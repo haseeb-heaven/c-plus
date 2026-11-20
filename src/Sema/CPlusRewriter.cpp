@@ -211,6 +211,7 @@ public:
     collectDeclarations();
     collectVariableTypes();
     collectArrays();
+    collectDynamicPointers();
     emitTranslationUnit();
 
     RewrittenSource result;
@@ -704,6 +705,45 @@ private:
     return true;
   }
 
+  /// Record pointers initialised by the C+ allocator.  Their `.len` is a
+  /// run-time query against the allocator's side table.
+  void collectDynamicPointers() {
+    static const std::set<std::string> kAllocators = {
+        "cplus_alloc", "cplus_zalloc", "cplus_realloc", "cplus_new",
+        "cplus_new_array"};
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Identifier ||
+          !kAllocators.count(ts[i].text))
+        continue;
+      size_t start = i;
+      while (start > 0) {
+        --start;
+        if (ts.isPunct(start, ";") || ts.isPunct(start, "{") ||
+            ts.isPunct(start, "}")) {
+          ++start;
+          break;
+        }
+      }
+      int paren = 0, bracket = 0;
+      size_t eq = kNPos;
+      for (size_t k = start; k < i; ++k) {
+        if (ts.isPunct(k, "(")) ++paren;
+        else if (ts.isPunct(k, ")")) --paren;
+        else if (ts.isPunct(k, "[")) ++bracket;
+        else if (ts.isPunct(k, "]")) --bracket;
+        else if (ts.isPunct(k, "=") && paren == 0 && bracket == 0) {
+          eq = k;
+          break;
+        }
+      }
+      if (eq == kNPos)
+        continue;
+      size_t name = ts.prevSig(eq);
+      if (name != kNPos && name < eq && ts[name].kind == TokKind::Identifier)
+        dynamicPointers_.insert(ts[name].text);
+    }
+  }
+
   /// Emit a range of tokens, applying the same C+ rewrites as the top level.
   void emitRange(size_t from, size_t to, const ClassInfo *selfClass = nullptr) {
     for (size_t k = from; k < to; ++k) {
@@ -759,13 +799,15 @@ private:
     return true;
   }
 
-  /// Rewrite `arr.len` to the array's compile-time extent.  The result is a
-  /// literal, so it costs nothing at run time.
+  /// Rewrite `x.len`: a fixed array becomes a literal extent; a pointer
+  /// produced by the C+ allocator becomes a side-table lookup divided by
+  /// the element size.
   bool tryEmitArrayLen(size_t i) {
     if (ts[i].kind != TokKind::Identifier)
       return false;
-    auto it = arrays_.find(ts[i].text);
-    if (it == arrays_.end())
+    bool isStatic = arrays_.count(ts[i].text) != 0;
+    bool isDynamic = dynamicPointers_.count(ts[i].text) != 0;
+    if (!isStatic && !isDynamic)
       return false;
     size_t dot = ts.nextSig(i);
     if (!ts.isPunct(dot, "."))
@@ -773,7 +815,11 @@ private:
     size_t member = ts.nextSig(dot);
     if (!ts.isIdent(member, "len"))
       return false;
-    emit("(" + std::to_string(it->second) + ")");
+    if (isStatic)
+      emit("(" + std::to_string(arrays_[ts[i].text]) + ")");
+    else
+      emit("cplus_alloc_count(" + ts[i].text + ", sizeof(*" + ts[i].text +
+           "))");
     skipTo_ = member;
     changed_ = true;
     return true;
@@ -841,6 +887,7 @@ private:
   std::set<std::string> classNames_;
   std::map<std::string, std::string> varClasses_;
   std::map<std::string, size_t> arrays_;
+  std::set<std::string> dynamicPointers_;
 };
 
 } // namespace

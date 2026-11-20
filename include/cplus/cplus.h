@@ -70,6 +70,13 @@ void cplus_zero(void *p, size_t size);
  * Calling it twice is a detected double-free, not silent corruption. */
 void cplus_release(void *ptr);
 
+/* Size bookkeeping for live managed allocations.  `cplus_alloc_bytes`
+ * returns the byte count recorded by the allocator; `cplus_alloc_count`
+ * divides it by the element size.  Both abort with a deterministic exit code
+ * if `ptr` is not a live C+ allocation. */
+size_t cplus_alloc_bytes(const void *ptr);
+size_t cplus_alloc_count(const void *ptr, size_t elem_size);
+
 /* Checked array index.  Returns `index` when it is in range and terminates
  * the process otherwise.  Available for code that wants an explicit check
  * where the compiler cannot prove the extent. */

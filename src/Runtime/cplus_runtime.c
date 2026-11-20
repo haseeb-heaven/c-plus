@@ -254,6 +254,27 @@ void cplus_release(void *ptr) {
   free(ptr);
 }
 
+size_t cplus_alloc_bytes(const void *ptr) {
+  if (!ptr)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
+                      0, "null pointer has no allocation length");
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_find_live(ptr);
+  size_t bytes = slot ? slot->size : 0;
+  cplus_alloc_unlock();
+  if (!slot)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
+                      0, "pointer is not a live C+ allocation");
+  return bytes;
+}
+
+size_t cplus_alloc_count(const void *ptr, size_t elem_size) {
+  if (elem_size == 0)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
+                      0, "element size must be greater than zero");
+  return cplus_alloc_bytes(ptr) / elem_size;
+}
+
 size_t cplus_check_index(size_t index, size_t count, const char *file,
                          int line, const char *expr) {
   if (index < count)
