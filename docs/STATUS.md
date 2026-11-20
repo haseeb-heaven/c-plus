@@ -24,6 +24,8 @@ the repository's test/demo runs. "partial" is never counted as complete.
 | Native executable generation | yes | yes | yes | host Clang driver; macOS arm64 verified here |
 | `--legacy-c` mode | yes | yes | yes | explicitly **not** memory safe |
 | Format-free `print` / `scan` | yes | yes | yes | no struct reflection; printer state is not thread-safe |
+| Default function arguments | yes | yes | yes | same translation unit only |
+| Range-based `for` | yes | yes | yes | simple lvalue ranges with `.len` only |
 | Safe concurrency (mutex + TLS + threads) | partial | yes | yes | no race detection; feature is experimental |
 | Networking demo (sockets) | yes | yes | yes | uses existing POSIX socket API |
 | Reproducible benchmarks | yes | yes | yes | 8 microbenchmarks, local machine only |
@@ -40,7 +42,7 @@ Commands that produced the "verified" column:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c+_lang
 ctest --test-dir build --output-on-failure   # 2/2 suites
-./tests/run_tests.sh                         # 29 tests
-./demos/run_demos.sh                         # 12 demos
+./tests/run_tests.sh                         # 32 tests
+./demos/run_demos.sh                         # 14 demos
 ./benchmarks/run_bench.sh                    # performance table
 ```

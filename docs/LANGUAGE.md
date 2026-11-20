@@ -293,6 +293,44 @@ for (auto i = 0; i < n; i++) { ... }
 `auto` with an owning resource type is not tracked by the ownership analysis;
 use the explicit resource type for such declarations.
 
+## Default arguments
+
+Parameters may have defaults; the compiler inserts them at each call site:
+
+```c
+int *get_data(size_t size = 0) {
+    if (size == 0)
+        size = 1;
+    /* ... */
+}
+
+int add(int a, int b = 2, int c = 3) {
+    return a + b + c;
+}
+
+get_data();        /* get_data(0) */
+add(1);            /* add(1, 2, 3) */
+add(1, 5);         /* add(1, 5, 3) */
+```
+
+The definition keeps only the parameter names; default expressions are copied
+into every visible call. Defaults should be trailing: a non-trailing default
+with no available default for a later parameter is a compile error.
+
+## Range-based for
+
+```c
+int values[] = {10, 20, 30};
+for (auto v : values) {
+    print(v);
+}
+```
+
+This lowers to a counted loop over `values.len`, with `v` declared as
+`__typeof__(values[idx])`. It works for fixed arrays and C+ allocations whose
+`.len` is visible in the translation unit. The range expression must be a
+simple lvalue; side-effecting expressions are not supported.
+
 ## print and scan
 
 `print(...)` needs no format specifiers. Each value is dispatched by its C

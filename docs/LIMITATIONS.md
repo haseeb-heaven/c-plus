@@ -29,6 +29,8 @@ depends on a runtime check, the check is named.
 | `auto` type inference | supported | lowers to `__typeof__`; also works with `(Class){...}`; not used for ownership inference |
 | Format-free `print(...)` | supported | type tags via `_Generic`; scalars, bool, char and C strings only |
 | Format-free `scan(...)` | supported | lvalues, bounded string reads, fatal on conversion failure |
+| Default function arguments | supported | same translation unit only; filled at call sites; defaults should be trailing |
+| Range-based `for` | supported | simple lvalue ranges with a visible `.len`; no side-effecting range expressions |
 | Dynamic out-of-bounds index, null/misaligned dereference | supported at run time | UBSan checks, abort on first failure |
 | Deterministic exit codes for safety failures | supported | `101`–`108` in `include/cplus/cplus.h` |
 | Lightweight classes with methods | supported | inline methods only; lower to `T_m(T *self, ...)` |
@@ -81,6 +83,11 @@ give a complete spatial/temporal memory-safety guarantee:
   `i = C; i < N; i++` (or `<=`) with literal bounds. Loops with computed
   bounds, multiple index variables or indirect subscripts fall back to the
   run-time check, not a compile error.
+- Default arguments are a source-level rewriting feature. A function defined
+  in another translation unit must be called with all arguments.
+- Range-based `for` needs a simple lvalue whose `.len` is known. It does not
+  support iterators, generator expressions or modifying the range during
+  iteration.
 - `print` does not reflect arbitrary structs/classes: print fields or return a
   scalar from a method. `scan` supports scalars and C strings, not arrays of
   numbers or structs; a `char *` destination gets a fixed 256-byte bound

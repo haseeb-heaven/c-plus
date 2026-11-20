@@ -147,6 +147,13 @@ Out-of-bounds accesses that can be proven wrong at compile time are errors:
 both `values[10]` and `for (i = 0; i < 5; i++) values[i]` fail to compile in
 safe mode. Indices only known at run time are checked by UBSan.
 
+Default arguments and range-based loops are also supported:
+
+```c
+int *get_data(size_t size = 0);   /* get_data() -> get_data(0) */
+for (auto v : values) { ... }      /* counted loop over values.len */
+```
+
 Managed memory is released at scope exit:
 
 ```c
@@ -186,7 +193,7 @@ still required for the full specification is tracked in
 
 ```sh
 ./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
-./demos/run_demos.sh      # twelve demos
+./demos/run_demos.sh      # fourteen demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
 
