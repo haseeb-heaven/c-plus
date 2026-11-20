@@ -114,6 +114,18 @@ public:
     return kNPos;
   }
 
+  size_t matchBracket(size_t open) const {
+    int depth = 0;
+    for (size_t i = open; i < toks_.size(); ++i) {
+      if (!isPunct(i, "[") && !isPunct(i, "]"))
+        continue;
+      depth += isPunct(i, "[") ? 1 : -1;
+      if (depth == 0)
+        return i;
+    }
+    return kNPos;
+  }
+
   /// Find the matching ')' for the '(' at `open`.
   size_t matchParen(size_t open) const {
     int depth = 0;
@@ -198,6 +210,7 @@ public:
   RewrittenSource run() {
     collectDeclarations();
     collectVariableTypes();
+    collectArrays();
     emitTranslationUnit();
 
     RewrittenSource result;
@@ -205,6 +218,7 @@ public:
     result.changed = changed_;
     result.resourceTypes = resourceTypes_;
     result.classTypes = classTypes_;
+    result.arrayLengths = arrays_;
     return result;
   }
 
@@ -384,6 +398,90 @@ private:
     }
   }
 
+  /// True when `nameIdx` looks like the declared name of an array rather than
+  /// an array subscript in an expression.
+  bool isDeclarationName(size_t nameIdx) const {
+    size_t prev = ts.prevSig(nameIdx);
+    if (prev == kNPos)
+      return false;
+    auto isPrimitive = [](const std::string &s) {
+      static const std::set<std::string> kPrimitives = {
+          "int",     "char",   "short",  "long",   "float", "double",
+          "_Bool",   "void",   "size_t", "struct", "union", "enum",
+          "unsigned", "signed", "const", "volatile", "static", "extern",
+          "register", "_Atomic"};
+      return kPrimitives.count(s) != 0;
+    };
+    if (isPrimitive(ts[prev].text) || classNames_.count(ts[prev].text) ||
+        resourceNames_.count(ts[prev].text))
+      return true;
+    if (ts[prev].kind != TokKind::Identifier)
+      return false;
+    static const std::set<std::string> kControl = {
+        "return", "if", "else", "for", "while", "do", "switch",
+        "case", "break", "continue", "goto", "sizeof"};
+    if (kControl.count(ts[prev].text))
+      return false;
+    size_t prev2 = ts.prevSig(prev);
+    if (prev2 == kNPos)
+      return false;
+    return isPrimitive(ts[prev2].text) || ts.isPunct(prev2, ";") ||
+           ts.isPunct(prev2, "{") || ts.isPunct(prev2, "}") ||
+           ts.isPunct(prev2, "(") || ts.isPunct(prev2, ",");
+  }
+
+  /// Number of top-level elements in an aggregate initialiser.
+  size_t initializerCount(size_t open, size_t close) const {
+    int paren = 0, bracket = 0, brace = 0;
+    size_t commas = 0;
+    bool any = false;
+    for (size_t k = open + 1; k < close; ++k) {
+      if (ts.isPunct(k, "(")) ++paren;
+      else if (ts.isPunct(k, ")")) --paren;
+      else if (ts.isPunct(k, "[")) ++bracket;
+      else if (ts.isPunct(k, "]")) --bracket;
+      else if (ts.isPunct(k, "{")) ++brace;
+      else if (ts.isPunct(k, "}")) --brace;
+      else if (ts.isPunct(k, ",") && paren == 0 && bracket == 0 && brace == 0)
+        ++commas;
+      else if (!ts.isTrivia(k))
+        any = true;
+    }
+    return any ? commas + 1 : 0;
+  }
+
+  /// Record fixed-size arrays so `arr.len` can be replaced by a constant.
+  void collectArrays() {
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Identifier)
+        continue;
+      size_t open = ts.nextSig(i);
+      if (!ts.isPunct(open, "[") || !isDeclarationName(i))
+        continue;
+      size_t close = ts.matchBracket(open);
+      if (close == kNPos)
+        continue;
+      size_t len = kNPos;
+      size_t inner = ts.nextSig(open);
+      if (inner == close) {
+        size_t eq = ts.nextSig(close);
+        if (!ts.isPunct(eq, "="))
+          continue;
+        size_t brace = ts.nextSig(eq);
+        if (!ts.isPunct(brace, "{"))
+          continue;
+        size_t end = ts.matchBrace(brace);
+        if (end == kNPos)
+          continue;
+        len = initializerCount(brace, end);
+      } else if (ts[inner].kind == TokKind::Number) {
+        len = static_cast<size_t>(strtoull(ts[inner].text.c_str(), nullptr, 0));
+      }
+      if (len != kNPos && len > 0)
+        arrays_[ts[i].text] = len;
+    }
+  }
+
   // --- emission -------------------------------------------------------------
 
   void emit(const std::string &s) { out_ += s; }
@@ -434,7 +532,7 @@ private:
           continue;
         }
       }
-      if (tryEmitMethodCall(i)) {
+      if (tryEmitArrayLen(i) || tryEmitMethodCall(i)) {
         i = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -509,7 +607,7 @@ private:
 
   void emitMethodBody(size_t open, size_t close, const ClassInfo *selfClass) {
     for (size_t i = open; i <= close; ++i) {
-      if (tryEmitMethodCall(i, selfClass)) {
+      if (tryEmitArrayLen(i) || tryEmitMethodCall(i, selfClass)) {
         i = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -596,6 +694,26 @@ private:
     return true;
   }
 
+  /// Rewrite `arr.len` to the array's compile-time extent.  The result is a
+  /// literal, so it costs nothing at run time.
+  bool tryEmitArrayLen(size_t i) {
+    if (ts[i].kind != TokKind::Identifier)
+      return false;
+    auto it = arrays_.find(ts[i].text);
+    if (it == arrays_.end())
+      return false;
+    size_t dot = ts.nextSig(i);
+    if (!ts.isPunct(dot, "."))
+      return false;
+    size_t member = ts.nextSig(dot);
+    if (!ts.isIdent(member, "len"))
+      return false;
+    emit("(" + std::to_string(it->second) + ")");
+    skipTo_ = member;
+    changed_ = true;
+    return true;
+  }
+
   bool tryEmitMethodCall(size_t i, const ClassInfo *selfClass = nullptr) {
     if (ts[i].kind != TokKind::Identifier)
       return false;
@@ -657,6 +775,7 @@ private:
   std::set<std::string> resourceNames_;
   std::set<std::string> classNames_;
   std::map<std::string, std::string> varClasses_;
+  std::map<std::string, size_t> arrays_;
 };
 
 } // namespace

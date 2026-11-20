@@ -31,6 +31,7 @@
 #include "Diagnostics.h"
 #include "LangFeatures.h"
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -53,6 +54,9 @@ struct RewrittenSource {
   std::vector<std::string> resourceTypes;
   /// Names of `class` types declared in this translation unit.
   std::vector<std::string> classTypes;
+  /// Extents of fixed-size arrays declared in this translation unit, used by
+  /// `arr.len` and by the static bounds check.
+  std::map<std::string, size_t> arrayLengths;
 };
 
 /// Rewrite C+ specific syntax into equivalent C syntax annotated for the
