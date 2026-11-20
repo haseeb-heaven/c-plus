@@ -4,6 +4,7 @@
 
 #include "Sema/CPlusRewriter.h"
 #include "Sema/RaiiLowering.h"
+#include "Sema/StaticBoundsCheck.h"
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -270,6 +271,12 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
   // Stage 1: lower C+ syntax (classes, resources, ownership modifiers) to C.
   RewrittenSource rewritten = rewriteCPlusSource(source, diags, opts.input);
+
+  // Stage 1b: reject bounds violations that are provable from array extents
+  // and simple loop bounds before producing an executable.  Legacy C mode
+  // keeps ordinary C behaviour.
+  if (opts.mode == Mode::Safe)
+    checkStaticBounds(source, rewritten.arrayLengths, diags, opts.input);
 
   // Stage 2: insert deterministic cleanup (RAII) for owned declarations.
   LoweredSource lowered = lowerRaii(rewritten.text, rewritten.resourceTypes,

@@ -91,6 +91,7 @@ add_library(cplus_core STATIC
   src/Sema/CPlusLexer.cpp
   src/Sema/CPlusRewriter.cpp
   src/Sema/RaiiLowering.cpp
+  src/Sema/StaticBoundsCheck.cpp
   src/Sema/TypeChecker.cpp
   src/Runtime/CPlusRuntime.cpp
   src/Driver/Driver.cpp)
