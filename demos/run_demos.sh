@@ -165,6 +165,10 @@ expect_ok J_modern_io "$OUT/J_modern_io.expected"
 printf 'count= 3 average= 8\n' >"$OUT/K_state_class.expected"
 expect_ok K_state_class "$OUT/K_state_class.expected"
 
+# L: class constructor + destructor with automatic cleanup.
+printf 'total 10\ndrop point 10\n' >"$OUT/L_class_lifecycle.expected"
+expect_ok L_class_lifecycle "$OUT/L_class_lifecycle.expected"
+
 echo
 echo "C+ demos: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then

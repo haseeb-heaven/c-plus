@@ -55,6 +55,8 @@ struct ClassInfo {
   std::vector<std::pair<size_t, size_t>> fields; // inclusive ranges
   std::vector<MethodInfo> methods;
   std::set<std::string> methodNames;
+  bool hasCtor = false;
+  bool hasDrop = false;
 };
 
 struct ResourceInfo {
@@ -243,6 +245,10 @@ private:
       if (ts.isIdent(i, kw::kClass)) {
         ClassInfo c;
         if (parseClass(i, &c)) {
+          if (c.hasDrop)
+            resourceTypes_.push_back(c.name);
+          if (c.hasCtor)
+            classNamesWithCtor_.insert(c.name);
           classNames_.insert(c.name);
           classTypes_.push_back(c.name);
           classes_.push_back(std::move(c));
@@ -363,11 +369,17 @@ private:
         return true;
       }
       if (m.name == c->name) {
-        diags_.error("constructors are not part of C+ MVP; initialise '" +
-                         c->name + "' with an aggregate initialiser instead",
-                     filename_, ts[nameIdx].line, ts[nameIdx].column);
-        return true;
+        if (!joinTokens(ts, m.itemStart, m.nameIdx).empty()) {
+          diags_.error("a constructor cannot declare a return type",
+                       filename_, ts[nameIdx].line, ts[nameIdx].column);
+          return true;
+        }
+        c->hasCtor = true;
       }
+      std::string dropParams = joinTokens(ts, m.lparen + 1, m.rparen);
+      if (m.name == "drop" &&
+          (dropParams.empty() || dropParams == "void"))
+        c->hasDrop = true;
       c->methodNames.insert(m.name);
       c->methods.push_back(m);
       p = m.bodyClose + 1;
@@ -508,7 +520,17 @@ private:
 
   void emit(const std::string &s) { out_ += s; }
 
-  void emitToken(size_t i) { out_ += ts[i].text; }
+  void emitToken(size_t i) {
+    if (ctorBody_ && ts.isIdent(i, "self")) {
+      out_ += "_cplus_self";
+      return;
+    }
+    if (ctorBody_ && ts.isPunct(i, "->")) {
+      out_ += ".";
+      return;
+    }
+    out_ += ts[i].text;
+  }
 
   size_t classAt(size_t i) const {
     for (size_t k = 0; k < classes_.size(); ++k)
@@ -559,7 +581,7 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitArrayLen(i) || tryEmitMethodCall(i)) {
+      if (tryEmitCtorCall(i) || tryEmitArrayLen(i) || tryEmitMethodCall(i)) {
         i = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -602,9 +624,28 @@ private:
     }
     emit("};\n");
     emit("typedef struct " + c.name + " " + c.name + ";\n");
+    if (c.hasDrop)
+      emit("void " + c.name + "_drop(" + c.name + " *self);\n");
 
     for (const auto &m : c.methods) {
       emit(lineDirective(filename_, ts[m.itemStart].line));
+      if (m.name == c.name) {
+        emit(c.name + " " + c.name + "_ctor(");
+        std::string params = joinTokens(ts, m.lparen + 1, m.rparen);
+        params.erase(0, params.find_first_not_of(' '));
+        while (!params.empty() && params.back() == ' ')
+          params.pop_back();
+        if (!params.empty() && params != "void")
+          emit(params);
+        emit(") {\n" + c.name + " _cplus_self = {0};\n");
+        emit(lineDirective(filename_, ts[m.bodyOpen].line));
+        bool previousCtor = ctorBody_;
+        ctorBody_ = true;
+        emitMethodBody(m.bodyOpen, m.bodyClose, &c);
+        ctorBody_ = previousCtor;
+        emit("\nreturn _cplus_self;\n}\n");
+        continue;
+      }
       std::string ret = joinTokens(ts, m.itemStart, m.nameIdx);
       if (ret.empty()) {
         diags_.error("method '" + m.name + "' is missing a return type",
@@ -639,7 +680,8 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitArrayLen(i) || tryEmitMethodCall(i, selfClass)) {
+      if (tryEmitCtorCall(i) || tryEmitArrayLen(i) ||
+          tryEmitMethodCall(i, selfClass)) {
         i = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -826,7 +868,8 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitArrayLen(k) || tryEmitMethodCall(k, selfClass)) {
+      if (tryEmitCtorCall(k) || tryEmitArrayLen(k) ||
+          tryEmitMethodCall(k, selfClass)) {
         k = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -869,6 +912,20 @@ private:
     emitRange(eq + 1, end);
     emit(")");
     skipTo_ = i; // the caller resumes at the declared name
+    changed_ = true;
+    return true;
+  }
+
+  /// `T(args)` calls a synthesized constructor for class T.
+  bool tryEmitCtorCall(size_t i) {
+    if (ts[i].kind != TokKind::Identifier ||
+        !classNamesWithCtor_.count(ts[i].text))
+      return false;
+    size_t lp = ts.nextSig(i);
+    if (!ts.isPunct(lp, "("))
+      return false;
+    emit(ts[i].text + "_ctor");
+    skipTo_ = i;
     changed_ = true;
     return true;
   }
@@ -960,6 +1017,7 @@ private:
   std::string filename_;
   std::string out_;
   bool changed_ = false;
+  bool ctorBody_ = false;
   size_t skipTo_ = kNPos;
 
   std::vector<ResourceInfo> resources_;
@@ -968,6 +1026,7 @@ private:
   std::vector<std::string> classTypes_;
   std::set<std::string> resourceNames_;
   std::set<std::string> classNames_;
+  std::set<std::string> classNamesWithCtor_;
   std::map<std::string, std::string> varClasses_;
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;

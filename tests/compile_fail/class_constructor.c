@@ -4,9 +4,10 @@ class Point {
     int x;
     int y;
 
-    Point(int x0, int y0) {
-        self->x = x0;
-        self->y = y0;
+    /* Constructors cannot declare a return type. */
+    int Point(int a, int b) {
+        self->x = a;
+        self->y = b;
     }
 };
 
