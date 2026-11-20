@@ -781,7 +781,8 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitCtorCall(i) || tryEmitArrayLen(i) || tryEmitMethodCall(i)) {
+      if (tryEmitIfDecl(i) || tryEmitOctal(i) || tryEmitCtorCall(i) ||
+          tryEmitArrayLen(i) || tryEmitMethodCall(i)) {
         i = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -891,8 +892,8 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitCtorCall(i) || tryEmitArrayLen(i) ||
-          tryEmitMethodCall(i, selfClass)) {
+      if (tryEmitIfDecl(i) || tryEmitOctal(i) || tryEmitCtorCall(i) ||
+          tryEmitArrayLen(i) || tryEmitMethodCall(i, selfClass)) {
         i = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -1089,8 +1090,8 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitCtorCall(k) || tryEmitArrayLen(k) ||
-          tryEmitMethodCall(k, selfClass)) {
+      if (tryEmitIfDecl(k) || tryEmitOctal(k) || tryEmitCtorCall(k) ||
+          tryEmitArrayLen(k) || tryEmitMethodCall(k, selfClass)) {
         k = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -1235,6 +1236,89 @@ private:
     skipTo_ = i; // the caller resumes at the declared name
     changed_ = true;
     return true;
+  }
+
+  /// C2y if-declarations: `if (T x = init; cond) body else other` becomes
+  /// `{ T x = init; if (cond) body else other }` so the variable is scoped.
+  bool tryEmitIfDecl(size_t i) {
+    if (!ts.isIdent(i, "if"))
+      return false;
+    size_t lp = ts.nextSig(i);
+    if (!ts.isPunct(lp, "("))
+      return false;
+    size_t rp = ts.matchParen(lp);
+    if (rp == kNPos)
+      return false;
+
+    size_t semi = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t k = lp + 1; k < rp; ++k) {
+      if (ts.isPunct(k, "(")) ++paren;
+      else if (ts.isPunct(k, ")")) --paren;
+      else if (ts.isPunct(k, "[") ) ++bracket;
+      else if (ts.isPunct(k, "]")) --bracket;
+      else if (ts.isPunct(k, ";") && paren == 0 && bracket == 0) {
+        semi = k;
+        break;
+      }
+    }
+    if (semi == kNPos || ts.nextSig(semi) >= rp)
+      return false;
+
+    size_t decl = ts.nextSig(lp);
+    size_t cond = ts.nextSig(semi);
+    emit("{ ");
+    emitRange(decl, semi);
+    emit("; if (");
+    emitRange(cond, rp);
+    emit(")");
+
+    size_t body = ts.nextSig(rp);
+    size_t end = body;
+    if (ts.isPunct(body, "{")) {
+      end = ts.matchBrace(body);
+    } else {
+      end = ts.statementEnd(body);
+    }
+    if (end == kNPos)
+      return false;
+    size_t after = ts.nextSig(end);
+    if (ts.isIdent(after, "else")) {
+      size_t other = ts.nextSig(after);
+      if (ts.isPunct(other, "{"))
+        end = ts.matchBrace(other);
+      else
+        end = ts.statementEnd(other);
+      if (end == kNPos)
+        return false;
+    }
+    extraBraces_[end]++;
+    skipTo_ = rp;
+    changed_ = true;
+    return true;
+  }
+
+  /// C2y 0o/0O octal literals: rewrite to classic leading-zero octal so the
+  /// gnu17 backend accepts them.
+  bool tryEmitOctal(size_t i) {
+    if (ts[i].kind == TokKind::Number && ts[i].text.size() > 2 &&
+        ts[i].text[0] == '0' &&
+        (ts[i].text[1] == 'o' || ts[i].text[1] == 'O')) {
+      emit("0" + ts[i].text.substr(2));
+      skipTo_ = i;
+      changed_ = true;
+      return true;
+    }
+    if (ts[i].kind == TokKind::Number && ts[i].text == "0" &&
+        i + 1 < ts.size() && ts[i + 1].kind == TokKind::Identifier &&
+        ts[i + 1].text.size() > 1 &&
+        (ts[i + 1].text[0] == 'o' || ts[i + 1].text[0] == 'O')) {
+      emit("0" + ts[i + 1].text.substr(1));
+      skipTo_ = i + 1;
+      changed_ = true;
+      return true;
+    }
+    return false;
   }
 
   /// `T(args)` calls a synthesized constructor for class T.

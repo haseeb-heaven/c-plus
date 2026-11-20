@@ -1,0 +1,11 @@
+open
+alloc
+work
+free
+close
+a 0
+open
+alloc
+free
+close
+b -1

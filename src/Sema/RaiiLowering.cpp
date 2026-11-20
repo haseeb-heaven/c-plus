@@ -23,6 +23,8 @@ struct OwnedVar {
   std::string type;   // resource type (for drop generation)
   std::string drop;   // destructor symbol
   bool managed = false;
+  bool isDefer = false;
+  std::string deferText;
   unsigned line = 0;
   unsigned column = 0;
 };
@@ -140,6 +142,37 @@ private:
         return i;
     }
     return kNPos;
+  }
+
+  std::string joinTokens(size_t from, size_t to) const {
+    std::string out;
+    for (size_t k = from; k < to; ++k) {
+      if (isTrivia(k))
+        continue;
+      if (!out.empty())
+        out += " ";
+      out += toks_[k].text;
+    }
+    return out;
+  }
+
+  void handleDefer(size_t i) {
+    size_t semi = statementEnd(i + 1);
+    if (semi == kNPos || semi == i + 1) {
+      errorAt("defer requires a statement", toks_[i]);
+      return;
+    }
+    OwnedVar v;
+    v.name = "__cplus_defer_" + std::to_string(deferCounter_++);
+    v.isDefer = true;
+    v.deferText = joinTokens(i + 1, semi);
+    v.line = toks_[i].line;
+    v.column = toks_[i].column;
+    registerOwned(v);
+    edits_.push_back(Edit{toks_[i].offset,
+                          toks_[semi].offset - toks_[i].offset,
+                          std::string(), seq_++});
+    atStmtStart_ = true;
   }
 
   // --- diagnostics ----------------------------------------------------------
@@ -363,6 +396,10 @@ private:
   }
 
   void handleIdentifier(size_t i, const Token &t) {
+    if (t.text == "defer") {
+      handleDefer(i);
+      return;
+    }
     // Track explicit moves so a borrow of the moved owner can be rejected.
     if (t.text == "cplus_move") {
       size_t lp = nextSig(i);
@@ -455,7 +492,9 @@ private:
         const OwnedVar &v = vars[k - 1];
         if (v.name == exclude)
           continue;
-        if (v.managed)
+        if (v.isDefer)
+          out += v.deferText + "; ";
+        else if (v.managed)
           out += "cplus_release(" + v.name + "); " + v.name + " = NULL; ";
         else
           out += v.drop + "(&" + v.name + "); ";
@@ -681,6 +720,7 @@ private:
   int parenDepth_ = 0;
   bool atStmtStart_ = true;
   unsigned obligations_ = 0;
+  unsigned deferCounter_ = 0;
   unsigned removedMarkers_ = 0;
   unsigned seq_ = 0;
 };

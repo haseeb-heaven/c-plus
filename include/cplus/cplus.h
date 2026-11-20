@@ -164,6 +164,31 @@ void cplus_tls_set(void *slot, void *value);
 void cplus_tls_free(void *slot);
 
 /* -------------------------------------------------------------------------
+ * C2y-inspired safe helpers, lowered to portable gnu17 C.
+ * ------------------------------------------------------------------------- */
+
+/* countof works only on a real array: a decayed pointer fails the static
+ * assertion instead of silently returning sizeof(pointer)/sizeof(element). */
+#define countof(a)                                                            \
+  ({                                                                          \
+    _Static_assert(!__builtin_types_compatible_p(__typeof__(a),               \
+                                                __typeof__((a) + 0)),         \
+                   "countof requires an array, not a pointer");               \
+    sizeof(a) / sizeof((a)[0]);                                               \
+  })
+
+/* Bit rotation helpers (C2y <stdbit.h> style) without the C2y dependency. */
+static inline uint32_t cplus_rotl32(uint32_t value, unsigned count) {
+  count %= 32u;
+  return count ? (value << count) | (value >> (32u - count)) : value;
+}
+
+static inline uint32_t cplus_rotr32(uint32_t value, unsigned count) {
+  count %= 32u;
+  return count ? (value >> count) | (value << (32u - count)) : value;
+}
+
+/* -------------------------------------------------------------------------
  * Modern I/O: print() and scan()
  *
  * `print` needs no format specifiers: each argument is dispatched by its C
