@@ -51,9 +51,9 @@ fail() {
 
 # --- positive tests --------------------------------------------------------
 
-for src in "$ROOT"/tests/cases/*.c; do
+for src in "$ROOT"/tests/cases/*.c "$ROOT"/tests/cases/*.cp; do
   [ -e "$src" ] || continue
-  name=$(basename "$src" .c)
+  name=$(basename "$src"); name=${name%.c}; name=${name%.cp}
   matches "$name" || continue
   exe="$OUT/$name"
   if ! "$CPLUS" build "$src" -o "$exe" >"$OUT/$name.build.log" 2>&1; then
@@ -83,9 +83,9 @@ done
 
 # --- compile-time negative tests ------------------------------------------
 
-for src in "$ROOT"/tests/compile_fail/*.c; do
+for src in "$ROOT"/tests/compile_fail/*.c "$ROOT"/tests/compile_fail/*.cp; do
   [ -e "$src" ] || continue
-  name=$(basename "$src" .c)
+  name=$(basename "$src"); name=${name%.c}; name=${name%.cp}
   matches "$name" || continue
   if "$CPLUS" check "$src" >"$OUT/$name.log" 2>&1; then
     fail "$name" "expected compilation to fail, but it succeeded"
@@ -103,9 +103,9 @@ done
 
 # --- run-time negative tests ----------------------------------------------
 
-for src in "$ROOT"/tests/runtime_fail/*.c; do
+for src in "$ROOT"/tests/runtime_fail/*.c "$ROOT"/tests/runtime_fail/*.cp; do
   [ -e "$src" ] || continue
-  name=$(basename "$src" .c)
+  name=$(basename "$src"); name=${name%.c}; name=${name%.cp}
   matches "$name" || continue
   exe="$OUT/$name"
   if ! "$CPLUS" build "$src" -o "$exe" >"$OUT/$name.build.log" 2>&1; then

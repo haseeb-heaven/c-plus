@@ -1,0 +1,20 @@
+#ifndef EXT_CP_HELPER_HP
+#define EXT_CP_HELPER_HP
+
+class Box {
+    int value;
+
+    Box(int v) {
+        self->value = v;
+    }
+
+    int get(void) {
+        return self->value;
+    }
+};
+
+int box_constant(void) {
+    return 7;
+}
+
+#endif
