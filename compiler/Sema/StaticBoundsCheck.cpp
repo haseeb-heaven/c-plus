@@ -22,6 +22,12 @@ namespace {
 
 constexpr size_t kNPos = static_cast<size_t>(-1);
 
+struct ArrayExtent {
+  size_t pos;
+  std::string name;
+  size_t extent;
+};
+
 class Checker {
 public:
   Checker(const std::string &source,
@@ -32,6 +38,9 @@ public:
   }
 
   void run() {
+    for (const auto &entry : arrays_)
+      localArrays_.push_back({0, entry.first, entry.second});
+    collectLocalArrays();
     collectFunctions();
     for (const auto &entry : funcs_)
       functionOpens_.insert(entry.second.bodyOpen);
@@ -149,12 +158,12 @@ private:
         size_t v = nextSig(k);
         if (v > sig.bodyClose || toks_[v].kind != TokKind::Identifier)
           continue;
-        auto it = arrays_.find(toks_[v].text);
-        if (it == arrays_.end())
+        size_t found = 0;
+        if (!findExtent(toks_[v].text, k, &found))
           continue;
-        if (extent && extent != it->second)
+        if (extent && extent != found)
           conflict = true;
-        extent = it->second;
+        extent = found;
       }
       if (!conflict && extent)
         returnExtents_[entry.first] = extent;
@@ -205,7 +214,7 @@ private:
           break;
         }
       if (name != kNPos)
-        arrays_[toks_[name].text] = it->second;
+        localArrays_.push_back({i, toks_[name].text, it->second});
     }
   }
 
@@ -232,6 +241,45 @@ private:
     d.column = at.column;
     d.help = "use a bound of " + name + ".len or a smaller index";
     diags_.report(std::move(d));
+  }
+
+  void collectLocalArrays() {
+    static const char *const kTypes[] = {
+        "int", "char", "short", "long", "float", "double", "void",
+        "unsigned", "signed", "struct", "union", "enum", "size_t",
+        "uint8_t", "uint16_t", "uint32_t", "uint64_t"};
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier || !isPunct(nextSig(i), "["))
+        continue;
+      size_t prev = i == 0 ? kNPos : i - 1;
+      while (prev != kNPos && trivia(prev)) {
+        if (prev == 0) { prev = kNPos; break; }
+        --prev;
+      }
+      if (prev == kNPos || toks_[prev].kind != TokKind::Identifier)
+        continue;
+      bool type = false;
+      for (const char *t : kTypes)
+        if (toks_[prev].text == t) { type = true; break; }
+      if (!type && !isPunct(prev, ","))
+        continue;
+      size_t open = nextSig(i);
+      size_t inner = nextSig(open);
+      long value = 0;
+      if (inner < toks_.size() && number(toks_[inner], &value) && value > 0)
+        localArrays_.push_back({i, toks_[i].text, static_cast<size_t>(value)});
+    }
+  }
+
+  bool findExtent(const std::string &name, size_t pos, size_t *extent) const {
+    for (size_t k = localArrays_.size(); k > 0; --k) {
+      const ArrayExtent &e = localArrays_[k - 1];
+      if (e.name == name && e.pos <= pos) {
+        *extent = e.extent;
+        return true;
+      }
+    }
+    return false;
   }
 
   /// `* (Type *) &x` type punning is undefined under strict aliasing (except
@@ -469,8 +517,8 @@ private:
   void checkPointerArithmetic(size_t i) {
     if (toks_[i].kind != TokKind::Identifier)
       return;
-    auto it = arrays_.find(toks_[i].text);
-    if (it == arrays_.end())
+    size_t arrayExtent = 0;
+    if (!findExtent(toks_[i].text, i, &arrayExtent))
       return;
     size_t op = nextSig(i);
     if (!isPunct(op, "+") && !isPunct(op, "-"))
@@ -481,7 +529,7 @@ private:
     long amount = 0;
     if (!number(toks_[numTok], &amount))
       return;
-    if (isPunct(op, "+") && amount > static_cast<long>(it->second))
+    if (isPunct(op, "+") && amount > static_cast<long>(arrayExtent))
       errorAt(toks_[op], "pointer arithmetic more than one past the end of '" +
                              toks_[i].text + "'");
     if (isPunct(op, "-") && amount < 0)
@@ -671,9 +719,23 @@ private:
       auto args = splitArgs(lp + 1, rp);
       if (args.size() < 2)
         continue;
-      std::string dst = baseName(args[0].first, args[0].second);
-      std::string src = baseName(args[1].first, args[1].second);
-      if (!dst.empty() && dst == src)
+      std::string dst = join(args[0].first, args[0].second);
+      std::string src = join(args[1].first, args[1].second);
+      bool overlap = !dst.empty() && dst == src;
+      if (!overlap) {
+        const std::string &shorter = dst.size() < src.size() ? dst : src;
+        const std::string &longer = dst.size() < src.size() ? src : dst;
+        if (longer.compare(0, shorter.size(), shorter) == 0) {
+          size_t pos = shorter.size();
+          while (pos < longer.size() &&
+                 (longer[pos] == ' ' || longer[pos] == '\t'))
+            ++pos;
+          if (pos < longer.size() &&
+              (longer[pos] == '+' || longer[pos] == '-'))
+            overlap = true;
+        }
+      }
+      if (overlap)
         errorAt(toks_[i], "memcpy source and destination overlap; use memmove");
     }
   }
@@ -1116,13 +1178,15 @@ private:
           continue;
       }
       if (count > 0)
-        arrays_[toks_[name].text] = count;
+        localArrays_.push_back({i, toks_[name].text, count});
     }
   }
 
   /// A subscript with a literal index that is known too large.
   void checkConstantSubscript(size_t i) {
-    if (toks_[i].kind != TokKind::Identifier || !arrays_.count(toks_[i].text))
+    size_t extent = 0;
+    if (toks_[i].kind != TokKind::Identifier ||
+        !findExtent(toks_[i].text, i, &extent))
       return;
     // `int a[4];` is a declaration, not an access.  A declaration is
     // preceded by a type name; an access is preceded by punctuation or a
@@ -1148,13 +1212,23 @@ private:
     if (!isPunct(open, "["))
       return;
     size_t close = match(open, "[", "]");
+    if (close == kNPos)
+      return;
+    // `char a[4], b[8];` declares arrays; it is not an access.  A declaration
+    // is preceded by a type or comma and followed by `;`, `,` or `=`.
+    size_t afterDecl = nextSig(close);
+    bool declTail = isPunct(afterDecl, ";") || isPunct(afterDecl, ",") ||
+                    isPunct(afterDecl, "=");
+    bool declHead = isPunct(prev, ",") ||
+                    (prev != kNPos && toks_[prev].kind == TokKind::Identifier);
+    if (declTail && declHead)
+      return;
     size_t indexTok = nextSig(open);
     if (indexTok >= close)
       return;
     long idx = 0;
     if (!number(toks_[indexTok], &idx))
       return;
-    size_t extent = arrays_.at(toks_[i].text);
     if (idx >= 0 && static_cast<size_t>(idx) >= extent)
       report(toks_[open], idx, toks_[i].text, extent);
   }
@@ -1207,9 +1281,10 @@ private:
     if (bodyEnd == kNPos)
       return;
 
+    size_t loopExtent = 0;
     for (size_t k = body; k < bodyEnd; ++k) {
       if (toks_[k].kind != TokKind::Identifier ||
-          !arrays_.count(toks_[k].text))
+          !findExtent(toks_[k].text, k, &loopExtent))
         continue;
       size_t bopen = nextSig(k);
       if (!isPunct(bopen, "["))
@@ -1222,7 +1297,7 @@ private:
           !(toks_[indexTok].kind == TokKind::Identifier &&
             toks_[indexTok].text == var))
         continue;
-      size_t extent = arrays_.at(toks_[k].text);
+      size_t extent = loopExtent;
       if (static_cast<unsigned long>(maxIndex) >= extent)
         report(toks_[indexTok], maxIndex, toks_[k].text, extent);
     }
@@ -1303,6 +1378,7 @@ private:
   std::vector<Token> toks_;
   std::string source_;
   std::map<std::string, size_t> arrays_;
+  std::vector<ArrayExtent> localArrays_;
   struct FuncSig {
     std::vector<std::string> params;
     size_t bodyOpen = 0;

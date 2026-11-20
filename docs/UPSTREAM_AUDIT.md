@@ -42,6 +42,12 @@ failures.
 The same applies to `2048.c`: the safe-mode diagnostic about `printf` in a
 signal handler is correct (pitfall 30); `--legacy-c` compiles it unchanged.
 
+`tetris.c` (42 KB, ncurses) was also compiled unchanged in both `--legacy-c`
+and safe mode and linked with `-lncurses`. Fixing this exposed three static
+checker false positives (shared array names across functions, declarations
+mistaken for accesses, and field-name collisions in `memcpy` overlap
+detection); all three are fixed and regression-tested.
+
 ## Remaining unresolved safety problems
 
 - Use-after-free cannot be detected automatically: ASan aborts inside its own
