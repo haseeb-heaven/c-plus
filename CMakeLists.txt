@@ -257,3 +257,14 @@ install(TARGETS c+ cplus_runtime
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION lib)
 install(FILES include/cplus/cplus.h DESTINATION include/cplus)
+
+# ---------------------------------------------------------------------------
+# CTest wrappers around the executable test and demo suites
+# ---------------------------------------------------------------------------
+enable_testing()
+add_test(NAME cplus_tests
+  COMMAND ${CMAKE_COMMAND} -E env CPLUS_BIN=$<TARGET_FILE:c+>
+          /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.sh)
+add_test(NAME cplus_demos
+  COMMAND ${CMAKE_COMMAND} -E env CPLUS_BIN=$<TARGET_FILE:c+>
+          /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/demos/run_demos.sh)
