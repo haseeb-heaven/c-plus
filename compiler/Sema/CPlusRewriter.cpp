@@ -715,8 +715,13 @@ private:
   void emit(const std::string &s) { out_ += s; }
 
   void emitToken(size_t i) {
-    if (ctorBody_ && ts.isIdent(i, "self")) {
+    bool instance = ts.isIdent(i, "self") || ts.isIdent(i, "this");
+    if (ctorBody_ && instance) {
       out_ += "_cplus_self";
+      return;
+    }
+    if (inMethod_ && ts.isIdent(i, "this")) {
+      out_ += "self";          // C++-style this -> lowered self parameter
       return;
     }
     if (ctorBody_ && ts.isPunct(i, "->")) {
@@ -882,6 +887,8 @@ private:
   }
 
   void emitMethodBody(size_t open, size_t close, const ClassInfo *selfClass) {
+    bool previousMethod = inMethod_;
+    inMethod_ = true;
     for (size_t i = open; i <= close; ++i) {
       if (tryEmitRangeFor(i) || tryEmitDefaultCall(i)) {
         i = skipTo_;
@@ -902,6 +909,7 @@ private:
       }
       emitToken(i);
     }
+    inMethod_ = previousMethod;
   }
 
   bool emitOwnedDeclaration(size_t start) {
@@ -1385,7 +1393,8 @@ private:
     auto it = varClasses_.find(ts[i].text);
     if (it != varClasses_.end())
       className = it->second;
-    else if (selfClass && ts[i].text == kw::kSelf)
+    else if (selfClass && (ts[i].text == kw::kSelf ||
+                           ts[i].text == "this"))
       className = selfClass->name;
     else
       return false;
@@ -1433,6 +1442,7 @@ private:
   std::string out_;
   bool changed_ = false;
   bool ctorBody_ = false;
+  bool inMethod_ = false;
   size_t skipTo_ = kNPos;
 
   std::map<size_t, int> extraBraces_;

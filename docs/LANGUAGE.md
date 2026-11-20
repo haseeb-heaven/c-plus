@@ -182,6 +182,10 @@ class Point {
 Point p = Point(2, 3);   /* lowers to Point_ctor(2, 3) */
 ```
 
+Inside methods, both `self` and `this` refer to the instance pointer;
+`this->field` is C++-style sugar for the lowered `self->field`. Constructors
+also accept `this->`.
+
 The constructor lowers to `Point Point_ctor(int a, int b)` that zero-initialises
 an aggregate, runs the body with `self` pointing at it, and returns it.
 `Point(...)` call sugar is rewritten to `Point_ctor(...)`. A constructor may
