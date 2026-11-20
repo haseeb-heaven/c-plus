@@ -130,6 +130,28 @@ fi
 printf 'counter=150000\n' >"$OUT/F_concurrency.expected"
 expect_ok F_concurrency "$OUT/F_concurrency.expected"
 
+# G: a valid borrow of a scoped resource.
+cat >"$OUT/G_borrow.expected" <<'EOF'
+borrowed value: 42
+owner still alive
+drop slot 42
+EOF
+expect_ok G_borrow "$OUT/G_borrow.expected"
+
+# H: managed allocation with tracked length and a valid borrowed view.
+printf 'len=4 total=100\n' >"$OUT/H_allocation_borrow.expected"
+expect_ok H_allocation_borrow "$OUT/H_allocation_borrow.expected"
+
+# I: cleanup on normal exit, continue and early return.
+cat >"$OUT/I_raii_safe.expected" <<'EOF'
+drop 1
+drop 2
+drop 3
+drop 2
+early=-1
+EOF
+expect_ok I_raii_safe "$OUT/I_raii_safe.expected"
+
 echo
 echo "C+ demos: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then
