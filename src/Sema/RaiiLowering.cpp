@@ -473,11 +473,11 @@ private:
       return;
     }
 
-    // Returning a resource moves ownership to the caller.  Zero the source so
-    // its automatic destructor is a no-op.
+    // Returning a resource local transfers ownership to the caller.  The
+    // local's normal scope-exit cleanup is unreachable after the return, so
+    // no move expression is needed; emitting one would only add a memset on
+    // every returned value and block optimisation of the caller's loop.
     *excluded = it->first;
-    edits_.push_back(Edit{toks_[v].offset, toks_[v].text.size(),
-                          "cplus_move(" + toks_[v].text + ")", seq_++});
   }
 
   void checkAssignment(size_t i) {

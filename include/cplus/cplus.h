@@ -13,6 +13,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,7 +89,7 @@ size_t cplus_check_index(size_t index, size_t count, const char *file,
 #define cplus_move(x)                                                         \
   ({                                                                          \
     __typeof__(x) _cplus_move_tmp = (x);                                      \
-    cplus_zero(&(x), sizeof(x));                                              \
+    memset(&(x), 0, sizeof(x));                                               \
     _cplus_move_tmp;                                                          \
   })
 
