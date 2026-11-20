@@ -59,6 +59,14 @@ struct ClassInfo {
   bool hasDrop = false;
 };
 
+struct FuncDefaults {
+  size_t nameIdx = 0;
+  size_t lparen = 0;
+  size_t rparen = 0;
+  size_t paramCount = 0;
+  std::vector<std::string> defaults; // per parameter, empty when none
+};
+
 struct ResourceInfo {
   std::string name;
   size_t keyword = 0;
@@ -212,6 +220,7 @@ public:
 
   RewrittenSource run() {
     collectDeclarations();
+    collectDefaultArgs();
     collectVariableTypes();
     collectAutoClasses();
     collectArrays();
@@ -516,6 +525,159 @@ private:
     }
   }
 
+  /// Split a token range on top-level commas.
+  std::vector<std::pair<size_t, size_t>>
+  splitTopLevel(size_t from, size_t to) const {
+    std::vector<std::pair<size_t, size_t>> out;
+    int paren = 0, bracket = 0, brace = 0;
+    size_t start = from;
+    for (size_t k = from; k < to; ++k) {
+      if (ts.isPunct(k, "(")) ++paren;
+      else if (ts.isPunct(k, ")")) --paren;
+      else if (ts.isPunct(k, "[")) ++bracket;
+      else if (ts.isPunct(k, "]")) --bracket;
+      else if (ts.isPunct(k, "{")) ++brace;
+      else if (ts.isPunct(k, "}")) --brace;
+      else if (ts.isPunct(k, ",") && paren == 0 && bracket == 0 && brace == 0) {
+        out.push_back({start, k});
+        start = k + 1;
+      }
+    }
+    out.push_back({start, to});
+    return out;
+  }
+
+  /// Collect function definitions whose parameters use C+ default arguments.
+  void collectDefaultArgs() {
+    static const std::set<std::string> kControl = {
+        "if", "for", "while", "switch", "return", "sizeof", "do", "case"};
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Identifier || kControl.count(ts[i].text))
+        continue;
+      bool inClass = false;
+      for (const auto &c : classes_)
+        if (i >= c.keyword && i <= c.bodyClose)
+          inClass = true;
+      if (inClass)
+        continue;
+      size_t lp = ts.nextSig(i);
+      if (!ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos || !ts.isPunct(ts.nextSig(rp), "{"))
+        continue;
+
+      auto parts = splitTopLevel(lp + 1, rp);
+      if (parts.size() == 1) {
+        std::string only = joinTokens(ts, parts[0].first, parts[0].second);
+        if (only.empty() || only == "void")
+          continue;
+      }
+      FuncDefaults f;
+      f.nameIdx = i;
+      f.lparen = lp;
+      f.rparen = rp;
+      f.paramCount = parts.size();
+      bool any = false;
+      for (const auto &part : parts) {
+        size_t eq = kNPos;
+        int paren = 0, bracket = 0;
+        for (size_t k = part.first; k < part.second; ++k) {
+          if (ts.isPunct(k, "(")) ++paren;
+          else if (ts.isPunct(k, ")")) --paren;
+          else if (ts.isPunct(k, "[") ) ++bracket;
+          else if (ts.isPunct(k, "]")) --bracket;
+          else if (ts.isPunct(k, "=") && paren == 0 && bracket == 0) {
+            eq = k;
+            break;
+          }
+        }
+        if (eq == kNPos) {
+          f.defaults.push_back(std::string());
+        } else {
+          any = true;
+          f.defaults.push_back(joinTokens(ts, eq + 1, part.second));
+        }
+      }
+      if (!any)
+        continue;
+      defaultsByName_[ts[i].text] = funcsWithDefaults_.size();
+      funcsWithDefaults_.push_back(f);
+    }
+  }
+
+  bool tryEmitDefaultDefinition(size_t i) {
+    auto it = defaultsByName_.find(ts[i].text);
+    if (it == defaultsByName_.end())
+      return false;
+    const FuncDefaults &f = funcsWithDefaults_[it->second];
+    if (f.nameIdx != i)
+      return false;
+    auto parts = splitTopLevel(f.lparen + 1, f.rparen);
+    emitToken(i);
+    emit("(");
+    for (size_t k = 0; k < parts.size(); ++k) {
+      if (k)
+        emit(", ");
+      size_t end = parts[k].second;
+      int paren = 0, bracket = 0;
+      for (size_t n = parts[k].first; n < parts[k].second; ++n) {
+        if (ts.isPunct(n, "(")) ++paren;
+        else if (ts.isPunct(n, ")")) --paren;
+        else if (ts.isPunct(n, "[")) ++bracket;
+        else if (ts.isPunct(n, "]")) --bracket;
+        else if (ts.isPunct(n, "=") && paren == 0 && bracket == 0) {
+          end = n;
+          break;
+        }
+      }
+      emitRange(parts[k].first, end);
+    }
+    emit(")");
+    skipTo_ = f.rparen;
+    changed_ = true;
+    return true;
+  }
+
+  bool tryEmitDefaultCall(size_t i) {
+    auto it = defaultsByName_.find(ts[i].text);
+    if (it == defaultsByName_.end())
+      return false;
+    const FuncDefaults &f = funcsWithDefaults_[it->second];
+    if (f.nameIdx == i)
+      return false;
+    size_t lp = ts.nextSig(i);
+    if (!ts.isPunct(lp, "("))
+      return false;
+    size_t rp = ts.matchParen(lp);
+    if (rp == kNPos)
+      return false;
+    auto args = splitTopLevel(lp + 1, rp);
+    size_t argc = (args.size() == 1 && joinTokens(ts, args[0].first,
+                                                  args[0].second).empty())
+                      ? 0
+                      : args.size();
+    emitToken(i);
+    emit("(");
+    if (argc > 0)
+      emitRange(lp + 1, rp);
+    for (size_t k = argc; k < f.paramCount; ++k) {
+      if (f.defaults[k].empty()) {
+        diags_.error("no default argument for parameter " + std::to_string(k + 1) +
+                         " in call to '" + ts[i].text + "'",
+                     filename_, ts[i].line, ts[i].column);
+        continue;
+      }
+      if (argc > 0 || k > argc)
+        emit(", ");
+      emit(f.defaults[k]);
+    }
+    emit(")");
+    skipTo_ = rp;
+    changed_ = true;
+    return true;
+  }
+
   // --- emission -------------------------------------------------------------
 
   void emit(const std::string &s) { out_ += s; }
@@ -548,6 +710,12 @@ private:
 
   void emitTranslationUnit() {
     for (size_t i = 0; i < ts.size(); ++i) {
+      if (tryEmitRangeFor(i) || tryEmitDefaultDefinition(i) ||
+          tryEmitDefaultCall(i)) {
+        i = skipTo_;
+        skipTo_ = kNPos;
+        continue;
+      }
       if (size_t ci = classAt(i); ci != kNPos) {
         emitClass(classes_[ci]);
         i = classes_[ci].bodyClose;
@@ -587,6 +755,12 @@ private:
         continue;
       }
       emitToken(i);
+      auto extra = extraBraces_.find(i);
+      if (extra != extraBraces_.end()) {
+        for (int n = 0; n < extra->second; ++n)
+          emit("}");
+        extraBraces_.erase(extra);
+      }
     }
   }
 
@@ -675,6 +849,11 @@ private:
 
   void emitMethodBody(size_t open, size_t close, const ClassInfo *selfClass) {
     for (size_t i = open; i <= close; ++i) {
+      if (tryEmitRangeFor(i) || tryEmitDefaultCall(i)) {
+        i = skipTo_;
+        skipTo_ = kNPos;
+        continue;
+      }
       if (ts.isIdent(i, "auto") && tryEmitAuto(i)) {
         i = skipTo_;
         skipTo_ = kNPos;
@@ -863,6 +1042,11 @@ private:
   /// Emit a range of tokens, applying the same C+ rewrites as the top level.
   void emitRange(size_t from, size_t to, const ClassInfo *selfClass = nullptr) {
     for (size_t k = from; k < to; ++k) {
+      if (tryEmitRangeFor(k) || tryEmitDefaultCall(k)) {
+        k = skipTo_;
+        skipTo_ = kNPos;
+        continue;
+      }
       if (ts.isIdent(k, "auto") && tryEmitAuto(k)) {
         k = skipTo_;
         skipTo_ = kNPos;
@@ -876,6 +1060,73 @@ private:
       }
       emitToken(k);
     }
+  }
+
+  std::string lengthExprFor(const std::string &name, size_t pos) const {
+    auto it = arrays_.find(name);
+    if (it != arrays_.end())
+      return "(" + std::to_string(it->second) + ")";
+    std::string expr;
+    for (const auto &entry : dynamicLengths_)
+      if (entry.pos < pos && entry.name == name)
+        expr = entry.expr;
+    if (!expr.empty())
+      return "(" + expr + ")";
+    if (dynamicPointers_.count(name))
+      return "cplus_alloc_count(" + name + ", sizeof(*" + name + "))";
+    return std::string();
+  }
+
+  /// Rewrite `for (auto v : arr) body` into a counted C loop that uses the
+  /// range's `.len` property.  The range must be a simple lvalue (array or
+  /// C+ allocation); side-effecting range expressions are not supported.
+  bool tryEmitRangeFor(size_t i) {
+    if (!ts.isIdent(i, "for"))
+      return false;
+    size_t lp = ts.nextSig(i);
+    if (!ts.isPunct(lp, "("))
+      return false;
+    size_t rp = ts.matchParen(lp);
+    if (rp == kNPos)
+      return false;
+
+    size_t first = ts.nextSig(lp);
+    if (first >= rp ||
+        !(ts.isIdent(first, "auto") || ts[first].kind == TokKind::Identifier))
+      return false;
+    size_t name = ts.nextSig(first);
+    size_t colon = ts.nextSig(name);
+    if (name >= rp || ts[name].kind != TokKind::Identifier ||
+        !ts.isPunct(colon, ":"))
+      return false;
+    size_t exprStart = ts.nextSig(colon);
+    if (exprStart >= rp || ts[exprStart].kind != TokKind::Identifier ||
+        ts.nextSig(exprStart) != rp)
+      return false;
+
+    size_t bodyOpen = ts.nextSig(rp);
+    if (!ts.isPunct(bodyOpen, "{"))
+      return false;
+    size_t bodyClose = ts.matchBrace(bodyOpen);
+    if (bodyClose == kNPos)
+      return false;
+
+    std::string range = ts[exprStart].text;
+    std::string var = ts[name].text;
+    std::string len = lengthExprFor(range, i);
+    if (len.empty()) {
+      diags_.error("range requires a known .len property: '" + range + "'",
+                   filename_, ts[exprStart].line, ts[exprStart].column);
+      return false;
+    }
+    std::string idx = "__cplus_range_i" + std::to_string(rangeCounter_++);
+    emit("for (size_t " + idx + " = 0; " + idx + " < " + len + "; " +
+         idx + "++) { __typeof__(" + range + "[" + idx + "]) " + var + " = " +
+         range + "[" + idx + "];");
+    extraBraces_[bodyClose]++;
+    skipTo_ = rp; // resume at the original body's opening brace
+    changed_ = true;
+    return true;
   }
 
   /// Rewrite `auto name = init;` to `__typeof__(init) name = init;`.
@@ -1020,6 +1271,10 @@ private:
   bool ctorBody_ = false;
   size_t skipTo_ = kNPos;
 
+  std::map<size_t, int> extraBraces_;
+  unsigned rangeCounter_ = 0;
+  std::vector<FuncDefaults> funcsWithDefaults_;
+  std::map<std::string, size_t> defaultsByName_;
   std::vector<ResourceInfo> resources_;
   std::vector<ClassInfo> classes_;
   std::vector<std::string> resourceTypes_;
