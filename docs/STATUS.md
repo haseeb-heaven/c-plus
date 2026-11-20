@@ -23,6 +23,7 @@ the repository's test/demo runs. "partial" is never counted as complete.
 | Fixed array `.len` | yes | yes | yes | compile-time literal |
 | C compatibility / C ABI / libc + POSIX | yes | yes | yes | C17 + GNU extensions; legacy C not safe |
 | `.cp` / `.hp` extensions | yes | yes | yes | `.c`/`.h` still accepted; header lowering per TU |
+| `.hp` standard library layer | yes | yes | yes | thin wrappers over libc/POSIX; not a libc rewrite |
 | Native executable generation | yes | yes | yes | host Clang driver; macOS arm64 verified here |
 | `--legacy-c` mode | yes | yes | yes | explicitly **not** memory safe |
 | Format-free `print` / `scan` | yes | yes | yes | no struct reflection; printer state is not thread-safe |
@@ -44,7 +45,7 @@ Commands that produced the "verified" column:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c+_lang
 ctest --test-dir build --output-on-failure   # 2/2 suites
-./tests/run_tests.sh                         # 47 tests
-./demos/run_demos.sh                         # 15 demos
+./tests/run_tests.sh                         # 48 tests
+./demos/run_demos.sh                         # 16 demos
 ./benchmarks/run_bench.sh                    # performance table
 ```

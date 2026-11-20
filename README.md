@@ -167,6 +167,13 @@ Ordinary `.c` files need no changes and compile unchanged. See
 [`docs/LANGUAGE.md`](docs/LANGUAGE.md) for the full syntax, and the `demos/`
 directory for complete programs.
 
+## Standard library
+
+The C+ standard library is provided as `.hp` headers in `include/cplus/std/`:
+owned `String`, growable `IntVec`, RAII `File`, `Mutex`/`Guard`, I/O helpers and
+RAII sockets. They are thin typed wrappers over libc/POSIX, not a rewrite of
+the C runtime. See [`docs/STDLIB.md`](docs/STDLIB.md).
+
 ## Safety model
 
 C+ also has a small borrow checker: a pointer borrowed from a local resource
@@ -195,7 +202,7 @@ still required for the full specification is tracked in
 
 ```sh
 ./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
-./demos/run_demos.sh      # fifteen demos
+./demos/run_demos.sh      # sixteen demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
 
