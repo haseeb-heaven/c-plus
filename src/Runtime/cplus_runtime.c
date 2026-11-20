@@ -84,20 +84,29 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
 /* -------------------------------------------------------------------------
  * Managed memory
  *
- * Managed allocations are tracked in a side table so that invalid and double
- * releases are detected instead of corrupting the heap.  The metadata is
- * never stored in front of the user pointer and is never freed, so a stale
- * pointer can be looked up safely.
+ * Managed allocations are tracked in a hash table so that invalid and double
+ * releases are detected without touching freed memory.  The metadata lives
+ * beside the allocation, never in front of the user pointer.
+ *
+ * A small direct-mapped cache remembers recently freed addresses, which lets
+ * us report a double release even when malloc has already handed the same
+ * address out again.  It is bounded, so bookkeeping stays O(1).
  * ------------------------------------------------------------------------- */
 
-typedef struct cplus_alloc_record {
+#define CPLUS_LIVE_INITIAL 64u
+#define CPLUS_RECENT_SLOTS 4096u
+#define CPLUS_TOMBSTONE ((void *)(uintptr_t)-1)
+
+typedef struct cplus_live_slot {
   void *ptr;
   size_t size;
-  int released;
-  struct cplus_alloc_record *next;
-} cplus_alloc_record;
+} cplus_live_slot;
 
-static cplus_alloc_record *cplus_alloc_head = NULL;
+static cplus_live_slot *cplus_live = NULL;
+static size_t cplus_live_cap = 0;
+static size_t cplus_live_count = 0;
+static size_t cplus_live_deleted = 0;
+static void *cplus_recent[CPLUS_RECENT_SLOTS];
 
 #ifdef CPLUS_POSIX
 static pthread_mutex_t cplus_alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -110,6 +119,72 @@ static void cplus_alloc_lock(void) {}
 static void cplus_alloc_unlock(void) {}
 #endif
 
+static size_t cplus_hash(const void *p) {
+  uintptr_t x = (uintptr_t)p;
+  x ^= x >> 30;
+  x *= (uintptr_t)0xbf58476d1ce4e5b9ULL;
+  x ^= x >> 27;
+  x *= (uintptr_t)0x94d049bb133111ebULL;
+  x ^= x >> 31;
+  return (size_t)x;
+}
+
+static size_t cplus_recent_index(const void *p) {
+  return (size_t)(cplus_hash(p) & (CPLUS_RECENT_SLOTS - 1u));
+}
+
+static cplus_live_slot *cplus_find_live(const void *p) {
+  if (cplus_live_cap == 0)
+    return NULL;
+  size_t mask = cplus_live_cap - 1;
+  size_t i = cplus_hash(p) & mask;
+  for (size_t probe = 0; probe <= mask; ++probe) {
+    void *slot = cplus_live[i].ptr;
+    if (slot == p)
+      return &cplus_live[i];
+    if (slot == NULL)
+      return NULL;
+    i = (i + 1) & mask;
+  }
+  return NULL;
+}
+
+static void cplus_live_insert(const void *p, size_t size) {
+  size_t mask = cplus_live_cap - 1;
+  size_t i = cplus_hash(p) & mask;
+  while (cplus_live[i].ptr != NULL && cplus_live[i].ptr != CPLUS_TOMBSTONE)
+    i = (i + 1) & mask;
+  if (cplus_live[i].ptr == CPLUS_TOMBSTONE)
+    --cplus_live_deleted;
+  cplus_live[i].ptr = (void *)p;
+  cplus_live[i].size = size;
+  ++cplus_live_count;
+}
+
+/* Called with the allocator lock held. */
+static void cplus_live_grow(void) {
+  size_t cap = cplus_live_cap ? cplus_live_cap * 2 : CPLUS_LIVE_INITIAL;
+  cplus_live_slot *fresh = (cplus_live_slot *)calloc(cap, sizeof(*fresh));
+  if (!fresh) {
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "allocation bookkeeping failed");
+  }
+  for (size_t k = 0; k < cplus_live_cap; ++k) {
+    void *p = cplus_live[k].ptr;
+    if (p != NULL && p != CPLUS_TOMBSTONE) {
+      size_t mask = cap - 1;
+      size_t i = cplus_hash(p) & mask;
+      while (fresh[i].ptr != NULL)
+        i = (i + 1) & mask;
+      fresh[i] = cplus_live[k];
+    }
+  }
+  free(cplus_live);
+  cplus_live = fresh;
+  cplus_live_cap = cap;
+  cplus_live_deleted = 0;
+}
+
 void *cplus_alloc(size_t size) {
   if (size == 0)
     size = 1;
@@ -118,36 +193,10 @@ void *cplus_alloc(size_t size) {
     cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
                       "managed allocation failed");
   }
-  cplus_alloc_record *r = (cplus_alloc_record *)malloc(sizeof(*r));
-  if (!r) {
-    free(p);
-    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
-                      "allocation bookkeeping failed");
-  }
-  r->ptr = p;
-  r->size = size;
-  r->released = 0;
-
   cplus_alloc_lock();
-  /* If the allocator reused the address of a released block, recycle its
-   * record.  Keeping released records lets us report a lost stale pointer as
-   * a double release instead of silently accepting it. */
-  cplus_alloc_record *reuse = NULL;
-  for (cplus_alloc_record *it = cplus_alloc_head; it; it = it->next) {
-    if (it->released && it->ptr == p) {
-      reuse = it;
-      break;
-    }
-  }
-  if (reuse) {
-    reuse->size = size;
-    reuse->released = 0;
-    free(r);
-    cplus_alloc_unlock();
-    return p;
-  }
-  r->next = cplus_alloc_head;
-  cplus_alloc_head = r;
+  if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
+    cplus_live_grow();
+  cplus_live_insert(p, size);
   cplus_alloc_unlock();
   return p;
 }
@@ -165,21 +214,13 @@ void *cplus_realloc(void *ptr, size_t size) {
     cplus_release(ptr);
     return NULL;
   }
-  /* Shared realloc is not supported: managed allocations are scope-owned.
-   * Allocate a new block of the requested size instead of risking an
-   * invalidated pointer. */
+  /* Managed allocations are scope-owned, so reallocation makes a fresh block
+   * instead of invalidating pointers held elsewhere. */
   void *fresh = cplus_alloc(size);
-  cplus_alloc_record *r = NULL;
   cplus_alloc_lock();
-  for (cplus_alloc_record *it = cplus_alloc_head; it; it = it->next) {
-    if (it->ptr == ptr) {
-      r = it;
-      break;
-    }
-  }
-  if (r && !r->released) {
-    memcpy(fresh, ptr, size < r->size ? size : r->size);
-  }
+  cplus_live_slot *slot = cplus_find_live(ptr);
+  if (slot)
+    memcpy(fresh, ptr, size < slot->size ? size : slot->size);
   cplus_alloc_unlock();
   return fresh;
 }
@@ -194,28 +235,23 @@ void cplus_release(void *ptr) {
     return;
 
   cplus_alloc_lock();
-  cplus_alloc_record *r = NULL;
-  for (cplus_alloc_record *it = cplus_alloc_head; it; it = it->next) {
-    if (it->ptr == ptr) {
-      r = it;
-      break;
-    }
-  }
-  if (!r) {
+  cplus_live_slot *slot = cplus_find_live(ptr);
+  if (!slot) {
+    int recently_freed = cplus_recent[cplus_recent_index(ptr)] == ptr;
     cplus_alloc_unlock();
+    if (recently_freed)
+      cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", NULL, 0,
+                        "managed memory released twice");
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", NULL, 0,
                       "pointer was not produced by the C+ allocator");
   }
-  if (r->released) {
-    cplus_alloc_unlock();
-    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", NULL, 0,
-                      "managed memory released twice");
-  }
-  r->released = 1;
-  void *raw = r->ptr;
+  slot->ptr = CPLUS_TOMBSTONE;
+  --cplus_live_count;
+  ++cplus_live_deleted;
+  cplus_recent[cplus_recent_index(ptr)] = ptr;
   cplus_alloc_unlock();
 
-  free(raw);
+  free(ptr);
 }
 
 size_t cplus_check_index(size_t index, size_t count, const char *file,
