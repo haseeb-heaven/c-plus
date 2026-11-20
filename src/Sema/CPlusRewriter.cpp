@@ -36,6 +36,16 @@ namespace {
 
 constexpr size_t kNPos = static_cast<size_t>(-1);
 
+std::set<std::string> &externalClasses() {
+  static std::set<std::string> names;
+  return names;
+}
+
+std::set<std::string> &externalCtors() {
+  static std::set<std::string> names;
+  return names;
+}
+
 struct MethodInfo {
   std::string name;
   size_t itemStart = 0;
@@ -266,6 +276,13 @@ private:
         }
       }
     }
+    for (const auto &name : externalClasses()) {
+      classNames_.insert(name);
+      classTypes_.push_back(name);
+      externalClassNames_.insert(name);
+      if (externalCtors().count(name))
+        classNamesWithCtor_.insert(name);
+    }
   }
 
   bool parseResource(size_t i, ResourceInfo *r) {
@@ -482,11 +499,19 @@ private:
         continue;
       size_t name = ts.nextSig(i);
       size_t eq = ts.nextSig(name);
-      size_t lparen = ts.nextSig(eq);
-      size_t cls = ts.nextSig(lparen);
+      size_t tok = ts.nextSig(eq);
       if (name >= ts.size() || ts[name].kind != TokKind::Identifier ||
-          !ts.isPunct(eq, "=") || !ts.isPunct(lparen, "(") ||
-          cls >= ts.size() || ts[cls].kind != TokKind::Identifier ||
+          !ts.isPunct(eq, "=") || tok >= ts.size())
+        continue;
+      size_t cls = kNPos;
+      if (ts.isPunct(tok, "(")) {
+        cls = ts.nextSig(tok);          // auto x = (Class){...}
+      } else if (ts[tok].kind == TokKind::Identifier &&
+                 ts.isPunct(ts.nextSig(tok), "(")) {
+        cls = tok;                      // auto x = Class(...)
+      }
+      if (cls == kNPos || cls >= ts.size() ||
+          ts[cls].kind != TokKind::Identifier ||
           !classNames_.count(ts[cls].text))
         continue;
       varClasses_[ts[name].text] = ts[cls].text;
@@ -1263,7 +1288,10 @@ private:
     for (const auto &c : classes_)
       if (c.name == className)
         cls = &c;
-    if (!cls || !cls->methodNames.count(ts[methodIdx].text))
+    bool external = externalClassNames_.count(className) != 0;
+    if (!cls && !external)
+      return false;
+    if (cls && !cls->methodNames.count(ts[methodIdx].text) && !external)
       return false;
 
     emit(className + "_" + ts[methodIdx].text + "(");
@@ -1301,6 +1329,7 @@ private:
   std::set<std::string> resourceNames_;
   std::set<std::string> classNames_;
   std::set<std::string> classNamesWithCtor_;
+  std::set<std::string> externalClassNames_;
   std::map<std::string, std::string> varClasses_;
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;
@@ -1322,6 +1351,17 @@ RewrittenSource rewriteCPlusSource(const std::string &source,
   std::vector<Token> toks = lexCPlus(source);
   Lowerer lowerer(toks, diags, filename);
   return lowerer.run();
+}
+
+void registerExternalClass(const std::string &name, bool hasConstructor) {
+  externalClasses().insert(name);
+  if (hasConstructor)
+    externalCtors().insert(name);
+}
+
+void clearExternalClasses() {
+  externalClasses().clear();
+  externalCtors().clear();
 }
 
 } // namespace cplus

@@ -16,6 +16,13 @@ RewrittenSource rewriteCPlusSource(const std::string &source,
                                    DiagnosticEngine &diags,
                                    const std::string &filename);
 
+/// Register a class declared in a lowered `.hp` header so that a later
+/// translation unit can resolve method calls and constructor sugar for it.
+void registerExternalClass(const std::string &name, bool hasConstructor);
+
+/// Clear the external-class registry (used between unrelated builds).
+void clearExternalClasses();
+
 } // namespace cplus
 
 #endif // CPLUS_CPLUSREWRITER_H

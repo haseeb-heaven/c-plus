@@ -14,6 +14,8 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <map>
+#include <set>
 #include <sstream>
 #include <system_error>
 #include <unistd.h>
@@ -259,8 +261,136 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
   }
 }
 
+/// Lower one translation unit (source file or header) to plain C.
+std::string lowerUnit(const std::string &text, const std::string &name,
+                      DiagnosticEngine &diags, Mode mode, bool *ok,
+                      RewrittenSource *outRewritten = nullptr) {
+  RewrittenSource rewritten = rewriteCPlusSource(text, diags, name);
+  if (mode == Mode::Safe)
+    checkStaticBounds(text, rewritten.arrayLengths, diags, name);
+  LoweredSource lowered =
+      lowerRaii(rewritten.text, rewritten.resourceTypes, diags, name, mode);
+  if (outRewritten)
+    *outRewritten = rewritten;
+  *ok = !diags.hasErrors();
+  return lowered.text;
+}
+
+std::string resolveInclude(const std::string &name,
+                           const std::string &currentPath) {
+  if (name.empty() || llvm::sys::path::is_absolute(name))
+    return fileExists(name) ? name : std::string();
+
+  std::vector<std::string> dirs;
+  llvm::StringRef parent = llvm::sys::path::parent_path(currentPath);
+  if (!parent.empty())
+    dirs.push_back(parent.str());
+  dirs.push_back(".");
+  std::string envInc = envOr("CPLUS_INCLUDE");
+  if (!envInc.empty())
+    dirs.push_back(envInc);
+  std::string autoInc = findCPlusIncludeDir();
+  if (!autoInc.empty())
+    dirs.push_back(autoInc);
+  std::string root = findSourceRoot();
+  if (!root.empty())
+    dirs.push_back(root + "/include");
+
+  for (const auto &dir : dirs) {
+    std::string candidate = joinPath(dir, name);
+    if (fileExists(candidate))
+      return candidate;
+  }
+  return std::string();
+}
+
+/// Replace `#include "x.hp"` with an absolute path to a lowered `.h` copy.
+/// This lets modern C+ headers use the same syntax as `.cp` sources while
+/// ordinary `.h` headers keep working unchanged.
+std::string preprocessModernHeaders(
+    const std::string &source, const std::string &currentPath,
+    DiagnosticEngine &diags, Mode mode, std::vector<TempFile> &guards,
+    std::map<std::string, std::string> &processed, unsigned &counter) {
+  std::string result;
+  std::istringstream in(source);
+  std::string line;
+  bool first = true;
+  while (std::getline(in, line)) {
+    if (!first)
+      result += "\n";
+    first = false;
+
+    size_t hash = line.find("#include");
+    if (hash != std::string::npos) {
+      size_t q1 = line.find('"', hash);
+      size_t q2 = q1 == std::string::npos ? std::string::npos
+                                          : line.find('"', q1 + 1);
+      if (q1 != std::string::npos && q2 != std::string::npos) {
+        std::string inc = line.substr(q1 + 1, q2 - q1 - 1);
+        if (llvm::StringRef(inc).ends_with(".hp")) {
+          std::string path = resolveInclude(inc, currentPath);
+          if (path.empty()) {
+            Diag d;
+            d.level = DiagLevel::Error;
+            d.message = "cannot find C+ header '" + inc + "'";
+            d.file = currentPath;
+            diags.report(std::move(d));
+          } else {
+            auto known = processed.find(path);
+            std::string tempPath =
+                known == processed.end() ? std::string() : known->second;
+            if (tempPath.empty()) {
+              std::string err;
+              std::string header = readFile(path, &err);
+              if (!err.empty()) {
+                Diag d;
+                d.level = DiagLevel::Error;
+                d.message = "cannot read '" + path + "': " + err;
+                diags.report(std::move(d));
+              } else {
+                header = preprocessModernHeaders(header, path, diags, mode,
+                                                 guards, processed, counter);
+                bool ok = false;
+                RewrittenSource headerInfo;
+                std::string lowered = lowerUnit(header, path, diags, mode, &ok,
+                                                &headerInfo);
+                for (const auto &cls : headerInfo.classTypes)
+                  registerExternalClass(
+                      cls, lowered.find(cls + "_ctor(") != std::string::npos);
+                llvm::SmallString<256> tmp;
+                llvm::sys::path::system_temp_directory(true, tmp);
+                llvm::sys::path::append(
+                    tmp, "cplus-hp-" + std::to_string(::getpid()) + "-" +
+                             std::to_string(counter++) + ".h");
+                tempPath = tmp.str().str();
+                if (!writeFile(tempPath, lowered, &err)) {
+                  Diag d;
+                  d.level = DiagLevel::Error;
+                  d.message = "cannot write lowered header: " + err;
+                  diags.report(std::move(d));
+                  tempPath.clear();
+                } else {
+                  guards.emplace_back();
+                  guards.back().path = tempPath;
+                  guards.back().keep = false;
+                  processed[path] = tempPath;
+                }
+              }
+            }
+            if (!tempPath.empty())
+              line.replace(q1, q2 - q1 + 1, "\"" + tempPath + "\"");
+          }
+        }
+      }
+    }
+    result += line;
+  }
+  return result;
+}
+
 int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
               llvm::raw_ostream &errs) {
+  clearExternalClasses();
   DiagnosticEngine diags;
   std::string err;
   std::string source = readFile(opts.input, &err);
@@ -269,18 +399,18 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     return 1;
   }
 
-  // Stage 1: lower C+ syntax (classes, resources, ownership modifiers) to C.
-  RewrittenSource rewritten = rewriteCPlusSource(source, diags, opts.input);
+  // Stage 0: lower any included `.hp` headers into temporary `.h` files.
+  std::vector<TempFile> headerGuards;
+  std::map<std::string, std::string> processedHeaders;
+  unsigned headerCounter = 0;
+  source = preprocessModernHeaders(source, opts.input, diags, opts.mode,
+                                   headerGuards, processedHeaders,
+                                   headerCounter);
 
-  // Stage 1b: reject bounds violations that are provable from array extents
-  // and simple loop bounds before producing an executable.  Legacy C mode
-  // keeps ordinary C behaviour.
-  if (opts.mode == Mode::Safe)
-    checkStaticBounds(source, rewritten.arrayLengths, diags, opts.input);
-
-  // Stage 2: insert deterministic cleanup (RAII) for owned declarations.
-  LoweredSource lowered = lowerRaii(rewritten.text, rewritten.resourceTypes,
-                                    diags, opts.input, opts.mode);
+  // Stages 1-2: lower C+ syntax and insert deterministic cleanup.
+  bool ok = false;
+  std::string loweredText =
+      lowerUnit(source, opts.input, diags, opts.mode, &ok);
 
   printDiagnostics(diags, errs, opts.input);
   if (diags.hasErrors())
@@ -289,7 +419,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     return 1;
 
   if (!opts.emitC.empty()) {
-    if (!writeFile(opts.emitC, lowered.text, &err)) {
+    if (!writeFile(opts.emitC, loweredText, &err)) {
       errs << "error: cannot write '" << opts.emitC << "': " << err << "\n";
       return 1;
     }
@@ -306,12 +436,12 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   std::string pidSuffix = std::to_string(::getpid());
   tempPath = std::string(inputDir);
   llvm::sys::path::append(tempPath, ".cplus-tmp-" + pidSuffix + ".c");
-  if (!writeFile(tempPath.str().str(), lowered.text, &err)) {
+  if (!writeFile(tempPath.str().str(), loweredText, &err)) {
     llvm::SmallString<256> sysTemp;
     llvm::sys::path::system_temp_directory(true, sysTemp);
     llvm::sys::path::append(sysTemp, "cplus-" + pidSuffix + ".c");
     tempPath = sysTemp;
-    if (!writeFile(tempPath.str().str(), lowered.text, &err)) {
+    if (!writeFile(tempPath.str().str(), loweredText, &err)) {
       errs << "error: cannot write temporary file: " << err << "\n";
       return 1;
     }

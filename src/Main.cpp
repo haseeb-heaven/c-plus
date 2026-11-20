@@ -3,7 +3,7 @@
 // The `c+` command line driver.
 //
 //   c+ --version
-//   c+ build  main.c            [--release|--debug] [--legacy-c]
+//   c+ build  main.cp           [--release|--debug] [--legacy-c]
 //   c+ run    main.c            [--release|--debug] [--legacy-c]
 //   c+ check  main.c            [--release|--debug] [--legacy-c]
 //   c+ test   [pattern]
@@ -48,6 +48,7 @@ void printVersion(raw_ostream &os) {
 
 void printUsage(raw_ostream &os) {
   os << "usage: c+ <command> [options] <file>\n\n";
+  os << "extensions: .cp/.hp recommended for modern C+; .c/.h remain supported\n\n";
   os << "commands:\n";
   os << "  build <file.c>   lower C+ and compile it to a native executable\n";
   os << "  run   <file.c>   build, then run the executable\n";
