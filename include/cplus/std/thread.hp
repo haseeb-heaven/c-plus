@@ -1,0 +1,42 @@
+/* C+ standard library: RAII mutex and lock guard over POSIX threads. */
+#ifndef CPLUS_STD_THREAD_HP
+#define CPLUS_STD_THREAD_HP
+
+#include "cplus/cplus.h"
+
+resource struct Mutex {
+    void *handle;
+};
+
+void Mutex_drop(Mutex *self) {
+    if (self->handle != NULL) {
+        cplus_mutex_free(self->handle);
+        self->handle = NULL;
+    }
+}
+
+Mutex Mutex_new(void) {
+    Mutex m;
+    m.handle = cplus_mutex_new();
+    return m;
+}
+
+resource struct Guard {
+    Mutex *owner;
+};
+
+void Guard_drop(Guard *self) {
+    if (self->owner != NULL) {
+        cplus_mutex_unlock(self->owner->handle);
+        self->owner = NULL;
+    }
+}
+
+Guard Guard_lock(Mutex *mutex) {
+    Guard g;
+    g.owner = mutex;
+    cplus_mutex_lock(mutex->handle);
+    return g;
+}
+
+#endif

@@ -46,6 +46,11 @@ std::set<std::string> &externalCtors() {
   return names;
 }
 
+std::set<std::string> &externalResources() {
+  static std::set<std::string> names;
+  return names;
+}
+
 struct MethodInfo {
   std::string name;
   size_t itemStart = 0;
@@ -276,6 +281,8 @@ private:
         }
       }
     }
+    for (const auto &name : externalResources())
+      resourceTypes_.push_back(name);
     for (const auto &name : externalClasses()) {
       classNames_.insert(name);
       classTypes_.push_back(name);
@@ -1359,9 +1366,14 @@ void registerExternalClass(const std::string &name, bool hasConstructor) {
     externalCtors().insert(name);
 }
 
+void registerExternalResource(const std::string &name) {
+  externalResources().insert(name);
+}
+
 void clearExternalClasses() {
   externalClasses().clear();
   externalCtors().clear();
+  externalResources().clear();
 }
 
 } // namespace cplus

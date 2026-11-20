@@ -1,0 +1,59 @@
+/* C+ standard library: RAII TCP listener/connection over POSIX sockets. */
+#ifndef CPLUS_STD_NET_HP
+#define CPLUS_STD_NET_HP
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include "cplus/cplus.h"
+
+resource struct Listener {
+    int fd;
+};
+
+void Listener_drop(Listener *self) {
+    if (self->fd >= 0) {
+        close(self->fd);
+        self->fd = -1;
+    }
+}
+
+Listener Listener_bind(int port) {
+    Listener l;
+    l.fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (l.fd < 0)
+        return l;
+    int yes = 1;
+    setsockopt(l.fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons((unsigned short)port);
+    if (bind(l.fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
+        listen(l.fd, 1) != 0) {
+        close(l.fd);
+        l.fd = -1;
+    }
+    return l;
+}
+
+resource struct Connection {
+    int fd;
+};
+
+void Connection_drop(Connection *self) {
+    if (self->fd >= 0) {
+        close(self->fd);
+        self->fd = -1;
+    }
+}
+
+Connection Connection_accept(Listener *listener) {
+    Connection c;
+    c.fd = accept(listener->fd, NULL, NULL);
+    return c;
+}
+
+#endif

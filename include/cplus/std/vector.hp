@@ -1,0 +1,53 @@
+/* C+ standard library: growable int vector with a tracked length. */
+#ifndef CPLUS_STD_VECTOR_HP
+#define CPLUS_STD_VECTOR_HP
+
+#include "cplus/cplus.h"
+
+class IntVec {
+    int *data;
+    size_t length;
+    size_t capacity;
+
+    IntVec(void) {
+        self->data = NULL;
+        self->length = 0;
+        self->capacity = 0;
+    }
+
+    size_t len(void) {
+        return self->length;
+    }
+
+    void push(int value) {
+        if (self->length == self->capacity) {
+            size_t next = self->capacity == 0 ? 4 : self->capacity * 2;
+            int *fresh = (int *)cplus_alloc(sizeof(int) * next);
+            size_t i;
+            for (i = 0; i < self->length; i++)
+                fresh[i] = self->data[i];
+            if (self->data != NULL)
+                cplus_release(self->data);
+            self->data = fresh;
+            self->capacity = next;
+        }
+        self->data[self->length++] = value;
+    }
+
+    int at(size_t index) {
+        if (index >= self->length)
+            return 0;
+        return self->data[index];
+    }
+
+    void drop(void) {
+        if (self->data != NULL) {
+            cplus_release(self->data);
+            self->data = NULL;
+            self->length = 0;
+            self->capacity = 0;
+        }
+    }
+};
+
+#endif

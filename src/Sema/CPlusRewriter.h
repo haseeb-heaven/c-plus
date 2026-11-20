@@ -20,6 +20,9 @@ RewrittenSource rewriteCPlusSource(const std::string &source,
 /// translation unit can resolve method calls and constructor sugar for it.
 void registerExternalClass(const std::string &name, bool hasConstructor);
 
+/// Register an owning type declared in a lowered `.hp` header.
+void registerExternalResource(const std::string &name);
+
 /// Clear the external-class registry (used between unrelated builds).
 void clearExternalClasses();
 

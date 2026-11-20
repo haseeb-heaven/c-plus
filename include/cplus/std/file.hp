@@ -1,0 +1,31 @@
+/* C+ standard library: RAII file handle over stdio FILE. */
+#ifndef CPLUS_STD_FILE_HP
+#define CPLUS_STD_FILE_HP
+
+#include <stdio.h>
+#include "cplus/cplus.h"
+
+resource struct File {
+    FILE *handle;
+};
+
+void File_drop(File *self) {
+    if (self->handle != NULL) {
+        fclose(self->handle);
+        self->handle = NULL;
+    }
+}
+
+File File_open(const char *path, const char *mode) {
+    File f;
+    f.handle = fopen(path, mode);
+    return f;
+}
+
+int File_write(File *self, const char *text) {
+    if (self->handle == NULL)
+        return 0;
+    return fputs(text, self->handle) != EOF;
+}
+
+#endif

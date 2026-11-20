@@ -1,0 +1,43 @@
+/* C+ standard library: owned string.
+ * Thin safe wrapper over libc string functions; no new string engine. */
+#ifndef CPLUS_STD_STRING_HP
+#define CPLUS_STD_STRING_HP
+
+#include <string.h>
+#include "cplus/cplus.h"
+
+class String {
+    char *data;
+    size_t length;
+
+    String(const char *text) {
+        size_t n = strlen(text);
+        self->data = (char *)cplus_alloc(n + 1);
+        memcpy(self->data, text, n + 1);
+        self->length = n;
+    }
+
+    size_t len(void) {
+        return self->length;
+    }
+
+    char at(size_t index) {
+        if (index >= self->length)
+            return '\0';
+        return self->data[index];
+    }
+
+    const char *c_str(void) {
+        return self->data;
+    }
+
+    void drop(void) {
+        if (self->data != NULL) {
+            cplus_release(self->data);
+            self->data = NULL;
+            self->length = 0;
+        }
+    }
+};
+
+#endif

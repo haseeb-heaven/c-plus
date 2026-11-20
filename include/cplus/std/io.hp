@@ -1,0 +1,15 @@
+/* C+ standard library: convenience I/O built on format-free print/scan. */
+#ifndef CPLUS_STD_IO_HP
+#define CPLUS_STD_IO_HP
+
+#include "cplus/cplus.h"
+
+void println(void) {
+    print();
+}
+
+void echo_int(int value) {
+    print(value);
+}
+
+#endif

@@ -85,6 +85,20 @@ int runProgram(const std::string &program,
 struct TempFile {
   std::string path;
   bool keep = false;
+  TempFile() = default;
+  TempFile(const TempFile &) = delete;
+  TempFile &operator=(const TempFile &) = delete;
+  TempFile(TempFile &&other) noexcept : path(std::move(other.path)), keep(other.keep) {
+    other.path.clear();
+  }
+  TempFile &operator=(TempFile &&other) noexcept {
+    if (this != &other) {
+      path = std::move(other.path);
+      keep = other.keep;
+      other.path.clear();
+    }
+    return *this;
+  }
   ~TempFile() {
     if (!keep && !path.empty())
       llvm::sys::fs::remove(path);
@@ -357,6 +371,8 @@ std::string preprocessModernHeaders(
                 for (const auto &cls : headerInfo.classTypes)
                   registerExternalClass(
                       cls, lowered.find(cls + "_ctor(") != std::string::npos);
+                for (const auto &res : headerInfo.resourceTypes)
+                  registerExternalResource(res);
                 llvm::SmallString<256> tmp;
                 llvm::sys::path::system_temp_directory(true, tmp);
                 llvm::sys::path::append(
