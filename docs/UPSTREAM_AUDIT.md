@@ -42,6 +42,11 @@ failures.
 The same applies to `2048.c`: the safe-mode diagnostic about `printf` in a
 signal handler is correct (pitfall 30); `--legacy-c` compiles it unchanged.
 
+`tiles.c` exposed a multidimensional-array false positive (`g[i/4][i%4]` on
+`int g[4][4]`); the bounds pass now evaluates division, modulo and arithmetic
+intervals for subscript expressions and checks each dimension separately, while
+skipping declarations inside loop bodies.
+
 `tetris.c` (42 KB, ncurses) was also compiled unchanged in both `--legacy-c`
 and safe mode and linked with `-lncurses`. Fixing this exposed three static
 checker false positives (shared array names across functions, declarations

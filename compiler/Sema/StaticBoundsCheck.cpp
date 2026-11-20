@@ -22,10 +22,10 @@ namespace {
 
 constexpr size_t kNPos = static_cast<size_t>(-1);
 
-struct ArrayExtent {
+struct ArrayShape {
   size_t pos;
   std::string name;
-  size_t extent;
+  std::vector<size_t> dims;
 };
 
 class Checker {
@@ -38,8 +38,13 @@ public:
   }
 
   void run() {
-    for (const auto &entry : arrays_)
-      localArrays_.push_back({0, entry.first, entry.second});
+    for (const auto &entry : arrays_) {
+      ArrayShape seed;
+      seed.pos = 0;
+      seed.name = entry.first;
+      seed.dims.push_back(entry.second);
+      localArrays_.push_back(seed);
+    }
     collectLocalArrays();
     collectFunctions();
     for (const auto &entry : funcs_)
@@ -213,8 +218,13 @@ private:
           name = k - 1;
           break;
         }
-      if (name != kNPos)
-        localArrays_.push_back({i, toks_[name].text, it->second});
+      if (name != kNPos) {
+        ArrayShape inherited;
+        inherited.pos = i;
+        inherited.name = toks_[name].text;
+        inherited.dims.push_back(it->second);
+        localArrays_.push_back(inherited);
+      }
     }
   }
 
@@ -263,23 +273,157 @@ private:
         if (toks_[prev].text == t) { type = true; break; }
       if (!type && !isPunct(prev, ","))
         continue;
-      size_t open = nextSig(i);
-      size_t inner = nextSig(open);
-      long value = 0;
-      if (inner < toks_.size() && number(toks_[inner], &value) && value > 0)
-        localArrays_.push_back({i, toks_[i].text, static_cast<size_t>(value)});
+      std::vector<size_t> dims;
+      size_t cursor = nextSig(i);
+      while (isPunct(cursor, "[")) {
+        size_t inner = nextSig(cursor);
+        long value = 0;
+        if (inner >= toks_.size() || !number(toks_[inner], &value) ||
+            value <= 0)
+          break;
+        dims.push_back(static_cast<size_t>(value));
+        size_t close = match(cursor, "[", "]");
+        if (close == kNPos)
+          break;
+        cursor = nextSig(close);
+      }
+      if (!dims.empty())
+        localArrays_.push_back({i, toks_[i].text, dims});
     }
   }
 
-  bool findExtent(const std::string &name, size_t pos, size_t *extent) const {
+  bool findShape(const std::string &name, size_t pos,
+                 const std::vector<size_t> **shape) const {
     for (size_t k = localArrays_.size(); k > 0; --k) {
-      const ArrayExtent &e = localArrays_[k - 1];
+      const ArrayShape &e = localArrays_[k - 1];
       if (e.name == name && e.pos <= pos) {
-        *extent = e.extent;
+        *shape = &e.dims;
         return true;
       }
     }
     return false;
+  }
+
+  bool findExtent(const std::string &name, size_t pos, size_t *extent) const {
+    const std::vector<size_t> *dims = nullptr;
+    if (!findShape(name, pos, &dims))
+      return false;
+    *extent = dims->front();
+    return true;
+  }
+
+  struct Interval {
+    bool known = false;
+    long lo = 0;
+    long hi = 0;
+  };
+
+  static Interval constant(long v) { return {true, v, v}; }
+
+  size_t findTopOp(size_t from, size_t to, const std::string &ops) const {
+    int paren = 0, bracket = 0;
+    for (size_t k = from; k < to; ++k) {
+      if (isPunct(k, "(")) ++paren;
+      else if (isPunct(k, ")")) --paren;
+      else if (isPunct(k, "[")) ++bracket;
+      else if (isPunct(k, "]")) --bracket;
+      else if (paren == 0 && bracket == 0 &&
+               toks_[k].kind == TokKind::Punct &&
+               ops.find(toks_[k].text[0]) != std::string::npos)
+        return k;
+    }
+    return kNPos;
+  }
+
+  /// Conservative interval evaluation for simple index expressions.  Anything
+  /// not understood returns unknown, which suppresses the diagnostic rather
+  /// than risking a false positive.
+  Interval evalIndex(size_t from, size_t to, const std::string &var,
+                     long vlo, long vhi) const {
+    while (from < to && trivia(from))
+      ++from;
+    while (to > from && trivia(to - 1))
+      --to;
+    if (from >= to)
+      return {};
+    if (from + 1 == to) {
+      long value = 0;
+      if (number(toks_[from], &value))
+        return constant(value);
+      if (toks_[from].kind == TokKind::Identifier && toks_[from].text == var)
+        return {true, vlo, vhi};
+      return {};
+    }
+    if (isPunct(from, "(")) {
+      size_t close = match(from, "(", ")");
+      if (close == to - 1)
+        return evalIndex(from + 1, close, var, vlo, vhi);
+    }
+    size_t op = findTopOp(from, to, "+-");
+    if (op != kNPos) {
+      Interval a = evalIndex(from, op, var, vlo, vhi);
+      Interval b = evalIndex(op + 1, to, var, vlo, vhi);
+      if (!a.known || !b.known) return {};
+      if (isPunct(op, "+")) return {true, a.lo + b.lo, a.hi + b.hi};
+      return {true, a.lo - b.hi, a.hi - b.lo};
+    }
+    op = findTopOp(from, to, "*/%");
+    if (op != kNPos) {
+      Interval a = evalIndex(from, op, var, vlo, vhi);
+      Interval b = evalIndex(op + 1, to, var, vlo, vhi);
+      if (!a.known || !b.known || b.lo != b.hi) return {};
+      long d = b.lo;
+      if (d == 0) return {};
+      if (isPunct(op, "*")) {
+        long c[] = {a.lo * d, a.hi * d};
+        return {true, std::min(c[0], c[1]), std::max(c[0], c[1])};
+      }
+      if (isPunct(op, "/")) {
+        if (d > 0) return {true, a.lo / d, a.hi / d};
+        return {true, a.hi / d, a.lo / d};
+      }
+      if (d > 0 && a.lo >= 0) return {true, 0, d - 1};
+      return {};
+    }
+    return {};
+  }
+
+  /// Check a subscript chain such as g[i/4][i%4] against the array's shape.
+  void checkSubscriptChain(size_t nameIdx, long vlo, long vhi,
+                           const std::string &var) {
+    const std::vector<size_t> *dims = nullptr;
+    if (!findShape(toks_[nameIdx].text, nameIdx, &dims))
+      return;
+    // Skip array declarations inside the loop body (e.g. `int r[4];`).
+    size_t prev = nameIdx == 0 ? kNPos : nameIdx - 1;
+    while (prev != kNPos && trivia(prev)) {
+      if (prev == 0) { prev = kNPos; break; }
+      --prev;
+    }
+    size_t firstOpen = nextSig(nameIdx);
+    size_t firstClose = isPunct(firstOpen, "[") ? match(firstOpen, "[", "]")
+                                                 : kNPos;
+    if (firstClose != kNPos) {
+      size_t after = nextSig(firstClose);
+      bool declTail = isPunct(after, ";") || isPunct(after, ",") ||
+                      isPunct(after, "=");
+      bool declHead = isPunct(prev, ",") ||
+                      (prev != kNPos && toks_[prev].kind == TokKind::Identifier);
+      if (declTail && declHead)
+        return;
+    }
+    size_t cursor = firstOpen;
+    for (size_t d = 0; d < dims->size(); ++d) {
+      if (!isPunct(cursor, "["))
+        return;
+      size_t close = match(cursor, "[", "]");
+      if (close == kNPos)
+        return;
+      Interval v = evalIndex(cursor + 1, close, var, vlo, vhi);
+      if (v.known && (v.lo < 0 || v.hi >= static_cast<long>((*dims)[d])))
+        report(toks_[cursor], v.hi, toks_[nameIdx].text, (*dims)[d]);
+      cursor = nextSig(close);
+    }
   }
 
   /// `* (Type *) &x` type punning is undefined under strict aliasing (except
@@ -1177,8 +1321,13 @@ private:
         if (!allocationCount(from, to, &count))
           continue;
       }
-      if (count > 0)
-        localArrays_.push_back({i, toks_[name].text, count});
+      if (count > 0) {
+        ArrayShape allocated;
+        allocated.pos = i;
+        allocated.name = toks_[name].text;
+        allocated.dims.push_back(count);
+        localArrays_.push_back(allocated);
+      }
     }
   }
 
@@ -1281,25 +1430,10 @@ private:
     if (bodyEnd == kNPos)
       return;
 
-    size_t loopExtent = 0;
     for (size_t k = body; k < bodyEnd; ++k) {
-      if (toks_[k].kind != TokKind::Identifier ||
-          !findExtent(toks_[k].text, k, &loopExtent))
+      if (toks_[k].kind != TokKind::Identifier)
         continue;
-      size_t bopen = nextSig(k);
-      if (!isPunct(bopen, "["))
-        continue;
-      size_t bclose = match(bopen, "[", "]");
-      if (bclose == kNPos)
-        continue;
-      size_t indexTok = nextSig(bopen);
-      if (indexTok >= bclose ||
-          !(toks_[indexTok].kind == TokKind::Identifier &&
-            toks_[indexTok].text == var))
-        continue;
-      size_t extent = loopExtent;
-      if (static_cast<unsigned long>(maxIndex) >= extent)
-        report(toks_[indexTok], maxIndex, toks_[k].text, extent);
+      checkSubscriptChain(k, start, maxIndex, var);
     }
   }
 
@@ -1378,7 +1512,7 @@ private:
   std::vector<Token> toks_;
   std::string source_;
   std::map<std::string, size_t> arrays_;
-  std::vector<ArrayExtent> localArrays_;
+  std::vector<ArrayShape> localArrays_;
   struct FuncSig {
     std::vector<std::string> params;
     size_t bodyOpen = 0;
