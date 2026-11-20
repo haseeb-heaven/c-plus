@@ -336,6 +336,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
   if (opts.mode == Mode::Safe) {
     args.push_back("-pthread");
+    // Statically known out-of-bounds subscripts are errors, not warnings.
+    // This rejects a bad constant index before an executable is produced;
+    // UBSan below handles indices that are only known at run time.
+    args.push_back("-Werror=array-bounds");
     // Runtime memory-safety instrumentation.  UBSan's bounds/null/alignment
     // checks cover fixed-extent arrays and invalid pointer use; they abort on
     // the first violation because a safe program must never continue after a
