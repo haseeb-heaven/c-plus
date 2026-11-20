@@ -128,11 +128,19 @@ size_t cplus_check_index(size_t index, size_t count, const char *file,
                          int line, const char *expr);
 
 /* Allocate a zeroed managed object of type T. */
-#define cplus_new(T) ((T *)cplus_zalloc(sizeof(T)))
+#define cplus_new(T)                                                          \
+  ({                                                                          \
+    cplus_log(CPLUS_LOG_DEBUG, "cplus_new size=%zu", sizeof(T));              \
+    (T *)cplus_zalloc(sizeof(T));                                             \
+  })
 
 /* Allocate a zeroed managed array of N elements of type T. */
-#define cplus_new_array(T, N) \
-  ((T *)cplus_alloc_array((size_t)(N), sizeof(T)))
+#define cplus_new_array(T, N)                                                 \
+  ({                                                                          \
+    cplus_log(CPLUS_LOG_DEBUG, "cplus_new_array count=%zu elem=%zu",          \
+              (size_t)(N), sizeof(T));                                        \
+    (T *)cplus_alloc_array((size_t)(N), sizeof(T));                           \
+  })
 
 /* Transfer ownership out of an owning variable.  The source is zeroed so that
  * its automatic destructor becomes a no-op; destructors must tolerate a
@@ -140,6 +148,7 @@ size_t cplus_check_index(size_t index, size_t count, const char *file,
  * compiles in gnu17 mode. */
 #define cplus_move(x)                                                         \
   ({                                                                          \
+    cplus_log(CPLUS_LOG_TRACE, "cplus_move size=%zu", sizeof(x));             \
     __typeof__(x) _cplus_move_tmp = (x);                                      \
     memset(&(x), 0, sizeof(x));                                               \
     _cplus_move_tmp;                                                          \
@@ -220,11 +229,13 @@ void cplus_tls_free(void *slot);
 
 /* Bit rotation helpers (C2y <stdbit.h> style) without the C2y dependency. */
 static inline uint32_t cplus_rotl32(uint32_t value, unsigned count) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_rotl32 value=%u count=%u", value, count);
   count %= 32u;
   return count ? (value << count) | (value >> (32u - count)) : value;
 }
 
 static inline uint32_t cplus_rotr32(uint32_t value, unsigned count) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_rotr32 value=%u count=%u", value, count);
   count %= 32u;
   return count ? (value >> count) | (value << (32u - count)) : value;
 }

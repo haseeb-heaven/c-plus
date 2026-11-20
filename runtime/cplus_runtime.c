@@ -305,6 +305,8 @@ size_t cplus_alloc_count(const void *ptr, size_t elem_size) {
 
 size_t cplus_check_index(size_t index, size_t count, const char *file,
                          int line, const char *expr) {
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_check_index index=%zu count=%zu", index,
+            count);
   if (index < count)
     return index;
   char buf[256];
