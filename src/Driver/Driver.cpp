@@ -477,6 +477,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     // This rejects a bad constant index before an executable is produced;
     // UBSan below handles indices that are only known at run time.
     args.push_back("-Werror=array-bounds");
+    // Two more classic C hazards are provable at compile time by Clang:
+    // returning the address of a local, and reading an uninitialised local.
+    args.push_back("-Werror=return-stack-address");
+    args.push_back("-Werror=uninitialized");
     // Runtime memory-safety instrumentation.  UBSan's bounds/null/alignment
     // checks cover fixed-extent arrays and invalid pointer use; they abort on
     // the first violation because a safe program must never continue after a

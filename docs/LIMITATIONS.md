@@ -51,6 +51,24 @@ depends on a runtime check, the check is named.
 | Cross-translation-unit resource types | **not supported** | declare the resource in every TU that owns it |
 | Full C++-style ownership system | **not supported** | the model covers locals only, not containers or fields |
 
+## Classic C bugs: what C+ actually catches
+
+| bug | status in safe C+ | mechanism |
+| --- | --- | --- |
+| 1. Buffer overflow / bad index | caught | compile-time for constants and simple loops; UBSan `bounds` at run time |
+| 2. Use-after-free | **not caught** for raw `malloc`/`free`; no ASan on this host | C+ managed allocations detect double/invalid release, not stale dereferences |
+| 3. Returning a pointer to a local | caught | `-Werror=return-stack-address` |
+| 4. Memory leak on early return | prevented for managed/RAII allocations; not detected for raw `malloc` | scope-exit cleanup |
+| 5. Double free | caught for C+ allocations; not for raw `free` | allocator side table + freed-address cache |
+| 6. Null pointer dereference | caught at run time | UBSan `null` |
+| 7. Uninitialized variable read | caught | `-Werror=uninitialized` |
+| 8. Missing null terminator | **not caught** | use bounded string APIs and reserve `strlen + 1` bytes yourself |
+| 9. Signed integer overflow | caught at run time | UBSan `undefined` |
+
+Items marked "not caught" remain undefined behaviour in safe C+ when written
+with raw C idioms. Use C+ managed allocations and resources, not bare
+`malloc`/`free`, for the guarantees in rows 2, 4 and 5.
+
 ## Memory safety: what the guarantee means
 
 Safe mode compiles with:

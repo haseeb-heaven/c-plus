@@ -9,6 +9,7 @@ the repository's test/demo runs. "partial" is never counted as complete.
 | Memory safety (supported subset) | yes | yes | yes | no UAF detection, no pointer-arithmetic checks, no ASan on this host |
 | Compile-time bad array index | yes | yes | yes | constant and simple counted loops only |
 | Runtime bounds/null/alignment checks | yes | yes | yes | UBSan-based; aborts on first violation |
+| Return-stack-address / uninitialized checks | yes | yes | yes | Clang warnings promoted to errors |
 | Double/invalid release detection | yes | yes | yes | stale pointer after address reuse may be misattributed |
 | RAII: scope exit / return / break / continue | yes | yes | yes | `goto`/`longjmp`/`exit` bypass cleanup |
 | RAII reverse destruction order | yes | yes | yes | one owner per declaration |
@@ -43,7 +44,7 @@ Commands that produced the "verified" column:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c+_lang
 ctest --test-dir build --output-on-failure   # 2/2 suites
-./tests/run_tests.sh                         # 36 tests
+./tests/run_tests.sh                         # 38 tests
 ./demos/run_demos.sh                         # 15 demos
 ./benchmarks/run_bench.sh                    # performance table
 ```

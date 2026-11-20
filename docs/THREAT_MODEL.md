@@ -36,6 +36,8 @@ current MVP.
 | dynamic bad index | UBSan `bounds` with `-fno-sanitize-recover=all` | abort (SIGABRT) |
 | null / misaligned dereference | UBSan `null,alignment` | abort |
 | signed overflow and other UB | UBSan `undefined` | abort |
+| returning address of a local | `-Werror=return-stack-address` | compile error |
+| uninitialized local read | `-Werror=uninitialized` | compile error |
 | double / invalid release | allocator side table + freed-address cache | exit 104 / 105 |
 | copied or assigned owning resource | RAII lowering compile diagnostics | compile error |
 | managed pointer escaping scope | RAII lowering compile diagnostic | compile error |
@@ -46,6 +48,11 @@ No runtime failure is allowed to continue execution with corrupted state.
 
 ## Known gaps (do not rely on C+ for these)
 
+- **Raw `malloc`/`free` is unsafe.** C+ managed allocations detect
+  double/invalid release, but a raw dangling pointer dereference is not
+  checked. ASan is broken on this host.
+- **Missing null terminators are not detected.** String buffer sizing is the
+  programmer's responsibility.
 - **Use-after-free is not detected.** ASan is broken on this host; enabling it
   would abort inside its own runtime. A stale pointer whose address was reused
   may be misattributed.
