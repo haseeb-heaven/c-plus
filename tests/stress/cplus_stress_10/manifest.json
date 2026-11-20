@@ -1,0 +1,40 @@
+{
+  "01_class_this_destructor": {
+    "kind": "run",
+    "expected": "LEDGER 118 236\nDROP 118\n"
+  },
+  "02_resource_early_return": {
+    "kind": "run",
+    "expected": "CLOSE 2\nCLOSE 1\nRETURN 42\n"
+  },
+  "03_managed_len": {
+    "kind": "run",
+    "expected": "MANAGED 8 140\n"
+  },
+  "04_stdlib_string_vector": {
+    "kind": "run",
+    "expected": "STDLIB 10 4 7\n"
+  },
+  "05_range_countof_auto": {
+    "kind": "run",
+    "expected": "RANGE 6 6 41\n"
+  },
+  "06_real_c_compatibility": {
+    "kind": "run",
+    "expected": "COMPAT 120 9 3 abc\n"
+  },
+  "07_defer_nested_returns": {
+    "kind": "run",
+    "expected": "DEFER 2\nDEFER 1\nRESULT 7\nDEFER 2\nDEFER 1\nRESULT 5\n"
+  },
+  "08_reject_resource_copy": {
+    "kind": "compile_fail"
+  },
+  "09_reject_borrow_escape": {
+    "kind": "compile_fail"
+  },
+  "10_trap_double_free": {
+    "kind": "runtime_fail",
+    "exit": 104
+  }
+}

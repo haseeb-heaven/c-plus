@@ -13,6 +13,9 @@ ctest --test-dir build --output-on-failure
 echo "== tests =="
 ./tests/run_tests.sh
 
+echo "== stress pack =="
+bash tests/stress/cplus_stress_10/run_10.sh
+
 echo "== breaker suite =="
 ./tests/cp_breaker.sh
 
