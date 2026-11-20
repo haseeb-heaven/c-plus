@@ -532,6 +532,11 @@ private:
           continue;
         }
       }
+      if (ts.isIdent(i, "auto") && tryEmitAuto(i)) {
+        i = skipTo_;
+        skipTo_ = kNPos;
+        continue;
+      }
       if (tryEmitArrayLen(i) || tryEmitMethodCall(i)) {
         i = skipTo_;
         skipTo_ = kNPos;
@@ -607,6 +612,11 @@ private:
 
   void emitMethodBody(size_t open, size_t close, const ClassInfo *selfClass) {
     for (size_t i = open; i <= close; ++i) {
+      if (ts.isIdent(i, "auto") && tryEmitAuto(i)) {
+        i = skipTo_;
+        skipTo_ = kNPos;
+        continue;
+      }
       if (tryEmitArrayLen(i) || tryEmitMethodCall(i, selfClass)) {
         i = skipTo_;
         skipTo_ = kNPos;
@@ -691,6 +701,61 @@ private:
       emit(" /*cplus$own:" + varName + ":" + typeName + "_drop*/");
     changed_ = true;
     skipTo_ = semi;
+    return true;
+  }
+
+  /// Emit a range of tokens, applying the same C+ rewrites as the top level.
+  void emitRange(size_t from, size_t to, const ClassInfo *selfClass = nullptr) {
+    for (size_t k = from; k < to; ++k) {
+      if (ts.isIdent(k, "auto") && tryEmitAuto(k)) {
+        k = skipTo_;
+        skipTo_ = kNPos;
+        continue;
+      }
+      if (tryEmitArrayLen(k) || tryEmitMethodCall(k, selfClass)) {
+        k = skipTo_;
+        skipTo_ = kNPos;
+        continue;
+      }
+      emitToken(k);
+    }
+  }
+
+  /// Rewrite `auto name = init;` to `__typeof__(init) name = init;`.
+  /// This is C++-style type inference lowered to a GNU C extension; the
+  /// initialiser is not evaluated by __typeof__, so there is no double work.
+  bool tryEmitAuto(size_t i) {
+    size_t name = ts.nextSig(i);
+    if (name >= ts.size() || ts[name].kind != TokKind::Identifier)
+      return false;
+    size_t eq = ts.nextSig(name);
+    if (!ts.isPunct(eq, "="))
+      return false;
+
+    int paren = 0, bracket = 0, brace = 0;
+    size_t end = kNPos;
+    for (size_t k = eq + 1; k < ts.size(); ++k) {
+      if (ts.isPunct(k, "(")) ++paren;
+      else if (ts.isPunct(k, ")")) --paren;
+      else if (ts.isPunct(k, "[")) ++bracket;
+      else if (ts.isPunct(k, "]")) --bracket;
+      else if (ts.isPunct(k, "{")) ++brace;
+      else if (ts.isPunct(k, "}")) --brace;
+      else if (ts.isPunct(k, ";") || ts.isPunct(k, ",")) {
+        if (paren == 0 && bracket == 0 && brace == 0) {
+          end = k;
+          break;
+        }
+      }
+    }
+    if (end == kNPos)
+      return false;
+
+    emit("__typeof__(");
+    emitRange(eq + 1, end);
+    emit(")");
+    skipTo_ = i; // the caller resumes at the declared name
+    changed_ = true;
     return true;
   }
 
