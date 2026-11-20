@@ -90,3 +90,16 @@ Intentional safe-mode rejections remain for 2048 (unsafe `printf` in a signal
 handler) and Lua (`setjmp`/`longjmp` bypass deterministic cleanup). `c4.c` is
 rejected by Clang itself because of `#define int long long` on `main`, so it is
 not a C+ regression.
+
+## Clang AST semantic checks
+
+A new AST checker (`compiler/Sema/AstSafetyCheck.cpp`) uses Clang's parsed
+AST (already linked into `cplus_core`) for checks that need semantics:
+
+- constant array subscripts against actual array dimensions;
+- async-signal-unsafe calls only inside functions registered with `signal()`;
+- writes to non-volatile globals only inside signal handlers.
+
+Token heuristics for those cases were removed from `StaticBoundsCheck.cpp`.
+The remaining source-level bounds analysis is limited to provable integer
+intervals for simple counted loops and is documented as such.

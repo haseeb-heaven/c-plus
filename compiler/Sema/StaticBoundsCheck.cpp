@@ -55,7 +55,6 @@ public:
     propagateReturnExtents();
     checkMemcpyOverlap();
     checkDataRaces();
-    checkSignalHandlers();
     checkStaticBufferCalls();
     checkCtypeChar();
     checkUncheckedIo();
@@ -67,7 +66,6 @@ public:
       if (isIdent(i, "for"))
         checkLoop(i);
       else {
-        checkConstantSubscript(i);
         checkTypePun(i);
         checkPointerArithmetic(i);
         checkUnrelatedPointerCompare(i);
@@ -851,53 +849,6 @@ private:
                         "volatile or atomic side effect");
   }
 
-  void checkSignalHandlers() {
-    std::set<std::string> handlers;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (!isIdent(i, "signal"))
-        continue;
-      size_t lp = nextSig(i);
-      if (!isPunct(lp, "("))
-        continue;
-      size_t rp = match(lp, "(", ")");
-      if (rp == kNPos)
-        continue;
-      auto args = splitArgs(lp + 1, rp);
-      if (args.size() < 2)
-        continue;
-      std::string name = baseName(args[1].first, args[1].second);
-      if (!name.empty())
-        handlers.insert(name);
-    }
-    static const char *const kUnsafe[] = {
-        "printf", "fprintf", "sprintf", "malloc", "calloc", "realloc",
-        "free",   "fopen",   "fclose",  "puts"};
-    for (const auto &entry : funcs_) {
-      if (!handlers.count(entry.first))
-        continue;
-      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
-        if (toks_[k].kind != TokKind::Identifier)
-          continue;
-        for (const char *fn : kUnsafe)
-          if (toks_[k].text == fn) {
-            errorAt(toks_[k], std::string("'") + fn +
-                                  "' is not async-signal-safe");
-            break;
-          }
-        if (globals_.count(toks_[k].text) &&
-            !volatileGlobals_.count(toks_[k].text)) {
-          size_t next = nextSig(k);
-          if (isPunct(next, "=") || isPunct(next, "++") ||
-              isPunct(next, "--"))
-            errorAt(toks_[k], "signal-modified global must be volatile "
-                              "sig_atomic_t: '" + toks_[k].text + "'");
-        }
-      }
-    }
-  }
-
-  /// strtok (and friends) keep internal static state; a second call in the
-  /// same function silently invalidates the first token stream.
   void checkStaticBufferCalls() {
     static const char *const kStateful[] = {"strtok", "asctime", "gmtime",
                                             "localtime", "inet_ntoa"};
@@ -1470,56 +1421,6 @@ private:
   }
 
   /// A subscript with a literal index that is known too large.
-  void checkConstantSubscript(size_t i) {
-    size_t extent = 0;
-    if (toks_[i].kind != TokKind::Identifier ||
-        !findExtent(toks_[i].text, i, &extent))
-      return;
-    // `int a[4];` is a declaration, not an access.  A declaration is
-    // preceded by a type name; an access is preceded by punctuation or a
-    // control keyword such as `return`.
-    size_t prev = i == 0 ? kNPos : (i - 1);
-    while (prev != kNPos && trivia(prev)) {
-      if (prev == 0) { prev = kNPos; break; }
-      --prev;
-    }
-    if (prev != kNPos && toks_[prev].kind == TokKind::Identifier) {
-      static const char *const kControl[] = {
-          "return", "if", "for", "while", "sizeof", "case", "else", "do"};
-      bool control = false;
-      for (const char *word : kControl)
-        if (toks_[prev].text == word) {
-          control = true;
-          break;
-        }
-      if (!control)
-        return;
-    }
-    size_t open = nextSig(i);
-    if (!isPunct(open, "["))
-      return;
-    size_t close = match(open, "[", "]");
-    if (close == kNPos)
-      return;
-    // `char a[4], b[8];` declares arrays; it is not an access.  A declaration
-    // is preceded by a type or comma and followed by `;`, `,` or `=`.
-    size_t afterDecl = nextSig(close);
-    bool declTail = isPunct(afterDecl, ";") || isPunct(afterDecl, ",") ||
-                    isPunct(afterDecl, "=");
-    bool declHead = isPunct(prev, ",") ||
-                    (prev != kNPos && toks_[prev].kind == TokKind::Identifier);
-    if (declTail && declHead)
-      return;
-    size_t indexTok = nextSig(open);
-    if (indexTok >= close)
-      return;
-    long idx = 0;
-    if (!number(toks_[indexTok], &idx))
-      return;
-    if (idx >= 0 && static_cast<size_t>(idx) >= extent)
-      report(toks_[open], idx, toks_[i].text, extent);
-  }
-
   /// Parse `for (init; cond; step)` and check subscripts of the loop index.
   void checkLoop(size_t forIdx) {
     size_t open = nextSig(forIdx);

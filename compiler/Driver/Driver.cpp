@@ -5,6 +5,7 @@
 #include "Sema/CPlusRewriter.h"
 #include "Sema/RaiiLowering.h"
 #include "Sema/StaticBoundsCheck.h"
+#include "Sema/AstSafetyCheck.h"
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -482,6 +483,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     bool ok = false;
     std::string loweredText = lowerUnit(source, input, diags, opts.mode, &ok);
+    if (opts.mode == Mode::Safe)
+      checkAstSafety(loweredText, input, base, diags);
     printDiagnostics(diags, errs, input);
     if (diags.hasErrors())
       return 1;
