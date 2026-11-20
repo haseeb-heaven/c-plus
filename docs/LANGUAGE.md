@@ -271,10 +271,11 @@ int *p = (int *)cplus_alloc(sizeof(int) * 3);
 _Static_assert(p.len == 3, "folded at compile time");
 ```
 
-If the size depends on a run-time value, the same expression becomes a cheap
-division instead of a hash lookup. Only when the allocation call is not
-visible in the translation unit (for example a pointer received as an
-argument) does `.len` fall back to the allocator's O(1) side-table query.
+If the size expression refers to variables, C+ does not copy it to the use
+site: doing so could reference an out-of-scope name. Such expressions fall
+back to the allocator's O(1) side-table query, which is always valid. Only
+purely constant size expressions (numbers and `sizeof`) are folded into the
+generated C.
 
 Querying `.len` on a released or foreign pointer is a fatal error, not a
 garbage value. The pointer must have a known element type (`void *` cannot be
