@@ -119,10 +119,10 @@ Measured with `./benchmarks/run_bench.sh`, median of 5 runs, on this machine
 
 | benchmark | c+ safe | c+ legacy | clang -O2 | safe / clang | legacy / clang |
 | --- | --- | --- | --- | --- | --- |
-| `alloc_churn` | 0.1945s | 0.1894s | 0.0559s | 3.48x | 3.39x |
-| `bounds_sum` | 0.0348s | 0.0327s | 0.0313s | 1.11x | 1.05x |
-| `method_dispatch` | 0.0256s | 0.0049s | 0.0051s | 4.98x | 0.96x |
-| `raii_loop` | 0.0190s | 0.0087s | 0.0077s | 2.48x | 1.14x |
+| `alloc_churn` | 0.1850s | 0.1841s | 0.0531s | 3.49x | 3.47x |
+| `bounds_sum` | 0.0335s | 0.0298s | 0.0298s | 1.12x | 1.00x |
+| `method_dispatch` | 0.0190s | 0.0067s | 0.0077s | 2.46x | 0.87x |
+| `raii_loop` | 0.0207s | 0.0102s | 0.0076s | 2.74x | 1.35x |
 
 How to read these numbers:
 
