@@ -1,0 +1,21 @@
+#ifndef O_EXTENSIONS_HP
+#define O_EXTENSIONS_HP
+
+/* Modern C+ header: class with constructor and method, lowered from .hp. */
+class Counter {
+    int value;
+
+    Counter(int start) {
+        self->value = start;
+    }
+
+    void add(int n) {
+        self->value += n;
+    }
+
+    int get(void) {
+        return self->value;
+    }
+};
+
+#endif

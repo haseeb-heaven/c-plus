@@ -36,7 +36,11 @@ fail() {
 
 build() {
   name=$1
-  "$CPLUS" build "$ROOT/demos/$name.c" -o "$OUT/$name" \
+  src="$ROOT/demos/$name.c"
+  if [ ! -f "$src" ]; then
+    src="$ROOT/demos/$name.cp"
+  fi
+  "$CPLUS" build "$src" -o "$OUT/$name" \
     >"$OUT/$name.build.log" 2>&1
 }
 
@@ -176,6 +180,10 @@ expect_ok M_default_args "$OUT/M_default_args.expected"
 # N: range-based for over fixed and managed ranges.
 printf 'total 60\nbuffer.len 3\n' >"$OUT/N_range_for.expected"
 expect_ok N_range_for "$OUT/N_range_for.expected"
+
+# O: modern .cp/.hp extensions with automatic header lowering.
+printf 'counter 15\n' >"$OUT/O_extensions.expected"
+expect_ok O_extensions "$OUT/O_extensions.expected"
 
 echo
 echo "C+ demos: $PASS passed, $FAIL failed"
