@@ -34,6 +34,8 @@ public:
     collectFunctions();
     collectCallConstants();
     collectAllocations();
+    collectReturnExtents();
+    propagateReturnExtents();
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (isIdent(i, "for"))
         checkLoop(i);
@@ -87,6 +89,81 @@ private:
       return false;
     *out = v;
     return true;
+  }
+
+  /// If a function returns a local whose extent is known, remember that
+  /// extent for the function's call sites.
+  void collectReturnExtents() {
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (sig.bodyClose == kNPos)
+        continue;
+      size_t extent = 0;
+      bool conflict = false;
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (!isIdent(k, "return"))
+          continue;
+        size_t v = nextSig(k);
+        if (v > sig.bodyClose || toks_[v].kind != TokKind::Identifier)
+          continue;
+        auto it = arrays_.find(toks_[v].text);
+        if (it == arrays_.end())
+          continue;
+        if (extent && extent != it->second)
+          conflict = true;
+        extent = it->second;
+      }
+      if (!conflict && extent)
+        returnExtents_[entry.first] = extent;
+    }
+  }
+
+  /// `int *p = make(5);` inherits the extent inferred for make's return.
+  void propagateReturnExtents() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      auto it = returnExtents_.find(toks_[i].text);
+      if (it == returnExtents_.end())
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{"))
+        continue;
+      size_t start = i;
+      while (start > 0) {
+        --start;
+        if (isPunct(start, ";") || isPunct(start, "{") ||
+            isPunct(start, "}")) {
+          ++start;
+          break;
+        }
+      }
+      size_t eq = kNPos;
+      int paren = 0, bracket = 0;
+      for (size_t k = start; k < i; ++k) {
+        if (isPunct(k, "(")) ++paren;
+        else if (isPunct(k, ")")) --paren;
+        else if (isPunct(k, "[")) ++bracket;
+        else if (isPunct(k, "]")) --bracket;
+        else if (isPunct(k, "=") && paren == 0 && bracket == 0) {
+          eq = k;
+          break;
+        }
+      }
+      if (eq == kNPos)
+        continue;
+      size_t name = kNPos;
+      for (size_t k = eq; k > start; --k)
+        if (toks_[k - 1].kind == TokKind::Identifier) {
+          name = k - 1;
+          break;
+        }
+      if (name != kNPos)
+        arrays_[toks_[name].text] = it->second;
+    }
   }
 
   void report(const Token &at, long index, const std::string &name,
@@ -161,7 +238,11 @@ private:
         else
           params.push_back(toks_[last].text);
       }
-      funcs_[toks_[i].text] = params;
+      FuncSig sig;
+      sig.params = params;
+      sig.bodyOpen = nextSig(rp);
+      sig.bodyClose = match(sig.bodyOpen, "{", "}");
+      funcs_[toks_[i].text] = sig;
     }
   }
 
@@ -190,10 +271,10 @@ private:
       if (rp == kNPos || isPunct(nextSig(rp), "{"))
         continue; // function definition, not a call
       auto args = splitArgs(lp + 1, rp);
-      if (args.size() != it->second.size())
+      if (args.size() != it->second.params.size())
         continue;
       for (size_t k = 0; k < args.size(); ++k) {
-        if (it->second[k].empty())
+        if (it->second.params[k].empty())
           continue;
         size_t only = kNPos;
         bool single = true;
@@ -208,14 +289,14 @@ private:
         }
         long value = 0;
         if (!single || only == kNPos || !number(toks_[only], &value)) {
-          conflict_.insert(it->second[k]);
+          conflict_.insert(it->second.params[k]);
           continue;
         }
-        auto c = constants_.find(it->second[k]);
+        auto c = constants_.find(it->second.params[k]);
         if (c != constants_.end() && c->second != value)
-          conflict_.insert(it->second[k]);
+          conflict_.insert(it->second.params[k]);
         else
-          constants_[it->second[k]] = value;
+          constants_[it->second.params[k]] = value;
       }
     }
     for (const auto &name : conflict_)
@@ -540,9 +621,15 @@ private:
 
   std::vector<Token> toks_;
   std::map<std::string, size_t> arrays_;
-  std::map<std::string, std::vector<std::string>> funcs_;
+  struct FuncSig {
+    std::vector<std::string> params;
+    size_t bodyOpen = 0;
+    size_t bodyClose = 0;
+  };
+  std::map<std::string, FuncSig> funcs_;
   std::map<std::string, long> constants_;
   std::set<std::string> conflict_;
+  std::map<std::string, size_t> returnExtents_;
   DiagnosticEngine &diags_;
   std::string filename_;
 };
