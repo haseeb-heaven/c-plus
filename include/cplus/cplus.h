@@ -187,39 +187,54 @@ typedef enum {
   CPLUS_SCAN_STR
 } cplus_scan_kind;
 
-/* Internal printer state.  This is a C struct plus functions - exactly what
- * a C+ class lowers to.  It keeps the "is first value" flag for one line. */
+/* Internal printer state.  This is a C struct with functions operating on
+ * it - exactly what a C+ class lowers to.  It remembers whether a value has
+ * already been printed on the current line. */
 typedef struct cplus_print_state {
   int first;
 } cplus_print_state;
 
-void cplus_print_int(int value);
-void cplus_print_uint(unsigned int value);
-void cplus_print_long(long value);
-void cplus_print_ulong(unsigned long value);
-void cplus_print_llong(long long value);
-void cplus_print_ullong(unsigned long long value);
-void cplus_print_double(double value);
-void cplus_print_ldouble(long double value);
-void cplus_print_char_value(char value);
-void cplus_print_bool(_Bool value);
-void cplus_print_cstr(const char *value);
-void cplus_print_unknown(const void *value);
-void cplus_print_end(void);
+typedef enum {
+  CPLUS_PRINT_INT = 1,
+  CPLUS_PRINT_UINT,
+  CPLUS_PRINT_LONG,
+  CPLUS_PRINT_ULONG,
+  CPLUS_PRINT_LLONG,
+  CPLUS_PRINT_ULLONG,
+  CPLUS_PRINT_DOUBLE,
+  CPLUS_PRINT_LDOUBLE,
+  CPLUS_PRINT_CHAR,
+  CPLUS_PRINT_BOOL,
+  CPLUS_PRINT_STR,
+  CPLUS_PRINT_UNKNOWN
+} cplus_print_kind;
 
+/* One generic entry point.  The macro passes a type tag plus the value
+ * through varargs, so no association is type-checked against the wrong C
+ * type the way separate overloaded functions would be. */
+void cplus_print_value(cplus_print_kind kind, ...);
+void cplus_print_end(void);
 void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
 
-#define cplus_print_one(x)                                                    \
-  _Generic((x) + 0,                                                           \
-           char *: cplus_print_cstr, const char *: cplus_print_cstr,          \
-           int: cplus_print_int, unsigned int: cplus_print_uint,              \
-           long: cplus_print_long, unsigned long: cplus_print_ulong,          \
-           long long: cplus_print_llong,                                      \
-           unsigned long long: cplus_print_ullong,                            \
-           float: cplus_print_double, double: cplus_print_double,             \
-           long double: cplus_print_ldouble,                                  \
-           _Bool: cplus_print_bool,                                           \
-           default: cplus_print_unknown)(x)
+#define cplus_print_arg(x)                                                    \
+  cplus_print_value(                                                          \
+      (__builtin_types_compatible_p(__typeof__(x), char)                      \
+           ? CPLUS_PRINT_CHAR                                                 \
+           : _Generic((x) + 0,                                                \
+                      char *: CPLUS_PRINT_STR,                                \
+                      const char *: CPLUS_PRINT_STR,                          \
+                      int: CPLUS_PRINT_INT,                                   \
+                      unsigned int: CPLUS_PRINT_UINT,                         \
+                      long: CPLUS_PRINT_LONG,                                 \
+                      unsigned long: CPLUS_PRINT_ULONG,                       \
+                      long long: CPLUS_PRINT_LLONG,                           \
+                      unsigned long long: CPLUS_PRINT_ULLONG,                 \
+                      float: CPLUS_PRINT_DOUBLE,                              \
+                      double: CPLUS_PRINT_DOUBLE,                             \
+                      long double: CPLUS_PRINT_LDOUBLE,                       \
+                      _Bool: CPLUS_PRINT_BOOL,                                \
+                      default: CPLUS_PRINT_UNKNOWN)),                         \
+      (x))
 
 #define cplus_scan_one(x)                                                     \
   cplus_scan_value((void *)&(x),                                              \
@@ -243,22 +258,22 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
 /* Fixed-width argument dispatch (up to 16 values). */
 #define CPLUS_PICK16(_1, _2, _3, _4, _5, _6, _7, _8,                          \
                      _9, _10, _11, _12, _13, _14, _15, _16, NAME, ...) NAME
-#define CPLUS_P1(a) (cplus_print_one(a))
-#define CPLUS_P2(a, ...) (cplus_print_one(a), CPLUS_P1(__VA_ARGS__))
-#define CPLUS_P3(a, ...) (cplus_print_one(a), CPLUS_P2(__VA_ARGS__))
-#define CPLUS_P4(a, ...) (cplus_print_one(a), CPLUS_P3(__VA_ARGS__))
-#define CPLUS_P5(a, ...) (cplus_print_one(a), CPLUS_P4(__VA_ARGS__))
-#define CPLUS_P6(a, ...) (cplus_print_one(a), CPLUS_P5(__VA_ARGS__))
-#define CPLUS_P7(a, ...) (cplus_print_one(a), CPLUS_P6(__VA_ARGS__))
-#define CPLUS_P8(a, ...) (cplus_print_one(a), CPLUS_P7(__VA_ARGS__))
-#define CPLUS_P9(a, ...) (cplus_print_one(a), CPLUS_P8(__VA_ARGS__))
-#define CPLUS_P10(a, ...) (cplus_print_one(a), CPLUS_P9(__VA_ARGS__))
-#define CPLUS_P11(a, ...) (cplus_print_one(a), CPLUS_P10(__VA_ARGS__))
-#define CPLUS_P12(a, ...) (cplus_print_one(a), CPLUS_P11(__VA_ARGS__))
-#define CPLUS_P13(a, ...) (cplus_print_one(a), CPLUS_P12(__VA_ARGS__))
-#define CPLUS_P14(a, ...) (cplus_print_one(a), CPLUS_P13(__VA_ARGS__))
-#define CPLUS_P15(a, ...) (cplus_print_one(a), CPLUS_P14(__VA_ARGS__))
-#define CPLUS_P16(a, ...) (cplus_print_one(a), CPLUS_P15(__VA_ARGS__))
+#define CPLUS_P1(a) (cplus_print_arg(a))
+#define CPLUS_P2(a, ...) (cplus_print_arg(a), CPLUS_P1(__VA_ARGS__))
+#define CPLUS_P3(a, ...) (cplus_print_arg(a), CPLUS_P2(__VA_ARGS__))
+#define CPLUS_P4(a, ...) (cplus_print_arg(a), CPLUS_P3(__VA_ARGS__))
+#define CPLUS_P5(a, ...) (cplus_print_arg(a), CPLUS_P4(__VA_ARGS__))
+#define CPLUS_P6(a, ...) (cplus_print_arg(a), CPLUS_P5(__VA_ARGS__))
+#define CPLUS_P7(a, ...) (cplus_print_arg(a), CPLUS_P6(__VA_ARGS__))
+#define CPLUS_P8(a, ...) (cplus_print_arg(a), CPLUS_P7(__VA_ARGS__))
+#define CPLUS_P9(a, ...) (cplus_print_arg(a), CPLUS_P8(__VA_ARGS__))
+#define CPLUS_P10(a, ...) (cplus_print_arg(a), CPLUS_P9(__VA_ARGS__))
+#define CPLUS_P11(a, ...) (cplus_print_arg(a), CPLUS_P10(__VA_ARGS__))
+#define CPLUS_P12(a, ...) (cplus_print_arg(a), CPLUS_P11(__VA_ARGS__))
+#define CPLUS_P13(a, ...) (cplus_print_arg(a), CPLUS_P12(__VA_ARGS__))
+#define CPLUS_P14(a, ...) (cplus_print_arg(a), CPLUS_P13(__VA_ARGS__))
+#define CPLUS_P15(a, ...) (cplus_print_arg(a), CPLUS_P14(__VA_ARGS__))
+#define CPLUS_P16(a, ...) (cplus_print_arg(a), CPLUS_P15(__VA_ARGS__))
 
 #define CPLUS_S1(a) (cplus_scan_one(a))
 #define CPLUS_S2(a, ...) (cplus_scan_one(a), CPLUS_S1(__VA_ARGS__))

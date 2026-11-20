@@ -14,6 +14,7 @@
 
 #include "cplus/cplus.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -449,64 +450,52 @@ static void cplus_print_separator(void) {
     putchar(' ');
 }
 
-void cplus_print_int(int value) {
+void cplus_print_value(cplus_print_kind kind, ...) {
+  va_list ap;
+  va_start(ap, kind);
   cplus_print_separator();
-  printf("%d", value);
-}
 
-void cplus_print_uint(unsigned int value) {
-  cplus_print_separator();
-  printf("%u", value);
-}
-
-void cplus_print_long(long value) {
-  cplus_print_separator();
-  printf("%ld", value);
-}
-
-void cplus_print_ulong(unsigned long value) {
-  cplus_print_separator();
-  printf("%lu", value);
-}
-
-void cplus_print_llong(long long value) {
-  cplus_print_separator();
-  printf("%lld", value);
-}
-
-void cplus_print_ullong(unsigned long long value) {
-  cplus_print_separator();
-  printf("%llu", value);
-}
-
-void cplus_print_double(double value) {
-  cplus_print_separator();
-  printf("%g", value);
-}
-
-void cplus_print_ldouble(long double value) {
-  cplus_print_separator();
-  printf("%Lg", value);
-}
-
-void cplus_print_char_value(char value) {
-  cplus_print_separator();
-  printf("%c", value);
-}
-
-void cplus_print_bool(_Bool value) {
-  cplus_print_separator();
-  printf("%s", value ? "true" : "false");
-}
-
-void cplus_print_cstr(const char *value) {
-  cplus_print_separator();
-  fputs(value ? value : "(null)", stdout);
-}
-
-void cplus_print_unknown(const void *value) {
-  cplus_print_separator();
-  printf("<unprintable:%p>", value);
+  switch (kind) {
+  case CPLUS_PRINT_INT:
+    printf("%d", va_arg(ap, int));
+    break;
+  case CPLUS_PRINT_UINT:
+    printf("%u", va_arg(ap, unsigned int));
+    break;
+  case CPLUS_PRINT_LONG:
+    printf("%ld", va_arg(ap, long));
+    break;
+  case CPLUS_PRINT_ULONG:
+    printf("%lu", va_arg(ap, unsigned long));
+    break;
+  case CPLUS_PRINT_LLONG:
+    printf("%lld", va_arg(ap, long long));
+    break;
+  case CPLUS_PRINT_ULLONG:
+    printf("%llu", va_arg(ap, unsigned long long));
+    break;
+  case CPLUS_PRINT_DOUBLE:
+    printf("%g", va_arg(ap, double));
+    break;
+  case CPLUS_PRINT_LDOUBLE:
+    printf("%Lg", va_arg(ap, long double));
+    break;
+  case CPLUS_PRINT_CHAR:
+    printf("%c", (char)va_arg(ap, int));
+    break;
+  case CPLUS_PRINT_BOOL:
+    printf("%s", va_arg(ap, int) ? "true" : "false");
+    break;
+  case CPLUS_PRINT_STR: {
+    const char *text = va_arg(ap, const char *);
+    fputs(text ? text : "(null)", stdout);
+    break;
+  }
+  default:
+    fputs("<unprintable>", stdout);
+    break;
+  }
+  va_end(ap);
 }
 
 void cplus_print_end(void) {
