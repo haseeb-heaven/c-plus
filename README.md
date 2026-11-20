@@ -119,9 +119,11 @@ directory for complete programs.
 
 ## Safety model
 
-Safe mode (the default) compiles with UBSan `undefined,bounds,null,alignment`
-checks and `-fno-sanitize-recover=all`, so a detected failure aborts instead
-of continuing with corrupted state. Runtime ownership errors use distinct
+Safe mode (the default) rejects statically known out-of-bounds array indices
+at compile time (`-Werror=array-bounds`), so `arr[10]` on an `int[3]` produces
+no executable. Indices only known at run time are checked by UBSan
+`undefined,bounds,null,alignment` with `-fno-sanitize-recover=all`, so a
+detected failure aborts instead of continuing with corrupted state. Runtime ownership errors use distinct
 exit codes (see `include/cplus/cplus.h`). `--legacy-c` disables all of this
 and should not be considered safe.
 
@@ -132,7 +134,7 @@ in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 ## Verification
 
 ```sh
-./tests/run_tests.sh      # 18 positive, compile-fail and runtime-fail tests
+./tests/run_tests.sh      # 19 positive, compile-fail and runtime-fail tests
 ./demos/run_demos.sh      # six demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```

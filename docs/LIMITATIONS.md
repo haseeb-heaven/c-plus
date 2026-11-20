@@ -18,7 +18,8 @@ depends on a runtime check, the check is named.
 | Compile-time copy and assignment rejection | supported | for owning locals tracked by the lowering pass |
 | Compile-time managed-pointer escape rejection | supported | `return p;` where `p` is managed is an error |
 | Managed allocation with double/invalid release detection | supported | O(1) hash table + bounded freed-address cache |
-| Out-of-bounds array index, null/misaligned dereference | supported at run time | UBSan checks, abort on first failure |
+| Statically known out-of-bounds array index | supported at compile time | `-Werror=array-bounds`; no executable is produced |
+| Dynamic out-of-bounds index, null/misaligned dereference | supported at run time | UBSan checks, abort on first failure |
 | Deterministic exit codes for safety failures | supported | `101`–`108` in `include/cplus/cplus.h` |
 | Lightweight classes with methods | supported | inline methods only; lower to `T_m(T *self, ...)` |
 | `p.m()` / `p->m()` sugar | supported | resolved from simple `T p;` / `T *p;` declarations in the same TU |
@@ -39,8 +40,13 @@ depends on a runtime check, the check is named.
 Safe mode compiles with:
 
 ```text
+-Werror=array-bounds
 -fsanitize=undefined,bounds,null,alignment -fno-sanitize-recover=all
 ```
+
+`-Werror=array-bounds` makes a provably out-of-bounds constant subscript a
+compile error (as in your `arr[10]` example). This is reused from the existing
+C compiler, not a separate C+ type system.
 
 This gives abort-on-violation checks for fixed-extent array subscripts, null
 and misaligned pointer use, and the undefined-behaviour checks that ship in
@@ -57,6 +63,9 @@ give a complete spatial/temporal memory-safety guarantee:
   immediate double-release case (tested), not every stale-pointer case.
 - `*p` and `p->field` through a raw pointer are ordinary C operations. The
   null/alignment checks catch the obvious invalid cases, not dangling ones.
+- Out-of-bounds pointers produced by arithmetic (`p + i`) are not statically
+  checked the way an array subscript is; this is not Rust-style borrow
+  checking.
 - Arbitrary pointer arithmetic and casts remain C behaviour.
 
 `--legacy-c` turns all of the above checks off. It is provided for

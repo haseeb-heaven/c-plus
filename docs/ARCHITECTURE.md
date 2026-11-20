@@ -84,14 +84,16 @@ Everything is C-only and links with `libc` (plus `pthread` in safe mode).
 Safe mode passes to the host C compiler:
 
 ```text
+-Werror=array-bounds                  # static: known-bad constant subscripts
 -fsanitize=undefined,bounds,null,alignment
 -fno-sanitize-recover=all
 -DCPLUS_SAFE=1  -DCPLUS=1  -pthread
 -O0 -g        (or -O2 with --release)
 ```
 
-`-fno-sanitize-recover=all` is what makes a detected failure abort instead of
-continuing. ASan is deliberately not enabled on this host: its runtime aborts
+`-Werror=array-bounds` turns a statically provable bad subscript into a
+compile error. `-fno-sanitize-recover=all` is what makes a run-time detected
+failure abort instead of continuing. ASan is deliberately not enabled on this host: its runtime aborts
 during initialisation with a `sanitizer_malloc_mac.inc` check failure, so
 enabling it would produce false claims. See the limitations document.
 
