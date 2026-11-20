@@ -20,7 +20,9 @@ depends on a runtime check, the check is named.
 | Managed allocation with double/invalid release detection | supported | O(1) hash table + bounded freed-address cache |
 | Statically known out-of-bounds array index | supported at compile time | `-Werror=array-bounds` plus a C+ static pass; no executable is produced |
 | Simple counted-loop index past array end | supported at compile time | `for (i = 0; i < N; i++) arr[i]` with known extent < N |
-| Fixed array `.len` | supported | literal extent; not available for pointers or managed arrays |
+| Fixed array `.len` | supported | compile-time literal extent |
+| C+ allocation `.len` | supported | O(1) side-table lookup / `sizeof(*ptr)`; not available for raw `malloc` pointers |
+| `.len` on a struct type | not automatic | a struct must declare its own `len` field; `.len` on a pointer from `cplus_new(T)` reports 1 object |
 | `auto` type inference | supported | lowers to `__typeof__`; not used for ownership inference |
 | Dynamic out-of-bounds index, null/misaligned dereference | supported at run time | UBSan checks, abort on first failure |
 | Deterministic exit codes for safety failures | supported | `101`–`108` in `include/cplus/cplus.h` |
@@ -75,6 +77,11 @@ give a complete spatial/temporal memory-safety guarantee:
   run-time check, not a compile error.
 - `auto` is type inference only. It does not infer ownership, so an owning
   resource declared with `auto` will not get deterministic cleanup.
+- `.len` on a C+ allocation needs the declaration's allocator call to be
+  visible in the same translation unit and a complete element type. It is a
+  hash lookup at run time; calling it in a tight loop has a real cost.
+- There is no generic reflection for structs: a struct's own `len`/`size`
+  fields must be written by the programmer.
 - Arbitrary pointer arithmetic and casts remain C behaviour.
 
 `--legacy-c` turns all of the above checks off. It is provided for

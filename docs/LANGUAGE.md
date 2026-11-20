@@ -184,8 +184,24 @@ printf("%d %d\n", arr.len, fixed.len);   /* 3 5 */
 
 `arr.len` works for `T name[] = {...}` and `T name[N]`, including inside class
 methods. It is a literal, not a runtime lookup, so it can be used in loop
-bounds and constant expressions. It is not available for pointers (including
-managed allocations), because a pointer does not carry an extent.
+bounds and constant expressions.
+
+Pointers created by the C+ allocator also have `.len`. Their length is queried
+from the allocation size table and divided by `sizeof(*ptr)`:
+
+```c
+int *a = (int *)cplus_alloc(sizeof(int) * 3);
+int *b = cplus_new_array(int, 5);
+Buffer *obj = cplus_new(Buffer);
+
+printf("%zu %zu %zu\n", a.len, b.len, obj.len);  /* 3 5 1 */
+```
+
+This is a run-time O(1) lookup, not a literal, so hoist it out of hot loops
+when needed. Querying `.len` on a released or foreign pointer is a fatal
+error, not a garbage value. The pointer must have a known element type
+(`void *` cannot be used because `sizeof(*ptr)` is invalid). A pointer from
+plain `malloc` is not tracked and has no `.len`.
 
 `auto name = init;` infers the type of `init` and lowers to
 `__typeof__(init) name = init;`:

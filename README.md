@@ -106,7 +106,8 @@ int main(void) {
 }
 ```
 
-Fixed arrays carry a compile-time length, and `auto` infers types from the
+Fixed arrays carry a compile-time length; allocations made through the C+
+allocator carry a tracked length too. `auto` infers types from the
 initialiser:
 
 ```c
@@ -114,6 +115,11 @@ int values[] = {10, 30, 50};
 auto total = 0;
 for (auto i = 0; i < values.len; i++)
     total += values[i];   /* values.len is a literal 3 */
+```
+
+```c
+int *heap = (int *)cplus_alloc(sizeof(int) * 3);
+printf("%zu\n", heap.len);   /* 3, from the allocation's size table */
 ```
 
 Out-of-bounds accesses that can be proven wrong at compile time are errors:
@@ -149,7 +155,7 @@ and Goose is in [`docs/RELATED.md`](docs/RELATED.md).
 ## Verification
 
 ```sh
-./tests/run_tests.sh      # 23 positive, compile-fail and runtime-fail tests
+./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
 ./demos/run_demos.sh      # six demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
