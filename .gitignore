@@ -18,3 +18,14 @@ cplus_rewritten.c
 .vscode/
 .idea/
 *.swp
+
+.cache
+.opencode
+.gemini
+.claude
+.agent
+.codex
+
+scratch
+
+benchmarks/out/
