@@ -103,9 +103,15 @@ depends on a runtime check, the check is named.
 | 46. C23 `auto` decay/qualifier loss | safer than C23 | `__typeof__` keeps const; arrays decay via pointer type |
 | 47. C23 `nullptr` mismatch | caught (rejected) | static check; use `NULL` |
 | 48. `_BitInt` promotion/overflow | caught (rejected) | static check; use `int64_t` |
+| 49. `fork()` after threads | caught | static check recommending `posix_spawn` |
+| 50. `restrict` aliasing violation | caught | static check for overlapping call arguments |
+| 51. Bit-field layout/signedness | caught | static check recommending masks/shifts |
+| 52. `fflush(stdin)` | caught | static check |
+| 53. `alloca`/unbounded VLA | caught | static check; use `cplus_alloc` |
+| 54. Control flow out of `defer` | caught | `defer` cleanup rejects return/break/continue/goto |
 
-All 48 bugs have named tests in `tests/` (`classic_bug1_*` through
-`classic_bug48_*`). The ones that are not automatically caught also have raw
+All 54 supplied bugs have named tests in `tests/` (`classic_bug1_*` through
+`classic_bug54_*`). The ones that are not automatically caught also have raw
 reference programs in `tests/known_gaps/` documenting the limitation.
 
 Items marked "not caught" remain undefined behaviour in safe C+ when written

@@ -162,6 +162,15 @@ private:
       errorAt("defer requires a statement", toks_[i]);
       return;
     }
+    for (size_t k = i + 1; k < semi; ++k) {
+      if (toks_[k].kind == TokKind::Identifier &&
+          (toks_[k].text == "return" || toks_[k].text == "break" ||
+           toks_[k].text == "continue" || toks_[k].text == "goto")) {
+        errorAt("'" + toks_[k].text + "' cannot jump out of a defer cleanup",
+                toks_[k]);
+        return;
+      }
+    }
     OwnedVar v;
     v.name = "__cplus_defer_" + std::to_string(deferCounter_++);
     v.isDefer = true;

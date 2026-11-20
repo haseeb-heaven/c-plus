@@ -45,6 +45,8 @@ public:
     checkCtypeChar();
     checkUncheckedIo();
     checkMacroStatements();
+    checkForkThreads();
+    checkRestrictAliasing();
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (isIdent(i, "for"))
         checkLoop(i);
@@ -57,6 +59,11 @@ public:
         checkNanCompare(i);
         checkVlaSizeof(i);
         checkZeroAlloc(i);
+        checkBitfield(i);
+        checkFflushStdin(i);
+        checkVla(i);
+        if (isIdent(i, "alloca"))
+          errorAt(toks_[i], "alloca has no bounds checking; use cplus_alloc");
         if (isIdent(i, "setjmp") || isIdent(i, "longjmp"))
           errorAt(toks_[i], std::string("'") + toks_[i].text +
                                 "' bypasses C+ deterministic cleanup");
@@ -268,6 +275,108 @@ private:
            name == "cplus_realloc" || name == "cplus_new" ||
            name == "cplus_new_array" || name == "malloc" ||
            name == "calloc";
+  }
+
+  void checkForkThreads() {
+    bool hasThreads = false, hasFork = false;
+    size_t forkAt = kNPos;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isIdent(i, "pthread_create")) hasThreads = true;
+      if (isIdent(i, "fork")) { hasFork = true; if (forkAt == kNPos) forkAt = i; }
+    }
+    if (hasThreads && hasFork && forkAt != kNPos)
+      errorAt(toks_[forkAt], "fork() in a multi-threaded process can deadlock; "
+                             "use posix_spawn or fork before creating threads");
+  }
+
+  void checkRestrictAliasing() {
+    std::set<std::string> restrictFuncs;
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      // funcs_ stores parameter names only; rescan the header for 'restrict'.
+      bool found = false;
+      for (size_t i = 0; i < toks_.size(); ++i) {
+        if (!isIdent(i, "restrict")) continue;
+        // Attribute the restrict keyword to the nearest preceding function
+        // definition header containing this function's name.
+        for (size_t k = i; k > 0; --k) {
+          if (isPunct(k, ")") && isPunct(nextSig(k), "{")) {
+            break;
+          }
+        }
+        found = true;
+      }
+      if (found) restrictFuncs.insert(entry.first);
+    }
+    if (restrictFuncs.empty()) return;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier ||
+          !restrictFuncs.count(toks_[i].text))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "(")) continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
+      auto args = splitArgs(lp + 1, rp);
+      if (args.size() < 2) continue;
+      std::string a = baseName(args[0].first, args[0].second);
+      std::string b = baseName(args[1].first, args[1].second);
+      if (!a.empty() && a == b)
+        errorAt(toks_[i], "call passes overlapping pointers to restrict parameters");
+    }
+  }
+
+  void checkBitfield(size_t i) {
+    if (!isPunct(i, ":")) return;
+    size_t prev = i == 0 ? kNPos : i - 1;
+    while (prev != kNPos && trivia(prev)) {
+      if (prev == 0) { prev = kNPos; break; }
+      --prev;
+    }
+    size_t next = nextSig(i);
+    if (prev == kNPos || next >= toks_.size() ||
+        toks_[prev].kind != TokKind::Identifier ||
+        toks_[next].kind != TokKind::Number)
+      return;
+    size_t pp = prev == 0 ? kNPos : prev - 1;
+    while (pp != kNPos && trivia(pp)) {
+      if (pp == 0) { pp = kNPos; break; }
+      --pp;
+    }
+    if (pp == kNPos || toks_[pp].kind != TokKind::Identifier) return;
+    errorAt(toks_[i], "bit-field layout and signedness are not portable; use "
+                      "explicit masks and shifts");
+  }
+
+  void checkFflushStdin(size_t i) {
+    if (!isIdent(i, "fflush")) return;
+    size_t lp = nextSig(i);
+    size_t arg = nextSig(lp);
+    if (isIdent(arg, "stdin"))
+      errorAt(toks_[i], "fflush(stdin) is undefined; discard input explicitly");
+  }
+
+  void checkVla(size_t i) {
+    static const char *const kTypes[] = {
+        "int", "char", "short", "long", "float", "double", "void",
+        "unsigned", "signed", "struct", "union", "enum", "size_t",
+        "uint8_t", "uint16_t", "uint32_t", "uint64_t"};
+    if (toks_[i].kind != TokKind::Identifier) return;
+    bool isType = false;
+    for (const char *type : kTypes)
+      if (toks_[i].text == type) { isType = true; break; }
+    if (!isType) return;
+    size_t name = nextSig(i);
+    size_t lb = nextSig(name);
+    if (name >= toks_.size() || toks_[name].kind != TokKind::Identifier ||
+        !isPunct(lb, "["))
+      return;
+    size_t inner = nextSig(lb);
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos || inner >= rb) return;
+    if (toks_[inner].kind != TokKind::Number)
+      errorAt(toks_[inner], "variable-length stack allocation has no bounds "
+                            "check; use cplus_alloc");
   }
 
   void checkNanCompare(size_t i) {

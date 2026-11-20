@@ -18,6 +18,7 @@ the repository's test/demo runs. "partial" is never counted as complete.
 | setjmp/longjmp, NaN, VLA sizeof, macro, zero-alloc, signal-flag checks | yes | yes | yes | static pass + promoted Clang warnings |
 | C23-specific unsafe constructs rejected / auto made qualifier-safe | yes | yes | yes | static pass + __typeof__ lowering |
 | C2y-style defer / countof / if-declarations / 0o literals | partial | yes | yes | see docs/C2Y.md; no full C2y backend |
+| fork/restrict/bit-field/fflush/VLA/defer-control checks | yes | yes | yes | static pass |
 | Double/invalid release detection | yes | yes | yes | stale pointer after address reuse may be misattributed |
 | RAII: scope exit / return / break / continue | yes | yes | yes | `goto`/`longjmp`/`exit` bypass cleanup |
 | RAII reverse destruction order | yes | yes | yes | one owner per declaration |
@@ -53,7 +54,7 @@ Commands that produced the "verified" column:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c+_lang
 ctest --test-dir build --output-on-failure   # 2/2 suites
-./tests/run_tests.sh                         # 94 tests
+./tests/run_tests.sh                         # 100 tests
 ./demos/run_demos.sh                         # 16 demos
 ./benchmarks/run_bench.sh                    # performance table
 ```
