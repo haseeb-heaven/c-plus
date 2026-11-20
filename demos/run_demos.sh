@@ -48,7 +48,12 @@ expect_ok() {
     fail "$name" "build failed; see demos/out/$name.build.log"
     return
   fi
-  "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  stdin_file="$ROOT/demos/$name.stdin"
+  if [ -f "$stdin_file" ]; then
+    "$OUT/$name" <"$stdin_file" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  else
+    "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  fi
   rc=$?
   if [ "$rc" -ne 0 ]; then
     fail "$name" "exited with $rc; see demos/out/$name.stderr"
@@ -151,6 +156,14 @@ drop 2
 early=-1
 EOF
 expect_ok I_raii_safe "$OUT/I_raii_safe.expected"
+
+# J: type-generic print and scan (input supplied by J_modern_io.stdin).
+printf 'enter count ratio label:\ncount= 7 ratio= 2.5 label= demo values.len= 3\n' >"$OUT/J_modern_io.expected"
+expect_ok J_modern_io "$OUT/J_modern_io.expected"
+
+# K: class state managed through methods, with auto type inference.
+printf 'count= 3 average= 8\n' >"$OUT/K_state_class.expected"
+expect_ok K_state_class "$OUT/K_state_class.expected"
 
 echo
 echo "C+ demos: $PASS passed, $FAIL failed"

@@ -60,7 +60,12 @@ for src in "$ROOT"/tests/cases/*.c; do
     fail "$name" "compilation failed; see tests/out/$name.build.log"
     continue
   fi
-  "$exe" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  stdin_file="$ROOT/tests/cases/$name.stdin"
+  if [ -f "$stdin_file" ]; then
+    "$exe" <"$stdin_file" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  else
+    "$exe" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  fi
   rc=$?
   if [ "$rc" -ne 0 ]; then
     fail "$name" "exited with $rc; stderr: $(head -2 "$OUT/$name.stderr" | tr '\n' ' ')"
