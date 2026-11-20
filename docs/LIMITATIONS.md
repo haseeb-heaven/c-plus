@@ -203,14 +203,14 @@ Measured with `./benchmarks/run_bench.sh`, median of 5 runs, on this machine
 
 | benchmark | c+ safe | c+ legacy | clang -O2 | safe / clang | legacy / clang |
 | --- | --- | --- | --- | --- | --- |
-| `alloc_churn` | 0.1799s | 0.1777s | 0.0518s | 3.47x | 3.43x |
-| `bounds_sum` | 0.0343s | 0.0313s | 0.0297s | 1.16x | 1.06x |
-| `function_call` | 0.1200s | 0.1188s | 0.1204s | 1.00x | 0.99x |
-| `integer_compute` | 0.0972s | 0.0949s | 0.0980s | 0.99x | 0.97x |
-| `method_dispatch` | 0.0188s | 0.0083s | 0.0059s | 3.16x | 1.40x |
-| `parallel_scale` | 0.0153s | 0.0124s | 0.0121s | 1.27x | 1.03x |
-| `pointer_chase` | 0.0329s | 0.0535s | 0.0535s | 0.61x | 1.00x |
-| `raii_loop` | 0.0190s | 0.0104s | 0.0102s | 1.86x | 1.02x |
+| `alloc_churn` | 0.1877s | 0.1834s | 0.0532s | 3.53x | 3.45x |
+| `bounds_sum` | 0.0327s | 0.0303s | 0.0312s | 1.05x | 0.97x |
+| `function_call` | 0.1222s | 0.1176s | 0.1168s | 1.05x | 1.01x |
+| `integer_compute` | 0.0958s | 0.0942s | 0.0940s | 1.02x | 1.00x |
+| `method_dispatch` | 0.0189s | 0.0081s | 0.0051s | 3.75x | 1.60x |
+| `parallel_scale` | 0.0157s | 0.0146s | 0.0141s | 1.11x | 1.03x |
+| `pointer_chase` | 0.0352s | 0.0535s | 0.0528s | 0.67x | 1.01x |
+| `raii_loop` | 0.0189s | 0.0105s | 0.0084s | 2.26x | 1.25x |
 
 How to read these numbers:
 
