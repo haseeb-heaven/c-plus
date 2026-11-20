@@ -29,6 +29,7 @@ depends on a runtime check, the check is named.
 | C+ allocation `.len` | supported | `(size_expr) / sizeof(*ptr)` when the allocation is visible (compile-time folded for fixed sizes); side-table fallback otherwise |
 | `.len` on a struct type | not automatic | a struct must declare its own `len` field; `.len` on a pointer from `cplus_new(T)` reports 1 object |
 | `auto` type inference | supported | lowers to `__typeof__`; also works with `(Class){...}`; not used for ownership inference |
+| `.cp` / `.hp` extensions | supported | `.c`/`.h` still accepted; `.hp` lowered on include |
 | Format-free `print(...)` | supported | type tags via `_Generic`; scalars, bool, char and C strings only |
 | Format-free `scan(...)` | supported | lvalues, bounded string reads, fatal on conversion failure |
 | Default function arguments | supported | same translation unit only; filled at call sites; defaults should be trailing |
@@ -92,6 +93,9 @@ give a complete spatial/temporal memory-safety guarantee:
   `i = C; i < N; i++` (or `<=`) with literal bounds. Loops with computed
   bounds, multiple index variables or indirect subscripts fall back to the
   run-time check, not a compile error.
+- `.hp` headers are lowered per translation unit; quoted includes are resolved
+  relative to the including file or the usual include directories. There is
+  no module system or precompiled-header support yet.
 - Default arguments are a source-level rewriting feature. A function defined
   in another translation unit must be called with all arguments.
 - Range-based `for` needs a simple lvalue whose `.len` is known. It does not

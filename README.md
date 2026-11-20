@@ -2,6 +2,8 @@
 
 C+ is ordinary C with a deliberately small set of additions: deterministic
 resource cleanup, lightweight struct-based classes and managed allocations.
+Use `.cp` and `.hp` for modern C+ sources and headers; `.c` and `.h` keep
+working exactly as before.
 
 It is **a feature layer over an existing open-source C toolchain**, not a new
 language runtime and not a rewrite of C. The `c+` driver lowers the C+
@@ -193,7 +195,7 @@ still required for the full specification is tracked in
 
 ```sh
 ./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
-./demos/run_demos.sh      # fourteen demos
+./demos/run_demos.sh      # fifteen demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
 

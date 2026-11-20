@@ -13,6 +13,17 @@ The reserved words in C+ source are `resource`, `class`, `managed`, `owned`,
 `auto` and `self`. Plain C code that uses them as identifiers must be compiled with
 `--legacy-c`.
 
+## File extensions
+
+- `.cp` — a C+ source file (recommended when using modern features)
+- `.hp` — a C+ header, lowered automatically when included from a `.cp`/`.c` source
+- `.c` / `.h` — ordinary C, still fully supported; C+ features may also be used
+
+A `.hp` header can contain classes, constructors, destructors and other C+
+syntax. The driver lowers it to a temporary `.h` with `#line` mapping, and
+class/constructor metadata is shared with the including translation unit so
+that `obj.method()` and `T(...)` work across the boundary.
+
 ## Resource structs
 
 ```c
