@@ -7,6 +7,9 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Frontend/PCHContainerOperations.h>
+
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Tooling/Tooling.h>
 
@@ -155,12 +158,25 @@ public:
 void checkAstSafety(const std::string &loweredC, const std::string &filename,
                     const std::vector<std::string> &backendArgs,
                     DiagnosticEngine &diags) {
-  std::vector<std::string> args = backendArgs;
+  // Keep only parse-relevant flags; sanitizer and warning-as-error flags can
+  // make the in-memory AST parse fail for unrelated reasons.
+  std::vector<std::string> args;
+  for (const auto &arg : backendArgs) {
+    if (arg.rfind("-I", 0) == 0 || arg.rfind("-D", 0) == 0 ||
+        arg.rfind("-std=", 0) == 0)
+      args.push_back(arg);
+  }
   args.push_back("-fsyntax-only");
+  // Tooling infers language from the filename suffix; a .cp suffix would be
+  // treated as C++.  Use a synthetic .c name for the in-memory buffer.
+  std::string astFile = filename + ".c";
+  IgnoringDiagConsumer ignore;
   std::unique_ptr<ASTUnit> ast = tooling::buildASTFromCodeWithArgs(
-      loweredC, args, filename, "cplus-ast-check");
-  if (!ast)
-    return;
+      loweredC, args, astFile, "cplus-ast-check",
+      std::make_shared<PCHContainerOperations>(),
+      tooling::getClangStripDependencyFileAdjuster(), {}, &ignore);
+  if (!ast || ast->getDiagnostics().hasErrorOccurred())
+    return; // AST parse failed; do not guess from a broken AST.
 
   SafetyVisitor collect(ast->getASTContext(), diags, filename, false);
   collect.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());

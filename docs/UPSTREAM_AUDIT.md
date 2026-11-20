@@ -103,3 +103,8 @@ AST (already linked into `cplus_core`) for checks that need semantics:
 Token heuristics for those cases were removed from `StaticBoundsCheck.cpp`.
 The remaining source-level bounds analysis is limited to provable integer
 intervals for simple counted loops and is documented as such.
+
+The AST checker must parse lowered C with a synthetic `.c` filename (a `.cp`
+suffix made Tooling treat it as C++) and must suppress its own parse
+diagnostics. After fixing that, `.cp` files using system headers such as
+`stdbool.h` compile correctly, and 2048 builds in safe mode.
