@@ -836,7 +836,18 @@ private:
       if (!isPunct(lp, "("))
         continue;
       size_t rp = match(lp, "(", ")");
-      if (rp != kNPos && isPunct(nextSig(rp), ";"))
+      if (rp == kNPos || !isPunct(nextSig(rp), ";"))
+        continue;
+      // A bare statement starts after ';', '{' or '}'.  An initializer,
+      // argument to another call, condition, or assignment already uses the
+      // return value and must not be reported.
+      size_t prev = i == 0 ? kNPos : i - 1;
+      while (prev != kNPos && trivia(prev)) {
+        if (prev == 0) { prev = kNPos; break; }
+        --prev;
+      }
+      if (prev == kNPos || isPunct(prev, ";") || isPunct(prev, "{") ||
+          isPunct(prev, "}"))
         errorAt(toks_[i], "check the return value of " + toks_[i].text);
     }
   }
