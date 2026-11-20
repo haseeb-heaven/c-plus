@@ -169,6 +169,14 @@ expect_ok K_state_class "$OUT/K_state_class.expected"
 printf 'total 10\ndrop point 10\n' >"$OUT/L_class_lifecycle.expected"
 expect_ok L_class_lifecycle "$OUT/L_class_lifecycle.expected"
 
+# M: default arguments filled in at each call site.
+printf 'first 10 default 6 partial 9\n' >"$OUT/M_default_args.expected"
+expect_ok M_default_args "$OUT/M_default_args.expected"
+
+# N: range-based for over fixed and managed ranges.
+printf 'total 60\nbuffer.len 3\n' >"$OUT/N_range_for.expected"
+expect_ok N_range_for "$OUT/N_range_for.expected"
+
 echo
 echo "C+ demos: $PASS passed, $FAIL failed"
 if [ "$FAIL" -ne 0 ]; then
