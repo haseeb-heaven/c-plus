@@ -4,9 +4,9 @@
 
 Safe C+ programs depend on:
 
-1. the `c+` lowering stages (`src/Sema/`);
+1. the `c+` lowering stages (`compiler/Sema/`);
 2. the host Clang driver and its C runtime/sanitizer libraries;
-3. the C+ runtime archive (`src/Runtime/cplus_runtime.c`);
+3. the C+ runtime archive (`runtime/cplus_runtime.c`);
 4. libc, POSIX and any linked C libraries;
 5. the operating system.
 

@@ -33,6 +33,8 @@ public:
 
   void run() {
     collectFunctions();
+    for (const auto &entry : funcs_)
+      functionOpens_.insert(entry.second.bodyOpen);
     collectCallConstants();
     collectAllocations();
     collectReturnExtents();
@@ -374,9 +376,17 @@ private:
     size_t inner = nextSig(lb);
     size_t rb = match(lb, "[", "]");
     if (rb == kNPos || inner >= rb) return;
-    if (toks_[inner].kind != TokKind::Number)
-      errorAt(toks_[inner], "variable-length stack allocation has no bounds "
-                            "check; use cplus_alloc");
+    if (toks_[inner].kind != TokKind::Number) {
+      // Uppercase names are the convention for preprocessor constants; the
+      // lexer cannot expand macros, so do not misreport them as VLAs.
+      bool macroLike = toks_[inner].kind == TokKind::Identifier;
+      for (char c : toks_[inner].text)
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+          macroLike = false;
+      if (!macroLike)
+        errorAt(toks_[inner], "variable-length stack allocation has no bounds "
+                              "check; use cplus_alloc");
+    }
   }
 
   void checkNanCompare(size_t i) {
@@ -589,26 +599,27 @@ private:
   }
 
   void checkCtypeChar() {
-    std::set<std::string> plainChars;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (!isIdent(i, "char"))
-        continue;
-      size_t prev = i == 0 ? kNPos : i - 1;
-      while (prev != kNPos && trivia(prev)) {
-        if (prev == 0) { prev = kNPos; break; }
-        --prev;
-      }
-      if (prev != kNPos &&
-          (isIdent(prev, "unsigned") || isIdent(prev, "signed")))
-        continue;
-      size_t name = nextSig(i);
-      if (name < toks_.size() && toks_[name].kind == TokKind::Identifier)
-        plainChars.insert(toks_[name].text);
-    }
     static const char *const kCtype[] = {
         "isalpha", "isdigit", "isalnum", "isspace", "islower", "isupper",
         "tolower", "toupper", "ispunct", "isxdigit"};
+    std::set<std::string> plainChars;
     for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i))
+        plainChars.clear();
+      if (isIdent(i, "char")) {
+        size_t prev = i == 0 ? kNPos : i - 1;
+        while (prev != kNPos && trivia(prev)) {
+          if (prev == 0) { prev = kNPos; break; }
+          --prev;
+        }
+        if (prev != kNPos &&
+            (isIdent(prev, "unsigned") || isIdent(prev, "signed")))
+          continue;
+        size_t name = nextSig(i);
+        if (name < toks_.size() && toks_[name].kind == TokKind::Identifier)
+          plainChars.insert(toks_[name].text);
+        continue;
+      }
       if (toks_[i].kind != TokKind::Identifier)
         continue;
       bool ctype = false;
@@ -619,8 +630,7 @@ private:
         }
       if (!ctype)
         continue;
-      size_t lp = nextSig(i);
-      size_t arg = nextSig(lp);
+      size_t arg = nextSig(nextSig(i));
       if (arg < toks_.size() && plainChars.count(toks_[arg].text))
         errorAt(toks_[arg], "cast a plain char to unsigned char before <ctype.h>");
     }
@@ -640,11 +650,10 @@ private:
   }
 
   std::string baseName(size_t from, size_t to) const {
-    std::string name;
     for (size_t k = from; k < to; ++k)
       if (toks_[k].kind == TokKind::Identifier)
-        name = toks_[k].text; // last identifier survives casts/field access
-    return name;
+        return toks_[k].text; // first identifier: E.field -> E, str + 2 -> str
+    return std::string();
   }
 
   /// memcpy with overlapping source/destination is undefined; memmove is the
@@ -780,6 +789,8 @@ private:
   void checkPointerLeaks() {
     std::map<std::string, bool> live;
     for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i))
+        live.clear();
       if (isPunct(i, "=")) {
         size_t lhs = i == 0 ? kNPos : i - 1;
         while (lhs != kNPos && trivia(lhs)) {
@@ -1303,6 +1314,7 @@ private:
   std::map<std::string, size_t> returnExtents_;
   std::set<std::string> globals_;
   std::set<std::string> volatileGlobals_;
+  std::set<size_t> functionOpens_;
   DiagnosticEngine &diags_;
   std::string filename_;
 };

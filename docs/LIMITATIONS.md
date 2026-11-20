@@ -35,7 +35,7 @@ depends on a runtime check, the check is named.
 | Default function arguments | supported | same translation unit only; filled at call sites; defaults should be trailing |
 | Range-based `for` | supported | simple lvalue ranges with a visible `.len`; no side-effecting range expressions |
 | Dynamic out-of-bounds index, null/misaligned dereference | supported at run time | UBSan checks, abort on first failure |
-| Deterministic exit codes for safety failures | supported | `101`–`108` in `include/cplus/cplus.h` |
+| Deterministic exit codes for safety failures | supported | `101`–`108` in `runtime/include/cplus/cplus.h` |
 | Lightweight classes with methods | supported | inline methods only; lower to `T_m(T *self, ...)` |
 | `p.m()` / `p->m()` sugar | supported | resolved from simple `T p;` / `T *p;` declarations in the same TU |
 | Pthreads + RAII mutex guard | supported | primitives and deterministic unlock; see race note below |

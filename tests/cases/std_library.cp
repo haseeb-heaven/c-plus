@@ -1,10 +1,10 @@
 /* All C+ standard-library .hp headers must be usable from a .cp source. */
-#include "cplus/std/string.hp"
-#include "cplus/std/vector.hp"
-#include "cplus/std/file.hp"
-#include "cplus/std/thread.hp"
-#include "cplus/std/io.hp"
-#include "cplus/std/net.hp"
+#include "stdlib/string.hp"
+#include "stdlib/vector.hp"
+#include "stdlib/file.hp"
+#include "stdlib/thread.hp"
+#include "stdlib/io.hp"
+#include "stdlib/net.hp"
 
 int main(void) {
     String s = String("hello");

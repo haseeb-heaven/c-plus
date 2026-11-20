@@ -169,7 +169,7 @@ directory for complete programs.
 
 ## Standard library
 
-The C+ standard library is provided as `.hp` headers in `include/cplus/std/`:
+The C+ standard library is provided as `.hp` headers in `include/stdlib/`:
 owned `String`, growable `IntVec`, RAII `File`, `Mutex`/`Guard`, I/O helpers and
 RAII sockets. They are thin typed wrappers over libc/POSIX, not a rewrite of
 the C runtime. See [`docs/STDLIB.md`](docs/STDLIB.md).
@@ -186,7 +186,7 @@ at compile time (`-Werror=array-bounds`), so `arr[10]` on an `int[3]` produces
 no executable. Indices only known at run time are checked by UBSan
 `undefined,bounds,null,alignment` with `-fno-sanitize-recover=all`, so a
 detected failure aborts instead of continuing with corrupted state. Runtime ownership errors use distinct
-exit codes (see `include/cplus/cplus.h`). `--legacy-c` disables all of this
+exit codes (see `runtime/include/cplus/cplus.h`). `--legacy-c` disables all of this
 and should not be considered safe.
 
 The evidence-backed capability matrix is in [`docs/STATUS.md`](docs/STATUS.md);
@@ -213,9 +213,9 @@ own machine for current numbers.
 
 ## Layout
 
-- `src/Sema/` — C+ lexer, syntax lowering and cleanup insertion
-- `src/Driver/` — compilation pipeline and backend invocation
-- `src/Runtime/` — small C runtime for managed memory and primitives
+- `compiler/Sema/` — C+ lexer, syntax lowering and cleanup insertion
+- `compiler/Driver/` — compilation pipeline and backend invocation
+- `runtime/` — small C runtime for managed memory and primitives
 - `include/cplus/` — stable C ABI used by generated code
 - `tests/`, `demos/`, `benchmarks/` — executable evidence
 

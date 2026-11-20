@@ -8,7 +8,7 @@ rewrite of those libraries. Ordinary C headers (`stdio.h`, `stdlib.h`,
 Include a header with its normal path:
 
 ```c
-#include "cplus/std/string.hp"
+#include "stdlib/string.hp"
 ```
 
 The compiler lowers each `.hp` header to a temporary `.h` with `#line`
@@ -19,19 +19,19 @@ translation unit.
 
 | header | contents | underlying API |
 | --- | --- | --- |
-| `cplus/std/string.hp` | `class String` with `len()`, `at()`, `c_str()`, RAII `drop()` | `strlen`, `memcpy`, `cplus_alloc` |
-| `cplus/std/vector.hp` | `class IntVec` with `push()`, `at()`, `len()`, RAII `drop()` | `cplus_alloc` / `cplus_release` |
-| `cplus/std/file.hp` | `resource File`, `File_open()`, `File_write()` | `fopen`, `fputs`, `fclose` |
-| `cplus/std/thread.hp` | `resource Mutex` / `Guard`, `Mutex_new()`, `Guard_lock()` | pthread wrappers in the C+ runtime |
-| `cplus/std/io.hp` | format-free `println()`, `echo_int()` | `print()` from `cplus/cplus.h` |
-| `cplus/std/net.hp` | `resource Listener` / `Connection`, bind/accept | POSIX sockets |
+| `stdlib/string.hp` | `class String` with `len()`, `at()`, `c_str()`, RAII `drop()` | `strlen`, `memcpy`, `cplus_alloc` |
+| `stdlib/vector.hp` | `class IntVec` with `push()`, `at()`, `len()`, RAII `drop()` | `cplus_alloc` / `cplus_release` |
+| `stdlib/file.hp` | `resource File`, `File_open()`, `File_write()` | `fopen`, `fputs`, `fclose` |
+| `stdlib/thread.hp` | `resource Mutex` / `Guard`, `Mutex_new()`, `Guard_lock()` | pthread wrappers in the C+ runtime |
+| `stdlib/io.hp` | format-free `println()`, `echo_int()` | `print()` from `cplus/cplus.h` |
+| `stdlib/net.hp` | `resource Listener` / `Connection`, bind/accept | POSIX sockets |
 
 ## Example
 
 ```c
-#include "cplus/std/string.hp"
-#include "cplus/std/vector.hp"
-#include "cplus/std/thread.hp"
+#include "stdlib/string.hp"
+#include "stdlib/vector.hp"
+#include "stdlib/thread.hp"
 
 int main(void) {
     String name = String("C+");

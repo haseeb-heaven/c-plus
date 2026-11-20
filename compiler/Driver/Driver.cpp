@@ -215,7 +215,7 @@ std::string findCPlusIncludeDir() {
   std::string env = envOr("CPLUS_INCLUDE");
   if (!env.empty() && llvm::sys::fs::exists(joinPath(env, "cplus/cplus.h")))
     return env;
-  std::string found = findByLayout("include");
+  std::string found = findByLayout("runtime/include");
   if (!found.empty() && llvm::sys::fs::exists(joinPath(found, "cplus/cplus.h")))
     return found;
   return std::string();
@@ -307,8 +307,10 @@ std::string resolveInclude(const std::string &name,
   if (!autoInc.empty())
     dirs.push_back(autoInc);
   std::string root = findSourceRoot();
-  if (!root.empty())
-    dirs.push_back(root + "/include");
+  if (!root.empty()) {
+    dirs.push_back(root);
+    dirs.push_back(root + "/runtime/include");
+  }
 
   for (const auto &dir : dirs) {
     std::string candidate = joinPath(dir, name);
