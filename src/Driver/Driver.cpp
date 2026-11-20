@@ -323,6 +323,9 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   args.push_back("-std=gnu17");
   args.push_back("-fno-common");
   args.push_back("-Wno-unused-parameter");
+  // Lets a source file tell that it is being compiled by c+, which is useful
+  // when the same file also has to build as plain C.
+  args.push_back("-DCPLUS=1");
 
   if (opts.opt == OptMode::Release) {
     args.push_back("-O2");
