@@ -39,12 +39,19 @@ public:
     checkPointerLeaks();
     checkMemcpyOverlap();
     checkDataRaces();
+    checkSignalHandlers();
+    checkStaticBufferCalls();
+    checkCtypeChar();
+    checkUncheckedIo();
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (isIdent(i, "for"))
         checkLoop(i);
       else {
         checkConstantSubscript(i);
         checkTypePun(i);
+        checkPointerArithmetic(i);
+        checkUnrelatedPointerCompare(i);
+        checkEmptyInfiniteLoop(i);
         if (isIdent(i, "realloc"))
           errorAt(toks_[i],
                   "raw realloc can lose the original block on failure; use "
@@ -243,6 +250,181 @@ private:
            name == "cplus_realloc" || name == "cplus_new" ||
            name == "cplus_new_array" || name == "malloc" ||
            name == "calloc";
+  }
+
+  void checkPointerArithmetic(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier)
+      return;
+    auto it = arrays_.find(toks_[i].text);
+    if (it == arrays_.end())
+      return;
+    size_t op = nextSig(i);
+    if (!isPunct(op, "+") && !isPunct(op, "-"))
+      return;
+    size_t numTok = nextSig(op);
+    if (numTok >= toks_.size())
+      return;
+    long amount = 0;
+    if (!number(toks_[numTok], &amount))
+      return;
+    if (isPunct(op, "+") && amount > static_cast<long>(it->second))
+      errorAt(toks_[op], "pointer arithmetic more than one past the end of '" +
+                             toks_[i].text + "'");
+    if (isPunct(op, "-") && amount < 0)
+      errorAt(toks_[op], "pointer arithmetic before the start of '" +
+                             toks_[i].text + "'");
+  }
+
+  void checkUnrelatedPointerCompare(size_t i) {
+    if (!isPunct(i, "&"))
+      return;
+    size_t a = nextSig(i);
+    size_t op = nextSig(a);
+    if (a >= toks_.size() || toks_[a].kind != TokKind::Identifier ||
+        !(isPunct(op, "<") || isPunct(op, "<=") || isPunct(op, ">") ||
+          isPunct(op, ">=")))
+      return;
+    size_t amp = nextSig(op);
+    if (!isPunct(amp, "&"))
+      return;
+    size_t b = nextSig(amp);
+    if (b >= toks_.size() || toks_[b].kind != TokKind::Identifier)
+      return;
+    errorAt(toks_[op], "relational comparison of pointers to different "
+                       "objects is undefined");
+  }
+
+  void checkEmptyInfiniteLoop(size_t i) {
+    if (!isIdent(i, "while"))
+      return;
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return;
+    size_t one = nextSig(lp);
+    long value = 0;
+    if (!number(toks_[one], &value) || value != 1)
+      return;
+    size_t rp = nextSig(one);
+    if (!isPunct(rp, ")"))
+      return;
+    size_t body = nextSig(rp);
+    if (!isPunct(body, "{"))
+      return;
+    size_t close = match(body, "{", "}");
+    if (close != kNPos && nextSig(body) == close)
+      errorAt(toks_[i], "empty infinite loop has undefined behavior; add a "
+                        "volatile or atomic side effect");
+  }
+
+  void checkSignalHandlers() {
+    std::set<std::string> handlers;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "signal"))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos)
+        continue;
+      auto args = splitArgs(lp + 1, rp);
+      if (args.size() < 2)
+        continue;
+      std::string name = baseName(args[1].first, args[1].second);
+      if (!name.empty())
+        handlers.insert(name);
+    }
+    static const char *const kUnsafe[] = {
+        "printf", "fprintf", "sprintf", "malloc", "calloc", "realloc",
+        "free",   "fopen",   "fclose",  "puts"};
+    for (const auto &entry : funcs_) {
+      if (!handlers.count(entry.first))
+        continue;
+      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
+        if (toks_[k].kind != TokKind::Identifier)
+          continue;
+        for (const char *fn : kUnsafe)
+          if (toks_[k].text == fn) {
+            errorAt(toks_[k], std::string("'") + fn +
+                                  "' is not async-signal-safe");
+            break;
+          }
+      }
+    }
+  }
+
+  /// strtok (and friends) keep internal static state; a second call in the
+  /// same function silently invalidates the first token stream.
+  void checkStaticBufferCalls() {
+    static const char *const kStateful[] = {"strtok", "asctime", "gmtime",
+                                            "localtime", "inet_ntoa"};
+    for (const auto &entry : funcs_) {
+      for (const char *fn : kStateful) {
+        unsigned count = 0;
+        size_t first = kNPos;
+        for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k)
+          if (isIdent(k, fn)) {
+            if (first == kNPos)
+              first = k;
+            ++count;
+          }
+        if (count > 1 && first != kNPos)
+          errorAt(toks_[first], std::string("'") + fn +
+                                    "' keeps static state; a second call "
+                                    "invalidates earlier results");
+      }
+    }
+  }
+
+  void checkCtypeChar() {
+    std::set<std::string> plainChars;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "char"))
+        continue;
+      size_t prev = i == 0 ? kNPos : i - 1;
+      while (prev != kNPos && trivia(prev)) {
+        if (prev == 0) { prev = kNPos; break; }
+        --prev;
+      }
+      if (prev != kNPos &&
+          (isIdent(prev, "unsigned") || isIdent(prev, "signed")))
+        continue;
+      size_t name = nextSig(i);
+      if (name < toks_.size() && toks_[name].kind == TokKind::Identifier)
+        plainChars.insert(toks_[name].text);
+    }
+    static const char *const kCtype[] = {
+        "isalpha", "isdigit", "isalnum", "isspace", "islower", "isupper",
+        "tolower", "toupper", "ispunct", "isxdigit"};
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      bool ctype = false;
+      for (const char *fn : kCtype)
+        if (toks_[i].text == fn) {
+          ctype = true;
+          break;
+        }
+      if (!ctype)
+        continue;
+      size_t lp = nextSig(i);
+      size_t arg = nextSig(lp);
+      if (arg < toks_.size() && plainChars.count(toks_[arg].text))
+        errorAt(toks_[arg], "cast a plain char to unsigned char before <ctype.h>");
+    }
+  }
+
+  void checkUncheckedIo() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!(isIdent(i, "fread") || isIdent(i, "fwrite")))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp != kNPos && isPunct(nextSig(rp), ";"))
+        errorAt(toks_[i], "check the return value of " + toks_[i].text);
+    }
   }
 
   std::string baseName(size_t from, size_t to) const {

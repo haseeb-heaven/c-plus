@@ -80,9 +80,17 @@ depends on a runtime check, the check is named.
 | 23. Flexible array member copy | **not caught** | see `tests/known_gaps/flexible_array_copy.c`; copy whole allocation |
 | 24. Data race (direct global write) | caught (conservative subset) | static check for unsynchronized writes in thread entry functions |
 | 25. Division by zero / INT_MIN/-1 | caught at run time | UBSan `undefined` / `division-by-zero` |
+| 26. Pointer arithmetic past one-past-end | caught | static extent check |
+| 27. Relational compare of unrelated pointers | caught | static check for `&a < &b` |
+| 28. `va_arg` promoted-type mismatch | caught | `-Werror=varargs` |
+| 29. Static-buffer `strtok` state | caught | static check for repeated stateful calls |
+| 30. Unsafe signal-handler call | caught | static check against a list of non-async-signal-safe calls |
+| 31. Plain `char` into `<ctype.h>` | caught | static check recommending `(unsigned char)` |
+| 32. Unchecked `fread`/`fwrite` | caught | static check for ignored return value |
+| 33. Empty infinite loop | caught | static check; add a volatile/atomic side effect |
 
-All 25 bugs have named tests in `tests/` (`classic_bug1_*` through
-`classic_bug25_*`). The ones that are not automatically caught also have raw
+All 33 bugs have named tests in `tests/` (`classic_bug1_*` through
+`classic_bug33_*`). The ones that are not automatically caught also have raw
 reference programs in `tests/known_gaps/` documenting the limitation.
 
 Items marked "not caught" remain undefined behaviour in safe C+ when written
