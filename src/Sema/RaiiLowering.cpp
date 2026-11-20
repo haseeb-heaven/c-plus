@@ -488,6 +488,13 @@ private:
     if (it == owned_.end())
       return;
 
+    // `*p = ...` and `p->field = ...` modify the pointee, not the owner.
+    size_t before = prevSig(lhs);
+    if (before != kNPos &&
+        (isPunct(before, "*") || isPunct(before, ".") ||
+         isPunct(before, "->")))
+      return;
+
     size_t rhs = nextSig(i);
     if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier) {
       auto rit = owned_.find(toks_[rhs].text);

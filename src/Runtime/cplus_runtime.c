@@ -129,6 +129,23 @@ void *cplus_alloc(size_t size) {
   r->released = 0;
 
   cplus_alloc_lock();
+  /* If the allocator reused the address of a released block, recycle its
+   * record.  Keeping released records lets us report a lost stale pointer as
+   * a double release instead of silently accepting it. */
+  cplus_alloc_record *reuse = NULL;
+  for (cplus_alloc_record *it = cplus_alloc_head; it; it = it->next) {
+    if (it->released && it->ptr == p) {
+      reuse = it;
+      break;
+    }
+  }
+  if (reuse) {
+    reuse->size = size;
+    reuse->released = 0;
+    free(r);
+    cplus_alloc_unlock();
+    return p;
+  }
   r->next = cplus_alloc_head;
   cplus_alloc_head = r;
   cplus_alloc_unlock();
@@ -196,7 +213,6 @@ void cplus_release(void *ptr) {
   }
   r->released = 1;
   void *raw = r->ptr;
-  r->ptr = NULL;
   cplus_alloc_unlock();
 
   free(raw);

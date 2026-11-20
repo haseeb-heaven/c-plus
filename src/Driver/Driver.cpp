@@ -132,8 +132,14 @@ std::string defaultOutputName(const std::string &input) {
 std::vector<std::string> cplusIncludeArgs() {
   std::vector<std::string> args;
   std::string inc = findCPlusIncludeDir();
-  if (!inc.empty())
+  if (!inc.empty()) {
     args.push_back("-I" + inc);
+    // Every C+ translation unit gets the runtime declaration header.  This
+    // makes cplus_new/cplus_move available without an explicit include and
+    // keeps ordinary C programs valid.
+    args.push_back("-include");
+    args.push_back(inc + "/cplus/cplus.h");
+  }
   return args;
 }
 
@@ -326,6 +332,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   }
 
   if (opts.mode == Mode::Safe) {
+    args.push_back("-pthread");
     // Runtime memory-safety instrumentation.  UBSan's bounds/null/alignment
     // checks cover fixed-extent arrays and invalid pointer use; they abort on
     // the first violation because a safe program must never continue after a
