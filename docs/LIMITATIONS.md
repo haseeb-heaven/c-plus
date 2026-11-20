@@ -18,7 +18,10 @@ depends on a runtime check, the check is named.
 | Compile-time copy and assignment rejection | supported | for owning locals tracked by the lowering pass |
 | Compile-time managed-pointer escape rejection | supported | `return p;` where `p` is managed is an error |
 | Managed allocation with double/invalid release detection | supported | O(1) hash table + bounded freed-address cache |
-| Statically known out-of-bounds array index | supported at compile time | `-Werror=array-bounds`; no executable is produced |
+| Statically known out-of-bounds array index | supported at compile time | `-Werror=array-bounds` plus a C+ static pass; no executable is produced |
+| Simple counted-loop index past array end | supported at compile time | `for (i = 0; i < N; i++) arr[i]` with known extent < N |
+| Fixed array `.len` | supported | literal extent; not available for pointers or managed arrays |
+| `auto` type inference | supported | lowers to `__typeof__`; not used for ownership inference |
 | Dynamic out-of-bounds index, null/misaligned dereference | supported at run time | UBSan checks, abort on first failure |
 | Deterministic exit codes for safety failures | supported | `101`–`108` in `include/cplus/cplus.h` |
 | Lightweight classes with methods | supported | inline methods only; lower to `T_m(T *self, ...)` |
@@ -66,6 +69,12 @@ give a complete spatial/temporal memory-safety guarantee:
 - Out-of-bounds pointers produced by arithmetic (`p + i`) are not statically
   checked the way an array subscript is; this is not Rust-style borrow
   checking.
+- The static loop checker handles counted loops of the form
+  `i = C; i < N; i++` (or `<=`) with literal bounds. Loops with computed
+  bounds, multiple index variables or indirect subscripts fall back to the
+  run-time check, not a compile error.
+- `auto` is type inference only. It does not infer ownership, so an owning
+  resource declared with `auto` will not get deterministic cleanup.
 - Arbitrary pointer arithmetic and casts remain C behaviour.
 
 `--legacy-c` turns all of the above checks off. It is provided for

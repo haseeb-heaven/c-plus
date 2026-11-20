@@ -106,6 +106,20 @@ int main(void) {
 }
 ```
 
+Fixed arrays carry a compile-time length, and `auto` infers types from the
+initialiser:
+
+```c
+int values[] = {10, 30, 50};
+auto total = 0;
+for (auto i = 0; i < values.len; i++)
+    total += values[i];   /* values.len is a literal 3 */
+```
+
+Out-of-bounds accesses that can be proven wrong at compile time are errors:
+both `values[10]` and `for (i = 0; i < 5; i++) values[i]` fail to compile in
+safe mode. Indices only known at run time are checked by UBSan.
+
 Managed memory is released at scope exit:
 
 ```c
@@ -129,12 +143,13 @@ and should not be considered safe.
 
 The honest capability table, including what is *not* implemented, is in
 [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). The lowering pipeline is described
-in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and a comparison with Fil-C
+and Goose is in [`docs/RELATED.md`](docs/RELATED.md).
 
 ## Verification
 
 ```sh
-./tests/run_tests.sh      # 19 positive, compile-fail and runtime-fail tests
+./tests/run_tests.sh      # 23 positive, compile-fail and runtime-fail tests
 ./demos/run_demos.sh      # six demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```

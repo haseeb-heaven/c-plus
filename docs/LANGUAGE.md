@@ -9,8 +9,8 @@ unchanged.
 - [`managed`](#managed-memory) — scope-owned heap allocation
 - [`owned`](#owned-declarations) — explicit spelling of an owning local
 
-The reserved words in C+ source are `resource`, `class`, `managed`, `owned`
-and `self`. Plain C code that uses them as identifiers must be compiled with
+The reserved words in C+ source are `resource`, `class`, `managed`, `owned`,
+`auto` and `self`. Plain C code that uses them as identifiers must be compiled with
 `--legacy-c`.
 
 ## Resource structs
@@ -170,6 +170,34 @@ c+ build demos/C_resource.c --emit-c /tmp/lowered.c --keep-temp -o demo
 
 `#line` directives also mean `__FILE__` and `__LINE__` in your source keep
 their original values.
+
+## Array length and type inference
+
+A fixed array has a `len` property that lowers to its compile-time extent as
+an integer literal:
+
+```c
+int arr[] = {10, 20, 30};
+int fixed[5];
+printf("%d %d\n", arr.len, fixed.len);   /* 3 5 */
+```
+
+`arr.len` works for `T name[] = {...}` and `T name[N]`, including inside class
+methods. It is a literal, not a runtime lookup, so it can be used in loop
+bounds and constant expressions. It is not available for pointers (including
+managed allocations), because a pointer does not carry an extent.
+
+`auto name = init;` infers the type of `init` and lowers to
+`__typeof__(init) name = init;`:
+
+```c
+auto n = arr.len;        /* int */
+auto p = &arr[0];        /* int * */
+for (auto i = 0; i < n; i++) { ... }
+```
+
+`auto` with an owning resource type is not tracked by the ownership analysis;
+use the explicit resource type for such declarations.
 
 ## Compile modes
 

@@ -37,14 +37,17 @@ DriverOptions
      - p.m() / p->m() -> T_m(&p, ...) / T_m(p, ...)
      - managed/owned -> plain declaration + machine-readable marker comment
      - #line directives map results back to the original file
-  3. lowerRaii()                   src/Sema/RaiiLowering.cpp
+  3. checkStaticBounds()           src/Sema/StaticBoundsCheck.cpp
+     - uses array extents collected by the rewriter
+     - rejects provable constant and counted-loop out-of-bounds accesses
+  4. lowerRaii()                   src/Sema/RaiiLowering.cpp
      - tracks lexical scopes and owning locals
      - inserts drops at scope exit (reverse declaration order)
      - wraps return/break/continue so cleanup cannot break if/else binding
      - rejects copies, assignments and managed-pointer escapes
-  4. write a temporary .c beside the source, add -include cplus/cplus.h,
+  5. write a temporary .c beside the source, add -include cplus/cplus.h,
      invoke the C compiler with the selected flags and the C+ runtime archive
-  5. for `run`, execute the produced binary; for `check`, stop at -fsyntax-only
+  6. for `run`, execute the produced binary; for `check`, stop at -fsyntax-only
 ```
 
 The lowered C is auditable: `c+ build --emit-c out.c --keep-temp` prints the
