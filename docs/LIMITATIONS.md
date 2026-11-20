@@ -23,7 +23,8 @@ depends on a runtime check, the check is named.
 | Managed allocation with double/invalid release detection | supported | O(1) hash table + bounded freed-address cache |
 | Statically known out-of-bounds array index | supported at compile time | `-Werror=array-bounds` plus a C+ static pass; no executable is produced |
 | Simple counted-loop index past array end | supported at compile time | `for (i = 0; i < N; i++) arr[i]` with known extent < N |
-| Allocation size from literal call argument | supported at compile time | `sizeof(T) * param` with a literal argument; ambiguous or multiple differing call sites are skipped |
+| Allocation size from literal call argument | supported at compile time | `sizeof(T) * param` with a literal argument; extent also follows function returns to call sites |
+| Return-propagated allocation extents | supported | single returned local; ambiguous or multiple differing call sites are skipped |
 | Fixed array `.len` | supported | compile-time literal extent |
 | C+ allocation `.len` | supported | `(size_expr) / sizeof(*ptr)` when the allocation is visible (compile-time folded for fixed sizes); side-table fallback otherwise |
 | `.len` on a struct type | not automatic | a struct must declare its own `len` field; `.len` on a pointer from `cplus_new(T)` reports 1 object |
@@ -80,6 +81,9 @@ give a complete spatial/temporal memory-safety guarantee:
 - Out-of-bounds pointers produced by arithmetic (`p + i`) are not statically
   checked the way an array subscript is; this is not Rust-style borrow
   checking.
+- Return-extent propagation only handles a single returned local with one
+  consistent extent. Aliases and multiple return paths with differing extents
+  are not inferred.
 - Allocation-size propagation only handles `sizeof(T) * parameter` with a
   literal call argument and one consistent value per parameter name. If the
   function is called with different sizes, the check is skipped rather than
