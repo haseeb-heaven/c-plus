@@ -88,7 +88,7 @@ depends on a runtime check, the check is named.
 | 31. Plain `char` into `<ctype.h>` | caught | static check recommending `(unsigned char)` |
 | 32. Unchecked `fread`/`fwrite` | caught | static check for ignored return value |
 | 33. Empty infinite loop | caught | static check; add a volatile/atomic side effect |
-| 34. `longjmp` bypassing cleanup | caught (rejected) | `setjmp`/`longjmp` rejected in safe mode |
+| 34. `longjmp` bypassing cleanup | warning | valid C compiles; RAII is not guaranteed across non-local jumps |
 | 35. Cross-TU declaration/ABI mismatch | **not detected** | single-TU compiler; see `tests/known_gaps/abi_mismatch/` |
 | 36. Casting away const to mutate | caught | `-Werror=cast-qual` |
 | 37. NaN equality comparison | caught | static check recommending `isnan()` |

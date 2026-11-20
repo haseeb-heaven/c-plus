@@ -78,8 +78,8 @@ public:
         if (isIdent(i, "alloca"))
           errorAt(toks_[i], "alloca has no bounds checking; use cplus_alloc");
         if (isIdent(i, "setjmp") || isIdent(i, "longjmp"))
-          errorAt(toks_[i], std::string("'") + toks_[i].text +
-                                "' bypasses C+ deterministic cleanup");
+          warningAt(toks_[i], std::string("'") + toks_[i].text +
+                                  "' bypasses C+ deterministic cleanup");
         if (isIdent(i, "unreachable"))
           errorAt(toks_[i], "C23 unreachable() is not supported in safe C+");
         if (isIdent(i, "_BitInt"))
@@ -231,6 +231,18 @@ private:
     d.line = at.line;
     d.column = at.column;
     d.help = "use C+ managed allocations and cplus_* helpers";
+    diags_.report(std::move(d));
+  }
+
+  void warningAt(const Token &at, const std::string &message) {
+    Diag d;
+    d.level = DiagLevel::Warning;
+    d.message = message;
+    d.file = filename_;
+    d.line = at.line;
+    d.column = at.column;
+    d.help = "RAII is not guaranteed across non-local jumps; use structured "
+             "control flow in safe C+";
     diags_.report(std::move(d));
   }
 
@@ -542,6 +554,11 @@ private:
     size_t rb = match(lb, "[", "]");
     if (rb == kNPos || inner >= rb) return;
     if (toks_[inner].kind != TokKind::Number) {
+      // A function-like expression such as offsetof(...) or sizeof(...) may
+      // still be a compile-time constant; do not misreport it as a VLA.
+      if (toks_[inner].kind == TokKind::Identifier &&
+          isPunct(nextSig(inner), "("))
+        return;
       // Uppercase names are the convention for preprocessor constants; the
       // lexer cannot expand macros, so do not misreport them as VLAs.
       bool macroLike = toks_[inner].kind == TokKind::Identifier;
@@ -753,7 +770,36 @@ private:
     unsigned lineNo = 0;
     while (std::getline(in, line)) {
       ++lineNo;
-      size_t def = line.find("#define");
+      // Strip comments and string literals: a ';' inside either is not a
+      // macro statement.
+      std::string code;
+      bool inComment = false;
+      for (size_t k = 0; k < line.size(); ++k) {
+        if (inComment) {
+          if (line[k] == '*' && k + 1 < line.size() && line[k + 1] == '/') {
+            inComment = false;
+            ++k;
+          }
+          continue;
+        }
+        if (line[k] == '/' && k + 1 < line.size() && line[k + 1] == '*') {
+          inComment = true;
+          ++k;
+          continue;
+        }
+        code += line[k];
+      }
+      // A ';' inside a string/char literal is not a statement.  Skipping
+      // such macro lines avoids false positives (e.g. Lua's DLMSG).
+      if (code.find('"') != std::string::npos ||
+          code.find('\'') != std::string::npos)
+        continue;
+      // A single `if (...) a; else b;` is one statement despite the ';'.
+      if (code.find("if ") != std::string::npos ||
+          code.find("if(") != std::string::npos ||
+          code.find("else") != std::string::npos)
+        continue;
+      size_t def = code.find("#define");
       if (def == std::string::npos)
         continue;
       // A multi-statement macro is only unsafe when a ';' appears at the
@@ -761,8 +807,8 @@ private:
       // or an if/else body are already grouped.
       int paren = 0, brace = 0;
       bool unsafe = false;
-      for (size_t k = def + 7; k < line.size(); ++k) {
-        char c = line[k];
+      for (size_t k = def + 7; k < code.size(); ++k) {
+        char c = code[k];
         if (c == '(') ++paren;
         else if (c == ')') --paren;
         else if (c == '{') ++brace;
@@ -771,8 +817,8 @@ private:
       }
       if (!unsafe)
         continue;
-      if (line.find("do {") != std::string::npos &&
-          line.find("while (0)") != std::string::npos)
+      if (code.find("do {") != std::string::npos &&
+          code.find("while (0)") != std::string::npos)
         continue;
       Diag d;
       d.level = DiagLevel::Error;

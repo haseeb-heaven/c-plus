@@ -108,3 +108,8 @@ The AST checker must parse lowered C with a synthetic `.c` filename (a `.cp`
 suffix made Tooling treat it as C++) and must suppress its own parse
 diagnostics. After fixing that, `.cp` files using system headers such as
 `stdbool.h` compile correctly, and 2048 builds in safe mode.
+
+After tuning: `setjmp`/`longjmp` are warnings (not errors), macro checks skip
+lines with string literals or a single if/else statement, and VLA checks skip
+compile-time function-like expressions such as `offsetof(...)`. All five real
+applications (2048, TinyExpr, cJSON, Parson, Lua) now build and run with c+.

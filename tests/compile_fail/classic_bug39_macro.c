@@ -1,4 +1,3 @@
 /* Bug 39: multi-statement macro without do/while wrapper. */
-#include <stdio.h>
-#define LOG_AND_RESET(x) printf("Val: %d\n", x); x = 0;
-int main(void) { int c = 5; if (0) LOG_AND_RESET(c); printf("%d\n", c); return 0; }
+#define SET_TWO(a, b) a = 1; b = 2;
+int main(void) { int x = 0, y = 0; if (0) SET_TWO(x, y); return x + y; }

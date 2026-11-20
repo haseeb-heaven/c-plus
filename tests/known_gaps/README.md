@@ -27,3 +27,7 @@ They are kept here as evidence of the limitation, not as verified safety tests.
 - `heuristics/classic_bug13_literal_write.c` — writing through a `char *`
   initialized from a string literal is UB, but promoting Clang's qualifier
   warning to an error breaks valid legacy C (e.g. `c4.c`). It is now a warning.
+- `heuristics/classic_bug34_longjmp.c` — `setjmp`/`longjmp` are valid C but
+  bypass deterministic cleanup. They now produce a warning, not an error, so
+  real C programs (e.g. Lua) still compile; RAII is not guaranteed across
+  non-local jumps.
