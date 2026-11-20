@@ -241,7 +241,9 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
                    __builtin_types_compatible_p(__typeof__(x), char *)        \
                        ? 256u                                                 \
                        : sizeof(x),                                           \
-                   _Generic((x) + 0,                                          \
+                   (__builtin_types_compatible_p(__typeof__(x), char)         \
+                        ? CPLUS_SCAN_CHAR                                      \
+                        : _Generic((x) + 0,                                    \
                             char *: CPLUS_SCAN_STR,                            \
                             const char *: CPLUS_SCAN_STR,                      \
                             int: CPLUS_SCAN_INT,                               \
@@ -252,8 +254,7 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
                             unsigned long long: CPLUS_SCAN_ULLONG,             \
                             float: CPLUS_SCAN_FLOAT,                           \
                             double: CPLUS_SCAN_DOUBLE,                         \
-                            char: CPLUS_SCAN_CHAR,                             \
-                            default: CPLUS_SCAN_INT))
+                            default: CPLUS_SCAN_INT)))
 
 /* Fixed-width argument dispatch (up to 16 values). */
 #define CPLUS_PICK16(_1, _2, _3, _4, _5, _6, _7, _8,                          \
