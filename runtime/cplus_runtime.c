@@ -212,6 +212,9 @@ void *cplus_alloc_array(size_t count, size_t element_size) {
   if (element_size == 0)
     element_size = 1;
   if (count > SIZE_MAX / element_size)
+    cplus_log(CPLUS_LOG_ERROR, "allocation overflow count=%zu elem=%zu", count,
+              element_size);
+  if (count > SIZE_MAX / element_size)
     cplus_print_fatal(CPLUS_EXIT_RESOURCE, "allocation overflow", NULL, 0,
                       "array size multiplication overflows size_t");
   return cplus_zalloc(count * element_size);
@@ -243,6 +246,7 @@ void cplus_zero(void *p, size_t size) {
 void cplus_release(void *ptr) {
   if (!ptr)
     return;
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_release ptr=%p", ptr);
 
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
@@ -271,6 +275,8 @@ void cplus_check_live(const void *ptr) {
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
   cplus_alloc_unlock();
+  if (!slot)
+    cplus_log(CPLUS_LOG_WARN, "dangling pointer query ptr=%p", ptr);
   if (!slot)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "dangling pointer", NULL, 0,
                       "pointer is no longer a live C+ allocation");

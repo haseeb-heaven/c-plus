@@ -99,6 +99,7 @@ add_library(cplus_core STATIC
 
 target_include_directories(cplus_core PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/compiler
+  ${CMAKE_CURRENT_SOURCE_DIR}/runtime/include
   ${LLVM_INCLUDE_DIRS}
   ${CLANG_INCLUDE_DIRS})
 

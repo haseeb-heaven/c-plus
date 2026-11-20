@@ -15,6 +15,44 @@
 #include <stdint.h>
 #include <string.h>
 
+/* -------------------------------------------------------------------------
+ * Optional logging/telemetry (disabled unless c+ is invoked with --log).
+ * Uses the MIT-licensed clog library vendored as cplus/clog.h.
+ * ------------------------------------------------------------------------- */
+#ifdef CPLUS_LOG_RUNTIME
+#include "cplus/clog.h"
+/* Avoid clog's generic convenience macro names colliding with user code. */
+#undef TRACE
+#undef DEBUG
+#undef INFO
+#undef WARN
+#undef ERROR
+#undef FATAL
+#define CPLUS_LOG_TRACE CLOG_TRACE
+#define CPLUS_LOG_DEBUG CLOG_DEBUG
+#define CPLUS_LOG_INFO CLOG_INFO
+#define CPLUS_LOG_WARN CLOG_WARN
+#define CPLUS_LOG_ERROR CLOG_ERROR
+#define CPLUS_LOG_FATAL CLOG_FATAL
+#ifndef CPLUS_LOG_LEVEL
+#define CPLUS_LOG_LEVEL CPLUS_LOG_WARN
+#endif
+#define cplus_log(level, ...)                                                  \
+  do {                                                                         \
+    if ((int)(level) >= (int)CPLUS_LOG_LEVEL)                                   \
+      clog_log((clog_level_t)(level), __FILE__, __LINE__, __func__,             \
+               __VA_ARGS__);                                                   \
+  } while (0)
+#else
+#define CPLUS_LOG_TRACE 0
+#define CPLUS_LOG_DEBUG 1
+#define CPLUS_LOG_INFO 2
+#define CPLUS_LOG_WARN 3
+#define CPLUS_LOG_ERROR 4
+#define CPLUS_LOG_FATAL 5
+#define cplus_log(...) ((void)0)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

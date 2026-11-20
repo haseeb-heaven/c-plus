@@ -7,6 +7,14 @@
 #include "Sema/StaticBoundsCheck.h"
 #include "Sema/AstSafetyCheck.h"
 
+#include "cplus/clog.h"
+#undef TRACE
+#undef DEBUG
+#undef INFO
+#undef WARN
+#undef ERROR
+#undef FATAL
+
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -24,6 +32,26 @@
 namespace cplus {
 
 namespace {
+
+static bool g_logEnabled = false;
+static int g_logLevel = 3; // CLOG_WARN
+
+static int logLevelFromString(const std::string &name) {
+  if (name == "trace") return 0;
+  if (name == "debug") return 1;
+  if (name == "info") return 2;
+  if (name == "warn" || name == "warning") return 3;
+  if (name == "error") return 4;
+  if (name == "fatal") return 5;
+  return 3;
+}
+
+#define DRIVER_LOG(level, ...)                                                 \
+  do {                                                                         \
+    if (g_logEnabled && (level) >= g_logLevel)                                  \
+      clog_log((clog_level_t)(level), __FILE__, __LINE__, __func__,             \
+               __VA_ARGS__);                                                   \
+  } while (0)
 
 std::string envOr(const char *name) {
   const char *v = std::getenv(name);
@@ -442,11 +470,20 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
     args.push_back("-v");
   for (const auto &inc : cplusIncludeArgs())
     args.push_back(inc);
+  if (opts.logging) {
+    args.push_back("-DCPLUS_LOG_RUNTIME=1");
+    args.push_back("-DCPLUS_LOG_LEVEL=" +
+                   std::to_string(logLevelFromString(opts.logLevel)));
+  }
   return args;
 }
 
 int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
               llvm::raw_ostream &errs) {
+  g_logEnabled = opts.logging;
+  g_logLevel = logLevelFromString(opts.logLevel);
+  DRIVER_LOG(CLOG_INFO, "c+ driver start: command=%s files=%zu",
+             opts.command.c_str(), opts.inputs.size());
   std::vector<std::string> inputs = opts.inputs.empty()
                                         ? std::vector<std::string>{opts.input}
                                         : opts.inputs;
@@ -481,8 +518,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
                                      headerGuards, processedHeaders,
                                      headerCounter);
 
+    DRIVER_LOG(CLOG_DEBUG, "lowering %s", input.c_str());
     bool ok = false;
     std::string loweredText = lowerUnit(source, input, diags, opts.mode, &ok);
+    DRIVER_LOG(CLOG_DEBUG, "lowered %s (%zu bytes)", input.c_str(),
+               loweredText.size());
     if (opts.mode == Mode::Safe)
       checkAstSafety(loweredText, input, base, diags);
     printDiagnostics(diags, errs, input);
@@ -548,9 +588,12 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       for (const auto &a : args)
         os << "  " << a << "\n";
     }
+    DRIVER_LOG(CLOG_INFO, "compile %s", input.c_str());
     int rc = runProgram(clang, args);
-    if (rc != 0)
+    if (rc != 0) {
+      DRIVER_LOG(CLOG_ERROR, "compile failed: %s rc=%d", input.c_str(), rc);
       return rc;
+    }
     if (opts.command == "check")
       os << "check: " << input << " ok\n";
   }
@@ -569,9 +612,12 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   linkArgs.push_back("-o");
   linkArgs.push_back(output);
 
+  DRIVER_LOG(CLOG_INFO, "link %s", output.c_str());
   int rc = runProgram(clang, linkArgs);
-  if (rc != 0)
+  if (rc != 0) {
+    DRIVER_LOG(CLOG_ERROR, "link failed rc=%d", rc);
     return rc;
+  }
 
   if (opts.command == "run") {
     std::string exe = output;

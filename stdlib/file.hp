@@ -17,6 +17,7 @@ void File_drop(File *self) {
 }
 
 File File_open(const char *path, const char *mode) {
+    cplus_log(CPLUS_LOG_DEBUG, "File_open %s %s", path, mode);
     File f;
     f.handle = fopen(path, mode);
     return f;

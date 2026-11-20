@@ -13,6 +13,9 @@ ctest --test-dir build --output-on-failure
 echo "== tests =="
 ./tests/run_tests.sh
 
+echo "== logging =="
+./tests/logging_test.sh
+
 echo "== demos =="
 ./demos/run_demos.sh
 

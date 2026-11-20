@@ -37,6 +37,8 @@ struct Options {
   bool verbose = false;
   bool warningsAsErrors = false;
   bool keepTemp = false;
+  bool logging = false;
+  std::string logLevel = "warn";
   std::vector<std::string> extraArgs;
 };
 
@@ -68,6 +70,8 @@ void printUsage(raw_ostream &os) {
   os << "  --keep-temp      keep the generated C file\n";
   os << "  -Werror          turn C+ warnings into errors\n";
   os << "  --verbose        show the backend command line\n";
+  os << "  --log            enable compiler/runtime logging (off by default)\n";
+  os << "  --log-level LVL  trace|debug|info|warn|error|fatal (default warn)\n";
   os << "  --               pass the remaining arguments to the C compiler\n";
 }
 
@@ -141,6 +145,15 @@ int main(int argc, char **argv) {
       opts.verbose = true;
       continue;
     }
+    if (a == "--log") {
+      opts.logging = true;
+      continue;
+    }
+    if (a == "--log-level") {
+      if (i + 1 < argc)
+        opts.logLevel = argv[++i];
+      continue;
+    }
     if (a == "--keep-temp") {
       opts.keepTemp = true;
       continue;
@@ -208,5 +221,7 @@ int main(int argc, char **argv) {
   d.warningsAsErrors = opts.warningsAsErrors;
   d.keepTemp = opts.keepTemp;
   d.extraArgs = opts.extraArgs;
+  d.logging = opts.logging;
+  d.logLevel = opts.logLevel;
   return runDriver(d, outs(), errs());
 }

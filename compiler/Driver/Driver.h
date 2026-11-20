@@ -34,6 +34,8 @@ struct DriverOptions {
   bool verbose = false;
   bool warningsAsErrors = false;
   bool keepTemp = false;
+  bool logging = false;
+  std::string logLevel = "warn";
   std::vector<std::string> extraArgs;
 };
 

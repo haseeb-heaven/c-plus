@@ -12,6 +12,7 @@ class String {
 
     String(const char *text) {
         size_t n = strlen(text);
+        cplus_log(CPLUS_LOG_DEBUG, "String ctor len=%zu", n);
         self->data = (char *)cplus_alloc(n + 1);
         memcpy(self->data, text, n + 1);
         self->length = n;

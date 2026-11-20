@@ -20,6 +20,7 @@ class IntVec {
     }
 
     void push(int value) {
+        cplus_log(CPLUS_LOG_TRACE, "IntVec push value=%d", value);
         if (self->length == self->capacity) {
             size_t next = self->capacity == 0 ? 4 : self->capacity * 2;
             int *fresh = (int *)cplus_alloc(sizeof(int) * next);

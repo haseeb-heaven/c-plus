@@ -33,6 +33,7 @@ void Guard_drop(Guard *self) {
 }
 
 Guard Guard_lock(Mutex *mutex) {
+    cplus_log(CPLUS_LOG_TRACE, "Guard_lock");
     Guard g;
     g.owner = mutex;
     cplus_mutex_lock(mutex->handle);

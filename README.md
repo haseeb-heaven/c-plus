@@ -219,6 +219,11 @@ own machine for current numbers.
 - `include/cplus/` — stable C ABI used by generated code
 - `tests/`, `demos/`, `benchmarks/` — executable evidence
 
+## Logging
+
+Compiler and runtime logging are opt-in via `c+ build --log --log-level debug`.
+See [`docs/LOGGING.md`](docs/LOGGING.md).
+
 ## Contributing
 
 Branching and release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).
