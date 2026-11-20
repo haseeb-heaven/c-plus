@@ -143,10 +143,14 @@ Measured with `./benchmarks/run_bench.sh`, median of 5 runs, on this machine
 
 | benchmark | c+ safe | c+ legacy | clang -O2 | safe / clang | legacy / clang |
 | --- | --- | --- | --- | --- | --- |
-| `alloc_churn` | 0.1850s | 0.1841s | 0.0531s | 3.49x | 3.47x |
-| `bounds_sum` | 0.0335s | 0.0298s | 0.0298s | 1.12x | 1.00x |
-| `method_dispatch` | 0.0190s | 0.0067s | 0.0077s | 2.46x | 0.87x |
-| `raii_loop` | 0.0207s | 0.0102s | 0.0076s | 2.74x | 1.35x |
+| `alloc_churn` | 0.1799s | 0.1777s | 0.0518s | 3.47x | 3.43x |
+| `bounds_sum` | 0.0343s | 0.0313s | 0.0297s | 1.16x | 1.06x |
+| `function_call` | 0.1200s | 0.1188s | 0.1204s | 1.00x | 0.99x |
+| `integer_compute` | 0.0972s | 0.0949s | 0.0980s | 0.99x | 0.97x |
+| `method_dispatch` | 0.0188s | 0.0083s | 0.0059s | 3.16x | 1.40x |
+| `parallel_scale` | 0.0153s | 0.0124s | 0.0121s | 1.27x | 1.03x |
+| `pointer_chase` | 0.0329s | 0.0535s | 0.0535s | 0.61x | 1.00x |
+| `raii_loop` | 0.0190s | 0.0104s | 0.0102s | 1.86x | 1.02x |
 
 How to read these numbers:
 

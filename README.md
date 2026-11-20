@@ -173,10 +173,14 @@ detected failure aborts instead of continuing with corrupted state. Runtime owne
 exit codes (see `include/cplus/cplus.h`). `--legacy-c` disables all of this
 and should not be considered safe.
 
-The honest capability table, including what is *not* implemented, is in
-[`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). The lowering pipeline is described
-in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and a comparison with Fil-C
-and Goose is in [`docs/RELATED.md`](docs/RELATED.md).
+The evidence-backed capability matrix is in [`docs/STATUS.md`](docs/STATUS.md);
+the honest limitations are in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). The
+lowering pipeline is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), the
+compiler-foundation decision in [`docs/FOUNDATION.md`](docs/FOUNDATION.md), the
+safety assumptions in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), and the
+comparison with Fil-C and Goose in [`docs/RELATED.md`](docs/RELATED.md). Work
+still required for the full specification is tracked in
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Verification
 
