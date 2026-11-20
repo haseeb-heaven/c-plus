@@ -18,13 +18,15 @@ endif()
 # ---------------------------------------------------------------------------
 # Locate LLVM + Clang development libraries.
 #
-# C+ is a *frontend extension* on top of the upstream Clang/LLVM compiler
-# infrastructure: we reuse Clang's C parser, Sema, AST, and CodeGen, and
-# LLVM's optimizer + target backends.  We never re-implement any of that.
+# C+ is a thin feature layer over an existing open-source C toolchain.  It
+# lowers the small set of C+ additions to plain C and hands that C to the
+# host Clang driver, which does parsing, type checking, optimisation, code
+# generation and linking.  C itself is never re-implemented.
 #
-# The only supported configuration for this MVP is a *static* LLVM/Clang build
-# (no shared libLLVM), because Homebrew's `libLLVM.dylib` may be a stub and
-# macOS SDK versions do not always match the toolchain's min-version.
+# LLVM/Clang development libraries are linked for the driver's own support
+# code (file/path/process helpers).  A *static* LLVM/Clang build is used
+# because Homebrew's `libLLVM.dylib` may be a stub and macOS SDK versions do
+# not always match the toolchain's min-version.
 # ---------------------------------------------------------------------------
 # Force static LLVM linkage.  Homebrew's shared libLLVM.dylib may be a stub,
 # and the static archives are always complete.
