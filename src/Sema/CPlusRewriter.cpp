@@ -23,6 +23,7 @@
 #include "Sema/CPlusLexer.h"
 #include "Sema/SemaCPlus.h"
 
+#include <cstdio>
 #include <algorithm>
 #include <map>
 #include <set>
@@ -725,8 +726,11 @@ private:
     return true;
   }
 
-  /// Record pointers initialised by the C+ allocator.  Their `.len` is a
-  /// run-time query against the allocator's side table.
+  /// Record pointers initialised by the C+ allocator.  When the allocation
+  /// size is visible in the source, `.len` can be computed as
+  /// `(size_expression) / sizeof(*ptr)`, which the C compiler folds to a
+  /// constant for fixed-size allocations.  Only genuinely dynamic sizes need
+  /// the runtime side-table lookup.
   void collectDynamicPointers() {
     static const std::set<std::string> kAllocators = {
         "cplus_alloc", "cplus_zalloc", "cplus_realloc", "cplus_new",
@@ -735,6 +739,49 @@ private:
       if (ts[i].kind != TokKind::Identifier ||
           !kAllocators.count(ts[i].text))
         continue;
+
+      size_t lp = ts.nextSig(i);
+      if (!ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos)
+        continue;
+
+      // Split the argument list at its first top-level comma.
+      size_t comma = kNPos;
+      int depth = 0;
+      for (size_t k = lp + 1; k < rp; ++k) {
+        if (ts.isPunct(k, "(") || ts.isPunct(k, "[") || ts.isPunct(k, "{"))
+          ++depth;
+        else if (ts.isPunct(k, ")") || ts.isPunct(k, "]") || ts.isPunct(k, "}"))
+          --depth;
+        else if (ts.isPunct(k, ",") && depth == 0) {
+          comma = k;
+          break;
+        }
+      }
+
+      size_t argStart = ts.nextSig(lp);
+      size_t argEnd = comma == kNPos ? rp : comma;
+      std::string expr;
+      if (ts.isIdent(i, "cplus_new")) {
+        expr = "1";
+      } else if (ts.isIdent(i, "cplus_new_array")) {
+        if (comma == kNPos)
+          continue;
+        expr = "(" + joinTokens(ts, ts.nextSig(comma), rp) + ")";
+      } else {
+        if (ts.isIdent(i, "cplus_realloc")) {
+          if (comma == kNPos)
+            continue;
+          argStart = ts.nextSig(comma);
+          argEnd = rp;
+        }
+        if (argStart >= argEnd)
+          continue;
+        expr = "(" + joinTokens(ts, argStart, argEnd) + ") / sizeof(*@NAME@)";
+      }
+
       size_t start = i;
       while (start > 0) {
         --start;
@@ -759,8 +806,15 @@ private:
       if (eq == kNPos)
         continue;
       size_t name = ts.prevSig(eq);
-      if (name != kNPos && name < eq && ts[name].kind == TokKind::Identifier)
-        dynamicPointers_.insert(ts[name].text);
+      if (name == kNPos || name >= eq ||
+          ts[name].kind != TokKind::Identifier)
+        continue;
+      const std::string var = ts[name].text;
+      dynamicPointers_.insert(var);
+      size_t at = expr.find("@NAME@");
+      if (at != std::string::npos)
+        expr.replace(at, 6, var);
+      dynamicLengths_.push_back({i, var, expr});
     }
   }
 
@@ -835,11 +889,20 @@ private:
     size_t member = ts.nextSig(dot);
     if (!ts.isIdent(member, "len"))
       return false;
-    if (isStatic)
+    if (isStatic) {
       emit("(" + std::to_string(arrays_[ts[i].text]) + ")");
-    else
-      emit("cplus_alloc_count(" + ts[i].text + ", sizeof(*" + ts[i].text +
-           "))");
+    } else {
+      // Use the most recent allocation of this name before this use site.
+      std::string expr;
+      for (const auto &entry : dynamicLengths_)
+        if (entry.pos < i && entry.name == ts[i].text)
+          expr = entry.expr;
+      if (expr.empty())
+        emit("cplus_alloc_count(" + ts[i].text + ", sizeof(*" + ts[i].text +
+             "))");
+      else
+        emit("(" + expr + ")");
+    }
     skipTo_ = member;
     changed_ = true;
     return true;
@@ -908,6 +971,12 @@ private:
   std::map<std::string, std::string> varClasses_;
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;
+  struct DynamicLength {
+    size_t pos;
+    std::string name;
+    std::string expr;
+  };
+  std::vector<DynamicLength> dynamicLengths_;
 };
 
 } // namespace

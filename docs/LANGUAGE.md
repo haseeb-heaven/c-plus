@@ -228,11 +228,25 @@ Buffer *obj = cplus_new(Buffer);
 printf("%zu %zu %zu\n", a.len, b.len, obj.len);  /* 3 5 1 */
 ```
 
-This is a run-time O(1) lookup, not a literal, so hoist it out of hot loops
-when needed. Querying `.len` on a released or foreign pointer is a fatal
-error, not a garbage value. The pointer must have a known element type
-(`void *` cannot be used because `sizeof(*ptr)` is invalid). A pointer from
-plain `malloc` is not tracked and has no `.len`.
+When the allocation call is visible, `.len` lowers to
+`(size_expression) / sizeof(*ptr)`, which is an integer constant expression
+for a fixed size — the C compiler folds it to a literal, so there is no run-time
+lookup at all:
+
+```c
+int *p = (int *)cplus_alloc(sizeof(int) * 3);
+_Static_assert(p.len == 3, "folded at compile time");
+```
+
+If the size depends on a run-time value, the same expression becomes a cheap
+division instead of a hash lookup. Only when the allocation call is not
+visible in the translation unit (for example a pointer received as an
+argument) does `.len` fall back to the allocator's O(1) side-table query.
+
+Querying `.len` on a released or foreign pointer is a fatal error, not a
+garbage value. The pointer must have a known element type (`void *` cannot be
+used because `sizeof(*ptr)` is invalid). A pointer from plain `malloc` is not
+tracked and has no `.len`.
 
 `auto name = init;` infers the type of `init` and lowers to
 `__typeof__(init) name = init;`:

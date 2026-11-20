@@ -24,7 +24,7 @@ depends on a runtime check, the check is named.
 | Statically known out-of-bounds array index | supported at compile time | `-Werror=array-bounds` plus a C+ static pass; no executable is produced |
 | Simple counted-loop index past array end | supported at compile time | `for (i = 0; i < N; i++) arr[i]` with known extent < N |
 | Fixed array `.len` | supported | compile-time literal extent |
-| C+ allocation `.len` | supported | O(1) side-table lookup / `sizeof(*ptr)`; not available for raw `malloc` pointers |
+| C+ allocation `.len` | supported | `(size_expr) / sizeof(*ptr)` when the allocation is visible (compile-time folded for fixed sizes); side-table fallback otherwise |
 | `.len` on a struct type | not automatic | a struct must declare its own `len` field; `.len` on a pointer from `cplus_new(T)` reports 1 object |
 | `auto` type inference | supported | lowers to `__typeof__`; also works with `(Class){...}`; not used for ownership inference |
 | Format-free `print(...)` | supported | type tags via `_Generic`; scalars, bool, char and C strings only |

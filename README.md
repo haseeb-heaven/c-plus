@@ -119,7 +119,7 @@ for (auto i = 0; i < values.len; i++)
 
 ```c
 int *heap = (int *)cplus_alloc(sizeof(int) * 3);
-printf("%zu\n", heap.len);   /* 3, from the allocation's size table */
+printf("%zu\n", heap.len);   /* 3, folded from sizeof(int) * 3 */
 ```
 
 Modern, format-free I/O is built in:
