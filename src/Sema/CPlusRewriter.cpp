@@ -985,12 +985,15 @@ private:
       size_t argStart = ts.nextSig(lp);
       size_t argEnd = comma == kNPos ? rp : comma;
       std::string expr;
+      size_t exprFrom = kNPos, exprTo = kNPos;
       if (ts.isIdent(i, "cplus_new")) {
         expr = "1";
       } else if (ts.isIdent(i, "cplus_new_array")) {
         if (comma == kNPos)
           continue;
-        expr = "(" + joinTokens(ts, ts.nextSig(comma), rp) + ")";
+        exprFrom = ts.nextSig(comma);
+        exprTo = rp;
+        expr = "(" + joinTokens(ts, exprFrom, exprTo) + ")";
       } else {
         if (ts.isIdent(i, "cplus_realloc")) {
           if (comma == kNPos)
@@ -1000,6 +1003,8 @@ private:
         }
         if (argStart >= argEnd)
           continue;
+        exprFrom = argStart;
+        exprTo = argEnd;
         expr = "(" + joinTokens(ts, argStart, argEnd) + ") / sizeof(*@NAME@)";
       }
 
@@ -1035,7 +1040,7 @@ private:
       size_t at = expr.find("@NAME@");
       if (at != std::string::npos)
         expr.replace(at, 6, var);
-      dynamicLengths_.push_back({i, var, expr});
+      dynamicLengths_.push_back({i, var, expr, exprFrom, exprTo});
     }
   }
 
@@ -1062,16 +1067,39 @@ private:
     }
   }
 
+  /// True when a size expression contains no variables, so it is safe to
+  /// re-emit at a different use site.  Identifiers that are type names or
+  /// `sizeof` are allowed; everything else is a variable and would break
+  /// scope if copied.
+  bool isConstantSizeExpr(size_t from, size_t to) const {
+    if (from == kNPos || to == kNPos || from >= to)
+      return true;
+    static const std::set<std::string> kTypeWords = {
+        "sizeof", "int",     "char",   "short",  "long",   "unsigned",
+        "signed", "float",   "double", "_Bool",  "void",   "size_t",
+        "const",  "volatile", "struct", "union",  "enum"};
+    for (size_t k = from; k < to; ++k) {
+      if (ts.isTrivia(k))
+        continue;
+      if (ts[k].kind == TokKind::Number || ts[k].kind == TokKind::Punct)
+        continue;
+      if (ts[k].kind == TokKind::Identifier &&
+          (kTypeWords.count(ts[k].text) || classNames_.count(ts[k].text) ||
+           resourceNames_.count(ts[k].text)))
+        continue;
+      return false;
+    }
+    return true;
+  }
+
   std::string lengthExprFor(const std::string &name, size_t pos) const {
     auto it = arrays_.find(name);
     if (it != arrays_.end())
       return "(" + std::to_string(it->second) + ")";
-    std::string expr;
     for (const auto &entry : dynamicLengths_)
-      if (entry.pos < pos && entry.name == name)
-        expr = entry.expr;
-    if (!expr.empty())
-      return "(" + expr + ")";
+      if (entry.pos < pos && entry.name == name &&
+          isConstantSizeExpr(entry.exprFrom, entry.exprTo))
+        return "(" + entry.expr + ")";
     if (dynamicPointers_.count(name))
       return "cplus_alloc_count(" + name + ", sizeof(*" + name + "))";
     return std::string();
@@ -1200,16 +1228,7 @@ private:
     if (isStatic) {
       emit("(" + std::to_string(arrays_[ts[i].text]) + ")");
     } else {
-      // Use the most recent allocation of this name before this use site.
-      std::string expr;
-      for (const auto &entry : dynamicLengths_)
-        if (entry.pos < i && entry.name == ts[i].text)
-          expr = entry.expr;
-      if (expr.empty())
-        emit("cplus_alloc_count(" + ts[i].text + ", sizeof(*" + ts[i].text +
-             "))");
-      else
-        emit("(" + expr + ")");
+      emit(lengthExprFor(ts[i].text, i));
     }
     skipTo_ = member;
     changed_ = true;
@@ -1289,6 +1308,8 @@ private:
     size_t pos;
     std::string name;
     std::string expr;
+    size_t exprFrom = kNPos;
+    size_t exprTo = kNPos;
   };
   std::vector<DynamicLength> dynamicLengths_;
 };
