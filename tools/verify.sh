@@ -13,6 +13,9 @@ ctest --test-dir build --output-on-failure
 echo "== tests =="
 ./tests/run_tests.sh
 
+echo "== cli compatibility =="
+./tests/cli_compat_test.sh
+
 echo "== breaker v3 =="
 bash tests/stress/cplus_breaker_v3/run.sh
 

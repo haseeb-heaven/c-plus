@@ -446,17 +446,21 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   }
   if (opts.mode == Mode::Safe) {
     args.push_back("-pthread");
-    args.push_back("-Werror=array-bounds");
-    args.push_back("-Werror=return-stack-address");
-    args.push_back("-Werror=uninitialized");
-    args.push_back("-Wwrite-strings");
-    args.push_back("-Werror=sizeof-array-argument");
-    args.push_back("-Werror=sizeof-pointer-div");
-    args.push_back("-Werror=format-security");
-    args.push_back("-Werror=unsequenced");
-    args.push_back("-Werror=shift-count-overflow");
-    args.push_back("-Werror=shift-negative-value");
-    args.push_back("-Werror=varargs");
+    if (!opts.disableWarnings) {
+      args.push_back("-Werror=array-bounds");
+      args.push_back("-Werror=return-stack-address");
+      args.push_back("-Werror=uninitialized");
+      args.push_back("-Wwrite-strings");
+      args.push_back("-Werror=sizeof-array-argument");
+      args.push_back("-Werror=sizeof-pointer-div");
+      args.push_back("-Werror=format-security");
+      args.push_back("-Werror=unsequenced");
+      args.push_back("-Werror=shift-count-overflow");
+      args.push_back("-Werror=shift-negative-value");
+      args.push_back("-Werror=varargs");
+    } else {
+      args.push_back("-w");
+    }
     args.push_back("-fsanitize=undefined,bounds,null,alignment");
     args.push_back("-fno-sanitize-recover=all");
     args.push_back("-fno-omit-frame-pointer");
@@ -493,8 +497,15 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   }
 
   const std::string clang = findClangBinary();
-  std::string output = opts.output.empty() ? defaultOutputName(inputs[0])
-                                           : opts.output;
+  std::string output = opts.output;
+  if (output.empty() && !opts.preprocessOnly) {
+    if (opts.compileOnly)
+      output = defaultOutputName(inputs[0]) + ".o";
+    else if (opts.assemblyOnly)
+      output = defaultOutputName(inputs[0]) + ".s";
+    else
+      output = defaultOutputName(inputs[0]);
+  }
   std::vector<std::string> base = backendArgs(opts);
   std::vector<std::string> objects;
   std::vector<TempFile> guards;
@@ -571,6 +582,20 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       args.push_back(a);
     if (opts.command == "check") {
       args.push_back("-fsyntax-only");
+    } else if (opts.preprocessOnly) {
+      args.push_back("-E");
+      if (!output.empty()) {
+        args.push_back("-o");
+        args.push_back(output);
+      }
+    } else if (opts.assemblyOnly) {
+      args.push_back("-S");
+      args.push_back("-o");
+      args.push_back(output);
+    } else if (opts.compileOnly) {
+      args.push_back("-c");
+      args.push_back("-o");
+      args.push_back(output);
     } else {
       llvm::SmallString<256> objPath;
       llvm::sys::path::system_temp_directory(true, objPath);
@@ -598,7 +623,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       os << "check: " << input << " ok\n";
   }
 
-  if (opts.command == "check")
+  if (opts.command == "check" || opts.compileOnly || opts.preprocessOnly ||
+      opts.assemblyOnly)
     return 0;
 
   std::vector<std::string> linkArgs = base;

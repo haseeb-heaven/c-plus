@@ -39,6 +39,10 @@ struct Options {
   bool keepTemp = false;
   bool logging = false;
   std::string logLevel = "warn";
+  bool disableWarnings = false;
+  bool compileOnly = false;
+  bool preprocessOnly = false;
+  bool assemblyOnly = false;
   std::vector<std::string> extraArgs;
 };
 
@@ -72,6 +76,10 @@ void printUsage(raw_ostream &os) {
   os << "  --verbose        show the backend command line\n";
   os << "  --log            enable compiler/runtime logging (off by default)\n";
   os << "  --log-level LVL  trace|debug|info|warn|error|fatal (default warn)\n";
+  os << "  -w               disable warnings (gcc compatible)\n";
+  os << "  -c / -S / -E     object / assembly / preprocess (gcc compatible)\n";
+  os << "  -O2 -g -std=...  passed through to the C backend\n";
+  os << "  c+ file.c -o f   gcc-style invocation (no subcommand needed)\n";
   os << "  --               pass the remaining arguments to the C compiler\n";
 }
 
@@ -145,6 +153,23 @@ int main(int argc, char **argv) {
       opts.verbose = true;
       continue;
     }
+    // gcc/g++ compatible short options
+    if (a == "-w") {
+      opts.disableWarnings = true;
+      continue;
+    }
+    if (a == "-c") {
+      opts.compileOnly = true;
+      continue;
+    }
+    if (a == "-E") {
+      opts.preprocessOnly = true;
+      continue;
+    }
+    if (a == "-S") {
+      opts.assemblyOnly = true;
+      continue;
+    }
     if (a == "--log") {
       opts.logging = true;
       continue;
@@ -168,6 +193,16 @@ int main(int argc, char **argv) {
         opts.emitC = argv[++i];
       continue;
     }
+    // Pass through common gcc/g++ options unchanged.
+    if (a.rfind("-I", 0) == 0 || a.rfind("-D", 0) == 0 ||
+        a.rfind("-U", 0) == 0 || a.rfind("-l", 0) == 0 ||
+        a.rfind("-L", 0) == 0 || a.rfind("-O", 0) == 0 ||
+        a.rfind("-std=", 0) == 0 || a.rfind("-W", 0) == 0 ||
+        a.rfind("-f", 0) == 0 || a == "-pthread" || a == "-shared" ||
+        a == "-pedantic" || a == "-ansi" || a == "-pipe") {
+      opts.extraArgs.push_back(a);
+      continue;
+    }
     if (a.size() > 1 && a[0] == '-' && a != "-") {
       opts.extraArgs.push_back(a);
       continue;
@@ -179,6 +214,23 @@ int main(int argc, char **argv) {
     printUsage(errs());
     return 1;
   }
+
+  auto isKnownCommand = [](const std::string &s) {
+    return s == "build" || s == "run" || s == "check" || s == "test" ||
+           s == "bench" || s == "demos";
+  };
+  auto looksLikeSource = [](const std::string &s) {
+    static const char *const exts[] = {".c",  ".cp",  ".cpp", ".cc",
+                                       ".cxx", ".C",  ".h",   ".hp"};
+    for (const char *ext : exts)
+      if (s.size() >= std::string(ext).size() &&
+          s.compare(s.size() - std::string(ext).size(),
+                    std::string(ext).size(), ext) == 0)
+        return true;
+    return s.find('/') != std::string::npos;
+  };
+  if (!isKnownCommand(positional[0]) && looksLikeSource(positional[0]))
+    positional.insert(positional.begin(), "build");
 
   opts.command = positional[0];
   for (size_t i = 1; i < positional.size(); ++i)
@@ -223,5 +275,9 @@ int main(int argc, char **argv) {
   d.extraArgs = opts.extraArgs;
   d.logging = opts.logging;
   d.logLevel = opts.logLevel;
+  d.disableWarnings = opts.disableWarnings;
+  d.compileOnly = opts.compileOnly;
+  d.preprocessOnly = opts.preprocessOnly;
+  d.assemblyOnly = opts.assemblyOnly;
   return runDriver(d, outs(), errs());
 }

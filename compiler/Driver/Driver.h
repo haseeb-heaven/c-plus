@@ -36,6 +36,10 @@ struct DriverOptions {
   bool keepTemp = false;
   bool logging = false;
   std::string logLevel = "warn";
+  bool disableWarnings = false;
+  bool compileOnly = false;
+  bool preprocessOnly = false;
+  bool assemblyOnly = false;
   std::vector<std::string> extraArgs;
 };
 
