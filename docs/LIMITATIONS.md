@@ -65,6 +65,10 @@ depends on a runtime check, the check is named.
 | 8. Missing null terminator | **not caught** | use bounded string APIs and reserve `strlen + 1` bytes yourself |
 | 9. Signed integer overflow | caught at run time | UBSan `undefined` |
 
+All nine bugs have named tests in `tests/` (`classic_bug1_*` through
+`classic_bug9_*`). The two that are not automatically caught also have raw
+reference programs in `tests/known_gaps/` documenting the limitation.
+
 Items marked "not caught" remain undefined behaviour in safe C+ when written
 with raw C idioms. Use C+ managed allocations and resources, not bare
 `malloc`/`free`, for the guarantees in rows 2, 4 and 5.

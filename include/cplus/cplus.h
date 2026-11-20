@@ -76,6 +76,9 @@ void cplus_release(void *ptr);
  * divides it by the element size.  Both abort with a deterministic exit code
  * if `ptr` is not a live C+ allocation. */
 size_t cplus_alloc_bytes(const void *ptr);
+/* Abort unless `ptr` is a live C+ allocation.  This is an explicit check for
+ * dangling managed pointers; ordinary dereferences are not instrumented. */
+void cplus_check_live(const void *ptr);
 size_t cplus_alloc_count(const void *ptr, size_t elem_size);
 
 /* Checked array index.  Returns `index` when it is in range and terminates

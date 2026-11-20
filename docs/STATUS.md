@@ -44,7 +44,7 @@ Commands that produced the "verified" column:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c+_lang
 ctest --test-dir build --output-on-failure   # 2/2 suites
-./tests/run_tests.sh                         # 38 tests
+./tests/run_tests.sh                         # 47 tests
 ./demos/run_demos.sh                         # 15 demos
 ./benchmarks/run_bench.sh                    # performance table
 ```

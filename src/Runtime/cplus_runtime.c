@@ -187,7 +187,7 @@ static void cplus_live_grow(void) {
 }
 
 void *cplus_alloc(size_t size) {
-  if (size == 0)
+  if (size <= 0)
     size = 1;
   void *p = malloc(size);
   if (!p) {
@@ -253,6 +253,18 @@ void cplus_release(void *ptr) {
   cplus_alloc_unlock();
 
   free(ptr);
+}
+
+void cplus_check_live(const void *ptr) {
+  if (!ptr)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "dangling pointer", NULL, 0,
+                      "null pointer is not a live allocation");
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_find_live(ptr);
+  cplus_alloc_unlock();
+  if (!slot)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "dangling pointer", NULL, 0,
+                      "pointer is no longer a live C+ allocation");
 }
 
 size_t cplus_alloc_bytes(const void *ptr) {
