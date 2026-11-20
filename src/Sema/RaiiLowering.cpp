@@ -323,6 +323,8 @@ private:
         isFunction = true;
         inFunction_ = true;
         owned_.clear();
+        borrows_.clear();
+        moved_.clear();
       }
     }
 
@@ -361,6 +363,24 @@ private:
   }
 
   void handleIdentifier(size_t i, const Token &t) {
+    // Track explicit moves so a borrow of the moved owner can be rejected.
+    if (t.text == "cplus_move") {
+      size_t lp = nextSig(i);
+      if (isPunct(lp, "(")) {
+        size_t arg = nextSig(lp);
+        if (arg < toks_.size() && toks_[arg].kind == TokKind::Identifier &&
+            owned_.count(toks_[arg].text))
+          moved_.insert(toks_[arg].text);
+      }
+      atStmtStart_ = false;
+      return;
+    }
+    auto borrow = borrows_.find(t.text);
+    if (borrow != borrows_.end() && moved_.count(borrow->second)) {
+      errorAt("borrow '" + t.text + "' of '" + borrow->second +
+                  "' is used after that resource was moved",
+              t, "re-borrow the new owner instead");
+    }
     if (t.text == "return") {
       std::string exclude;
       checkReturnValue(i, &exclude);
@@ -392,8 +412,12 @@ private:
       return;
     }
 
-    if (atStmtStart_ && inFunction_ && parenDepth_ == 0)
+    if (atStmtStart_ && inFunction_ && parenDepth_ == 0) {
+      size_t ownedBefore = obligations_;
       tryResourceDeclaration(i);
+      if (obligations_ == ownedBefore)
+        tryBorrowDeclaration(i);
+    }
     atStmtStart_ = false;
   }
 
@@ -455,6 +479,13 @@ private:
     size_t v = nextSig(i);
     if (v >= toks_.size() || toks_[v].kind != TokKind::Identifier)
       return;
+    auto borrow = borrows_.find(toks_[v].text);
+    if (borrow != borrows_.end()) {
+      errorAt("borrow '" + borrow->first + "' of local '" + borrow->second +
+                  "' cannot escape the function",
+              toks_[v], "return the owner instead, or copy the borrowed data");
+      return;
+    }
     auto it = owned_.find(toks_[v].text);
     if (it == owned_.end())
       return;
@@ -478,6 +509,7 @@ private:
     // no move expression is needed; emitting one would only add a memset on
     // every returned value and block optimisation of the caller's loop.
     *excluded = it->first;
+    moved_.insert(it->first);
   }
 
   void checkAssignment(size_t i) {
@@ -578,6 +610,32 @@ private:
     registerOwned(v);
   }
 
+  /// Record `T *p = &owner;` and `T *p = managed_owner;` as borrows of a
+  /// local resource or managed allocation.  This is a deliberately small
+  /// borrow checker: it catches dangling escapes and use-after-move, not
+  /// aliasing or general lifetime relationships.
+  bool tryBorrowDeclaration(size_t i) {
+    size_t star = nextSig(i);
+    if (!isPunct(star, "*"))
+      return false;
+    size_t name = nextSig(star);
+    if (name >= toks_.size() || toks_[name].kind != TokKind::Identifier)
+      return false;
+    size_t eq = nextSig(name);
+    if (!isPunct(eq, "="))
+      return false;
+    size_t init = nextSig(eq);
+    bool addressOf = isPunct(init, "&");
+    size_t ownerIdx = addressOf ? nextSig(init) : init;
+    if (ownerIdx >= toks_.size() ||
+        toks_[ownerIdx].kind != TokKind::Identifier)
+      return false;
+    if (!owned_.count(toks_[ownerIdx].text))
+      return false;
+    borrows_[toks_[name].text] = toks_[ownerIdx].text;
+    return true;
+  }
+
   // --- edit application -----------------------------------------------------
 
   void applyEdits() {
@@ -610,6 +668,8 @@ private:
 
   std::set<std::string> resourceTypes_;
   std::map<std::string, OwnedVar> owned_;
+  std::map<std::string, std::string> borrows_;
+  std::set<std::string> moved_;
 
   std::vector<Scope> scopes_;
   std::vector<LoopInfo> loops_;
