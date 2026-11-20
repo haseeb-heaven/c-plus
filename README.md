@@ -122,6 +122,18 @@ int *heap = (int *)cplus_alloc(sizeof(int) * 3);
 printf("%zu\n", heap.len);   /* 3, from the allocation's size table */
 ```
 
+Modern, format-free I/O is built in:
+
+```c
+int n;
+char name[32];
+scan(n, name);              /* no format string, no & */
+print("n=", n, "name=", name);   /* n= 42 name= Ada */
+```
+
+`print` dispatches by C type; `scan` takes lvalues directly and bounds string
+reads. Classes can be created with `auto state = (State){0};`.
+
 Out-of-bounds accesses that can be proven wrong at compile time are errors:
 both `values[10]` and `for (i = 0; i < 5; i++) values[i]` fail to compile in
 safe mode. Indices only known at run time are checked by UBSan.
@@ -161,7 +173,7 @@ and Goose is in [`docs/RELATED.md`](docs/RELATED.md).
 
 ```sh
 ./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
-./demos/run_demos.sh      # nine demos
+./demos/run_demos.sh      # eleven demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
 

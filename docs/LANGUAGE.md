@@ -246,6 +246,49 @@ for (auto i = 0; i < n; i++) { ... }
 `auto` with an owning resource type is not tracked by the ownership analysis;
 use the explicit resource type for such declarations.
 
+## print and scan
+
+`print(...)` needs no format specifiers. Each value is dispatched by its C
+type, values are separated by spaces, and a newline ends the line:
+
+```c
+int n = 42;
+double ratio = 2.5;
+char label[] = "demo";
+print("n=", n, "ratio=", ratio, "label=", label);
+/* n= 42 ratio= 2.5 label= demo */
+```
+
+Supported print types are the integer families, `float`/`double`/`long
+double`, `_Bool`, `char` and C strings. Objects of struct/class type are not
+printed automatically — print their fields or use a method that returns a
+supported value.
+
+`scan(...)` also needs no format string and no explicit `&`:
+
+```c
+int n;
+double d;
+char name[32];
+scan(n, d, name);
+```
+
+It reads whitespace-separated values from standard input. Strings are copied
+into the destination array up to its `sizeof` (or 256 bytes for a `char *`),
+and a failed conversion is a fatal input error (exit 109).
+
+Both macros reserve the names `print` and `scan` in C+ code.
+
+## auto with classes
+
+`auto` can infer a class type from a compound literal, and method-call sugar
+still works:
+
+```c
+auto state = (State){0};
+state.add(3);        /* lowers to State_add(&state, 3) */
+```
+
 ## Compile modes
 
 | mode | syntax lowering | runtime checks | safety claim |

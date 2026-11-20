@@ -73,6 +73,9 @@ original source because the generated C carries `#line` directives.
 - `cplus_check_index`, `cplus_check_bounds`, fatal reporting with fixed exit
   codes (`CPLUS_EXIT_DOUBLE_FREE`, `CPLUS_EXIT_BOUNDS`, ...)
 - mutex primitives used by the concurrency primitives in demos/tests
+- the type-generic `cplus_print_value` / `cplus_scan_value` entry points;
+  the printer's line state is a struct-plus-functions pair, i.e. the same
+  shape a C+ class lowers to
 
 The managed allocator uses an open-addressed hash table of live allocations
 and a bounded direct-mapped cache of recently freed addresses. Lookups are
@@ -119,9 +122,9 @@ overridden with `CPLUS_INCLUDE` and `CPLUS_RUNTIME_LIB`.
 
 - `tests/run_tests.sh` — 18 tests: positive programs, compile-fail cases,
   safe runtime aborts, and legacy C mode.
-- `demos/run_demos.sh` — nine programs covering C interop, bounds safety,
+- `demos/run_demos.sh` — eleven programs covering C interop, bounds safety,
   resource cleanup, classes, sockets, threads, borrowing, managed allocation
-  length and RAII across loops/early returns.
+  length, RAII across loops/early returns, format-free I/O and stateful classes.
 - `benchmarks/run_bench.sh` — builds each benchmark three ways and reports
   medians, separating lowering cost from sanitizer cost.
 
