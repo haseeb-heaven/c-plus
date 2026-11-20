@@ -85,19 +85,19 @@ message(STATUS "Using Clang from ${Clang_DIR}")
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 
 add_library(cplus_core STATIC
-  src/Diagnostics.cpp
-  src/SourceManager.cpp
-  src/Sema/SemaCPlus.cpp
-  src/Sema/CPlusLexer.cpp
-  src/Sema/CPlusRewriter.cpp
-  src/Sema/RaiiLowering.cpp
-  src/Sema/StaticBoundsCheck.cpp
-  src/Sema/TypeChecker.cpp
-  src/Runtime/CPlusRuntime.cpp
-  src/Driver/Driver.cpp)
+  compiler/Diagnostics.cpp
+  compiler/SourceManager.cpp
+  compiler/Sema/SemaCPlus.cpp
+  compiler/Sema/CPlusLexer.cpp
+  compiler/Sema/CPlusRewriter.cpp
+  compiler/Sema/RaiiLowering.cpp
+  compiler/Sema/StaticBoundsCheck.cpp
+  compiler/Sema/TypeChecker.cpp
+  runtime/CPlusRuntime.cpp
+  compiler/Driver/Driver.cpp)
 
 target_include_directories(cplus_core PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/compiler
   ${LLVM_INCLUDE_DIRS}
   ${CLANG_INCLUDE_DIRS})
 
@@ -221,15 +221,15 @@ endif()
 # ---------------------------------------------------------------------------
 # The `c+` driver executable
 # ---------------------------------------------------------------------------
-add_executable(c+ src/Main.cpp)
+add_executable(c+ compiler/Main.cpp)
 target_link_libraries(c+ PRIVATE cplus_core)
 set_target_properties(c+ PROPERTIES OUTPUT_NAME "c+")
 
 # ---------------------------------------------------------------------------
 # The C+ runtime (linked into produced programs)
 # ---------------------------------------------------------------------------
-add_library(cplus_runtime STATIC src/Runtime/cplus_runtime.c)
-target_include_directories(cplus_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_library(cplus_runtime STATIC runtime/cplus_runtime.c)
+target_include_directories(cplus_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/runtime/include)
 target_link_libraries(cplus_runtime PUBLIC m)
 if(APPLE)
   target_link_libraries(cplus_runtime PUBLIC pthread)
@@ -249,7 +249,7 @@ message(STATUS "C+ backend C compiler: ${CPLUS_CLANG_BIN}")
 
 target_compile_definitions(cplus_core PRIVATE
   CPLUS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-  CPLUS_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/include"
+  CPLUS_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/runtime/include"
   CPLUS_CLANG_BIN="${CPLUS_CLANG_BIN}"
   CPLUS_RUNTIME_LIB="$<TARGET_FILE:cplus_runtime>")
 add_dependencies(c+ cplus_runtime)
@@ -257,7 +257,7 @@ add_dependencies(c+ cplus_runtime)
 install(TARGETS c+ cplus_runtime
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION lib)
-install(FILES include/cplus/cplus.h DESTINATION include/cplus)
+install(FILES runtime/include/cplus/cplus.h DESTINATION include/cplus)
 
 # ---------------------------------------------------------------------------
 # CTest wrappers around the executable test and demo suites

@@ -62,6 +62,8 @@ void cplus_check_nonnull(const void *ptr, const char *file, int line,
 
 void *cplus_alloc(size_t size);
 void *cplus_zalloc(size_t size);
+/* Zeroed array allocation with overflow-checked element multiplication. */
+void *cplus_alloc_array(size_t count, size_t element_size);
 void *cplus_realloc(void *ptr, size_t size);
 
 /* Zero `size` bytes at `p`.  Used by the cplus_move() ownership transfer. */
@@ -91,7 +93,8 @@ size_t cplus_check_index(size_t index, size_t count, const char *file,
 #define cplus_new(T) ((T *)cplus_zalloc(sizeof(T)))
 
 /* Allocate a zeroed managed array of N elements of type T. */
-#define cplus_new_array(T, N) ((T *)cplus_zalloc(sizeof(T) * (size_t)(N)))
+#define cplus_new_array(T, N) \
+  ((T *)cplus_alloc_array((size_t)(N), sizeof(T)))
 
 /* Transfer ownership out of an owning variable.  The source is zeroed so that
  * its automatic destructor becomes a no-op; destructors must tolerate a

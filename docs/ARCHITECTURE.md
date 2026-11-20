@@ -23,24 +23,24 @@ static C archive, and ordinary C files compile unchanged.
 ```text
 file.c
   |
-  |  src/Main.cpp        CLI parsing (build/run/check/test/bench/demos)
+  |  compiler/Main.cpp        CLI parsing (build/run/check/test/bench/demos)
   v
 DriverOptions
   |
-  |  src/Driver/Driver.cpp
+  |  compiler/Driver/Driver.cpp
   v
   1. read source
-  2. rewriteCPlusSource()          src/Sema/CPlusRewriter.cpp
+  2. rewriteCPlusSource()          compiler/Sema/CPlusRewriter.cpp
      - CPlusLexer.cpp tokenises without losing offsets
      - resource struct -> struct + typedef
      - class -> struct + T_method(T *self, ...) functions
      - p.m() / p->m() -> T_m(&p, ...) / T_m(p, ...)
      - managed/owned -> plain declaration + machine-readable marker comment
      - #line directives map results back to the original file
-  3. checkStaticBounds()           src/Sema/StaticBoundsCheck.cpp
+  3. checkStaticBounds()           compiler/Sema/StaticBoundsCheck.cpp
      - uses array extents collected by the rewriter
      - rejects provable constant and counted-loop out-of-bounds accesses
-  4. lowerRaii()                   src/Sema/RaiiLowering.cpp
+  4. lowerRaii()                   compiler/Sema/RaiiLowering.cpp
      - tracks lexical scopes and owning locals
      - inserts drops at scope exit (reverse declaration order)
      - wraps return/break/continue so cleanup cannot break if/else binding
@@ -65,8 +65,8 @@ original source because the generated C carries `#line` directives.
 
 ## Runtime ABI
 
-`include/cplus/cplus.h` is the stable boundary between generated code and
-`src/Runtime/cplus_runtime.c`:
+`runtime/include/cplus/cplus.h` is the stable boundary between generated code and
+`runtime/cplus_runtime.c`:
 
 - `cplus_alloc`, `cplus_zalloc`, `cplus_realloc`, `cplus_release`
 - `cplus_new(T)`, `cplus_new_array(T, N)`, `cplus_move(x)`

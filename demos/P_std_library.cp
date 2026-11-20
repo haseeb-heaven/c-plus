@@ -2,11 +2,11 @@
  *
  * String, IntVec, File, Mutex/Guard and sockets are all RAII types lowered
  * from .hp headers; nothing here reimplements libc. */
-#include "cplus/std/string.hp"
-#include "cplus/std/vector.hp"
-#include "cplus/std/file.hp"
-#include "cplus/std/thread.hp"
-#include "cplus/std/io.hp"
+#include "stdlib/string.hp"
+#include "stdlib/vector.hp"
+#include "stdlib/file.hp"
+#include "stdlib/thread.hp"
+#include "stdlib/io.hp"
 
 int main(void) {
     String name = String("C+");
