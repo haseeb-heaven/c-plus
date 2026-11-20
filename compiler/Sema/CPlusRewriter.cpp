@@ -1085,6 +1085,24 @@ private:
         expr.replace(at, 6, var);
       dynamicLengths_.push_back({i, var, expr, exprFrom, exprTo});
     }
+    // Record explicit releases so a `.len` query after release can be made
+    // to trap instead of returning the folded constant.
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (!ts.isIdent(i, "cplus_release"))
+        continue;
+      size_t lp = ts.nextSig(i);
+      if (!ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos)
+        continue;
+      std::string released;
+      for (size_t k = lp + 1; k < rp; ++k)
+        if (ts[k].kind == TokKind::Identifier)
+          released = ts[k].text;
+      if (!released.empty())
+        releases_.push_back({i, released});
+    }
   }
 
   /// Emit a range of tokens, applying the same C+ rewrites as the top level.
@@ -1381,7 +1399,15 @@ private:
     if (isStatic) {
       emit("(" + std::to_string(arrays_[ts[i].text]) + ")");
     } else {
-      emit(lengthExprFor(ts[i].text, i));
+      std::string expr = lengthExprFor(ts[i].text, i);
+      bool released = false;
+      for (const auto &r : releases_)
+        if (r.pos < i && r.name == ts[i].text)
+          released = true;
+      if (released)
+        emit("(cplus_check_live(" + ts[i].text + "), " + expr + ")");
+      else
+        emit(expr);
     }
     skipTo_ = member;
     changed_ = true;
@@ -1471,6 +1497,11 @@ private:
     size_t exprTo = kNPos;
   };
   std::vector<DynamicLength> dynamicLengths_;
+  struct ReleaseInfo {
+    size_t pos;
+    std::string name;
+  };
+  std::vector<ReleaseInfo> releases_;
 };
 
 } // namespace

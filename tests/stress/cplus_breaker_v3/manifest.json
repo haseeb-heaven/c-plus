@@ -1,0 +1,127 @@
+{
+  "01_raii_loop_exits": {
+    "kind": "positive",
+    "expected": "DROP 1\nSTEP 2\nDROP 2\nDROP 3\nEND\n",
+    "exit": null
+  },
+  "02_defer_return_order": {
+    "kind": "positive",
+    "expected": "inner-2\ninner-1\nouter-2\nouter-1\nresult=31\n",
+    "exit": null
+  },
+  "03_this_nested_methods": {
+    "kind": "positive",
+    "expected": "METER 56 168\n",
+    "exit": null
+  },
+  "04_class_destruct_order": {
+    "kind": "positive",
+    "expected": "INNER 5\nDROP 3\nDROP 2\nOUTER 1\nDROP 1\n",
+    "exit": null
+  },
+  "05_managed_churn": {
+    "kind": "positive",
+    "expected": "CHURN 140250\n",
+    "exit": null
+  },
+  "06_vector_realloc_stress": {
+    "kind": "positive",
+    "expected": "VECTOR 1025 51111 95 0\n",
+    "exit": null
+  },
+  "07_string_nested_cleanup": {
+    "kind": "positive",
+    "expected": "STRING 900\n",
+    "exit": null
+  },
+  "08_three_dimensional_bounds": {
+    "kind": "positive",
+    "expected": "THREED 1770\n",
+    "exit": null
+  },
+  "09_fread_used_result": {
+    "kind": "positive",
+    "expected": "IO 4 0 D\n",
+    "exit": null
+  },
+  "10_signal_outside_handler": {
+    "kind": "positive",
+    "expected": "SAFE PRINT 0\n",
+    "exit": null
+  },
+  "11_bitfields_and_macros": {
+    "kind": "positive",
+    "expected": "BITS 1 5 9 2\n",
+    "exit": null
+  },
+  "12_new_octal_if_decl": {
+    "kind": "positive",
+    "expected": "C2Y 18\n",
+    "exit": null
+  },
+  "13_range_countof": {
+    "kind": "positive",
+    "expected": "RANGE 7 7 58\n",
+    "exit": null
+  },
+  "14_resource_transfer": {
+    "kind": "positive",
+    "expected": "STATE 0 7\nDROP 7\n",
+    "exit": null
+  },
+  "15_defer_and_managed_return": {
+    "kind": "positive",
+    "expected": "DEFER 5\nSUM 18\n",
+    "exit": null
+  },
+  "16_stdlib_file_raii": {
+    "kind": "positive",
+    "expected": "FILE OK\n",
+    "exit": null
+  },
+  "17_stdlib_thread_guard": {
+    "kind": "positive",
+    "expected": "GUARD 99\n",
+    "exit": null
+  },
+  "18_c_aliasing_valid": {
+    "kind": "positive",
+    "expected": "ALIAS 36\n",
+    "exit": null
+  },
+  "19_resource_copy_should_fail": {
+    "kind": "reject",
+    "expected": null,
+    "exit": null
+  },
+  "20_managed_owner_escape_should_fail": {
+    "kind": "reject",
+    "expected": null,
+    "exit": null
+  },
+  "21_array_oob_should_fail": {
+    "kind": "reject",
+    "expected": null,
+    "exit": null
+  },
+  "22_countof_pointer_should_fail": {
+    "kind": "reject",
+    "expected": null,
+    "exit": null
+  },
+  "23_double_free_trap": {
+    "kind": "trap",
+    "expected": null,
+    "exit": 104
+  },
+  "24_invalid_free_trap": {
+    "kind": "trap",
+    "expected": null,
+    "exit": 105
+  },
+  "25_freed_len_trap": {
+    "kind": "trap",
+    "expected": null,
+    "exit": null
+  }
+}
