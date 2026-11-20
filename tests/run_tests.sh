@@ -107,8 +107,11 @@ for src in "$ROOT"/tests/runtime_fail/*.c; do
     fail "$name" "compilation failed; see tests/out/$name.build.log"
     continue
   fi
-  "$exe" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
-  rc=$?
+  # These programs abort by design; keep the shell's job message quiet.
+  rm -f "$OUT/$name.exit"
+  { "$exe" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr";
+    echo $? >"$OUT/$name.exit"; } 2>/dev/null
+  rc=$(cat "$OUT/$name.exit")
   want=134
   if [ -f "$ROOT/tests/runtime_fail/$name.exit" ]; then
     want=$(cat "$ROOT/tests/runtime_fail/$name.exit")

@@ -54,6 +54,7 @@ void printUsage(raw_ostream &os) {
   os << "  check <file.c>   lower and type-check without writing an executable\n";
   os << "  test  [pattern]  run the automated test suite\n";
   os << "  bench [pattern]  run the benchmark suite\n";
+  os << "  demos            build and run the demo programs\n";
   os << "  --version        print version information\n";
   os << "  --help           print this message\n\n";
   os << "options:\n";
@@ -168,12 +169,12 @@ int main(int argc, char **argv) {
   if (positional.size() > 1)
     opts.input = positional[1];
 
-  if (opts.command == "test" || opts.command == "bench") {
-    return runScript(opts.command == "test" ? "tests/run_tests.sh"
-                                            : "benchmarks/run_bench.sh",
-                     opts.input, opts.command == "bench")
-               ? 0
-               : 1;
+  if (opts.command == "test" || opts.command == "bench" ||
+      opts.command == "demos") {
+    const char *script = opts.command == "test"    ? "tests/run_tests.sh"
+                         : opts.command == "bench" ? "benchmarks/run_bench.sh"
+                                                   : "demos/run_demos.sh";
+    return runScript(script, opts.input, opts.command == "bench") ? 0 : 1;
   }
 
   if (opts.command != "build" && opts.command != "run" &&
