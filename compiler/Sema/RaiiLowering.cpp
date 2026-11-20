@@ -432,7 +432,7 @@ private:
       checkReturnValue(i, &exclude);
       std::string drops = dropsFor(0, scopes_.size(), exclude);
       if (!drops.empty())
-        insertStatementCleanup(i, drops);
+        insertReturnCleanup(i, drops);
       atStmtStart_ = false;
       return;
     }
@@ -476,6 +476,31 @@ private:
 
   /// Wrap `return`/`break`/`continue` in a compound statement so that
   /// injecting cleanup cannot change how an enclosing `if`/`else` binds.
+  /// Evaluate the return expression before running cleanup: cleanup may null
+  /// owning locals, so `return xs[0];` must read xs first.
+  void insertReturnCleanup(size_t keywordIdx, const std::string &drops) {
+    size_t semi = statementEnd(keywordIdx);
+    if (semi == kNPos) {
+      warningAt("cannot place cleanup before this statement",
+                toks_[keywordIdx]);
+      return;
+    }
+    size_t exprStart = nextSig(keywordIdx);
+    if (exprStart >= semi) { // `return;`
+      insertStatementCleanup(keywordIdx, drops);
+      return;
+    }
+    std::string expr = joinTokens(exprStart, semi);
+    std::string replacement = "{ __typeof__(" + expr +
+                              ") __cplus_ret = (" + expr + "); " + drops +
+                              " return __cplus_ret;";
+    edits_.push_back(Edit{toks_[keywordIdx].offset,
+                          toks_[semi].offset - toks_[keywordIdx].offset,
+                          replacement, seq_++});
+    edits_.push_back(
+        Edit{toks_[semi].offset + toks_[semi].text.size(), 0, " }", seq_++});
+  }
+
   void insertStatementCleanup(size_t keywordIdx, const std::string &drops) {
     size_t semi = statementEnd(keywordIdx);
     if (semi == kNPos) {
@@ -526,6 +551,11 @@ private:
   void checkReturnValue(size_t i, std::string *excluded) {
     size_t v = nextSig(i);
     if (v >= toks_.size() || toks_[v].kind != TokKind::Identifier)
+      return;
+    // Only a direct `return x;` transfers the object.  An expression such as
+    // `return x[0] == 1;` merely reads through it and is safe.
+    size_t after = nextSig(v);
+    if (after < toks_.size() && !isPunct(after, ";"))
       return;
     auto borrow = borrows_.find(toks_[v].text);
     if (borrow != borrows_.end()) {

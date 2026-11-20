@@ -1176,10 +1176,13 @@ private:
         ts.nextSig(exprStart) != rp)
       return false;
 
-    size_t bodyOpen = ts.nextSig(rp);
-    if (!ts.isPunct(bodyOpen, "{"))
-      return false;
-    size_t bodyClose = ts.matchBrace(bodyOpen);
+    size_t body = ts.nextSig(rp);
+    size_t bodyClose = kNPos;
+    if (ts.isPunct(body, "{")) {
+      bodyClose = ts.matchBrace(body);
+    } else {
+      bodyClose = ts.statementEnd(body); // single-statement loop body
+    }
     if (bodyClose == kNPos)
       return false;
 
