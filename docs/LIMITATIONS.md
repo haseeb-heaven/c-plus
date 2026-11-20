@@ -16,6 +16,9 @@ depends on a runtime check, the check is named.
 | Cleanup before `return`, `break`, `continue` | supported | statements wrapped in `{ }` to preserve `if`/`else` binding |
 | Explicit `cplus_move` and automatic move on return | supported | source is zeroed; destructor must tolerate that |
 | Compile-time copy and assignment rejection | supported | for owning locals tracked by the lowering pass |
+| Borrow escape rejection | supported (subset) | returning a pointer borrowed from a local resource/managed allocation is an error |
+| Use-after-move rejection | supported (subset) | using a tracked borrow after `cplus_move(owner)` is an error |
+| Full Rust-style borrow checker | **not implemented** | no lifetime annotations, aliasing/exclusivity rules or container-aware borrows |
 | Compile-time managed-pointer escape rejection | supported | `return p;` where `p` is managed is an error |
 | Managed allocation with double/invalid release detection | supported | O(1) hash table + bounded freed-address cache |
 | Statically known out-of-bounds array index | supported at compile time | `-Werror=array-bounds` plus a C+ static pass; no executable is produced |
@@ -75,6 +78,11 @@ give a complete spatial/temporal memory-safety guarantee:
   `i = C; i < N; i++` (or `<=`) with literal bounds. Loops with computed
   bounds, multiple index variables or indirect subscripts fall back to the
   run-time check, not a compile error.
+- The borrow checker only tracks `T *p = &owner;` and `T *p = managed_owner;`
+  declarations in the same translation unit. It does not track borrows stored
+  in structs, arrays or function arguments, and it does not enforce aliasing
+  or exclusivity rules. Borrowing a pointer that was not created by C+ is not
+  checked.
 - `auto` is type inference only. It does not infer ownership, so an owning
   resource declared with `auto` will not get deterministic cleanup.
 - `.len` on a C+ allocation needs the declaration's allocator call to be

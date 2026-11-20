@@ -44,7 +44,8 @@ DriverOptions
      - tracks lexical scopes and owning locals
      - inserts drops at scope exit (reverse declaration order)
      - wraps return/break/continue so cleanup cannot break if/else binding
-     - rejects copies, assignments and managed-pointer escapes
+     - rejects copies, assignments, managed-pointer escapes, borrow escapes
+       and use-after-move (a small borrow checker)
   5. write a temporary .c beside the source, add -include cplus/cplus.h,
      invoke the C compiler with the selected flags and the C+ runtime archive
   6. for `run`, execute the produced binary; for `check`, stop at -fsyntax-only
@@ -118,8 +119,9 @@ overridden with `CPLUS_INCLUDE` and `CPLUS_RUNTIME_LIB`.
 
 - `tests/run_tests.sh` — 18 tests: positive programs, compile-fail cases,
   safe runtime aborts, and legacy C mode.
-- `demos/run_demos.sh` — six programs covering C interop, bounds safety,
-  resource cleanup, classes, sockets and threads.
+- `demos/run_demos.sh` — nine programs covering C interop, bounds safety,
+  resource cleanup, classes, sockets, threads, borrowing, managed allocation
+  length and RAII across loops/early returns.
 - `benchmarks/run_bench.sh` — builds each benchmark three ways and reports
   medians, separating lowering cost from sanitizer cost.
 

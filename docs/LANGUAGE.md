@@ -79,6 +79,37 @@ no `cplus_move` is needed, and no destructor runs for the returned local.
 Borrowing is just a plain pointer (`File *borrowed = &f;`). It is not tracked;
 see [limitations](LIMITATIONS.md).
 
+## Borrowing
+
+A pointer to a local resource or managed allocation is tracked as a borrow:
+
+```c
+File f = File_open("x");
+FILE *view = &f.handle;   /* borrow of f */
+fprintf(view, "data\n");  /* valid while f is alive */
+```
+
+The borrow checker rejects two mistakes:
+
+```c
+FILE *bad(void) {
+    File f = File_open("x");
+    FILE *view = &f.handle;
+    return view;              /* error: borrow cannot escape the function */
+}
+
+Handle a = {7};
+Handle *view = &a;
+Handle b = cplus_move(a);
+printf("%d\n", view->id);     /* error: borrow used after move */
+```
+
+Borrows are valid until the owner is moved or its scope ends. Copy the data
+or return the owner instead. This is a targeted subset, not Rust-style
+borrowing: there are no lifetime annotations, no aliasing/exclusivity rules,
+and no field-level or container-level tracking. See
+[limitations](LIMITATIONS.md).
+
 ## Class
 
 ```c

@@ -139,6 +139,11 @@ directory for complete programs.
 
 ## Safety model
 
+C+ also has a small borrow checker: a pointer borrowed from a local resource
+or managed allocation may be used while the owner is alive, but returning
+that borrow or using it after `cplus_move(owner)` is a compile error. See
+`docs/LIMITATIONS.md` for what this does **not** cover.
+
 Safe mode (the default) rejects statically known out-of-bounds array indices
 at compile time (`-Werror=array-bounds`), so `arr[10]` on an `int[3]` produces
 no executable. Indices only known at run time are checked by UBSan
@@ -156,7 +161,7 @@ and Goose is in [`docs/RELATED.md`](docs/RELATED.md).
 
 ```sh
 ./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
-./demos/run_demos.sh      # six demos
+./demos/run_demos.sh      # nine demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
 
