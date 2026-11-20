@@ -36,11 +36,18 @@ public:
     collectAllocations();
     collectReturnExtents();
     propagateReturnExtents();
+    checkPointerLeaks();
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (isIdent(i, "for"))
         checkLoop(i);
-      else
+      else {
         checkConstantSubscript(i);
+        checkTypePun(i);
+        if (isIdent(i, "realloc"))
+          errorAt(toks_[i],
+                  "raw realloc can lose the original block on failure; use "
+                  "cplus_realloc");
+      }
     }
   }
 
@@ -166,6 +173,17 @@ private:
     }
   }
 
+  void errorAt(const Token &at, const std::string &message) {
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = message;
+    d.file = filename_;
+    d.line = at.line;
+    d.column = at.column;
+    d.help = "use C+ managed allocations and cplus_* helpers";
+    diags_.report(std::move(d));
+  }
+
   void report(const Token &at, long index, const std::string &name,
               size_t extent) {
     Diag d;
@@ -178,6 +196,126 @@ private:
     d.column = at.column;
     d.help = "use a bound of " + name + ".len or a smaller index";
     diags_.report(std::move(d));
+  }
+
+  /// `* (Type *) &x` type punning is undefined under strict aliasing (except
+  /// for character types, which C explicitly allows).
+  void checkTypePun(size_t i) {
+    if (!isPunct(i, "*"))
+      return;
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return;
+    size_t typeIdx = nextSig(lp);
+    if (typeIdx >= toks_.size() ||
+        toks_[typeIdx].kind != TokKind::Identifier)
+      return;
+    const std::string &type = toks_[typeIdx].text;
+    if (type == "char" || type == "signed" || type == "unsigned" ||
+        type == "void")
+      return;
+    size_t star = nextSig(typeIdx);
+    size_t rp = nextSig(star);
+    size_t amp = nextSig(rp);
+    if (isPunct(star, "*") && isPunct(rp, ")") && isPunct(amp, "&"))
+      errorAt(toks_[i],
+              "type-punned dereference violates strict aliasing; use memcpy");
+  }
+
+  std::string allocatorName(size_t i) const {
+    if (i >= toks_.size())
+      return std::string();
+    if (isPunct(i, "(")) {
+      size_t rp = match(i, "(", ")");
+      if (rp == kNPos)
+        return std::string();
+      i = nextSig(rp);
+    }
+    if (i < toks_.size() && toks_[i].kind == TokKind::Identifier)
+      return toks_[i].text;
+    return std::string();
+  }
+
+  bool isAllocator(const std::string &name) const {
+    return name == "cplus_alloc" || name == "cplus_zalloc" ||
+           name == "cplus_realloc" || name == "cplus_new" ||
+           name == "cplus_new_array" || name == "malloc" ||
+           name == "calloc";
+  }
+
+  /// Reassigning a pointer that still owns a C+ allocation loses the old
+  /// block.  Reassigning from cplus_realloc(p, ...) is allowed.
+  void checkPointerLeaks() {
+    std::map<std::string, bool> live;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isPunct(i, "=")) {
+        size_t lhs = i == 0 ? kNPos : i - 1;
+        while (lhs != kNPos && trivia(lhs)) {
+          if (lhs == 0) { lhs = kNPos; break; }
+          --lhs;
+        }
+        if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
+          continue;
+        size_t before = lhs == 0 ? kNPos : lhs - 1;
+        while (before != kNPos && trivia(before)) {
+          if (before == 0) { before = kNPos; break; }
+          --before;
+        }
+        bool declarationStar = false;
+        if (isPunct(before, "*") && before != kNPos) {
+          size_t typeTok = before == 0 ? kNPos : before - 1;
+          while (typeTok != kNPos && trivia(typeTok)) {
+            if (typeTok == 0) { typeTok = kNPos; break; }
+            --typeTok;
+          }
+          if (typeTok != kNPos && toks_[typeTok].kind == TokKind::Identifier) {
+            static const char *const kTypes[] = {
+                "int", "char", "short", "long", "float", "double", "void",
+                "unsigned", "signed", "struct", "union", "enum", "const",
+                "static", "volatile", "size_t"};
+            for (const char *type : kTypes)
+              if (toks_[typeTok].text == type) {
+                declarationStar = true;
+                break;
+              }
+          }
+        }
+        if (before != kNPos &&
+            ((isPunct(before, "*") && !declarationStar) ||
+             isPunct(before, ".") || isPunct(before, "->")))
+          continue; // assignment through the pointer, not to the pointer
+        const std::string name = toks_[lhs].text;
+        size_t rhs = nextSig(i);
+        std::string alloc = allocatorName(rhs);
+        size_t reallocArg = nextSig(nextSig(rhs));
+        bool reallocSelf = isIdent(rhs, "cplus_realloc") &&
+                           (alloc == "cplus_realloc") &&
+                           reallocArg < toks_.size() &&
+                           toks_[reallocArg].kind == TokKind::Identifier &&
+                           toks_[reallocArg].text == name;
+        if (live[name] && !reallocSelf)
+          errorAt(toks_[lhs], "reassigning pointer '" + name +
+                                  "' would leak its live allocation");
+        if (isAllocator(alloc)) {
+          live[name] = true;
+          continue;
+        }
+        if (live[name] && !reallocSelf)
+          live[name] = false;
+      }
+      if (isIdent(i, "cplus_release") || isIdent(i, "free")) {
+        size_t lp = nextSig(i);
+        size_t rp = match(lp, "(", ")");
+        if (rp != kNPos) {
+          std::string released;
+          for (size_t k = lp + 1; k < rp; ++k)
+            if (toks_[k].kind == TokKind::Identifier)
+              released = toks_[k].text; // handles self->field
+          if (!released.empty())
+            live[released] = false;
+        }
+      }
+    }
   }
 
   std::vector<std::pair<size_t, size_t>> splitArgs(size_t from,

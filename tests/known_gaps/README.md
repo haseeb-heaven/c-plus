@@ -10,3 +10,6 @@ They are kept here as evidence of the limitation, not as verified safety tests.
 - `missing_terminator.c` — `strncpy` into a buffer with no room for `'\0'`.
   C+ does not check string termination; reserve `strlen + 1` bytes as in
   `classic_bug8_terminator`.
+- `macro_double_eval.c` — `SQUARE(i++)` expands to `((i++) * (i++))`. C+
+  does not yet diagnose repeated macro-parameter evaluation; use an inline
+  function instead.

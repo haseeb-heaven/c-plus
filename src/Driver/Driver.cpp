@@ -497,6 +497,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     // returning the address of a local, and reading an uninitialised local.
     args.push_back("-Werror=return-stack-address");
     args.push_back("-Werror=uninitialized");
+    args.push_back("-Wwrite-strings");
+    args.push_back("-Werror=incompatible-pointer-types-discards-qualifiers");
+    args.push_back("-Werror=sizeof-array-argument");
+    args.push_back("-Werror=sizeof-pointer-div");
+    args.push_back("-Werror=format-security");
     // Runtime memory-safety instrumentation.  UBSan's bounds/null/alignment
     // checks cover fixed-extent arrays and invalid pointer use; they abort on
     // the first violation because a safe program must never continue after a

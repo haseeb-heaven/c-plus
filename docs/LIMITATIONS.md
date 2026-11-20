@@ -64,9 +64,17 @@ depends on a runtime check, the check is named.
 | 7. Uninitialized variable read | caught | `-Werror=uninitialized` |
 | 8. Missing null terminator | **not caught** | use bounded string APIs and reserve `strlen + 1` bytes yourself |
 | 9. Signed integer overflow | caught at run time | UBSan `undefined` |
+| 10. Pointer reassignment leak | caught | allocation-liveness tracking in the static pass |
+| 11. `realloc` failure overwrite | caught | raw `realloc` rejected; use `cplus_realloc` |
+| 12. Strict aliasing violation | caught | type-punned dereference diagnostic |
+| 13. Modifying a string literal | caught | `-Werror=incompatible-pointer-types-discards-qualifiers` |
+| 14. File descriptor leak on error path | prevented with RAII resources | deterministic `T_drop` |
+| 15. `sizeof` on decayed array parameter | caught | `-Werror=sizeof-array-argument` / `sizeof-pointer-div` |
+| 16. Format string vulnerability | caught | `-Werror=format-security` |
+| 17. Macro side-effect double evaluation | **not caught** | use an inline function; see `tests/known_gaps/macro_double_eval.c` |
 
-All nine bugs have named tests in `tests/` (`classic_bug1_*` through
-`classic_bug9_*`). The two that are not automatically caught also have raw
+All 17 bugs have named tests in `tests/` (`classic_bug1_*` through
+`classic_bug17_*`). The ones that are not automatically caught also have raw
 reference programs in `tests/known_gaps/` documenting the limitation.
 
 Items marked "not caught" remain undefined behaviour in safe C+ when written

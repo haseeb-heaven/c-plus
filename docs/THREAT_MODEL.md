@@ -38,6 +38,9 @@ current MVP.
 | signed overflow and other UB | UBSan `undefined` | abort |
 | returning address of a local | `-Werror=return-stack-address` | compile error |
 | uninitialized local read | `-Werror=uninitialized` | compile error |
+| pointer reassignment leak | static liveness tracking | compile error |
+| raw `realloc` / type punning | static pass | compile error |
+| string-literal write, sizeof decay, non-literal format | Clang warnings as errors | compile error |
 | double / invalid release | allocator side table + freed-address cache | exit 104 / 105 |
 | copied or assigned owning resource | RAII lowering compile diagnostics | compile error |
 | managed pointer escaping scope | RAII lowering compile diagnostic | compile error |
