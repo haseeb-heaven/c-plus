@@ -37,6 +37,8 @@ public:
     collectReturnExtents();
     propagateReturnExtents();
     checkPointerLeaks();
+    checkMemcpyOverlap();
+    checkDataRaces();
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (isIdent(i, "for"))
         checkLoop(i);
@@ -241,6 +243,131 @@ private:
            name == "cplus_realloc" || name == "cplus_new" ||
            name == "cplus_new_array" || name == "malloc" ||
            name == "calloc";
+  }
+
+  std::string baseName(size_t from, size_t to) const {
+    std::string name;
+    for (size_t k = from; k < to; ++k)
+      if (toks_[k].kind == TokKind::Identifier)
+        name = toks_[k].text; // last identifier survives casts/field access
+    return name;
+  }
+
+  /// memcpy with overlapping source/destination is undefined; memmove is the
+  /// correct API.
+  void checkMemcpyOverlap() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "memcpy"))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos)
+        continue;
+      auto args = splitArgs(lp + 1, rp);
+      if (args.size() < 2)
+        continue;
+      std::string dst = baseName(args[0].first, args[0].second);
+      std::string src = baseName(args[1].first, args[1].second);
+      if (!dst.empty() && dst == src)
+        errorAt(toks_[i], "memcpy source and destination overlap; use memmove");
+    }
+  }
+
+  std::string prevSafe(size_t i) const {
+    if (i == 0) return std::string();
+    size_t p = i - 1;
+    while (p > 0 && trivia(p)) --p;
+    return toks_[p].text;
+  }
+
+  void collectGlobals() {
+    int depth = 0;
+    static const char *const kTypes[] = {
+        "int", "char", "short", "long", "float", "double", "void",
+        "unsigned", "signed", "struct", "union", "enum", "static",
+        "volatile", "const", "size_t", "_Atomic"};
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isPunct(i, "{")) { ++depth; continue; }
+      if (isPunct(i, "}")) { --depth; continue; }
+      if (depth != 0 || toks_[i].kind != TokKind::Identifier)
+        continue;
+      size_t next = nextSig(i);
+      if (next >= toks_.size() || isPunct(next, "("))
+        continue;
+      size_t prev = i == 0 ? kNPos : i - 1;
+      while (prev != kNPos && trivia(prev)) {
+        if (prev == 0) { prev = kNPos; break; }
+        --prev;
+      }
+      bool afterType = false;
+      if (prev != kNPos && toks_[prev].kind == TokKind::Identifier)
+        for (const char *type : kTypes)
+          if (toks_[prev].text == type) {
+            afterType = true;
+            break;
+          }
+      if (afterType ||
+          (prev != kNPos && (isPunct(prev, ";") || isPunct(prev, "}"))))
+        globals_.insert(toks_[i].text);
+    }
+  }
+
+  /// A conservative check: a thread entry function that writes a global
+  /// without taking any C+ lock is a data race.
+  void checkDataRaces() {
+    collectGlobals();
+    std::set<std::string> workers;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "pthread_create"))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos)
+        continue;
+      auto args = splitArgs(lp + 1, rp);
+      if (args.size() < 3)
+        continue;
+      std::string name = baseName(args[2].first, args[2].second);
+      if (!name.empty())
+        workers.insert(name);
+    }
+    for (const auto &entry : funcs_) {
+      if (!workers.count(entry.first))
+        continue;
+      const FuncSig &sig = entry.second;
+      bool locked = false;
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (toks_[k].kind != TokKind::Identifier)
+          continue;
+        const std::string &word = toks_[k].text;
+        // Direct runtime calls or a lock-taking helper (Lock_acquire,
+        // Guard_lock, ...) count as synchronisation for this conservative
+        // check.
+        if (word.find("lock") != std::string::npos ||
+            word.find("Lock") != std::string::npos ||
+            word.find("guard") != std::string::npos ||
+            word.find("Guard") != std::string::npos)
+          locked = true;
+      }
+      if (locked)
+        continue;
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (toks_[k].kind != TokKind::Identifier ||
+            !globals_.count(toks_[k].text))
+          continue;
+        size_t next = nextSig(k);
+        bool write = isPunct(next, "=") || isPunct(next, "++") ||
+                     isPunct(next, "--") || isPunct(next, "+=");
+        if (write)
+          errorAt(toks_[k], "unsynchronized write to shared global '" +
+                                toks_[k].text + "' in thread function '" +
+                                entry.first + "'");
+      }
+    }
   }
 
   /// Reassigning a pointer that still owns a C+ allocation loses the old
@@ -768,6 +895,7 @@ private:
   std::map<std::string, long> constants_;
   std::set<std::string> conflict_;
   std::map<std::string, size_t> returnExtents_;
+  std::set<std::string> globals_;
   DiagnosticEngine &diags_;
   std::string filename_;
 };

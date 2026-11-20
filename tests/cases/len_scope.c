@@ -10,7 +10,7 @@ int main(void) {
             arr[i] = (i + 1) * 10;
     }
     /* `size` is out of scope here: .len must use the runtime query. */
-    for (int idx = 0; idx < arr.len; idx++)
+    for (size_t idx = 0; idx < arr.len; idx++)
         printf("%d\t", arr[idx]);
     printf("\n");
     cplus_release(arr);

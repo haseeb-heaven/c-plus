@@ -72,9 +72,17 @@ depends on a runtime check, the check is named.
 | 15. `sizeof` on decayed array parameter | caught | `-Werror=sizeof-array-argument` / `sizeof-pointer-div` |
 | 16. Format string vulnerability | caught | `-Werror=format-security` |
 | 17. Macro side-effect double evaluation | **not caught** | use an inline function; see `tests/known_gaps/macro_double_eval.c` |
+| 18. Unsequenced modification | caught | `-Werror=unsequenced` |
+| 19. Shift count / negative shift | caught (count) | `-Werror=shift-count-overflow`; negative runtime shifts use UBSan |
+| 20. Signed-to-unsigned comparison | caught | `-Werror=sign-compare` |
+| 21. Unaligned pointer dereference | caught at run time | UBSan `alignment` |
+| 22. Overlapping memcpy | caught | static check recommending `memmove` |
+| 23. Flexible array member copy | **not caught** | see `tests/known_gaps/flexible_array_copy.c`; copy whole allocation |
+| 24. Data race (direct global write) | caught (conservative subset) | static check for unsynchronized writes in thread entry functions |
+| 25. Division by zero / INT_MIN/-1 | caught at run time | UBSan `undefined` / `division-by-zero` |
 
-All 17 bugs have named tests in `tests/` (`classic_bug1_*` through
-`classic_bug17_*`). The ones that are not automatically caught also have raw
+All 25 bugs have named tests in `tests/` (`classic_bug1_*` through
+`classic_bug25_*`). The ones that are not automatically caught also have raw
 reference programs in `tests/known_gaps/` documenting the limitation.
 
 Items marked "not caught" remain undefined behaviour in safe C+ when written
@@ -123,6 +131,8 @@ give a complete spatial/temporal memory-safety guarantee:
   `i = C; i < N; i++` (or `<=`) with literal bounds. Loops with computed
   bounds, multiple index variables or indirect subscripts fall back to the
   run-time check, not a compile error.
+- Bugs 23 (flexible array member copy) and general data races beyond direct
+  global writes remain outside the enforced subset.
 - `.hp` headers are lowered per translation unit; quoted includes are resolved
   relative to the including file or the usual include directories. There is
   no module system or precompiled-header support yet.

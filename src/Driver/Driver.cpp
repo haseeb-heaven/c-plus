@@ -502,6 +502,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     args.push_back("-Werror=sizeof-array-argument");
     args.push_back("-Werror=sizeof-pointer-div");
     args.push_back("-Werror=format-security");
+    args.push_back("-Werror=unsequenced");
+    args.push_back("-Werror=shift-count-overflow");
+    args.push_back("-Werror=shift-negative-value");
+    args.push_back("-Werror=sign-compare");
     // Runtime memory-safety instrumentation.  UBSan's bounds/null/alignment
     // checks cover fixed-extent arrays and invalid pointer use; they abort on
     // the first violation because a safe program must never continue after a
