@@ -146,10 +146,43 @@ Method-call sugar is resolved from simple declarations of the form
 inference or overload resolution: if the receiver's class cannot be
 determined this way, write the plain function call.
 
-Not supported: constructors, destructors as class members, inheritance,
-interfaces, virtual dispatch, access control and methods declared outside the
-class body. Use aggregate initialisation (`Counter c = {0};`) instead of
-constructors.
+### Constructors and destructors
+
+A method named after the class is a constructor, and a `void drop(void)`
+method is the destructor:
+
+```c
+class Point {
+    int x;
+    int y;
+
+    Point(int a, int b) {
+        self->x = a;
+        self->y = b;
+    }
+
+    int sum(void) { return self->x + self->y; }
+
+    void drop(void) {
+        printf("drop %d\n", self->sum());
+    }
+};
+
+Point p = Point(2, 3);   /* lowers to Point_ctor(2, 3) */
+```
+
+The constructor lowers to `Point Point_ctor(int a, int b)` that zero-initialises
+an aggregate, runs the body with `self` pointing at it, and returns it.
+`Point(...)` call sugar is rewritten to `Point_ctor(...)`. A constructor may
+not declare a return type and may not return early.
+
+The destructor lowers to `void Point_drop(Point *self)`, is forward-declared
+before generated code, and makes `Point` an owning type: a local `Point p`
+gets the same deterministic cleanup as a `resource struct`. Destructors must
+tolerate a zeroed handle, just like resource destructors.
+
+Not supported: inheritance, interfaces, virtual dispatch, access control and
+methods declared outside the class body.
 
 ## Managed memory
 

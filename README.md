@@ -88,7 +88,8 @@ int main(void) {
 ```
 
 A class is a struct plus functions; `p.m(x)` and `p->m(x)` are sugar for
-`T_m(&p, x)` and `T_m(p, x)`:
+`T_m(&p, x)` and `T_m(p, x)`. Constructors and a `drop` destructor are
+supported and integrate with RAII:
 
 ```c
 class Counter {
@@ -104,6 +105,14 @@ int main(void) {
     c.add(5);
     printf("%d\n", c.get());
 }
+
+/* With a constructor and destructor:
+ * class Point {
+ *     Point(int a, int b) { self->x = a; self->y = b; }
+ *     void drop(void) { ... }
+ * };
+ * Point p = Point(1, 2);   // Point_ctor(1, 2), auto Point_drop(&p)
+ */
 ```
 
 Fixed arrays carry a compile-time length; allocations made through the C+
@@ -173,7 +182,7 @@ and Goose is in [`docs/RELATED.md`](docs/RELATED.md).
 
 ```sh
 ./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
-./demos/run_demos.sh      # eleven demos
+./demos/run_demos.sh      # twelve demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
 

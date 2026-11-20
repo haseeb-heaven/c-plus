@@ -38,7 +38,8 @@ depends on a runtime check, the check is named.
 | Use-after-free detection | **not implemented** | ASan unavailable on this host; see below |
 | Static verification that shared data is locked | **not implemented** | concurrency is primitive-based, not verified |
 | `goto` / `longjmp` cleanup | warning only | non-local exits bypass inserted destructors |
-| Constructors, destructors as class members | **not supported** | use aggregate init and `T_drop` |
+| Constructors as class methods | supported | `T(...)` → `T_ctor`, no return type, no early return |
+| Destructors as class methods | supported | `void drop(void)` → `T_drop`; makes the class an owning type |
 | Inheritance, interfaces, virtual dispatch, access control | **not supported** | classes are structs + functions |
 | Full type inference for method calls | **not supported** | receiver class must be visible as a simple declaration |
 | Leak detection for borrowed pointers | **not supported** | borrowing is a raw pointer; no alias tracking |
