@@ -781,7 +781,8 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitIfDecl(i) || tryEmitOctal(i) || tryEmitCtorCall(i) ||
+      if (tryEmitCountof(i) || tryEmitIfDecl(i) || tryEmitOctal(i) ||
+          tryEmitCtorCall(i) ||
           tryEmitArrayLen(i) || tryEmitMethodCall(i)) {
         i = skipTo_;
         skipTo_ = kNPos;
@@ -892,7 +893,8 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitIfDecl(i) || tryEmitOctal(i) || tryEmitCtorCall(i) ||
+      if (tryEmitCountof(i) || tryEmitIfDecl(i) || tryEmitOctal(i) ||
+          tryEmitCtorCall(i) ||
           tryEmitArrayLen(i) || tryEmitMethodCall(i, selfClass)) {
         i = skipTo_;
         skipTo_ = kNPos;
@@ -1090,8 +1092,9 @@ private:
         skipTo_ = kNPos;
         continue;
       }
-      if (tryEmitIfDecl(k) || tryEmitOctal(k) || tryEmitCtorCall(k) ||
-          tryEmitArrayLen(k) || tryEmitMethodCall(k, selfClass)) {
+      if (tryEmitCountof(k) || tryEmitIfDecl(k) || tryEmitOctal(k) ||
+          tryEmitCtorCall(k) || tryEmitArrayLen(k) ||
+          tryEmitMethodCall(k, selfClass)) {
         k = skipTo_;
         skipTo_ = kNPos;
         continue;
@@ -1294,6 +1297,19 @@ private:
     }
     extraBraces_[end]++;
     skipTo_ = rp;
+    changed_ = true;
+    return true;
+  }
+
+  /// C2y `_Countof(expr)` is an alias for the C+ countof() helper.
+  bool tryEmitCountof(size_t i) {
+    if (!ts.isIdent(i, "_Countof"))
+      return false;
+    size_t lp = ts.nextSig(i);
+    if (!ts.isPunct(lp, "("))
+      return false;
+    emit("countof");
+    skipTo_ = i; // resume at '(' so arguments are emitted normally
     changed_ = true;
     return true;
   }
