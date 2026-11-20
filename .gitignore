@@ -1,0 +1,20 @@
+# Build output
+build/
+build-*/
+*.o
+*.a
+*.dylib
+*.so
+
+# Compiled test/demo artifacts
+tests/**/out/
+tests/**/bin/
+demos/**/out/
+*.tmp
+cplus_rewritten.c
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
