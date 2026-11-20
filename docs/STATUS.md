@@ -16,6 +16,7 @@ the repository's test/demo runs. "partial" is never counted as complete.
 | memcpy overlap / direct data-race checks | yes | yes | yes | token-level static pass (conservative) |
 | Pointer arithmetic / pointer compare / signal / ctype / I/O checks | yes | yes | yes | static pass + promoted Clang warnings |
 | setjmp/longjmp, NaN, VLA sizeof, macro, zero-alloc, signal-flag checks | yes | yes | yes | static pass + promoted Clang warnings |
+| C23-specific unsafe constructs rejected / auto made qualifier-safe | yes | yes | yes | static pass + __typeof__ lowering |
 | Double/invalid release detection | yes | yes | yes | stale pointer after address reuse may be misattributed |
 | RAII: scope exit / return / break / continue | yes | yes | yes | `goto`/`longjmp`/`exit` bypass cleanup |
 | RAII reverse destruction order | yes | yes | yes | one owner per declaration |
@@ -51,7 +52,7 @@ Commands that produced the "verified" column:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c+_lang
 ctest --test-dir build --output-on-failure   # 2/2 suites
-./tests/run_tests.sh                         # 79 tests
+./tests/run_tests.sh                         # 87 tests
 ./demos/run_demos.sh                         # 16 demos
 ./benchmarks/run_bench.sh                    # performance table
 ```

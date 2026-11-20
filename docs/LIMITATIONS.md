@@ -96,9 +96,16 @@ depends on a runtime check, the check is named.
 | 39. Multi-statement macro without do/while | caught | static check on `#define` lines |
 | 40. Zero-size malloc/realloc | caught | static check; use `cplus_alloc` |
 | 41. Missing volatile signal flag | caught | static check recommending `volatile sig_atomic_t` |
+| 42. C23 `realloc(ptr, 0)` UB | caught | raw `realloc` rejected; zero-size allocation rejected |
+| 43. C23 `unreachable()` cascade | caught (rejected) | static check |
+| 44. Lying `[[unsequenced]]`/`[[reproducible]]` | caught (rejected) | static check |
+| 45. C23 empty parameter list change | avoided by design | C+ targets gnu17; explicit `(void)` recommended |
+| 46. C23 `auto` decay/qualifier loss | safer than C23 | `__typeof__` keeps const; arrays decay via pointer type |
+| 47. C23 `nullptr` mismatch | caught (rejected) | static check; use `NULL` |
+| 48. `_BitInt` promotion/overflow | caught (rejected) | static check; use `int64_t` |
 
-All 41 bugs have named tests in `tests/` (`classic_bug1_*` through
-`classic_bug41_*`). The ones that are not automatically caught also have raw
+All 48 bugs have named tests in `tests/` (`classic_bug1_*` through
+`classic_bug48_*`). The ones that are not automatically caught also have raw
 reference programs in `tests/known_gaps/` documenting the limitation.
 
 Items marked "not caught" remain undefined behaviour in safe C+ when written
@@ -147,6 +154,8 @@ give a complete spatial/temporal memory-safety guarantee:
   `i = C; i < N; i++` (or `<=`) with literal bounds. Loops with computed
   bounds, multiple index variables or indirect subscripts fall back to the
   run-time check, not a compile error.
+- Bug 35 (cross-TU ABI mismatch) needs whole-program type information that a
+  single-TU lowering compiler does not have.
 - Bugs 23 (flexible array member copy) and general data races beyond direct
   global writes remain outside the enforced subset.
 - `.hp` headers are lowered per translation unit; quoted includes are resolved

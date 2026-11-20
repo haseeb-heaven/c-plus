@@ -60,6 +60,16 @@ public:
         if (isIdent(i, "setjmp") || isIdent(i, "longjmp"))
           errorAt(toks_[i], std::string("'") + toks_[i].text +
                                 "' bypasses C+ deterministic cleanup");
+        if (isIdent(i, "unreachable"))
+          errorAt(toks_[i], "C23 unreachable() is not supported in safe C+");
+        if (isIdent(i, "_BitInt"))
+          errorAt(toks_[i], "_BitInt has no safe C+ lowering; use int64_t or "
+                            "cplus_checked arithmetic");
+        if (isIdent(i, "nullptr"))
+          errorAt(toks_[i], "C23 nullptr is not supported; use NULL");
+        if (isIdent(i, "unsequenced") || isIdent(i, "reproducible"))
+          errorAt(toks_[i], "optimizer attributes that can lie about side "
+                            "effects are not supported in safe C+");
         if (isIdent(i, "realloc"))
           errorAt(toks_[i],
                   "raw realloc can lose the original block on failure; use "

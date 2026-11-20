@@ -1219,9 +1219,19 @@ private:
     if (end == kNPos)
       return false;
 
-    emit("__typeof__(");
-    emitRange(eq + 1, end);
-    emit(")");
+    // C23 auto decays arrays to pointers.  Our __typeof__ based lowering
+    // would otherwise try to declare an array variable from an array value,
+    // so emit a pointer type for known fixed arrays.
+    size_t firstInit = ts.nextSig(eq);
+    if (firstInit < end && ts[firstInit].kind == TokKind::Identifier &&
+        arrays_.count(ts[firstInit].text) &&
+        ts.nextSig(firstInit) == end) {
+      emit("__typeof__(&" + ts[firstInit].text + "[0])");
+    } else {
+      emit("__typeof__(");
+      emitRange(eq + 1, end);
+      emit(")");
+    }
     skipTo_ = i; // the caller resumes at the declared name
     changed_ = true;
     return true;
