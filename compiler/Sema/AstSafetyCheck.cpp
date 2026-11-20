@@ -39,11 +39,36 @@ public:
     return nonVolatileGlobals_;
   }
 
+  bool isNullConstant(const Expr *expr) const {
+    if (!expr)
+      return false;
+    expr = expr->IgnoreParenCasts();
+    Expr::EvalResult result;
+    if (expr->EvaluateAsInt(result, ctx_) && result.Val.isInt())
+      return result.Val.getInt().getZExtValue() == 0;
+    return false;
+  }
+
+  const VarDecl *nullVarOf(const Expr *expr) const {
+    if (!expr)
+      return nullptr;
+    expr = expr->IgnoreParenImpCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(expr))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (nullVars_.count(vd->getNameAsString()))
+          return vd;
+    return nullptr;
+  }
+
   bool TraverseFunctionDecl(FunctionDecl *fd) {
-    std::string previous = currentFunction_;
+    std::string previousFunction = currentFunction_;
+    std::set<std::string> previousNulls = nullVars_;
     currentFunction_ = fd->getNameAsString();
+    if (report_)
+      nullVars_.clear();
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
-    currentFunction_ = previous;
+    currentFunction_ = previousFunction;
+    nullVars_ = previousNulls;
     return result;
   }
 
@@ -51,22 +76,43 @@ public:
     if (!report_ && vd->hasGlobalStorage() &&
         !vd->getType().isVolatileQualified())
       nonVolatileGlobals_.insert(vd->getNameAsString());
+    if (report_ && vd->getType()->isPointerType() &&
+        isNullConstant(vd->getInit()))
+      nullVars_.insert(vd->getNameAsString());
     return true;
   }
 
   bool VisitBinaryOperator(BinaryOperator *op) {
-    if (!report_ || !handlers_.count(currentFunction_) ||
-        !op->isAssignmentOp())
+    if (!report_)
       return true;
-    reportGlobalWrite(op->getLHS(), op->getBeginLoc());
+    if (op->isAssignmentOp()) {
+      if (const VarDecl *vd = nullVarOf(op->getLHS()))
+        nullVars_.erase(vd->getNameAsString());
+      if (handlers_.count(currentFunction_))
+        reportGlobalWrite(op->getLHS(), op->getBeginLoc());
+    }
     return true;
   }
 
   bool VisitUnaryOperator(UnaryOperator *op) {
-    if (!report_ || !handlers_.count(currentFunction_) ||
-        !(op->isIncrementOp() || op->isDecrementOp()))
+    if (!report_)
       return true;
-    reportGlobalWrite(op->getSubExpr(), op->getBeginLoc());
+    if (op->getOpcode() == UO_Deref) {
+      const Expr *sub = op->getSubExpr();
+      if (isNullConstant(sub) || nullVarOf(sub))
+        report(op->getBeginLoc(), "null pointer dereference");
+    }
+    if (handlers_.count(currentFunction_) &&
+        (op->isIncrementOp() || op->isDecrementOp()))
+      reportGlobalWrite(op->getSubExpr(), op->getBeginLoc());
+    return true;
+  }
+
+  bool VisitMemberExpr(MemberExpr *member) {
+    if (!report_ || !member->isArrow())
+      return true;
+    if (nullVarOf(member->getBase()))
+      report(member->getBeginLoc(), "null pointer dereference");
     return true;
   }
 
@@ -151,6 +197,7 @@ private:
 public:
   std::set<std::string> handlers_;
   std::set<std::string> nonVolatileGlobals_;
+  std::set<std::string> nullVars_;
 };
 
 } // namespace

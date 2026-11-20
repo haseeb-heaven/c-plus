@@ -60,7 +60,7 @@ depends on a runtime check, the check is named.
 | 3. Returning a pointer to a local | caught | `-Werror=return-stack-address` |
 | 4. Memory leak on early return | prevented for managed/RAII allocations; not detected for raw `malloc` | scope-exit cleanup |
 | 5. Double free | caught for C+ allocations; not for raw `free` | allocator side table + freed-address cache |
-| 6. Null pointer dereference | caught at run time | UBSan `null` |
+| 6. Null pointer dereference | caught at compile time when provable | Clang AST; UBSan backstop for dynamic cases |
 | 7. Uninitialized variable read | caught | `-Werror=uninitialized` |
 | 8. Missing null terminator | **not caught** | use bounded string APIs and reserve `strlen + 1` bytes yourself |
 | 9. Signed integer overflow | caught at run time | UBSan `undefined` |
