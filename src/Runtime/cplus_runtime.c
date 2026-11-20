@@ -430,3 +430,142 @@ void *cplus_tls_get(void *s) { (void)s; return NULL; }
 void cplus_tls_set(void *s, void *v) { (void)s; (void)v; }
 void cplus_tls_free(void *s) { (void)s; }
 #endif
+
+/* -------------------------------------------------------------------------
+ * Modern I/O: type-generic print/scan
+ *
+ * The state struct below is a C struct with functions operating on it - the
+ * same shape a C+ `class` lowers to.  It remembers whether a value has
+ * already been printed on the current line so print() can insert spaces
+ * without a format string.
+ * ------------------------------------------------------------------------- */
+
+static cplus_print_state cplus_print_line = {1};
+
+static void cplus_print_separator(void) {
+  if (cplus_print_line.first)
+    cplus_print_line.first = 0;
+  else
+    putchar(' ');
+}
+
+void cplus_print_int(int value) {
+  cplus_print_separator();
+  printf("%d", value);
+}
+
+void cplus_print_uint(unsigned int value) {
+  cplus_print_separator();
+  printf("%u", value);
+}
+
+void cplus_print_long(long value) {
+  cplus_print_separator();
+  printf("%ld", value);
+}
+
+void cplus_print_ulong(unsigned long value) {
+  cplus_print_separator();
+  printf("%lu", value);
+}
+
+void cplus_print_llong(long long value) {
+  cplus_print_separator();
+  printf("%lld", value);
+}
+
+void cplus_print_ullong(unsigned long long value) {
+  cplus_print_separator();
+  printf("%llu", value);
+}
+
+void cplus_print_double(double value) {
+  cplus_print_separator();
+  printf("%g", value);
+}
+
+void cplus_print_ldouble(long double value) {
+  cplus_print_separator();
+  printf("%Lg", value);
+}
+
+void cplus_print_char_value(char value) {
+  cplus_print_separator();
+  printf("%c", value);
+}
+
+void cplus_print_bool(_Bool value) {
+  cplus_print_separator();
+  printf("%s", value ? "true" : "false");
+}
+
+void cplus_print_cstr(const char *value) {
+  cplus_print_separator();
+  fputs(value ? value : "(null)", stdout);
+}
+
+void cplus_print_unknown(const void *value) {
+  cplus_print_separator();
+  printf("<unprintable:%p>", value);
+}
+
+void cplus_print_end(void) {
+  putchar('\n');
+  cplus_print_line.first = 1;
+}
+
+void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
+  int rc = 0;
+  if (!dest)
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", NULL, 0,
+                      "scan destination is null");
+
+  switch (kind) {
+  case CPLUS_SCAN_INT:
+    rc = scanf("%d", (int *)dest);
+    break;
+  case CPLUS_SCAN_UINT:
+    rc = scanf("%u", (unsigned int *)dest);
+    break;
+  case CPLUS_SCAN_LONG:
+    rc = scanf("%ld", (long *)dest);
+    break;
+  case CPLUS_SCAN_ULONG:
+    rc = scanf("%lu", (unsigned long *)dest);
+    break;
+  case CPLUS_SCAN_LLONG:
+    rc = scanf("%lld", (long long *)dest);
+    break;
+  case CPLUS_SCAN_ULLONG:
+    rc = scanf("%llu", (unsigned long long *)dest);
+    break;
+  case CPLUS_SCAN_FLOAT:
+    rc = scanf("%f", (float *)dest);
+    break;
+  case CPLUS_SCAN_DOUBLE:
+    rc = scanf("%lf", (double *)dest);
+    break;
+  case CPLUS_SCAN_CHAR:
+    rc = scanf(" %c", (char *)dest);
+    break;
+  case CPLUS_SCAN_STR: {
+    char token[4096];
+    rc = scanf("%4095s", token);
+    if (rc == 1 && size > 0) {
+      size_t n = strlen(token);
+      if (n >= size)
+        n = size - 1;
+      memcpy(dest, token, n);
+      ((char *)dest)[n] = '\0';
+    }
+    break;
+  }
+  default:
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", NULL, 0,
+                      "unsupported scan type");
+  }
+
+  if (rc != 1)
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", NULL, 0,
+                      "failed to read a value from stdin");
+}

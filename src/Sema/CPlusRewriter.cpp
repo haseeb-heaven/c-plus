@@ -210,6 +210,7 @@ public:
   RewrittenSource run() {
     collectDeclarations();
     collectVariableTypes();
+    collectAutoClasses();
     collectArrays();
     collectDynamicPointers();
     emitTranslationUnit();
@@ -449,6 +450,25 @@ private:
         any = true;
     }
     return any ? commas + 1 : 0;
+  }
+
+  /// `auto state = (Class){...}` is a class-typed variable too, so method
+  /// call sugar must know its class.
+  void collectAutoClasses() {
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (!ts.isIdent(i, "auto"))
+        continue;
+      size_t name = ts.nextSig(i);
+      size_t eq = ts.nextSig(name);
+      size_t lparen = ts.nextSig(eq);
+      size_t cls = ts.nextSig(lparen);
+      if (name >= ts.size() || ts[name].kind != TokKind::Identifier ||
+          !ts.isPunct(eq, "=") || !ts.isPunct(lparen, "(") ||
+          cls >= ts.size() || ts[cls].kind != TokKind::Identifier ||
+          !classNames_.count(ts[cls].text))
+        continue;
+      varClasses_[ts[name].text] = ts[cls].text;
+    }
   }
 
   /// Record fixed-size arrays so `arr.len` can be replaced by a constant.
