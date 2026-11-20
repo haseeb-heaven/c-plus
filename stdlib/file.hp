@@ -10,6 +10,7 @@ resource struct File {
 };
 
 void File_drop(File *self) {
+    cplus_log(CPLUS_LOG_DEBUG, "File_drop handle=%p", (void *)self->handle);
     if (self->handle != NULL) {
         fclose(self->handle);
         self->handle = NULL;
@@ -24,6 +25,7 @@ File File_open(const char *path, const char *mode) {
 }
 
 int File_write(File *self, const char *text) {
+    cplus_log(CPLUS_LOG_TRACE, "File_write handle=%p", (void *)self->handle);
     if (self->handle == NULL)
         return 0;
     return fputs(text, self->handle) != EOF;

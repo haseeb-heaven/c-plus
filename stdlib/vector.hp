@@ -10,12 +10,14 @@ class IntVec {
     size_t capacity;
 
     IntVec(void) {
+        cplus_log(CPLUS_LOG_DEBUG, "IntVec ctor");
         self->data = NULL;
         self->length = 0;
         self->capacity = 0;
     }
 
     size_t len(void) {
+        cplus_log(CPLUS_LOG_TRACE, "IntVec len=%zu", self->length);
         return self->length;
     }
 
@@ -23,6 +25,8 @@ class IntVec {
         cplus_log(CPLUS_LOG_TRACE, "IntVec push value=%d", value);
         if (self->length == self->capacity) {
             size_t next = self->capacity == 0 ? 4 : self->capacity * 2;
+            cplus_log(CPLUS_LOG_DEBUG, "IntVec grow %zu -> %zu",
+                      self->capacity, next);
             int *fresh = (int *)cplus_alloc(sizeof(int) * next);
             size_t i;
             for (i = 0; i < self->length; i++)
@@ -36,12 +40,15 @@ class IntVec {
     }
 
     int at(size_t index) {
+        cplus_log(CPLUS_LOG_TRACE, "IntVec at=%zu len=%zu", index,
+                  self->length);
         if (index >= self->length)
             return 0;
         return self->data[index];
     }
 
     void drop(void) {
+        cplus_log(CPLUS_LOG_DEBUG, "IntVec drop len=%zu", self->length);
         if (self->data != NULL) {
             cplus_release(self->data);
             self->data = NULL;

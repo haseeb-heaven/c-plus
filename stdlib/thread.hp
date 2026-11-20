@@ -9,6 +9,7 @@ resource struct Mutex {
 };
 
 void Mutex_drop(Mutex *self) {
+    cplus_log(CPLUS_LOG_DEBUG, "Mutex_drop handle=%p", self->handle);
     if (self->handle != NULL) {
         cplus_mutex_free(self->handle);
         self->handle = NULL;
@@ -16,6 +17,7 @@ void Mutex_drop(Mutex *self) {
 }
 
 Mutex Mutex_new(void) {
+    cplus_log(CPLUS_LOG_DEBUG, "Mutex_new");
     Mutex m;
     m.handle = cplus_mutex_new();
     return m;
@@ -26,6 +28,7 @@ resource struct Guard {
 };
 
 void Guard_drop(Guard *self) {
+    cplus_log(CPLUS_LOG_DEBUG, "Guard_drop owner=%p", (void *)self->owner);
     if (self->owner != NULL) {
         cplus_mutex_unlock(self->owner->handle);
         self->owner = NULL;

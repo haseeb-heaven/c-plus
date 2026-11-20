@@ -478,6 +478,7 @@ static void cplus_print_separator(void) {
 }
 
 void cplus_print_value(cplus_print_kind kind, ...) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_print_value kind=%d", (int)kind);
   va_list ap;
   va_start(ap, kind);
   cplus_print_separator();
@@ -532,6 +533,8 @@ void cplus_print_end(void) {
 
 void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
   int rc = 0;
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_scan_value dest=%p size=%zu kind=%d", dest,
+            size, (int)kind);
   if (!dest)
     cplus_print_fatal(CPLUS_EXIT_IO, "input error", NULL, 0,
                       "scan destination is null");

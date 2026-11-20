@@ -18,8 +18,8 @@ pipeline logging.
 ## Runtime/stdlib logging
 
 When `--log` is used, the driver passes `-DCPLUS_LOG_RUNTIME=1` and the chosen
-level to the generated C. Runtime and `.hp` standard-library methods then emit
-logs such as:
+level to the generated C. Every standard-library method (`String`, `IntVec`, `File`, `Mutex`/`Guard`,
+I/O and sockets) and key runtime entry points emit scoped logs, for example:
 
 ```text
 [DEBUG] String ctor len=3  (string.hp:15 in String_ctor)

@@ -19,20 +19,25 @@ class String {
     }
 
     size_t len(void) {
+        cplus_log(CPLUS_LOG_TRACE, "String len=%zu", self->length);
         return self->length;
     }
 
     char at(size_t index) {
+        cplus_log(CPLUS_LOG_TRACE, "String at=%zu len=%zu", index,
+                  self->length);
         if (index >= self->length)
             return '\0';
         return self->data[index];
     }
 
     const char *c_str(void) {
+        cplus_log(CPLUS_LOG_TRACE, "String c_str");
         return self->data;
     }
 
     void drop(void) {
+        cplus_log(CPLUS_LOG_DEBUG, "String drop len=%zu", self->length);
         if (self->data != NULL) {
             cplus_release(self->data);
             self->data = NULL;

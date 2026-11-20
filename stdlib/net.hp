@@ -13,6 +13,7 @@ resource struct Listener {
 };
 
 void Listener_drop(Listener *self) {
+    cplus_log(CPLUS_LOG_DEBUG, "Listener_drop fd=%d", self->fd);
     if (self->fd >= 0) {
         close(self->fd);
         self->fd = -1;
@@ -20,6 +21,7 @@ void Listener_drop(Listener *self) {
 }
 
 Listener Listener_bind(int port) {
+    cplus_log(CPLUS_LOG_DEBUG, "Listener_bind port=%d", port);
     Listener l;
     l.fd = socket(AF_INET, SOCK_STREAM, 0);
     if (l.fd < 0)
@@ -44,6 +46,7 @@ resource struct Connection {
 };
 
 void Connection_drop(Connection *self) {
+    cplus_log(CPLUS_LOG_DEBUG, "Connection_drop fd=%d", self->fd);
     if (self->fd >= 0) {
         close(self->fd);
         self->fd = -1;
@@ -51,6 +54,7 @@ void Connection_drop(Connection *self) {
 }
 
 Connection Connection_accept(Listener *listener) {
+    cplus_log(CPLUS_LOG_DEBUG, "Connection_accept fd=%d", listener->fd);
     Connection c;
     c.fd = accept(listener->fd, NULL, NULL);
     return c;
