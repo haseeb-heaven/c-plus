@@ -13,3 +13,6 @@ They are kept here as evidence of the limitation, not as verified safety tests.
 - `macro_double_eval.c` — `SQUARE(i++)` expands to `((i++) * (i++))`. C+
   does not yet diagnose repeated macro-parameter evaluation; use an inline
   function instead.
+- `abi_mismatch/file1.c` + `file2.c` — cross-translation-unit declaration
+  mismatch (`int` vs `double`) links cleanly in C. C+ compiles one TU at a
+  time and has no whole-program ABI check, so this remains undetected.

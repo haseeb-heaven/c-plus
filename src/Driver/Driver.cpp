@@ -507,6 +507,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     args.push_back("-Werror=shift-negative-value");
     args.push_back("-Werror=sign-compare");
     args.push_back("-Werror=varargs");
+    args.push_back("-Werror=cast-qual");
     // Runtime memory-safety instrumentation.  UBSan's bounds/null/alignment
     // checks cover fixed-extent arrays and invalid pointer use; they abort on
     // the first violation because a safe program must never continue after a

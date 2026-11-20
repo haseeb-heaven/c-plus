@@ -8,12 +8,12 @@ conversation supplied **25 explicitly numbered bugs** (1–25), so this audit
 covers exactly those 25. Items 26–54 are **not invented** here; they need the
 actual source list before any claim can be made about them.
 
-## Bug status (1–33)
+## Bug status (1–41)
 
 The detailed table lives in [LIMITATIONS.md](LIMITATIONS.md). Summary:
 
 - **Prevented at compile time:** 1, 3, 5 (C+ allocations), 7, 10–16, 18–20,
-  22, 24 (direct global writes in thread entry functions), 26–33.
+  22, 24 (direct global writes in thread entry functions), 26–34, 36–41.
 - **Aborted safely at run time:** 6, 9, 21, 25, and dynamic forms of 1.
 - **Prevented by RAII design:** 4, 5, 14 (when C+ resources are used).
 - **Not automatically detected:** 2 (raw UAF), 8 (null terminator), 17
@@ -22,7 +22,7 @@ The detailed table lives in [LIMITATIONS.md](LIMITATIONS.md). Summary:
 
 Every item has a named test under `tests/`; undetected items also have raw
 reference programs in `tests/known_gaps/`. The original 54-item list was not
-found, so no claim is made about items 34–54.
+found, so no claim is made about items 42–54.
 
 ## Reference projects: legal and technical audit
 

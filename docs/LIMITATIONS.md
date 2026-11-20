@@ -88,9 +88,17 @@ depends on a runtime check, the check is named.
 | 31. Plain `char` into `<ctype.h>` | caught | static check recommending `(unsigned char)` |
 | 32. Unchecked `fread`/`fwrite` | caught | static check for ignored return value |
 | 33. Empty infinite loop | caught | static check; add a volatile/atomic side effect |
+| 34. `longjmp` bypassing cleanup | caught (rejected) | `setjmp`/`longjmp` rejected in safe mode |
+| 35. Cross-TU declaration/ABI mismatch | **not detected** | single-TU compiler; see `tests/known_gaps/abi_mismatch/` |
+| 36. Casting away const to mutate | caught | `-Werror=cast-qual` |
+| 37. NaN equality comparison | caught | static check recommending `isnan()` |
+| 38. `sizeof` evaluating a VLA side effect | caught | static check |
+| 39. Multi-statement macro without do/while | caught | static check on `#define` lines |
+| 40. Zero-size malloc/realloc | caught | static check; use `cplus_alloc` |
+| 41. Missing volatile signal flag | caught | static check recommending `volatile sig_atomic_t` |
 
-All 33 bugs have named tests in `tests/` (`classic_bug1_*` through
-`classic_bug33_*`). The ones that are not automatically caught also have raw
+All 41 bugs have named tests in `tests/` (`classic_bug1_*` through
+`classic_bug41_*`). The ones that are not automatically caught also have raw
 reference programs in `tests/known_gaps/` documenting the limitation.
 
 Items marked "not caught" remain undefined behaviour in safe C+ when written

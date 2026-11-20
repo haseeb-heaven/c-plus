@@ -11,6 +11,7 @@
 #include "Sema/CPlusLexer.h"
 
 #include <cstdlib>
+#include <sstream>
 #include <set>
 #include <string>
 #include <vector>
@@ -26,7 +27,7 @@ public:
   Checker(const std::string &source,
           const std::map<std::string, size_t> &arrays,
           DiagnosticEngine &diags, const std::string &filename)
-      : toks_(lexCPlus(source)), arrays_(arrays), diags_(diags),
+      : toks_(lexCPlus(source)), source_(source), arrays_(arrays), diags_(diags),
         filename_(filename) {
   }
 
@@ -43,6 +44,7 @@ public:
     checkStaticBufferCalls();
     checkCtypeChar();
     checkUncheckedIo();
+    checkMacroStatements();
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (isIdent(i, "for"))
         checkLoop(i);
@@ -52,6 +54,12 @@ public:
         checkPointerArithmetic(i);
         checkUnrelatedPointerCompare(i);
         checkEmptyInfiniteLoop(i);
+        checkNanCompare(i);
+        checkVlaSizeof(i);
+        checkZeroAlloc(i);
+        if (isIdent(i, "setjmp") || isIdent(i, "longjmp"))
+          errorAt(toks_[i], std::string("'") + toks_[i].text +
+                                "' bypasses C+ deterministic cleanup");
         if (isIdent(i, "realloc"))
           errorAt(toks_[i],
                   "raw realloc can lose the original block on failure; use "
@@ -252,6 +260,83 @@ private:
            name == "calloc";
   }
 
+  void checkNanCompare(size_t i) {
+    if (!isIdent(i, "NAN"))
+      return;
+    size_t before = i == 0 ? kNPos : i - 1;
+    while (before != kNPos && trivia(before)) {
+      if (before == 0) { before = kNPos; break; }
+      --before;
+    }
+    size_t after = nextSig(i);
+    bool equality = (before != kNPos && (isPunct(before, "==") ||
+                                          isPunct(before, "!="))) ||
+                    isPunct(after, "==") || isPunct(after, "!=");
+    if (equality)
+      errorAt(toks_[i], "NaN is never equal to itself; use isnan()");
+  }
+
+  void checkVlaSizeof(size_t i) {
+    if (!isIdent(i, "sizeof"))
+      return;
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return;
+    size_t rp = match(lp, "(", ")");
+    if (rp == kNPos)
+      return;
+    bool bracket = false;
+    for (size_t k = lp + 1; k < rp; ++k) {
+      if (isPunct(k, "[")) bracket = true;
+      if (bracket && (isPunct(k, "++") || isPunct(k, "--")))
+        errorAt(toks_[i], "sizeof on a VLA evaluates the expression at run time");
+    }
+  }
+
+  void checkZeroAlloc(size_t i) {
+    if (!(isIdent(i, "malloc") || isIdent(i, "calloc") ||
+          isIdent(i, "realloc")))
+      return;
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return;
+    size_t rp = match(lp, "(", ")");
+    if (rp == kNPos)
+      return;
+    auto args = splitArgs(lp + 1, rp);
+    for (size_t k = 0; k < args.size(); ++k) {
+      long value = 0;
+      if (constantFactor(args[k].first, args[k].second, &value) && value == 0)
+        errorAt(toks_[i], "zero-size allocation is implementation-defined; "
+                          "use cplus_alloc");
+    }
+  }
+
+  void checkMacroStatements() {
+    std::istringstream in(source_);
+    std::string line;
+    unsigned lineNo = 0;
+    while (std::getline(in, line)) {
+      ++lineNo;
+      if (line.find("#define") == std::string::npos)
+        continue;
+      size_t semicolon = line.find(';');
+      if (semicolon == std::string::npos)
+        continue;
+      if (line.find("do {") != std::string::npos &&
+          line.find("while (0)") != std::string::npos)
+        continue;
+      Diag d;
+      d.level = DiagLevel::Error;
+      d.message = "multi-statement macro must be wrapped in do { ... } while (0)";
+      d.file = filename_;
+      d.line = lineNo;
+      d.column = static_cast<unsigned>(semicolon + 1);
+      d.help = "wrap the macro body to keep if/else binding correct";
+      diags_.report(std::move(d));
+    }
+  }
+
   void checkPointerArithmetic(size_t i) {
     if (toks_[i].kind != TokKind::Identifier)
       return;
@@ -349,6 +434,14 @@ private:
                                   "' is not async-signal-safe");
             break;
           }
+        if (globals_.count(toks_[k].text) &&
+            !volatileGlobals_.count(toks_[k].text)) {
+          size_t next = nextSig(k);
+          if (isPunct(next, "=") || isPunct(next, "++") ||
+              isPunct(next, "--"))
+            errorAt(toks_[k], "signal-modified global must be volatile "
+                              "sig_atomic_t: '" + toks_[k].text + "'");
+        }
       }
     }
   }
@@ -493,6 +586,17 @@ private:
       if (afterType ||
           (prev != kNPos && (isPunct(prev, ";") || isPunct(prev, "}"))))
         globals_.insert(toks_[i].text);
+        bool isVolatile = false;
+        size_t scan = i;
+        while (scan > 0) {
+          --scan;
+          if (isPunct(scan, ";") || isPunct(scan, "}"))
+            break;
+          if (isIdent(scan, "volatile"))
+            isVolatile = true;
+        }
+        if (isVolatile)
+          volatileGlobals_.insert(toks_[i].text);
     }
   }
 
@@ -544,7 +648,7 @@ private:
         size_t next = nextSig(k);
         bool write = isPunct(next, "=") || isPunct(next, "++") ||
                      isPunct(next, "--") || isPunct(next, "+=");
-        if (write)
+        if (write && !volatileGlobals_.count(toks_[k].text))
           errorAt(toks_[k], "unsynchronized write to shared global '" +
                                 toks_[k].text + "' in thread function '" +
                                 entry.first + "'");
@@ -1067,6 +1171,7 @@ private:
   }
 
   std::vector<Token> toks_;
+  std::string source_;
   std::map<std::string, size_t> arrays_;
   struct FuncSig {
     std::vector<std::string> params;
@@ -1078,6 +1183,7 @@ private:
   std::set<std::string> conflict_;
   std::map<std::string, size_t> returnExtents_;
   std::set<std::string> globals_;
+  std::set<std::string> volatileGlobals_;
   DiagnosticEngine &diags_;
   std::string filename_;
 };
