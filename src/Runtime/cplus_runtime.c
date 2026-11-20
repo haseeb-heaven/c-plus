@@ -208,6 +208,15 @@ void *cplus_zalloc(size_t size) {
   return p;
 }
 
+void *cplus_alloc_array(size_t count, size_t element_size) {
+  if (element_size == 0)
+    element_size = 1;
+  if (count > SIZE_MAX / element_size)
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "allocation overflow", NULL, 0,
+                      "array size multiplication overflows size_t");
+  return cplus_zalloc(count * element_size);
+}
+
 void *cplus_realloc(void *ptr, size_t size) {
   if (!ptr)
     return cplus_alloc(size);
