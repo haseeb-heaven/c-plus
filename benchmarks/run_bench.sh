@@ -68,7 +68,7 @@ for src in "$ROOT"/benchmarks/*.c; do
     FAILED=1
     continue
   fi
-  if ! "$CLANG" -std=gnu17 -O2 -I"$ROOT/include" -include cplus/cplus.h \
+  if ! "$CLANG" -std=gnu17 -O2 -pthread -I"$ROOT/include" -include cplus/cplus.h \
       "$src" -o "$plain" >"$OUT/$name.c.log" 2>&1; then
     echo "  FAIL $name: clang build failed; see benchmarks/out/$name.c.log"
     FAILED=1
