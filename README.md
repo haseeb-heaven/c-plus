@@ -203,6 +203,12 @@ own machine for current numbers.
 - `include/cplus/` — stable C ABI used by generated code
 - `tests/`, `demos/`, `benchmarks/` — executable evidence
 
+## Contributing
+
+Branching and release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+`main`/`master` are stable-release branches only; development happens on
+`develop` and `features/<topic>` branches.
+
 ## License
 
 See [`LICENSE`](LICENSE).
