@@ -85,6 +85,19 @@ public:
   bool VisitBinaryOperator(BinaryOperator *op) {
     if (!report_)
       return true;
+    // A comparison against NULL means the code is explicitly checking the
+    // pointer; do not report later dereferences of it as provably null.
+    if (op->isEqualityOp()) {
+      const Expr *lhs = op->getLHS();
+      const Expr *rhs = op->getRHS();
+      if (isNullConstant(rhs))
+        if (const VarDecl *vd = nullVarOf(lhs))
+          nullVars_.erase(vd->getNameAsString());
+      if (isNullConstant(lhs))
+        if (const VarDecl *vd = nullVarOf(rhs))
+          nullVars_.erase(vd->getNameAsString());
+      return true;
+    }
     if (op->isAssignmentOp()) {
       if (const VarDecl *vd = nullVarOf(op->getLHS()))
         nullVars_.erase(vd->getNameAsString());
