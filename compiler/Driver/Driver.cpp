@@ -150,12 +150,9 @@ std::vector<std::string> cplusIncludeArgs() {
   std::vector<std::string> args;
   std::string inc = findCPlusIncludeDir();
   if (!inc.empty()) {
+    // Add the include directory only.  Auto-including cplus.h would inject a
+    // `print` macro into unrelated C code and collide with user functions.
     args.push_back("-I" + inc);
-    // Every C+ translation unit gets the runtime declaration header.  This
-    // makes cplus_new/cplus_move available without an explicit include and
-    // keeps ordinary C programs valid.
-    args.push_back("-include");
-    args.push_back(inc + "/cplus/cplus.h");
   }
   return args;
 }
@@ -406,114 +403,31 @@ std::string preprocessModernHeaders(
   return result;
 }
 
-int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
-              llvm::raw_ostream &errs) {
-  clearExternalClasses();
-  DiagnosticEngine diags;
-  std::string err;
-  std::string source = readFile(opts.input, &err);
-  if (!err.empty()) {
-    errs << "error: cannot read '" << opts.input << "': " << err << "\n";
-    return 1;
-  }
-
-  // Stage 0: lower any included `.hp` headers into temporary `.h` files.
-  std::vector<TempFile> headerGuards;
-  std::map<std::string, std::string> processedHeaders;
-  unsigned headerCounter = 0;
-  source = preprocessModernHeaders(source, opts.input, diags, opts.mode,
-                                   headerGuards, processedHeaders,
-                                   headerCounter);
-
-  // Stages 1-2: lower C+ syntax and insert deterministic cleanup.
-  bool ok = false;
-  std::string loweredText =
-      lowerUnit(source, opts.input, diags, opts.mode, &ok);
-
-  printDiagnostics(diags, errs, opts.input);
-  if (diags.hasErrors())
-    return 1;
-  if (opts.warningsAsErrors && diags.warningCount() > 0)
-    return 1;
-
-  if (!opts.emitC.empty()) {
-    if (!writeFile(opts.emitC, loweredText, &err)) {
-      errs << "error: cannot write '" << opts.emitC << "': " << err << "\n";
-      return 1;
-    }
-    if (opts.verbose)
-      os << "lowered C written to " << opts.emitC << "\n";
-  }
-
-  // Stage 3: write the lowered C next to the input so that quoted includes
-  // and __FILE__-relative assumptions keep working.
-  llvm::SmallString<256> tempPath;
-  llvm::StringRef inputDir = llvm::sys::path::parent_path(opts.input);
-  if (inputDir.empty())
-    inputDir = ".";
-  std::string pidSuffix = std::to_string(::getpid());
-  tempPath = std::string(inputDir);
-  llvm::sys::path::append(tempPath, ".cplus-tmp-" + pidSuffix + ".c");
-  if (!writeFile(tempPath.str().str(), loweredText, &err)) {
-    llvm::SmallString<256> sysTemp;
-    llvm::sys::path::system_temp_directory(true, sysTemp);
-    llvm::sys::path::append(sysTemp, "cplus-" + pidSuffix + ".c");
-    tempPath = sysTemp;
-    if (!writeFile(tempPath.str().str(), loweredText, &err)) {
-      errs << "error: cannot write temporary file: " << err << "\n";
-      return 1;
-    }
-  }
-  TempFile guard;
-  guard.path = tempPath.str().str();
-  guard.keep = opts.keepTemp || !envOr("CPLUS_KEEP_TEMP").empty();
-  if (guard.keep)
-    os << "note: lowered C kept at " << guard.path << "\n";
-
-  const std::string clang = findClangBinary();
-  std::string output = opts.output.empty() ? defaultOutputName(opts.input)
-                                           : opts.output;
-
+static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   std::vector<std::string> args;
-  args.push_back("-std=gnu17");
+  args.push_back(opts.mode == Mode::LegacyC ? "-std=gnu89" : "-std=gnu17");
   args.push_back("-fno-common");
   args.push_back("-Wno-unused-parameter");
-  // Lets a source file tell that it is being compiled by c+, which is useful
-  // when the same file also has to build as plain C.
   args.push_back("-DCPLUS=1");
-
-  if (opts.opt == OptMode::Release) {
+  if (opts.opt == OptMode::Release)
     args.push_back("-O2");
-  } else {
+  else {
     args.push_back("-O0");
     args.push_back("-g");
   }
-
   if (opts.mode == Mode::Safe) {
     args.push_back("-pthread");
-    // Statically known out-of-bounds subscripts are errors, not warnings.
-    // This rejects a bad constant index before an executable is produced;
-    // UBSan below handles indices that are only known at run time.
     args.push_back("-Werror=array-bounds");
-    // Two more classic C hazards are provable at compile time by Clang:
-    // returning the address of a local, and reading an uninitialised local.
     args.push_back("-Werror=return-stack-address");
     args.push_back("-Werror=uninitialized");
     args.push_back("-Wwrite-strings");
-    args.push_back("-Werror=incompatible-pointer-types-discards-qualifiers");
     args.push_back("-Werror=sizeof-array-argument");
     args.push_back("-Werror=sizeof-pointer-div");
     args.push_back("-Werror=format-security");
     args.push_back("-Werror=unsequenced");
     args.push_back("-Werror=shift-count-overflow");
     args.push_back("-Werror=shift-negative-value");
-    args.push_back("-Werror=sign-compare");
     args.push_back("-Werror=varargs");
-    args.push_back("-Werror=cast-qual");
-    // Runtime memory-safety instrumentation.  UBSan's bounds/null/alignment
-    // checks cover fixed-extent arrays and invalid pointer use; they abort on
-    // the first violation because a safe program must never continue after a
-    // memory-safety failure.
     args.push_back("-fsanitize=undefined,bounds,null,alignment");
     args.push_back("-fno-sanitize-recover=all");
     args.push_back("-fno-omit-frame-pointer");
@@ -521,48 +435,140 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   } else {
     args.push_back("-DCPLUS_LEGACY_C=1");
   }
-
   if (opts.warningsAsErrors)
     args.push_back("-Werror");
   if (opts.verbose)
     args.push_back("-v");
-
   for (const auto &inc : cplusIncludeArgs())
     args.push_back(inc);
+  return args;
+}
 
-  // The temp file usually lives next to the source; add the source directory
-  // explicitly for the fallback case.
-  args.push_back("-I" + std::string(inputDir));
+int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
+              llvm::raw_ostream &errs) {
+  std::vector<std::string> inputs = opts.inputs.empty()
+                                        ? std::vector<std::string>{opts.input}
+                                        : opts.inputs;
+  if (inputs.empty()) {
+    errs << "error: no input files\n";
+    return 1;
+  }
 
-  for (const auto &a : opts.extraArgs)
-    args.push_back(a);
+  const std::string clang = findClangBinary();
+  std::string output = opts.output.empty() ? defaultOutputName(inputs[0])
+                                           : opts.output;
+  std::vector<std::string> base = backendArgs(opts);
+  std::vector<std::string> objects;
+  std::vector<TempFile> guards;
+  std::string pidSuffix = std::to_string(::getpid());
+
+  for (size_t fileIndex = 0; fileIndex < inputs.size(); ++fileIndex) {
+    const std::string &input = inputs[fileIndex];
+    clearExternalClasses();
+    DiagnosticEngine diags;
+    std::string err;
+    std::string source = readFile(input, &err);
+    if (!err.empty()) {
+      errs << "error: cannot read '" << input << "': " << err << "\n";
+      return 1;
+    }
+
+    std::vector<TempFile> headerGuards;
+    std::map<std::string, std::string> processedHeaders;
+    unsigned headerCounter = 0;
+    source = preprocessModernHeaders(source, input, diags, opts.mode,
+                                     headerGuards, processedHeaders,
+                                     headerCounter);
+
+    bool ok = false;
+    std::string loweredText = lowerUnit(source, input, diags, opts.mode, &ok);
+    printDiagnostics(diags, errs, input);
+    if (diags.hasErrors())
+      return 1;
+    if (opts.warningsAsErrors && diags.warningCount() > 0)
+      return 1;
+
+    if (fileIndex == 0 && !opts.emitC.empty()) {
+      if (!writeFile(opts.emitC, loweredText, &err)) {
+        errs << "error: cannot write '" << opts.emitC << "': " << err << "\n";
+        return 1;
+      }
+      if (opts.verbose)
+        os << "lowered C written to " << opts.emitC << "\n";
+    }
+
+    llvm::SmallString<256> tempPath;
+    llvm::StringRef inputDir = llvm::sys::path::parent_path(input);
+    if (inputDir.empty())
+      inputDir = ".";
+    tempPath = std::string(inputDir);
+    llvm::sys::path::append(tempPath, ".cplus-tmp-" + pidSuffix + "-" +
+                                          std::to_string(fileIndex) + ".c");
+    if (!writeFile(tempPath.str().str(), loweredText, &err)) {
+      llvm::SmallString<256> sysTemp;
+      llvm::sys::path::system_temp_directory(true, sysTemp);
+      llvm::sys::path::append(sysTemp, "cplus-" + pidSuffix + "-" +
+                                           std::to_string(fileIndex) + ".c");
+      tempPath = sysTemp;
+      if (!writeFile(tempPath.str().str(), loweredText, &err)) {
+        errs << "error: cannot write temporary file: " << err << "\n";
+        return 1;
+      }
+    }
+    TempFile guard;
+    guard.path = tempPath.str().str();
+    guard.keep = opts.keepTemp || !envOr("CPLUS_KEEP_TEMP").empty();
+    if (guard.keep)
+      os << "note: lowered C kept at " << guard.path << "\n";
+    guards.push_back(std::move(guard));
+
+    std::vector<std::string> args = base;
+    args.push_back("-I" + std::string(inputDir));
+    for (const auto &a : opts.extraArgs)
+      args.push_back(a);
+    if (opts.command == "check") {
+      args.push_back("-fsyntax-only");
+    } else {
+      llvm::SmallString<256> objPath;
+      llvm::sys::path::system_temp_directory(true, objPath);
+      llvm::sys::path::append(objPath, "cplus-" + pidSuffix + "-" +
+                                           std::to_string(fileIndex) + ".o");
+      args.push_back("-c");
+      args.push_back("-o");
+      args.push_back(objPath.str().str());
+      objects.push_back(objPath.str().str());
+    }
+    args.push_back(tempPath.str().str());
+
+    if (opts.verbose) {
+      os << "backend: " << clang << "\n";
+      for (const auto &a : args)
+        os << "  " << a << "\n";
+    }
+    int rc = runProgram(clang, args);
+    if (rc != 0)
+      return rc;
+    if (opts.command == "check")
+      os << "check: " << input << " ok\n";
+  }
 
   if (opts.command == "check")
-    args.push_back("-fsyntax-only");
-  else {
-    args.push_back("-o");
-    args.push_back(output);
-  }
+    return 0;
 
-  args.push_back(guard.path);
+  std::vector<std::string> linkArgs = base;
+  for (const auto &obj : objects)
+    linkArgs.push_back(obj);
   std::string runtime = runtimeLibArg();
-  if (!runtime.empty() && opts.command != "check")
-    args.push_back(runtime);
+  if (!runtime.empty())
+    linkArgs.push_back(runtime);
+  for (const auto &a : opts.extraArgs)
+    linkArgs.push_back(a);
+  linkArgs.push_back("-o");
+  linkArgs.push_back(output);
 
-  if (opts.verbose) {
-    os << "backend: " << clang << "\n";
-    for (const auto &a : args)
-      os << "  " << a << "\n";
-  }
-
-  int rc = runProgram(clang, args);
+  int rc = runProgram(clang, linkArgs);
   if (rc != 0)
     return rc;
-
-  if (opts.command == "check") {
-    os << "check: " << opts.input << " ok\n";
-    return 0;
-  }
 
   if (opts.command == "run") {
     std::string exe = output;
@@ -570,7 +576,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       exe = "./" + exe;
     return runProgram(exe, {});
   }
-
   if (opts.verbose)
     os << "built " << output << "\n";
   return 0;

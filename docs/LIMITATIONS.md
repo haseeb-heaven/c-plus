@@ -64,17 +64,17 @@ depends on a runtime check, the check is named.
 | 7. Uninitialized variable read | caught | `-Werror=uninitialized` |
 | 8. Missing null terminator | **not caught** | use bounded string APIs and reserve `strlen + 1` bytes yourself |
 | 9. Signed integer overflow | caught at run time | UBSan `undefined` |
-| 10. Pointer reassignment leak | caught | allocation-liveness tracking in the static pass |
+| 10. Pointer reassignment leak | **not detected** | token liveness heuristic was unsound and removed |
 | 11. `realloc` failure overwrite | caught | raw `realloc` rejected; use `cplus_realloc` |
 | 12. Strict aliasing violation | caught | type-punned dereference diagnostic |
-| 13. Modifying a string literal | caught | `-Werror=incompatible-pointer-types-discards-qualifiers` |
+| 13. Modifying a string literal | warning only | qualifier error broke valid legacy C; see `tests/known_gaps/` |
 | 14. File descriptor leak on error path | prevented with RAII resources | deterministic `T_drop` |
 | 15. `sizeof` on decayed array parameter | caught | `-Werror=sizeof-array-argument` / `sizeof-pointer-div` |
 | 16. Format string vulnerability | caught | `-Werror=format-security` |
 | 17. Macro side-effect double evaluation | **not caught** | use an inline function; see `tests/known_gaps/macro_double_eval.c` |
 | 18. Unsequenced modification | caught | `-Werror=unsequenced` |
 | 19. Shift count / negative shift | caught (count) | `-Werror=shift-count-overflow`; negative runtime shifts use UBSan |
-| 20. Signed-to-unsigned comparison | caught | `-Werror=sign-compare` |
+| 20. Signed-to-unsigned comparison | warning only | needs real type info; see `tests/known_gaps/` |
 | 21. Unaligned pointer dereference | caught at run time | UBSan `alignment` |
 | 22. Overlapping memcpy | caught | static check recommending `memmove` |
 | 23. Flexible array member copy | **not caught** | see `tests/known_gaps/flexible_array_copy.c`; copy whole allocation |
@@ -105,7 +105,7 @@ depends on a runtime check, the check is named.
 | 48. `_BitInt` promotion/overflow | caught (rejected) | static check; use `int64_t` |
 | 49. `fork()` after threads | caught | static check recommending `posix_spawn` |
 | 50. `restrict` aliasing violation | caught | static check for overlapping call arguments |
-| 51. Bit-field layout/signedness | caught | static check recommending masks/shifts |
+| 51. Bit-field layout/signedness | valid C | implementation-defined but not rejected; see `tests/known_gaps/` |
 | 52. `fflush(stdin)` | caught | static check |
 | 53. `alloca`/unbounded VLA | caught | static check; use `cplus_alloc` |
 | 54. Control flow out of `defer` | caught | `defer` cleanup rejects return/break/continue/goto |

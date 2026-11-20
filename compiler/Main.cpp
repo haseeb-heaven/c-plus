@@ -29,6 +29,7 @@ namespace {
 struct Options {
   std::string command;
   std::string input;
+  std::vector<std::string> inputs;
   std::string output;
   std::string emitC;
   Mode mode = Mode::Safe;
@@ -167,8 +168,10 @@ int main(int argc, char **argv) {
   }
 
   opts.command = positional[0];
-  if (positional.size() > 1)
-    opts.input = positional[1];
+  for (size_t i = 1; i < positional.size(); ++i)
+    opts.inputs.push_back(positional[i]);
+  if (!opts.inputs.empty())
+    opts.input = opts.inputs[0];
 
   if (opts.command == "test" || opts.command == "bench" ||
       opts.command == "demos") {
@@ -196,6 +199,7 @@ int main(int argc, char **argv) {
   DriverOptions d;
   d.command = opts.command;
   d.input = opts.input;
+  d.inputs = opts.inputs;
   d.output = opts.output;
   d.emitC = opts.emitC;
   d.mode = opts.mode;

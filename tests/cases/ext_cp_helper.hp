@@ -1,4 +1,6 @@
 #ifndef EXT_CP_HELPER_HP
+
+#include "cplus/cplus.h"
 #define EXT_CP_HELPER_HP
 
 class Box {

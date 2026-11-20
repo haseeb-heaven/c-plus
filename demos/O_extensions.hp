@@ -1,4 +1,6 @@
 #ifndef O_EXTENSIONS_HP
+
+#include "cplus/cplus.h"
 #define O_EXTENSIONS_HP
 
 /* Modern C+ header: class with constructor and method, lowered from .hp. */

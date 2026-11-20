@@ -53,13 +53,13 @@ public:
     collectAllocations();
     collectReturnExtents();
     propagateReturnExtents();
-    checkPointerLeaks();
     checkMemcpyOverlap();
     checkDataRaces();
     checkSignalHandlers();
     checkStaticBufferCalls();
     checkCtypeChar();
     checkUncheckedIo();
+    checkConstCastMutation();
     checkMacroStatements();
     checkForkThreads();
     checkRestrictAliasing();
@@ -75,7 +75,6 @@ public:
         checkNanCompare(i);
         checkVlaSizeof(i);
         checkZeroAlloc(i);
-        checkBitfield(i);
         checkFflushStdin(i);
         checkVla(i);
         if (isIdent(i, "alloca"))
@@ -94,9 +93,7 @@ public:
           errorAt(toks_[i], "optimizer attributes that can lie about side "
                             "effects are not supported in safe C+");
         if (isIdent(i, "realloc"))
-          errorAt(toks_[i],
-                  "raw realloc can lose the original block on failure; use "
-                  "cplus_realloc");
+          checkRawRealloc(i);
       }
     }
   }
@@ -520,28 +517,6 @@ private:
     }
   }
 
-  void checkBitfield(size_t i) {
-    if (!isPunct(i, ":")) return;
-    size_t prev = i == 0 ? kNPos : i - 1;
-    while (prev != kNPos && trivia(prev)) {
-      if (prev == 0) { prev = kNPos; break; }
-      --prev;
-    }
-    size_t next = nextSig(i);
-    if (prev == kNPos || next >= toks_.size() ||
-        toks_[prev].kind != TokKind::Identifier ||
-        toks_[next].kind != TokKind::Number)
-      return;
-    size_t pp = prev == 0 ? kNPos : prev - 1;
-    while (pp != kNPos && trivia(pp)) {
-      if (pp == 0) { pp = kNPos; break; }
-      --pp;
-    }
-    if (pp == kNPos || toks_[pp].kind != TokKind::Identifier) return;
-    errorAt(toks_[i], "bit-field layout and signedness are not portable; use "
-                      "explicit masks and shifts");
-  }
-
   void checkFflushStdin(size_t i) {
     if (!isIdent(i, "fflush")) return;
     size_t lp = nextSig(i);
@@ -579,6 +554,48 @@ private:
         errorAt(toks_[inner], "variable-length stack allocation has no bounds "
                               "check; use cplus_alloc");
     }
+  }
+
+  /// Only reject `p = realloc(p, ...)` (and bare calls).  Wrappers such as
+  /// `return realloc(p, n);` and alias assignments may be perfectly safe.
+  void checkRawRealloc(size_t i) {
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return;
+    size_t rp = match(lp, "(", ")");
+    if (rp == kNPos)
+      return;
+    auto args = splitArgs(lp + 1, rp);
+    if (args.empty())
+      return;
+    std::string target = baseName(args[0].first, args[0].second);
+    size_t eq = kNPos;
+    for (size_t k = i; k > 0; --k) {
+      if (isPunct(k, "=")) { eq = k; break; }
+      if (isPunct(k, ";") || isPunct(k, "{") || isPunct(k, "}"))
+        break;
+    }
+    if (eq != kNPos) {
+      size_t lhs = eq == 0 ? kNPos : eq - 1;
+      while (lhs != kNPos && trivia(lhs)) {
+        if (lhs == 0) { lhs = kNPos; break; }
+        --lhs;
+      }
+      if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier &&
+          toks_[lhs].text == target) {
+        errorAt(toks_[i], "raw realloc can lose the original block on failure; "
+                          "use cplus_realloc");
+        return;
+      }
+    }
+    size_t prev = i == 0 ? kNPos : i - 1;
+    while (prev != kNPos && trivia(prev)) {
+      if (prev == 0) { prev = kNPos; break; }
+      --prev;
+    }
+    if (prev == kNPos || isPunct(prev, ";") || isPunct(prev, "{") ||
+        isPunct(prev, "}"))
+      errorAt(toks_[i], "raw realloc return value is ignored");
   }
 
   void checkNanCompare(size_t i) {
@@ -633,16 +650,128 @@ private:
     }
   }
 
+  /// Casting away const and then writing through the result is undefined for
+  /// an originally const object.  A plain cast (Lua-style ABI casts) is fine.
+  void checkConstCastMutation() {
+    std::set<std::string> constNames;
+    std::set<std::string> castPtrs;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i)) {
+        constNames.clear();
+        castPtrs.clear();
+      }
+      if (isIdent(i, "const")) {
+        size_t n = nextSig(i);
+        while (n < toks_.size() && toks_[n].kind == TokKind::Identifier) {
+          size_t after = nextSig(n);
+          if (isPunct(after, "=") || isPunct(after, ";") ||
+              isPunct(after, "[")) {
+            constNames.insert(toks_[n].text);
+            break;
+          }
+          n = after;
+        }
+        continue;
+      }
+      if (isPunct(i, "(")) {
+        size_t close = match(i, "(", ")");
+        if (close != kNPos) {
+          bool hasStar = false;
+          for (size_t k = i + 1; k < close; ++k)
+            if (isPunct(k, "*")) hasStar = true;
+          size_t after = nextSig(close);
+          if (hasStar && isPunct(after, "&")) {
+            size_t owner = nextSig(after);
+            if (owner < toks_.size() && constNames.count(toks_[owner].text)) {
+              for (size_t k = i; k > 0; --k) {
+                if (isPunct(k, "=")) {
+                  size_t lhs = k == 0 ? kNPos : k - 1;
+                  while (lhs != kNPos && trivia(lhs)) {
+                    if (lhs == 0) { lhs = kNPos; break; }
+                    --lhs;
+                  }
+                  if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier)
+                    castPtrs.insert(toks_[lhs].text);
+                  break;
+                }
+                if (isPunct(k, ";") || isPunct(k, "{")) break;
+              }
+            }
+          }
+        }
+      }
+      if (toks_[i].kind == TokKind::Identifier && castPtrs.count(toks_[i].text)) {
+        size_t prev = i == 0 ? kNPos : i - 1;
+        while (prev != kNPos && trivia(prev)) {
+          if (prev == 0) { prev = kNPos; break; }
+          --prev;
+        }
+        size_t next = nextSig(i);
+        bool derefWrite = isPunct(prev, "*") && isPunct(next, "=");
+        bool indexWrite = false;
+        if (isPunct(next, "[")) {
+          size_t rb = match(next, "[", "]");
+          if (rb != kNPos && isPunct(nextSig(rb), "="))
+            indexWrite = true;
+        }
+        if (derefWrite || indexWrite)
+          errorAt(toks_[i], "casting away const and writing to the original "
+                            "object is undefined");
+      }
+    }
+  }
+
+  void checkNegativeComparison() {
+    std::set<std::string> negativeNames;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i))
+        negativeNames.clear();
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      if (isPunct(nextSig(i), "=")) {
+        size_t value = nextSig(nextSig(i));
+        if (isPunct(value, "-")) {
+          long ignored = 0;
+          if (number(toks_[nextSig(value)], &ignored))
+            negativeNames.insert(toks_[i].text);
+        }
+      }
+      if (!negativeNames.count(toks_[i].text))
+        continue;
+      size_t op = nextSig(i);
+      if (isPunct(op, "<") || isPunct(op, "<=") || isPunct(op, ">") ||
+          isPunct(op, ">=")) {
+        size_t rhs = nextSig(op);
+        if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier)
+          errorAt(toks_[i], "comparison of a negative value with an unsigned "
+                            "operand is always false or true");
+      }
+    }
+  }
+
   void checkMacroStatements() {
     std::istringstream in(source_);
     std::string line;
     unsigned lineNo = 0;
     while (std::getline(in, line)) {
       ++lineNo;
-      if (line.find("#define") == std::string::npos)
+      size_t def = line.find("#define");
+      if (def == std::string::npos)
         continue;
-      size_t semicolon = line.find(';');
-      if (semicolon == std::string::npos)
+      // A multi-statement macro is only unsafe when a ';' appears at the
+      // replacement list's top level.  Statements inside { ... }, do { } while
+      // or an if/else body are already grouped.
+      int paren = 0, brace = 0;
+      bool unsafe = false;
+      for (size_t k = def + 7; k < line.size(); ++k) {
+        char c = line[k];
+        if (c == '(') ++paren;
+        else if (c == ')') --paren;
+        else if (c == '{') ++brace;
+        else if (c == '}') --brace;
+        else if (c == ';' && paren == 0 && brace == 0) unsafe = true;
+      }
+      if (!unsafe)
         continue;
       if (line.find("do {") != std::string::npos &&
           line.find("while (0)") != std::string::npos)
@@ -652,7 +781,7 @@ private:
       d.message = "multi-statement macro must be wrapped in do { ... } while (0)";
       d.file = filename_;
       d.line = lineNo;
-      d.column = static_cast<unsigned>(semicolon + 1);
+      d.column = 1;
       d.help = "wrap the macro body to keep if/else binding correct";
       diags_.report(std::move(d));
     }
@@ -1001,8 +1130,6 @@ private:
     }
   }
 
-  /// Reassigning a pointer that still owns a C+ allocation loses the old
-  /// block.  Reassigning from cplus_realloc(p, ...) is allowed.
   void checkPointerLeaks() {
     std::map<std::string, bool> live;
     for (size_t i = 0; i < toks_.size(); ++i) {

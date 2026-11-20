@@ -67,3 +67,26 @@ Benchmarks after the restructure still run against `clang -O2`. The managed
 allocator costs roughly 3.4x in the allocation microbenchmark; method dispatch
 and RAII loops are near 1.00x in legacy mode, with safe-mode overhead coming
 from UBSan instrumentation. See `LIMITATIONS.md` for the latest table.
+
+## Removal of unsound token heuristics
+
+Following evidence from real C projects, the following token heuristics were
+removed rather than extended with more special cases:
+
+- pointer-reassignment leak tracking (false positives on `c4.c`);
+- universal bit-field rejection (bit-fields are valid C);
+- negative-literal comparison heuristic (needs real types);
+- blanket `realloc` and cast-qual rejection (broke valid wrappers and legacy C);
+- automatic `-include cplus/cplus.h` (its `print` macro collided with cJSON's
+  own `print()` function). C+ sources now include the header explicitly.
+
+Sound checks retained: constant and simple-loop array bounds with interval
+evaluation, pointer arithmetic beyond one-past-end, UBSan runtime checks,
+RAII/borrow lowering, and Clang diagnostics promoted to errors.
+
+Real applications after these fixes (`COMPILER=c+`, safe mode unless noted):
+calculator, TinyExpr, cJSON, Parson and JSMN build and run successfully.
+Intentional safe-mode rejections remain for 2048 (unsafe `printf` in a signal
+handler) and Lua (`setjmp`/`longjmp` bypass deterministic cleanup). `c4.c` is
+rejected by Clang itself because of `#define int long long` on `main`, so it is
+not a C+ regression.

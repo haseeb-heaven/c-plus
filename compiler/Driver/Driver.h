@@ -26,6 +26,7 @@ namespace cplus {
 struct DriverOptions {
   std::string command; // "build", "run", "check"
   std::string input;
+  std::vector<std::string> inputs;
   std::string output;
   std::string emitC; // if non-empty, write the lowered C here
   Mode mode = Mode::Safe;

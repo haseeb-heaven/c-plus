@@ -16,3 +16,14 @@ They are kept here as evidence of the limitation, not as verified safety tests.
 - `abi_mismatch/file1.c` + `file2.c` — cross-translation-unit declaration
   mismatch (`int` vs `double`) links cleanly in C. C+ compiles one TU at a
   time and has no whole-program ABI check, so this remains undetected.
+- `heuristics/classic_bug10_reassign_leak.c` — pointer reassignment leak cannot
+  be proven reliably with token tracking (false positives on real C such as
+  `c4.c`); the check was removed.
+- `heuristics/classic_bug51_bitfield.c` — bit-field layout is
+  implementation-defined but valid C; rejecting it was unsound and removed.
+- `heuristics/classic_bug20_signconvert.c` — signed/unsigned comparison needs
+  real type information; the token heuristic produced false positives on valid
+  C and was removed. Clang's `-Wsign-compare` remains as a warning.
+- `heuristics/classic_bug13_literal_write.c` — writing through a `char *`
+  initialized from a string literal is UB, but promoting Clang's qualifier
+  warning to an error breaks valid legacy C (e.g. `c4.c`). It is now a warning.
