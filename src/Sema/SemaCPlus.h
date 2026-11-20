@@ -49,6 +49,10 @@ struct RewrittenSource {
   std::string text;
   /// True if the rewrite changed anything.
   bool changed = false;
+  /// Names of `resource struct` types declared in this translation unit.
+  std::vector<std::string> resourceTypes;
+  /// Names of `class` types declared in this translation unit.
+  std::vector<std::string> classTypes;
 };
 
 /// Rewrite C+ specific syntax into equivalent C syntax annotated for the

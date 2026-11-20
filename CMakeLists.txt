@@ -88,12 +88,8 @@ add_library(cplus_core STATIC
   src/Sema/SemaCPlus.cpp
   src/Sema/CPlusLexer.cpp
   src/Sema/CPlusRewriter.cpp
+  src/Sema/RaiiLowering.cpp
   src/Sema/TypeChecker.cpp
-  src/Sema/RaiiAnalyzer.cpp
-  src/Ast/ClassLowering.cpp
-  src/Ast/ResourceLowering.cpp
-  src/Analysis/BoundsAnalysis.cpp
-  src/Analysis/OwnershipAnalysis.cpp
   src/Runtime/CPlusRuntime.cpp
   src/Driver/Driver.cpp)
 
@@ -236,5 +232,26 @@ if(APPLE)
   target_link_libraries(cplus_runtime PUBLIC pthread)
 endif()
 
-install(TARGETS c+ RUNTIME DESTINATION bin)
+# The driver needs to locate the host C compiler, the C+ runtime archive and
+# the C+ headers at run time.  The compile-time values are defaults; all of
+# them can be overridden through environment variables (CPLUS_CLANG,
+# CPLUS_INCLUDE, CPLUS_RUNTIME_LIB).
+find_program(CPLUS_CLANG_BIN NAMES clang
+  PATHS /usr/bin /usr/local/bin
+  NO_DEFAULT_PATH)
+if(NOT CPLUS_CLANG_BIN)
+  set(CPLUS_CLANG_BIN "clang")
+endif()
+message(STATUS "C+ backend C compiler: ${CPLUS_CLANG_BIN}")
+
+target_compile_definitions(cplus_core PRIVATE
+  CPLUS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  CPLUS_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/include"
+  CPLUS_CLANG_BIN="${CPLUS_CLANG_BIN}"
+  CPLUS_RUNTIME_LIB="$<TARGET_FILE:cplus_runtime>")
+add_dependencies(c+ cplus_runtime)
+
+install(TARGETS c+ cplus_runtime
+  RUNTIME DESTINATION bin
+  ARCHIVE DESTINATION lib)
 install(FILES include/cplus/cplus.h DESTINATION include/cplus)

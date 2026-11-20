@@ -4,12 +4,11 @@
 #define CPLUS_CPLUSREWRITER_H
 
 #include "Diagnostics.h"
+#include "Sema/SemaCPlus.h"
 
 #include <string>
 
 namespace cplus {
-
-struct RewrittenSource;
 
 /// Rewrite C+ specific syntax into equivalent, annotated C syntax.
 /// See src/Sema/CPlusRewriter.cpp for the transformation rules.

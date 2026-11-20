@@ -60,10 +60,37 @@ void cplus_check_nonnull(const void *ptr, const char *file, int line,
 
 void *cplus_alloc(size_t size);
 void *cplus_zalloc(size_t size);
+void *cplus_realloc(void *ptr, size_t size);
+
+/* Zero `size` bytes at `p`.  Used by the cplus_move() ownership transfer. */
+void cplus_zero(void *p, size_t size);
 
 /* Explicit release of a managed allocation.  Safe to call exactly once.
  * Calling it twice is a detected double-free, not silent corruption. */
 void cplus_release(void *ptr);
+
+/* Checked array index.  Returns `index` when it is in range and terminates
+ * the process otherwise.  Available for code that wants an explicit check
+ * where the compiler cannot prove the extent. */
+size_t cplus_check_index(size_t index, size_t count, const char *file,
+                         int line, const char *expr);
+
+/* Allocate a zeroed managed object of type T. */
+#define cplus_new(T) ((T *)cplus_zalloc(sizeof(T)))
+
+/* Allocate a zeroed managed array of N elements of type T. */
+#define cplus_new_array(T, N) ((T *)cplus_zalloc(sizeof(T) * (size_t)(N)))
+
+/* Transfer ownership out of an owning variable.  The source is zeroed so that
+ * its automatic destructor becomes a no-op; destructors must tolerate a
+ * zeroed handle.  This is a GNU statement expression, available because C+
+ * compiles in gnu17 mode. */
+#define cplus_move(x)                                                         \
+  ({                                                                          \
+    __typeof__(x) _cplus_move_tmp = (x);                                      \
+    cplus_zero(&(x), sizeof(x));                                              \
+    _cplus_move_tmp;                                                          \
+  })
 
 /* -------------------------------------------------------------------------
  * Scope guards (RAII)
