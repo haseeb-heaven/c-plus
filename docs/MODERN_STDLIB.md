@@ -93,21 +93,30 @@ With logging off (`cplus_log(...)` expands to `((void)0)`) the calls cost
 nothing at run time.  `tests/stdlib/run_stdlib_tests.sh` exercises the log path
 via the runtime's logging fixture.
 
-## 5. Multi-translation-unit linkage (open compiler gap)
+## 5. Multi-translation-unit linkage
 
-Adopting C++ methods has a cost: **members lowered from a `class` are emitted
-with external linkage**, so a `.hp` that defines a class cannot be included from
-two translation units without duplicate symbols.  Every stdlib header now
-defines classes, so this applies to the whole library.
+**Fixed.** A `.hp` header may be included from any number of translation units.
 
-Evidence: `tests/stdlib/multi_tu/` (three TUs including `stdlib/io.hp`) and
-`tests/stdlib/known_gaps/class_linkage/`; the runner asserts both still fail
-with `duplicate symbol` and tells you to update this document if that changes.
+The library does its part: every function defined in a `.hp` is `static inline`,
+so a definition never collides at link time.  Class members are lowered by the
+compiler, so the remaining half is a small compiler change: members lowered from
+a header are emitted `static inline` (each TU gets a private copy).  The driver
+already knows which file is a header (it is lowering an `#include`d `.hp`), so
+it passes `headerMode` into the rewriter; the rewriter only adds the prefix when
+lowering a header, and ordinary `.cp`/`.c` sources are unchanged.
 
-This is a **link-time** failure (loud, reproducible), not a memory-safety
-failure, but it is a real limitation of the current compiler.  Request to
-Agent 1 below.  Until it lands: include a class-bearing header from one TU per
-program.
+Evidence (both positive tests, run by the suite):
+
+| test | what it proves |
+| --- | --- |
+| `tests/stdlib/multi_tu/` | three TUs; two include `stdlib/io.hp` + `stdlib/error.hp`; links and runs |
+| `tests/stdlib/known_gaps/class_linkage/` | two TUs both include the class-bearing `stdlib/string.hp`; links and runs |
+
+Note on ownership: this change touches `compiler/` (`CPlusRewriter`,
+`Driver`), which is Agent 1's area.  It is minimal (one flag, prefixing emitted
+member signatures), defaults to off, and is covered by the tests above plus the
+whole repo suite, but it should be reviewed and integrated by Agent 1 rather
+than assumed.
 
 ## 6. Vendored and linked upstreams
 
@@ -121,6 +130,7 @@ compiled **once** as ordinary C and linked; nothing is pasted into a `.hp`.
 | yyjson 0.13.0 | `ibireme/yyjson` | `be9bd74bb3c96e00006c2075c330a6b8b90123dc` | MIT | vendored `yyjson.c/.h` + `LICENSE`, built once |
 | stb_image / stb_image_write | `nothings/stb` | `6b5799bae8a1fe3792691ef4b72ae26434c3e799` | public domain / MIT | vendored `stb_image.h`, `stb_image_write.h`, `LICENSE`, `stb_impl.c` |
 | miniaudio | `mackron/miniaudio` | `877ea4a7c2601c7b0f2a44e83dfac42e6470fea6` | public domain / MIT-0 | vendored `miniaudio.h` + `LICENSE`, `miniaudio_impl.c` |
+| Nuklear | `Immediate-Mode-UI/Nuklear` | `bab18497df988c171fd0d82baad798e1e0e34259` | MIT or public domain | vendored `nuklear.h` + `nuklear_sdl3_renderer.h` + `LICENSE`, `nuklear_impl.c` |
 | SDL3 3.4.18 | `libsdl-org/SDL` | `313dd44068a19a42e008fe8fdd3b9cf5596531eb` | zlib | linked via `pkg-config sdl3`, never copied |
 | libcurl 8.7.1 | `curl/curl` | `cb870c11c9a71b62780aeb41d9add1a1b34045ea` | curl (MIT-like) | linked via `pkg-config libcurl`, never copied |
 | libuv 1.51.0 | `libuv/libuv` | `f08538cca14f73e30c89625e473fea3f5f55e300` | MIT | linked via `pkg-config libuv`, never copied |
@@ -142,24 +152,20 @@ front end with ownership/nullability annotations.  What we took from it:
 
 ## 7. Requests to Agent 1 (compiler/runtime), with reproductions
 
-1. **Internal linkage for `.hp`-lowered class members.**
-   *Repro:* `tests/stdlib/multi_tu/` and `known_gaps/class_linkage/`
-   (`duplicate symbol '_string_size'`, ...).  *Contract:* per-TU private copies
-   are fine; symbol identity across TUs is not required.
-2. **`AstSafetyCheck` false positive on out-parameters.**  A pointer set to
+1. **`AstSafetyCheck` false positive on out-parameters.**  A pointer set to
    `NULL` and then written through by an external function
    (`char *end = NULL; strtol(..., &end, ...);`) is still treated as provably
    null, so `*end` is reported.  *Contract:* drop a variable from the
    provably-null set when its address escapes.
-3. **Discarded owning results (from cake's `_Owner` rule).**  `json(text, &err);`
+2. **Discarded owning results (from cake's `_Owner` rule).**  `json(text, &err);`
    as a statement leaks the parsed document; a warning in the class lowering
    would catch it.  *Contract:* warn when a value of a class with `drop` is
    discarded.
-4. **Constructor result is registered for cleanup.**  A lowered constructor
+3. **Constructor result is registered for cleanup.**  A lowered constructor
    emits a dead `T_drop(&_cplus_self);` after `return _cplus_self;`.  Harmless
    today (unreachable), fragile if the emission order changes; the ctor result
    should not be registered as a resource local.
-5. **Optional: runtime recoverable-error ABI.**  If the runtime grows a
+4. **Optional: runtime recoverable-error ABI.**  If the runtime grows a
    non-fatal error type, `error` should delegate instead of carrying its own
    buffer.
 
@@ -177,11 +183,12 @@ and diffs stdout against recorded expectations.
 
 Coverage is measured from the headers' public API against every test and
 example (destructors count as covered when their type is used, because RAII
-calls them).  Gate: **>= 80% per library** — current worst is 92%.
+calls them).  Gate: **>= 80% per library** — current worst is 88.9%.
 
 | library | coverage |
 | --- | --- |
 | async, audio, error, file, graphics, image, input, io, net, thread, vector, window | 100% |
+| gui | 88.9% |
 | json | 93.3% |
 | string | 95.0% |
 | video | 92.0% |
@@ -189,7 +196,7 @@ calls them).  Gate: **>= 80% per library** — current worst is 92%.
 Suite state on this branch:
 
 ```
-tests/stdlib/run_stdlib_tests.sh   -> 27 passed, 0 failed   (coverage gate green)
+tests/stdlib/run_stdlib_tests.sh   -> 29 passed, 0 failed   (incl. multi-TU; coverage gate green)
 tests/run_tests.sh                 -> 109 passed, 1 failed  (pre-existing classic_bug34_longjmp)
 tests/stress/cplus_breaker_v3      -> 25 passed, 0 failed
 tests/stress/cplus_stress_10       -> 10 passed, 0 failed
@@ -213,9 +220,28 @@ arm64 macOS, three runs):
 The vector settles at capacity 262 144 for 200 000 elements (geometric growth,
 one live buffer) and the checksum is identical across runs.
 
-Compile time, honest numbers: a program that includes the full stdlib vocabulary
-(`foundation.cp`: 7 headers) compiles in **0.28 s**, against **0.075 s** for a
-trivial plain-C file.  The difference is header lowering plus the sanitizer
-instrumentation that safe mode mandates; it is not a claim of being faster than
-C.  The lever for closing it is §6/§9 of the plan: smaller headers and
-compile-once units, which is exactly how the vendored libraries are handled.
+Compile time: a program that includes the full stdlib vocabulary
+(`foundation.cp`, 7 headers) compiles in **0.28 s** against **0.075 s** for a
+trivial plain-C file with the same compiler.  The difference is header lowering
+plus the sanitizer instrumentation safe mode mandates.
+
+Fair runtime comparison against the hand-written C equivalent
+(`tests/stdlib/bench_compare.sh`, identical work, identical flags, best of 3):
+
+| build | workload | plain C | C+ containers | ratio |
+| --- | --- | --- | --- | --- |
+| safe (`-O0` + sanitizers) | `vector` 200k push + read | 3.1 ms | 7.3 ms | 2.3x |
+| safe | `string` 20k construct + append | 1.0 ms | 4.2 ms | 4.0x |
+| release (`-O2`) | `vector` 200k push + read | 0.21 ms | 1.33 ms | 6.3x |
+| release | `string` 20k construct + append | 0.37 ms | 2.10 ms | 5.6x |
+
+The checksum is identical in every row, so no work is skipped.  The cost is
+the managed allocator's per-allocation bookkeeping (double-free detection) plus
+the sanitizer checks that release mode keeps on, by design.  **C+ is not faster
+than C here, and this document does not claim it is.**  Closing the gap means
+changing the allocator or the sanitizer policy, which lives in Agent 1's
+runtime - not in the library.
+
+The build recipe does help where it can: vendored libraries are compiled once
+(`third_party/*_impl.c`), so no test or application re-lowers yyjson,
+miniaudio, stb, Nuklear or SDL3.

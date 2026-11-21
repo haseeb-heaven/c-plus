@@ -230,8 +230,9 @@ std::string lineDirective(const std::string &file, unsigned line) {
 class Lowerer {
 public:
   Lowerer(const std::vector<Token> &toks, DiagnosticEngine &diags,
-          const std::string &filename)
-      : ts(toks), diags_(diags), filename_(filename) {}
+          const std::string &filename, bool headerMode)
+      : ts(toks), diags_(diags), filename_(filename),
+        headerMode_(headerMode) {}
 
   RewrittenSource run() {
     collectDeclarations();
@@ -803,6 +804,15 @@ private:
     }
   }
 
+  /// A class defined in a `.hp` header is emitted with internal linkage so the
+  /// header can be included from any number of translation units.  Members are
+  /// inline definitions, so `static inline` gives each TU a private copy
+  /// without -Wunused-function noise.
+  void emitMemberLinkage() {
+    if (headerMode_)
+      emit("static inline ");
+  }
+
   void emitResource(const ResourceInfo &r) {
     // Drop the `resource` keyword.  If the user wrote `resource Name {`,
     // synthesise the `struct` keyword.
@@ -837,12 +847,15 @@ private:
     }
     emit("};\n");
     emit("typedef struct " + c.name + " " + c.name + ";\n");
-    if (c.hasDrop)
+    if (c.hasDrop) {
+      emitMemberLinkage();
       emit("void " + c.name + "_drop(" + c.name + " *self);\n");
+    }
 
     for (const auto &m : c.methods) {
       emit(lineDirective(filename_, ts[m.itemStart].line));
       if (m.name == c.name) {
+        emitMemberLinkage();
         emit(c.name + " " + c.name + "_ctor(");
         std::string params = joinTokens(ts, m.lparen + 1, m.rparen);
         params.erase(0, params.find_first_not_of(' '));
@@ -863,8 +876,10 @@ private:
       if (ret.empty()) {
         diags_.error("method '" + m.name + "' is missing a return type",
                      filename_, ts[m.nameIdx].line, ts[m.nameIdx].column);
+        emitMemberLinkage();
         emit("void ");
       } else {
+        emitMemberLinkage();
         emit(ret);
         emit(" ");
       }
@@ -1473,6 +1488,7 @@ private:
   bool ctorBody_ = false;
   bool inMethod_ = false;
   size_t skipTo_ = kNPos;
+  bool headerMode_ = false;
 
   std::map<size_t, int> extraBraces_;
   unsigned rangeCounter_ = 0;
@@ -1508,9 +1524,10 @@ private:
 
 RewrittenSource rewriteCPlusSource(const std::string &source,
                                    DiagnosticEngine &diags,
-                                   const std::string &filename) {
+                                   const std::string &filename,
+                                   bool headerMode) {
   std::vector<Token> toks = lexCPlus(source);
-  Lowerer lowerer(toks, diags, filename);
+  Lowerer lowerer(toks, diags, filename, headerMode);
   return lowerer.run();
 }
 

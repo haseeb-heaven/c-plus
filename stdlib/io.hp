@@ -19,7 +19,7 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 
-void println(void) {
+static inline void println(void) {
     print();
 }
 

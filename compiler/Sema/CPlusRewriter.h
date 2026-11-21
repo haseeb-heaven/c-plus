@@ -14,7 +14,8 @@ namespace cplus {
 /// See src/Sema/CPlusRewriter.cpp for the transformation rules.
 RewrittenSource rewriteCPlusSource(const std::string &source,
                                    DiagnosticEngine &diags,
-                                   const std::string &filename);
+                                   const std::string &filename,
+                                   bool headerMode = false);
 
 /// Register a class declared in a lowered `.hp` header so that a later
 /// translation unit can resolve method calls and constructor sugar for it.

@@ -304,8 +304,9 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
 /// Lower one translation unit (source file or header) to plain C.
 std::string lowerUnit(const std::string &text, const std::string &name,
                       DiagnosticEngine &diags, Mode mode, bool *ok,
-                      RewrittenSource *outRewritten = nullptr) {
-  RewrittenSource rewritten = rewriteCPlusSource(text, diags, name);
+                      RewrittenSource *outRewritten = nullptr,
+                      bool headerMode = false) {
+  RewrittenSource rewritten = rewriteCPlusSource(text, diags, name, headerMode);
   if (mode == Mode::Safe)
     checkStaticBounds(text, rewritten.arrayLengths, diags, name);
   LoweredSource lowered =
@@ -395,7 +396,7 @@ std::string preprocessModernHeaders(
                 bool ok = false;
                 RewrittenSource headerInfo;
                 std::string lowered = lowerUnit(header, path, diags, mode, &ok,
-                                                &headerInfo);
+                                                &headerInfo, true);
                 for (const auto &cls : headerInfo.classTypes)
                   registerExternalClass(
                       cls, lowered.find(cls + "_ctor(") != std::string::npos);

@@ -81,6 +81,16 @@ build_ext stb "$ROOT/third_party/stb/stb_impl.c" "$ROOT/third_party/stb" || {
   echo "error: cannot build third_party/stb (see $OUT/stb.build.log)" >&2; exit 1; }
 build_ext miniaudio "$ROOT/third_party/miniaudio/miniaudio_impl.c" "$ROOT/third_party/miniaudio" || {
   echo "error: cannot build third_party/miniaudio (see $OUT/miniaudio.build.log)" >&2; exit 1; }
+# Nuklear needs the SDL3 headers and links against SDL3.
+if [ ! -f "$EXT/libnuklear.a" ] || [ "$ROOT/third_party/nuklear/nuklear_impl.c" -nt "$EXT/libnuklear.a" ]; then
+  if "$CXX" -c "$ROOT/third_party/nuklear/nuklear_impl.c" -o "$EXT/nuklear.o" -O2 \
+      -I"$ROOT/third_party/nuklear" $(pkg-config --cflags sdl3) >"$OUT/nuklear.build.log" 2>&1; then
+    ar rcs "$EXT/libnuklear.a" "$EXT/nuklear.o"
+    printf 'built external library: %s\n' "$EXT/libnuklear.a"
+  else
+    echo "error: cannot build third_party/nuklear (see $OUT/nuklear.build.log)" >&2; exit 1
+  fi
+fi
 
 pkg_libs() {
   pkg-config --cflags --libs "$@" 2>/dev/null || true
@@ -116,8 +126,11 @@ libs_for() {
       -Wl,-framework,CoreFoundation -Wl,-framework,CoreAudio \
       -Wl,-framework,AudioToolbox"
   fi
-  if grep -qE 'stdlib/(window|graphics|input)\.hp' "$_src"; then
+  if grep -qE 'stdlib/(window|graphics|input|gui)\.hp' "$_src"; then
     _out="$_out $(pkg_libs sdl3)"
+  fi
+  if grep -q 'stdlib/gui.hp' "$_src"; then
+    _out="$_out -I$ROOT/third_party/nuklear -L$EXT -lnuklear"
   fi
   if grep -q 'stdlib/http.hp' "$_src"; then
     _out="$_out $(pkg_libs libcurl)"
@@ -222,38 +235,44 @@ if matches "coverage"; then
   fi
 fi
 
-# --- documented gap: class-bearing .hp included from two TUs ---------------
+# --- multiple translation units sharing a class-bearing header --------------
 
 if matches "multi_tu"; then
   if "$CPLUS" build "$ROOT/tests/stdlib/multi_tu/main.cp" \
       "$ROOT/tests/stdlib/multi_tu/part_a.cp" \
       "$ROOT/tests/stdlib/multi_tu/part_b.cp" \
-      -o "$OUT/multi_tu" >"$OUT/multi_tu.build.log" 2>&1; then
-    fail "multi_tu_gap" "expected duplicate symbols; the gap appears fixed - update docs/MODERN_STDLIB.md"
-  else
-    if grep -q "duplicate symbol" "$OUT/multi_tu.build.log"; then
-      pass "multi_tu_gap (expected failure: class members have external linkage)"
+      -o "$OUT/multi_tu" >"$OUT/multi_tu.build.log" 2>&1 &&
+     SDL_VIDEODRIVER=dummy "$OUT/multi_tu" <"$ROOT/tests/stdlib/multi_tu.stdin" \
+        >"$OUT/multi_tu.stdout" 2>"$OUT/multi_tu.stderr"; then
+    if [ -f "$ROOT/tests/stdlib/multi_tu.expected" ] &&
+       ! diff -u "$ROOT/tests/stdlib/multi_tu.expected" "$OUT/multi_tu.stdout" \
+         >"$OUT/multi_tu.diff" 2>&1; then
+      fail "multi_tu" "stdout mismatch; see build/stdlib-tests/multi_tu.diff"
     else
-      fail "multi_tu_gap" "failed for an unexpected reason; see build/stdlib-tests/multi_tu.build.log"
+      pass "multi_tu"
     fi
+  else
+    fail "multi_tu" "build or run failed; see build/stdlib-tests/multi_tu.build.log"
   fi
 fi
 
-# --- documented known gap: class-bearing .hp in two TUs --------------------
+# --- the same class-bearing header from two TUs (string.hp) ---------------
 
-if matches "class_linkage_gap"; then
+if matches "class_linkage"; then
   if "$CPLUS" build "$ROOT/tests/stdlib/known_gaps/class_linkage/main.cp" \
       "$ROOT/tests/stdlib/known_gaps/class_linkage/part_a.cp" \
       "$ROOT/tests/stdlib/known_gaps/class_linkage/part_b.cp" \
-      -o "$OUT/class_linkage_gap" \
-      >"$OUT/class_linkage_gap.log" 2>&1; then
-    fail "class_linkage_gap" "expected a duplicate-symbol link failure (gap fixed? update the test and docs/MODERN_STDLIB.md)"
-  else
-    if grep -q "duplicate symbol" "$OUT/class_linkage_gap.log"; then
-      pass "class_linkage_gap (expected failure: duplicate class symbols)"
+      -o "$OUT/class_linkage" >"$OUT/class_linkage.log" 2>&1 &&
+     "$OUT/class_linkage" >"$OUT/class_linkage.stdout" 2>"$OUT/class_linkage.stderr"; then
+    if [ -f "$ROOT/tests/stdlib/known_gaps/class_linkage.expected" ] &&
+       ! diff -u "$ROOT/tests/stdlib/known_gaps/class_linkage.expected" \
+         "$OUT/class_linkage.stdout" >"$OUT/class_linkage.diff" 2>&1; then
+      fail "class_linkage" "stdout mismatch; see build/stdlib-tests/class_linkage.diff"
     else
-      fail "class_linkage_gap" "failed for an unexpected reason; see build/stdlib-tests/class_linkage_gap.log"
+      pass "class_linkage"
     fi
+  else
+    fail "class_linkage" "build or run failed; see build/stdlib-tests/class_linkage.log"
   fi
 fi
 

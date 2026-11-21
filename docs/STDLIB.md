@@ -41,6 +41,7 @@ int main(void) {
 | `stdlib/window.hp` | `sdl` (`valid`, `subsystem_flags`, `drop`), `window` (`valid`, `native`, `size`, `set_title`, `drop`) | SDL3 |
 | `stdlib/graphics.hp` | `renderer` (`valid`, `native`, `set_color`, `clear`, `fill_rect`, `line`, `present`, `set_vsync`, `read`, `drop`), `surface` (`valid`, `width`, `height`, `pixel`, `drop`) | SDL3 |
 | `stdlib/input.hp` | `poll_event`, `event_is_quit`, `event_is_key_down`, `event_is_key_up`, `event_scancode`, `event_text`, `keyboard_state`, `key_pressed`, `mouse_state`, `mouse_button_left` | SDL3 |
+| `stdlib/gui.hp` | `gui` (`valid`, `native`, `handle_event`, `input_*`, `window_begin`, `window_end`, `layout_row_dynamic`, `layout_row_static`, `button`, `label`, `slider`, `widget_bounds`, `render`, `style_text_color`, `drop`) | Nuklear + its SDL3 renderer backend |
 | `stdlib/http.hp` | `http` (process lifetime), `http_headers` (`add`, `native`, `drop`), `http_client` (`valid`, `set_timeout`, `follow_redirects`, `set_headers`, `get`, `post`, `status`, `bytes`, `drop`) | libcurl |
 | `stdlib/async.hp` | `loop` (`valid`, `native`, `run`, `stop`, `now_ms`, `drop`), `timer` (`valid`, `start`, `stop`, `is_active`, `drop`), `read_file`, `sleep_ms`, `uv_error_text` | libuv |
 | `stdlib/video.hp` | `media` (`valid`, `stream_count`, `video_index`, `video_width`, `video_height`, `video_codec`, `duration_ms`, `open_decoder`, `drop`), `decoder` (`valid`, `width`, `height`, `next_frame`, `drop`), `frame` (`valid`, `width`, `height`, `format`, `pts`, `drop`), `video_error_text` | FFmpeg |
@@ -65,5 +66,7 @@ and run by `tests/stdlib/run_stdlib_tests.sh`.
 - Every method logs through `cplus_log`; run `c+ --log trace` (or
   `--log-level trace`) to see the call trace.  With logging off each call
   compiles to nothing.
+- Headers are safe to include from several translation units: functions are
+  `static inline` and members lowered from a `.hp` get internal linkage.
 - The library does not hide C: native handles are reachable with `native()`.
 - `.h` files remain fully supported; these headers are additive.

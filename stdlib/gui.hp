@@ -1,0 +1,191 @@
+/* C+ standard library: immediate-mode GUI via Nuklear (MIT / public domain)
+ * with its official SDL3 renderer backend, vendored in third_party/nuklear.
+ *
+ * C++-flavoured RAII: `gui ui = gui(w.native(), r.native(), &err);` owns the
+ * Nuklear context, `ui.window_begin(...)` / `ui.button(...)` build a frame and
+ * `ui.render(...)` draws it through SDL3.  Nuklear does the widget logic and
+ * the SDL3 backend does the drawing; nothing here reimplements a UI toolkit.
+ *
+ * Build third_party/nuklear/nuklear_impl.c once and link with pkg-config sdl3.
+ */
+#ifndef CPLUS_STD_GUI_HP
+#define CPLUS_STD_GUI_HP
+
+#define NK_INCLUDE_FIXED_TYPES
+#define NK_INCLUDE_STANDARD_IO
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_FONT_BAKING
+#define NK_INCLUDE_DEFAULT_FONT
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
+#define NK_INCLUDE_COMMAND_USERDATA
+
+#include <SDL3/SDL.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "nuklear.h"
+#include "nuklear_sdl3_renderer.h"
+
+class gui {
+    struct nk_context *context;
+    int pointer_x;
+    int pointer_y;
+    int initialized;
+
+    /* Takes native handles: a constructor must not use `->` on other objects. */
+    gui(SDL_Window *native_window, SDL_Renderer *native_renderer, error *err) {
+        error_reset(err);
+        this->context = NULL;
+        this->pointer_x = 0;
+        this->pointer_y = 0;
+        this->initialized = 0;
+        if (native_window == NULL || native_renderer == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "gui: invalid window or renderer");
+        } else {
+            this->context = nk_sdl_init(native_window, native_renderer,
+                                        nk_sdl_allocator());
+            if (this->context == NULL) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "gui: nk_sdl_init failed");
+            } else {
+                struct nk_font_atlas *atlas =
+                    nk_sdl_font_stash_begin(this->context);
+                nk_sdl_font_stash_end(this->context);
+                (void)atlas;
+                this->initialized = 1;
+            }
+        }
+    }
+
+    int valid(void) {
+        return this->initialized != 0 && this->context != NULL;
+    }
+
+    /* Borrowed native context for APIs that need the Nuklear type. */
+    struct nk_context *native(void) {
+        return this->context;
+    }
+
+    /* Feed SDL events here; returns 1 when Nuklear consumed the event. */
+    int handle_event(SDL_Event *event) {
+        if (!this->valid() || event == NULL)
+            return 0;
+        return nk_sdl_handle_event(this->context, event) ? 1 : 0;
+    }
+
+    void input_begin(void) {
+        if (this->valid())
+            nk_input_begin(this->context);
+    }
+
+    void input_motion(int x, int y) {
+        if (!this->valid())
+            return;
+        this->pointer_x = x;
+        this->pointer_y = y;
+        nk_input_motion(this->context, x, y);
+    }
+
+    /* A click happens at the current cursor position, so the press/release
+     * must carry the last motion coordinates. */
+    void input_button(int down) {
+        if (this->valid())
+            nk_input_button(this->context, NK_BUTTON_LEFT, this->pointer_x,
+                            this->pointer_y, down);
+    }
+
+    void input_end(void) {
+        if (this->valid())
+            nk_input_end(this->context);
+    }
+
+    /* Begins a window; returns 1 when its body should be emitted. */
+    int window_begin(const char *title, float x, float y, float w, float h,
+                     unsigned flags) {
+        if (!this->valid() || title == NULL)
+            return 0;
+        return nk_begin(this->context, title, nk_rect(x, y, w, h),
+                        (nk_flags)flags)
+                   ? 1
+                   : 0;
+    }
+
+    void window_end(void) {
+        if (this->valid())
+            nk_end(this->context);
+    }
+
+    /* Layout: Nuklear places widgets in rows, so a row must be opened before
+     * the widgets that fill it. */
+    void layout_row_dynamic(float height, int columns) {
+        if (this->valid() && columns > 0)
+            nk_layout_row_dynamic(this->context, height, columns);
+    }
+
+    void layout_row_static(float height, int item_width, int columns) {
+        if (this->valid() && columns > 0)
+            nk_layout_row_static(this->context, height, item_width, columns);
+    }
+
+    int button(const char *label) {
+        if (!this->valid() || label == NULL)
+            return 0;
+        return nk_button_label(this->context, label) ? 1 : 0;
+    }
+
+    void label(const char *text) {
+        if (this->valid() && text != NULL)
+            nk_label(this->context, text, NK_TEXT_LEFT);
+    }
+
+    int slider(int *value, int minimum, int maximum) {
+        if (!this->valid() || value == NULL)
+            return 0;
+        return nk_slider_int(this->context, minimum, value, maximum, 1);
+    }
+
+    /* Bounds of the widget just emitted, for tests and layout code.  Returns
+     * 0 when there is no laid-out widget (the rect would be meaningless). */
+    int widget_bounds(int *x, int *y, int *width, int *height) {
+        struct nk_rect bounds;
+        if (!this->valid() || this->context->current == NULL)
+            return 0;
+        bounds = nk_widget_bounds(this->context);
+        /* Reject NaN/inf so the int conversion below is always defined. */
+        if (!(bounds.x == bounds.x) || !(bounds.y == bounds.y) ||
+            !(bounds.w == bounds.w) || !(bounds.h == bounds.h))
+            return 0;
+        if (x != NULL)
+            *x = (int)bounds.x;
+        if (y != NULL)
+            *y = (int)bounds.y;
+        if (width != NULL)
+            *width = (int)bounds.w;
+        if (height != NULL)
+            *height = (int)bounds.h;
+        return 1;
+    }
+
+    /* Ends the frame: draws and clears.  Call once per frame, after the last
+     * window_end(), or Nuklear will reject the next frame. */
+    void render(int anti_aliasing) {
+        if (this->valid())
+            nk_sdl_render(this->context, anti_aliasing ? NK_ANTI_ALIASING_ON
+                                                       : NK_ANTI_ALIASING_OFF);
+    }
+
+    int style_text_color(unsigned char r, unsigned char g, unsigned char b) {
+        if (!this->valid())
+            return 0;
+        this->context->style.text.color = nk_rgb(r, g, b);
+        return 1;
+    }
+
+    void drop(void) {
+        if (this->initialized && this->context != NULL) {
+            nk_sdl_shutdown(this->context);
+            this->context = NULL;
+            this->initialized = 0;
+        }
+    }
+};
+
+#endif
