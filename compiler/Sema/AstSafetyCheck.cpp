@@ -24,6 +24,36 @@ using namespace clang;
 namespace cplus {
 namespace {
 
+/// Find a free/release call on a named variable inside a function body.
+struct FreeCallFinder : RecursiveASTVisitor<FreeCallFinder> {
+  const std::string &target;
+  bool found = false;
+  explicit FreeCallFinder(const std::string &t) : target(t) {}
+
+  static std::string nameOf(const Expr *e) {
+    if (!e)
+      return std::string();
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(x))
+      if (uo->getOpcode() == UO_AddrOf)
+        x = uo->getSubExpr()->IgnoreParenImpCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        return vd->getNameAsString();
+    return std::string();
+  }
+
+  bool VisitCallExpr(CallExpr *c) {
+    if (!c->getDirectCallee())
+      return true;
+    std::string n = c->getDirectCallee()->getNameAsString();
+    if ((n == "free" || n == "cplus_release") && c->getNumArgs() >= 1 &&
+        nameOf(c->getArg(0)) == target)
+      found = true;
+    return true;
+  }
+};
+
 class SafetyVisitor : public RecursiveASTVisitor<SafetyVisitor> {
 public:
   SafetyVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string filename,
@@ -47,6 +77,12 @@ public:
   const std::map<std::string, llvm::APSInt> &constLocals() const { return constLocals_; }
   void setAssignedVars(const std::set<std::string> &s) { assignedVars_ = s; }
   const std::set<std::string> &assignedVars() const { return assignedVars_; }
+  const std::set<std::string> &functionsReturningFreed() const {
+    return functionsReturningFreed_;
+  }
+  void setFunctionsReturningFreed(const std::set<std::string> &s) {
+    functionsReturningFreed_ = s;
+  }
   const std::set<std::string> &nonVolatileGlobals() const {
     return nonVolatileGlobals_;
   }
@@ -318,6 +354,7 @@ public:
     std::string previousFunction = currentFunction_;
     std::set<std::string> previousNulls = nullVars_;
     currentFunction_ = fd->getNameAsString();
+    currentFnDecl_ = fd;
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
@@ -330,6 +367,20 @@ public:
     currentFunction_ = previousFunction;
     nullVars_ = previousNulls;
     return result;
+  }
+
+  bool VisitReturnStmt(ReturnStmt *s) {
+    if (report_ || !s->getRetValue() || !currentFnDecl_ ||
+        !currentFnDecl_->getBody())
+      return true;
+    std::string name = varNameOf(s->getRetValue());
+    if (name.empty())
+      return true;
+    FreeCallFinder finder(name);
+    finder.TraverseStmt(currentFnDecl_->getBody());
+    if (finder.found)
+      functionsReturningFreed_.insert(currentFunction_);
+    return true;
   }
 
   bool VisitVarDecl(VarDecl *vd) {
@@ -370,6 +421,12 @@ public:
       }
       if (isa<StringLiteral>(init->IgnoreParenCasts()))
         stringPtrs_.insert(vd->getNameAsString());
+      if (const auto *call = dyn_cast<CallExpr>(init)) {
+        if (call->getDirectCallee() &&
+            functionsReturningFreed_.count(
+                call->getDirectCallee()->getNameAsString()))
+          releasedVars_.insert(vd->getNameAsString());
+      }
     }
     if (!vd->getType()->isPointerType())
       return true;
@@ -918,6 +975,8 @@ private:
   std::set<std::string> stringPtrs_;
   std::map<std::string, llvm::APSInt> constLocals_;
   std::set<std::string> assignedVars_;
+  std::set<std::string> functionsReturningFreed_;
+  const FunctionDecl *currentFnDecl_ = nullptr;
   std::string currentFunction_;
 
 public:
@@ -970,6 +1029,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setHandledReallocs(collect.handledReallocs());
   check.setConstLocals(collect.constLocals());
   check.setAssignedVars(collect.assignedVars());
+  check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // CFG/dataflow definite-initialization analysis on each function body.

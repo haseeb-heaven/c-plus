@@ -45,7 +45,7 @@ declared safe subset.
 | unique ownership of resource/managed locals | IMPLEMENTED | resource_copy, resource_assign, move tests |
 | ownership transfer on return / cplus_move | IMPLEMENTED | resource_move, move_return |
 | use-after-move rejection | IMPLEMENTED | use_after_move, moved_from_warning |
-| use-after-free (direct + simple alias, straight-line, realloc success branch) | IMPLEMENTED | uaf_direct, uaf_alias, libc_alias_uaf, realloc_success_alias_uaf |
+| use-after-free (direct + simple alias, straight-line, realloc success branch, interprocedural return of freed pointer) | IMPLEMENTED | uaf_direct, uaf_alias, libc_alias_uaf, realloc_success_alias_uaf, interproc_return_uaf |
 | double-free (same var + simple alias + interproc free) | IMPLEMENTED | malloc_double_free, interproc_double_free, double_release_alias |
 | invalid frees (stack/global object, string literal, array, interior pointer) | IMPLEMENTED | invalid_free_stack, invalid_free_global, invalid_free_string, invalid_free_array, invalid_free_interior, release_stack_pointer; `p + 0` accepted |
 | shared vs exclusive mutable borrows (fields) | PARTIAL | borrow_mut_conflict, borrow_field_ok; containers not covered |

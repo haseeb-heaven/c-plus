@@ -171,11 +171,19 @@ int main(void){{ int *p=malloc({n}); if(!p)return 2; int *a=p; int *b=a; int *c=
 void rel(int*p){{ free(p); }}
 int main(void){{ int *p=malloc({n}); if(!p)return 2; rel(p); return *p; }}""",
         True, "CPLUS-LIFETIME")
+    add(f"interproc_return_uaf_{n}", f"""#include <stdlib.h>
+int *make_freed(void){{ int *p=malloc({n}*sizeof(int)); if(!p)return 0; free(p); return p; }}
+int main(void){{ int *q=make_freed(); if(!q)return 1; return *q; }}""",
+        True, "CPLUS-LIFETIME")
     add(f"nested_ok_{n}", f"""#include <stdlib.h>
 int main(void){{ int *p=malloc({n}); if(!p)return 1; {{ int *q=p; *q=5; }} int v=*p; free(p); return v==5?0:1; }}""",
         False, runtime=(n % 8 == 0))
     add(f"chain_ok_{n}", f"""#include <stdlib.h>
 int main(void){{ int *p=malloc({n}); if(!p)return 1; int *a=p; int *b=a; *b=9; int v=*a; free(p); return v==9?0:1; }}""",
+        False, runtime=(n % 8 == 0))
+    add(f"interproc_return_ok_{n}", f"""#include <stdlib.h>
+int *make_fresh(void){{ int *t=malloc(4); if(!t)return 0; free(t); int *p=malloc({n}*sizeof(int)); return p; }}
+int main(void){{ int *q=make_fresh(); if(!q)return 1; *q=3; int v=*q; free(q); return v==3?0:1; }}""",
         False, runtime=(n % 8 == 0))
 
 # ---------------------------------------------------------------------------
