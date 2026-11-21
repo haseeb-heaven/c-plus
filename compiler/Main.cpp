@@ -199,11 +199,20 @@ int main(int argc, char **argv) {
         opts.output = argv[++i];
       continue;
     }
-    // gcc-style two-token options: -I dir, -D NAME, -U NAME, -L dir, -l lib.
-    if ((a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") &&
-        i + 1 < argc) {
-      opts.extraArgs.emplace_back(a);
-      opts.extraArgs.emplace_back(argv[++i]);
+    // gcc-style two-token options: -I dir, -D NAME, -U NAME, -L dir, -l lib,
+    // -x language.  Consuming the value here prevents it from being mistaken
+    // for a subcommand or source file.
+    if ((a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l" ||
+         a == "-x") && i + 1 < argc) {
+      std::string value = argv[++i];
+      if (a == "-x") {
+        // C+ lowers every source to C and buildClangArgs already emits `-x c`.
+        // Accept gcc's -x spelling (and ignore the value) without duplicating
+        // the flag after the input file.
+      } else {
+        opts.extraArgs.emplace_back(a);
+        opts.extraArgs.emplace_back(value);
+      }
       continue;
     }
     if (a == "--emit-c") {
@@ -232,22 +241,19 @@ int main(int argc, char **argv) {
     printUsage(errs());
     return 1;
   }
+  if (positional[0] == "help") {
+    printUsage(outs());
+    return 0;
+  }
 
   auto isKnownCommand = [](const std::string &s) {
     return s == "build" || s == "run" || s == "check" || s == "test" ||
            s == "bench" || s == "demos";
   };
-  auto looksLikeSource = [](const std::string &s) {
-    static const char *const exts[] = {".c",  ".cp",  ".cpp", ".cc",
-                                       ".cxx", ".C",  ".h",   ".hp"};
-    for (const char *ext : exts)
-      if (s.size() >= std::string(ext).size() &&
-          s.compare(s.size() - std::string(ext).size(),
-                    std::string(ext).size(), ext) == 0)
-        return true;
-    return s.find('/') != std::string::npos;
-  };
-  if (!isKnownCommand(positional[0]) && looksLikeSource(positional[0]))
+  // gcc/g++ accept bare source names with no extension and multiple inputs.
+  // Anything that is not a C+ subcommand is therefore an implicit `build`,
+  // matching `gcc file.c -o file` and `c+ c4.c -o c4`.
+  if (!isKnownCommand(positional[0]))
     positional.insert(positional.begin(), "build");
 
   opts.command = positional[0];
