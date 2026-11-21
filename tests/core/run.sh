@@ -68,6 +68,7 @@ build_run nested_raii "$ROOT/tests/core/positive/nested_raii.cp"
 build_run borrow_valid "$ROOT/tests/core/positive/borrow_valid.cp"
 build_run realloc_chain "$ROOT/tests/core/positive/realloc_chain.c"
 build_run zero_alloc "$ROOT/tests/core/positive/zero_alloc.c"
+build_run thread_guard_ok "$ROOT/tests/core/positive/thread_guard_ok.cp"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -92,6 +93,15 @@ else
   bad release_mode "release build/run failed"
 fi
 
+if "$CPLUS" build "$ROOT/tests/core/positive/multi_tu_resource_main.c" \
+   "$ROOT/tests/core/positive/multi_tu_resource_a.c" \
+   -I"$ROOT/tests/core/positive" -o "$OUT/multi_tu_resource" \
+   >"$OUT/multi_tu_resource.log" 2>&1 && "$OUT/multi_tu_resource"; then
+  ok multi_tu_resource
+else
+  bad multi_tu_resource "multi-TU resource build/run failed"
+fi
+
 echo "core safety: ownership warnings"
 build_expect_stderr moved_from_warning "$ROOT/tests/safety/moved_from_warning.cp" "use of moved-from"
 build_expect_stderr double_move_warning "$ROOT/tests/safety/double_move_warning.cp" "moved more than once"
@@ -104,6 +114,7 @@ expect_reject multi_dim_negative "$ROOT/tests/safety/multi_dim_negative.c"
 expect_trap alloc_overflow_mul "$ROOT/tests/safety/alloc_overflow_mul.cp" 107
 expect_trap double_release_after_realloc "$ROOT/tests/safety/double_release_after_realloc.c" 104
 expect_reject alias_borrow_escape "$ROOT/tests/safety/alias_borrow_escape.c"
+expect_reject thread_global_write "$ROOT/tests/safety/thread_global_write.c"
 expect_reject constructor_early_return "$ROOT/tests/safety/constructor_early_return.cp"
 expect_reject bounds_loop "$ROOT/tests/safety/bounds_loop.c"
 expect_reject uninit_branch "$ROOT/tests/safety/uninit_branch.c"

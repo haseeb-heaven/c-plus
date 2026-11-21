@@ -102,7 +102,7 @@ enforced with C+ AST/token analysis and UBSan.
   `pthread_create`; existing RAII mutex/Guard and data-race token checks remain.
   This is a warning, not full race-freedom enforcement.
 
-Core-safety runner now has 25 cases, plus a 14-case scratch-style probe script (`tests/core/scratch_probe.sh`). Full suites remain green.
+Core-safety runner now has 49 cases, plus a 14-case scratch-style probe script (`tests/core/scratch_probe.sh`). Full suites remain green.
 
 ## Coverage
 
@@ -134,3 +134,14 @@ boundary, not a claim that all of libc is safe or Rust-equivalent.
 - `cplus_realloc` previously kept the old pointer live, so releasing an old
   alias was silently accepted. It now releases the old allocation, making
   stale aliases detectable (double release / invalid length query).
+
+## Additional evidence
+
+- Multi-TU resource: a resource declared in a plain `.h` header builds and
+  links across two translation units when the RAII-relevant declarations are
+  represented in C form. A `resource struct` inside a plain `.h` is not
+  lowered (headers are lowered only when written as `.hp`), which is a
+  documented cross-TU limitation.
+- Thread guard: synchronized shared counter across two threads passes with
+  RAII lock/unlock. An unsynchronized global write in a thread function is
+  rejected.
