@@ -21,6 +21,7 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -265,6 +266,18 @@ std::string findCPlusRuntimeLib() {
   return std::string();
 }
 
+/// Read a specific source line for diagnostic context (Clang-style snippet).
+static std::string sourceLineAt(const std::string &file, unsigned line) {
+  if (file.empty() || !line)
+    return std::string();
+  std::ifstream in(file);
+  std::string s;
+  unsigned n = 1;
+  while (std::getline(in, s) && n < line)
+    ++n;
+  return n == line ? s : std::string();
+}
+
 void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
                       const std::string &inputName) {
   for (const auto &d : diags.diags()) {
@@ -295,6 +308,29 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
     DRIVER_LOG(CLOG_WARN, "diagnostic %s %s:%u: %s", level, file.c_str(),
                d.line, d.message.c_str());
     os << level << ": " << d.message << "\n";
+    // Clang-style source snippet with a caret so the location is visible
+    // without opening the file.
+    if (d.line) {
+      std::string src = sourceLineAt(file, d.line);
+      if (!src.empty()) {
+        os << "  " << src << "\n";
+        if (d.column && d.column <= src.size() + 1) {
+          os << "  ";
+          for (unsigned k = 1; k < d.column; ++k)
+            os << ' ';
+          os << "^";
+          size_t start = d.column - 1;
+          size_t end = start;
+          while (end < src.size() &&
+                 (std::isalnum(static_cast<unsigned char>(src[end])) ||
+                  src[end] == '_' || src[end] == '.'))
+            ++end;
+          for (size_t k = start + 1; k < end; ++k)
+            os << "~";
+          os << "\n";
+        }
+      }
+    }
     if (!d.help.empty())
       os << "help: " << d.help << "\n";
     for (const auto &n : d.notes) {
