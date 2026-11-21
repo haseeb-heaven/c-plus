@@ -8,6 +8,7 @@ add_library(cplus_safecrt STATIC
   src/safe_format.c
   src/safe_io.c
   src/safe_log.c
+  src/safe_stats.c
   src/safe_memory.c
   src/safe_platform.c
   src/safe_string.c
