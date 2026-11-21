@@ -18,6 +18,11 @@ errno_t cplus_sc_strcat_s(char *restrict dest, rsize_t dmax, const char *restric
 errno_t cplus_sc_strncat_s(char *restrict dest, rsize_t dmax, const char *restrict src, rsize_t slen){ return cplus_sc__strncat_s_chk(dest,dmax,src,slen,BOS_UNKNOWN,BOS_UNKNOWN); }
 rsize_t cplus_sc_strnlen_s(const char *str, rsize_t smax){ return cplus_sc__strnlen_s_chk(str,smax,BOS_UNKNOWN); }
 errno_t cplus_sc_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *indicator){ return cplus_sc__strcmp_s_chk(dest,dmax,src,indicator,BOS_UNKNOWN,BOS_UNKNOWN); }
+typedef void (*cplus_sc_constraint_handler_t)(const char *restrict msg, void *restrict ptr, errno_t error);
+extern constraint_handler_t cplus_sc_set_mem_constraint_handler_s(constraint_handler_t handler);
+extern constraint_handler_t cplus_sc_set_str_constraint_handler_s(constraint_handler_t handler);
+void cplus_sc_set_mem_constraint_handler_s_wrapper(void (*handler)(const char*,void*,int)){ cplus_sc_set_mem_constraint_handler_s((constraint_handler_t)handler); }
+void cplus_sc_set_str_constraint_handler_s_wrapper(void (*handler)(const char*,void*,int)){ cplus_sc_set_str_constraint_handler_s((constraint_handler_t)handler); }
 #ifdef __cplusplus
 }
 #endif

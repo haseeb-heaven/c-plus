@@ -72,7 +72,7 @@ done
 
 for f in "$ROOT"/stdlib/safe/src/*.c; do
   base=$(basename "$f" .c)
-  "$CC" $CFLAGS_W -c "$f" -o "$OUT/w_$base.o"
+  "$CC" $CFLAGS_W -I$SC/include -c "$f" -o "$OUT/w_$base.o"
 done
 
 ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/w_*.o
