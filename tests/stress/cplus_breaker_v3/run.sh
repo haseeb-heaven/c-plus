@@ -21,14 +21,14 @@ run_case() {
   fi
   "$CPLUS_BIN" build "$source" -o "$exe" >"$OUT/$name.build.stdout" 2>"$OUT/$name.build.stderr" || rc=$?
   if [ "$rc" -ne 0 ]; then
-    if [ "$kind" = trap ]; then echo "PASS [reject] $name (compile-time rejection)"; PASS=$((PASS+1));
+    if [[ "$kind" == "trap" ]]; then echo "PASS [reject] $name (compile-time rejection)"; PASS=$((PASS+1));
     else echo "FAIL [compile] $name (see tests/out/stress/cplus_breaker_v3/$name.build.stderr)"; FAIL=$((FAIL+1));
     fi
     return
   fi
   rc=0
   ( cd "$OUT" && "$exe" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr" ) || rc=$?
-  if [ "$kind" = trap ]; then
+  if [[ "$kind" == "trap" ]]; then
     if [ "$rc" -eq 0 ]; then echo "FAIL [no trap] $name"; FAIL=$((FAIL+1));return;fi
     if [ -n "$trap_code" ] && [ "$rc" -ne "$trap_code" ]; then echo "FAIL [wrong exit $rc, expected $trap_code] $name"; FAIL=$((FAIL+1));return;fi
     if [ -z "$trap_code" ]; then echo "PASS [trapped $rc; inspect stderr] $name"; else echo "PASS [trap $trap_code] $name";fi
