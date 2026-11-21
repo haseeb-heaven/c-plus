@@ -459,6 +459,20 @@ public:
     return result;
   }
 
+  bool VisitCastExpr(CastExpr *cast) {
+    if (!report_)
+      return true;
+    const Expr *sub = cast->getSubExpr()->IgnoreParenImpCasts();
+    if (!sub || !cast->getType()->isPointerType() ||
+        !sub->getType()->isIntegerType() || isNullConstant(sub))
+      return true;
+    // A pointer forged from an arbitrary integer has no provenance that the
+    // checker can verify. Reject in STRICT, warn in DEFAULT.
+    warnAt(cast->getBeginLoc(),
+           "pointer created from integer value has unverifiable provenance");
+    return true;
+  }
+
   bool VisitReturnStmt(ReturnStmt *s) {
     if (report_ || !s->getRetValue() || !currentFnDecl_ ||
         !currentFnDecl_->getBody())

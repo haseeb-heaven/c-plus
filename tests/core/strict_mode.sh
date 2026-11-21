@@ -60,6 +60,7 @@ expect_warn_then_reject unverified_realloc "$FIX/unverified_realloc.c"
 expect_warn_then_reject unverified_thread  "$FIX/unverified_thread.c"
 expect_warn_then_reject branch_uaf "$ROOT/tests/safety/branch_uaf.c"
 expect_warn_then_reject thread_volatile_race "$ROOT/tests/safety/thread_volatile_race.c"
+expect_warn_then_reject pointer_from_int "$ROOT/tests/safety/pointer_from_int.c"
 
 # UAF diagnostic must name the pointer and show the source-location chain.
 "$CPLUS" check --default "$FIX/uaf_chain.c" >"$OUT/chain.stdout" 2>"$OUT/chain.stderr" || true

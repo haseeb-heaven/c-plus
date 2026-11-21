@@ -53,7 +53,7 @@ declared safe subset.
 | pointer alias tracking across branches/loops | PARTIAL -> IMPROVED | may-release state collected from if/loop bodies; definite double-free rejected, possible UAF warned in DEFAULT and rejected in STRICT; reassignment to fresh/null clears may-state |
 | definite initialization | IMPLEMENTED | uninit, uninit_branch, init_all_branches (CFG dataflow) |
 | nullability | IMPLEMENTED (provable cases) | null_deref, null_outparam |
-| provenance / arbitrary casts | UNSUPPORTED | documented gap |
+| provenance / arbitrary casts | PARTIAL -> IMPROVED | allocation/object/alias/string/array origins tracked; integer-forged pointers rejected in STRICT and warned in DEFAULT; casts from int still not proven safe |
 | buffer bounds (constant, constant-propagated local index, simple loops, multidim, memcpy/memset/strcpy/strncpy/strcat/snprintf) | IMPLEMENTED | constant_oob, loop_oob, multidim_bounds, bounds_var_index, memset_overflow, strcat_overflow, strncpy_overflow, snprintf_overflow |
 | libc nullability (null source pointers) | IMPLEMENTED | memcpy_null_source, mass_fuzz memcpy_null_src_* |
 | dynamic bounds checks | PARTIAL | UBSan + FORTIFY; not a complete spatial guarantee |
