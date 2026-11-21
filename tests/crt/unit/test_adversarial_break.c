@@ -17,7 +17,8 @@ int main(void) {
     /* memcpy_s: NULLs, zero, overflow, exact boundary */
     assert(cplus_memcpy_s(NULL,8,s,3)!=0);
     assert(cplus_memcpy_s(d,8,NULL,3)!=0);
-    assert(cplus_memcpy_s(d,0,s,0)!=0); /* dmax 0 invalid */
+    /* safeclib C11: slen==0 can be EOK even with dmax==0; dmax==0 with nonzero slen is error */
+    assert(cplus_memcpy_s(d,0,s,1)!=0);
     assert(cplus_memcpy_s(d,2,s,3)!=0); /* too small */
     /* smax==0: Annex K implementation-defined/constraint; accept error or success but no crash */
     (void)cplus_memcpy_s(d,8,s,0);

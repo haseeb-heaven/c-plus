@@ -1,0 +1,1524 @@
+/*------------------------------------------------------------------
+ * vsnprintf_s.c
+ *
+ * 2014-2019 Marco Paland
+ * November 2021, Reini Urban
+ *
+ * Copyright (c) 2014-2019, PALANDesign Hannover, Germany
+ * Copyright (c) 2021, 2024 by Reini Urban
+ * All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *------------------------------------------------------------------
+ */
+
+#ifdef FOR_DOXYGEN
+#include "safe_str_lib.h"
+#else
+#include "safeclib_private.h"
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+// \author (c) Marco Paland (info@paland.com)
+//             2014-2019, PALANDesign Hannover, Germany
+//
+// based on https://github.com/mpaland/printf/blob/master/printf.c
+// converted by Reini Urban Nov 2021 for the _s variants.
+// Also added support for %Lsc and %Lefg
+//
+// \license The MIT License (MIT)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+//
+// \brief Tiny printf, sprintf and (v)snprintf implementation, optimized for
+//        speed on embedded systems with a very limited
+//        resources. These routines are thread safe and reentrant! Use
+//        this instead of the bloated standard/newlib printf cause
+//        these use malloc for printf (and may not be thread safe).
+//
+///////////////////////////////////////////////////////////////////////////////
+
+/* safelib extensions:
+ * added support for _s
+ * %lc, %ls widechar conversions
+ */
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+
+#ifdef FOR_DOXYGEN
+#include "safe_str_lib.h"
+#else
+#include "safeclib_private.h"
+#endif
+
+// optionally define this globally (e.g. gcc -DPRINTF_INCLUDE_CONFIG_H ...) to
+// include the printf_config.h header file default: undefined
+#ifdef PRINTF_INCLUDE_CONFIG_H
+#include "printf_config.h"
+#endif
+
+// 'ntoa' conversion buffer size, this must be big enough to hold one converted
+// numeric number including padded zeros (dynamically created on stack)
+// default: 32 byte
+#ifndef PRINTF_NTOA_BUFFER_SIZE
+#define PRINTF_NTOA_BUFFER_SIZE 32U
+#endif
+
+// 'ftoa' conversion buffer size, this must be big enough to hold one converted
+// float number including padded zeros (dynamically created on stack)
+// default: 32 byte for double
+#ifndef PRINTF_FTOA_BUFFER_SIZE
+#define PRINTF_FTOA_BUFFER_SIZE 32U
+#endif
+
+// support for the floating point type (%f)
+// default: activated
+#ifndef PRINTF_DISABLE_SUPPORT_FLOAT
+#define PRINTF_SUPPORT_FLOAT
+#endif
+
+// support for exponential floating point notation (%e/%g)
+// default: activated
+#ifndef PRINTF_DISABLE_SUPPORT_EXPONENTIAL
+#define PRINTF_SUPPORT_EXPONENTIAL
+#endif
+
+// define the default floating point precision
+// default: 6 digits, resp. 12 for long double
+#ifndef PRINTF_DEFAULT_FLOAT_PRECISION
+#define PRINTF_DEFAULT_FLOAT_PRECISION 6U
+#endif
+
+// define the largest float suitable to print with %f
+// default: 1e9
+#ifndef PRINTF_MAX_FLOAT
+#define PRINTF_MAX_FLOAT 1e9
+#endif
+
+// support for the long long types (%llu or %p)
+// default: activated
+#ifndef PRINTF_DISABLE_SUPPORT_LONG_LONG
+#ifdef HAVE_LONG_LONG
+#define PRINTF_SUPPORT_LONG_LONG
+#else
+#undef PRINTF_SUPPORT_LONG_LONG
+#endif
+#endif
+
+// support for the long double types (%Lf %Le %Lg %La)
+// default: probed
+#ifndef PRINTF_DISABLE_SUPPORT_LONG_DOUBLE
+#ifdef HAVE_LONG_DOUBLE
+#define PRINTF_SUPPORT_LONG_DOUBLE
+#else
+#undef PRINTF_SUPPORT_LONG_DOUBLE
+#endif
+#endif
+
+// support for the ptrdiff_t type (%t)
+// ptrdiff_t is normally defined in <stddef.h> as long or long long type
+// default: activated
+#ifndef PRINTF_DISABLE_SUPPORT_PTRDIFF_T
+#define PRINTF_SUPPORT_PTRDIFF_T
+#endif
+
+// import float.h for DBL_MAX.
+#ifdef PRINTF_SUPPORT_FLOAT
+#ifdef HAVE_FLOAT_H
+#include <float.h>
+#else
+#undef PRINTF_SUPPORT_FLOAT
+#endif
+#endif
+
+// if need math.h and isinf. isinfl below.
+#ifdef PRINTF_SUPPORT_FLOAT
+#ifdef HAVE_MATH_H
+#include <math.h>
+#endif
+#ifndef HAVE_ISINF
+#ifdef HAVE___BUILTIN_ISINF
+#undef isinf
+#define isinf(x) __builtin_isinf(x)
+#else
+#ifdef HAVE_LIMITS_H
+#include <limits.h>
+#endif
+/* see also portable_isinfl below */
+static inline int portable_isinf(double x) {
+/* Handle special case for non-finite values */
+#ifdef INFINITY
+    if (x == INFINITY || x == -INFINITY) {
+        return 1;
+    }
+#endif
+/* IEEE 754 bit pattern checking */
+#if DBL_MANT_DIG == 53 && DBL_MAX_EXP == 1024
+    {
+        union {
+            uint64_t u;
+            double d;
+        } u;
+        u.d = x;
+        /* Mask off the sign bit (bit 63) */
+        uint64_t abs_u = u.u & 0x7FFFFFFFFFFFFFFFULL;
+        /* Infinity is Exponent=All 1s (0x7FF), Mantissa=All 0s */
+        return abs_u == 0x7FF0000000000000ULL;
+    }
+#else
+    /* Fallback comparison-based method */
+    if (x != x) {
+        return 0; /* NaN */
+    }
+    return (x + x == x) && (x != 0.0L);
+#endif
+}
+#define isinf(x) portable_isinf(x)
+#endif
+#endif
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+// internal flag definitions
+#define FLAGS_ZEROPAD (1U << 0U)
+#define FLAGS_LEFT (1U << 1U)
+#define FLAGS_PLUS (1U << 2U)
+#define FLAGS_SPACE (1U << 3U)
+#define FLAGS_HASH (1U << 4U) // ALTERNATE_FORM
+#define FLAGS_UPPERCASE (1U << 5U)
+#define FLAGS_CHAR (1U << 6U)
+#define FLAGS_SHORT (1U << 7U)
+#define FLAGS_LONG (1U << 8U)
+#define FLAGS_LONG_LONG (1U << 9U)
+#define FLAGS_PRECISION (1U << 10U)
+#define FLAGS_ADAPT_EXP (1U << 11U)
+#define FLAGS_LONG_DOUBLE (1U << 12U)
+
+// internal secure strlen
+// \return The length of the string (excluding the terminating 0) limited by
+// 'maxsize'
+static inline unsigned int safec_strnlen_s(const char *str, size_t maxsize) {
+    const char *s;
+    for (s = str; *s && maxsize--; ++s)
+        ;
+    return (unsigned int)(s - str);
+}
+
+// internal test if char is a digit (0-9)
+// \return true if char is a digit
+static inline bool safec_is_digit(char ch) {
+    return (ch >= '0') && (ch <= '9');
+}
+
+// internal ASCII string to unsigned int conversion
+static unsigned int safec_atoi(const char **str) {
+    unsigned int i = 0U;
+    while (safec_is_digit(**str)) {
+        i = i * 10U + (unsigned int)(*((*str)++) - '0');
+    }
+    return i;
+}
+
+// output the specified string in reverse, taking care of any zero-padding
+static size_t safec_out_rev(out_fct_type out, char *buffer, size_t idx,
+                            size_t maxlen, const char *buf, size_t len,
+                            unsigned int width, unsigned int flags) {
+    const size_t start_idx = idx;
+
+    // pad spaces up to given width
+    if (!(flags & FLAGS_LEFT) && !(flags & FLAGS_ZEROPAD)) {
+        for (size_t i = len; i < width; i++) {
+            int rc = out(' ', buffer, idx++, maxlen);
+            if (unlikely(rc < 0))
+                return rc;
+        }
+    }
+
+    // reverse string
+    while (len) {
+        int rc = out(buf[--len], buffer, idx++, maxlen);
+        if (unlikely(rc < 0))
+            return rc;
+    }
+
+    // append pad spaces up to given width
+    if (flags & FLAGS_LEFT) {
+        while (idx - start_idx < width) {
+            int rc = out(' ', buffer, idx++, maxlen);
+            if (unlikely(rc < 0))
+                return rc;
+        }
+    }
+
+    return idx;
+}
+
+// internal itoa format
+static size_t safec_ntoa_format(out_fct_type out, const char *funcname,
+                                char *buffer, size_t idx, size_t maxlen,
+                                char *buf, size_t len, bool negative,
+                                unsigned int base, unsigned int prec,
+                                unsigned int width, unsigned int flags) {
+    // number of real digits, before any padding
+    const size_t ndigits = len;
+    // pad leading zeros
+    if (!(flags & FLAGS_LEFT)) {
+        if (width && (flags & FLAGS_ZEROPAD) &&
+            (negative || (flags & (FLAGS_PLUS | FLAGS_SPACE)))) {
+            width--;
+        }
+        while ((len < prec) && (len < PRINTF_NTOA_BUFFER_SIZE)) {
+            buf[len++] = '0';
+        }
+        while ((flags & FLAGS_ZEROPAD) && (len < width) &&
+               (len < PRINTF_NTOA_BUFFER_SIZE)) {
+            buf[len++] = '0';
+        }
+    }
+
+    // handle hash
+    if (flags & FLAGS_HASH) {
+        if (base == 8U) {
+            // octal: a leading 0, unless the padding already provides one
+            if (!len || buf[len - 1] != '0') {
+                if (len < PRINTF_NTOA_BUFFER_SIZE) {
+                    buf[len++] = '0';
+                }
+            }
+        } else if ((base == 16U) || (base == 2U)) {
+            // the 0x/0b prefix is part of the zero-padded width
+            if (!(flags & FLAGS_PRECISION)) {
+                size_t pfx = 2;
+                while (pfx-- && len > ndigits) {
+                    len--;
+                }
+            }
+            if ((base == 16U) && !(flags & FLAGS_UPPERCASE) &&
+                (len < PRINTF_NTOA_BUFFER_SIZE)) {
+                buf[len++] = 'x';
+            } else if ((base == 16U) && (flags & FLAGS_UPPERCASE) &&
+                       (len < PRINTF_NTOA_BUFFER_SIZE)) {
+                buf[len++] = 'X';
+            } else if ((base == 2U) && (len < PRINTF_NTOA_BUFFER_SIZE)) {
+                buf[len++] = 'b';
+            }
+            if (len < PRINTF_NTOA_BUFFER_SIZE) {
+                buf[len++] = '0';
+            }
+        }
+    }
+
+    if (len < PRINTF_NTOA_BUFFER_SIZE) {
+        if (negative) {
+            buf[len++] = '-';
+        } else if (flags & FLAGS_PLUS) {
+            buf[len++] = '+'; // ignore the space if the '+' exists
+        } else if (flags & FLAGS_SPACE) {
+            buf[len++] = ' ';
+        }
+    }
+    if (width > 2147483614) {
+        char msg[80];
+        snprintf(msg, sizeof msg, "%s: width exceeds max", funcname);
+        invoke_safe_str_constraint_handler(msg, buf, ESLEMAX);
+        return -ESLEMAX;
+    }
+
+    return safec_out_rev(out, buffer, idx, maxlen, buf, len, width, flags);
+}
+
+// internal itoa for 'long' type
+static size_t safec_ntoa_long(out_fct_type out, const char *funcname,
+                              char *buffer, size_t idx, size_t maxlen,
+                              unsigned long value, bool negative,
+                              unsigned long base, unsigned int prec,
+                              unsigned int width, unsigned int flags) {
+    char buf[PRINTF_NTOA_BUFFER_SIZE + 1];
+    size_t len = 0U;
+
+    // no hash for 0 values
+    if (!value) {
+        flags &= ~FLAGS_HASH;
+    }
+
+    // write if precision != 0 and value is != 0
+    if (!(flags & FLAGS_PRECISION) || value) {
+        do {
+            const char digit = (char)(value % base);
+            buf[len++] =
+                digit < 10 ? '0' + digit
+                           : (flags & FLAGS_UPPERCASE ? 'A' : 'a') + digit - 10;
+            value /= base;
+        } while (value && (len < PRINTF_NTOA_BUFFER_SIZE));
+    }
+
+    return safec_ntoa_format(out, funcname, buffer, idx, maxlen, buf, len,
+                             negative, (unsigned int)base, prec, width, flags);
+}
+
+// internal itoa for 'long long' type
+#ifdef PRINTF_SUPPORT_LONG_LONG
+static size_t safec_ntoa_long_long(out_fct_type out, const char *funcname,
+                                   char *buffer, size_t idx, size_t maxlen,
+                                   unsigned long long value, bool negative,
+                                   unsigned long long base, unsigned int prec,
+                                   unsigned int width, unsigned int flags) {
+    char buf[PRINTF_NTOA_BUFFER_SIZE];
+    size_t len = 0U;
+
+    // no hash for 0 values
+    if (!value) {
+        flags &= ~FLAGS_HASH;
+    }
+
+    // write if precision != 0 and value is != 0
+    if (!(flags & FLAGS_PRECISION) || value) {
+        do {
+            const char digit = (char)(value % base);
+            buf[len++] =
+                digit < 10 ? '0' + digit
+                           : (flags & FLAGS_UPPERCASE ? 'A' : 'a') + digit - 10;
+            value /= base;
+        } while (value && (len < PRINTF_NTOA_BUFFER_SIZE));
+    }
+
+    return safec_ntoa_format(out, funcname, buffer, idx, maxlen, buf, len,
+                             negative, (unsigned int)base, prec, width, flags);
+}
+#endif // PRINTF_SUPPORT_LONG_LONG
+
+#ifdef PRINTF_SUPPORT_FLOAT
+
+// internal formatting of a finite double via libc: reconstructs the format
+// from flags, width and precision. 'conv' is one of f, e, g (lowercase).
+static size_t safec_dtoa_libc(out_fct_type out, const char *funcname,
+                              char *buffer, size_t idx, size_t maxlen,
+                              double value, unsigned int prec,
+                              unsigned int width, unsigned int flags,
+                              char conv) {
+    char fmt[32];
+    char *f = fmt;
+    char *s, *p;
+    int n;
+
+    *f++ = '%';
+    if (flags & FLAGS_LEFT)
+        *f++ = '-';
+    if (flags & FLAGS_PLUS)
+        *f++ = '+';
+    if (flags & FLAGS_SPACE)
+        *f++ = ' ';
+    if (flags & FLAGS_HASH)
+        *f++ = '#';
+    if (flags & FLAGS_ZEROPAD)
+        *f++ = '0';
+    if (width)
+        f += sprintf(f, "%u", width);
+    if (flags & FLAGS_PRECISION)
+        f += sprintf(f, ".%u", prec);
+    *f++ = (flags & FLAGS_UPPERCASE) ? (char)(conv - 'a' + 'A') : conv;
+    *f = '\0';
+
+    n = snprintf(NULL, 0, fmt, value);
+    if (n < 0)
+        return (size_t)-EINVAL;
+    s = (char *)malloc((size_t)n + 1);
+    if (!s) {
+        invoke_safe_str_constraint_handler(
+            "vsnprintf_s: malloc float arg failed", buffer, RCNEGATE(ENOMEM));
+        return (size_t)-ENOMEM;
+    }
+    snprintf(s, (size_t)n + 1, fmt, value);
+    for (p = s; *p; p++) {
+        int rc = out(*p, buffer, idx++, maxlen);
+        if (unlikely(rc < 0)) {
+            free(s);
+            return rc;
+        }
+    }
+    free(s);
+    return idx;
+}
+
+// internal ftoa for fixed decimal floating point
+static size_t safec_ftoa(out_fct_type out, const char *funcname, char *buffer,
+                         size_t idx, size_t maxlen, double value,
+                         unsigned int prec, unsigned int width,
+                         unsigned int flags) {
+    char buf[PRINTF_FTOA_BUFFER_SIZE + 1]; // Add extra byte for safety
+    size_t len = 0U;
+    double tmp;
+    double diff = 0.0;
+    unsigned long frac;
+    int whole;
+    bool negative;
+
+    // powers of 10
+    static const double pow10[] = {1,         10,        100,     1000,
+                                   10000,     100000,    1000000, 10000000,
+                                   100000000, 1000000000};
+    const unsigned maxprec = 9U;
+
+    // test for special values
+    if (value != value)
+        return safec_out_rev(out, buffer, idx, maxlen,
+                             (flags & FLAGS_UPPERCASE) ? "NAN" : "nan", 3,
+                             width, flags);
+    if (isinf(value)) {
+        if (value < 0)
+            // reverse of -inf
+            return safec_out_rev(out, buffer, idx, maxlen,
+                                 (flags & FLAGS_UPPERCASE) ? "FNI-" : "fni-", 4,
+                                 width, flags);
+        else
+            // reverse of inf
+            return safec_out_rev(out, buffer, idx, maxlen,
+                                 (flags & FLAGS_PLUS)
+                                     ? (flags & FLAGS_UPPERCASE) ? "FNI+"
+                                                                 : "fni+"
+                                 : (flags & FLAGS_UPPERCASE) ? "FNI"
+                                                             : "fni",
+                                 (flags & FLAGS_PLUS) ? 4 : 3, width, flags);
+    }
+    // test for very large values
+    // standard printf behavior is to print EVERY whole number digit -- which
+    // could be 100s of characters overflowing your buffers == bad
+    if ((value > PRINTF_MAX_FLOAT) || (value < -PRINTF_MAX_FLOAT)) {
+        return safec_dtoa_libc(out, funcname, buffer, idx, maxlen, value, prec,
+                               width, flags, 'f');
+    }
+
+    // test for negative
+    negative = false;
+    if (signbit(value)) {
+        negative = true;
+        value = 0 - value;
+    }
+
+    // set default precision, if not set explicitly
+    if (!(flags & FLAGS_PRECISION)) {
+        prec = PRINTF_DEFAULT_FLOAT_PRECISION;
+    }
+    // limit precision to 9, cause a prec >= 10 can lead to overflow errors
+    while ((len < PRINTF_FTOA_BUFFER_SIZE) && (prec > maxprec)) {
+        buf[len++] = '0';
+        prec--;
+    }
+
+    whole = (int)value;
+    tmp = (value - whole) * pow10[prec];
+    frac = (unsigned long)tmp;
+    diff = tmp - frac;
+
+    if (diff > 0.5) {
+        ++frac;
+        // handle rollover, e.g. case 0.99 with prec 1 is 1.0
+        if (frac >= pow10[prec]) {
+            frac = 0;
+            ++whole;
+        }
+    } else if (diff < 0.5) {
+    } else if (prec == 0U ? (whole & 1) : ((frac == 0U) || (frac & 1U))) {
+        // if halfway, round up if odd (prec 0) OR if last digit is 0
+        ++frac;
+        // handle rollover, e.g. case 0.95 with prec 1 is 1.0
+        if (frac >= pow10[prec]) {
+            frac = 0;
+            ++whole;
+        }
+    }
+
+    if (prec != 0U) {
+        unsigned int count = prec;
+        // now do fractional part, as an unsigned number
+        while (len < PRINTF_FTOA_BUFFER_SIZE) {
+            --count;
+            buf[len++] = (char)(48U + (frac % 10U));
+            if (!(frac /= 10U)) {
+                break;
+            }
+        }
+        // add extra 0s
+        while ((len < PRINTF_FTOA_BUFFER_SIZE) && (count-- > 0U)) {
+            buf[len++] = '0';
+        }
+        if (len < PRINTF_FTOA_BUFFER_SIZE) {
+            // add decimal
+            buf[len++] = '.';
+        }
+    }
+
+    // do whole part, number is reversed
+    while (len < PRINTF_FTOA_BUFFER_SIZE) {
+        buf[len++] = (char)(48 + (whole % 10));
+        if (!(whole /= 10)) {
+            break;
+        }
+    }
+
+    // pad leading zeros
+    if (!(flags & FLAGS_LEFT) && (flags & FLAGS_ZEROPAD)) {
+        if (width && (negative || (flags & (FLAGS_PLUS | FLAGS_SPACE)))) {
+            width--;
+        }
+        while ((len < width) && (len < PRINTF_FTOA_BUFFER_SIZE)) {
+            buf[len++] = '0';
+        }
+    }
+
+    if (len < PRINTF_FTOA_BUFFER_SIZE) {
+        if (negative) {
+            buf[len++] = '-';
+        } else if (flags & FLAGS_PLUS) {
+            buf[len++] = '+'; // ignore the space if the '+' exists
+        } else if (flags & FLAGS_SPACE) {
+            buf[len++] = ' ';
+        }
+    }
+
+    return safec_out_rev(out, buffer, idx, maxlen, buf, len, width, flags);
+}
+
+#ifdef PRINTF_SUPPORT_LONG_DOUBLE
+#if defined(HAVE_ISINFL)
+#define _ISINFL(value) isinfl(value)
+#elif defined(HAVE___BUILTIN_ISINFL)
+#define _ISINFL(x) __builtin_isinfl(x)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+/* C99 and later */
+#define _ISINFL(value) isinf(value)
+#else
+#ifdef HAVE_LIMITS_H
+#include <limits.h>
+#endif
+/* Portable implementation for older standards */
+static inline int portable_isinfl(long double x) {
+/* Handle special case for non-finite values */
+#ifdef HUGE_VALL
+    if (x == HUGE_VALL || x == -HUGE_VALL) {
+        return 1;
+    }
+#endif
+
+/* IEEE 754 bit pattern checking */
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+    /* Same as double */
+    union {
+        long double ld;
+        unsigned long long bits;
+    } u = {x};
+
+    return ((u.bits & 0x7fffffffffffffffULL) == 0x7ff0000000000000ULL);
+#elif LDBL_MANT_DIG == 64 && LDBL_MAX_EXP == 16384
+    /* 80-bit extended precision */
+    union {
+        long double ld;
+        struct {
+            unsigned long long mantissa;
+            unsigned short exp_sign;
+        } bits;
+    } u = {x};
+
+    return ((u.bits.exp_sign & 0x7fff) == 0x7fff) &&
+           (u.bits.mantissa == 0x8000000000000000ULL);
+#elif LDBL_MANT_DIG == 113 && LDBL_MAX_EXP == 16384
+    /* 128-bit quad precision */
+    union {
+        long double ld;
+        struct {
+            unsigned long long hi;
+            unsigned long long lo;
+        } bits;
+    } u = {x};
+
+    return ((u.bits.hi & 0x7fff000000000000ULL) == 0x7fff000000000000ULL) &&
+           (u.bits.lo == 0) && ((u.bits.hi & 0x0000ffffffffffffULL) == 0);
+#else
+    /* Fallback comparison-based method */
+    if (x != x) {
+        return 0; /* NaN */
+    }
+    return (x + x == x) && (x != 0.0L);
+#endif
+}
+#define _ISINFL(value) portable_isinfl(value)
+#endif // HAVE_ISINFL
+
+// internal ftoa for fixed decimal long double
+static size_t safec_ftoa_long(out_fct_type out, const char *funcname,
+                              char *buffer, size_t idx, size_t maxlen,
+                              long double value, unsigned int prec,
+                              unsigned int width, unsigned int flags,
+                              const char *format) {
+    char buf[64];
+    char *p = buf;
+    int rc = 0;
+    (void)funcname; // FIXME
+    (void)prec;
+
+    if (value != value)
+        return safec_out_rev(out, buffer, idx, maxlen,
+                             (flags & FLAGS_UPPERCASE) ? "NAN" : "nan", 3,
+                             width, flags);
+    if (_ISINFL(value)) {
+        if (value < 0)
+            return safec_out_rev(out, buffer, idx, maxlen,
+                                 (flags & FLAGS_UPPERCASE) ? "FNI-" : "fni-", 4,
+                                 width, flags);
+        else
+            return safec_out_rev(out, buffer, idx, maxlen,
+                                 (flags & FLAGS_PLUS)
+                                     ? (flags & FLAGS_UPPERCASE) ? "FNI+"
+                                                                 : "fni+"
+                                 : (flags & FLAGS_UPPERCASE) ? "FNI"
+                                                             : "fni",
+                                 (flags & FLAGS_PLUS) ? 4 : 3, width, flags);
+    }
+    snprintf(buf, 64, format, value);
+    buf[63] = '\0';
+    while (*p != 0) {
+        rc = out(*(p++), buffer, idx++, maxlen);
+        if (unlikely(rc < 0))
+            return rc;
+    }
+    return idx;
+}
+
+// internal etoa for fixed decimal long double
+static inline size_t safec_etoa_long(out_fct_type out, const char *funcname,
+                                     char *buffer, size_t idx, size_t maxlen,
+                                     long double value, unsigned int prec,
+                                     unsigned int width, unsigned int flags,
+                                     const char *format) {
+    return safec_ftoa_long(out, funcname, buffer, idx, maxlen, value, prec,
+                           width, flags, format);
+}
+
+// internal atoa for fixed decimal long double
+static inline size_t safec_atoa_long(out_fct_type out, const char *funcname,
+                                     char *buffer, size_t idx, size_t maxlen,
+                                     long double value, unsigned int prec,
+                                     unsigned int width, unsigned int flags,
+                                     const char *format) {
+    return safec_ftoa_long(out, funcname, buffer, idx, maxlen, value, prec,
+                           width, flags, format);
+}
+#endif // PRINTF_SUPPORT_LONG_DOUBLE
+
+#ifdef PRINTF_SUPPORT_EXPONENTIAL
+// the complete same as safec_ftoa_long, but taking double, not long double
+static inline size_t safec_atoa(out_fct_type out, const char *funcname,
+                                char *buffer, size_t idx, size_t maxlen,
+                                double value, unsigned int prec,
+                                unsigned int width, unsigned int flags,
+                                const char *format) {
+    char buf[64];
+    char *p = buf;
+    int rc = 0;
+    (void)funcname; // FIXME
+    (void)prec;
+
+    if (value != value)
+        return safec_out_rev(out, buffer, idx, maxlen,
+                             (flags & FLAGS_UPPERCASE) ? "NAN" : "nan", 3,
+                             width, flags);
+    if (isinf(value)) {
+        if (value < 0)
+            return safec_out_rev(out, buffer, idx, maxlen,
+                                 (flags & FLAGS_UPPERCASE) ? "FNI-" : "fni-", 4,
+                                 width, flags);
+        else
+            return safec_out_rev(out, buffer, idx, maxlen,
+                                 (flags & FLAGS_PLUS)
+                                     ? (flags & FLAGS_UPPERCASE) ? "FNI+"
+                                                                 : "fni+"
+                                 : (flags & FLAGS_UPPERCASE) ? "FNI"
+                                                             : "fni",
+                                 (flags & FLAGS_PLUS) ? 4 : 3, width, flags);
+    }
+    snprintf(buf, 64, format, value);
+    buf[63] = '\0';
+    while (*p != 0) {
+        rc = out(*(p++), buffer, idx++, maxlen);
+        if (unlikely(rc < 0))
+            return rc;
+    }
+    return idx;
+}
+
+// internal ftoa variant for exponential floating-point type (%e and %g).
+// The correctly rounded digit generation is delegated to libc.
+static size_t safec_etoa(out_fct_type out, const char *funcname, char *buffer,
+                         size_t idx, size_t maxlen, double value,
+                         unsigned int prec, unsigned int width,
+                         unsigned int flags) {
+    // NaN and inf are handled in safec_ftoa
+    if (!isfinite(value)) {
+        return safec_ftoa(out, funcname, buffer, idx, maxlen, value, prec,
+                          width, flags);
+    }
+    return safec_dtoa_libc(out, funcname, buffer, idx, maxlen, value, prec,
+                           width, flags, (flags & FLAGS_ADAPT_EXP) ? 'g' : 'e');
+}
+#endif // PRINTF_SUPPORT_EXPONENTIAL
+#endif // PRINTF_SUPPORT_FLOAT
+
+// internal vsnprintf, extended for _s.
+// already checked in the caller
+// mingw has a _vsnprintf_s(char *_DstBuf,size_t _DstSize,size_t _MaxCount,const
+// char *_Format,va_list _ArgList);
+int safec_vsnprintf_s(out_fct_type out, const char *funcname, char *buffer,
+                      const size_t bufsize, const char *format, va_list va) {
+    size_t idx = 0U;
+    unsigned int flags, width, precision, n;
+    int rc = 0;
+#ifdef PRINTF_SUPPORT_FLOAT
+    const char *startformat = NULL;
+#endif
+
+    while (*format) {
+        if ((long)idx < 0)
+            return idx;
+        // format specifier?  %[flags][width][.precision][length]
+        if (*format != '%') {
+            // no
+            rc = out(*format, buffer, idx++, bufsize);
+            if (unlikely(rc < 0))
+                return rc;
+            format++;
+            continue;
+        } else {
+#ifdef PRINTF_SUPPORT_FLOAT
+            startformat = (char *)format;
+#endif
+            // yes, evaluate it
+            format++;
+        }
+
+        // evaluate flags
+        flags = 0U;
+        do {
+            switch (*format) {
+            case '0':
+                flags |= FLAGS_ZEROPAD;
+                format++;
+                n = 1U;
+                break;
+            case '-':
+                flags |= FLAGS_LEFT;
+                format++;
+                n = 1U;
+                break;
+            case '+':
+                flags |= FLAGS_PLUS;
+                format++;
+                n = 1U;
+                break;
+            case ' ':
+                flags |= FLAGS_SPACE;
+                format++;
+                n = 1U;
+                break;
+            case '#':
+                flags |= FLAGS_HASH;
+                format++;
+                n = 1U;
+                break;
+            default:
+                n = 0U;
+                break;
+            }
+        } while (n);
+
+        // evaluate width field
+        width = 0U;
+        if (safec_is_digit(*format)) {
+            width = safec_atoi(&format);
+        } else if (*format == '*') {
+            const int w = va_arg(va, int);
+            if (w < 0) {
+                flags |= FLAGS_LEFT; // reverse padding
+                width = (unsigned int)-w;
+            } else {
+                width = (unsigned int)w;
+            }
+            format++;
+        }
+
+        // evaluate precision field
+        precision = 0U;
+        if (*format == '.') {
+            flags |= FLAGS_PRECISION;
+            format++;
+            if (safec_is_digit(*format)) {
+                precision = safec_atoi(&format);
+            } else if (*format == '*') {
+                const int prec = (int)va_arg(va, int);
+                precision = prec > 0 ? (unsigned int)prec : 0U;
+                format++;
+            }
+        }
+
+        // evaluate length field
+        switch (*format) {
+        case 'l':
+            flags |= FLAGS_LONG;
+            format++;
+            if (*format == 'l') {
+                flags |= FLAGS_LONG_LONG;
+                format++;
+            }
+            break;
+#ifdef PRINTF_SUPPORT_LONG_DOUBLE
+        case 'L':
+            if (flags & FLAGS_LONG)
+                return -1; // EINVAL
+            if (flags & FLAGS_SHORT)
+                return -1; // EINVAL
+            flags |= FLAGS_LONG_DOUBLE;
+            format++;
+            break;
+#endif
+        case 'h':
+            flags |= FLAGS_SHORT;
+            format++;
+            if (*format == 'h') {
+                flags |= FLAGS_CHAR;
+                format++;
+            }
+            break;
+#ifdef PRINTF_SUPPORT_PTRDIFF_T
+        case 't':
+            flags |= (sizeof(ptrdiff_t) == sizeof(long) ? FLAGS_LONG
+                                                        : FLAGS_LONG_LONG);
+            format++;
+            break;
+#endif
+        case 'j':
+            flags |= (sizeof(intmax_t) == sizeof(long) ? FLAGS_LONG
+                                                       : FLAGS_LONG_LONG);
+            format++;
+            break;
+        case 'z':
+            flags |=
+                (sizeof(size_t) == sizeof(long) ? FLAGS_LONG : FLAGS_LONG_LONG);
+            format++;
+            break;
+        default:
+            break;
+        }
+
+        // evaluate specifier
+        switch (*format) {
+        case 'd':
+        case 'i':
+        case 'u':
+        case 'x':
+        case 'X':
+        case 'o':
+        case 'b': {
+            // set the base
+            unsigned int base;
+#ifndef ENABLE_ILLEGAL_FORMATSPECIFIER
+            if (flags & FLAGS_LONG_DOUBLE) {
+                char msg[80];
+                snprintf(msg, sizeof msg, "%s: illegal %%L%c format-specifier",
+                         funcname, *format);
+                invoke_safe_str_constraint_handler(msg, NULL, EINVAL);
+                return -1;
+            }
+#endif
+            if (*format == 'x' || *format == 'X') {
+                base = 16U;
+            } else if (*format == 'o') {
+                base = 8U;
+            } else if (*format == 'b') {
+                base = 2U;
+            } else {
+                base = 10U;
+                flags &= ~FLAGS_HASH; // no hash for dec format
+            }
+            // uppercase
+            if (*format == 'X') {
+                flags |= FLAGS_UPPERCASE;
+            }
+
+            // no plus or space flag for u, x, X, o, b
+            if ((*format != 'i') && (*format != 'd')) {
+                flags &= ~(FLAGS_PLUS | FLAGS_SPACE);
+            }
+
+            // ignore '0' flag when precision is given
+            if (flags & FLAGS_PRECISION) {
+                flags &= ~FLAGS_ZEROPAD;
+            }
+
+            // convert the integer
+            if ((*format == 'i') || (*format == 'd')) {
+                // signed
+                if (flags & FLAGS_LONG_LONG) {
+#ifdef PRINTF_SUPPORT_LONG_LONG
+                    const long long value = va_arg(va, long long);
+                    idx = safec_ntoa_long_long(
+                        out, funcname, buffer, idx, bufsize,
+                        (unsigned long long)(value > 0 ? value : 0 - value),
+                        value < 0, base, precision, width, flags);
+#endif
+                } else if (flags & FLAGS_LONG) {
+                    const long value = va_arg(va, long);
+                    idx = safec_ntoa_long(
+                        out, funcname, buffer, idx, bufsize,
+                        (unsigned long)(value > 0 ? value : 0 - value),
+                        value < 0, base, precision, width, flags);
+                } else {
+                    const int value =
+                        (flags & FLAGS_CHAR)    ? (char)va_arg(va, int)
+                        : (flags & FLAGS_SHORT) ? (short int)va_arg(va, int)
+                                                : va_arg(va, int);
+                    idx = safec_ntoa_long(
+                        out, funcname, buffer, idx, bufsize,
+                        (unsigned int)(value > 0 ? value : 0 - value),
+                        value < 0, base, precision, width, flags);
+                }
+            } else {
+                // unsigned
+                if (flags & FLAGS_LONG_LONG) {
+#ifdef PRINTF_SUPPORT_LONG_LONG
+                    idx = safec_ntoa_long_long(
+                        out, funcname, buffer, idx, bufsize,
+                        va_arg(va, unsigned long long), false, base, precision,
+                        width, flags);
+#endif
+                } else if (flags & FLAGS_LONG) {
+                    idx = safec_ntoa_long(out, funcname, buffer, idx, bufsize,
+                                          va_arg(va, unsigned long), false,
+                                          base, precision, width, flags);
+                } else {
+                    const unsigned int value =
+                        (flags & FLAGS_CHAR)
+                            ? (unsigned char)va_arg(va, unsigned int)
+                        : (flags & FLAGS_SHORT)
+                            ? (unsigned short int)va_arg(va, unsigned int)
+                            : va_arg(va, unsigned int);
+                    idx = safec_ntoa_long(out, funcname, buffer, idx, bufsize,
+                                          value, false, base, precision, width,
+                                          flags);
+                }
+            }
+            format++;
+            break;
+        }
+#ifdef PRINTF_SUPPORT_FLOAT
+        case 'f':
+        case 'F':
+            if (*format == 'F')
+                flags |= FLAGS_UPPERCASE;
+            format++;
+#ifdef PRINTF_SUPPORT_LONG_DOUBLE
+            if (flags & FLAGS_LONG_DOUBLE) {
+                if (*format) {
+                    unsigned off = format - startformat;
+                    char *s = (char *)malloc(off + 1);
+                    if (!s) {
+                        invoke_safe_str_constraint_handler(
+                            "vsnprintf_s: malloc format arg failed", buffer,
+                            RCNEGATE(ENOMEM));
+                        return -(ENOMEM);
+                    }
+                    memcpy(s, startformat, off);
+                    s[off] = '\0';
+                    idx = safec_ftoa_long(out, funcname, buffer, idx, bufsize,
+                                          va_arg(va, long double), precision,
+                                          width, flags, s);
+                    free(s);
+                } else { // already at end
+                    idx = safec_ftoa_long(out, funcname, buffer, idx, bufsize,
+                                          va_arg(va, long double), precision,
+                                          width, flags, startformat);
+                }
+            } else
+#endif
+            {
+                idx = safec_ftoa(out, funcname, buffer, idx, bufsize,
+                                 va_arg(va, double), precision, width, flags);
+            }
+            break;
+#ifdef PRINTF_SUPPORT_EXPONENTIAL
+        case 'e':
+        case 'E':
+        case 'g':
+        case 'G':
+            if ((*format == 'g') || (*format == 'G'))
+                flags |= FLAGS_ADAPT_EXP;
+            if ((*format == 'E') || (*format == 'G'))
+                flags |= FLAGS_UPPERCASE;
+            format++;
+#ifdef PRINTF_SUPPORT_LONG_DOUBLE
+            if (flags & FLAGS_LONG_DOUBLE) {
+                if (*format) {
+                    unsigned off = format - startformat;
+                    char *s = (char *)malloc(off + 1);
+                    if (!s) {
+                        invoke_safe_str_constraint_handler(
+                            "vsnprintf_s: malloc format arg failed", buffer,
+                            RCNEGATE(ENOMEM));
+                        return -(ENOMEM);
+                    }
+                    memcpy(s, startformat, off);
+                    s[off] = '\0';
+                    idx = safec_etoa_long(out, funcname, buffer, idx, bufsize,
+                                          va_arg(va, long double), precision,
+                                          width, flags, s);
+                    free(s);
+                } else {
+                    idx = safec_etoa_long(out, funcname, buffer, idx, bufsize,
+                                          va_arg(va, long double), precision,
+                                          width, flags, startformat);
+                }
+            } else
+#endif
+            {
+                idx = safec_etoa(out, funcname, buffer, idx, bufsize,
+                                 va_arg(va, double), precision, width, flags);
+            }
+            break;
+        case 'a':
+        case 'A':
+            if (*format == 'A')
+                flags |= FLAGS_UPPERCASE;
+            format++;
+#ifdef PRINTF_SUPPORT_LONG_DOUBLE
+            if (flags & FLAGS_LONG_DOUBLE) {
+                if (*format) {
+                    unsigned off = format - startformat;
+                    char *s = (char *)malloc(off + 1);
+                    if (!s) {
+                        invoke_safe_str_constraint_handler(
+                            "vsnprintf_s: malloc format arg failed", buffer,
+                            RCNEGATE(ENOMEM));
+                        return -(ENOMEM);
+                    }
+                    memcpy(s, startformat, off);
+                    s[off] = '\0';
+                    idx = safec_atoa_long(out, funcname, buffer, idx, bufsize,
+                                          va_arg(va, long double), precision,
+                                          width, flags, s);
+                    free(s);
+                } else {
+                    idx = safec_atoa_long(out, funcname, buffer, idx, bufsize,
+                                          va_arg(va, long double), precision,
+                                          width, flags, startformat);
+                }
+            } else
+#endif
+            {
+                if (*format) {
+                    unsigned off = format - startformat;
+                    char *s = (char *)malloc(off + 1);
+                    if (!s) {
+                        invoke_safe_str_constraint_handler(
+                            "vsnprintf_s: malloc format arg failed", buffer,
+                            RCNEGATE(ENOMEM));
+                        return -(ENOMEM);
+                    }
+                    memcpy(s, startformat, off);
+                    s[off] = '\0';
+                    idx = safec_atoa(out, funcname, buffer, idx, bufsize,
+                                     va_arg(va, double), precision, width,
+                                     flags, s);
+                    free(s);
+                } else {
+                    idx = safec_atoa(out, funcname, buffer, idx, bufsize,
+                                     va_arg(va, double), precision, width,
+                                     flags, startformat);
+                }
+            }
+            break;
+#endif // PRINTF_SUPPORT_EXPONENTIAL
+#endif // PRINTF_SUPPORT_FLOAT
+        case 'c': {
+            unsigned int l = 1U;
+            char wstr[5];
+            if (flags & FLAGS_LONG) {
+#ifndef SAFECLIB_DISABLE_WCHAR
+                int len = wctomb(wstr, va_arg(va, int));
+                if (len <= 0 || len > 4) {
+                    char msg[80];
+                    snprintf(msg, sizeof msg, "%s: wctomb for %%lc arg failed",
+                             funcname);
+                    invoke_safe_str_constraint_handler(msg, buffer,
+                                                       RCNEGATE(EILSEQ));
+                    return -(EILSEQ);
+                }
+                wstr[len] = '\0';
+#else
+                char msg[80];
+                snprintf(msg, sizeof msg, "%s: unsupported %%lc arg", funcname);
+                invoke_safe_str_constraint_handler(msg, buffer, RCNEGATE(1));
+                return -1;
+#endif
+            }
+            // pre padding
+            if (!(flags & FLAGS_LEFT)) {
+                while (l++ < width) {
+                    rc = out(' ', buffer, idx++, bufsize);
+                    if (unlikely(rc < 0))
+                        return rc;
+                }
+            }
+            // char output
+            if (flags & FLAGS_LONG) {
+                char *p = &wstr[0];
+                while (*p != 0) {
+                    rc = out(*(p++), buffer, idx++, bufsize);
+                    if (unlikely(rc < 0))
+                        return rc;
+                }
+            } else {
+                rc = out((char)va_arg(va, int), buffer, idx++, bufsize);
+                if (unlikely(rc < 0))
+                    return rc;
+            }
+            // post padding
+            if (flags & FLAGS_LEFT) {
+                while (l++ < width) {
+                    rc = out(' ', buffer, idx++, bufsize);
+                    if (unlikely(rc < 0))
+                        return rc;
+                }
+            }
+            format++;
+            break;
+        }
+
+        case 's': {
+            char *p, *op;
+            unsigned int l;
+            if (flags & FLAGS_LONG) {
+#ifndef SAFECLIB_DISABLE_WCHAR
+                size_t len;
+                errno_t err;
+                const wchar_t *lp = va_arg(va, wchar_t *);
+                if (!lp) {
+                    char msg[80];
+                    snprintf(msg, sizeof msg, "%s: %%ls arg is null", funcname);
+                    invoke_safe_str_constraint_handler(msg, buffer, ESNULLP);
+                    return -(ESNULLP);
+                }
+                l = wcsnlen_s(lp, precision ? precision : RSIZE_MAX_WSTR);
+                p = (char *)malloc(l + 1);
+                if (!p) {
+                    invoke_safe_str_constraint_handler(
+                        "vsnprintf_s: malloc precision arg failed", buffer,
+                        RCNEGATE(ENOMEM));
+                    return -(ENOMEM);
+                }
+                err = wcstombs_s(&len, p, l + 1, lp, l);
+                if (err != EOK) {
+                    char msg[80];
+                    snprintf(msg, sizeof msg,
+                             "%s: wcstombs_s for %%ls arg failed", funcname);
+                    invoke_safe_str_constraint_handler(msg, buffer,
+                                                       RCNEGATE(err));
+                    free(p);
+                    return -err;
+                }
+#else
+                {
+                    char msg[80];
+                    snprintf(msg, sizeof msg, "%s: unsupported %%ls arg",
+                             funcname);
+                    invoke_safe_str_constraint_handler(msg, buffer,
+                                                       RCNEGATE(1));
+                }
+                return -1;
+#endif
+            } else {
+                p = va_arg(va, char *);
+                if (!p) {
+                    char msg[80];
+                    snprintf(msg, sizeof msg, "%s: %%s arg is null", funcname);
+                    invoke_safe_str_constraint_handler(msg, buffer, ESNULLP);
+                    return -(ESNULLP);
+                }
+                l = safec_strnlen_s(p, precision ? precision : (size_t)-1);
+            }
+            if (l + idx > bufsize) {
+                char msg[80];
+                snprintf(msg, sizeof msg, "%s: %%s arg exceeds dmax", funcname);
+                invoke_safe_str_constraint_handler(msg, buffer, ESNOSPC);
+                if (flags & FLAGS_LONG)
+                    free(p);
+                return -(ESNOSPC);
+            }
+            // pre padding
+            if (flags & FLAGS_PRECISION) {
+                l = (l < precision ? l : precision);
+            }
+            if (!(flags & FLAGS_LEFT)) {
+                while (l++ < width) {
+                    rc = out(' ', buffer, idx++, bufsize);
+                    if (unlikely(rc < 0)) {
+                        if (flags & FLAGS_LONG)
+                            free(p);
+                        return rc;
+                    }
+                }
+            }
+            op = p;
+            // string output
+            while ((*p != 0) && (!(flags & FLAGS_PRECISION) || precision--)) {
+                rc = out(*(p++), buffer, idx++, bufsize);
+                if (unlikely(rc < 0)) { // eg.  EBADF write to closed file
+                    if (flags & FLAGS_LONG)
+                        free(op);
+                    return rc;
+                }
+            }
+            if (flags & FLAGS_LONG)
+                free(op);
+            // post padding
+            if (flags & FLAGS_LEFT) {
+                while (l++ < width) {
+                    rc = out(' ', buffer, idx++, bufsize);
+                    if (unlikely(rc < 0))
+                        return rc;
+                }
+            }
+            format++;
+            break;
+        }
+
+        case 'p': {
+            uintptr_t arg = (uintptr_t)va_arg(va, void *);
+            width = sizeof(void *) * 2U;
+            flags |= FLAGS_ZEROPAD | FLAGS_UPPERCASE;
+#ifdef PRINTF_SUPPORT_LONG_LONG
+            if (sizeof(uintptr_t) == sizeof(long long)) {
+                idx = safec_ntoa_long_long(out, funcname, buffer, idx, bufsize,
+                                           arg, false, 16U, precision, width,
+                                           flags);
+            } else {
+#endif
+                idx = safec_ntoa_long(out, funcname, buffer, idx, bufsize,
+                                      (unsigned long)arg, false, 16U, precision,
+                                      width, flags);
+#ifdef PRINTF_SUPPORT_LONG_LONG
+            }
+#endif
+            format++;
+            break;
+        }
+
+        case '%':
+            rc = out('%', buffer, idx++, bufsize);
+            if (unlikely(rc < 0))
+                return rc;
+            format++;
+            break;
+
+        case 'n': {
+            char msg[80];
+            snprintf(msg, sizeof msg, "%s: illegal %%n", funcname);
+            invoke_safe_str_constraint_handler(msg, NULL, EINVAL);
+            return -1;
+        }
+        default:
+            // illegal % format-specifier
+#ifndef ENABLE_ILLEGAL_FORMATSPECIFIER
+        {
+            char msg[80];
+            snprintf(msg, sizeof msg, "%s: illegal %%%c format-specifier",
+                     funcname, *format);
+            invoke_safe_str_constraint_handler(msg, NULL, EINVAL);
+        }
+            return -1;
+#else
+        {
+            rc = out(*format, buffer, idx++, bufsize);
+            if (unlikely(rc < 0))
+                return rc;
+        }
+            format++;
+#endif
+            break;
+        }
+    }
+
+    // termination for s*printf only
+    if (out == safec_out_buffer) {
+        rc = out((char)0, buffer, idx < bufsize ? idx : bufsize - 1U, bufsize);
+        if (unlikely(rc < 0))
+            return rc;
+    }
+
+    // return written chars without terminating \0
+    return (int)idx;
+}
+
+/**
+ * @def vsnprintf_s(dest,dmax,fmt,ap)
+ * @brief
+ *    The truncating \c vsnprintf_s function composes a string with same test
+ *    that would be printed if format was used on \c printf. Instead of being
+ *    printed, the content is stored in dest.  At most dmax characters are
+ *    written.  It is guaranteed that dest will be null-terminated.
+ *
+ * @note
+ *    POSIX specifies that \c errno is set on error. However, the safeclib
+ *    extended \c ES* errors do not set \c errno, only when the underlying
+ *    system \c vsnprintf call fails, \c errno is set.
+ *
+ * @remark SPECIFIED IN
+ *    * C11 standard (ISO/IEC 9899:2011):
+ *    K.3.5.3.12 The vsnprintf_s function (p: 600)
+ *    http://en.cppreference.com/w/c/io/vfprintf
+ *
+ * @param[out]  dest  pointer to string that will be written into.
+ * @param[in]   dmax  restricted maximum length of \c dest
+ * @param[in]   fmt   format-control string.
+ * @param[in]   ap    optional arguments
+ *
+ * @pre \c fmt shall not be a null pointer.
+ * @pre \c dest shall not be a null pointer.
+ * @pre \c dmax shall not be zero.
+ * @pre \c dmax shall not be greater than \c RSIZE_MAX_STR and the size of
+ * dest.
+ * @pre \c fmt  shall not contain the conversion specifier \c %n.
+ * @pre None of the arguments corresponding to \c %s is a null pointer.
+ * @pre No encoding error shall occur.
+ *
+ * @note C11 uses RSIZE_MAX, not RSIZE_MAX_STR.
+ *
+ * @return  On success the total number of characters written is returned.
+ * @return  On failure a negative error number is returned.
+ * @return  If the buffer \c dest is too small for the formatted text,
+ *          including the terminating null, then the buffer is truncated
+ *          and zero terminated.
+ *
+ * @retval  -ESNULLP    when \c dest or fmt is NULL pointer, or
+ *                      when a \c %s argument is NULL
+ * @retval  -ESZEROL    when \c dmax == 0
+ * @retval  -ESLEMAX    when \c dmax > \c RSIZE_MAX_STR
+ * @retval  -EOVERFLOW  when \c dmax > size of dest
+ * @retval  -EINVAL     when fmt contains %n
+ * @retval  -ENOMEM     when malloc fails
+ *
+ * @see
+ *    snprintf_s(), sprintf_s(), vsprintf_s(), vsnwprintf_s()
+ */
+#ifdef FOR_DOXYGEN
+int vsnprintf_s(char *restrict dest, rsize_t dmax, const char *restrict fmt,
+                va_list ap)
+#else
+EXPORT int _vsnprintf_s_chk(char *restrict dest, rsize_t dmax,
+                            const size_t destbos, const char *restrict fmt,
+                            va_list ap)
+#endif
+{
+    const char *p;
+    int ret;
+
+    if (unlikely(dest == NULL || fmt == NULL)) {
+        invoke_safe_str_constraint_handler("vsnprintf_s: dest/fmt is null",
+                                           dest, ESNULLP);
+        return -ESNULLP;
+    }
+    if (unlikely(dmax == 0)) {
+        invoke_safe_str_constraint_handler("vsnprintf_s: dmax is zero", dest,
+                                           ESZEROL);
+        return -ESZEROL;
+    }
+    if (unlikely(dmax > RSIZE_MAX_STR)) {
+        invoke_safe_str_constraint_handler("vsnprintf_s: dmax exceeds max",
+                                           dest, ESLEMAX);
+        return -ESLEMAX;
+    }
+    if (destbos == BOS_UNKNOWN) {
+        BND_CHK_PTR_BOUNDS(dest, dmax);
+    } else {
+        if (unlikely(dmax > destbos)) {
+            return -(handle_str_bos_overflow("vsnprintf_s: dmax exceeds dest",
+                                             dest, destbos));
+        }
+    }
+    // catch %n early, before it outputs anything
+    if (unlikely((p = strnstr(fmt, "%n", RSIZE_MAX_STR)))) {
+        /* at the beginning or if inside, not %%n */
+        if ((p - fmt == 0) || *(p - 1) != '%') {
+            invoke_safe_str_constraint_handler("vsnprintf_s: illegal %n", dest,
+                                               EINVAL);
+            return -(EINVAL);
+        }
+    }
+
+    errno = 0;
+    ret =
+        safec_vsnprintf_s(safec_out_buffer, "vsnprintf_s", dest, dmax, fmt, ap);
+
+    // if (unlikely(ret < 0)) {
+    //     char errstr[128] = "vsnprintf_s: ";
+    //     strcat(errstr, strerror(errno));
+    //     handle_error(dest, dmax, errstr, -ret);
+    //     return ret;
+    // }
+
+    /* manual truncation */
+    if (ret >= 0) {
+#ifdef SAFECLIB_STR_NULL_SLACK
+        /* oops, ret would have been written if dmax was ignored */
+        if ((rsize_t)ret > dmax) {
+            dest[dmax - 1] = '\0';
+        } else {
+            memset(&dest[ret], 0, dmax - ret);
+        }
+#else
+        dest[dmax - 1] = '\0';
+#endif
+    } else {
+#ifdef SAFECLIB_STR_NULL_SLACK
+        memset(dest, 0, dmax);
+#else
+        *dest = '\0';
+#endif
+    }
+    return ret;
+}
