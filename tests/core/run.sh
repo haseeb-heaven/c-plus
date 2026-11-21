@@ -55,6 +55,8 @@ build_run raii_basic "$ROOT/tests/core/positive/raii_basic.cp"
 build_run move_and_borrow "$ROOT/tests/core/positive/move_and_borrow.cp"
 build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
 build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"
+build_run bounds_var_index_ok "$ROOT/tests/core/positive/bounds_var_index_ok.c"
+build_run memset_ok "$ROOT/tests/core/positive/memset_ok.c"
 build_run init_all_branches "$ROOT/tests/core/positive/init_all_branches.c"
 build_run pointer_one_past "$ROOT/tests/core/positive/pointer_one_past.c"
 build_run explicit_drop_once "$ROOT/tests/core/positive/explicit_drop_once.cp"
@@ -185,6 +187,8 @@ expect_reject invalid_free_interior "$ROOT/tests/safety/invalid_free_interior.c"
 expect_reject invalid_free_global "$ROOT/tests/safety/invalid_free_global.c"
 expect_reject invalid_free_string "$ROOT/tests/safety/invalid_free_string.c"
 expect_reject invalid_free_array "$ROOT/tests/safety/invalid_free_array.c"
+expect_reject bounds_var_index "$ROOT/tests/safety/bounds_var_index.c"
+expect_reject memset_overflow "$ROOT/tests/safety/memset_overflow.c"
 
 if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
    -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \

@@ -43,6 +43,10 @@ public:
   void setStrict(bool strict) { strict_ = strict; }
   void setHandledReallocs(const std::set<unsigned> &s) { handledReallocs_ = s; }
   const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
+  void setConstLocals(const std::map<std::string, llvm::APSInt> &m) { constLocals_ = m; }
+  const std::map<std::string, llvm::APSInt> &constLocals() const { return constLocals_; }
+  void setAssignedVars(const std::set<std::string> &s) { assignedVars_ = s; }
+  const std::set<std::string> &assignedVars() const { return assignedVars_; }
   const std::set<std::string> &nonVolatileGlobals() const {
     return nonVolatileGlobals_;
   }
@@ -332,8 +336,16 @@ public:
     if (!report_ && vd->hasGlobalStorage() &&
         !vd->getType().isVolatileQualified())
       nonVolatileGlobals_.insert(vd->getNameAsString());
-    if (!report_)
+    if (!report_) {
+      // Record local integer constants for constant-propagated bounds checks.
+      if (vd->hasLocalStorage() && vd->getType()->isIntegerType() &&
+          vd->getInit() && !vd->getType().isVolatileQualified()) {
+        Expr::EvalResult r;
+        if (vd->getInit()->EvaluateAsInt(r, ctx_) && r.Val.isInt())
+          constLocals_[vd->getNameAsString()] = r.Val.getInt();
+      }
       return true;
+    }
     // `T *b = &owner;` records a borrow for lifetime/conflict checks.
     if (vd->getType()->isPointerType() && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenImpCasts();
@@ -383,8 +395,13 @@ public:
   }
 
   bool VisitBinaryOperator(BinaryOperator *op) {
-    if (!report_)
+    if (!report_) {
+      if (op->isAssignmentOp())
+        assignedVars_.insert(varNameOf(op->getLHS()));
       return true;
+    }
+    if (op->isAssignmentOp())
+      assignedVars_.insert(varNameOf(op->getLHS()));
     if (op->isAdditiveOp()) {
       const Expr *lhs = op->getLHS();
       const Expr *rhs = op->getRHS();
@@ -527,7 +544,8 @@ public:
   /// For memcpy/memmove with a direct array destination, reject a constant
   /// byte count that exceeds the destination extent.  Unknown extents are not
   /// guessed.
-  void checkBoundedCopy(const CallExpr *call) {
+  void checkBoundedCopy(const CallExpr *call,
+                        const std::string &op = "copy") {
     const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
     const Expr *n = call->getArg(2)->IgnoreParenImpCasts();
     Expr::EvalResult amount;
@@ -552,7 +570,7 @@ public:
     unsigned long long capacity =
         at->getSize().getZExtValue() * elemSize;
     if ((unsigned long long)bytes > capacity)
-      report(call->getBeginLoc(), "copy of " + std::to_string(bytes) +
+      report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
                                       " bytes exceeds destination '" +
                                       vd->getNameAsString() + "'");
   }
@@ -617,6 +635,8 @@ public:
       baseName = "memmove";
     else if (baseName.rfind("__builtin___strcpy_chk", 0) == 0)
       baseName = "strcpy";
+    else if (baseName.rfind("__builtin___memset_chk", 0) == 0)
+      baseName = "memset";
     if (!report_ && name.size() > 5 &&
         name.compare(name.size() - 5, 5, "_drop") == 0 &&
         call->getNumArgs() >= 1) {
@@ -680,6 +700,9 @@ public:
       }
       if ((baseName == "memcpy" || baseName == "memmove") && call->getNumArgs() >= 3) {
         checkBoundedCopy(call);
+      }
+      if (baseName == "memset" && call->getNumArgs() >= 3) {
+        checkBoundedCopy(call, "fill");
       }
       if (baseName == "strcpy" && call->getNumArgs() >= 2) {
         checkStringCopy(call);
@@ -748,10 +771,20 @@ public:
     if (!arrayType)
       return true;
     Expr::EvalResult result;
-    if (!subscript->getIdx()->EvaluateAsInt(result, ctx_) ||
-        !result.Val.isInt())
-      return true;
-    llvm::APSInt index = result.Val.getInt();
+    llvm::APSInt index;
+    if (subscript->getIdx()->EvaluateAsInt(result, ctx_) &&
+        result.Val.isInt()) {
+      index = result.Val.getInt();
+    } else {
+      // Constant-propagate a local `int i = <literal>;` that is never
+      // reassigned.  This is still a compile-time proof, not a guess.
+      std::string name = varNameOf(subscript->getIdx());
+      auto it = constLocals_.find(name);
+      if (name.empty() || it == constLocals_.end() ||
+          assignedVars_.count(name))
+        return true;
+      index = it->second;
+    }
     if (index.isNegative())
       return true;
     unsigned long long extent = arrayType->getSize().getZExtValue();
@@ -883,6 +916,8 @@ private:
   std::map<std::string, SourceLocation> aliasLocs_;
   std::map<std::string, SourceLocation> releaseLocs_;
   std::set<std::string> stringPtrs_;
+  std::map<std::string, llvm::APSInt> constLocals_;
+  std::set<std::string> assignedVars_;
   std::string currentFunction_;
 
 public:
@@ -933,6 +968,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setGlobals(collect.nonVolatileGlobals());
   check.setDestructors(collect.destructors());
   check.setHandledReallocs(collect.handledReallocs());
+  check.setConstLocals(collect.constLocals());
+  check.setAssignedVars(collect.assignedVars());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // CFG/dataflow definite-initialization analysis on each function body.

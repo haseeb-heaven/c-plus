@@ -84,6 +84,10 @@ int main(void){{ int *p=malloc({n}); if(!p)return 2; int *q=p; free(p); free(q);
     cnt = n + 2
     add(f"memcpy_overflow_{n}", f"#include <string.h>\nint main(void){{ char d[{n}]; char s[{max(16,cnt)}]={{0}}; memcpy(d,s,{cnt}); return 0; }}",
         True, "CPLUS-BOUNDS")
+    add(f"memset_overflow_{n}", f"#include <string.h>\nint main(void){{ char d[{n}]; memset(d,0,{cnt}); return 0; }}",
+        True, "CPLUS-BOUNDS")
+    add(f"var_index_bad_{n}", f"int main(void){{ int a[{n}]={{0}}; int i={n+1}; return a[i]; }}",
+        True, "CPLUS-BOUNDS")
     csrc = "abcdefghi"[:max(2, n)]
     add(f"checked_copy_bad_{n}", f'#include "cplus/cplus.h"\nint main(void){{ char d[{n}]; return cplus_strcpy(d,2,"{csrc}"); }}',
         True, "CPLUS-LIBC")
@@ -148,6 +152,10 @@ int main(void){{ struct S s={{0}}; int *a=&s.x[0]; int *b=&s.x[{n-1}]; *a=1; *b=
     add(f"free_zero_ok_{n}", f"""#include <stdlib.h>
 int main(void){{ int *p=malloc({n}*sizeof(int)); if(!p)return 1; free(p+0); return 0; }}""",
         False)
+    add(f"memset_ok_{n}", f"#include <string.h>\nint main(void){{ char d[{n}]={{0}}; memset(d,0,{n}); return d[0]; }}",
+        False)
+    add(f"var_index_ok_{n}", f"int main(void){{ int a[{n}]={{0}}; int i=0; return a[i]; }}",
+        False, runtime=(n % 8 == 0))
 
 # ---------------------------------------------------------------------------
 # Dimension 2: structural variations (nested scopes, branch merges, chains).
