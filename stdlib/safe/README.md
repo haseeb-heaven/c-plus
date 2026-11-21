@@ -17,7 +17,7 @@ libc symbols, and does **not** claim that ordinary C becomes memory-safe.
 ## Build
 
 ```sh
-sh build/safe/build_safecrt.sh
+sh scripts/build_safecrt.sh
 # produces build/safe/libcplus_safecrt.a
 ```
 

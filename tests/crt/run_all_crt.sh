@@ -7,7 +7,7 @@ sh tests/crt/run_crt_tests.sh
 echo "== Safe CRT unit tests =="
 sh tests/crt/run_safecrt_tests.sh
 echo "== Safe CRT examples =="
-sh build/safe/build_safecrt.sh >/dev/null
+sh scripts/build_safecrt.sh >/dev/null
 CC=${CPLUS_CLANG:-clang}
 INC="-Istdlib/safe -Ithird_party/intel-safestringlib/include"
 LIB=build/safe/libcplus_safecrt.a

@@ -2,7 +2,7 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$ROOT"
-sh build/safe/build_safecrt.sh >/dev/null
+sh scripts/build_safecrt.sh >/dev/null
 CC=${CPLUS_CLANG:-clang}
 INC="-Istdlib/safe -Ithird_party/intel-safestringlib/include"
 LIB=build/safe/libcplus_safecrt.a

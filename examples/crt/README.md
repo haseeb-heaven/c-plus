@@ -3,7 +3,7 @@
 One standalone example per public checked API. Build:
 
 ```sh
-sh build/safe/build_safecrt.sh
+sh scripts/build_safecrt.sh
 CC=${CPLUS_CLANG:-clang}
 for f in examples/crt/*.c; do
   [ "$(basename "$f")" = "README.md" ] && continue

@@ -14,7 +14,7 @@ jobs:
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build
       - name: Build safe CRT
-        run: sh build/safe/build_safecrt.sh
+        run: sh scripts/build_safecrt.sh
       - name: CRT unit tests
         run: sh tests/crt/unit/run_unit_tests.sh
       - name: CRT all checks
