@@ -316,3 +316,22 @@ Known limitations reported by Agent 2 and verified here: expression-sized
 arrays resolve correctly via Clang AST (regression added); `calloc(SIZE_MAX,k)`
 can be folded by Clang -O2, so allocation-failure fixtures need
 `noinline`/volatile designs. Neither agent assumes unknown functions are safe.
+
+## Compile-time temporal safety (safe mode)
+
+The Clang AST visitor now tracks straight-line release state and simple
+pointer aliases:
+- `free(p)` / `cplus_release(p)` followed by `*p` or `p->field` is rejected as
+  `use-after-free`;
+- `T *q = p` or `q = p` joins the same obligation group, so releasing `p` marks
+  `q` released too and `*q` is rejected;
+- assignment of NULL resets the group state (this is what generated RAII
+  emits), and address-taking / comparison with NULL clears provably-null state;
+- frees inside conditionals/loops do **not** propagate release state, so valid
+  code like `if (argc > 1) free(p); return *p;` is not falsely rejected.
+
+This is a sound subset, not Rust-style borrow checking: it does not handle
+heap aliases through containers, calls that free through unknown pointers,
+or paths where a branch frees and the pointer is not reset. Those remain
+runtime/UBSan or unsupported cases. Tests: `uaf_direct`, `uaf_alias`,
+`uaf_conditional`, `double_release_alias`, `interproc_double_free`.

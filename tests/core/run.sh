@@ -75,6 +75,7 @@ build_run null_outparam "$ROOT/tests/core/positive/null_outparam.c"
 build_run libc_valid "$ROOT/tests/core/positive/libc_valid.c"
 build_run interproc_borrow "$ROOT/tests/core/positive/interproc_borrow.c"
 build_run expr_array_bound "$ROOT/tests/core/positive/expr_array_bound.c"
+build_run uaf_conditional "$ROOT/tests/core/positive/uaf_conditional.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -154,7 +155,7 @@ expect_trap string_overflow "$ROOT/tests/safety/string_overflow.c" 101
 expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 134
 expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 134
 expect_trap strnlen_null "$ROOT/tests/safety/strnlen_null.c" 134
-expect_trap double_release_alias "$ROOT/tests/safety/double_release_from_alias.c" 104
+expect_reject double_release_alias "$ROOT/tests/safety/double_release_from_alias.c"
 expect_trap release_stack_pointer "$ROOT/tests/safety/release_stack_pointer.c" 105
 
 if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \

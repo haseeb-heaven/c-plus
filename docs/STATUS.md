@@ -9,6 +9,7 @@ the repository's test/demo runs. "partial" is never counted as complete.
 | Memory safety (supported subset) | yes | yes | yes | no UAF detection, no pointer-arithmetic checks, no ASan on this host |
 | Compile-time bad array index | yes | yes | yes | constant and simple counted loops only |
 | Compile-time null pointer dereference | yes | yes | yes | Clang AST constant-initializer tracking |
+| Compile-time use-after-free (direct + simple alias) | yes | yes | yes | Clang AST release-state/alias tracking; branch-conservative |
 | Runtime bounds/null/alignment checks | yes | yes | yes | UBSan-based; aborts on first violation |
 | Return-stack-address / uninitialized checks | yes | yes | yes | Clang warnings promoted to errors |
 | Pointer-leak / raw realloc / strict-aliasing checks | yes | yes | yes | token-level static pass |

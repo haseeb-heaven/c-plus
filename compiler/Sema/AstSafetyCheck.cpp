@@ -63,6 +63,74 @@ public:
     return nullptr;
   }
 
+  std::string varNameOf(const Expr *expr) const {
+    if (!expr)
+      return std::string();
+    const Expr *e = expr->IgnoreParenImpCasts();
+    const auto *ref = dyn_cast<DeclRefExpr>(e);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    return vd ? vd->getNameAsString() : std::string();
+  }
+
+  void markReleased(const std::string &name) {
+    if (name.empty())
+      return;
+    auto it = aliasGroups_.find(name);
+    if (it != aliasGroups_.end())
+      for (const auto &alias : it->second)
+        releasedVars_.insert(alias);
+    else
+      releasedVars_.insert(name);
+  }
+
+  void clearReleased(const std::string &name) {
+    if (name.empty())
+      return;
+    auto it = aliasGroups_.find(name);
+    if (it != aliasGroups_.end())
+      for (const auto &alias : it->second)
+        releasedVars_.erase(alias);
+    else
+      releasedVars_.erase(name);
+  }
+
+  bool isReleased(const Expr *expr) const {
+    return releasedVars_.count(varNameOf(expr)) != 0;
+  }
+
+  // Do not propagate release state across branches: a free in one branch is
+  // not a guarantee on every path.
+  bool TraverseIfStmt(IfStmt *s) {
+    ++conditionalDepth_;
+    bool r = RecursiveASTVisitor::TraverseIfStmt(s);
+    --conditionalDepth_;
+    return r;
+  }
+  bool TraverseForStmt(ForStmt *s) {
+    ++conditionalDepth_;
+    bool r = RecursiveASTVisitor::TraverseForStmt(s);
+    --conditionalDepth_;
+    return r;
+  }
+  bool TraverseWhileStmt(WhileStmt *s) {
+    ++conditionalDepth_;
+    bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
+    --conditionalDepth_;
+    return r;
+  }
+  bool TraverseDoStmt(DoStmt *s) {
+    ++conditionalDepth_;
+    bool r = RecursiveASTVisitor::TraverseDoStmt(s);
+    --conditionalDepth_;
+    return r;
+  }
+  bool TraverseSwitchStmt(SwitchStmt *s) {
+    ++conditionalDepth_;
+    bool r = RecursiveASTVisitor::TraverseSwitchStmt(s);
+    --conditionalDepth_;
+    return r;
+  }
+
   bool TraverseFunctionDecl(FunctionDecl *fd) {
     std::string previousFunction = currentFunction_;
     std::set<std::string> previousNulls = nullVars_;
@@ -70,6 +138,7 @@ public:
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
+      aliasGroups_.clear();
     }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
     currentFunction_ = previousFunction;
@@ -81,9 +150,25 @@ public:
     if (!report_ && vd->hasGlobalStorage() &&
         !vd->getType().isVolatileQualified())
       nonVolatileGlobals_.insert(vd->getNameAsString());
-    if (report_ && vd->getType()->isPointerType() &&
-        isNullConstant(vd->getInit()))
+    if (!report_ || !vd->getType()->isPointerType())
+      return true;
+    if (isNullConstant(vd->getInit())) {
       nullVars_.insert(vd->getNameAsString());
+      return true;
+    }
+    // `T *q = p;` creates a simple alias and inherits the release state.
+    std::string initName = varNameOf(vd->getInit());
+    if (!initName.empty() && conditionalDepth_ == 0) {
+      auto &group = aliasGroups_[vd->getNameAsString()];
+      auto other = aliasGroups_[initName];
+      group.insert(vd->getNameAsString());
+      group.insert(initName);
+      group.insert(other.begin(), other.end());
+      for (const auto &alias : group)
+        aliasGroups_[alias] = group;
+      if (releasedVars_.count(initName))
+        releasedVars_.insert(vd->getNameAsString());
+    }
     return true;
   }
 
@@ -131,13 +216,24 @@ public:
       return true;
     }
     if (op->isAssignmentOp()) {
+      std::string lhsName = varNameOf(op->getLHS());
+      std::string rhsName = varNameOf(op->getRHS());
+      if (!lhsName.empty() && !rhsName.empty() && lhsName != rhsName &&
+          conditionalDepth_ == 0) {
+        // q = p: simple pointer alias; merge their obligation groups.
+        auto &lgroup = aliasGroups_[lhsName];
+        auto rgroup = aliasGroups_[rhsName];
+        lgroup.insert(lhsName);
+        lgroup.insert(rgroup.begin(), rgroup.end());
+        lgroup.insert(rhsName);
+        for (const auto &alias : lgroup)
+          aliasGroups_[alias] = lgroup;
+      }
       if (const VarDecl *vd = nullVarOf(op->getLHS()))
         nullVars_.erase(vd->getNameAsString());
       if (isNullConstant(op->getRHS())) {
         const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
-        if (const auto *ref = dyn_cast<DeclRefExpr>(lhs))
-          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
-            releasedVars_.erase(vd->getNameAsString());
+        clearReleased(varNameOf(lhs));
       }
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
@@ -158,7 +254,9 @@ public:
     }
     if (op->getOpcode() == UO_Deref) {
       const Expr *sub = op->getSubExpr();
-      if (isNullConstant(sub) || nullVarOf(sub))
+      if (isReleased(sub))
+        report(op->getBeginLoc(), "use-after-free: dereference of released pointer");
+      else if (isNullConstant(sub) || nullVarOf(sub))
         report(op->getBeginLoc(), "null pointer dereference");
     }
     if (handlers_.count(currentFunction_) &&
@@ -170,7 +268,9 @@ public:
   bool VisitMemberExpr(MemberExpr *member) {
     if (!report_ || !member->isArrow())
       return true;
-    if (nullVarOf(member->getBase()))
+    if (isReleased(member->getBase()))
+      report(member->getBeginLoc(), "use-after-free: member access through released pointer");
+    else if (nullVarOf(member->getBase()))
       report(member->getBeginLoc(), "null pointer dereference");
     return true;
   }
@@ -317,7 +417,8 @@ public:
           report(call->getBeginLoc(), "double free of '" +
                                           ptrVar->getNameAsString() + "'");
         else
-          releasedVars_.insert(ptrVar->getNameAsString());
+          if (conditionalDepth_ == 0)
+            markReleased(ptrVar->getNameAsString());
       }
       if (baseName == "realloc") {
         // Do NOT mark the old pointer released: on failure realloc returns
@@ -351,7 +452,8 @@ public:
             report(call->getBeginLoc(), "double free after call to '" + name +
                                             "' which frees its argument");
           else
-            releasedVars_.insert(vd->getNameAsString());
+            if (conditionalDepth_ == 0)
+              markReleased(vd->getNameAsString());
         }
       }
     }
@@ -423,6 +525,8 @@ public:
   std::set<std::string> nonVolatileGlobals_;
   std::set<std::string> nullVars_;
   std::set<std::string> releasedVars_;
+  std::map<std::string, std::set<std::string>> aliasGroups_;
+  int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
 };
 

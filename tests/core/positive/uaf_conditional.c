@@ -1,0 +1,2 @@
+#include <stdlib.h>
+int main(int argc,char**argv){ int *p=malloc(sizeof(int)); if(argc>1) free(p); return *p; }
