@@ -52,6 +52,12 @@ enforced with C+ AST/token analysis and UBSan.
 - `cplus_new(T)` / `cplus_new_array(T,N)` — zeroed managed allocation.
 - `cplus_move(x)` — zero source; destructor must tolerate zeroed handle.
 - `countof(a)` — array-only compile-time element count.
+- `cplus_memcpy`/`cplus_memmove` — overlap-safe copies with null checks for
+  non-zero counts (zero-count null calls are a no-op).
+- `cplus_strnlen(s,max)` — bounded string length, never reads past `max`.
+- `cplus_strcpy(dst,size,src)` — bounded copy that aborts on overflow.
+- `cplus_fatal_hook` — test-only hook invoked before termination; production
+  leaves it NULL.
 
 ## Evidence
 
@@ -97,3 +103,28 @@ enforced with C+ AST/token analysis and UBSan.
   This is a warning, not full race-freedom enforcement.
 
 Core-safety runner now has 25 cases, plus a 14-case scratch-style probe script (`tests/core/scratch_probe.sh`). Full suites remain green.
+
+## Coverage
+
+`tests/core/coverage.sh` builds `runtime/cplus_runtime.c` with gcov
+instrumentation, runs `tests/core/coverage_driver.c` (including intercepted
+fatal paths via `cplus_fatal_hook`) and reports line coverage. Target: >=80%
+for the runtime library. Current result: **337/414 lines (81%)**, covering
+fatal paths through the test hook, allocator growth, zero-size paths and I/O. Runtime logging is gated by a global level set from
+`CPLUS_LOG_LEVEL` when `--log` is used; without it, logging has no effect.
+
+## libc boundary benchmark
+
+`tests/core/libc_bench.sh` compares the safe bounded-memory wrappers against
+raw libc with Clang -O2 on the same 2,000,000-iteration workload:
+
+```text
+c+ safe : real 0.58s
+clang C : real 0.16s
+clang UB: real 0.33s
+```
+
+The raw-clang difference includes C+ UBSan instrumentation; the `clang UB`
+line is the equivalent sanitizer baseline. Overhead varies with machine load;
+the script is the source of truth. This is a narrow measured
+boundary, not a claim that all of libc is safe or Rust-equivalent.

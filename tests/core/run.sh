@@ -61,6 +61,7 @@ build_run loop_cleanup "$ROOT/tests/core/positive/loop_cleanup.cp"
 build_run recursive_resource "$ROOT/tests/core/positive/recursive_resource.cp"
 build_run partial_init "$ROOT/tests/core/positive/partial_init.cp"
 build_run double_explicit_drop "$ROOT/tests/core/positive/double_explicit_drop.cp"
+build_run safe_memory "$ROOT/tests/core/positive/safe_memory.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -100,6 +101,17 @@ expect_reject null_deref "$ROOT/tests/safety/null_deref.c"
 echo "core safety: traps"
 expect_trap double_release "$ROOT/tests/safety/double_release.cp" 104
 expect_trap uaf_check "$ROOT/tests/safety/uaf_check.cp" 105
+expect_trap string_overflow "$ROOT/tests/safety/string_overflow.c" 101
+expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 102
+
+if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
+   -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \
+   "$OUT/safe_memory_log" >"$OUT/safe_memory_log.stdout" 2>"$OUT/safe_memory_log.stderr" && \
+   grep -q "cplus_memcpy" "$OUT/safe_memory_log.stdout"; then
+  ok runtime_logging
+else
+  bad runtime_logging "missing runtime trace log"
+fi
 
 echo
 echo "core safety: $PASS passed, $FAIL failed"

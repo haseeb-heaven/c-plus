@@ -19,6 +19,7 @@
  * Optional logging/telemetry (disabled unless c+ is invoked with --log).
  * Uses the MIT-licensed clog library vendored as cplus/clog.h.
  * ------------------------------------------------------------------------- */
+extern int cplus_runtime_log_level; /* enabled by generated program constructor */
 #ifdef CPLUS_LOG_RUNTIME
 #include "cplus/clog.h"
 /* Avoid clog's generic convenience macro names colliding with user code. */
@@ -37,6 +38,9 @@
 #ifndef CPLUS_LOG_LEVEL
 #define CPLUS_LOG_LEVEL CPLUS_LOG_WARN
 #endif
+__attribute__((constructor)) static void cplus_runtime_logging_init(void) {
+  cplus_runtime_log_level = (int)CPLUS_LOG_LEVEL;
+}
 #define cplus_log(level, ...)                                                  \
   do {                                                                         \
     if ((int)(level) >= (int)CPLUS_LOG_LEVEL)                                   \
@@ -82,6 +86,9 @@ typedef enum {
 void cplus_fatal(cplus_exit_code code, const char *kind, const char *file,
                  int line, const char *msg);
 
+/* Optional test hook: called before terminating.  NULL in production. */
+extern void (*cplus_fatal_hook)(cplus_exit_code code, const char *kind);
+
 /* Emitted by the compiler for every checked array subscript. */
 void cplus_check_bounds(const void *base, size_t count, size_t index,
                         const char *file, int line, const char *expr);
@@ -106,6 +113,13 @@ void *cplus_realloc(void *ptr, size_t size);
 
 /* Zero `size` bytes at `p`.  Used by the cplus_move() ownership transfer. */
 void cplus_zero(void *p, size_t size);
+
+/* Bounded memory/string helpers for safe C+ code.  These are runtime
+ * primitives, not language features; Agent 2's .hp wrappers can build on them. */
+void *cplus_memcpy(void *dest, const void *src, size_t n);
+void *cplus_memmove(void *dest, const void *src, size_t n);
+size_t cplus_strnlen(const char *s, size_t max);
+int cplus_strcpy(char *dest, size_t dest_size, const char *src);
 
 /* Explicit release of a managed allocation.  Safe to call exactly once.
  * Calling it twice is a detected double-free, not silent corruption. */

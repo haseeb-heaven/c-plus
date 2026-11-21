@@ -13,6 +13,25 @@
  *===----------------------------------------------------------------------===*/
 
 #include "cplus/cplus.h"
+#include <stdarg.h>
+#include <stdio.h>
+
+int cplus_runtime_log_level = 99; /* enabled by generated program constructor */
+
+static void cplus_log_impl(int level, const char *file, int line,
+                           const char *func, const char *fmt, ...) {
+  if (level < cplus_runtime_log_level)
+    return;
+  va_list ap;
+  va_start(ap, fmt);
+  fprintf(stdout, "[%d] ", level);
+  vfprintf(stdout, fmt, ap);
+  fprintf(stdout, "  (%s:%d in %s)\n", file, line, func);
+  va_end(ap);
+}
+#undef cplus_log
+#define cplus_log(level, ...)                                                  \
+  cplus_log_impl((int)(level), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -29,6 +48,8 @@
  * Diagnostics
  * ------------------------------------------------------------------------- */
 
+void (*cplus_fatal_hook)(cplus_exit_code, const char *) = NULL;
+
 static void cplus_print_fatal(cplus_exit_code code, const char *kind,
                               const char *file, int line, const char *msg) {
   fflush(stdout);
@@ -41,6 +62,8 @@ static void cplus_print_fatal(cplus_exit_code code, const char *kind,
   }
   fputc('\n', stderr);
   fflush(stderr);
+  if (cplus_fatal_hook)
+    cplus_fatal_hook(code, kind);
   _Exit((int)code);
 }
 
@@ -221,6 +244,7 @@ void *cplus_alloc_array(size_t count, size_t element_size) {
 }
 
 void *cplus_realloc(void *ptr, size_t size) {
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_realloc ptr=%p size=%zu", ptr, size);
   if (!ptr)
     return cplus_alloc(size);
   if (size == 0) {
@@ -241,6 +265,51 @@ void *cplus_realloc(void *ptr, size_t size) {
 void cplus_zero(void *p, size_t size) {
   if (p && size)
     memset(p, 0, size);
+}
+
+void *cplus_memcpy(void *dest, const void *src, size_t n) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_memcpy dest=%p src=%p n=%zu", dest, src, n);
+  if (n == 0)
+    return dest;
+  if (!dest || !src)
+    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "null pointer", NULL, 0,
+                      "cplus_memcpy with zero count requires non-null pointers");
+  return memmove(dest, src, n); /* overlap-safe even when called as memcpy */
+}
+
+void *cplus_memmove(void *dest, const void *src, size_t n) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_memmove dest=%p src=%p n=%zu", dest, src,
+            n);
+  if (n == 0)
+    return dest;
+  if (!dest || !src)
+    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "null pointer", NULL, 0,
+                      "cplus_memmove requires non-null pointers");
+  return memmove(dest, src, n);
+}
+
+size_t cplus_strnlen(const char *s, size_t max) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_strnlen max=%zu", max);
+  if (!s)
+    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "null pointer", NULL, 0,
+                      "cplus_strnlen requires a non-null pointer");
+  size_t n = 0;
+  while (n < max && s[n] != '\0')
+    ++n;
+  return n;
+}
+
+int cplus_strcpy(char *dest, size_t dest_size, const char *src) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_strcpy dest_size=%zu", dest_size);
+  if (!dest || !src || dest_size == 0)
+    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "invalid string buffer", NULL, 0,
+                      "cplus_strcpy requires non-null pointers and space");
+  size_t len = cplus_strnlen(src, dest_size);
+  if (len >= dest_size)
+    cplus_print_fatal(CPLUS_EXIT_BOUNDS, "string overflow", NULL, 0,
+                      "source string does not fit in destination");
+  memcpy(dest, src, len + 1);
+  return (int)len;
 }
 
 void cplus_release(void *ptr) {
@@ -283,6 +352,7 @@ void cplus_check_live(const void *ptr) {
 }
 
 size_t cplus_alloc_bytes(const void *ptr) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_alloc_bytes ptr=%p", ptr);
   if (!ptr)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
                       0, "null pointer has no allocation length");
@@ -297,6 +367,8 @@ size_t cplus_alloc_bytes(const void *ptr) {
 }
 
 size_t cplus_alloc_count(const void *ptr, size_t elem_size) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_alloc_count ptr=%p elem=%zu", ptr,
+            elem_size);
   if (elem_size == 0)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
                       0, "element size must be greater than zero");
@@ -322,6 +394,7 @@ size_t cplus_check_index(size_t index, size_t count, const char *file,
 
 int cplus_scope_push(cplus_scope *scope, void *ptr, void (*drop)(void *),
                      cplus_cleanup_kind kind) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_scope_push scope=%p ptr=%p", scope, ptr);
   if (!scope)
     return -1;
   cplus_cleanup *c = (cplus_cleanup *)malloc(sizeof(cplus_cleanup));
@@ -338,6 +411,7 @@ int cplus_scope_push(cplus_scope *scope, void *ptr, void (*drop)(void *),
 }
 
 void cplus_scope_cleanup(cplus_scope *scope) {
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_scope_cleanup scope=%p", scope);
   if (!scope)
     return;
   /* Cleanups run in reverse order of registration: the most recently
