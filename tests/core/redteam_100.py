@@ -93,7 +93,7 @@ add("memcpy_null_src", "#include <string.h>\nint main(void){char d[8];char*s=0;m
 add("memcpy_null_dst", "#include <string.h>\nint main(void){char*d=0;char s[4]={0};memcpy(d,s,4);return 0;}", "accept")
 add("memcpy_zero", "#include <string.h>\nint main(void){char d[4];char s[4]={0};memcpy(d,s,0);return 0;}", "accept")
 add("alloc_zero", "#include <stdlib.h>\nint main(void){int*p=malloc(0);free(p);return 0;}", "strict")
-add("alloc_size_overflow", "#include <stdlib.h>\nint main(void){size_t n=(size_t)-1;int*p=malloc(n*sizeof(int));if(!p)return 1;free(p);return 0;}", "accept")
+add("alloc_size_overflow", "#include <stdlib.h>\nint main(void){size_t n=(size_t)-1;int*p=malloc(n*sizeof(int));if(!p)return 1;free(p);return 0;}", "reject")
 add("vla_index", "int main(int c,char**v){int a[c];for(int i=0;i<c;i++)a[i]=i;return 0;}", "strict")
 add("array_one_past", "int main(void){int a[4]={0};int*p=a+4;(void)p;return 0;}", "accept")
 

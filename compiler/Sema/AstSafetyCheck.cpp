@@ -16,6 +16,7 @@
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Tooling/Tooling.h>
 
+#include <map>
 #include <set>
 #include <string>
 
@@ -205,6 +206,360 @@ public:
     return vd ? vd->getNameAsString() : std::string();
   }
 
+  // ---- Heap-extent tracking -------------------------------------------
+  // Only allocations whose byte count is a compile-time constant are tracked.
+  // Unknown or computed sizes are deliberately left untracked so that valid C
+  // is never rejected on a guess.
+
+  struct HeapAllocState {
+    long long bytes = -1; // total byte extent; -1 means unknown
+    bool zeroInit = false; // calloc-style zero initialisation
+    const VarDecl *decl = nullptr;
+  };
+
+  /// Evaluate an allocation-size argument to a concrete byte count.  Only
+  /// literal integer expressions and never-reassigned local constants are
+  /// accepted; everything else is left unknown.
+  bool evalByteCount(const Expr *arg, long long &out) const {
+    if (!arg)
+      return false;
+    Expr::EvalResult r;
+    if (arg->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+      llvm::APSInt v = r.Val.getInt();
+      if (v.isNegative())
+        return false;
+      unsigned long long z = v.getZExtValue();
+      if (z > (1ULL << 40))
+        return false; // absurd; handled as a definitely-failing allocation
+      out = (long long)z;
+      return true;
+    }
+    std::string name = varNameOf(arg);
+    auto it = constLocals_.find(name);
+    if (name.empty() || it == constLocals_.end() || assignedVars_.count(name))
+      return false;
+    llvm::APSInt v = it->second;
+    if (v.isNegative())
+      return false;
+    out = (long long)v.getZExtValue();
+    return true;
+  }
+
+  /// Record the byte extent of a heap allocation performed in a variable's
+  /// initializer.  Called in both passes so the checking pass sees the same
+  /// facts as the collection pass.
+  void recordHeapAllocation(VarDecl *vd) {
+    if (!vd || !vd->getType()->isPointerType() || !vd->getInit())
+      return;
+    const Expr *init = vd->getInit()->IgnoreParenCasts();
+    const auto *call = dyn_cast<CallExpr>(init);
+    if (!call || !call->getDirectCallee() || call->getNumArgs() < 1)
+      return;
+    std::string callee = call->getDirectCallee()->getNameAsString();
+    if (callee != "malloc" && callee != "calloc")
+      return;
+    const Expr *arg = call->getArg(0)->IgnoreParenImpCasts();
+
+    // An enormous constant allocator request definitely fails.  Treat its
+    // result as provably null so the existing null-dereference check (with
+    // its guard suppression) rejects an immediate dereference.
+    Expr::EvalResult hr;
+    if (arg->EvaluateAsInt(hr, ctx_) && hr.Val.isInt()) {
+      llvm::APSInt hv = hr.Val.getInt();
+      if ((hv.isUnsigned() && hv.isMaxValue()) ||
+          hv.getZExtValue() >= (1ULL << 40)) {
+        if (report_)
+          nullVars_.insert(vd->getNameAsString());
+        return;
+      }
+    }
+
+    // `malloc(strlen(src))` is the classic missing-NUL bug: one byte too few
+    // for a later strcpy/strcat.  Record the source for the copy check
+    // instead of a byte count.
+    if (const auto *sl = dyn_cast<CallExpr>(arg)) {
+      if (sl->getDirectCallee() &&
+          sl->getDirectCallee()->getNameAsString() == "strlen" &&
+          sl->getNumArgs() == 1) {
+        if (report_)
+          strlenSized_[vd] = varNameOf(sl->getArg(0));
+        return;
+      }
+    }
+
+    long long bytes = -1;
+    if (!evalByteCount(arg, bytes))
+      return;
+    HeapAllocState st;
+    st.bytes = bytes;
+    st.zeroInit = (callee == "calloc");
+    st.decl = vd;
+    heapAllocs_[vd->getNameAsString()] = st;
+  }
+
+  /// True when `e` is a plain reference to a heap variable whose recorded
+  /// extent still applies.
+  const HeapAllocState *heapStateOf(const Expr *e) const {
+    if (!e)
+      return nullptr;
+    const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenImpCasts());
+    if (!ref)
+      return nullptr;
+    const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+    if (!vd)
+      return nullptr;
+    auto it = heapAllocs_.find(vd->getNameAsString());
+    if (it == heapAllocs_.end() || it->second.decl != vd)
+      return nullptr;
+    return &it->second;
+  }
+
+  /// Resolve a subscript/offset index to a compile-time value.  The worst
+  /// case index of an enclosing counted loop is preferred over a local
+  /// constant, because a loop induction variable is not actually constant.
+  bool evalIndexValue(const Expr *idx, long long &out) const {
+    if (!idx)
+      return false;
+    if (const auto *ref = dyn_cast<DeclRefExpr>(idx->IgnoreParenImpCasts())) {
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        auto ov = loopIndexOverride_.find(vd);
+        if (ov != loopIndexOverride_.end()) {
+          out = ov->second;
+          return true;
+        }
+      }
+    }
+    Expr::EvalResult r;
+    if (idx->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+      out = r.Val.getInt().getSExtValue();
+      return true;
+    }
+    std::string name = varNameOf(idx);
+    auto it = constLocals_.find(name);
+    if (name.empty() || it == constLocals_.end() || assignedVars_.count(name))
+      return false;
+    out = it->second.getSExtValue();
+    return true;
+  }
+
+  /// Recognise `for (T i = 0; i < N; i++)` / `i <= N` with a constant bound
+  /// and unit increment.  The worst-case index is used only for heap-access
+  /// checks inside the loop body.
+  bool parseLoopBound(const ForStmt *s, const VarDecl *&vd,
+                      long long &maxIndex) const {
+    const VarDecl *ivd = nullptr;
+    if (const auto *ds = dyn_cast_or_null<DeclStmt>(s->getInit())) {
+      for (const Decl *d : ds->decls()) {
+        if (const auto *v = dyn_cast<VarDecl>(d)) {
+          ivd = v;
+          break;
+        }
+      }
+    }
+    if (!ivd || !ivd->getInit() || !ivd->getType()->isIntegerType())
+      return false;
+    Expr::EvalResult ir;
+    if (!ivd->getInit()->EvaluateAsInt(ir, ctx_) || !ir.Val.isInt())
+      return false;
+    if (ir.Val.getInt().getSExtValue() != 0)
+      return false;
+    const auto *bo = dyn_cast_or_null<BinaryOperator>(s->getCond());
+    if (!bo || (bo->getOpcode() != BO_LT && bo->getOpcode() != BO_LE))
+      return false;
+    const auto *lref =
+        dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+    if (!lref || lref->getDecl() != ivd)
+      return false;
+    long long bound = 0;
+    Expr::EvalResult br;
+    if (bo->getRHS()->EvaluateAsInt(br, ctx_) && br.Val.isInt()) {
+      bound = br.Val.getInt().getSExtValue();
+    } else {
+      std::string bn = varNameOf(bo->getRHS());
+      auto it = constLocals_.find(bn);
+      if (bn.empty() || it == constLocals_.end() || assignedVars_.count(bn))
+        return false;
+      bound = it->second.getSExtValue();
+    }
+    const Expr *inc = s->getInc();
+    if (!inc)
+      return false;
+    const Expr *ie = inc->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(ie)) {
+      if (uo->getOpcode() != UO_PostInc && uo->getOpcode() != UO_PreInc)
+        return false;
+    } else if (const auto *bio = dyn_cast<BinaryOperator>(ie)) {
+      if (bio->getOpcode() != BO_AddAssign)
+        return false;
+      Expr::EvalResult sr;
+      if (!bio->getRHS()->EvaluateAsInt(sr, ctx_) || !sr.Val.isInt() ||
+          sr.Val.getInt() != 1)
+        return false;
+    } else {
+      return false;
+    }
+    maxIndex = (bo->getOpcode() == BO_LT) ? bound - 1 : bound;
+    if (maxIndex < 0)
+      return false;
+    vd = ivd;
+    return true;
+  }
+
+  /// Reject array subscripts / pointer offsets beyond a tracked heap extent.
+  void checkHeapSubscript(const ArraySubscriptExpr *sub, SourceLocation loc) {
+    const HeapAllocState *st = heapStateOf(sub->getBase());
+    if (!st)
+      return;
+    long long idx = 0;
+    if (!evalIndexValue(sub->getIdx(), idx))
+      return;
+    std::string name = varNameOf(sub->getBase());
+    if (idx < 0) {
+      report(loc, "negative array index on heap allocation '" + name + "'");
+      return;
+    }
+    if (st->bytes < 0)
+      return;
+    const auto *pt = sub->getBase()->IgnoreParenImpCasts()->getType()->getAs<PointerType>();
+    if (!pt)
+      return;
+    QualType elem = pt->getPointeeType();
+    unsigned long long elemSize = 0;
+    if ((elem->isIntegerType() || elem->isCharType() ||
+         elem->isFloatingType() || elem->isEnumeralType()) &&
+        !elem->isDependentType())
+      elemSize = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
+    if (elemSize == 0)
+      return;
+    unsigned long long off = (unsigned long long)idx * elemSize;
+    if (off >= (unsigned long long)st->bytes)
+      report(loc, "array index " + std::to_string(idx) +
+                      " exceeds heap allocation '" + name + "' of " +
+                      std::to_string(st->bytes) + " bytes");
+  }
+
+  /// True when `e` is `array + N` with N exactly one past a fixed array's
+  /// end.  Dereferencing such a pointer is undefined behaviour.
+  bool isOnePastEndExpr(const Expr *e) const {
+    if (!e)
+      return false;
+    const auto *bo = dyn_cast<BinaryOperator>(e->IgnoreParenImpCasts());
+    if (!bo || bo->getOpcode() != BO_Add)
+      return false;
+    const auto *ref =
+        dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd)
+      return false;
+    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
+    if (!at)
+      return false;
+    Expr::EvalResult r;
+    if (!bo->getRHS()->EvaluateAsInt(r, ctx_) || !r.Val.isInt())
+      return false;
+    return r.Val.getInt().getSExtValue() ==
+           (long long)at->getSize().getZExtValue();
+  }
+
+  /// Reject dereferences at the extent of a heap allocation or one past a
+  /// fixed array, and reads of heap memory that was never written.
+  void checkHeapDeref(const UnaryOperator *op) {
+    const Expr *sub = op->getSubExpr();
+    SourceLocation loc = op->getBeginLoc();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(sub->IgnoreParenImpCasts())) {
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        if (onePastEnd_.count(vd)) {
+          report(loc, "dereference one past the end of array via pointer "
+                      "arithmetic");
+          return;
+        }
+      }
+    }
+    const HeapAllocState *st = heapStateOf(sub);
+    if (st) {
+      std::string name = varNameOf(sub);
+      if (st->bytes == 0) {
+        report(loc, "dereference of zero-size heap allocation '" + name +
+                        "' (array index out of bounds)");
+        return;
+      }
+      if (const auto *bo = dyn_cast<BinaryOperator>(sub->IgnoreParenImpCasts())) {
+        if (bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) {
+          const HeapAllocState *baseSt = heapStateOf(bo->getLHS());
+          if (baseSt && baseSt->bytes >= 0) {
+            long long off = 0;
+            if (evalIndexValue(bo->getRHS(), off)) {
+              if (bo->getOpcode() == BO_Sub)
+                off = -off;
+              const auto *pt = bo->getLHS()
+                                   ->IgnoreParenImpCasts()
+                                   ->getType()
+                                   ->getAs<PointerType>();
+              if (pt) {
+                QualType elem = pt->getPointeeType();
+                unsigned long long es = 0;
+                if ((elem->isIntegerType() || elem->isCharType() ||
+                     elem->isFloatingType() || elem->isEnumeralType()) &&
+                    !elem->isDependentType())
+                  es = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
+                if (es != 0) {
+                  long long byteOff = off * (long long)es;
+                  if (byteOff < 0 ||
+                      (unsigned long long)byteOff >=
+                          (unsigned long long)baseSt->bytes)
+                    report(loc, "pointer offset " + std::to_string(off) +
+                                    " exceeds heap allocation '" +
+                                    varNameOf(bo->getLHS()) + "'");
+                }
+              }
+            }
+          }
+        }
+      }
+      // Uninitialized-heap reads are intentionally NOT diagnosed here:
+      // writes through aliases, out-parameters and callees are not tracked
+      // precisely enough, so reporting them produced false positives on
+      // valid C (e.g. `int *q=p; *q=1; return *p;`). Kept as a documented gap.
+    }
+  }
+
+  /// Reject writes through a pointer known to reference a string literal.
+  void checkStringLiteralWrite(const Expr *lhs, SourceLocation loc) {
+    if (!lhs)
+      return;
+    const Expr *e = lhs->IgnoreParenImpCasts();
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e)) {
+      std::string name = varNameOf(ase->getBase());
+      if (!name.empty() && stringPtrs_.count(name))
+        report(loc, "write to string literal '" + name + "'");
+    } else if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
+      if (uo->getOpcode() == UO_Deref) {
+        std::string name = varNameOf(uo->getSubExpr());
+        if (!name.empty() && stringPtrs_.count(name))
+          report(loc, "write to string literal '" + name + "'");
+      }
+    }
+  }
+
+  /// `malloc(strlen(src))` followed by strcpy/strcat overflows by the NUL.
+  void checkStrcpyNul(const CallExpr *call) {
+    if (call->getNumArgs() < 2)
+      return;
+    const auto *ref = dyn_cast<DeclRefExpr>(
+        call->getArg(0)->IgnoreParenImpCasts());
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd)
+      return;
+    auto it = strlenSized_.find(vd);
+    if (it == strlenSized_.end())
+      return;
+    std::string srcName = varNameOf(call->getArg(1));
+    if (srcName.empty() || srcName == it->second)
+      report(call->getBeginLoc(),
+             "string copy needs a NUL terminator: buffer '" +
+                 vd->getNameAsString() + "' was sized by strlen alone");
+  }
+
   /// Detect frees of objects that cannot be the start of an allocation.
   /// These are always bugs in C and are rejected in both safety modes.
   void checkInvalidFree(SourceLocation loc, const Expr *arg,
@@ -273,6 +628,15 @@ public:
     // or `const char *s = "literal";`.
     std::string name = varNameOf(arg->IgnoreParenCasts());
     if (!name.empty()) {
+      if (const auto *ref = dyn_cast<DeclRefExpr>(arg->IgnoreParenImpCasts())) {
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+          if (heapInterior_.count(vd)) {
+            report(loc, "invalid free of interior pointer '" + name +
+                            "' via " + api);
+            return;
+          }
+        }
+      }
       if (stringPtrs_.count(name)) {
         report(loc, "invalid free of string-literal pointer '" + name +
                         "' via " + api);
@@ -501,7 +865,21 @@ public:
     ++conditionalDepth_;
     if (!report_)
       collectMayRelease(s->getBody());
+    const VarDecl *induction = nullptr;
+    long long worstIndex = 0;
+    bool haveBound = report_ && parseLoopBound(s, induction, worstIndex);
+    auto oldIt = loopIndexOverride_.find(induction);
+    bool hadOld = oldIt != loopIndexOverride_.end();
+    long long saved = hadOld ? oldIt->second : 0;
+    if (haveBound)
+      loopIndexOverride_[induction] = worstIndex;
     bool r = RecursiveASTVisitor::TraverseForStmt(s);
+    if (haveBound) {
+      if (hadOld)
+        loopIndexOverride_[induction] = saved;
+      else
+        loopIndexOverride_.erase(induction);
+    }
     --conditionalDepth_;
     return r;
   }
@@ -540,6 +918,11 @@ public:
       borrowOwner_.clear();
       writeBorrows_.clear();
       movedVars_.clear();
+      heapAllocs_.clear();
+      heapWritten_.clear();
+      heapInterior_.clear();
+      onePastEnd_.clear();
+      strlenSized_.clear();
     }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
     currentFunction_ = previousFunction;
@@ -609,6 +992,7 @@ public:
       if (!vd->getType().isVolatileQualified())
         nonVolatileGlobals_.insert(vd->getNameAsString());
     }
+    recordHeapAllocation(vd);
     if (!report_) {
       // Record local integer constants for constant-propagated bounds checks.
       if (vd->hasLocalStorage() && vd->getType()->isIntegerType() &&
@@ -619,6 +1003,10 @@ public:
       }
       return true;
     }
+    // `int *end = arr + 4;` yields a pointer that is one past the array's
+    // last element; dereferencing it is undefined even though forming it is ok.
+    if (vd->getInit() && isOnePastEndExpr(vd->getInit()))
+      onePastEnd_.insert(vd);
     // `T *b = &owner;` records a borrow for lifetime/conflict checks.
     if (vd->getType()->isPointerType() && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenCasts();
@@ -701,6 +1089,42 @@ public:
       const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
       if (isNullConstant(rhs) || isa<CallExpr>(rhs))
         maybeReleasedVars_.erase(lhsName);
+
+      // Writing through a string-literal pointer is never valid.
+      checkStringLiteralWrite(op->getLHS(), op->getBeginLoc());
+
+      const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
+      // A definite write through a heap pointer proves its memory
+      // initialised before any later read of the same pointer.
+      if (const auto *uo = dyn_cast<UnaryOperator>(lhs)) {
+        if (uo->getOpcode() == UO_Deref) {
+          const Expr *inner = uo->getSubExpr()->IgnoreParenImpCasts();
+          if (const auto *ref = dyn_cast<DeclRefExpr>(inner)) {
+            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+              if (heapStateOf(ref))
+                heapWritten_.insert(vd);
+            }
+          }
+        }
+      } else if (const auto *ase = dyn_cast<ArraySubscriptExpr>(lhs)) {
+        const Expr *base = ase->getBase()->IgnoreParenImpCasts();
+        if (const auto *ref = dyn_cast<DeclRefExpr>(base)) {
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+            if (heapStateOf(ref))
+              heapWritten_.insert(vd);
+          }
+        }
+      }
+      if (const auto *ref = dyn_cast<DeclRefExpr>(lhs)) {
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+          // Reassignment hands the pointer an extent we cannot prove.
+          auto hit = heapAllocs_.find(vd->getNameAsString());
+          if (hit != heapAllocs_.end() && hit->second.decl == vd)
+            heapAllocs_.erase(hit);
+          if (isOnePastEndExpr(op->getRHS()))
+            onePastEnd_.insert(vd);
+        }
+      }
     }
     if (op->isAdditiveOp()) {
       const Expr *lhs = op->getLHS();
@@ -772,6 +1196,29 @@ public:
   bool VisitUnaryOperator(UnaryOperator *op) {
     if (!report_)
       return true;
+    if (op->isIncrementOp() || op->isDecrementOp()) {
+      const Expr *se = op->getSubExpr()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(se)) {
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+          // Advancing a heap pointer makes it an interior pointer; freeing
+          // it later is invalid.
+          if (heapStateOf(ref))
+            heapInterior_.insert(vd);
+        }
+      }
+      // `*p++` / `(*p)++` writes the pointed-to memory.
+      if (const auto *uo = dyn_cast<UnaryOperator>(se)) {
+        if (uo->getOpcode() == UO_Deref) {
+          const Expr *inner = uo->getSubExpr()->IgnoreParenImpCasts();
+          if (const auto *ref = dyn_cast<DeclRefExpr>(inner)) {
+            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+              if (heapStateOf(ref))
+                heapWritten_.insert(vd);
+            }
+          }
+        }
+      }
+    }
     if (op->getOpcode() == UO_AddrOf) {
       // Address taken: a libc out-parameter may write a non-null value.
       const Expr *sub = op->getSubExpr()->IgnoreParenImpCasts();
@@ -793,6 +1240,7 @@ public:
         report(op->getBeginLoc(), "use-after-move: dereference of moved resource");
       else if (isNullConstant(sub) || nullVarOf(sub))
         report(op->getBeginLoc(), "null pointer dereference");
+      checkHeapDeref(op);
     }
     if (handlers_.count(currentFunction_) &&
         (op->isIncrementOp() || op->isDecrementOp()))
@@ -1016,6 +1464,18 @@ public:
       destructors_.insert(name);
     }
     if (report_) {
+      // Conservatively treat any heap pointer passed to a call as possibly
+      // written, so a later read is not claimed uninitialised on a guess.
+      for (unsigned i = 0; i < call->getNumArgs(); ++i) {
+        const Expr *a = call->getArg(i)->IgnoreParenCasts();
+        if (const auto *ref = dyn_cast<DeclRefExpr>(a)) {
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+            auto hit = heapAllocs_.find(vd->getNameAsString());
+            if (hit != heapAllocs_.end() && hit->second.decl == vd)
+              heapWritten_.insert(vd);
+          }
+        }
+      }
       const VarDecl *ptrVar = nullptr;
       if (call->getNumArgs() >= 1) {
         const Expr *arg = call->getArg(0)->IgnoreParenImpCasts();
@@ -1093,6 +1553,7 @@ public:
         if (isa<StringLiteral>(call->getArg(0)->IgnoreParenCasts()))
           report(call->getBeginLoc(), "write to string literal via strcpy");
         checkStringCopy(call);
+        checkStrcpyNul(call);
         checkLibcNullSource(call, baseName);
       }
       if (baseName == "strncpy" && call->getNumArgs() >= 3) {
@@ -1185,6 +1646,10 @@ public:
     else if (isNullConstant(subscript->getBase()) ||
              nullVarOf(subscript->getBase()))
       report(subscript->getBeginLoc(), "null pointer subscript");
+    if (heapStateOf(subscript->getBase())) {
+      checkHeapSubscript(subscript, subscript->getBeginLoc());
+      return true;
+    }
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
     QualType baseType = base->getType();
     const auto *arrayType = ctx_.getAsConstantArrayType(baseType);
@@ -1343,6 +1808,12 @@ private:
   std::map<std::string, SourceLocation> aliasLocs_;
   std::map<std::string, SourceLocation> releaseLocs_;
   std::set<std::string> stringPtrs_;
+  std::map<std::string, HeapAllocState> heapAllocs_;
+  std::set<const VarDecl *> heapWritten_;
+  std::set<const VarDecl *> heapInterior_;
+  std::set<const VarDecl *> onePastEnd_;
+  std::map<const VarDecl *, std::string> strlenSized_;
+  std::map<const VarDecl *, long long> loopIndexOverride_;
   std::map<std::string, llvm::APSInt> constLocals_;
   std::set<std::string> assignedVars_;
   std::set<std::string> functionsReturningFreed_;

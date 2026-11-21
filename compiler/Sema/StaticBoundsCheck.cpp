@@ -10,6 +10,7 @@
 
 #include "Sema/CPlusLexer.h"
 
+#include <cstdint>
 #include <cstdlib>
 #include <sstream>
 #include <set>
@@ -53,7 +54,19 @@ public:
     collectAllocations();
     collectReturnExtents();
     propagateReturnExtents();
+    // Collect lightweight facts used by the bug-pattern checks below.  Each
+    // collector is deliberately conservative so it cannot reject valid C.
+    collectPointerNames();
+    collectRawAllocationPointers();
+    collectSizeConstants();
+    collectNegativeNames();
+    collectTypePunnedPointers();
     checkMemcpyOverlap();
+    // Targeted compile-time rejections for user-provided bug patterns.
+    checkSizeofPointer();        // bug 35
+    checkAllocationOverflow();   // bug 41
+    checkNegativeToUnsigned();   // bug 42
+    checkUnalignedCasts();       // bug 46
     checkDataRaces();
     checkStaticBufferCalls();
     checkCtypeChar();
@@ -67,6 +80,7 @@ public:
         checkLoop(i);
       else {
         checkTypePun(i);
+        checkTypePunnedDeref(i); // bug 45
         checkPointerArithmetic(i);
         checkUnrelatedPointerCompare(i);
         checkEmptyInfiniteLoop(i);
@@ -1648,6 +1662,730 @@ private:
     return false;
   }
 
+  //===--------------------------------------------------------------------===//
+  // Additional conservative checks for the user-provided bug corpus.
+  // These reuse the token stream only; every check bails out (no diagnostic)
+  // on anything it cannot understand, so valid C is never rejected.
+  //===--------------------------------------------------------------------===//
+
+  static bool isTypeWord(const std::string &s) {
+    static const char *const kWords[] = {
+        "void", "char", "short", "int", "long", "float", "double", "signed",
+        "unsigned", "struct", "union", "enum", "size_t", "ssize_t",
+        "int8_t", "uint8_t", "int16_t", "uint16_t", "int32_t", "uint32_t",
+        "int64_t", "uint64_t", "intptr_t", "uintptr_t", "const", "volatile",
+        "_Bool", "FILE"};
+    for (const char *w : kWords)
+      if (s == w)
+        return true;
+    return false;
+  }
+
+  size_t prevSig(size_t i) const {
+    if (i == 0)
+      return kNPos;
+    size_t p = i - 1;
+    while (p > 0 && trivia(p))
+      --p;
+    return p;
+  }
+
+  void skipWs(size_t &p, size_t end) const {
+    while (p < end && trivia(p))
+      ++p;
+  }
+
+  /// Version of match() bounded by `end` rather than the whole token stream.
+  size_t matchIn(size_t open, size_t end, const char *l, const char *r) const {
+    int depth = 0;
+    for (size_t i = open; i < end; ++i) {
+      if (isPunct(i, l))
+        ++depth;
+      else if (isPunct(i, r) && --depth == 0)
+        return i;
+    }
+    return kNPos;
+  }
+
+  bool isKnownArray(const std::string &name, size_t pos) const {
+    const std::vector<size_t> *dims = nullptr;
+    return findShape(name, pos, &dims);
+  }
+
+  /// Collect names declared as pointers (`T *p`, including parameters).  Only
+  /// used to recognise the `sizeof(pointer)` buffer-size bug (bug 35).
+  void collectPointerNames() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "*"))
+        continue;
+      size_t prev = prevSig(i);
+      if (prev == kNPos)
+        continue;
+      bool typeContext =
+          (toks_[prev].kind == TokKind::Identifier &&
+           isTypeWord(toks_[prev].text)) ||
+          isPunct(prev, ",") || isPunct(prev, "(") || isPunct(prev, "*");
+      if (!typeContext)
+        continue;
+      size_t name = nextSig(i);
+      if (name < toks_.size() && toks_[name].kind == TokKind::Identifier &&
+          !isTypeWord(toks_[name].text))
+        pointerNames_.insert(toks_[name].text);
+    }
+  }
+
+  /// The argument ranges of memset/memcpy/memmove (size argument is arg #2).
+  bool memoryCallArgs(size_t i,
+                      std::vector<std::pair<size_t, size_t>> *args) const {
+    if (!(isIdent(i, "memset") || isIdent(i, "memcpy") ||
+          isIdent(i, "memmove")))
+      return false;
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return false;
+    size_t rp = match(lp, "(", ")");
+    if (rp == kNPos)
+      return false;
+    *args = splitArgs(lp + 1, rp);
+    return true;
+  }
+
+  /// Bug 35: `memset(buf, 0, sizeof(buf))` where `buf` is a pointer sizes only
+  /// the pointer, not the buffer.  Arrays are exempt: there sizeof is correct.
+  void checkSizeofPointer() {
+    std::vector<std::pair<size_t, size_t>> args;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!memoryCallArgs(i, &args) || args.size() < 3)
+        continue;
+      size_t from = args[2].first, to = args[2].second;
+      for (size_t k = from; k < to; ++k) {
+        if (!isIdent(k, "sizeof"))
+          continue;
+        size_t op = nextSig(k);
+        std::string name;
+        if (isPunct(op, "(")) {
+          size_t close = matchIn(op, to, "(", ")");
+          if (close == kNPos || close >= to)
+            continue;
+          size_t id = nextSig(op);
+          if (id >= close || toks_[id].kind != TokKind::Identifier ||
+              nextSig(id) != close)
+            continue; // only a bare `sizeof(name)`, not sizeof(*p)/sizeof(T)
+          name = toks_[id].text;
+        } else if (op < to && toks_[op].kind == TokKind::Identifier) {
+          name = toks_[op].text;
+        }
+        if (name.empty() || !pointerNames_.count(name))
+          continue;
+        if (isKnownArray(name, k))
+          continue;
+        errorAt(toks_[k], "sizeof(" + name +
+                              ") is the pointer size, not the buffer size; "
+                              "pass the element count instead");
+      }
+    }
+  }
+
+  //--- Unsigned constant folding (bug 41) ----------------------------------//
+
+  static bool parseUInt(const Token &t, uint64_t *out) {
+    if (t.kind != TokKind::Number)
+      return false;
+    const std::string &s = t.text;
+    char *end = nullptr;
+    unsigned long long v = strtoull(s.c_str(), &end, 0);
+    if (end == s.c_str())
+      return false;
+    *out = static_cast<uint64_t>(v);
+    return true;
+  }
+
+  static bool isUnsignedTypeName(const std::string &s) {
+    return s == "size_t" || s == "unsigned" || s == "uint64_t" ||
+           s == "uint32_t" || s == "uint16_t" || s == "uint8_t" ||
+           s == "uintptr_t";
+  }
+
+  /// Byte size of a spelled-out integer type; 0 means "unknown" (suppresses
+  /// the diagnostic).  Host sizes match the x86-64 targets C+ builds for.
+  static size_t typeSize(const std::string &type) {
+    if (type.find("char") != std::string::npos)
+      return 1;
+    if (type.find("short") != std::string::npos)
+      return 2;
+    if (type.find("long long") != std::string::npos ||
+        type.find("double") != std::string::npos ||
+        type.find("size_t") != std::string::npos ||
+        type.find("uint64") != std::string::npos ||
+        type.find("int64") != std::string::npos ||
+        type.find("long") != std::string::npos)
+      return 8;
+    if (type.find("int") != std::string::npos ||
+        type.find("float") != std::string::npos ||
+        type.find("uint32") != std::string::npos ||
+        type.find("unsigned") != std::string::npos)
+      return 4;
+    return 0;
+  }
+
+  bool lookupUnsignedConst(const std::string &name, size_t pos,
+                           uint64_t *out) const {
+    auto it = unsignedConsts_.find(name);
+    if (it == unsignedConsts_.end())
+      return false;
+    for (size_t k = it->second.size(); k > 0; --k)
+      if (it->second[k - 1].first <= pos) {
+        *out = it->second[k - 1].second;
+        return true;
+      }
+    return false;
+  }
+
+  /// A `( TYPE * )` cast opening at `open`?  Returns the index of `)`.
+  bool castClose(size_t open, size_t end, size_t *close) const {
+    size_t k = open + 1;
+    skipWs(k, end);
+    bool anyType = false;
+    while (k < end) {
+      if (toks_[k].kind == TokKind::Identifier && isTypeWord(toks_[k].text)) {
+        anyType = true;
+        ++k;
+        skipWs(k, end);
+        continue;
+      }
+      if (isPunct(k, "*")) {
+        ++k;
+        skipWs(k, end);
+        continue;
+      }
+      if (isPunct(k, ")")) {
+        if (anyType) {
+          *close = k;
+          return true;
+        }
+        return false;
+      }
+      return false;
+    }
+    return false;
+  }
+
+  uint64_t evalUUnary(size_t &p, size_t end, bool &ok, bool &overflow) const {
+    skipWs(p, end);
+    if (p >= end) {
+      ok = false;
+      return 0;
+    }
+    if (isPunct(p, "-")) {
+      ++p;
+      return static_cast<uint64_t>(0) - evalUUnary(p, end, ok, overflow);
+    }
+    if (isPunct(p, "+")) {
+      ++p;
+      return evalUUnary(p, end, ok, overflow);
+    }
+    if (isPunct(p, "(")) {
+      size_t close = kNPos;
+      if (castClose(p, end, &close)) { // cast is transparent for unsigned math
+        p = close + 1;
+        return evalUUnary(p, end, ok, overflow);
+      }
+      size_t gclose = matchIn(p, end, "(", ")"); // plain grouping
+      if (gclose == kNPos) {
+        ok = false;
+        return 0;
+      }
+      ++p;
+      uint64_t v = evalUAdd(p, gclose, ok, overflow);
+      skipWs(p, end);
+      if (p < end && isPunct(p, ")"))
+        ++p;
+      else
+        ok = false;
+      return v;
+    }
+    if (isIdent(p, "sizeof")) { // sizeof(TYPE)
+      ++p;
+      skipWs(p, end);
+      if (p < end && isPunct(p, "(")) {
+        size_t close = matchIn(p, end, "(", ")");
+        if (close == kNPos) {
+          ok = false;
+          return 0;
+        }
+        std::string type;
+        for (size_t k = p + 1; k < close; ++k)
+          if (toks_[k].kind == TokKind::Identifier) {
+            if (!type.empty())
+              type += " ";
+            type += toks_[k].text;
+          }
+        size_t sz = typeSize(type);
+        if (sz == 0) {
+          ok = false;
+          return 0;
+        }
+        p = close + 1;
+        return static_cast<uint64_t>(sz);
+      }
+      ok = false;
+      return 0;
+    }
+    uint64_t num = 0;
+    if (parseUInt(toks_[p], &num)) {
+      ++p;
+      return num;
+    }
+    if (toks_[p].kind == TokKind::Identifier) {
+      uint64_t value = 0;
+      if (lookupUnsignedConst(toks_[p].text, p, &value)) {
+        ++p;
+        return value;
+      }
+    }
+    ok = false;
+    return 0;
+  }
+
+  uint64_t evalUMul(size_t &p, size_t end, bool &ok, bool &overflow) const {
+    uint64_t a = evalUUnary(p, end, ok, overflow);
+    while (ok) {
+      skipWs(p, end);
+      if (p >= end)
+        break;
+      bool div = isPunct(p, "/"), mod = isPunct(p, "%");
+      if (!isPunct(p, "*") && !div && !mod)
+        break;
+      ++p;
+      uint64_t b = evalUUnary(p, end, ok, overflow);
+      if (!ok)
+        break;
+      if (div || mod) {
+        if (b == 0) {
+          ok = false;
+          break;
+        }
+        a = div ? a / b : a % b;
+      } else {
+        if (b != 0 && a > (~static_cast<uint64_t>(0)) / b)
+          overflow = true;
+        a *= b;
+      }
+    }
+    return a;
+  }
+
+  uint64_t evalUAdd(size_t &p, size_t end, bool &ok, bool &overflow) const {
+    uint64_t a = evalUMul(p, end, ok, overflow);
+    while (ok) {
+      skipWs(p, end);
+      if (p >= end)
+        break;
+      if (isPunct(p, "+")) {
+        ++p;
+        uint64_t b = evalUMul(p, end, ok, overflow);
+        if (!ok)
+          break;
+        if (a > (~static_cast<uint64_t>(0)) - b)
+          overflow = true;
+        a += b;
+      } else if (isPunct(p, "-")) {
+        ++p;
+        uint64_t b = evalUMul(p, end, ok, overflow);
+        if (!ok)
+          break;
+        a -= b; // unsigned wraparound is well defined
+      } else {
+        break;
+      }
+    }
+    return a;
+  }
+
+  bool evalUnsignedExpr(size_t from, size_t to, uint64_t *out,
+                        bool *overflow) const {
+    size_t p = from;
+    bool ok = true;
+    *overflow = false;
+    uint64_t v = evalUAdd(p, to, ok, *overflow);
+    skipWs(p, to);
+    if (!ok || p != to)
+      return false;
+    *out = v;
+    return true;
+  }
+
+  /// Record compile-time values of size_t/unsigned locals so allocation sizes
+  /// can be constant-folded.  Values are keyed by source position so shadowed
+  /// or reassigned names cannot leak across scopes (bug 41).
+  void collectSizeConstants() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier ||
+          !isUnsignedTypeName(toks_[i].text))
+        continue;
+      size_t name = nextSig(i);
+      if (name >= toks_.size() || toks_[name].kind != TokKind::Identifier)
+        continue;
+      size_t eq = nextSig(name);
+      if (!isPunct(eq, "="))
+        continue;
+      size_t semi = findSemi(nextSig(eq), toks_.size());
+      if (semi == kNPos)
+        continue;
+      uint64_t value = 0;
+      bool overflow = false;
+      if (!evalUnsignedExpr(nextSig(eq), semi, &value, &overflow))
+        continue;
+      unsignedConsts_[toks_[name].text].push_back({name, value});
+    }
+  }
+
+  /// Bug 41: reject allocation sizes whose constant arithmetic wraps size_t,
+  /// e.g. `malloc(n * sizeof(int))` with n == SIZE_MAX / 2 + 2.
+  void checkAllocationOverflow() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      const std::string &fn = toks_[i].text;
+      if (!(isAllocator(fn) || fn == "realloc"))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos)
+        continue;
+      for (const auto &arg : splitArgs(lp + 1, rp)) {
+        bool hasSizeof = false;
+        for (size_t k = arg.first; k < arg.second; ++k)
+          if (isIdent(k, "sizeof")) {
+            hasSizeof = true;
+            break;
+          }
+        if (!hasSizeof)
+          continue;
+        uint64_t value = 0;
+        bool overflow = false;
+        if (!evalUnsignedExpr(arg.first, arg.second, &value, &overflow))
+          continue;
+        if (overflow)
+          errorAt(toks_[i], "allocation size wraps size_t; check the "
+                            "multiplication before allocating");
+      }
+    }
+  }
+
+  //--- Negative-to-unsigned conversions (bug 42) ---------------------------//
+
+  /// Bug 42 facts: per-function set of names known to hold a negative value,
+  /// gathered from local `name = -NUMBER` initialisers and from negative
+  /// literal arguments propagated into callee parameters.  A name with any
+  /// other (or unknown) assignment is dropped to avoid false positives.
+  /// The generic checkNegativeComparison() is deliberately not used: it would
+  /// falsely reject valid signed comparisons such as `if (x < y)`.
+  void collectNegativeNames() {
+    // Local assignments, scoped to each function body.
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (sig.bodyClose == kNPos)
+        continue;
+      std::set<std::string> conflict;
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (toks_[k].kind != TokKind::Identifier)
+          continue;
+        size_t eq = nextSig(k);
+        if (eq > sig.bodyClose || !isPunct(eq, "="))
+          continue;
+        const std::string &name = toks_[k].text;
+        size_t val = nextSig(eq);
+        if (val > sig.bodyClose)
+          continue;
+        bool negative = isPunct(val, "-");
+        if (negative)
+          val = nextSig(val);
+        long ignored = 0;
+        if (val <= sig.bodyClose && number(toks_[val], &ignored)) {
+          if (negative)
+            negFacts_[entry.first].insert(name);
+          else
+            conflict.insert(name);
+        } else {
+          conflict.insert(name);
+        }
+      }
+      for (const auto &n : conflict)
+        negFacts_[entry.first].erase(n);
+    }
+    // Negative literal arguments propagated into the callee's parameters.
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      auto it = funcs_.find(toks_[i].text);
+      if (it == funcs_.end())
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{"))
+        continue; // a definition, not a call
+      auto args = splitArgs(lp + 1, rp);
+      if (args.size() != it->second.params.size())
+        continue;
+      for (size_t k = 0; k < args.size(); ++k) {
+        const std::string &param = it->second.params[k];
+        if (param.empty())
+          continue;
+        size_t a = args[k].first, b = args[k].second;
+        skipWs(a, b);
+        if (!isPunct(a, "-"))
+          continue;
+        long ignored = 0;
+        size_t num = nextSig(a);
+        if (num < b && number(toks_[num], &ignored))
+          negFacts_[it->first].insert(param);
+      }
+    }
+  }
+
+  /// Negative-value facts in scope at `pos`, or null when none are known.
+  const std::set<std::string> *negativeFactsAt(size_t pos) const {
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (sig.bodyOpen <= pos && pos <= sig.bodyClose) {
+        auto it = negFacts_.find(entry.first);
+        return it == negFacts_.end() ? nullptr : &it->second;
+      }
+    }
+    return nullptr;
+  }
+
+  bool castIsUnsignedType(size_t from, size_t to) const {
+    for (size_t k = from; k < to; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      const std::string &s = toks_[k].text;
+      if (s == "size_t" || s == "unsigned" || s.rfind("uint", 0) == 0)
+        return true;
+    }
+    return false;
+  }
+
+  /// Bug 42: a value known to be negative, cast to size_t (or passed bare) as
+  /// a memory-operation length, becomes a huge unsigned size.
+  void checkNegativeToUnsigned() {
+    std::vector<std::pair<size_t, size_t>> args;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!memoryCallArgs(i, &args) || args.size() < 3)
+        continue;
+      const std::set<std::string> *neg = negativeFactsAt(i);
+      if (!neg || neg->empty())
+        continue;
+      size_t from = args[2].first, to = args[2].second;
+      bool reported = false;
+      for (size_t k = from; k < to && !reported; ++k) {
+        if (!isPunct(k, "("))
+          continue;
+        size_t close = matchIn(k, to, "(", ")");
+        if (close == kNPos || close >= to ||
+            !castIsUnsignedType(k + 1, close))
+          continue;
+        size_t id = nextSig(close);
+        if (id >= to || toks_[id].kind != TokKind::Identifier)
+          continue;
+        if (neg->count(toks_[id].text)) {
+          errorAt(toks_[k], "negative length '" + toks_[id].text +
+                                "' converted to size_t becomes a huge size");
+          reported = true;
+        }
+      }
+      if (reported)
+        continue;
+      // Bare known-negative identifier used directly as the size argument.
+      size_t only = kNPos;
+      bool single = true;
+      for (size_t k = from; k < to; ++k) {
+        if (trivia(k))
+          continue;
+        if (only != kNPos) {
+          single = false;
+          break;
+        }
+        only = k;
+      }
+      if (single && only != kNPos && toks_[only].kind == TokKind::Identifier &&
+          neg->count(toks_[only].text))
+        errorAt(toks_[only], "negative length '" + toks_[only].text +
+                                 "' passed as an unsigned size");
+    }
+  }
+
+  //--- Strict-aliasing type punning (bug 45) --------------------------------//
+
+  /// Record pointers initialised from `(T*)&other` where T is not a character
+  /// type; writing through them violates strict aliasing.  The existing
+  /// checkTypePun() only handles the inline `* (T*) &x` spelling.
+  void collectTypePunnedPointers() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "="))
+        continue;
+      size_t lhs = prevSig(i);
+      if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
+        continue;
+      size_t rhs = nextSig(i);
+      if (!isPunct(rhs, "("))
+        continue;
+      size_t close = match(rhs, "(", ")");
+      if (close == kNPos)
+        continue;
+      bool hasStar = false, charLike = false;
+      for (size_t k = rhs + 1; k < close; ++k) {
+        if (isPunct(k, "*"))
+          hasStar = true;
+        if (toks_[k].kind == TokKind::Identifier &&
+            (toks_[k].text == "char" || toks_[k].text == "void"))
+          charLike = true; // character types may alias anything
+      }
+      if (!hasStar || charLike)
+        continue;
+      size_t amp = nextSig(close);
+      if (!isPunct(amp, "&"))
+        continue;
+      size_t var = nextSig(amp);
+      if (var >= toks_.size() || toks_[var].kind != TokKind::Identifier)
+        continue;
+      typePunned_.insert(toks_[lhs].text);
+    }
+  }
+
+  /// Bug 45: a write through a pointer produced by an aliasing-punning cast.
+  void checkTypePunnedDeref(size_t i) {
+    if (isPunct(i, "*")) {
+      size_t before = prevSig(i);
+      // `int *p = ...` is a declarator, not a dereference write.
+      if (before != kNPos && toks_[before].kind == TokKind::Identifier &&
+          isTypeWord(toks_[before].text))
+        return;
+      size_t n = nextSig(i);
+      if (n < toks_.size() && toks_[n].kind == TokKind::Identifier &&
+          typePunned_.count(toks_[n].text) && isPunct(nextSig(n), "=")) {
+        errorAt(toks_[i], "type-punned write through '" + toks_[n].text +
+                              "' violates strict aliasing; use memcpy");
+        return;
+      }
+    }
+    if (toks_[i].kind == TokKind::Identifier &&
+        typePunned_.count(toks_[i].text)) {
+      size_t lb = nextSig(i);
+      if (isPunct(lb, "[")) {
+        size_t rb = match(lb, "[", "]");
+        if (rb != kNPos && isPunct(nextSig(rb), "="))
+          errorAt(toks_[i], "type-punned write through '" + toks_[i].text +
+                                "' violates strict aliasing; use memcpy");
+      }
+    }
+  }
+
+  //--- Unaligned pointer casts (bug 46) -------------------------------------//
+
+  /// Collect pointers assigned (via an optional cast) from malloc/calloc etc.
+  /// `byteAllocPtrs_` keeps the subset whose pointee is a byte type (char/void),
+  /// the only bases for which `base + N` denotes a byte offset (bug 46).
+  void collectRawAllocationPointers() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "="))
+        continue;
+      size_t lhs = prevSig(i);
+      if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
+        continue;
+      if (!isAllocator(allocatorName(nextSig(i))))
+        continue;
+      size_t star = prevSig(lhs);
+      size_t typeTok = (star != kNPos && isPunct(star, "*")) ? prevSig(star)
+                                                             : kNPos;
+      if (typeTok != kNPos && toks_[typeTok].kind == TokKind::Identifier) {
+        const std::string &t = toks_[typeTok].text;
+        if (t == "char" || t == "void")
+          byteAllocPtrs_.insert(toks_[lhs].text);
+      }
+    }
+  }
+
+  static size_t typeAlignment(const std::string &type) {
+    if (type.find("char") != std::string::npos)
+      return 1;
+    if (type.find("short") != std::string::npos)
+      return 2;
+    if (type.find("long long") != std::string::npos ||
+        type.find("double") != std::string::npos ||
+        type.find("size_t") != std::string::npos ||
+        type.find("uint64") != std::string::npos ||
+        type.find("int64") != std::string::npos ||
+        type.find("long") != std::string::npos)
+      return 8;
+    if (type.find("int") != std::string::npos ||
+        type.find("float") != std::string::npos ||
+        type.find("uint32") != std::string::npos ||
+        type.find("unsigned") != std::string::npos)
+      return 4;
+    return 0;
+  }
+
+  /// Bug 46: casting a known allocation base plus a non-multiple byte offset
+  /// to a type with stricter alignment produces an unaligned pointer.
+  void checkUnalignedCasts() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "("))
+        continue;
+      size_t close = match(i, "(", ")");
+      if (close == kNPos)
+        continue;
+      bool hasStar = false;
+      std::string type;
+      for (size_t k = i + 1; k < close; ++k) {
+        if (isPunct(k, "*"))
+          hasStar = true;
+        if (toks_[k].kind == TokKind::Identifier) {
+          if (!type.empty())
+            type += " ";
+          type += toks_[k].text;
+        }
+      }
+      if (!hasStar || type.empty())
+        continue;
+      size_t align = typeAlignment(type);
+      if (align <= 1)
+        continue;
+      size_t open2 = nextSig(close);
+      if (!isPunct(open2, "("))
+        continue;
+      size_t close2 = match(open2, "(", ")");
+      if (close2 == kNPos)
+        continue;
+      size_t base = nextSig(open2);
+      if (base >= close2 || toks_[base].kind != TokKind::Identifier)
+        continue;
+      const std::string &baseName = toks_[base].text;
+      // Only byte-granular allocation bases make `base + N` a byte offset;
+      // for typed arrays/pointers N counts elements, not bytes.
+      if (!byteAllocPtrs_.count(baseName))
+        continue;
+      size_t op = nextSig(base);
+      if (!(isPunct(op, "+") || isPunct(op, "-")))
+        continue;
+      size_t numTok = nextSig(op);
+      if (numTok >= close2)
+        continue;
+      long offset = 0;
+      if (!number(toks_[numTok], &offset) || offset == 0)
+        continue;
+      if (offset % static_cast<long>(align) != 0)
+        errorAt(toks_[i], "unaligned pointer: '" + baseName + "' offset " +
+                              std::to_string(offset) + " is not a multiple of " +
+                              std::to_string(align) + " for '" + type + "'");
+    }
+  }
+
   std::vector<Token> toks_;
   std::string source_;
   std::map<std::string, size_t> arrays_;
@@ -1664,6 +2402,12 @@ private:
   std::set<std::string> globals_;
   std::set<std::string> volatileGlobals_;
   std::set<size_t> functionOpens_;
+  std::set<std::string> pointerNames_;   // bug 35
+  std::set<std::string> byteAllocPtrs_;  // bug 46
+  std::map<std::string, std::vector<std::pair<size_t, uint64_t>>>
+      unsignedConsts_;                   // bug 41 (value keyed by source pos)
+  std::map<std::string, std::set<std::string>> negFacts_; // bug 42
+  std::set<std::string> typePunned_;     // bug 45
   DiagnosticEngine &diags_;
   std::string filename_;
 };

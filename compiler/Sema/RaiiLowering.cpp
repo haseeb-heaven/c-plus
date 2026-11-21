@@ -77,6 +77,10 @@ public:
   }
 
   LoweredSource run() {
+    // Plain-C raw-allocation / FILE lifetime checks.  Kept separate from the
+    // ownership-lowering scan below: these patterns carry no C+ markers, so
+    // they are diagnosed directly from the token stream.
+    analyzePlainC();
     scan();
     applyEdits();
 
@@ -211,6 +215,39 @@ private:
     d.column = t.column;
     d.help = help;
     diags_.report(std::move(d));
+  }
+
+  /// Diagnostics for plain-C lifetime bugs that are "strict" findings: an
+  /// error in STRICT mode, a warning in the default (Safe) mode, and nothing
+  /// at all in LegacyC mode.
+  void strictDiag(const std::string &msg, const Token &t,
+                  const std::string &help = std::string()) {
+    if (mode_ == Mode::LegacyC)
+      return;
+    if (strict_)
+      errorAt(msg, t, help);
+    else
+      warningAt(msg, t, help);
+  }
+
+  /// Possible leaks are reported as warnings even in STRICT: the linear scan
+  /// cannot prove a leak on every path, so rejecting would create false
+  /// positives on valid C with early returns or complex control flow.
+  void plainWarn(const std::string &msg, const Token &t,
+                 const std::string &help = std::string()) {
+    if (mode_ == Mode::LegacyC)
+      return;
+    warningAt(msg, t, help);
+  }
+
+  /// Diagnostics for plain-C lifetime bugs that are always rejected in safe
+  /// modes (double close, use-after-close, escaping stack buffers).  LegacyC
+  /// mode is left untouched.
+  void plainError(const std::string &msg, const Token &t,
+                  const std::string &help = std::string()) {
+    if (mode_ == Mode::LegacyC)
+      return;
+    errorAt(msg, t, help);
   }
 
   // --- markers --------------------------------------------------------------
@@ -752,6 +789,611 @@ private:
       return false;
     borrows_[toks_[name].text] = toks_[ownerIdx].text;
     return true;
+  }
+
+  // --- plain-C lifetime checks ----------------------------------------------
+  //
+  // The checks below cover the raw `malloc`/`fopen` patterns that occur in
+  // ordinary C, where no C+ ownership marker exists.  They are deliberately
+  // token-level and conservative so that valid C is never rejected:
+  //
+  //   * a leak is only reported at an explicit `return` that is reached while
+  //     an allocation is still live on the linear token path (free/fclose
+  //     removes it from the live set; a null-check guard suppresses the
+  //     report), and only when the pointer is a local that neither escapes
+  //     via return nor via an out-parameter;
+  //   * `longjmp` is only escalated when an allocation is live;
+  //   * a `FILE*` is only flagged for fclose/use when it came from `fopen`
+  //     in this function and was actually tracked.
+  //
+  // Everything here is disabled in LegacyC mode.  STRICT mode turns the
+  // leak/longjmp findings into errors; the definite-UB findings are always
+  // errors in safe modes.
+
+  enum class AllocKind { Malloc, Fopen };
+
+  struct RawAlloc {
+    AllocKind kind = AllocKind::Malloc;
+    bool possiblyNull = false;
+    bool escaped = false;   // returned or stored through an out-parameter
+    bool reported = false;  // avoid a cascade of leak reports for one alloc
+    unsigned line = 0;
+    unsigned column = 0;
+  };
+
+  struct LocalVar {
+    int scopeIndex = 0;  // index into the scope stack where it was declared
+    bool isPointer = false;
+    bool isArray = false;
+    bool isStatic = false;
+  };
+
+  size_t matchingParen(size_t open) const {
+    int depth = 0;
+    for (size_t k = open; k < toks_.size(); ++k) {
+      if (isPunct(k, "("))
+        ++depth;
+      else if (isPunct(k, ")")) {
+        if (--depth == 0)
+          return k;
+      }
+    }
+    return kNPos;
+  }
+
+  size_t matchingParenBackward(size_t close) const {
+    int depth = 0;
+    for (size_t k = close + 1; k > 0;) {
+      --k;
+      if (isPunct(k, ")"))
+        ++depth;
+      else if (isPunct(k, "(")) {
+        if (--depth == 0)
+          return k;
+      }
+    }
+    return kNPos;
+  }
+
+  size_t matchingBrace(size_t open) const {
+    int depth = 0;
+    for (size_t k = open; k < toks_.size(); ++k) {
+      if (isPunct(k, "{"))
+        ++depth;
+      else if (isPunct(k, "}")) {
+        if (--depth == 0)
+          return k;
+      }
+    }
+    return kNPos;
+  }
+
+  /// Walk backwards from `from` to the `=` that assigns to a variable.
+  /// Cast spellings such as `(int*)malloc(...)` and parenthesised sub
+  /// expressions are skipped so the assignment target is not hidden.
+  size_t findEqBefore(size_t from) const {
+    for (size_t j = from; j > 0;) {
+      size_t p = prevSig(j);
+      if (p == kNPos)
+        return kNPos;
+      if (isPunct(p, ";") || isPunct(p, "{") || isPunct(p, "}"))
+        return kNPos;
+      if (isPunct(p, "="))
+        return p;
+      if (isPunct(p, ")")) {
+        // Jump over a complete parenthesised group (a cast in practice).
+        // Start at depth 1 for the closing paren we are already standing on.
+        size_t k = p;
+        int depth = 1;
+        for (; k > 0;) {
+          size_t q = prevSig(k);
+          if (q == kNPos)
+            break;
+          if (isPunct(q, ")"))
+            ++depth;
+          else if (isPunct(q, "(")) {
+            if (--depth == 0)
+              break;
+          }
+          k = q;
+        }
+        j = k;
+        continue;
+      }
+      j = p;
+    }
+    return kNPos;
+  }
+
+  size_t findAssignmentLhs(size_t eq) const {
+    size_t p = prevSig(eq);
+    if (p == kNPos || toks_[p].kind != TokKind::Identifier)
+      return kNPos;
+    return p;
+  }
+
+  /// True when the identifier at `lhs` is a dereference/member/subscript
+  /// (`*p`, `p->x`, `x[i]`) rather than a plain variable name.  A declaration
+  /// pointer (`int *p = ...`) is *not* a dereference: the token before `*`
+  /// is a type identifier.
+  bool isDerefLhs(size_t lhs) const {
+    size_t b = prevSig(lhs);
+    if (b == kNPos)
+      return false;
+    if (isPunct(b, "*")) {
+      size_t beforeStar = prevSig(b);
+      if (beforeStar == kNPos || toks_[beforeStar].kind != TokKind::Identifier)
+        return true; // `*p = ...`
+      return false; // `int *p = ...`
+    }
+    if (isPunct(b, ".") || isPunct(b, "->") || isPunct(b, "["))
+      return true;
+    if (isPunct(nextSig(lhs), "["))
+      return true;
+    return false;
+  }
+
+  /// Recognise `!x`, `x == NULL`, `NULL == x`, `x == 0` as a null test used to
+  /// guard an early return.  `x != NULL` is intentionally not a guard: a
+  /// return on that branch would really leak a non-null allocation.
+  bool isNullCheck(size_t from, size_t to, const std::string &name) const {
+    std::vector<size_t> sig;
+    for (size_t k = from; k < to; ++k)
+      if (!isTrivia(k))
+        sig.push_back(k);
+    auto isNullConst = [&](size_t x) {
+      return (toks_[x].kind == TokKind::Identifier &&
+              toks_[x].text == "NULL") ||
+             (toks_[x].kind == TokKind::Number && toks_[x].text == "0");
+    };
+    if (sig.size() == 2 && isPunct(sig[0], "!") &&
+        isIdent(sig[1], name.c_str()))
+      return true;
+    if (sig.size() == 3 && isPunct(sig[1], "==")) {
+      if (isIdent(sig[0], name.c_str()) && isNullConst(sig[2]))
+        return true;
+      if (isNullConst(sig[0]) && isIdent(sig[2], name.c_str()))
+        return true;
+    }
+    return false;
+  }
+
+  /// Collect file-scope declarations so a global pointer assigned in a
+  /// function is not mistaken for a leaking local allocation.
+  std::set<std::string> collectGlobals() const {
+    std::set<std::string> out;
+    int depth = 0;
+    bool atStart = true;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isTrivia(i))
+        continue;
+      if (isPunct(i, "{")) {
+        ++depth;
+        atStart = true;
+        continue;
+      }
+      if (isPunct(i, "}")) {
+        if (depth > 0)
+          --depth;
+        atStart = true;
+        continue;
+      }
+      if (isPunct(i, ";") || isPunct(i, ":")) {
+        atStart = true;
+        continue;
+      }
+      if (depth == 0 && atStart) {
+        size_t end = statementEnd(i);
+        if (end != kNPos) {
+          std::map<std::string, LocalVar> dummy;
+          recordLocalDecl(i, end, dummy, &out);
+        }
+      }
+      atStart = false;
+    }
+    return out;
+  }
+
+  /// Record a simple `type *name` / `type name[N]` declaration.  Names found
+  /// are added to `scope` (for locals) and, when non-null, to `out` (for
+  /// file-scope declarations).
+  void recordLocalDecl(size_t s, size_t e,
+                       std::map<std::string, LocalVar> &scope,
+                       std::set<std::string> *out = nullptr) const {
+    if (s >= e)
+      return;
+    static const std::set<std::string> kNonDecl = {
+        "return", "if",   "for",     "while",   "do",      "switch",
+        "case",   "else", "goto",    "break",   "continue"};
+    size_t k = s;
+    bool isStatic = false;
+    while (k < e) {
+      if (isIdent(k, "static")) {
+        isStatic = true;
+        k = nextSig(k);
+      } else if (isIdent(k, "const") || isIdent(k, "volatile") ||
+                 isIdent(k, "unsigned") || isIdent(k, "signed") ||
+                 isIdent(k, "struct") || isIdent(k, "union") ||
+                 isIdent(k, "enum") || isIdent(k, "long") ||
+                 isIdent(k, "short") || isIdent(k, "register") ||
+                 isIdent(k, "extern") || isIdent(k, "inline")) {
+        k = nextSig(k);
+      } else {
+        break;
+      }
+    }
+    if (k >= e || toks_[k].kind != TokKind::Identifier ||
+        kNonDecl.count(toks_[k].text))
+      return;
+    k = nextSig(k);
+    bool sawStar = false;
+    while (k < e && isPunct(k, "*")) {
+      sawStar = true;
+      k = nextSig(k);
+    }
+    if (k >= e || toks_[k].kind != TokKind::Identifier)
+      return;
+    const std::string name = toks_[k].text;
+    size_t after = nextSig(k);
+    bool isArray = after < e && isPunct(after, "[");
+    if (out)
+      out->insert(name);
+    else
+      scope[name] = LocalVar{0, sawStar, isArray, isStatic};
+  }
+
+  void analyzePlainC() {
+    if (mode_ == Mode::LegacyC)
+      return;
+    const std::set<std::string> globals = collectGlobals();
+
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "{"))
+        continue;
+      size_t before = prevSig(i);
+      if (before == kNPos || !isPunct(before, ")"))
+        continue; // not a function body (struct/initialiser/control block)
+      // Functions explicitly opted out of cleanup are left alone.
+      bool noCleanup = false;
+      for (size_t k = before, steps = 0;
+           k != kNPos && k > 0 && steps < 32; ++steps) {
+        size_t p = prevSig(k);
+        if (p == kNPos || isPunct(p, ";") || isPunct(p, "}"))
+          break;
+        if (isIdent(p, "cplus_no_cleanup")) {
+          noCleanup = true;
+          break;
+        }
+        k = p;
+      }
+      size_t end = matchingBrace(i);
+      if (end == kNPos)
+        continue;
+      if (!noCleanup)
+        analyzeFunction(i, end, globals);
+      i = end;
+    }
+  }
+
+  void analyzeFunction(size_t openIdx, size_t closeIdx,
+                       const std::set<std::string> &globals) {
+    // Parameter names: an allocation stored into a parameter is an
+    // out-parameter/escaping store, not a provable local leak.
+    std::set<std::string> params;
+    size_t closeParen = prevSig(openIdx);
+    size_t openParen =
+        closeParen == kNPos ? kNPos : matchingParenBackward(closeParen);
+    if (openParen != kNPos) {
+      for (size_t k = openParen + 1; k < closeParen; ++k)
+        if (toks_[k].kind == TokKind::Identifier)
+          params.insert(toks_[k].text);
+    }
+
+    std::vector<std::map<std::string, LocalVar>> scopes(1);
+    std::map<std::string, RawAlloc> live;          // live on the linear path
+    std::set<std::string> closedFiles;             // fopen results already closed
+    std::set<std::string> nullChecked;            // fopen vars with a null test
+    // `p -> (inner local, scope index)` for `p = &innerLocal`.
+    std::map<std::string, std::pair<std::string, int>> dangling;
+    std::set<std::string> expired;                 // pointers to dead locals
+    std::set<std::string> danglingReported;
+    std::set<std::string> longjmpReported;
+
+    auto lookupLocal = [&](const std::string &n) -> LocalVar * {
+      for (int s = static_cast<int>(scopes.size()) - 1; s >= 0; --s) {
+        auto it = scopes[s].find(n);
+        if (it != scopes[s].end())
+          return &it->second;
+      }
+      return nullptr;
+    };
+
+    auto reportDanglingUse = [&](const Token &at, const std::string &name) {
+      if (danglingReported.count(name))
+        return;
+      danglingReported.insert(name);
+      plainError("use of pointer '" + name +
+                     "' whose target local has left its scope",
+                 at, "the pointed-to stack object no longer exists");
+    };
+
+    // Whether `retIdx` is immediately guarded by an `if (!x)`-style null
+    // check for `name`.  Scanning backwards stops at the first statement
+    // boundary so only the directly enclosing condition is considered.
+    auto nullGuardedReturn = [&](size_t retIdx, const std::string &name) {
+      for (size_t j = retIdx; j > openIdx;) {
+        size_t p = prevSig(j);
+        if (p == kNPos || p <= openIdx)
+          break;
+        if (isPunct(p, ";") || isIdent(p, "return") || isIdent(p, "else"))
+          break;
+        if (isIdent(p, "if")) {
+          size_t lp = nextSig(p);
+          if (!isPunct(lp, "("))
+            return false;
+          size_t rp = matchingParen(lp);
+          if (rp == kNPos || rp >= retIdx)
+            return false;
+          return isNullCheck(lp + 1, rp, name);
+        }
+        j = p;
+      }
+      return false;
+    };
+
+    auto noteFopenNullChecks = [&](size_t ifIdx) {
+      size_t lp = nextSig(ifIdx);
+      if (!isPunct(lp, "("))
+        return;
+      size_t rp = matchingParen(lp);
+      if (rp == kNPos)
+        return;
+      for (size_t k = lp + 1; k < rp; ++k) {
+        if (toks_[k].kind == TokKind::Identifier) {
+          auto it = live.find(toks_[k].text);
+          if (it != live.end() && it->second.kind == AllocKind::Fopen)
+            nullChecked.insert(toks_[k].text);
+        }
+      }
+    };
+
+    static const std::set<std::string> kFileUseFuncs = {
+        "fprintf", "fputs",  "fputc",   "fwrite", "fread",  "fseek",
+        "ftell",   "fflush", "rewind",  "fileno", "ferror", "feof",
+        "clearerr", "setbuf", "setvbuf"};
+
+    bool atStmtStart = true;
+    for (size_t i = openIdx + 1; i < closeIdx; ++i) {
+      const Token &t = toks_[i];
+      if (isTrivia(i))
+        continue;
+
+      if (atStmtStart) {
+        size_t end = statementEnd(i);
+        if (end == kNPos || end > closeIdx)
+          end = closeIdx;
+        recordLocalDecl(i, end, scopes.back());
+      }
+
+      if (isPunct(i, "{")) {
+        scopes.push_back(std::map<std::string, LocalVar>());
+        atStmtStart = true;
+        continue;
+      }
+      if (isPunct(i, "}")) {
+        int closing = static_cast<int>(scopes.size()) - 1;
+        for (const auto &kv : dangling)
+          if (kv.second.second == closing)
+            expired.insert(kv.first);
+        if (scopes.size() > 1)
+          scopes.pop_back();
+        atStmtStart = true;
+        continue;
+      }
+      if (isPunct(i, ";") || isPunct(i, ":")) {
+        atStmtStart = true;
+        continue;
+      }
+      if (isPunct(i, "=")) {
+        size_t lhs = findAssignmentLhs(i);
+        std::string lhsName =
+            lhs == kNPos ? std::string() : toks_[lhs].text;
+        size_t rhs = nextSig(i);
+
+        // `*out = p` / `obj.field = p` / `out = p` (out a pointer parameter)
+        // transfers the pointer to the caller: not a provable local leak.
+        if (!lhsName.empty() && (isDerefLhs(lhs) || params.count(lhsName))) {
+          if (rhs < closeIdx && toks_[rhs].kind == TokKind::Identifier) {
+            auto it = live.find(toks_[rhs].text);
+            if (it != live.end())
+              it->second.escaped = true;
+          }
+        }
+
+        // `p = &innerLocal` sets up a possible dangling pointer once the
+        // inner scope closes.  Any other reassignment clears that state.
+        if (!lhsName.empty() && isPunct(rhs, "&")) {
+          size_t target = nextSig(rhs);
+          if (target < closeIdx && toks_[target].kind == TokKind::Identifier) {
+            LocalVar *pv = lookupLocal(lhsName);
+            LocalVar *tv = lookupLocal(toks_[target].text);
+            if (pv && tv && !tv->isStatic && !pv->isStatic &&
+                tv->scopeIndex > pv->scopeIndex) {
+              dangling[lhsName] = {toks_[target].text, tv->scopeIndex};
+              expired.erase(lhsName);
+            } else {
+              expired.erase(lhsName);
+              dangling.erase(lhsName);
+            }
+          }
+        } else if (!lhsName.empty()) {
+          expired.erase(lhsName);
+          dangling.erase(lhsName);
+        }
+        atStmtStart = false;
+        continue;
+      }
+      if (isPunct(i, "&")) {
+        size_t arg = nextSig(i); // `f(&p)` similarly escapes p
+        if (arg < closeIdx && toks_[arg].kind == TokKind::Identifier) {
+          auto it = live.find(toks_[arg].text);
+          if (it != live.end())
+            it->second.escaped = true;
+        }
+        atStmtStart = false;
+        continue;
+      }
+      if (isPunct(i, "*")) {
+        size_t arg = nextSig(i);
+        if (arg < closeIdx && toks_[arg].kind == TokKind::Identifier &&
+            expired.count(toks_[arg].text))
+          reportDanglingUse(t, toks_[arg].text);
+        atStmtStart = false;
+        continue;
+      }
+      if (t.kind != TokKind::Identifier) {
+        atStmtStart = false;
+        continue;
+      }
+
+      if (isIdent(i, "malloc") || isIdent(i, "fopen")) {
+        size_t lp = nextSig(i);
+        if (isPunct(lp, "(")) {
+          size_t eq = findEqBefore(i);
+          if (eq != kNPos && eq < closeIdx) {
+            size_t lhs = findAssignmentLhs(eq);
+            if (lhs != kNPos && lhs > openIdx && !isDerefLhs(lhs)) {
+              const std::string name = toks_[lhs].text;
+              if (!params.count(name) && !globals.count(name)) {
+                RawAlloc a;
+                a.kind = isIdent(i, "fopen") ? AllocKind::Fopen
+                                             : AllocKind::Malloc;
+                a.possiblyNull = a.kind == AllocKind::Fopen;
+                a.line = t.line;
+                a.column = t.column;
+                live[name] = a;
+              }
+            }
+          }
+        }
+      } else if (isIdent(i, "free") || isIdent(i, "fclose")) {
+        size_t lp = nextSig(i);
+        size_t arg = isPunct(lp, "(") ? nextSig(lp) : kNPos;
+        if (arg < closeIdx && toks_[arg].kind == TokKind::Identifier) {
+          const std::string name = toks_[arg].text;
+          bool isFclose = isIdent(i, "fclose");
+          auto it = live.find(name);
+          // A second fclose on a mutually-exclusive path (e.g. an early
+          // return inside an if) is valid C; the linear scan cannot prove a
+          // double close, so only use-after-close is diagnosed.
+          if (isFclose && closedFiles.count(name)) {
+            // no diagnostic: path-sensitive proof unavailable
+          } else if (it != live.end()) {
+            if (isFclose) {
+              // `fclose` on a plainly possibly-null fopen result is UB.  A
+              // null test anywhere before this point suppresses the report.
+              if (it->second.kind == AllocKind::Fopen &&
+                  it->second.possiblyNull && !nullChecked.count(name))
+                plainError("fclose on possibly null FILE* '" + name +
+                               "' from fopen",
+                           t, "test the fopen result before closing it");
+              closedFiles.insert(name);
+            }
+            live.erase(it); // freed on this path
+          }
+        }
+      } else if (isIdent(i, "setbuf") || isIdent(i, "setvbuf")) {
+        size_t lp = nextSig(i);
+        if (isPunct(lp, "(")) {
+          size_t comma = kNPos;
+          int depth = 0;
+          for (size_t k = lp; k < closeIdx; ++k) {
+            if (isPunct(k, "("))
+              ++depth;
+            else if (isPunct(k, ")")) {
+              if (--depth == 0)
+                break;
+            } else if (isPunct(k, ",") && depth == 1) {
+              comma = k;
+              break;
+            }
+          }
+          if (comma != kNPos) {
+            size_t bufArg = nextSig(comma);
+            if (bufArg < closeIdx &&
+                toks_[bufArg].kind == TokKind::Identifier) {
+              LocalVar *lv = lookupLocal(toks_[bufArg].text);
+              if (lv && lv->isArray && !lv->isStatic)
+                plainError(std::string(t.text) +
+                               " buffer '" + toks_[bufArg].text +
+                               "' is a stack array that will dangle",
+                           t, "use a buffer with static or heap lifetime");
+            }
+          }
+        }
+      } else if (isIdent(i, "return")) {
+        size_t v = nextSig(i);
+        std::string returned;
+        if (v < closeIdx && toks_[v].kind == TokKind::Identifier) {
+          size_t after = nextSig(v);
+          if (after < closeIdx && isPunct(after, ";"))
+            returned = toks_[v].text;
+        }
+        for (auto &kv : live) {
+          if (kv.second.reported)
+            continue;
+          if (!returned.empty() && kv.first == returned) {
+            kv.second.escaped = true; // ownership leaves the function
+            continue;
+          }
+          if (kv.second.escaped || nullGuardedReturn(i, kv.first))
+            continue;
+          kv.second.reported = true;
+          std::string msg;
+          if (kv.second.kind == AllocKind::Fopen)
+            msg = "FILE* '" + kv.first +
+                  "' leaks on this return path (no matching fclose)";
+          else
+            msg = "allocation '" + kv.first +
+                  "' leaks on this return path (no matching free)";
+          plainWarn(msg, t,
+                    "free/close the resource on every return path, or use a "
+                    "C+ managed allocation");
+        }
+      } else if (isIdent(i, "longjmp")) {
+        // The generic longjmp warning is already produced by the bounds
+        // checker; STRICT mode escalates it when a live allocation exists.
+        if (strict_) {
+          for (auto &kv : live) {
+            if (kv.second.escaped || longjmpReported.count(kv.first))
+              continue;
+            longjmpReported.insert(kv.first);
+            errorAt("longjmp bypasses cleanup of live allocation '" +
+                        kv.first + "'",
+                    t, "the allocation is never reached by a free/fclose");
+          }
+        }
+      } else if (kFileUseFuncs.count(t.text)) {
+        // A FILE* that came from fopen and was already closed must not be
+        // used again (this also catches `fclose(f); fprintf(f, ...);`).
+        size_t lp = nextSig(i);
+        size_t arg = isPunct(lp, "(") ? nextSig(lp) : kNPos;
+        if (arg < closeIdx && toks_[arg].kind == TokKind::Identifier &&
+            closedFiles.count(toks_[arg].text))
+          plainError("use of closed FILE* '" + toks_[arg].text + "'", t,
+                     "the stream was already closed");
+      } else if (isIdent(i, "if")) {
+        noteFopenNullChecks(i);
+      }
+
+      if (expired.count(t.text)) {
+        size_t after = nextSig(i);
+        if (isPunct(after, "[")) // `p[0]` after the target left scope
+          reportDanglingUse(t, t.text);
+      }
+
+      atStmtStart = false;
+    }
   }
 
   // --- edit application -----------------------------------------------------
