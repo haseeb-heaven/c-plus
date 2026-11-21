@@ -15,6 +15,7 @@ Tracks what is actually shipped/verified on `agent/modern-stdlib` (PR #17). **No
 | Libc tests | `sh tests/libc/run_libc_tests.sh` | 27 passed, 0 failed |
 | Libc install smoke | `sh tests/libc/install_smoke.sh` | ok |
 | CTL containers | `sh tests/ctl/run_ctl_tests.sh` | 7 passed, 0 failed (vector, string, deque, list, set, map, unordered_set) |
+| yyjson (upstream API) | `sh tests/json/run_json_tests.sh` | 1 passed, 0 failed |
 | Libc coverage | `sh tests/libc/coverage_libc.sh` | all modules >=80% line; stdio 80%, stdio2 91.67%, others 97-100% |
 
 ### Telemetry (per-API counters)
