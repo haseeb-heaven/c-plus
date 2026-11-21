@@ -31,3 +31,5 @@ scratch
 benchmarks/out/
 
 examples/out/
+
+*.plist
