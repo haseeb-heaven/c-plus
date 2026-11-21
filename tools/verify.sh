@@ -13,6 +13,9 @@ ctest --test-dir build --output-on-failure
 echo "== tests =="
 ./tests/run_tests.sh
 
+echo "== perf comparison =="
+./tests/core/perf_compare.sh >/dev/null
+
 echo "== native capabilities =="
 ./tests/core/capabilities.sh >/dev/null
 

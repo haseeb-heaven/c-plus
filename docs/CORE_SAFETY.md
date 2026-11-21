@@ -335,3 +335,20 @@ heap aliases through containers, calls that free through unknown pointers,
 or paths where a branch frees and the pointer is not reset. Those remain
 runtime/UBSan or unsupported cases. Tests: `uaf_direct`, `uaf_alias`,
 `uaf_conditional`, `double_release_alias`, `interproc_double_free`.
+
+## Safe subset and comparison baseline
+
+`docs/SAFE_SUBSET.md` defines the exact accepted/rejected/unknown operations.
+`tests/core/perf_compare.sh` compares a 20M-iteration integer sum compiled with
+clang -O2, C+ legacy -O2, C+ safe -O2 and rustc -O. Latest local run:
+
+```text
+clang_o2       real 1.15s
+cplus_legacy   real 0.33s
+cplus_safe     real 0.44s
+rust_o         real 0.45s
+```
+
+The clang number is anomalous relative to earlier benches and needs repeated
+runs on a quiet machine; no performance victory is claimed. Safe C+ carries
+UBSan overhead, similar to Rust's debug-like check cost in this narrow probe.

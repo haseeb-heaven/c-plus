@@ -76,6 +76,7 @@ build_run libc_valid "$ROOT/tests/core/positive/libc_valid.c"
 build_run interproc_borrow "$ROOT/tests/core/positive/interproc_borrow.c"
 build_run expr_array_bound "$ROOT/tests/core/positive/expr_array_bound.c"
 build_run uaf_conditional "$ROOT/tests/core/positive/uaf_conditional.c"
+build_run borrow_field_ok "$ROOT/tests/core/positive/borrow_field_ok.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 

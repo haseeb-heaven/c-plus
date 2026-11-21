@@ -139,6 +139,9 @@ public:
       nullVars_.clear();
       releasedVars_.clear();
       aliasGroups_.clear();
+      borrowOwner_.clear();
+      writeBorrows_.clear();
+      movedVars_.clear();
     }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
     currentFunction_ = previousFunction;
@@ -150,7 +153,29 @@ public:
     if (!report_ && vd->hasGlobalStorage() &&
         !vd->getType().isVolatileQualified())
       nonVolatileGlobals_.insert(vd->getNameAsString());
-    if (!report_ || !vd->getType()->isPointerType())
+    if (!report_)
+      return true;
+    // `T *b = &owner;` records a borrow for lifetime/conflict checks.
+    if (vd->getType()->isPointerType() && vd->getInit()) {
+      const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      if (const auto *uo = dyn_cast<UnaryOperator>(init)) {
+        if (uo->getOpcode() == UO_AddrOf) {
+          const Expr *sub = uo->getSubExpr();
+          std::string owner = varNameOf(sub);
+          if (owner.empty())
+            if (const auto *me = dyn_cast<MemberExpr>(sub))
+              owner = varNameOf(me->getBase());
+          if (!owner.empty()) {
+            auto it = writeBorrows_.find(owner);
+            if (it != writeBorrows_.end() && !it->second.empty())
+              report(vd->getBeginLoc(), "conflicting mutable borrow of '" +
+                                            owner + "'");
+            borrowOwner_[vd->getNameAsString()] = owner;
+          }
+        }
+      }
+    }
+    if (!vd->getType()->isPointerType())
       return true;
     if (isNullConstant(vd->getInit())) {
       nullVars_.insert(vd->getNameAsString());
@@ -237,6 +262,25 @@ public:
       }
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
+
+      // A write through a recorded borrow makes it the exclusive mutator.
+      const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
+      std::string borrowName;
+      if (const auto *uo = dyn_cast<UnaryOperator>(lhs)) {
+        if (uo->getOpcode() == UO_Deref)
+          borrowName = varNameOf(uo->getSubExpr());
+      } else if (const auto *me = dyn_cast<MemberExpr>(lhs)) {
+        if (me->isArrow())
+          borrowName = varNameOf(me->getBase());
+      }
+      auto bit = borrowOwner_.find(borrowName);
+      if (bit != borrowOwner_.end()) {
+        auto &writers = writeBorrows_[bit->second];
+        if (!writers.empty() && !writers.count(borrowName))
+          report(op->getBeginLoc(), "mutable borrow conflict on '" +
+                                        bit->second + "'");
+        writers.insert(borrowName);
+      }
     }
     return true;
   }
@@ -256,6 +300,8 @@ public:
       const Expr *sub = op->getSubExpr();
       if (isReleased(sub))
         report(op->getBeginLoc(), "use-after-free: dereference of released pointer");
+      else if (movedVars_.count(varNameOf(sub)))
+        report(op->getBeginLoc(), "use-after-move: dereference of moved resource");
       else if (isNullConstant(sub) || nullVarOf(sub))
         report(op->getBeginLoc(), "null pointer dereference");
     }
@@ -270,6 +316,8 @@ public:
       return true;
     if (isReleased(member->getBase()))
       report(member->getBeginLoc(), "use-after-free: member access through released pointer");
+    else if (movedVars_.count(varNameOf(member->getBase())))
+      report(member->getBeginLoc(), "use-after-move: member access through moved resource");
     else if (nullVarOf(member->getBase()))
       report(member->getBeginLoc(), "null pointer dereference");
     return true;
@@ -406,6 +454,19 @@ public:
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
             ptrVar = vd;
       }
+      if (baseName == "cplus_move" && call->getNumArgs() >= 1) {
+        std::string moved = varNameOf(call->getArg(0));
+        if (!moved.empty()) {
+          movedVars_.insert(moved);
+          bool hasBorrow = borrowOwner_.count(moved) != 0;
+          for (const auto &entry : borrowOwner_)
+            if (entry.second == moved)
+              hasBorrow = true;
+          if (hasBorrow)
+            report(call->getBeginLoc(), "borrow of '" + moved +
+                                            "' cannot cross a move");
+        }
+      }
       if ((baseName == "free" || baseName == "cplus_release") && call->getNumArgs() >= 1) {
         const Expr *arg0 = call->getArg(0)->IgnoreParenImpCasts();
         if (const auto *pref = dyn_cast<DeclRefExpr>(arg0))
@@ -528,6 +589,9 @@ public:
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
+  std::map<std::string, std::string> borrowOwner_;
+  std::map<std::string, std::set<std::string>> writeBorrows_;
+  std::set<std::string> movedVars_;
 };
 
 } // namespace
