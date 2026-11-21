@@ -31,6 +31,8 @@ jobs:
         run: sh tests/json/run_json_tests.sh
       - name: exception tests
         run: sh tests/exceptions/run_except_tests.sh
+      - name: Libc fuzz
+        run: sh tests/libc/run_fuzz.sh
       - name: Combined fuzz harness
         run: |
           clang -O2 -Wall -Wextra -pedantic -std=c99 -Istdlib/safe -Ithird_party/intel-safestringlib/include tests/crt/fuzz/fuzz_all_safe_apis.c build/safe/libcplus_safecrt.a -o /tmp/fuzz_all

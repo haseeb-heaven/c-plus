@@ -30,3 +30,12 @@ Document any edits in git history; initial copy preserves upstream content.
 - src/stdlib/div.c ldiv.c lldiv.c llabs.c atoll.c
 - Integrated as cplus_div/ldiv/lldiv/llabs/atoll (verbatim renamed; logging).
   Tests: tests/libc/test_musl_stdlib_extra.c.
+
+## Additional copied ctype (2026-11-22)
+
+- src/ctype/isascii.c toascii.c -> cplus_isascii/cplus_toascii (libc/src/ctype/ctype3.c).
+
+## Platform-backed (not musl copies)
+
+- libc/src/math/math2.c: atan2/asin/acos/atan/sinh/cosh/tanh/log2/cbrt/hypot/round/trunc/fmin/fmax/copysign/ldexp/frexp/modf (system libm).
+- libc/src/stdlib/stdlib_extra3.c: strtoll/strtoull/strtod/atof (system libc).
