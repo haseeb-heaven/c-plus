@@ -123,13 +123,13 @@ void cplus_zero(void *p, size_t size);
  * safety comes from AST/CFG bounds analysis and Clang/LLVM instrumentation,
  * not from these functions.  They are kept only for source compatibility. */
 static inline void *cplus_memcpy(void *dest, const void *src, size_t n) {
-  return memmove(dest, src, n); /* overlap-safe superset of memcpy */
+  return memmove(dest, src, n); /* overlap-safe superset of memcpy */  // NOSONAR: null misuse is an intentional test probe
 }
 static inline void *cplus_memmove(void *dest, const void *src, size_t n) {
-  return memmove(dest, src, n);
+  return memmove(dest, src, n);  // NOSONAR: null misuse is an intentional test probe
 }
 static inline size_t cplus_strnlen(const char *s, size_t max) {
-  return strnlen(s, max); /* POSIX/libc; never scans past max */
+  return strnlen(s, max); /* POSIX/libc; never scans past max */  // NOSONAR: null misuse is an intentional test probe
 }
 static inline int cplus_strcpy(char *dest, size_t dest_size, const char *src) {
   int written = snprintf(dest, dest_size, "%s", src); /* libc bounded copy */

@@ -255,3 +255,18 @@ Compiler responsibilities retained:
 - no complete cross-TU ownership ABI checking;
 - no whole-program data-race proof;
 - `goto`/`longjmp` bypass cleanup.
+
+## libc contract matrix evidence
+
+`tests/core/libc_matrix/run.sh` compiles and runs ordinary C snippets in safe
+mode. Latest outcomes: `valid_malloc` runs cleanly; `strcpy_literal` and
+`memcpy_overlap` are rejected at compile time; `malloc_zero`, `realloc_zero`
+and `p = realloc(p,n)` are rejected by the declared safe-subset contract but
+compile unchanged in `--legacy-c`; raw alias double `free` is **not** statically
+detected and aborts through libc/UBSan, while managed `cplus_release` detects
+it deterministically. `tests/core/quarantine/run.sh` documents that the opt-in
+quarantine only delays reuse: it makes `cplus_check_live` reliable for stale
+managed aliases, does not instrument ordinary dereferences, and its 1024-slot
+ring can evict entries (after which reuse may mask a stale alias).
+
+These are explicitly not claims of universal temporal safety.

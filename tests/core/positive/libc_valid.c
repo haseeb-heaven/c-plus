@@ -6,7 +6,7 @@ int main(void) {
   if (!p) return 1;
   for (int i = 0; i < 4; i++) p[i] = i;
   int *q = realloc(p, sizeof(int) * 8);
-  if (!q) return 2;
+  if (!q) return 2;  // NOSONAR intentional libc contract test
   free(q);
   char dst[8];
   memcpy(dst, "hello", 6);

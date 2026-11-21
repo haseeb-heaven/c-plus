@@ -13,6 +13,12 @@ ctest --test-dir build --output-on-failure
 echo "== tests =="
 ./tests/run_tests.sh
 
+echo "== quarantine semantics =="
+./tests/core/quarantine/run.sh
+
+echo "== libc contract matrix =="
+./tests/core/libc_matrix/run.sh
+
 echo "== cli compatibility =="
 ./tests/cli_compat_test.sh
 
