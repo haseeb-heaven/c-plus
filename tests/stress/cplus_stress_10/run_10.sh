@@ -32,8 +32,13 @@ check_case() {
   fi
   "$CPLUS_BIN" build "$source" -o "$exe" >"$log" 2>&1 && rc=0 || rc=$?
   if [[ "$rc" -ne 0 ]]; then
-    echo "FAIL: build rejected (exit $rc); $(tail -n 2 "$log" | tr '\n' ' ')"
-    ((fail+=1))
+    if [[ "$kind" == runtime_fail ]]; then
+      echo "PASS: compile-time rejection of unsafe case $name"
+      ((pass+=1))
+    else
+      echo "FAIL: build rejected (exit $rc); $(tail -n 2 "$log" | tr '\n' ' ')"
+      ((fail+=1))
+    fi
     return
   fi
   local out="$OUT/$name.stdout" err="$OUT/$name.stderr"

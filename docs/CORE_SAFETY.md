@@ -209,3 +209,47 @@ header-lowered class members as `static inline` (`headerMode` in
 constructor/method/destructor, clean link and exact-once cleanup). The same
 fix also eliminates the need for separate-token `-I dir` parsing, which was
 fixed in `compiler/Main.cpp`.
+
+## Compiler contracts for ordinary libc / C+ Safe CRT (pillar 1)
+
+Agent 1 owns compiler recognition and the minimal runtime contract; Agent 2
+owns the public Safe CRT library surface (issue #19). These are **compiler
+checks**, not a vendored libc.
+
+| existing C API | recognised pattern in safe mode | guarantee | unknown cases |
+| --- | --- | --- | --- |
+| `malloc(n)`, `calloc(n,s)` | tracked variable receiving fresh allocation | later `free`/`realloc` of same variable checked; overflow for `calloc` delegated to libc where available | alias escapes, unknown n, custom allocators |
+| `realloc(p,n)` | `p = realloc(p,n)` marks old pointer invalid | repeated release of stale `p` rejected | failed realloc leaving `p` valid is not distinguished |
+| `free(p)`, `cplus_release(p)` | same variable released twice without reset to NULL | compile-time double-free error | aliases, heap reuse, freed-through-other-pointer |
+| `memcpy(dst,src,n)`, `memmove` | direct fixed array destination + constant byte count | reject count exceeding destination; FORTIFY builtins recognized | pointer destinations, computed n, unknown source extent |
+| `strcpy(dst,src)` | direct fixed array destination + string literal | reject literal+NUL exceeding destination | runtime strings, pointer destinations |
+| `fopen`/`fclose` | ownership by variable | basic double-close warning path via RAII | FILE* aliases and multi-TU escapes |
+
+FORTIFY rewrites `memcpy`/`strcpy` to `__builtin___*_chk`; the AST visitor
+maps those back to the original call names. Assignment of NULL after release
+resets the double-release state, which is what generated RAII cleanup emits.
+
+### Final scope (PR comment 7063159395)
+
+There are **two** library workstreams, not three. Pillar 1 is not a new CRT
+API. `malloc_s`/`free_s` are **not deliverables**. Ordinary C APIs keep their
+names, native ABI and valid behaviour; C+ improves their use with compiler
+analysis only. Agent 2 owns the single modern C+ library (`stdlib/**`, logging,
+JSON, HTTP, GUI, audio, etc.) under issue #3.
+
+Compiler responsibilities retained:
+- AST/CFG/dataflow ownership, alias and invalidation tracking for ordinary
+  `malloc`/`calloc`/`realloc`/`free` and memory/string/I/O calls;
+- object-size/bounds checks for direct fixed arrays and FORTIFY builtins;
+- no source rewrite of valid C, no changed `free(NULL)`, `realloc` failure,
+  overlap, EOF or errno semantics;
+- minimal compiler-required runtime metadata only; no libc replacement;
+- `.hp` linkage and multi-TU safety coordinated with Agent 2.
+
+## Remaining gaps for issues #1/#4/#19
+
+- no automatic use-after-free detection for raw C pointers;
+- no full provenance/cast verification;
+- no complete cross-TU ownership ABI checking;
+- no whole-program data-race proof;
+- `goto`/`longjmp` bypass cleanup.

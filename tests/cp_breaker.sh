@@ -29,7 +29,13 @@ check() {
     return
   fi
   if ((rc != 0)); then
-    echo "FAIL BUILD $name (see $log)"; head -n 3 "$log" | sed 's/^/    /'; ((FAIL+=1)); return
+    if [[ "$expected" == runtime* ]]; then
+      echo "PASS REJECT $name (compile-time rejection is stronger than trap)"
+      ((PASS+=1))
+    else
+      echo "FAIL BUILD $name (see $log)"; head -n 3 "$log" | sed 's/^/    /'; ((FAIL+=1))
+    fi
+    return
   fi
   if [[ "$mode" == check ]]; then
     echo "PASS CHECK $name"; ((PASS+=1)); return

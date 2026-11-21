@@ -72,6 +72,7 @@ build_run thread_guard_ok "$ROOT/tests/core/positive/thread_guard_ok.cp"
 build_run allocator_fuzz "$ROOT/tests/core/allocator_fuzz.c"
 build_run checked_copy_overlap "$ROOT/tests/core/positive/checked_copy_overlap.c"
 build_run null_outparam "$ROOT/tests/core/positive/null_outparam.c"
+build_run libc_valid "$ROOT/tests/core/positive/libc_valid.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -105,6 +106,15 @@ else
   bad multi_tu_resource "multi-TU resource build/run failed"
 fi
 
+if "$CPLUS" build "$ROOT/tests/core/multi_tu_lib/part_a.cp" \
+   "$ROOT/tests/core/multi_tu_lib/part_b.cp" \
+   -I "$ROOT/tests/core/multi_tu_lib" -o "$OUT/multi_tu_lib" \
+   >"$OUT/multi_tu_lib.log" 2>&1 && "$OUT/multi_tu_lib"; then
+  ok multi_tu_lib
+else
+  bad multi_tu_lib "multi-TU stdlib-like .hp build/link/run failed"
+fi
+
 if "$CPLUS" build "$ROOT/tests/core/multi_tu_hp/part_a.cp" \
    "$ROOT/tests/core/multi_tu_hp/part_b.cp" \
    -I "$ROOT/tests/core/multi_tu_hp" -o "$OUT/multi_tu_hp" \
@@ -136,7 +146,7 @@ expect_reject uninit "$ROOT/tests/safety/uninit.c"
 expect_reject null_deref "$ROOT/tests/safety/null_deref.c"
 
 echo "core safety: traps"
-expect_trap double_release "$ROOT/tests/safety/double_release.cp" 104
+expect_reject double_release "$ROOT/tests/safety/double_release.cp"
 expect_trap uaf_check "$ROOT/tests/safety/uaf_check.cp" 105
 expect_trap string_overflow "$ROOT/tests/safety/string_overflow.c" 101
 expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 134

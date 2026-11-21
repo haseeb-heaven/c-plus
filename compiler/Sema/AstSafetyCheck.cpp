@@ -65,8 +65,10 @@ public:
     std::string previousFunction = currentFunction_;
     std::set<std::string> previousNulls = nullVars_;
     currentFunction_ = fd->getNameAsString();
-    if (report_)
+    if (report_) {
       nullVars_.clear();
+      releasedVars_.clear();
+    }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
     currentFunction_ = previousFunction;
     nullVars_ = previousNulls;
@@ -129,6 +131,12 @@ public:
     if (op->isAssignmentOp()) {
       if (const VarDecl *vd = nullVarOf(op->getLHS()))
         nullVars_.erase(vd->getNameAsString());
+      if (isNullConstant(op->getRHS())) {
+        const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
+        if (const auto *ref = dyn_cast<DeclRefExpr>(lhs))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+            releasedVars_.erase(vd->getNameAsString());
+      }
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
     }
@@ -187,11 +195,79 @@ public:
     diags_.report(std::move(d));
   }
 
+  bool isIdentExpr(const Expr *expr, const VarDecl *vd) const {
+    if (!expr || !vd)
+      return false;
+    const Expr *e = expr->IgnoreParenImpCasts();
+    const auto *ref = dyn_cast<DeclRefExpr>(e);
+    return ref && ref->getDecl() == vd;
+  }
+
+  /// For memcpy/memmove with a direct array destination, reject a constant
+  /// byte count that exceeds the destination extent.  Unknown extents are not
+  /// guessed.
+  void checkBoundedCopy(const CallExpr *call) {
+    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
+    const Expr *n = call->getArg(2)->IgnoreParenImpCasts();
+    Expr::EvalResult amount;
+    if (!n->EvaluateAsInt(amount, ctx_) || !amount.Val.isInt())
+      return;
+    long long bytes = amount.Val.getInt().getSExtValue();
+    if (bytes <= 0)
+      return;
+    const auto *ref = dyn_cast<DeclRefExpr>(dst);
+    if (!ref)
+      return;
+    const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+    if (!vd)
+      return;
+    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
+    if (!at)
+      return;
+    QualType elem = at->getElementType();
+    if (!elem->isIntegerType() && !elem->isCharType())
+      return;
+    unsigned long long elemSize = ctx_.getTypeSize(elem) / 8u;
+    unsigned long long capacity =
+        at->getSize().getZExtValue() * elemSize;
+    if ((unsigned long long)bytes > capacity)
+      report(call->getBeginLoc(), "copy of " + std::to_string(bytes) +
+                                      " bytes exceeds destination '" +
+                                      vd->getNameAsString() + "'");
+  }
+
+  /// Detect strcpy from a short string literal into a smaller array.  Source
+  /// lengths that are not compile-time constants are unknown.
+  void checkStringCopy(const CallExpr *call) {
+    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
+    const Expr *src = call->getArg(1)->IgnoreParenImpCasts();
+    const auto *dstRef = dyn_cast<DeclRefExpr>(dst);
+    const auto *str = dyn_cast<StringLiteral>(src);
+    if (!dstRef || !str)
+      return;
+    const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
+    const auto *at = vd ? ctx_.getAsConstantArrayType(vd->getType()) : nullptr;
+    if (!at)
+      return;
+    unsigned long long cap = at->getSize().getZExtValue();
+    unsigned long long need = str->getLength() + 1;
+    if (need > cap)
+      report(call->getBeginLoc(), "string copy of " + std::to_string(need - 1) +
+                                      " chars plus NUL exceeds destination '" +
+                                      vd->getNameAsString() + "'");
+  }
+
   bool VisitCallExpr(CallExpr *call) {
     const FunctionDecl *callee = call->getDirectCallee();
-    if (!callee)
-      return true;
-    std::string name = callee->getNameAsString();
+    std::string name = callee ? callee->getNameAsString() : std::string();
+    if (!callee) {
+      const Expr *calleeExpr = call->getCallee()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(calleeExpr))
+        callee = dyn_cast<FunctionDecl>(ref->getDecl());
+      if (!callee)
+        return true;
+      name = callee->getNameAsString();
+    }
 
     if (name == "signal" && call->getNumArgs() >= 2) {
       const Expr *arg = call->getArg(1)->IgnoreParenImpCasts();
@@ -208,6 +284,44 @@ public:
       if (unsafe.count(name))
         report(call->getBeginLoc(), "'" + name +
                                         "' is not async-signal-safe");
+    }
+    // Compiler contracts for ordinary libc (issue #19 / pillar 1).  Only
+    // sound, provable patterns are diagnosed; unknown cases are left alone.
+    // Clang FORTIFY rewrites memcpy/strcpy to *_chk builtins with an extra
+    // object-size argument; treat those as the original calls.
+    std::string baseName = name;
+    if (baseName.rfind("__builtin___memcpy_chk", 0) == 0)
+      baseName = "memcpy";
+    else if (baseName.rfind("__builtin___memmove_chk", 0) == 0)
+      baseName = "memmove";
+    else if (baseName.rfind("__builtin___strcpy_chk", 0) == 0)
+      baseName = "strcpy";
+    if (report_) {
+      const VarDecl *ptrVar = nullptr;
+      if (call->getNumArgs() >= 1) {
+        const Expr *arg = call->getArg(0)->IgnoreParenImpCasts();
+        if (const auto *ref = dyn_cast<DeclRefExpr>(arg))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+            ptrVar = vd;
+      }
+      if ((baseName == "free" || baseName == "cplus_release") && ptrVar) {
+        if (releasedVars_.count(ptrVar->getNameAsString()))
+          report(call->getBeginLoc(), "double free of '" +
+                                          ptrVar->getNameAsString() + "'");
+        else
+          releasedVars_.insert(ptrVar->getNameAsString());
+      }
+      if (baseName == "realloc" && ptrVar && call->getNumArgs() >= 1) {
+        // `p = realloc(p, n)` invalidates the old pointer on success.
+        if (isIdentExpr(call->getArg(0), ptrVar))
+          releasedVars_.insert(ptrVar->getNameAsString());
+      }
+      if ((baseName == "memcpy" || baseName == "memmove") && call->getNumArgs() >= 3) {
+        checkBoundedCopy(call);
+      }
+      if (baseName == "strcpy" && call->getNumArgs() >= 2) {
+        checkStringCopy(call);
+      }
     }
     if (name == "pthread_create" && call->getNumArgs() >= 4) {
       const Expr *arg = call->getArg(3)->IgnoreParenImpCasts();
@@ -276,6 +390,7 @@ public:
   std::set<std::string> handlers_;
   std::set<std::string> nonVolatileGlobals_;
   std::set<std::string> nullVars_;
+  std::set<std::string> releasedVars_;
 };
 
 } // namespace

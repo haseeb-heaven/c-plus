@@ -1,0 +1,10 @@
+#ifndef CPLUS_CORE_THREAD_LITE_HP
+#define CPLUS_CORE_THREAD_LITE_HP
+#include "cplus/cplus.h"
+resource struct MutexLite { void *h; };
+static inline void MutexLite_drop(MutexLite *m) { if (m->h) { cplus_mutex_free(m->h); m->h = NULL; } }
+static inline MutexLite MutexLite_new(void) { MutexLite m; m.h = cplus_mutex_new(); return m; }
+resource struct GuardLite { MutexLite *owner; };
+static inline void GuardLite_drop(GuardLite *g) { if (g->owner) { cplus_mutex_unlock(g->owner->h); g->owner = NULL; } }
+static inline GuardLite GuardLite_lock(MutexLite *m) { GuardLite g; g.owner = m; cplus_mutex_lock(m->h); return g; }
+#endif
