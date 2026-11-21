@@ -57,6 +57,7 @@ build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
 build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"
 build_run bounds_var_index_ok "$ROOT/tests/core/positive/bounds_var_index_ok.c"
 build_run memset_ok "$ROOT/tests/core/positive/memset_ok.c"
+build_run libc_bounds_ok "$ROOT/tests/core/positive/libc_bounds_ok.c"
 build_run init_all_branches "$ROOT/tests/core/positive/init_all_branches.c"
 build_run pointer_one_past "$ROOT/tests/core/positive/pointer_one_past.c"
 build_run explicit_drop_once "$ROOT/tests/core/positive/explicit_drop_once.cp"
@@ -191,6 +192,10 @@ expect_reject invalid_free_string "$ROOT/tests/safety/invalid_free_string.c"
 expect_reject invalid_free_array "$ROOT/tests/safety/invalid_free_array.c"
 expect_reject bounds_var_index "$ROOT/tests/safety/bounds_var_index.c"
 expect_reject memset_overflow "$ROOT/tests/safety/memset_overflow.c"
+expect_reject strcat_overflow "$ROOT/tests/safety/strcat_overflow.c"
+expect_reject strncpy_overflow "$ROOT/tests/safety/strncpy_overflow.c"
+expect_reject snprintf_overflow "$ROOT/tests/safety/snprintf_overflow.c"
+expect_reject memcpy_null_source "$ROOT/tests/safety/memcpy_null_source.c"
 
 if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
    -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \

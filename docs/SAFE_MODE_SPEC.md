@@ -54,7 +54,8 @@ declared safe subset.
 | definite initialization | IMPLEMENTED | uninit, uninit_branch, init_all_branches (CFG dataflow) |
 | nullability | IMPLEMENTED (provable cases) | null_deref, null_outparam |
 | provenance / arbitrary casts | UNSUPPORTED | documented gap |
-| buffer bounds (constant, constant-propagated local index, simple loops, multidim, memset/memcpy/strcpy) | IMPLEMENTED | constant_oob, loop_oob, multidim_bounds, bounds_var_index, memset_overflow |
+| buffer bounds (constant, constant-propagated local index, simple loops, multidim, memcpy/memset/strcpy/strncpy/strcat/snprintf) | IMPLEMENTED | constant_oob, loop_oob, multidim_bounds, bounds_var_index, memset_overflow, strcat_overflow, strncpy_overflow, snprintf_overflow |
+| libc nullability (null source pointers) | IMPLEMENTED | memcpy_null_source, mass_fuzz memcpy_null_src_* |
 | dynamic bounds checks | PARTIAL | UBSan + FORTIFY; not a complete spatial guarantee |
 | struct/field ownership | PARTIAL | field borrow conflict; field move not complete |
 | container ownership | UNSUPPORTED | Agent 2 library layer owns this; compiler contract only |

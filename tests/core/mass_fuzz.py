@@ -88,6 +88,15 @@ int main(void){{ int *p=malloc({n}); if(!p)return 2; int *q=p; free(p); free(q);
         True, "CPLUS-BOUNDS")
     add(f"var_index_bad_{n}", f"int main(void){{ int a[{n}]={{0}}; int i={n+1}; return a[i]; }}",
         True, "CPLUS-BOUNDS")
+    add(f"strcat_overflow_{n}", f'#include <string.h>\nint main(void){{ char d[{n}]="a"; strcat(d,"{alphabet}"); return 0; }}',
+        True, "CPLUS-BOUNDS")
+    add(f"strncpy_overflow_{n}", f'#include <string.h>\nint main(void){{ char d[{n}]; strncpy(d,"{alphabet}",{n+2}); return 0; }}',
+        True, "CPLUS-BOUNDS")
+    add(f"snprintf_overflow_{n}", f'#include <stdio.h>\nint main(void){{ char d[{n}]; snprintf(d,{n+2},"%s","abcdefgh"); return 0; }}',
+        True, "CPLUS-BOUNDS")
+    add(f"memcpy_null_src_{n}", """#include <string.h>
+int main(void) { char d[8]; char *s = 0; memcpy(d, s, 4); return 0; }""",
+        True, "CPLUS-LIFETIME")
     csrc = "abcdefghi"[:max(2, n)]
     add(f"checked_copy_bad_{n}", f'#include "cplus/cplus.h"\nint main(void){{ char d[{n}]; return cplus_strcpy(d,2,"{csrc}"); }}',
         True, "CPLUS-LIBC")
@@ -156,6 +165,12 @@ int main(void){{ int *p=malloc({n}*sizeof(int)); if(!p)return 1; free(p+0); retu
         False)
     add(f"var_index_ok_{n}", f"int main(void){{ int a[{n}]={{0}}; int i=0; return a[i]; }}",
         False, runtime=(n % 8 == 0))
+    add(f"strcat_ok_{n}", f'#include <string.h>\nint main(void){{ char d[{n+8}]="a"; strcat(d,"bc"); return d[0]==\'a\'?0:1; }}',
+        False, runtime=(n % 8 == 0))
+    add(f"strncpy_ok_{n}", f'#include <string.h>\nint main(void){{ char d[{n+4}]; strncpy(d,"abc",4); return d[0]==\'a\'?0:1; }}',
+        False, runtime=(n % 8 == 0))
+    add(f"snprintf_ok_{n}", f'#include <stdio.h>\nint main(void){{ char d[{n+8}]; snprintf(d,sizeof(d),"%s","abc"); return d[0]==\'a\'?0:1; }}',
+        False)
 
 # ---------------------------------------------------------------------------
 # Dimension 2: structural variations (nested scopes, branch merges, chains).

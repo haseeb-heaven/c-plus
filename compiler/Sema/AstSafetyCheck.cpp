@@ -601,10 +601,12 @@ public:
   /// For memcpy/memmove with a direct array destination, reject a constant
   /// byte count that exceeds the destination extent.  Unknown extents are not
   /// guessed.
-  void checkBoundedCopy(const CallExpr *call,
-                        const std::string &op = "copy") {
-    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
-    const Expr *n = call->getArg(2)->IgnoreParenImpCasts();
+  void checkBoundedWrite(const CallExpr *call, unsigned dstIdx,
+                         unsigned sizeIdx, const std::string &op) {
+    if (call->getNumArgs() <= std::max(dstIdx, sizeIdx))
+      return;
+    const Expr *dst = call->getArg(dstIdx)->IgnoreParenImpCasts();
+    const Expr *n = call->getArg(sizeIdx)->IgnoreParenImpCasts();
     Expr::EvalResult amount;
     if (!n->EvaluateAsInt(amount, ctx_) || !amount.Val.isInt())
       return;
@@ -630,6 +632,49 @@ public:
       report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
                                       " bytes exceeds destination '" +
                                       vd->getNameAsString() + "'");
+  }
+
+  void checkBoundedCopy(const CallExpr *call,
+                        const std::string &op = "copy") {
+    checkBoundedWrite(call, 0, 2, op);
+  }
+
+  /// strcat(dst, src): reject when the concatenation provably overflows a
+  /// fixed-size destination with a constant string initializer.
+  void checkStringConcat(const CallExpr *call) {
+    if (call->getNumArgs() < 2)
+      return;
+    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
+    const auto *ref = dyn_cast<DeclRefExpr>(dst);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd || !vd->getInit())
+      return;
+    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
+    if (!at || !at->getElementType()->isCharType())
+      return;
+    const auto *initStr = dyn_cast<StringLiteral>(
+        vd->getInit()->IgnoreParenCasts());
+    const auto *srcStr = dyn_cast<StringLiteral>(
+        call->getArg(1)->IgnoreParenCasts());
+    if (!initStr || !srcStr)
+      return;
+    unsigned long long capacity = at->getSize().getZExtValue();
+    unsigned long long needed =
+        initStr->getLength() + srcStr->getLength() + 1;
+    if (needed > capacity)
+      report(call->getBeginLoc(),
+             "string concatenation needs " + std::to_string(needed) +
+                 " bytes but destination '" + vd->getNameAsString() +
+                 "' has capacity " + std::to_string(capacity));
+  }
+
+  /// Null pointers passed to libc read/write APIs are contract violations.
+  void checkLibcNullSource(const CallExpr *call, const std::string &api) {
+    if (call->getNumArgs() < 2)
+      return;
+    const Expr *src = call->getArg(1)->IgnoreParenCasts();
+    if (isNullConstant(src) || nullVarOf(src))
+      report(call->getBeginLoc(), "null source pointer passed to " + api);
   }
 
   /// Detect strcpy from a short string literal into a smaller array.  Source
@@ -694,6 +739,12 @@ public:
       baseName = "strcpy";
     else if (baseName.rfind("__builtin___memset_chk", 0) == 0)
       baseName = "memset";
+    else if (baseName.rfind("__builtin___strcat_chk", 0) == 0)
+      baseName = "strcat";
+    else if (baseName.rfind("__builtin___strncpy_chk", 0) == 0)
+      baseName = "strncpy";
+    else if (baseName.rfind("__builtin___snprintf_chk", 0) == 0)
+      baseName = "snprintf";
     if (!report_ && name.size() > 5 &&
         name.compare(name.size() - 5, 5, "_drop") == 0 &&
         call->getNumArgs() >= 1) {
@@ -757,12 +808,26 @@ public:
       }
       if ((baseName == "memcpy" || baseName == "memmove") && call->getNumArgs() >= 3) {
         checkBoundedCopy(call);
+        checkLibcNullSource(call, baseName);
       }
       if (baseName == "memset" && call->getNumArgs() >= 3) {
         checkBoundedCopy(call, "fill");
       }
       if (baseName == "strcpy" && call->getNumArgs() >= 2) {
         checkStringCopy(call);
+        checkLibcNullSource(call, baseName);
+      }
+      if (baseName == "strncpy" && call->getNumArgs() >= 3) {
+        checkBoundedWrite(call, 0, 2, "string copy");
+        checkLibcNullSource(call, baseName);
+      }
+      if (baseName == "strcat" && call->getNumArgs() >= 2) {
+        checkStringConcat(call);
+        checkLibcNullSource(call, baseName);
+      }
+      if ((baseName == "snprintf" || baseName == "vsnprintf") &&
+          call->getNumArgs() >= 2) {
+        checkBoundedWrite(call, 0, 1, "format write");
       }
       if (baseName == "cplus_strcpy" && call->getNumArgs() >= 3) {
         const Expr *cap = call->getArg(1)->IgnoreParenImpCasts();
@@ -878,8 +943,15 @@ private:
     else if (message.find("RAII") != std::string::npos)
       category = "CPLUS-RAII";
     else if (message.find("null pointer") != std::string::npos ||
+             message.find("null source") != std::string::npos ||
              message.find("uninitialized") != std::string::npos)
       category = "CPLUS-LIFETIME";
+    else if (message.find("checked string copy") != std::string::npos)
+      category = "CPLUS-LIBC";
+    else if (message.find("string concatenation") != std::string::npos ||
+             message.find("string copy") != std::string::npos ||
+             message.find("format write") != std::string::npos)
+      category = "CPLUS-BOUNDS";
     else if (message.find("libc") != std::string::npos ||
              message.find("string copy") != std::string::npos)
       category = "CPLUS-LIBC";
