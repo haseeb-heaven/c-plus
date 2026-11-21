@@ -5,9 +5,15 @@ CC=${CPLUS_BIN:-$ROOT/build/c+}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 OUT="$ROOT/tests/out/core/quarantine"
 mkdir -p "$OUT"
-for n in stale_check eviction; do
-  "$CC" build "$HERE/$n.c" -o "$OUT/$n" >"$OUT/$n.build.log" 2>&1
-done
+"$CC" build "$HERE/eviction.c" -o "$OUT/eviction" >"$OUT/eviction.build.log" 2>&1
+# stale_check deliberately queries a released pointer. Compile-time rejection
+# is a stronger guarantee than the runtime liveness trap.
+stale_rejected=0
+if "$CC" build "$HERE/stale_check.c" -o "$OUT/stale_check" >"$OUT/stale_check.build.log" 2>&1; then
+  stale_rejected=0
+else
+  stale_rejected=1
+fi
 # raw_deref is a deliberate use-after-free.  If the compiler rejects it at
 # compile time that is a stronger guarantee than the runtime quarantine; only
 # build the binary when the checker accepts the source.
@@ -19,12 +25,17 @@ else
 fi
 
 # 1. With quarantine, an explicit liveness check detects a stale alias.
-rc=0
-CPLUS_QUARANTINE=1 "$OUT/stale_check" >"$OUT/stale.stdout" 2>"$OUT/stale.stderr" || rc=$?
-if [ "$rc" -eq 105 ] && grep -q 'dangling pointer' "$OUT/stale.stderr"; then
-  echo "PASS stale alias detected with explicit cplus_check_live"
+if [ "$stale_rejected" -eq 1 ]; then
+  grep -q 'use-after-free' "$OUT/stale_check.build.log"
+  echo "PASS stale alias rejected at compile time (stronger than quarantine)"
 else
-  echo "FAIL stale alias check rc=$rc"; exit 1
+  rc=0
+  CPLUS_QUARANTINE=1 "$OUT/stale_check" >"$OUT/stale.stdout" 2>"$OUT/stale.stderr" || rc=$?
+  if [ "$rc" -eq 105 ] && grep -q 'dangling pointer' "$OUT/stale.stderr"; then
+    echo "PASS stale alias detected with explicit cplus_check_live"
+  else
+    echo "FAIL stale alias check rc=$rc"; exit 1
+  fi
 fi
 
 # 2. Without an explicit check, raw dereference is either rejected by the

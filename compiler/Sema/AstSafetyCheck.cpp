@@ -998,6 +998,12 @@ public:
           if (const auto *parm = dyn_cast<ParmVarDecl>(pref->getDecl()))
             userFrees_[currentFunction_].insert(parm->getFunctionScopeIndex());
       }
+      if (baseName == "cplus_check_live" && ptrVar &&
+          releasedVars_.count(ptrVar->getNameAsString()))
+        report(call->getBeginLoc(),
+               "use-after-free: liveness check on released pointer '" +
+                   ptrVar->getNameAsString() + "'");
+
       bool isAllocatorFree = (baseName == "free" ||
                               baseName == "cplus_release");
       if (isAllocatorFree && call->getNumArgs() >= 1)

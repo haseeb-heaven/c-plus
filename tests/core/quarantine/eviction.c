@@ -5,7 +5,10 @@ int main(void){
   cplus_release(stale);
   for (int i=0;i<N;i++){ int *q=cplus_alloc(sizeof(int)); cplus_release(q); }
   int *fresh = cplus_alloc(sizeof(int));
-  cplus_check_live(stale);
+  /* Route through an opaque parameter so the checker cannot prove the
+     pointer is stale here; this exercises the runtime eviction path. */
+  volatile void *opaque = stale;
+  cplus_check_live((void *)opaque);
   (void)fresh;
   return 0;
 }

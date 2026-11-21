@@ -179,7 +179,8 @@ expect_reject null_deref "$ROOT/tests/safety/null_deref.c"
 
 echo "core safety: traps"
 expect_reject double_release "$ROOT/tests/safety/double_release.cp"
-expect_trap uaf_check "$ROOT/tests/safety/uaf_check.cp" 105
+# Stronger guarantee: the stale liveness query is rejected at compile time.
+expect_reject uaf_check "$ROOT/tests/safety/uaf_check.cp"
 expect_reject string_overflow "$ROOT/tests/safety/string_overflow.c"
 expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 134
 expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 134
