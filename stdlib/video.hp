@@ -1,0 +1,297 @@
+/* C+ standard library: media/video decoding via FFmpeg (LGPL/GPL, linked).
+ *
+ * C++-flavoured RAII: `media m = media("clip.mp4", &err); decoder d =
+ * m.open_decoder(&err);` and `d.next_frame(&f, &err)` decodes.  Demuxing and
+ * decoding are FFmpeg's job; no codec lives here.
+ *
+ * Licensing: the linked FFmpeg build decides the terms (LGPL by default, GPL
+ * when configured with --enable-gpl).
+ * Link with pkg-config libavformat libavcodec libavutil.
+ */
+#ifndef CPLUS_STD_VIDEO_HP
+#define CPLUS_STD_VIDEO_HP
+
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/error.h>
+#include <libavutil/imgutils.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+static inline void video_error_text(int status, char *buf, size_t size) {
+    if (buf == NULL || size == 0)
+        return;
+    if (av_strerror(status, buf, size) < 0)
+        buf[0] = '\0';
+}
+
+class frame {
+    AVFrame *native_frame;
+
+    frame(error *err) {
+        error_reset(err);
+        this->native_frame = av_frame_alloc();
+        if (this->native_frame == NULL)
+            error_fail(err, CPLUS_EXIT_RESOURCE, "frame: av_frame_alloc failed");
+    }
+
+    int valid(void) {
+        return this->native_frame != NULL;
+    }
+
+    int width(void) {
+        return this->valid() ? this->native_frame->width : 0;
+    }
+
+    int height(void) {
+        return this->valid() ? this->native_frame->height : 0;
+    }
+
+    int format(void) {
+        return this->valid() ? (int)this->native_frame->format : -1;
+    }
+
+    long long pts(void) {
+        return this->valid() ? (long long)this->native_frame->pts : 0;
+    }
+
+    void drop(void) {
+        if (this->native_frame != NULL) {
+            av_frame_free(&this->native_frame);
+            this->native_frame = NULL;
+        }
+    }
+};
+
+/* Free helper: constructors may not use `->`, so stream lookup lives here. */
+static inline const AVCodecParameters *video_stream_params(
+    AVFormatContext *format, int stream) {
+    if (format == NULL || stream < 0)
+        return NULL;
+    if ((unsigned)stream >= format->nb_streams)
+        return NULL;
+    return format->streams[stream]->codecpar;
+}
+
+static inline enum AVCodecID video_codec_id(const AVCodecParameters *params) {
+    return params == NULL ? AV_CODEC_ID_NONE : params->codec_id;
+}
+
+class decoder {
+    AVFormatContext *owner_format;
+    AVCodecContext *codec;
+    AVPacket *packet;
+    int stream;
+    int draining;
+    int initialized;
+
+    /* Takes the native container: a constructor must not use `->`. */
+    decoder(AVFormatContext *owner_format, int stream, error *err) {
+        do {
+            const AVCodec *found;
+            const AVCodecParameters *params;
+            char why[256];
+            int rc;
+            error_reset(err);
+            this->owner_format = owner_format;
+            this->codec = NULL;
+            this->packet = NULL;
+            this->stream = stream;
+            this->draining = 0;
+            this->initialized = 0;
+            if (owner_format == NULL || stream < 0) {
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED, "decoder: no video stream");
+                break;
+            }
+            params = video_stream_params(owner_format, stream);
+            found = avcodec_find_decoder(video_codec_id(params));
+            if (found == NULL) {
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED, "decoder: no decoder for stream");
+                break;
+            }
+            this->codec = avcodec_alloc_context3(found);
+            if (this->codec == NULL) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "decoder: avcodec_alloc_context3 failed");
+                break;
+            }
+            rc = avcodec_parameters_to_context(this->codec, params);
+            if (rc >= 0)
+                rc = avcodec_open2(this->codec, found, NULL);
+            if (rc < 0) {
+                video_error_text(rc, why, sizeof(why));
+                error_fail(err, CPLUS_EXIT_IO, why[0] != '\0' ? why : "decoder: cannot open codec");
+                avcodec_free_context(&this->codec);
+                this->codec = NULL;
+                break;
+            }
+            this->packet = av_packet_alloc();
+            if (this->packet == NULL) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "decoder: av_packet_alloc failed");
+                avcodec_free_context(&this->codec);
+                this->codec = NULL;
+                break;
+            }
+            this->initialized = 1;
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->initialized != 0 && this->codec != NULL;
+    }
+
+    int width(void) {
+        return this->valid() ? this->codec->width : 0;
+    }
+
+    int height(void) {
+        return this->valid() ? this->codec->height : 0;
+    }
+
+    /* 0 decoded, 1 end of stream, -1 with err set. */
+    int next_frame(frame *out, error *err) {
+        error_reset(err);
+        if (!this->valid() || out == NULL || out->native_frame == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "decoder::next_frame: invalid argument");
+            return STDLIB_FAIL;
+        }
+        for (;;) {
+            char why[256];
+            int rc = avcodec_receive_frame(this->codec, out->native_frame);
+            if (rc == 0)
+                return STDLIB_OK;
+            if (rc == AVERROR_EOF)
+                return 1;
+            if (rc != AVERROR(EAGAIN)) {
+                video_error_text(rc, why, sizeof(why));
+                error_fail(err, CPLUS_EXIT_IO, why[0] != '\0' ? why : "decode failed");
+                return STDLIB_FAIL;
+            }
+            if (this->draining)
+                continue;
+            av_packet_unref(this->packet);
+            if (av_read_frame(this->owner_format, this->packet) < 0) {
+                avcodec_send_packet(this->codec, NULL); /* flush */
+                this->draining = 1;
+                continue;
+            }
+            if (this->packet->stream_index != this->stream)
+                continue;
+            rc = avcodec_send_packet(this->codec, this->packet);
+            if (rc < 0) {
+                video_error_text(rc, why, sizeof(why));
+                error_fail(err, CPLUS_EXIT_IO, why[0] != '\0' ? why : "cannot feed packet");
+                return STDLIB_FAIL;
+            }
+        }
+    }
+
+    void drop(void) {
+        if (this->packet != NULL) {
+            av_packet_free(&this->packet);
+            this->packet = NULL;
+        }
+        if (this->codec != NULL) {
+            avcodec_free_context(&this->codec);
+            this->codec = NULL;
+        }
+        this->owner_format = NULL;
+        this->initialized = 0;
+    }
+};
+
+class media {
+    AVFormatContext *format;
+    int video_stream;
+    int initialized;
+
+    media(const char *path, error *err) {
+        do {
+            char why[256];
+            int rc;
+            error_reset(err);
+            this->format = NULL;
+            this->video_stream = -1;
+            this->initialized = 0;
+            if (path == NULL)
+                break;
+            rc = avformat_open_input(&this->format, path, NULL, NULL);
+            if (rc < 0) {
+                video_error_text(rc, why, sizeof(why));
+                error_fail(err, CPLUS_EXIT_IO, why[0] != '\0' ? why : "media: cannot open");
+                this->format = NULL;
+                break;
+            }
+            rc = avformat_find_stream_info(this->format, NULL);
+            if (rc < 0) {
+                video_error_text(rc, why, sizeof(why));
+                error_fail(err, CPLUS_EXIT_IO, why[0] != '\0' ? why : "media: no stream info");
+                avformat_close_input(&this->format);
+                this->format = NULL;
+                break;
+            }
+            this->video_stream = av_find_best_stream(this->format, AVMEDIA_TYPE_VIDEO,
+                                                     -1, -1, NULL, 0);
+            this->initialized = 1;
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->initialized != 0 && this->format != NULL;
+    }
+
+    int stream_count(void) {
+        return this->valid() ? (int)this->format->nb_streams : 0;
+    }
+
+    int video_index(void) {
+        return this->video_stream;
+    }
+
+    int video_width(void) {
+        const AVCodecParameters *params;
+        if (!this->valid() || this->video_stream < 0)
+            return 0;
+        params = this->format->streams[this->video_stream]->codecpar;
+        return params != NULL ? params->width : 0;
+    }
+
+    int video_height(void) {
+        const AVCodecParameters *params;
+        if (!this->valid() || this->video_stream < 0)
+            return 0;
+        params = this->format->streams[this->video_stream]->codecpar;
+        return params != NULL ? params->height : 0;
+    }
+
+    const char *video_codec(void) {
+        const AVCodecParameters *params;
+        if (!this->valid() || this->video_stream < 0)
+            return "none";
+        params = this->format->streams[this->video_stream]->codecpar;
+        if (params == NULL)
+            return "none";
+        return avcodec_get_name(params->codec_id);
+    }
+
+    long long duration_ms(void) {
+        if (!this->valid() || this->format->duration == AV_NOPTS_VALUE)
+            return 0;
+        return (long long)(this->format->duration / (AV_TIME_BASE / 1000));
+    }
+
+    /* Opens a decoder for the best video stream. */
+    decoder open_decoder(error *err) {
+        decoder opened = decoder(this->format, this->video_stream, err);
+        return opened;
+    }
+
+    void drop(void) {
+        if (this->initialized && this->format != NULL) {
+            avformat_close_input(&this->format);
+            this->format = NULL;
+            this->initialized = 0;
+        }
+    }
+};
+
+#endif

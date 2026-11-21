@@ -1,8 +1,8 @@
 /* C+ standard library: RAII TCP listener/connection over POSIX sockets.
  *
- * A handle records whether it owns its descriptor.  Descriptors 0, 1 and 2 are
- * never closed by a destructor: a zero-initialised handle has fd 0 and must
- * not close stdin, and a moved-from handle has fd -1 and closes nothing.
+ * C++-flavoured: `listener l = listener(port); connection c = l.accept();`.
+ * Each handle records whether it owns its descriptor, so a zero-initialised or
+ * borrowed handle never closes anything and a moved-from handle is inert.
  */
 #ifndef CPLUS_STD_NET_HP
 #define CPLUS_STD_NET_HP
@@ -13,83 +13,142 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
 
-resource struct Listener {
+class connection {
     int fd;
-    int borrowed;
-};
+    int owns;
 
-static inline void Listener_drop(Listener *self) {
-    cplus_log(CPLUS_LOG_DEBUG, "Listener_drop fd=%d", self->fd);
-    if (!self->borrowed && self->fd > 2)
-        close(self->fd);
-    self->fd = -1;
-    self->borrowed = 0;
-}
-
-static inline int Listener_valid(const Listener *self) {
-    return self->fd > 2;
-}
-
-static inline Listener Listener_bind(int port) {
-    Listener listener;
-    int yes = 1;
-    struct sockaddr_in addr;
-
-    listener.fd = -1;
-    listener.borrowed = 0;
-
-    listener.fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (listener.fd < 0)
-        return listener;
-
-    setsockopt(listener.fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = htons((unsigned short)port);
-    if (bind(listener.fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
-        listen(listener.fd, 1) != 0) {
-        close(listener.fd);
-        listener.fd = -1;
+    connection(int descriptor) {
+        this->fd = descriptor;
+        this->owns = descriptor >= 0 ? 1 : 0;
     }
-    return listener;
-}
 
-/* Wraps an existing descriptor without taking ownership of closing it. */
-static inline Listener Listener_borrow(int fd) {
-    Listener listener;
-    listener.fd = fd;
-    listener.borrowed = 1;
-    return listener;
-}
+    int is_valid(void) {
+        return this->fd >= 0;
+    }
 
-resource struct Connection {
-    int fd;
-    int borrowed;
+    int descriptor(void) {
+        return this->fd;
+    }
+
+    /* Reads at most size bytes: byte count, STDLIB_EOF at end of stream,
+     * STDLIB_FAIL with err set. */
+    int read(char *buf, size_t capacity, error *err) {
+        ssize_t n;
+        error_reset(err);
+        if (this->fd < 0 || buf == NULL || capacity == 0) {
+            error_fail(err, CPLUS_EXIT_IO, "connection::read: invalid argument");
+            return STDLIB_FAIL;
+        }
+        n = read(this->fd, buf, capacity);
+        if (n < 0) {
+            error_fail(err, CPLUS_EXIT_IO, "connection::read failed");
+            return STDLIB_FAIL;
+        }
+        if (n == 0)
+            return STDLIB_EOF;
+        return (int)n;
+    }
+
+    int write(const char *data, size_t length, error *err) {
+        ssize_t n;
+        error_reset(err);
+        if (this->fd < 0 || data == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "connection::write: invalid argument");
+            return STDLIB_FAIL;
+        }
+        n = write(this->fd, data, length);
+        if (n < 0 || (size_t)n != length) {
+            error_fail(err, CPLUS_EXIT_IO, "connection::write failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->owns && this->fd >= 0)
+            close(this->fd);
+        this->fd = -1;
+        this->owns = 0;
+    }
 };
 
-static inline void Connection_drop(Connection *self) {
-    cplus_log(CPLUS_LOG_DEBUG, "Connection_drop fd=%d", self->fd);
-    if (!self->borrowed && self->fd > 2)
-        close(self->fd);
-    self->fd = -1;
-    self->borrowed = 0;
+class listener {
+    int fd;
+    int owns;
+
+    /* No early return: C+ constructors have no return statement. */
+    listener(int port) {
+        int yes = 1;
+        struct sockaddr_in addr;
+        this->fd = -1;
+        this->owns = 0;
+        if (port >= 0) {
+            this->fd = socket(AF_INET, SOCK_STREAM, 0);
+            if (this->fd >= 0) {
+                setsockopt(this->fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+                memset(&addr, 0, sizeof(addr));
+                addr.sin_family = AF_INET;
+                addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                addr.sin_port = htons((unsigned short)port);
+                if (bind(this->fd, (struct sockaddr *)&addr, sizeof(addr)) == 0 &&
+                    listen(this->fd, 1) == 0) {
+                    this->owns = 1;
+                } else {
+                    close(this->fd);
+                    this->fd = -1;
+                }
+            }
+        }
+    }
+
+    int is_valid(void) {
+        return this->fd >= 0;
+    }
+
+    int descriptor(void) {
+        return this->fd;
+    }
+
+    int bound_port(void) {
+        struct sockaddr_in bound;
+        socklen_t len = sizeof(bound);
+        if (this->fd < 0)
+            return 0;
+        if (getsockname(this->fd, (struct sockaddr *)&bound, &len) != 0)
+            return 0;
+        return ntohs(bound.sin_port);
+    }
+
+    connection accept(void) {
+        connection accepted = connection(this->fd >= 0
+                                             ? accept(this->fd, NULL, NULL)
+                                             : -1);
+        return accepted;
+    }
+
+    void drop(void) {
+        if (this->owns && this->fd >= 0)
+            close(this->fd);
+        this->fd = -1;
+        this->owns = 0;
+    }
+};
+
+/* Wrap an existing descriptor without taking ownership of closing it. */
+static inline listener listener_borrow(int fd) {
+    listener borrowed = listener(-1);
+    borrowed.fd = fd;
+    borrowed.owns = 0;
+    return borrowed;
 }
 
-static inline int Connection_valid(const Connection *self) {
-    return self->fd > 2;
-}
-
-static inline Connection Connection_accept(Listener *listener) {
-    Connection conn;
-    conn.fd = -1;
-    conn.borrowed = 0;
-    if (listener == NULL || !Listener_valid(listener))
-        return conn;
-    conn.fd = accept(listener->fd, NULL, NULL);
-    return conn;
+static inline connection connection_borrow(int fd) {
+    connection borrowed = connection(-1);
+    borrowed.fd = fd;
+    borrowed.owns = 0;
+    return borrowed;
 }
 
 #endif

@@ -5,7 +5,7 @@
  * link fails with duplicate symbols.  Free functions are unaffected because
  * the library defines them `static inline`.
  *
- * Expected today: link error (duplicate symbols for String_*).
+ * Expected today: link error (duplicate symbols for string_*).
  * See docs/MODERN_STDLIB.md ("Multi-translation-unit linkage").
  */
 #include <stdio.h>
@@ -13,6 +13,6 @@
 #include "stdlib/string.hp"
 
 int gap_a(void) {
-    String s = String("aaaa");
-    return (int)s.len();
+    string s = string("aaaa");
+    return (int)s.size();
 }

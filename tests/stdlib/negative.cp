@@ -9,54 +9,61 @@
 #include "stdlib/thread.hp"
 
 int main(void) {
-    StdError err;
-    StdError_init(&err);
+    error err = error();
     int failures = 0;
 
-    IntVec v = IntVec();
+    vector v = vector();
     int out = 0;
     if (v.reserve(SIZE_MAX / 2) != -1)
         failures++;
-    if (v.get(0, &out) != -1)
+    if (v.at_checked(0, &out) != -1)
         failures++;
-    if (v.pop(&out) != -1)
+    if (v.pop_back(&out) != -1)
         failures++;
-    if (v.get(0, NULL) != -1)
+    if (v.at_checked(0, NULL) != -1)
         failures++;
-    if (v.push(1) != 0 || v.get(0, &out) != 0 || out != 1)
+    if (v.push_back(1) != 0 || v.at_checked(0, &out) != 0 || out != 1)
         failures++;
 
-    String s = String("a-b");
+    string s = string("a-b");
     char buf[4];
     if (s.field('-', 9, buf, sizeof(buf)) != -1)
         failures++;
-    if (s.substring(50, 2, buf, sizeof(buf)) != -1)
+    if (s.substr(50, 2, buf, sizeof(buf)) != -1)
         failures++;
-    if (s.substring(0, 2, NULL, 4) != -1)
+    if (s.substr(0, 2, NULL, 4) != -1)
         failures++;
     if (s.find("zz") != -1)
         failures++;
-    print("strings-ok", failures, s.field_count('-'), s.compare("a-b"));
+    print("strings-ok", failures, s.count_fields('-'), s.compare("a-b"));
 
-    File missing = File_open("/nonexistent/cplus/definitely/missing.txt", "r");
-    if (File_valid(&missing))
+    file missing = file("/nonexistent/cplus/definitely/missing.txt", "r");
+    if (missing.is_open())
         failures++;
-    if (File_read(&missing, buf, sizeof(buf), &err) != STDLIB_FAIL)
+    if (missing.read(buf, sizeof(buf), &err) != STDLIB_FAIL)
         failures++;
-    if (!StdError_failed(&err))
+    if (!err.failed_now())
         failures++;
-    print("file-error", failures, StdError_code(&err));
+    print("file-error", failures, err.code());
 
-    int wr = File_write(&missing, "x");
-    int bytes = File_write_bytes(&missing, "x", 1, &err);
-    if (wr != 0 || bytes != STDLIB_FAIL || !StdError_failed(&err))
+    int wr = missing.write("x");
+    int bytes = missing.write_bytes("x", 1, &err);
+    if (wr != 0 || bytes != STDLIB_FAIL || !err.failed_now())
         failures++;
     print("bad-handle-write", failures, wr, bytes);
 
-    Guard no_owner = Guard_lock(NULL);
-    if (Guard_holds(&no_owner))
+    err.set(CPLUS_EXIT_IO, "synthetic");
+    if (!err.failed_now() || err.code() != (int)CPLUS_EXIT_IO || !err.ok() == 0)
         failures++;
-    print("guard-null", failures, Guard_holds(&no_owner));
+    error_reset(&err);
+    if (err.failed_now() || err.ok() != 1)
+        failures++;
+    print("error-methods", failures, err.ok(), err.code());
+
+    guard no_owner = guard(NULL);
+    if (no_owner.holds())
+        failures++;
+    print("guard-null", failures, no_owner.holds());
 
     return failures == 0 ? 0 : 1;
 }

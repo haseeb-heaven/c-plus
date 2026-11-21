@@ -1,17 +1,11 @@
 /* C+ standard library: JSON via yyjson (MIT, vendored in third_party/yyjson).
  *
- * RAII-over-upstream, not a new parser: yyjson parses, serialises and owns the
- * memory; this header only adds lifetime-safety and error results.
- *
- *   JsonDoc      owns a parsed document      -> drop() frees it
- *   JsonRef      borrows a value inside a doc -> never frees anything
- *   JsonBuilder  owns a mutable document      -> drop() frees it
- *
- * A JsonRef is only valid while its JsonDoc/JsonBuilder is alive; the write
- * helpers return a malloc'd buffer that the caller releases with Json_free().
- *
- * Build third_party/yyjson/yyjson.c once as a normal C translation unit and
- * add third_party/yyjson to the include path.
+ * C++-flavoured RAII over upstream, not a new parser:
+ *   json         owns a parsed document   -> drop() frees it
+ *   json_view    borrows a value inside it -> never frees anything
+ *   json_builder owns a mutable document  -> drop() frees it
+ * A json_view is only valid while its owner lives; a serialised buffer is
+ * released with json_free().
  */
 #ifndef CPLUS_STD_JSON_HP
 #define CPLUS_STD_JSON_HP
@@ -22,222 +16,254 @@
 #include "stdlib/error.hp"
 #include "yyjson.h"
 
-/* ---- borrowed value ----------------------------------------------------- */
+class json_view {
+    const yyjson_val *value;
 
-typedef struct JsonRef {
-    const yyjson_val *val;
-} JsonRef;
+    json_view(const yyjson_val *value) {
+        this->value = value;
+    }
 
-static inline int JsonRef_valid(const JsonRef *self) {
-    return self->val != NULL;
+    int valid(void) {
+        return this->value != NULL;
+    }
+
+    int is_object(void) {
+        return yyjson_is_obj(this->value);
+    }
+
+    int is_array(void) {
+        return yyjson_is_arr(this->value);
+    }
+
+    int is_number(void) {
+        return yyjson_is_num(this->value);
+    }
+
+    int is_string(void) {
+        return yyjson_is_str(this->value);
+    }
+
+    int is_bool(void) {
+        return yyjson_is_bool(this->value);
+    }
+
+    int get_int(int *out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_num(this->value)) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_int: not a number");
+            return STDLIB_FAIL;
+        }
+        *out = yyjson_get_int(this->value);
+        return STDLIB_OK;
+    }
+
+    int get_double(double *out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_num(this->value)) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_double: not a number");
+            return STDLIB_FAIL;
+        }
+        *out = yyjson_get_num(this->value);
+        return STDLIB_OK;
+    }
+
+    int get_bool(int *out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_bool(this->value)) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_bool: not a bool");
+            return STDLIB_FAIL;
+        }
+        *out = yyjson_get_bool(this->value) ? 1 : 0;
+        return STDLIB_OK;
+    }
+
+    /* Borrowed string: valid while the owning document lives. */
+    int get_string(const char **out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_str(this->value)) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_string: not a string");
+            return STDLIB_FAIL;
+        }
+        *out = yyjson_get_str(this->value);
+        return STDLIB_OK;
+    }
+
+    size_t size(void) {
+        if (yyjson_is_arr(this->value))
+            return yyjson_arr_size(this->value);
+        if (yyjson_is_obj(this->value))
+            return yyjson_obj_size(this->value);
+        return 0;
+    }
+
+    json_view at(size_t index) {
+        json_view item = json_view(yyjson_arr_get(this->value, index));
+        return item;
+    }
+
+    json_view member(const char *key) {
+        json_view item = json_view(
+            (this->value == NULL || key == NULL) ? NULL
+                                                 : yyjson_obj_get(this->value, key));
+        return item;
+    }
+
+    char *write(size_t *length) {
+        if (this->value == NULL)
+            return NULL;
+        return yyjson_val_write(this->value, YYJSON_WRITE_NOFLAG, length);
+    }
+};
+
+class json {
+    yyjson_doc *document;
+
+    /* A NULL source yields an invalid document without recording an error;
+     * the parse-file helper fills it in afterwards. */
+    json(const char *text, error *err) {
+        do {
+            yyjson_read_err info;
+            error_reset(err);
+            this->document = NULL;
+            if (text == NULL)
+                break;
+            /* yyjson reads without modifying the buffer. */
+            this->document = yyjson_read_opts((char *)text, strlen(text),
+                                              YYJSON_READ_NOFLAG, NULL, &info);
+            if (this->document == NULL)
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED,
+                           info.msg != NULL ? info.msg : "JSON parse failed");
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->document != NULL;
+    }
+
+    json_view root(void) {
+        json_view view = json_view(this->document == NULL
+                                       ? NULL
+                                       : yyjson_doc_get_root(this->document));
+        return view;
+    }
+
+    void drop(void) {
+        if (this->document != NULL) {
+            yyjson_doc_free(this->document);
+            this->document = NULL;
+        }
+    }
+};
+
+/* Parse a file: the returned json is invalid (and err set) on failure. */
+static inline json json_parse_file(const char *path, error *err) {
+    json out = json(NULL, err);
+    yyjson_read_err info;
+    error_reset(err);
+    if (path == NULL) {
+        error_fail(err, CPLUS_EXIT_IO, "json::parse_file: null path");
+        return out;
+    }
+    out.document = yyjson_read_file(path, YYJSON_READ_NOFLAG, NULL, &info);
+    if (out.document == NULL)
+        error_fail(err, CPLUS_EXIT_IO,
+                   info.msg != NULL ? info.msg : "JSON file read failed");
+    return out;
 }
 
-static inline int JsonRef_is_obj(const JsonRef *self) {
-    return yyjson_is_obj(self->val);
+static inline json_view json_view_of(const yyjson_val *value) {
+    json_view view = json_view(value);
+    return view;
 }
 
-static inline int JsonRef_is_arr(const JsonRef *self) {
-    return yyjson_is_arr(self->val);
-}
-
-static inline int JsonRef_is_num(const JsonRef *self) {
-    return yyjson_is_num(self->val);
-}
-
-static inline int JsonRef_is_str(const JsonRef *self) {
-    return yyjson_is_str(self->val);
-}
-
-static inline int JsonRef_is_bool(const JsonRef *self) {
-    return yyjson_is_bool(self->val);
-}
-
-static inline int JsonRef_int(const JsonRef *self, int *out) {
-    if (out == NULL || !yyjson_is_num(self->val))
-        return -1;
-    *out = yyjson_get_int(self->val);
-    return 0;
-}
-
-static inline int JsonRef_double(const JsonRef *self, double *out) {
-    if (out == NULL || !yyjson_is_num(self->val))
-        return -1;
-    *out = yyjson_get_num(self->val);
-    return 0;
-}
-
-static inline int JsonRef_bool(const JsonRef *self, int *out) {
-    if (out == NULL || !yyjson_is_bool(self->val))
-        return -1;
-    *out = yyjson_get_bool(self->val) ? 1 : 0;
-    return 0;
-}
-
-/* Borrowed string: valid while the owning document is alive.  Never free it. */
-static inline int JsonRef_str(const JsonRef *self, const char **out) {
-    if (out == NULL || !yyjson_is_str(self->val))
-        return -1;
-    *out = yyjson_get_str(self->val);
-    return 0;
-}
-
-static inline size_t JsonRef_size(const JsonRef *self) {
-    if (yyjson_is_arr(self->val))
-        return yyjson_arr_size(self->val);
-    if (yyjson_is_obj(self->val))
-        return yyjson_obj_size(self->val);
-    return 0;
-}
-
-static inline JsonRef JsonRef_arr_at(const JsonRef *self, size_t index) {
-    JsonRef ref;
-    ref.val = yyjson_arr_get(self->val, index);
-    return ref;
-}
-
-static inline JsonRef JsonRef_member(const JsonRef *self, const char *key) {
-    JsonRef ref;
-    ref.val = (self->val == NULL || key == NULL) ? NULL
-                                                 : yyjson_obj_get(self->val, key);
-    return ref;
-}
-
-/* Serialise a borrowed value; free the result with Json_free(). */
-static inline char *JsonRef_write(const JsonRef *self, size_t *len) {
-    if (self->val == NULL)
-        return NULL;
-    return yyjson_val_write(self->val, YYJSON_WRITE_NOFLAG, len);
-}
-
-static inline void Json_free(char *text) {
+static inline void json_free(char *text) {
     free(text);
 }
 
-/* ---- owned parsed document ---------------------------------------------- */
+class json_builder {
+    yyjson_mut_doc *document;
+    yyjson_mut_val *root_value;
 
-resource struct JsonDoc {
-    yyjson_doc *doc;
+    json_builder(void) {
+        this->document = yyjson_mut_doc_new(NULL);
+        this->root_value = NULL;
+        if (this->document != NULL) {
+            this->root_value = yyjson_mut_obj(this->document);
+            if (this->root_value != NULL)
+                yyjson_mut_doc_set_root(this->document, this->root_value);
+        }
+    }
+
+    int valid(void) {
+        return this->document != NULL && this->root_value != NULL;
+    }
+
+    int add_int(const char *key, int value, error *err) {
+        error_reset(err);
+        if (!this->valid()) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_int: invalid builder");
+            return STDLIB_FAIL;
+        }
+        if (!yyjson_mut_obj_add_int(this->document, this->root_value, key, value)) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_int failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int add_double(const char *key, double value, error *err) {
+        error_reset(err);
+        if (!this->valid()) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_double: invalid builder");
+            return STDLIB_FAIL;
+        }
+        if (!yyjson_mut_obj_add_double(this->document, this->root_value, key, value)) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_double failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int add_bool(const char *key, int value, error *err) {
+        error_reset(err);
+        if (!this->valid()) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_bool: invalid builder");
+            return STDLIB_FAIL;
+        }
+        if (!yyjson_mut_obj_add_bool(this->document, this->root_value, key, value != 0)) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_bool failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    /* Copies the value, so the caller keeps ownership of its buffer. */
+    int add_string(const char *key, const char *value, error *err) {
+        error_reset(err);
+        if (!this->valid() || value == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_string: invalid argument");
+            return STDLIB_FAIL;
+        }
+        if (!yyjson_mut_obj_add_strcpy(this->document, this->root_value, key, value)) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_string failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    char *write(size_t *length) {
+        if (!this->valid())
+            return NULL;
+        return yyjson_mut_write(this->document, YYJSON_WRITE_NOFLAG, length);
+    }
+
+    void drop(void) {
+        if (this->document != NULL) {
+            yyjson_mut_doc_free(this->document);
+            this->document = NULL;
+            this->root_value = NULL;
+        }
+    }
 };
-
-static inline void JsonDoc_drop(JsonDoc *self) {
-    if (self->doc != NULL) {
-        yyjson_doc_free(self->doc);
-        self->doc = NULL;
-    }
-}
-
-static inline int JsonDoc_valid(const JsonDoc *self) {
-    return self->doc != NULL;
-}
-
-static inline JsonRef JsonDoc_root(const JsonDoc *self) {
-    JsonRef ref;
-    ref.val = self->doc == NULL ? NULL : yyjson_doc_get_root(self->doc);
-    return ref;
-}
-
-static inline JsonDoc JsonDoc_parse(const char *text, StdError *err) {
-    JsonDoc doc;
-    yyjson_read_err info;
-    StdError_init(err);
-    doc.doc = NULL;
-    if (text == NULL) {
-        StdError_set(err, CPLUS_EXIT_UNSUPPORTED, "JsonDoc_parse: null input");
-        return doc;
-    }
-    /* yyjson reads without modifying the buffer. */
-    doc.doc = yyjson_read_opts((char *)text, strlen(text), YYJSON_READ_NOFLAG,
-                               NULL, &info);
-    if (doc.doc == NULL) {
-        StdError_set(err, CPLUS_EXIT_UNSUPPORTED,
-                     info.msg != NULL ? info.msg : "JSON parse failed");
-    }
-    return doc;
-}
-
-static inline JsonDoc JsonDoc_read_file(const char *path, StdError *err) {
-    JsonDoc doc;
-    yyjson_read_err info;
-    StdError_init(err);
-    doc.doc = NULL;
-    if (path == NULL) {
-        StdError_set(err, CPLUS_EXIT_IO, "JsonDoc_read_file: null path");
-        return doc;
-    }
-    doc.doc = yyjson_read_file(path, YYJSON_READ_NOFLAG, NULL, &info);
-    if (doc.doc == NULL) {
-        StdError_set(err, CPLUS_EXIT_IO,
-                     info.msg != NULL ? info.msg : "JSON file read failed");
-    }
-    return doc;
-}
-
-/* ---- owned mutable document (builder) ----------------------------------- */
-
-resource struct JsonBuilder {
-    yyjson_mut_doc *doc;
-    yyjson_mut_val *root;
-};
-
-static inline void JsonBuilder_drop(JsonBuilder *self) {
-    if (self->doc != NULL) {
-        yyjson_mut_doc_free(self->doc);
-        self->doc = NULL;
-        self->root = NULL;
-    }
-}
-
-static inline int JsonBuilder_valid(const JsonBuilder *self) {
-    return self->doc != NULL && self->root != NULL;
-}
-
-static inline JsonBuilder JsonBuilder_new(void) {
-    JsonBuilder builder;
-    builder.doc = yyjson_mut_doc_new(NULL);
-    builder.root = NULL;
-    if (builder.doc != NULL) {
-        builder.root = yyjson_mut_obj(builder.doc);
-        if (builder.root != NULL)
-            yyjson_mut_doc_set_root(builder.doc, builder.root);
-    }
-    return builder;
-}
-
-static inline int JsonBuilder_add_int(JsonBuilder *self, const char *key,
-                                      int value) {
-    if (!JsonBuilder_valid(self))
-        return -1;
-    return yyjson_mut_obj_add_int(self->doc, self->root, key, value) ? 0 : -1;
-}
-
-static inline int JsonBuilder_add_double(JsonBuilder *self, const char *key,
-                                         double value) {
-    if (!JsonBuilder_valid(self))
-        return -1;
-    return yyjson_mut_obj_add_double(self->doc, self->root, key, value) ? 0 : -1;
-}
-
-static inline int JsonBuilder_add_bool(JsonBuilder *self, const char *key,
-                                       int value) {
-    if (!JsonBuilder_valid(self))
-        return -1;
-    return yyjson_mut_obj_add_bool(self->doc, self->root, key, value != 0) ? 0
-                                                                          : -1;
-}
-
-/* Copies `value`, so the caller keeps ownership of its buffer. */
-static inline int JsonBuilder_add_str(JsonBuilder *self, const char *key,
-                                      const char *value) {
-    if (!JsonBuilder_valid(self) || value == NULL)
-        return -1;
-    return yyjson_mut_obj_add_strcpy(self->doc, self->root, key, value) ? 0 : -1;
-}
-
-/* Serialise the builder; free the result with Json_free(). */
-static inline char *JsonBuilder_write(JsonBuilder *self, size_t *len) {
-    if (!JsonBuilder_valid(self))
-        return NULL;
-    return yyjson_mut_write(self->doc, YYJSON_WRITE_NOFLAG, len);
-}
 
 #endif

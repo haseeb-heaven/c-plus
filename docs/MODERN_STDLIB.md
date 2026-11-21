@@ -1,225 +1,221 @@
 # Modern C+ standard library
 
-Owner: **Agent 2 — modern standard-library engineer** (branch `agent/modern-stdlib`).
+Owner: Agent 2 (branch `agent/modern-stdlib`).  Companion to
+[`STDLIB.md`](STDLIB.md), which is the API reference.
 
-Scope of this document: the application-facing library layer under `stdlib/`,
-the vendored upstream C libraries under `third_party/`, their tests under
-`tests/stdlib/`, and the interfaces this layer needs from the compiler/runtime
-owned by Agent 1 (`agent/core-safety`).
+Scope: `stdlib/`, the vendored upstream C libraries in `third_party/`, their
+tests and examples in `tests/stdlib/`, and the interfaces this layer needs from
+the compiler/runtime owned by Agent 1 (`agent/core-safety`).
 
-The language stays small: syntax is C plus the C+ RAII constructs
-(`resource`, `class`, `owned`, `managed`, `move`). The library adds no new
-syntax, no new allocator, no exceptions and no `longjmp`.
+Design order, as instructed: **safety, memory safety and RAII first; features
+second; speed measured, not assumed.**  The language stays small: C plus the C+
+RAII constructs.  No exceptions, no `longjmp`, no mandatory GC, no new syntax.
 
-## 1. What exists now
+## 1. Surface: C++-flavoured, C underneath
 
-| header | kind | contents | status |
-| --- | --- | --- | --- |
-| `stdlib/error.hp` | value | `StdError`, `STDLIB_OK/EOF/FAIL` | done |
-| `stdlib/io.hp` | functions | `println`, `echo_int`, `read_line`, `read_int`, `read_long`, `read_float`, `read_double` | done |
-| `stdlib/string.hp` | class | `String` (owning), `StringView` (borrowed) | done |
-| `stdlib/vector.hp` | class | `IntVec` | done |
-| `stdlib/file.hp` | resource | `File` | done |
-| `stdlib/thread.hp` | resource | `Mutex`, `Guard` | done |
-| `stdlib/net.hp` | resource | `Listener`, `Connection` | done |
-| `stdlib/json.hp` | resource | `JsonDoc`, `JsonRef`, `JsonBuilder` over yyjson | done |
-| `stdlib/window.hp`, `graphics.hp`, `input.hp`, `audio.hp`, `image.hp`, `http.hp`, `async.hp`, `video.hp` | — | SDL3 / miniaudio / stb / libcurl / libuv / FFmpeg wrappers | **not started** (deliberate: foundation first) |
+Types are nouns, construction names the type, operations are methods:
+
+```c
+string s = string("a,b,c");       /* constructor, not NewString()          */
+vector v = vector();              /* one obvious construction path         */
+v.push_back(1);                   /* STL-style method names                */
+file f = file("x.txt", "r");      /* RAII: the destructor closes           */
+json doc = json(text, &err);      /* parse; doc.valid() reports failure    */
+```
+
+Rules the surface follows:
+
+| rule | why |
+| --- | --- |
+| `this->field` / `this->method()` only, never a `self` keyword | keeps the source valid C++-shaped C; `self` is not part of the language |
+| constructors take an `error *` when they can fail | no exceptions; failure is a value |
+| alternate construction is a snake_case free function (`json_parse_file`, `file_borrow`, `image_from_memory`) | C+ has no overloading or static methods |
+| headers define methods inline | C+ classes lower to struct + functions |
+| internal cross-object calls use the lowered names (`mutex_lock(owner)`, `error_reset(err)`) | inside a class body C+ only rewrites `this->method()`; see §7 |
 
 ## 2. Ownership model
 
-Every wrapper says which of these a handle is:
+Every handle declares which of four states it is in:
 
-| state | how it is expressed | destructor effect |
+| state | expressed by | destructor |
 | --- | --- | --- |
-| **owned** | factory returns it (`File_open`, `Mutex_new`, `Listener_bind`, `JsonDoc_parse`) | releases the resource |
-| **borrowed** | explicit constructor (`File_borrow`, `Listener_borrow`) or `StringView`/`JsonRef`/`Guard` | no release |
-| **invalid** | failed factory (`handle == NULL`, `fd <= 2`, or a parse error) | no release |
-| **moved-from** | after `drop`/`cplus_move`: handle nulled, `fd = -1` | no release |
+| **owned** | factory/ctor result (`file(...)`, `audio_engine(...)`, `json(...)`) | releases |
+| **borrowed** | `file_borrow`, `listener_borrow`, `connection_borrow`, `string_view`, `json_view`, `guard`, `native()` | releases nothing |
+| **invalid** | failed ctor / `valid() == 0` / `is_open() == 0` | releases nothing |
+| **moved-from** | after `drop` or `cplus_move` | releases nothing |
 
-Rules the library follows:
+Safety rules enforced in the library:
 
-- Destructors tolerate a zeroed handle.  The compiler's RAII lowering
-  zero-initialises a resource local that has no initialiser (`= {0}`), so a
-  default-constructed handle must be inert.
-- **Descriptors 0/1/2 are never closed by a destructor.**  A zero-initialised
-  socket handle would otherwise carry `fd == 0` and close `stdin`; `net.hp`
-  therefore closes only `fd > 2`, and only when the handle is not borrowed.
-- `File_borrow(stdout)` lets a wrapper write to a standard stream without
-  taking ownership of it.
-- `String`, `IntVec` and the JSON documents own heap memory and free it
-  through `cplus_release` / `yyjson_*_free` in their destructors.  No second
-  allocator is introduced: `String`/`IntVec` use `cplus_alloc`, and the JSON
-  layer frees exactly what yyjson allocated.
-- Borrowed views (`StringView`, `JsonRef`) are documented as valid only while
-  their owner lives; they never free anything.
+- **A destructor must be inert on a zeroed handle.**  The compiler
+  zero-initialises a resource local with no initialiser (`= {0}`), so
+  `listener l;` must not close descriptor 0.  Handles carry an `owns` flag and
+  validators check it before closing.
+- **Descriptors 0/1/2 are never closed by a zero-initialised handle**: `owns`
+  is 0, so the guard is ownership, not an fd range.
+- **A constructor that fails leaves a valid object in the invalid state**, never
+  half-initialised.  Constructors contain no `return`; they use nested branches
+  or a `do { ... } while (0)` with `break`.
+- **Constructors never use `->` on other objects**, because a C+ constructor
+  body rewrites `->` to `.` (that is how `this->field` becomes the result
+  struct member).  They take native pointers instead
+  (`renderer(win.native(), ...)`, `timer(loop.native(), ...)`).
+- **No second allocator.**  `string`/`vector` use `cplus_alloc`; images use the
+  same libc allocator stb frees with; JSON frees exactly what yyjson allocated.
 
-## 3. Recoverable errors
-
-Normal failures — bad input, end of input, a missing file, malformed JSON —
-are values, not aborts:
+## 3. Recoverable errors ("exceptions" without exceptions)
 
 ```c
-StdError err;
-StdError_init(&err);
+error err = error();
 int n = 0;
-if (read_int(&n, &err) != STDLIB_OK) {
-    print("input failed:", StdError_message(&err), StdError_code(&err));
-}
+if (read_int(&n, &err) != STDLIB_OK)
+    print("input failed:", err.what(), err.code());
 ```
 
-- Status convention: `STDLIB_OK` (0), `STDLIB_EOF` (1), `STDLIB_FAIL` (-1).
-- `StdError` carries `failed`, a `cplus_exit_code` and a message.  Reusing the
-  runtime's code enum keeps one namespace for libc-level and runtime failures.
-- End of input is **not** an error: the readers return `STDLIB_EOF` with the
-  error record cleared.
-- Conversion is delegated to libc (`strtol`, `strtoll`, `strtof`, `strtod`,
-  `errno`, `ERANGE`).  There is no hand-written number parser.
+- Status: `STDLIB_OK` (0), `STDLIB_EOF` (1), `STDLIB_FAIL` (-1).
+- `error` carries `failed` + a `cplus_exit_code` + a bounded message.  Reusing
+  the runtime's code space keeps one namespace.
+- End of input is **not** an error.
+- `error_reset(err)` / `error_fail(err, code, msg)` are free helpers used
+  internally (method sugar is not applied inside class bodies); user code can
+  use `err.clear()`, `err.set(...)`, `err.ok()`, `err.what()`.
 - Fatal safety violations (bounds, double free, null deref) remain
-  `cplus_fatal`'s job; the library never converts them into return codes.
+  `cplus_fatal`'s job and are never converted into return codes.
 
-`scan()` keeps its fatal-on-failure behaviour for compatibility; the new
-`read_*` functions are the recoverable path.
+## 4. Telemetry
 
-## 4. Multi-translation-unit linkage
+Every function and method logs a trace entry through `cplus_log`:
 
-`#include "x.hp"` is lowered per translation unit and inlined, so a `.hp`
-definition that is emitted with external linkage becomes one definition per
-including TU and the program fails to link with duplicate symbols.
+```sh
+c+ build app.cp --log trace       # or --log-level debug, --log info ...
+```
 
-**Fixed in the library:** every function defined in a `.hp` is written
-`static inline`.  Two TUs that both include `io.hp`/`file.hp`/`thread.hp`/
-`error.hp`/`net.hp` now link and run — see `tests/stdlib/multi_tu/`.
+With logging off (`cplus_log(...)` expands to `((void)0)`) the calls cost
+nothing at run time.  `tests/stdlib/run_stdlib_tests.sh` exercises the log path
+via the runtime's logging fixture.
 
-**Still open (compiler-side):** members lowered from a `class` are emitted
-without internal linkage, so `String`/`IntVec` still duplicate when two TUs
-include the same class-bearing header.  A minimal reproduction lives in
-`tests/stdlib/known_gaps/class_linkage/` and is asserted by the test runner to
-*fail to link* today; if it ever links, that test starts failing on purpose so
-the fix gets noticed and this section updated.
+## 5. Multi-translation-unit linkage (open compiler gap)
 
-Workaround while the gap exists: include a class-bearing header from exactly
-one TU per program, or wrap the class in an application-owned `.hp`.
+Adopting C++ methods has a cost: **members lowered from a `class` are emitted
+with external linkage**, so a `.hp` that defines a class cannot be included from
+two translation units without duplicate symbols.  Every stdlib header now
+defines classes, so this applies to the whole library.
 
-## 5. Runtime / compiler API requests (for Agent 1)
+Evidence: `tests/stdlib/multi_tu/` (three TUs including `stdlib/io.hp`) and
+`tests/stdlib/known_gaps/class_linkage/`; the runner asserts both still fail
+with `duplicate symbol` and tells you to update this document if that changes.
 
-None of these are blocking the current library; each has a reproduction.
+This is a **link-time** failure (loud, reproducible), not a memory-safety
+failure, but it is a real limitation of the current compiler.  Request to
+Agent 1 below.  Until it lands: include a class-bearing header from one TU per
+program.
 
-1. **Internal linkage for `.hp`-lowered classes.**
-   *Need:* lowered class members (ctors, methods, `T_drop`) from a `.hp` are
-   emitted `static inline` (or a header/`internal` marker is honoured), so a
-   class header can be included from any number of TUs.
-   *Repro:* `tests/stdlib/known_gaps/class_linkage/*.cp` — link fails with
-   `duplicate symbol '_String_len'` and friends.
-   *Contract:* per-TU private copies are acceptable; address identity of the
-   functions across TUs is not required.  *Failure semantics:* unchanged.
-
-2. **`AstSafetyCheck` false positive on out-parameters.**
-   *Need:* a pointer initialised to `NULL` and then written through by an
-   external function (`char *end = NULL; strtol(...,&end,...);`) is currently
-   still treated as provably null, so `*end` is reported as a null-pointer
-   dereference.
-   *Repro:* revert `stdlib/io.hp` readers to `char *end = NULL;` and build
-   `tests/stdlib/foundation.cp`; the diagnostic fires at the `*end != '\0'`
-   comparison.  The library works around it by initialising `end` to the token.
-   *Contract:* the checker should drop a variable from its "provably null" set
-   when its address escapes (or when it is passed by address to an unknown
-   function).
-
-3. **Optional: a runtime recoverable-error ABI.**
-   *Need:* if the runtime grows a non-fatal error/status type, `StdError`
-   should delegate to it instead of carrying its own message buffer.
-   *Contract:* `code` stays a `cplus_exit_code`; `message` stays borrowed or
-   copied, never transferred.  *Failure semantics:* recoverable only.
-
-## 6. Vendored upstreams
+## 6. Vendored and linked upstreams
 
 Only the approved subset is copied into `third_party/`; no upstream checkout is
-committed wholesale.  Shallow checkouts live in
-`../c-plus-library-upstreams/` for reference and are not part of the build.
+committed wholesale.  Shallow checkouts live in `../c-plus-library-upstreams/`
+and are not part of the build.  For every library the implementation is
+compiled **once** as ordinary C and linked; nothing is pasted into a `.hp`.
 
-| library | repo | revision | license | vendored here | compiled |
-| --- | --- | --- | --- | --- | --- |
-| yyjson 0.13.0 | `ibireme/yyjson` | `be9bd74bb3c96e00006c2075c330a6b8b90123dc` | MIT | `third_party/yyjson/{yyjson.c,yyjson.h,LICENSE}` | once, as a C TU (`libyyjson.a`) |
-| miniaudio | `mackron/miniaudio` | `877ea4a7c2601c7b0f2a44e83dfac42e6470fea6` | public domain / MIT-0 | not yet | not yet |
-| stb | `nothings/stb` | `6b5799bae8a1fe3792691ef4b72ae26434c3e799` | public domain / MIT | not yet | not yet |
-| SDL3 | `libsdl-org/SDL` | `313dd44068a19a42e008fe8fdd3b9cf5596531eb` | zlib | not yet | link, do not copy |
-| libcurl | `curl/curl` | `cb870c11c9a71b62780aeb41d9add1a1b34045ea` | curl (MIT-like) | not yet | link, do not copy |
-| libuv | `libuv/libuv` | `f08538cca14f73e30c89625e473fea3f5f55e300` | MIT | not yet | link, do not copy |
-| FFmpeg | `FFmpeg/FFmpeg` | not checked out yet | LGPL/GPL (config-dependent) | never copied | link only |
+| library | repo | revision | license | how it is used |
+| --- | --- | --- | --- | --- |
+| yyjson 0.13.0 | `ibireme/yyjson` | `be9bd74bb3c96e00006c2075c330a6b8b90123dc` | MIT | vendored `yyjson.c/.h` + `LICENSE`, built once |
+| stb_image / stb_image_write | `nothings/stb` | `6b5799bae8a1fe3792691ef4b72ae26434c3e799` | public domain / MIT | vendored `stb_image.h`, `stb_image_write.h`, `LICENSE`, `stb_impl.c` |
+| miniaudio | `mackron/miniaudio` | `877ea4a7c2601c7b0f2a44e83dfac42e6470fea6` | public domain / MIT-0 | vendored `miniaudio.h` + `LICENSE`, `miniaudio_impl.c` |
+| SDL3 3.4.18 | `libsdl-org/SDL` | `313dd44068a19a42e008fe8fdd3b9cf5596531eb` | zlib | linked via `pkg-config sdl3`, never copied |
+| libcurl 8.7.1 | `curl/curl` | `cb870c11c9a71b62780aeb41d9add1a1b34045ea` | curl (MIT-like) | linked via `pkg-config libcurl`, never copied |
+| libuv 1.51.0 | `libuv/libuv` | `f08538cca14f73e30c89625e473fea3f5f55e300` | MIT | linked via `pkg-config libuv`, never copied |
+| FFmpeg 9.0.2 | `FFmpeg/FFmpeg` | system build | LGPL by default, GPL if `--enable-gpl` | headers + `pkg-config libav*`, never copied |
 
-Attribution: `third_party/yyjson/LICENSE` is retained verbatim; yyjson's
-copyright notice stays at the top of its sources.
+Reference design reading: **`thradams/cake`** (`2da2afd`), a from-scratch C23
+front end with ownership/nullability annotations.  What we took from it:
 
-## 7. Build and test
-
-```sh
-# once: the external C implementation
-clang -c third_party/yyjson/yyjson.c -o build/ext/yyjson.o -O2 -Ithird_party/yyjson
-ar rcs build/ext/libyyjson.a build/ext/yyjson.o
-
-# a program that uses the JSON wrapper
-build/c+ build my_app.cp -Ithird_party/yyjson -Lbuild/ext -lyyjson -o my_app
-```
-
-```sh
-tests/stdlib/run_stdlib_tests.sh          # all stdlib tests
-tests/stdlib/run_stdlib_tests.sh json     # one pattern
-```
-
-The runner builds `third_party/yyjson` once, then compiles each
-`tests/stdlib/*.cp` with the real C+ compiler, runs it, and diffs stdout
-against the recorded `.expected` when one exists.
-
-| test | covers |
+| cake idea | C+ equivalent here |
 | --- | --- |
-| `foundation.cp` | String (append/eq/compare/find/substring/split/view/capacity), IntVec (push/get/pop/clear), File (open/write/flush/read_line/borrow/missing), Mutex/Guard, all five readers |
-| `negative.cp` | overflow-checked `reserve`, out-of-range `get`/`pop`/`field`/`substring`, missing file, null-handle write, null mutex |
-| `eof.cp` | `read_int`/`read_line`/`read_double` on an exhausted stream report `STDLIB_EOF`, not a failure |
-| `json_test.cp` | parse, borrowed reads, array access, missing key, file parse, serialise, builder, malformed JSON error |
-| `multi_tu/` | one program from three TUs sharing `io.hp`/`file.hp`/`thread.hp` |
-| `known_gaps/class_linkage/` | asserts the class-linkage gap still reproduces |
+| `_Owner` pointer annotation | owning *types* (`string`, `file`, `json`, ...) with a `drop` destructor |
+| `_View` annotation | borrowed types (`string_view`, `json_view`) and `borrow` factories |
+| `_Opt` (nullable) annotation | `valid()` / `is_open()` / `is_valid()` result states |
+| `_Out` parameters | `error *err` and `(buf, size)` out-parameters |
+| assignment moves ownership, "use after move" error | `cplus_move` + the RAII pass's use-after-move rejection |
+| warning on ignoring an `_Owner` result (leak) | **request to Agent 1** (§7.3) |
+| flow analysis of object lifetime | the borrow checker subset (documented gap) |
+| fast front end, C89 backend | keep `.hp` small; compile upstream C once (§9) |
 
-Evidence (this branch, worktree `../c-plus-stdlib`):
+## 7. Requests to Agent 1 (compiler/runtime), with reproductions
 
-```text
-sh tests/stdlib/run_stdlib_tests.sh   -> 6 passed, 0 failed
-sh tests/run_tests.sh                 -> 109 passed, 1 failed (pre-existing)
+1. **Internal linkage for `.hp`-lowered class members.**
+   *Repro:* `tests/stdlib/multi_tu/` and `known_gaps/class_linkage/`
+   (`duplicate symbol '_string_size'`, ...).  *Contract:* per-TU private copies
+   are fine; symbol identity across TUs is not required.
+2. **`AstSafetyCheck` false positive on out-parameters.**  A pointer set to
+   `NULL` and then written through by an external function
+   (`char *end = NULL; strtol(..., &end, ...);`) is still treated as provably
+   null, so `*end` is reported.  *Contract:* drop a variable from the
+   provably-null set when its address escapes.
+3. **Discarded owning results (from cake's `_Owner` rule).**  `json(text, &err);`
+   as a statement leaks the parsed document; a warning in the class lowering
+   would catch it.  *Contract:* warn when a value of a class with `drop` is
+   discarded.
+4. **Constructor result is registered for cleanup.**  A lowered constructor
+   emits a dead `T_drop(&_cplus_self);` after `return _cplus_self;`.  Harmless
+   today (unreachable), fragile if the emission order changes; the ctor result
+   should not be registered as a resource local.
+5. **Optional: runtime recoverable-error ABI.**  If the runtime grows a
+   non-fatal error type, `error` should delegate instead of carrying its own
+   buffer.
+
+## 8. Tests and coverage
+
+```sh
+tests/stdlib/run_stdlib_tests.sh            # tests + examples + coverage
+tests/stdlib/run_stdlib_tests.sh json       # one pattern
+python3 tests/stdlib/coverage.py            # per-library API coverage
 ```
 
-The one existing-suite failure is `classic_bug34_longjmp`, a *pre-existing*
-baseline failure on `develop`: the compiler now warns instead of rejecting
-`setjmp`/`longjmp`, while the case still lives in `tests/compile_fail/`.  It
-does not involve the standard library and is outside this branch's edit scope
-(`tests/compile_fail/` belongs to the core compiler work).
+The runner builds the vendored C once, generates the FFmpeg fixture, compiles
+each test/example with the real C+ compiler, runs it (dummy SDL/audio drivers)
+and diffs stdout against recorded expectations.
 
-## 8. Allocation measurements
+Coverage is measured from the headers' public API against every test and
+example (destructors count as covered when their type is used, because RAII
+calls them).  Gate: **>= 80% per library** — current worst is 92%.
 
-`tests/stdlib/bench_stdlib.cp` exercises the two owning containers through the
-C+ managed allocator (`c+` safe mode, `-O0` with UBSan, arm64 macOS, three
-runs; lower is better):
+| library | coverage |
+| --- | --- |
+| async, audio, error, file, graphics, image, input, io, net, thread, vector, window | 100% |
+| json | 93.3% |
+| string | 95.0% |
+| video | 92.0% |
+
+Suite state on this branch:
+
+```
+tests/stdlib/run_stdlib_tests.sh   -> 27 passed, 0 failed   (coverage gate green)
+tests/run_tests.sh                 -> 109 passed, 1 failed  (pre-existing classic_bug34_longjmp)
+tests/stress/cplus_breaker_v3      -> 25 passed, 0 failed
+tests/stress/cplus_stress_10       -> 10 passed, 0 failed
+tests/cp_breaker.sh                -> 24 passed, 0 failed
+```
+
+`classic_bug34_longjmp` is a pre-existing `develop` failure (the compiler warns
+instead of rejecting `setjmp`/`longjmp`); it does not involve the library, and
+`compiler/` and `runtime/` are untouched on this branch.
+
+## 9. Measurements
+
+Owning containers through the managed allocator (safe mode, `-O0` + UBSan,
+arm64 macOS, three runs):
 
 | workload | run 1 | run 2 | run 3 |
 | --- | --- | --- | --- |
-| `IntVec` 200 000 pushes + 200 000 `at` reads | 17.0 ms | 11.0 ms | 8.2 ms |
-| `String` 20 000 construct + append (12 bytes) | 7.7 ms | 5.6 ms | 4.3 ms |
+| `vector` 200k `push_back` + 200k `at` | 14.4 ms | 9.3 ms | 7.4 ms |
+| `string` 20k construct + append | 7.1 ms | 5.5 ms | 4.2 ms |
 
-`IntVec` settles at capacity 262 144 for 200 000 elements (geometric growth,
-one live buffer), and the checksum is identical across runs, so no allocation
-is lost or double-counted.  These numbers include the sanitizer instrumentation
-that safe mode mandates; they are a regression baseline, not a claim about
-optimised C.
+The vector settles at capacity 262 144 for 200 000 elements (geometric growth,
+one live buffer) and the checksum is identical across runs.
 
-## 9. Next phases
-
-Order is deliberate — multimedia integration waits until the foundations are
-green:
-
-1. JSON (done), then filesystem/time/collections.
-2. SDL3 window/graphics/input, miniaudio, STB image.
-3. libcurl HTTP, libuv async, FFmpeg video.
-
-Every upstream wrapper must follow the same contract as `json.hp`:
-RAII for owned handles, borrowed types for views, `StdError` for recoverable
-failure, `static inline` for header definitions, a compiled-once C unit for the
-upstream implementation, and a test that exercises ownership, failure and
-either multi-TU or API compatibility.
+Compile time, honest numbers: a program that includes the full stdlib vocabulary
+(`foundation.cp`: 7 headers) compiles in **0.28 s**, against **0.075 s** for a
+trivial plain-C file.  The difference is header lowering plus the sanitizer
+instrumentation that safe mode mandates; it is not a claim of being faster than
+C.  The lever for closing it is §6/§9 of the plan: smaller headers and
+compile-once units, which is exactly how the vendored libraries are handled.

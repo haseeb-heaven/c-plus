@@ -3,7 +3,7 @@
  * Build: ../build/c+ build macpulse.cp -o macpulse && ./macpulse
  * Requires macOS (Mach, libproc, BSD interfaces). No third-party libraries.
  * C+ language features: class, this->, method calls, auto, resource RAII,
- *                       typed print(), IntVec from the .hp standard library.
+ *                       typed print(), vector from the .hp standard library.
  * Terminal: q quit, space pause, +/- refresh, 1 overview, 2 processes.
  */
 #include <stdio.h>
@@ -120,7 +120,7 @@ static void bar(double pct, int width) {
     fputs("\033[0m", stdout);
 }
 
-static void spark(IntVec *v, int width) {
+static void spark(vector *v, int width) {
     const char *levels[] = {" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
     int n = v->len();
     int begin = n > width ? n - width : 0;
@@ -287,7 +287,7 @@ class Monitor {
         this->previous_time = now;
     }
 
-    void render(IntVec *cpu_hist, IntVec *ram_hist, int page, int period_ms,
+    void render(vector *cpu_hist, vector *ram_hist, int page, int period_ms,
                 int paused) {
         char m_used[32], m_total[32], swap_u[32], swap_t[32];
         char d_used[32], d_total[32], down[32], up[32];
@@ -353,8 +353,8 @@ int main(void) {
     {
     Terminal terminal = Terminal_open();
     Monitor monitor = {0};
-    IntVec cpu_history = IntVec();
-    IntVec ram_history = IntVec();
+    vector cpu_history = vector();
+    vector ram_history = vector();
     auto period_ms = 1000;
     auto paused = 0;
     auto page = 1;
@@ -385,7 +385,7 @@ int main(void) {
         struct timespec delay = {0, 50000000};
         nanosleep(&delay, NULL);
     }
-    /* Terminal and both IntVec instances drop automatically here. */
+    /* Terminal and both vector instances drop automatically here. */
     }
     print("MacPulse stopped. Terminal restored.");
     return 0;

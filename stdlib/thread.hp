@@ -1,56 +1,74 @@
 /* C+ standard library: RAII mutex and lock guard over POSIX threads.
  *
- * Mutex owns a runtime mutex handle; Guard borrows a Mutex and releases it in
- * drop().  A zero-initialised Mutex or Guard has a NULL handle/owner, so its
- * destructor is a no-op rather than a stray unlock.
+ * C++-flavoured: `mutex m = mutex(); { guard g = guard(&m); ... }` locks for
+ * the scope and releases in drop().  A zero-initialised mutex or guard has no
+ * handle or owner, so its destructor is a no-op rather than a stray unlock.
+ *
+ * Inside a class body C+ only rewrites `this->method()` calls, so internal
+ * cross-object calls use the lowered names (`mutex_lock`, ...).
  */
 #ifndef CPLUS_STD_THREAD_HP
 #define CPLUS_STD_THREAD_HP
 
 #include "cplus/cplus.h"
 
-resource struct Mutex {
+class mutex {
     void *handle;
-};
 
-static inline void Mutex_drop(Mutex *self) {
-    if (self->handle != NULL) {
-        cplus_mutex_free(self->handle);
-        self->handle = NULL;
+    mutex(void) {
+        this->handle = cplus_mutex_new();
     }
-}
 
-static inline Mutex Mutex_new(void) {
-    Mutex mutex;
-    mutex.handle = cplus_mutex_new();
-    return mutex;
-}
+    int is_valid(void) {
+        return this->handle != NULL;
+    }
 
-static inline int Mutex_valid(const Mutex *self) {
-    return self->handle != NULL;
-}
+    void lock(void) {
+        if (this->handle != NULL)
+            cplus_mutex_lock(this->handle);
+    }
+
+    void unlock(void) {
+        if (this->handle != NULL)
+            cplus_mutex_unlock(this->handle);
+    }
+
+    void *native(void) {
+        return this->handle;
+    }
+
+    void drop(void) {
+        if (this->handle != NULL) {
+            cplus_mutex_free(this->handle);
+            this->handle = NULL;
+        }
+    }
+};
 
 /* Borrowed lock guard: it never owns the mutex, only the critical section. */
-resource struct Guard {
-    Mutex *owner;
+class guard {
+    mutex *owner;
+
+    guard(mutex *owner) {
+        this->owner = owner;
+        if (owner != NULL)
+            mutex_lock(owner);
+    }
+
+    int holds(void) {
+        return this->owner != NULL;
+    }
+
+    void unlock(void) {
+        if (this->owner != NULL)
+            mutex_unlock(this->owner);
+    }
+
+    void drop(void) {
+        if (this->owner != NULL)
+            mutex_unlock(this->owner);
+        this->owner = NULL;
+    }
 };
-
-static inline void Guard_drop(Guard *self) {
-    if (self->owner != NULL && self->owner->handle != NULL)
-        cplus_mutex_unlock(self->owner->handle);
-    self->owner = NULL;
-}
-
-static inline Guard Guard_lock(Mutex *mutex) {
-    Guard guard;
-    guard.owner = mutex;
-    if (mutex != NULL && mutex->handle != NULL)
-        cplus_mutex_lock(mutex->handle);
-    return guard;
-}
-
-static inline int Guard_holds(const Guard *self) {
-    return self->owner != NULL;
-}
 
 #endif

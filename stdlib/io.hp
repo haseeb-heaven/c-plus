@@ -1,12 +1,11 @@
 /* C+ standard library: convenience I/O and safe interactive input.
  *
- * print()/scan() come from the runtime; this header adds recoverable, bounded
- * readers.  Conversion is delegated to libc (strtol, strtoll, strtof, strtod)
- * - there is no hand-written number parser here.
+ * print()/scan() come from the runtime; this header adds the recoverable,
+ * bounded readers.  Conversion is delegated to libc (strtol, strtoll, strtof,
+ * strtod) - there is no hand-written number parser here.
  *
  * Every reader returns STDLIB_OK, STDLIB_EOF or STDLIB_FAIL and fills the
- * StdError argument (cleared on success).  Definitions are `static inline` so
- * a `.hp` header stays safe to include from any number of translation units.
+ * error argument (cleared on success).
  */
 #ifndef CPLUS_STD_IO_HP
 #define CPLUS_STD_IO_HP
@@ -20,17 +19,11 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 
-static inline void println(void) {
-    cplus_log(CPLUS_LOG_TRACE, "println");
+void println(void) {
     print();
 }
 
-static inline void echo_int(int value) {
-    cplus_log(CPLUS_LOG_TRACE, "echo_int value=%d", value);
-    print(value);
-}
-
-/* Read one whitespace-delimited token into `buf` (always NUL-terminated).
+/* Read one whitespace-delimited token into buf (always NUL-terminated).
  * Returns 0 on success, 1 at end of input.  Reads at most size-1 bytes. */
 static inline int stdlib_io_token(char *buf, size_t size) {
     int c;
@@ -49,118 +42,124 @@ static inline int stdlib_io_token(char *buf, size_t size) {
     return 0;
 }
 
-static inline int read_line(char *buf, size_t size, StdError *err) {
-    StdError_init(err);
+static inline int read_line(char *buf, size_t size, error *err) {
+    error_reset(err);
     if (buf == NULL || size == 0) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_line: destination is null or empty");
+        error_fail(err, CPLUS_EXIT_IO, "read_line: destination is null or empty");
         return STDLIB_FAIL;
     }
     if (fgets(buf, (int)size, stdin) == NULL) {
         if (feof(stdin))
             return STDLIB_EOF;
-        StdError_set(err, CPLUS_EXIT_IO, "read_line: input stream error");
+        error_fail(err, CPLUS_EXIT_IO, "read_line: input stream error");
         return STDLIB_FAIL;
     }
-    size_t n = strlen(buf);
-    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
-        buf[--n] = '\0';
+    {
+        size_t n = strlen(buf);
+        while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+            buf[--n] = '\0';
+    }
     return STDLIB_OK;
 }
 
-static inline int read_int(int *out, StdError *err) {
-    StdError_init(err);
+static inline int read_int(int *out, error *err) {
+    char token[64];
+    char *end;
+    long value;
+    error_reset(err);
     if (out == NULL) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_int: destination is null");
+        error_fail(err, CPLUS_EXIT_IO, "read_int: destination is null");
         return STDLIB_FAIL;
     }
-    char token[64];
-    int status = stdlib_io_token(token, sizeof(token));
-    if (status != 0)
-        return status == 1 ? STDLIB_EOF : STDLIB_FAIL;
+    if (stdlib_io_token(token, sizeof(token)) != 0)
+        return STDLIB_EOF;
+    end = token;
     errno = 0;
-    char *end = token;
-    long value = strtol(token, &end, 10);
+    value = strtol(token, &end, 10);
     if (end == token || *end != '\0') {
-        StdError_set(err, CPLUS_EXIT_IO, "read_int: not an integer");
+        error_fail(err, CPLUS_EXIT_IO, "read_int: not an integer");
         return STDLIB_FAIL;
     }
     if (errno == ERANGE || value < INT_MIN || value > INT_MAX) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_int: out of range");
+        error_fail(err, CPLUS_EXIT_IO, "read_int: out of range");
         return STDLIB_FAIL;
     }
     *out = (int)value;
     return STDLIB_OK;
 }
 
-static inline int read_long(long *out, StdError *err) {
-    StdError_init(err);
+static inline int read_long(long *out, error *err) {
+    char token[64];
+    char *end;
+    long long value;
+    error_reset(err);
     if (out == NULL) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_long: destination is null");
+        error_fail(err, CPLUS_EXIT_IO, "read_long: destination is null");
         return STDLIB_FAIL;
     }
-    char token[64];
-    int status = stdlib_io_token(token, sizeof(token));
-    if (status != 0)
-        return status == 1 ? STDLIB_EOF : STDLIB_FAIL;
+    if (stdlib_io_token(token, sizeof(token)) != 0)
+        return STDLIB_EOF;
+    end = token;
     errno = 0;
-    char *end = token;
-    long long value = strtoll(token, &end, 10);
+    value = strtoll(token, &end, 10);
     if (end == token || *end != '\0') {
-        StdError_set(err, CPLUS_EXIT_IO, "read_long: not an integer");
+        error_fail(err, CPLUS_EXIT_IO, "read_long: not an integer");
         return STDLIB_FAIL;
     }
     if (errno == ERANGE || value < LONG_MIN || value > LONG_MAX) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_long: out of range");
+        error_fail(err, CPLUS_EXIT_IO, "read_long: out of range");
         return STDLIB_FAIL;
     }
     *out = (long)value;
     return STDLIB_OK;
 }
 
-static inline int read_float(float *out, StdError *err) {
-    StdError_init(err);
+static inline int read_float(float *out, error *err) {
+    char token[64];
+    char *end;
+    float value;
+    error_reset(err);
     if (out == NULL) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_float: destination is null");
+        error_fail(err, CPLUS_EXIT_IO, "read_float: destination is null");
         return STDLIB_FAIL;
     }
-    char token[64];
-    int status = stdlib_io_token(token, sizeof(token));
-    if (status != 0)
-        return status == 1 ? STDLIB_EOF : STDLIB_FAIL;
+    if (stdlib_io_token(token, sizeof(token)) != 0)
+        return STDLIB_EOF;
+    end = token;
     errno = 0;
-    char *end = token;
-    float value = strtof(token, &end);
+    value = strtof(token, &end);
     if (end == token || *end != '\0') {
-        StdError_set(err, CPLUS_EXIT_IO, "read_float: not a number");
+        error_fail(err, CPLUS_EXIT_IO, "read_float: not a number");
         return STDLIB_FAIL;
     }
     if (errno == ERANGE) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_float: out of range");
+        error_fail(err, CPLUS_EXIT_IO, "read_float: out of range");
         return STDLIB_FAIL;
     }
     *out = value;
     return STDLIB_OK;
 }
 
-static inline int read_double(double *out, StdError *err) {
-    StdError_init(err);
+static inline int read_double(double *out, error *err) {
+    char token[64];
+    char *end;
+    double value;
+    error_reset(err);
     if (out == NULL) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_double: destination is null");
+        error_fail(err, CPLUS_EXIT_IO, "read_double: destination is null");
         return STDLIB_FAIL;
     }
-    char token[64];
-    int status = stdlib_io_token(token, sizeof(token));
-    if (status != 0)
-        return status == 1 ? STDLIB_EOF : STDLIB_FAIL;
+    if (stdlib_io_token(token, sizeof(token)) != 0)
+        return STDLIB_EOF;
+    end = token;
     errno = 0;
-    char *end = token;
-    double value = strtod(token, &end);
+    value = strtod(token, &end);
     if (end == token || *end != '\0') {
-        StdError_set(err, CPLUS_EXIT_IO, "read_double: not a number");
+        error_fail(err, CPLUS_EXIT_IO, "read_double: not a number");
         return STDLIB_FAIL;
     }
     if (errno == ERANGE) {
-        StdError_set(err, CPLUS_EXIT_IO, "read_double: out of range");
+        error_fail(err, CPLUS_EXIT_IO, "read_double: out of range");
         return STDLIB_FAIL;
     }
     *out = value;

@@ -1,4 +1,4 @@
-/* C+ standard library: growable int vector with a tracked length.
+/* C+ standard library: growable int vector with a tracked size.
  *
  * Storage comes from the C+ managed allocator (cplus_alloc / cplus_release);
  * there is no second allocator here.  Growth is overflow-checked and every
@@ -9,97 +9,96 @@
 
 #include "cplus/cplus.h"
 
-class IntVec {
-    int *data;
-    size_t length;
-    size_t capacity;
+class vector {
+    int *items;
+    size_t used;
+    size_t space;
 
-    IntVec(void) {
-        this->data = NULL;
-        this->length = 0;
-        this->capacity = 0;
+    vector(void) {
+        this->items = NULL;
+        this->used = 0;
+        this->space = 0;
     }
 
-    size_t len(void) {
-        return this->length;
+    size_t size(void) {
+        return this->used;
     }
 
     size_t capacity(void) {
-        return this->capacity;
+        return this->space;
     }
 
     /* Grow the buffer to hold at least `want` elements.  0 on success. */
     int reserve(size_t want) {
         int *fresh;
         size_t i;
-        if (want <= this->capacity)
+        if (want <= this->space)
             return 0;
         if (want > SIZE_MAX / sizeof(int))
             return -1;
         fresh = (int *)cplus_alloc(sizeof(int) * want);
-        for (i = 0; i < this->length; i++)
-            fresh[i] = this->data[i];
-        if (this->data != NULL)
-            cplus_release(this->data);
-        this->data = fresh;
-        this->capacity = want;
+        for (i = 0; i < this->used; i++)
+            fresh[i] = this->items[i];
+        if (this->items != NULL)
+            cplus_release(this->items);
+        this->items = fresh;
+        this->space = want;
         return 0;
     }
 
-    int push(int value) {
-        if (this->length == this->capacity) {
+    int push_back(int value) {
+        if (this->used == this->space) {
             size_t want = 4;
-            if (this->capacity > 0) {
-                if (this->capacity > (SIZE_MAX / 2) / sizeof(int))
+            if (this->space > 0) {
+                if (this->space > (SIZE_MAX / 2) / sizeof(int))
                     return -1;
-                want = this->capacity * 2;
+                want = this->space * 2;
             }
-            if (this->reserve(want) != 0)
+            if (vector_reserve(this, want) != 0)
                 return -1;
         }
-        this->data[this->length++] = value;
+        this->items[this->used++] = value;
         return 0;
     }
 
     /* Compatibility accessor: returns 0 for an out-of-range index. */
     int at(size_t index) {
-        if (index >= this->length)
+        if (index >= this->used)
             return 0;
-        return this->data[index];
+        return this->items[index];
     }
 
-    /* Checked access: 0 on success, -1 when `index` is out of range. */
-    int get(size_t index, int *out) {
+    /* Checked access: 0 on success, -1 when the index is out of range. */
+    int at_checked(size_t index, int *out) {
         if (out == NULL)
             return -1;
-        if (index >= this->length)
+        if (index >= this->used)
             return -1;
-        *out = this->data[index];
+        *out = this->items[index];
         return 0;
     }
 
-    /* Remove the last element into `out`: 0 on success, -1 when empty. */
-    int pop(int *out) {
+    /* Remove the last element into out: 0 on success, -1 when empty. */
+    int pop_back(int *out) {
         if (out == NULL)
             return -1;
-        if (this->length == 0)
+        if (this->used == 0)
             return -1;
-        *out = this->data[this->length - 1];
-        this->length--;
+        *out = this->items[this->used - 1];
+        this->used--;
         return 0;
     }
 
     void clear(void) {
-        this->length = 0;
+        this->used = 0;
     }
 
     void drop(void) {
-        cplus_log(CPLUS_LOG_DEBUG, "IntVec drop len=%zu", this->length);
-        if (this->data != NULL) {
-            cplus_release(this->data);
-            this->data = NULL;
-            this->length = 0;
-            this->capacity = 0;
+        if (this->items != NULL) {
+            cplus_release(this->items);
+            this->items = NULL;
+            this->used = 0;
+            this->space = 0;
         }
     }
 };

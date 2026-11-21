@@ -1,6 +1,6 @@
 /* Allocation / churn benchmark for the owning containers.
  *
- * Measures the cost of IntVec growth and of String construction + append, both
+ * Measures the cost of vector growth and of string construction + append, both
  * of which go through the C+ managed allocator.  Run directly:
  *   build/stdlib-tests/bench_stdlib
  */
@@ -22,9 +22,9 @@ int main(void) {
     int i;
 
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    IntVec v = IntVec();
+    vector v = vector();
     for (i = 0; i < 200000; i++) {
-        if (v.push(i) != 0)
+        if (v.push_back(i) != 0)
             return 1;
     }
     for (i = 0; i < 200000; i++)
@@ -35,10 +35,10 @@ int main(void) {
 
     clock_gettime(CLOCK_MONOTONIC, &t0);
     for (i = 0; i < 20000; i++) {
-        String s = String("a");
+        string s = string("a");
         if (s.append("bbbbbbbbbb") != 0)
             return 1;
-        sum += (long)s.len();
+        sum += (long)s.size();
     }
     clock_gettime(CLOCK_MONOTONIC, &t1);
     double str_ms = elapsed_ms(t0, t1);

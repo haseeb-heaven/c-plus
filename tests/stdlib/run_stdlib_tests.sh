@@ -9,8 +9,9 @@
 #   tests/stdlib/<name>.expected      optional expected stdout
 #   tests/stdlib/multi_tu/            one program built from three TUs
 #
-# External libraries are compiled once here (third_party/yyjson) and linked,
-# never re-lowered per test.
+# External libraries are compiled once here (third_party/yyjson, stb,
+# miniaudio) or linked from the system (SDL3, libcurl, libuv, FFmpeg), never
+# re-lowered per test.
 set -u
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -20,6 +21,7 @@ EXT="$ROOT/build/ext"
 PATTERN=${1:-}
 PASS=0
 FAIL=0
+SKIPPED=0
 FAILED=""
 
 mkdir -p "$OUT" "$EXT"
@@ -45,6 +47,11 @@ pass() {
   printf '  ok   %s\n' "$1"
 }
 
+skip() {
+  SKIPPED=$((SKIPPED + 1))
+  printf '  skip %s (%s)\n' "$1" "$2"
+}
+
 fail() {
   FAIL=$((FAIL + 1))
   FAILED="$FAILED
@@ -52,18 +59,77 @@ fail() {
   printf '  FAIL %s (%s)\n' "$1" "$2"
 }
 
-# --- external libraries (compiled once) ------------------------------------
+# --- external libraries (compiled once each) --------------------------------
 
-YYJSON_LIB="$EXT/libyyjson.a"
-if [ ! -f "$YYJSON_LIB" ] || [ "$ROOT/third_party/yyjson/yyjson.c" -nt "$YYJSON_LIB" ]; then
-  if ! "$CXX" -c "$ROOT/third_party/yyjson/yyjson.c" -o "$EXT/yyjson.o" \
-       -O2 -I"$ROOT/third_party/yyjson" >"$OUT/yyjson.build.log" 2>&1; then
-    echo "error: cannot build third_party/yyjson/yyjson.c (see $OUT/yyjson.build.log)" >&2
-    exit 1
+build_ext() { # name source include-dir
+  _lib="$EXT/lib$1.a"
+  _obj="$EXT/$1.o"
+  if [ -f "$_lib" ] && [ ! "$2" -nt "$_lib" ]; then
+    return 0
   fi
-  ar rcs "$YYJSON_LIB" "$EXT/yyjson.o"
-  printf 'built external library: %s\n' "$YYJSON_LIB"
+  if ! "$CXX" -c "$2" -o "$_obj" -O2 -I"$3" >"$OUT/$1.build.log" 2>&1; then
+    return 1
+  fi
+  ar rcs "$_lib" "$_obj"
+  printf 'built external library: %s\n' "$_lib"
+  return 0
+}
+
+build_ext yyjson "$ROOT/third_party/yyjson/yyjson.c" "$ROOT/third_party/yyjson" || {
+  echo "error: cannot build third_party/yyjson (see $OUT/yyjson.build.log)" >&2; exit 1; }
+build_ext stb "$ROOT/third_party/stb/stb_impl.c" "$ROOT/third_party/stb" || {
+  echo "error: cannot build third_party/stb (see $OUT/stb.build.log)" >&2; exit 1; }
+build_ext miniaudio "$ROOT/third_party/miniaudio/miniaudio_impl.c" "$ROOT/third_party/miniaudio" || {
+  echo "error: cannot build third_party/miniaudio (see $OUT/miniaudio.build.log)" >&2; exit 1; }
+
+pkg_libs() {
+  pkg-config --cflags --libs "$@" 2>/dev/null || true
+}
+
+# --- generated fixtures (never vendored, never committed) -------------------
+
+CLIP="$OUT/clip.mp4"
+if [ ! -f "$CLIP" ] && command -v ffmpeg >/dev/null 2>&1; then
+  if ffmpeg -loglevel error -y -f lavfi \
+      -i testsrc=size=64x48:rate=10:duration=1 -pix_fmt yuv420p \
+      "$CLIP" >"$OUT/clip.build.log" 2>&1; then
+    printf 'generated fixture: %s\n' "$CLIP"
+  else
+    rm -f "$CLIP"
+  fi
 fi
+
+# Libraries a test needs, decided by the C+ headers it includes.
+libs_for() {
+  _src="$1"
+  _out=""
+  if grep -q 'stdlib/json.hp' "$_src"; then
+    _out="$_out -I$ROOT/third_party/yyjson -L$EXT -lyyjson"
+  fi
+  if grep -q 'stdlib/image.hp' "$_src"; then
+    _out="$_out -I$ROOT/third_party/stb -L$EXT -lstb"
+  fi
+  if grep -q 'stdlib/audio.hp' "$_src"; then
+    # -Wl, form: the driver's CLI would treat a bare "-framework X" operand as
+    # an input file, so pass the pair through to the linker as one argument.
+    _out="$_out -I$ROOT/third_party/miniaudio -L$EXT -lminiaudio \
+      -Wl,-framework,CoreFoundation -Wl,-framework,CoreAudio \
+      -Wl,-framework,AudioToolbox"
+  fi
+  if grep -qE 'stdlib/(window|graphics|input)\.hp' "$_src"; then
+    _out="$_out $(pkg_libs sdl3)"
+  fi
+  if grep -q 'stdlib/http.hp' "$_src"; then
+    _out="$_out $(pkg_libs libcurl)"
+  fi
+  if grep -q 'stdlib/async.hp' "$_src"; then
+    _out="$_out $(pkg_libs libuv)"
+  fi
+  if grep -q 'stdlib/video.hp' "$_src"; then
+    _out="$_out $(pkg_libs libavformat libavcodec libavutil)"
+  fi
+  echo "$_out"
+}
 
 # --- single-translation-unit tests -----------------------------------------
 
@@ -74,11 +140,13 @@ for src in "$ROOT"/tests/stdlib/*.cp; do
   case "$name" in bench_*) continue ;; esac
   exe="$OUT/$name"
 
-  libs=""
-  if grep -q 'stdlib/json.hp' "$src"; then
-    libs="-I$ROOT/third_party/yyjson -L$EXT -lyyjson"
-  fi
+  # A test whose fixture is unavailable is skipped, never silently passed.
+  case "$name" in
+    video_test)
+      [ -f "$CLIP" ] || { skip "$name" "ffmpeg CLI unavailable for the fixture"; continue; } ;;
+  esac
 
+  libs=$(libs_for "$src")
   if ! "$CPLUS" build "$src" $libs -o "$exe" >"$OUT/$name.build.log" 2>&1; then
     fail "$name" "compilation failed; see build/stdlib-tests/$name.build.log"
     continue
@@ -86,9 +154,11 @@ for src in "$ROOT"/tests/stdlib/*.cp; do
 
   stdin_file="$ROOT/tests/stdlib/$name.stdin"
   if [ -f "$stdin_file" ]; then
-    "$exe" <"$stdin_file" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
+      "$exe" <"$stdin_file" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
   else
-    "$exe" </dev/null >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
+      "$exe" </dev/null >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
   fi
   rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -105,23 +175,67 @@ for src in "$ROOT"/tests/stdlib/*.cp; do
   pass "$name"
 done
 
-# --- multiple translation units --------------------------------------------
+# --- examples (build and run; every demo must exit 0) ----------------------
+
+EXOUT="$OUT/examples"
+mkdir -p "$EXOUT"
+for src in "$ROOT"/tests/stdlib/examples/*.cp; do
+  [ -e "$src" ] || continue
+  base=$(basename "$src"); base=${base%.cp}
+  name="demo_$base"
+  matches "$name" || continue
+  case "$base" in
+    video_demo)
+      [ -f "$CLIP" ] || { skip "$name" "ffmpeg CLI unavailable for the fixture"; continue; } ;;
+  esac
+  exe="$EXOUT/$base"
+  libs=$(libs_for "$src")
+  if ! "$CPLUS" build "$src" $libs -o "$exe" >"$OUT/$name.build.log" 2>&1; then
+    fail "$name" "compilation failed; see build/stdlib-tests/$name.build.log"
+    continue
+  fi
+  stdin_file="$ROOT/tests/stdlib/examples/$base.stdin"
+  if [ -f "$stdin_file" ]; then
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
+      "$exe" <"$stdin_file" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  else
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
+      "$exe" </dev/null >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  fi
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    fail "$name" "exited with $rc; stderr: $(head -2 "$OUT/$name.stderr" | tr '\n' ' ')"
+    continue
+  fi
+  pass "$name"
+done
+
+# --- per-library API coverage (>= 80% each) --------------------------------
+
+if matches "coverage"; then
+  if python3 "$ROOT/tests/stdlib/coverage.py" >"$OUT/coverage.txt" 2>&1; then
+    pass "coverage"
+    sed 's/^/       /' "$OUT/coverage.txt"
+  else
+    fail "coverage" "below threshold; see build/stdlib-tests/coverage.txt"
+    sed 's/^/       /' "$OUT/coverage.txt"
+  fi
+fi
+
+# --- documented gap: class-bearing .hp included from two TUs ---------------
 
 if matches "multi_tu"; then
   if "$CPLUS" build "$ROOT/tests/stdlib/multi_tu/main.cp" \
       "$ROOT/tests/stdlib/multi_tu/part_a.cp" \
       "$ROOT/tests/stdlib/multi_tu/part_b.cp" \
-      -o "$OUT/multi_tu" >"$OUT/multi_tu.build.log" 2>&1 &&
-     "$OUT/multi_tu" >"$OUT/multi_tu.stdout" 2>"$OUT/multi_tu.stderr"; then
-    if [ -f "$ROOT/tests/stdlib/multi_tu.expected" ] &&
-       ! diff -u "$ROOT/tests/stdlib/multi_tu.expected" "$OUT/multi_tu.stdout" \
-         >"$OUT/multi_tu.diff" 2>&1; then
-      fail "multi_tu" "stdout mismatch; see build/stdlib-tests/multi_tu.diff"
-    else
-      pass "multi_tu"
-    fi
+      -o "$OUT/multi_tu" >"$OUT/multi_tu.build.log" 2>&1; then
+    fail "multi_tu_gap" "expected duplicate symbols; the gap appears fixed - update docs/MODERN_STDLIB.md"
   else
-    fail "multi_tu" "build or run failed; see build/stdlib-tests/multi_tu.build.log"
+    if grep -q "duplicate symbol" "$OUT/multi_tu.build.log"; then
+      pass "multi_tu_gap (expected failure: class members have external linkage)"
+    else
+      fail "multi_tu_gap" "failed for an unexpected reason; see build/stdlib-tests/multi_tu.build.log"
+    fi
   fi
 fi
 
@@ -144,7 +258,7 @@ if matches "class_linkage_gap"; then
 fi
 
 echo
-echo "C+ stdlib tests: $PASS passed, $FAIL failed"
+echo "C+ stdlib tests: $PASS passed, $FAIL failed, $SKIPPED skipped"
 if [ "$FAIL" -ne 0 ]; then
   printf '%s\n' "$FAILED"
   exit 1

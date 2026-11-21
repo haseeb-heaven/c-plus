@@ -1,5 +1,5 @@
-/* Multi-translation-unit test: three TUs, two of which include the same .hp
- * headers.  With static-inline library definitions this must link cleanly. */
+/* Multi-translation-unit test: three TUs sharing the same function-only .hp
+ * header.  Function definitions are static inline, so this links cleanly. */
 #include <stdio.h>
 #include "cplus/cplus.h"
 

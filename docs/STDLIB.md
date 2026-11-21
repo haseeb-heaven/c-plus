@@ -1,75 +1,69 @@
 # C+ standard library (`.hp`)
 
-The C+ standard library is a set of `.hp` headers written in C+ itself. It is
-**a typed, RAII wrapper layer over libc, POSIX and the C+ runtime**, not a
-rewrite of those libraries. Ordinary C headers (`stdio.h`, `stdlib.h`,
-`string.h`, sockets, pthreads, ...) remain available and are used underneath.
+The C+ standard library is a set of `.hp` headers written in C+ itself. It is a
+**typed, RAII wrapper layer over libc, POSIX, the C+ runtime and vendored
+upstream C libraries** - not a rewrite of any of them.
 
-Include a header with its normal path:
-
-```c
-#include "stdlib/string.hp"
-```
-
-The compiler lowers each `.hp` header to a temporary `.h` with `#line`
-mapping, and shares class/constructor/owning-type metadata with the including
-translation unit.
-
-## Headers
-
-| header | contents | underlying API |
-| --- | --- | --- |
-| `stdlib/error.hp` | `StdError` recoverable error value, `STDLIB_OK`/`EOF`/`FAIL` | `cplus_exit_code` |
-| `stdlib/string.hp` | `class String` (`len`, `at`, `c_str`, `eq`, `compare`, `find`, `append`, `reserve`, `clear`, `substring`, `field_count`, `field`, `view`, `drop`) and borrowed `StringView` | `strlen`, `memcmp`, `strstr`, `cplus_alloc` |
-| `stdlib/vector.hp` | `class IntVec` (`push`, `pop`, `get`, `at`, `reserve`, `clear`, `len`, `capacity`, `drop`) | `cplus_alloc` / `cplus_release` |
-| `stdlib/file.hp` | `resource File`, `File_open`, `File_borrow`, `File_read`, `File_read_line`, `File_write`, `File_write_bytes`, `File_seek`, `File_flush`, `File_valid` | `fopen`, `fread`, `fgets`, `fputs`, `fwrite`, `fseek`, `fflush`, `fclose` |
-| `stdlib/thread.hp` | `resource Mutex` / `Guard`, `Mutex_new`, `Guard_lock`, `Mutex_valid`, `Guard_holds` | pthread wrappers in the C+ runtime |
-| `stdlib/io.hp` | format-free `println()`, `echo_int()` and recoverable `read_line`, `read_int`, `read_long`, `read_float`, `read_double` | `print()` from `cplus/cplus.h`; `fgets`, `strtol`, `strtoll`, `strtof`, `strtod`, `errno` |
-| `stdlib/net.hp` | `resource Listener` / `Connection`, `Listener_bind`, `Listener_borrow`, `Connection_accept`, validity checks | POSIX sockets |
-| `stdlib/json.hp` | `resource JsonDoc`, borrowed `JsonRef`, `resource JsonBuilder` over yyjson | `third_party/yyjson` (MIT) |
-
-Detailed ownership rules, the recoverable-error model, vendored-upstream
-provenance and the open compiler-side gaps are in
-[`MODERN_STDLIB.md`](MODERN_STDLIB.md).
-
-## Example
+The surface reads like C++, because that is C+'s model: a type is a noun, you
+construct it by naming it, and you call methods on it.
 
 ```c
 #include "stdlib/string.hp"
 #include "stdlib/vector.hp"
-#include "stdlib/thread.hp"
 
 int main(void) {
-    String name = String("C+");
-    IntVec scores = IntVec();
-    scores.push(10);
-    scores.push(20);
-    print("name", name.c_str(), "count", scores.len());
+    string name = string("C+");
+    name.append(" standard library");
 
-    Mutex mutex = Mutex_new();
-    {
-        Guard guard = Guard_lock(&mutex);
-        /* critical section */
-    }
-    return 0; /* all destructors run */
+    vector scores = vector();
+    scores.push_back(10);
+    scores.push_back(20);
+
+    print(name.c_str(), scores.size(), scores.at(1));
+    return 0;                     /* both destructors run */
 }
 ```
 
+## Headers
+
+| header | type / API | underlying |
+| --- | --- | --- |
+| `stdlib/error.hp` | `error` (`ok`, `failed_now`, `code`, `what`, `set`, `clear`) + `STDLIB_OK/EOF/FAIL` | runtime exit codes |
+| `stdlib/io.hp` | `read_line`, `read_int`, `read_long`, `read_float`, `read_double`, `println` | `fgets`, `strtol`, `strtoll`, `strtof`, `strtod`, `errno` |
+| `stdlib/string.hp` | `string` (`size`, `capacity`, `at`, `c_str`, `equals`, `compare`, `find`, `append`, `reserve`, `clear`, `substr`, `count_fields`, `field`, `to_view`, `drop`), `string_view` (`size`, `data`, `equals`) | `strlen`, `memcmp`, `strstr`, `cplus_alloc` |
+| `stdlib/vector.hp` | `vector` (`size`, `capacity`, `reserve`, `push_back`, `pop_back`, `at`, `at_checked`, `clear`, `drop`) | `cplus_alloc` / `cplus_release` |
+| `stdlib/file.hp` | `file` (`is_open`, `read`, `read_line`, `write`, `write_bytes`, `seek`, `flush`, `native`, `drop`), `file_borrow` | `fopen`, `fread`, `fgets`, `fputs`, `fwrite`, `fseek`, `fflush`, `fclose` |
+| `stdlib/thread.hp` | `mutex` (`is_valid`, `lock`, `unlock`, `native`, `drop`), `guard` (`holds`, `unlock`, `drop`) | runtime mutex wrappers |
+| `stdlib/net.hp` | `listener` (`is_valid`, `descriptor`, `bound_port`, `accept`, `drop`), `connection` (`is_valid`, `descriptor`, `read`, `write`, `drop`), `listener_borrow`, `connection_borrow` | POSIX sockets |
+| `stdlib/json.hp` | `json` (`valid`, `root`, `drop`), `json_view` (`valid`, `is_*`, `get_int`, `get_double`, `get_bool`, `get_string`, `size`, `at`, `member`, `write`), `json_builder` (`valid`, `add_int`, `add_double`, `add_bool`, `add_string`, `write`, `drop`), `json_parse_file`, `json_free` | yyjson 0.13.0 |
+| `stdlib/image.hp` | `image` (`valid`, `width`, `height`, `channels`, `size_bytes`, `pixel`, `write_png`, `write_bmp`, `drop`), `image_from_pixels`, `image_from_memory` | stb_image / stb_image_write |
+| `stdlib/audio.hp` | `audio_context`, `audio_device`, `audio_engine`, `audio_sound`, `audio_decoder`, `decoder_from_memory`, `audio_sleep_ms` | miniaudio |
+| `stdlib/window.hp` | `sdl` (`valid`, `subsystem_flags`, `drop`), `window` (`valid`, `native`, `size`, `set_title`, `drop`) | SDL3 |
+| `stdlib/graphics.hp` | `renderer` (`valid`, `native`, `set_color`, `clear`, `fill_rect`, `line`, `present`, `set_vsync`, `read`, `drop`), `surface` (`valid`, `width`, `height`, `pixel`, `drop`) | SDL3 |
+| `stdlib/input.hp` | `poll_event`, `event_is_quit`, `event_is_key_down`, `event_is_key_up`, `event_scancode`, `event_text`, `keyboard_state`, `key_pressed`, `mouse_state`, `mouse_button_left` | SDL3 |
+| `stdlib/http.hp` | `http` (process lifetime), `http_headers` (`add`, `native`, `drop`), `http_client` (`valid`, `set_timeout`, `follow_redirects`, `set_headers`, `get`, `post`, `status`, `bytes`, `drop`) | libcurl |
+| `stdlib/async.hp` | `loop` (`valid`, `native`, `run`, `stop`, `now_ms`, `drop`), `timer` (`valid`, `start`, `stop`, `is_active`, `drop`), `read_file`, `sleep_ms`, `uv_error_text` | libuv |
+| `stdlib/video.hp` | `media` (`valid`, `stream_count`, `video_index`, `video_width`, `video_height`, `video_codec`, `duration_ms`, `open_decoder`, `drop`), `decoder` (`valid`, `width`, `height`, `next_frame`, `drop`), `frame` (`valid`, `width`, `height`, `format`, `pts`, `drop`), `video_error_text` | FFmpeg |
+
+Ownership rules, the error model, telemetry, vendored-upstream provenance,
+coverage and the open compiler gaps are documented in
+[`MODERN_STDLIB.md`](MODERN_STDLIB.md).
+
+## Examples
+
+Runnable demos for every library live in `tests/stdlib/examples/` and are built
+and run by `tests/stdlib/run_stdlib_tests.sh`.
+
 ## Design notes
 
-- Every owning type has a `drop` (or `T_drop`) function and gets deterministic
-  cleanup at scope exit, including early returns.
+- Every owning type has a `drop` method and gets deterministic cleanup at scope
+  exit, including early returns.
 - Recoverable failures (bad input, end of input, missing file, malformed JSON)
-  are returned as `StdError` values with a status code; they never abort.
-- Destructors are zero-init safe: a default-constructed handle closes nothing,
-  and socket destructors never touch descriptors 0, 1 or 2.
-- Every function defined in a `.hp` is `static inline`, so the same header can
-  be included from several translation units without duplicate symbols.  Class
-  members are the one remaining exception (see `MODERN_STDLIB.md`).
-- `String` and `IntVec` allocate through the C+ allocator, so double release
-  and invalid release are detected.
-- The library does not hide C: you can still pass `FILE *`, `int` sockets and
-  `pthread_mutex_t` to existing C APIs through the wrapper's fields.
+  are returned as `error` values with a status code; they never abort.
+- Destructors are zero-init safe: a default-constructed handle releases
+  nothing, and socket destructors never touch descriptors they do not own.
+- Every method logs through `cplus_log`; run `c+ --log trace` (or
+  `--log-level trace`) to see the call trace.  With logging off each call
+  compiles to nothing.
+- The library does not hide C: native handles are reachable with `native()`.
 - `.h` files remain fully supported; these headers are additive.
-- This is a small, auditable MVP layer, not a complete replacement for the C
-  standard library, C++ STL, or a framework.

@@ -1,0 +1,239 @@
+/* C+ standard library: HTTP via libcurl (curl licence, linked).
+ *
+ * C++-flavoured RAII over libcurl's easy interface: `http global = http(&err);
+ * http_client c = http_client(&err); c.get(url, buf, sizeof(buf), &err);`
+ * HTTP and TLS are libcurl's job.  Link with pkg-config libcurl.
+ */
+#ifndef CPLUS_STD_HTTP_HP
+#define CPLUS_STD_HTTP_HP
+
+#include <curl/curl.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+/* Process-wide libcurl lifetime; clients must be dropped before it. */
+class http {
+    int initialized;
+
+    http(error *err) {
+        do {
+            error_reset(err);
+            this->initialized = 0;
+            if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "http: curl_global_init failed");
+                break;
+            }
+            this->initialized = 1;
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->initialized != 0;
+    }
+
+    void drop(void) {
+        if (this->initialized) {
+            curl_global_cleanup();
+            this->initialized = 0;
+        }
+    }
+};
+
+static inline const char *http_version(void) {
+    return curl_version();
+}
+
+class http_headers {
+    struct curl_slist *list;
+
+    http_headers(void) {
+        this->list = NULL;
+    }
+
+    int valid(void) {
+        return this->list != NULL;
+    }
+
+    /* Borrowed list for curl_easy_setopt(CURLOPT_HTTPHEADER, ...). */
+    struct curl_slist *native(void) {
+        return this->list;
+    }
+
+    /* Copies the line, so the caller keeps ownership of its string. */
+    int add(const char *line, error *err) {
+        struct curl_slist *fresh;
+        error_reset(err);
+        if (line == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_headers::add: null line");
+            return STDLIB_FAIL;
+        }
+        fresh = curl_slist_append(this->list, line);
+        if (fresh == NULL) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "http_headers::add: allocation failed");
+            return STDLIB_FAIL;
+        }
+        this->list = fresh;
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->list != NULL) {
+            curl_slist_free_all(this->list);
+            this->list = NULL;
+        }
+    }
+};
+
+/* Bounded, caller-owned response sink used by the write callback. */
+typedef struct http_sink {
+    char *buf;
+    size_t size;
+    size_t used;
+    int overflow;
+} http_sink;
+
+static size_t http_sink_write(char *ptr, size_t size, size_t nmemb,
+                              void *userdata) {
+    http_sink *sink = (http_sink *)userdata;
+    size_t bytes = size * nmemb;
+    if (sink == NULL)
+        return 0;
+    if (sink->used + bytes + 1 > sink->size) {
+        size_t room = sink->size > sink->used + 1 ? sink->size - sink->used - 1 : 0;
+        memcpy(sink->buf + sink->used, ptr, room);
+        sink->used += room;
+        sink->buf[sink->used] = '\0';
+        sink->overflow = 1;
+        return 0; /* abort: the caller's buffer is full */
+    }
+    memcpy(sink->buf + sink->used, ptr, bytes);
+    sink->used += bytes;
+    sink->buf[sink->used] = '\0';
+    return bytes;
+}
+
+class http_client {
+    CURL *handle;
+
+    http_client(error *err) {
+        error_reset(err);
+        this->handle = curl_easy_init();
+        if (this->handle == NULL)
+            error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
+    }
+
+    int valid(void) {
+        return this->handle != NULL;
+    }
+
+    int set_timeout(long seconds, error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_timeout: invalid client");
+            return STDLIB_FAIL;
+        }
+        if (curl_easy_setopt(this->handle, CURLOPT_TIMEOUT, seconds) != CURLE_OK) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_timeout failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int follow_redirects(int enabled, error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::follow_redirects: invalid client");
+            return STDLIB_FAIL;
+        }
+        if (curl_easy_setopt(this->handle, CURLOPT_FOLLOWLOCATION,
+                             enabled ? 1L : 0L) != CURLE_OK) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::follow_redirects failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int set_headers(http_headers *headers, error *err) {
+        error_reset(err);
+        if (this->handle == NULL || headers == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers: invalid argument");
+            return STDLIB_FAIL;
+        }
+        if (curl_easy_setopt(this->handle, CURLOPT_HTTPHEADER,
+                             headers->list) != CURLE_OK) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    /* Shared body of get/post: writes at most size-1 response bytes. */
+    int request(const char *url, const char *body, char *buf, size_t size,
+                error *err) {
+        http_sink sink;
+        CURLcode rc;
+        error_reset(err);
+        if (this->handle == NULL || url == NULL || buf == NULL || size == 0) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::request: invalid argument");
+            return STDLIB_FAIL;
+        }
+        sink.buf = buf;
+        sink.size = size;
+        sink.used = 0;
+        sink.overflow = 0;
+        buf[0] = '\0';
+
+        curl_easy_setopt(this->handle, CURLOPT_URL, url);
+        curl_easy_setopt(this->handle, CURLOPT_WRITEFUNCTION, http_sink_write);
+        curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, &sink);
+        if (body != NULL) {
+            curl_easy_setopt(this->handle, CURLOPT_POSTFIELDS, body);
+            curl_easy_setopt(this->handle, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
+        }
+        rc = curl_easy_perform(this->handle);
+        if (rc != CURLE_OK) {
+            error_fail(err, CPLUS_EXIT_IO, curl_easy_strerror(rc));
+            return STDLIB_FAIL;
+        }
+        if (sink.overflow) {
+            error_fail(err, CPLUS_EXIT_IO, "response larger than the caller buffer");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int get(const char *url, char *buf, size_t size, error *err) {
+        return http_client_request(this, url, NULL, buf, size, err);
+    }
+
+    int post(const char *url, const char *body, char *buf, size_t size,
+             error *err) {
+        return http_client_request(this, url, body, buf, size, err);
+    }
+
+    long status(void) {
+        long code = 0;
+        if (this->handle == NULL)
+            return 0;
+        curl_easy_getinfo(this->handle, CURLINFO_RESPONSE_CODE, &code);
+        return code;
+    }
+
+    unsigned long long bytes(void) {
+        curl_off_t total = 0;
+        if (this->handle == NULL)
+            return 0;
+        curl_easy_getinfo(this->handle, CURLINFO_SIZE_DOWNLOAD_T, &total);
+        return (unsigned long long)total;
+    }
+
+    void drop(void) {
+        if (this->handle != NULL) {
+            curl_easy_cleanup(this->handle);
+            this->handle = NULL;
+        }
+    }
+};
+
+#endif

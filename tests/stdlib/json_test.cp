@@ -5,69 +5,68 @@
 #include "stdlib/json.hp"
 
 int main(void) {
-    StdError err;
-    StdError_init(&err);
-
+    error err = error();
     const char *text =
         "{\"name\":\"cplus\",\"stars\":5,\"ratio\":1.5,\"ok\":true,"
         "\"tags\":[\"a\",\"b\",\"c\"]}";
 
-    JsonDoc doc = JsonDoc_parse(text, &err);
-    if (!JsonDoc_valid(&doc)) {
-        print("parse-failed", StdError_message(&err));
+    json doc = json(text, &err);
+    if (!doc.valid()) {
+        print("parse-failed", err.what());
         return 1;
     }
 
-    JsonRef root = JsonDoc_root(&doc);
-    JsonRef name_ref = JsonRef_member(&root, "name");
-    JsonRef stars_ref = JsonRef_member(&root, "stars");
-    JsonRef ratio_ref = JsonRef_member(&root, "ratio");
-    JsonRef ok_ref = JsonRef_member(&root, "ok");
-    JsonRef tags_ref = JsonRef_member(&root, "tags");
+    json_view root = doc.root();
+    json_view name_ref = root.member("name");
+    json_view stars_ref = root.member("stars");
+    json_view ratio_ref = root.member("ratio");
+    json_view ok_ref = root.member("ok");
+    json_view tags_ref = root.member("tags");
 
     const char *name = NULL;
     int stars = -1;
     double ratio = 0;
     int ok = 0;
-    int got_name = JsonRef_str(&name_ref, &name);
-    int got_stars = JsonRef_int(&stars_ref, &stars);
-    int got_ratio = JsonRef_double(&ratio_ref, &ratio);
-    int got_ok = JsonRef_bool(&ok_ref, &ok);
-    print("read", got_name, name, got_stars, stars, got_ratio, ratio, got_ok,
-          ok);
+    int got_name = name_ref.get_string(&name, &err);
+    int got_stars = stars_ref.get_int(&stars, &err);
+    int got_ratio = ratio_ref.get_double(&ratio, &err);
+    int got_ok = ok_ref.get_bool(&ok, &err);
+    print("read", got_name, name, got_stars, stars, got_ratio, ratio, got_ok, ok);
 
-    size_t tag_count = JsonRef_size(&tags_ref);
-    JsonRef first = JsonRef_arr_at(&tags_ref, 0);
+    size_t tags = tags_ref.size();
+    json_view first = tags_ref.at(0);
     const char *first_tag = NULL;
-    JsonRef_str(&first, &first_tag);
-    print("array", tag_count, first_tag, JsonRef_valid(&tags_ref));
+    first.get_string(&first_tag, &err);
+    print("array", tags, first_tag, tags_ref.valid(), tags_ref.is_array(),
+          root.is_object(), stars_ref.is_number(), name_ref.is_string(),
+          ok_ref.is_bool());
 
-    JsonRef missing = JsonRef_member(&root, "nope");
-    int missing_hit = JsonRef_int(&missing, &stars);
-    print("missing", JsonRef_valid(&missing), missing_hit);
+    json_view missing = root.member("nope");
+    int missing_hit = missing.get_int(&stars, &err);
+    print("missing", missing.valid(), missing_hit);
 
-    JsonDoc file_doc = JsonDoc_read_file("tests/stdlib/data/sample.json", &err);
-    JsonRef file_root = JsonDoc_root(&file_doc);
-    JsonRef project = JsonRef_member(&file_root, "project");
+    json file_doc = json_parse_file("tests/stdlib/data/sample.json", &err);
+    json_view file_root = file_doc.root();
+    json_view project = file_root.member("project");
     const char *project_name = NULL;
-    JsonRef_str(&project, &project_name);
-    print("file", JsonDoc_valid(&file_doc), project_name);
+    project.get_string(&project_name, &err);
+    print("file", file_doc.valid(), project_name);
 
-    size_t len = 0;
-    char *dump = JsonRef_write(&root, &len);
-    print("dump", dump, len);
-    Json_free(dump);
+    size_t length = 0;
+    char *dump = root.write(&length);
+    print("dump", dump, length);
+    json_free(dump);
 
-    JsonBuilder builder = JsonBuilder_new();
-    JsonBuilder_add_str(&builder, "lang", "cplus");
-    JsonBuilder_add_int(&builder, "year", 2026);
-    JsonBuilder_add_bool(&builder, "safe", 1);
-    char *built = JsonBuilder_write(&builder, &len);
-    print("built", built);
-    Json_free(built);
+    json_builder builder = json_builder();
+    builder.add_string("lang", "cplus", &err);
+    builder.add_int("year", 2026, &err);
+    builder.add_double("version", 0.1, &err);
+    builder.add_bool("safe", 1, &err);
+    char *built = builder.write(&length);
+    print("built", built, builder.valid());
+    json_free(built);
 
-    JsonDoc bad = JsonDoc_parse("{not json", &err);
-    print("bad", JsonDoc_valid(&bad), StdError_failed(&err),
-          StdError_message(&err));
+    json bad = json("{not json", &err);
+    print("bad", bad.valid(), err.failed_now(), err.what());
     return 0;
 }

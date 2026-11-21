@@ -4,6 +4,6 @@
 #include "stdlib/string.hp"
 
 int gap_b(void) {
-    String s = String("bb");
-    return (int)s.len();
+    string s = string("bb");
+    return (int)s.size();
 }

@@ -1,19 +1,17 @@
-/* TU B: includes thread.hp + io.hp, the same headers as TU A. */
+/* TU B: the same headers as TU A, plus a second reader. */
 #include <stdio.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
 #include "stdlib/io.hp"
-#include "stdlib/thread.hp"
 
 int part_b(void) {
-    Mutex mutex = Mutex_new();
+    error err = error();
+    char line[16];
     int i;
-    int total = 0;
-    if (!Mutex_valid(&mutex))
-        return 0;
+    int counted = 0;
     for (i = 0; i < 3; i++) {
-        Guard guard = Guard_lock(&mutex);
-        if (Guard_holds(&guard))
-            total++;
+        if (read_line(line, sizeof(line), &err) == STDLIB_OK)
+            counted++;
     }
-    return total;
+    return counted;
 }

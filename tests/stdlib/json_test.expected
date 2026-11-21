@@ -1,7 +1,7 @@
 read 0 cplus 0 5 0 1.5 0 1
-array 3 a 1
+array 3 a 1 1 1 1 1 1
 missing 0 -1
 file 1 cplus
 dump {"name":"cplus","stars":5,"ratio":1.5,"ok":true,"tags":["a","b","c"]} 69
-built {"lang":"cplus","year":2026,"safe":true}
+built {"lang":"cplus","year":2026,"version":0.1,"safe":true} 1
 bad 0 1 unexpected character, expected a string key

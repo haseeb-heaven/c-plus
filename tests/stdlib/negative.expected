@@ -1,4 +1,5 @@
 strings-ok 0 2 0
 file-error 0 109
 bad-handle-write 0 0 -1
+error-methods 0 1 0
 guard-null 0 0

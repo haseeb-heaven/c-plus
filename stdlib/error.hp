@@ -1,62 +1,89 @@
-/* C+ standard library: recoverable error results.
+/* C+ standard library: recoverable errors.
  *
- * Ordinary library failures - bad input, end of input, a missing file, an
- * allocation that the caller wants to see fail - are reported through a
- * StdError value and a status code.  Nothing in this header terminates the
- * process; fatal safety violations stay the runtime's job (cplus_fatal).
+ * C++-flavoured surface without C++ exceptions: an `error` value carries a
+ * status code and a message, and library calls report through it.  Nothing in
+ * this header terminates the process; fatal safety violations stay the
+ * runtime's job (cplus_fatal).
  *
- * The code field reuses the runtime safety taxonomy (cplus_exit_code) so that
- * libc-level failures and runtime failures share one namespace.  When the
- * runtime grows a recoverable-error ABI, this type will delegate to it.
+ * `error_reset` / `error_fail` are free helpers as well as being what the
+ * methods call, so they also work inside class methods, where method-call
+ * sugar on parameters is not applied.
  */
 #ifndef CPLUS_STD_ERROR_HP
 #define CPLUS_STD_ERROR_HP
 
 #include "cplus/cplus.h"
 
-/* Status returned by library operations. */
-#define STDLIB_OK 0    /* success                              */
-#define STDLIB_EOF 1   /* end of input, not a failure          */
-#define STDLIB_FAIL -1 /* failure; the StdError carries details */
+#define STDLIB_OK 0    /* success                     */
+#define STDLIB_EOF 1   /* end of input, not a failure */
+#define STDLIB_FAIL -1 /* failure; see the error      */
 
 #define STDLIB_ERROR_SIZE 256
 
-typedef struct StdError {
+static inline void error_reset(void *target);
+static inline void error_fail(void *target, cplus_exit_code code,
+                              const char *message);
+
+class error {
     int failed;
-    cplus_exit_code code;
-    char message[STDLIB_ERROR_SIZE];
-} StdError;
+    cplus_exit_code status;
+    char text[STDLIB_ERROR_SIZE];
 
-static inline void StdError_init(StdError *self) {
-    self->failed = 0;
-    self->code = CPLUS_EXIT_OK;
-    self->message[0] = '\0';
+    error(void) {
+        this->failed = 0;
+        this->status = CPLUS_EXIT_OK;
+        this->text[0] = '\0';
+    }
+
+    int ok(void) {
+        return !this->failed;
+    }
+
+    int failed_now(void) {
+        return this->failed;
+    }
+
+    int code(void) {
+        return (int)this->status;
+    }
+
+    const char *what(void) {
+        return this->text;
+    }
+
+    void clear(void) {
+        error_reset(this);
+    }
+
+    void set(cplus_exit_code code_value, const char *message) {
+        error_fail(this, code_value, message);
+    }
+};
+
+static inline void error_reset(void *target) {
+    error *slot = (error *)target;
+    if (slot == NULL)
+        return;
+    slot->failed = 0;
+    slot->status = CPLUS_EXIT_OK;
+    slot->text[0] = '\0';
 }
 
-static inline int StdError_failed(const StdError *self) {
-    return self->failed != 0;
-}
-
-static inline int StdError_code(const StdError *self) {
-    return (int)self->code;
-}
-
-static inline const char *StdError_message(const StdError *self) {
-    return self->message;
-}
-
-static inline void StdError_set(StdError *self, cplus_exit_code code,
-                                const char *text) {
+static inline void error_fail(void *target, cplus_exit_code code,
+                              const char *message) {
+    error *slot = (error *)target;
     size_t i = 0;
-    self->failed = 1;
-    self->code = code;
-    if (text != NULL) {
-        while (text[i] != '\0' && i + 1 < STDLIB_ERROR_SIZE) {
-            self->message[i] = text[i];
+    if (slot == NULL)
+        return;
+    slot->failed = 1;
+    slot->status = code;
+    if (message != NULL) {
+        while (message[i] != '\0' && i + 1 < STDLIB_ERROR_SIZE) {
+            slot->text[i] = message[i];
             i++;
         }
     }
-    self->message[i] = '\0';
+    slot->text[i] = '\0';
 }
 
 #endif

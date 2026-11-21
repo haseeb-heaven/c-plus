@@ -1,4 +1,4 @@
-/* Foundation smoke test: String, IntVec, File, Thread, safe input. */
+/* Foundation smoke test: string, vector, file, mutex, safe input. */
 #include <stdio.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
@@ -9,69 +9,68 @@
 #include "stdlib/thread.hp"
 
 int main(void) {
-    StdError err;
-    StdError_init(&err);
+    error err = error();
 
-    String s = String("hello");
+    string s = string("hello");
     int appended = s.append(" world");
-    print("str", s.len(), s.c_str(), appended, s.eq("hello world"),
+    print("str", s.size(), s.c_str(), appended, s.equals("hello world"),
           s.compare("hello world"), s.find("world"));
 
     char slice[8];
-    s.substring(6, 5, slice, sizeof(slice));
-    print("slice", slice, s.field_count(' '));
+    s.substr(6, 5, slice, sizeof(slice));
+    print("slice", slice, s.count_fields(' '));
     char field0[8];
     char field1[8];
     s.field(' ', 0, field0, sizeof(field0));
     s.field(' ', 1, field1, sizeof(field1));
     print("fields", field0, field1, s.field(' ', 5, field0, sizeof(field0)));
 
-    StringView view = s.view();
-    print("view", StringView_len(&view), StringView_eq(&view, "hello world"));
+    string_view view = s.to_view();
+    print("view", view.size(), view.equals("hello world"));
     s.reserve(128);
     print("capacity", s.capacity());
 
-    IntVec v = IntVec();
+    vector v = vector();
     int i;
     for (i = 0; i < 5; i++) {
-        if (v.push(i * i) != 0)
+        if (v.push_back(i * i) != 0)
             return 10;
     }
     int got = -1;
-    int ok = v.get(3, &got);
-    int bad = v.get(99, &got);
+    int ok = v.at_checked(3, &got);
+    int bad = v.at_checked(99, &got);
     int last = -1;
-    v.pop(&last);
-    print("vec", v.len(), v.capacity(), ok, got, bad, last);
+    v.pop_back(&last);
+    print("vec", v.size(), v.capacity(), ok, got, bad, last);
     v.clear();
-    print("vec-clear", v.len(), v.pop(&last));
+    print("vec-clear", v.size(), v.pop_back(&last));
 
-    File out = File_open("/tmp/cplus_foundation.txt", "w");
-    if (!File_valid(&out))
+    file out = file("/tmp/cplus_foundation.txt", "w");
+    if (!out.is_open())
         return 11;
-    File_write(&out, "line one\n");
-    File_write_bytes(&out, "line two\n", 9, &err);
-    File_flush(&out, &err);
+    out.write("line one\n");
+    out.write_bytes("line two\n", 9, &err);
+    out.flush(&err);
 
-    File in = File_open("/tmp/cplus_foundation.txt", "r");
-    if (!File_valid(&in))
+    file in = file("/tmp/cplus_foundation.txt", "r");
+    if (!in.is_open())
         return 12;
     char line[32];
-    int rd = File_read_line(&in, line, sizeof(line), &err);
+    int rd = in.read_line(line, sizeof(line), &err);
     print("file", rd, line);
 
-    File missing = File_open("/nonexistent/cplus/dir/x.txt", "r");
-    print("missing", File_valid(&missing));
+    file missing = file("/nonexistent/cplus/dir/x.txt", "r");
+    print("missing", missing.is_open());
 
-    File std = File_borrow(stdout);
-    print("borrowed", File_valid(&std));
+    file std_out = file_borrow(stdout);
+    print("borrowed", std_out.is_open());
 
-    Mutex mutex = Mutex_new();
-    if (!Mutex_valid(&mutex))
+    mutex m = mutex();
+    if (!m.is_valid())
         return 13;
     {
-        Guard guard = Guard_lock(&mutex);
-        print("guard", Guard_holds(&guard));
+        guard g = guard(&m);
+        print("guard", g.holds());
     }
 
     int count = 0;

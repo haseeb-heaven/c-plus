@@ -1,0 +1,63 @@
+/* C+ standard library: events, keyboard and mouse via SDL3 (zlib licence).
+ *
+ * These are stateless helpers, so they stay free functions with C++-flavoured
+ * names.  Events are borrowed: the caller owns the SDL_Event it passes in.
+ * Link with pkg-config sdl3.
+ */
+#ifndef CPLUS_STD_INPUT_HP
+#define CPLUS_STD_INPUT_HP
+
+#include <SDL3/SDL.h>
+#include "cplus/cplus.h"
+
+/* Pumps pending events: 1 when event was filled, 0 when the queue is empty.
+ * A NULL event only pumps. */
+static inline int poll_event(SDL_Event *event) {
+    return SDL_PollEvent(event) ? 1 : 0;
+}
+
+static inline int event_is_quit(const SDL_Event *event) {
+    return event != NULL && event->type == SDL_EVENT_QUIT;
+}
+
+static inline int event_is_key_down(const SDL_Event *event) {
+    return event != NULL && event->type == SDL_EVENT_KEY_DOWN;
+}
+
+static inline int event_is_key_up(const SDL_Event *event) {
+    return event != NULL && event->type == SDL_EVENT_KEY_UP;
+}
+
+static inline SDL_Scancode event_scancode(const SDL_Event *event) {
+    if (event == NULL)
+        return SDL_SCANCODE_UNKNOWN;
+    return event->key.scancode;
+}
+
+static inline char event_text(const SDL_Event *event) {
+    if (event == NULL || event->type != SDL_EVENT_TEXT_INPUT)
+        return '\0';
+    return event->text.text[0];
+}
+
+/* Borrowed keyboard state, valid until the next pump.  Never free it. */
+static inline const bool *keyboard_state(void) {
+    return SDL_GetKeyboardState(NULL);
+}
+
+static inline int key_pressed(const bool *state, SDL_Scancode key) {
+    if (state == NULL)
+        return 0;
+    return state[key] ? 1 : 0;
+}
+
+/* Mouse position and pressed-button mask; returns the mask. */
+static inline unsigned mouse_state(float *x, float *y) {
+    return (unsigned)SDL_GetMouseState(x, y);
+}
+
+static inline int mouse_button_left(unsigned mask) {
+    return (mask & SDL_BUTTON_LMASK) != 0;
+}
+
+#endif

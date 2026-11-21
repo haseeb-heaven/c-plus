@@ -1,6 +1,6 @@
 /* Demo P: the C+ standard library is a set of .hp wrappers over libc/POSIX.
  *
- * String, IntVec, File, Mutex/Guard and sockets are all RAII types lowered
+ * string, vector, file, mutex/guard and sockets are all RAII types lowered
  * from .hp headers; nothing here reimplements libc. */
 #include "stdlib/string.hp"
 #include "stdlib/vector.hp"
@@ -9,16 +9,16 @@
 #include "stdlib/io.hp"
 
 int main(void) {
-    String name = String("C+");
-    IntVec scores = IntVec();
-    scores.push(10);
-    scores.push(20);
+    string name = string("C+");
+    vector scores = vector();
+    scores.push_back(10);
+    scores.push_back(20);
 
-    print("language", name.c_str(), "scores", scores.len(), scores.at(1));
+    print("language", name.c_str(), "scores", scores.size(), scores.at(1));
 
-    Mutex mutex = Mutex_new();
+    mutex lock = mutex();
     {
-        Guard guard = Guard_lock(&mutex);
+        guard held = guard(&lock);
         println();
     }
     return 0;
