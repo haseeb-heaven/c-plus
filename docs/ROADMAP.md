@@ -25,14 +25,20 @@ matrix in [STATUS.md](STATUS.md) is the evidence-backed view of what exists.
 
 ## Phase 1 — correctness and safety hardening
 
-- [ ] Use-after-free detection with a working sanitizer backend (ASan is
-      broken on this host; evaluate a different backend or a quarantine).
+- [~] Use-after-free detection: ASan remains broken on this host; an opt-in
+      bounded quarantine (`CPLUS_QUARANTINE=1`) now delays managed frees so
+      stale aliases after address reuse are detected. Not enabled by default;
+      raw C pointers remain unchecked.
 - [ ] Concurrency safety: data-race detection or a checked lock discipline;
       currently mutex RAII is only a primitive, marked experimental.
-- [ ] Extend borrow checking to fields, containers and function arguments.
-- [ ] Handle `goto`/`longjmp` cleanup with documented diagnostics rather than
-      a warning.
-- [ ] Adversarial fuzzing of the rewriter, bounds pass and allocator.
+- [~] Borrow checking covers locals, escapes, moves, stack-to-thread args and
+      null out-parameters; fields/containers/general function-argument
+      lifetimes remain open.
+- [~] `goto`/`longjmp` produce documented warnings in the safe subset;
+      rejecting them outright would break real C programs and is not yet
+      enabled.
+- [~] Adversarial fuzzing: deterministic checker fuzz (120 inputs, 0 crashes)
+      and allocator churn test added; libFuzzer target still planned.
 - [ ] Verify Linux x86-64 and ARM64 targets in CI; add Windows x86-64 later.
 
 ## Phase 2 — toolchain maturity

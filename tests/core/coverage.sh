@@ -10,6 +10,7 @@ rm -f *.gcda *.gcno *.gcov
   "$ROOT/runtime/cplus_runtime.c" \
   "$ROOT/tests/core/coverage_driver.c" -o runtime_coverage
 printf "42 3.5 hello\n" | ./runtime_coverage >/dev/null
+printf "42 3.5 hello\n" | CPLUS_QUARANTINE=1 ./runtime_coverage >/dev/null
 gcov -b -c runtime_coverage-cplus_runtime.gcno >/dev/null 2>&1
 GCOV=cplus_runtime.c.gcov
 if [ ! -f "$GCOV" ]; then

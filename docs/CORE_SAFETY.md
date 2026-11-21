@@ -109,7 +109,7 @@ Core-safety runner now has 49 cases, plus a 14-case scratch-style probe script (
 `tests/core/coverage.sh` builds `runtime/cplus_runtime.c` with gcov
 instrumentation, runs `tests/core/coverage_driver.c` (including intercepted
 fatal paths via `cplus_fatal_hook`) and reports line coverage. Target: >=80%
-for the runtime library. Current result: **308/382 lines (80%)** after removing redundant wrappers, covering
+for the runtime library. Current result: **320/395 lines (81%)** including the opt-in quarantine path, covering
 fatal paths through the test hook, allocator growth, zero-size paths and I/O. Runtime logging is gated by a global level set from
 `CPLUS_LOG_LEVEL` when `--log` is used; without it, logging has no effect.
 
@@ -248,7 +248,9 @@ Compiler responsibilities retained:
 
 ## Remaining gaps for issues #1/#4/#19
 
-- no automatic use-after-free detection for raw C pointers;
+- no automatic use-after-free detection for raw C pointers; opt-in
+  `CPLUS_QUARANTINE=1` delays frees in a bounded ring so stale managed aliases
+  after address reuse are detected (exit 105) at the cost of delayed reclamation;
 - no full provenance/cast verification;
 - no complete cross-TU ownership ABI checking;
 - no whole-program data-race proof;

@@ -132,6 +132,19 @@ static size_t cplus_live_count = 0;
 static size_t cplus_live_deleted = 0;
 static void *cplus_recent[CPLUS_RECENT_SLOTS];
 
+/* Opt-in temporal-safety experiment: keep released blocks out of malloc's
+ * reuse pool for a bounded time so stale aliases are detected instead of
+ * being misattributed to a new allocation.  Disabled by default. */
+#define CPLUS_QUARANTINE_SLOTS 1024u
+static void *cplus_quarantine[CPLUS_QUARANTINE_SLOTS];
+static size_t cplus_quarantine_next = 0;
+static size_t cplus_quarantine_count = 0;
+
+static int cplus_quarantine_enabled(void) {
+  const char *env = getenv("CPLUS_QUARANTINE");
+  return env && env[0] != '0';
+}
+
 #ifdef CPLUS_POSIX
 static pthread_mutex_t cplus_alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void cplus_alloc_lock(void) { pthread_mutex_lock(&cplus_alloc_mutex); }
@@ -288,6 +301,18 @@ void cplus_release(void *ptr) {
   --cplus_live_count;
   ++cplus_live_deleted;
   cplus_recent[cplus_recent_index(ptr)] = ptr;
+  if (cplus_quarantine_enabled()) {
+    void *oldest = cplus_quarantine[cplus_quarantine_next];
+    cplus_quarantine[cplus_quarantine_next] = ptr;
+    cplus_quarantine_next = (cplus_quarantine_next + 1) %
+                            CPLUS_QUARANTINE_SLOTS;
+    if (cplus_quarantine_count < CPLUS_QUARANTINE_SLOTS)
+      ++cplus_quarantine_count;
+    cplus_alloc_unlock();
+    if (oldest)
+      free(oldest); /* bounded: at most CPLUS_QUARANTINE_SLOTS delayed frees */
+    return;
+  }
   cplus_alloc_unlock();
 
   free(ptr);

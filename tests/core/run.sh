@@ -164,6 +164,16 @@ else
   bad runtime_logging "missing runtime trace log"
 fi
 
+if "$CPLUS" build "$ROOT/tests/core/positive/quarantine_probe.c" \
+   -o "$OUT/quarantine_probe" >"$OUT/quarantine_probe.log" 2>&1; then
+  CPLUS_QUARANTINE=1 "$OUT/quarantine_probe" \
+    >"$OUT/quarantine_probe.stdout" 2>"$OUT/quarantine_probe.stderr"
+  qrc=$?
+  if [ "$qrc" -eq 105 ]; then ok quarantine_uaf; else bad quarantine_uaf "exit $qrc"; fi
+else
+  bad quarantine_uaf "build failed"
+fi
+
 echo
 echo "core safety: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
