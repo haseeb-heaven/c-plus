@@ -5,6 +5,7 @@
 static atomic_int g_level = CPLUS_SAFE_LOG_OFF;
 
 void cplus_safe_log_set_level(cplus_safe_log_level level) {
+    /* logger config; no recursive logging */
     atomic_store(&g_level, (int)level);
 }
 cplus_safe_log_level cplus_safe_log_get_level(void) {

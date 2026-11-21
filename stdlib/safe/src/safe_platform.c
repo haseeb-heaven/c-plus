@@ -1,8 +1,10 @@
 #include "../safe_platform.h"
+#include "../safe_log.h"
 #include <stddef.h>
 
 void cplus_safe_platform_probe(cplus_safe_platform_info *out) {
-    if (!out) return;
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "safe_platform_probe", "enter");
+    if (!out) { cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "safe_platform_probe", "null out"); return; }
     out->has_fortify = 0;
     out->has_object_size = 0;
     out->has_annex_k = 0;

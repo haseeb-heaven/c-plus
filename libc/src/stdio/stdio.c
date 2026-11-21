@@ -7,8 +7,8 @@ int cplus_fclose(FILE *stream) { cplus_libc_log("fclose","enter"); return fclose
 size_t cplus_fread(void *ptr,size_t size,size_t nmemb,FILE*stream){cplus_libc_log("fread","enter"); return fread(ptr,size,nmemb,stream);} 
 size_t cplus_fwrite(const void*ptr,size_t size,size_t nmemb,FILE*stream){cplus_libc_log("fwrite","enter"); return fwrite(ptr,size,nmemb,stream);} 
 int cplus_vsnprintf(char*str,size_t size,const char*fmt,va_list ap){cplus_libc_log("vsnprintf","enter"); return vsnprintf(str,size,fmt,ap);} 
-int cplus_snprintf(char*str,size_t size,const char*fmt,...){va_list ap; va_start(ap,fmt); int r=cplus_vsnprintf(str,size,fmt,ap); va_end(ap); return r;} 
-int cplus_printf(const char*fmt,...){va_list ap; va_start(ap,fmt); int r=vprintf(fmt,ap); va_end(ap); return r;} 
-int cplus_fprintf(FILE*stream,const char*fmt,...){va_list ap; va_start(ap,fmt); int r=vfprintf(stream,fmt,ap); va_end(ap); return r;} 
-int cplus_scanf(const char*fmt,...){va_list ap; va_start(ap,fmt); int r=vscanf(fmt,ap); va_end(ap); return r;} 
-int cplus_fscanf(FILE*stream,const char*fmt,...){va_list ap; va_start(ap,fmt); int r=vfscanf(stream,fmt,ap); va_end(ap); return r;} 
+int cplus_snprintf(char*str,size_t size,const char*fmt,...){cplus_libc_log("snprintf","enter"); va_list ap; va_start(ap,fmt); int r=cplus_vsnprintf(str,size,fmt,ap); va_end(ap); return r;} 
+int cplus_printf(const char*fmt,...){cplus_libc_log("printf","enter"); va_list ap; va_start(ap,fmt); int r=vprintf(fmt,ap); va_end(ap); return r;} 
+int cplus_fprintf(FILE*stream,const char*fmt,...){cplus_libc_log("fprintf","enter"); va_list ap; va_start(ap,fmt); int r=vfprintf(stream,fmt,ap); va_end(ap); return r;} 
+int cplus_scanf(const char*fmt,...){cplus_libc_log("scanf","enter"); va_list ap; va_start(ap,fmt); int r=vscanf(fmt,ap); va_end(ap); return r;} 
+int cplus_fscanf(FILE*stream,const char*fmt,...){cplus_libc_log("fscanf","enter"); va_list ap; va_start(ap,fmt); int r=vfscanf(stream,fmt,ap); va_end(ap); return r;} 

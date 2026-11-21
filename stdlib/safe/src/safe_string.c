@@ -39,5 +39,7 @@ errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *ind
     return r;
 }
 rsize_t cplus_strnlen_s(const char *str, rsize_t smax) {
-    return cplus_upstream_strnlen_s(str, smax);
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strnlen_s", "enter");
+    rsize_t r = cplus_upstream_strnlen_s(str, smax);
+    return r;
 }
