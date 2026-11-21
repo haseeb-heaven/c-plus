@@ -6,6 +6,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/intel-safestringl
 
 add_library(cplus_safecrt STATIC
   src/safe_alloc.c
+  src/safe_error.c
   src/safe_format.c
   src/safe_io.c
   src/safe_log.c
