@@ -6,6 +6,19 @@
 
 **Status: experimental.** The full Rust-grade safe-subset guarantee is **not implemented or independently verified yet**. This README distinguishes the desired architecture from the compiler's current behavior. See [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md) and the [roadmap](docs/ROADMAP.md).
 
+## What C+ ships
+
+**C+ is one toolchain with two deliverables:**
+
+1. **The C+ safety compiler (Agent 1):** compile-time ownership, borrowing, alias and lifetime validation; RAII; fail-closed safe mode; Clang/LLVM optimization; unchanged ordinary C syntax.
+2. **The C+ hardened standard library (Agent 2):** compiled and installable C standard-library implementations (initially allocation, memory, strings and I/O), compatible public headers, selected checked `*_s` APIs, machine-readable compiler contracts, opt-in logging, example programs, unit tests, fuzz targets and SDK packaging. Reuse appropriately licensed upstream implementations and preserve C ABI/observable C behavior.
+
+The **bundled library is required as a project deliverable**, not merely wrappers around platform libc. Not all ISO C library functions or platforms are implemented yet. Interoperation with system libc remains necessary where fully replacing a platform runtime is unsafe/unsupported. `malloc_s` and related allocation `_s` APIs are **optional C+ extensions**, not standardized Microsoft/Apple CRT functions.
+
+**No automatic magic:** passing a raw `char *` to `strcpy` does not reveal its allocated length to the library. The compiler must establish sound contracts and bounds, use proven dynamic enforcement, or reject the operation in strict safe mode. Full Rust-like safety for arbitrary unchanged C, universal zero overhead, and better-than-C performance are **not current guarantees**.
+
+See [#21 — compiler](https://github.com/haseeb-heaven/c-plus/issues/21), [#22 — bundled hardened libc](https://github.com/haseeb-heaven/c-plus/issues/22), and [#23 — SDK verification](https://github.com/haseeb-heaven/c-plus/issues/23).
+
 ## The design in one picture
 
 ```text
@@ -142,7 +155,7 @@ cmake --build build --target c+ -- -j4
 | Task | Owner | Links |
 | --- | --- | --- |
 | **Sound safe-mode compiler** — ownership, borrows, alias/field/loop/cross-TU lifetimes, RAII, concurrency and fail-closed FFI | **Agent 1** | [Issue #21](https://github.com/haseeb-heaven/c-plus/issues/21) · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
-| **Safe existing libc contracts** — C ABI, platform checks, negative fixtures, portable adapters, failure semantics and fuzzing | **Agent 2** | [Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
+| **Bundled hardened libc implementation** — real compiled stdlib functions, standard C headers, `*_s` checked APIs, compiler contracts, platform adapters, logging, examples, fuzzing and installable SDK | **Agent 2** | [Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
 | **Evidence & merge gate** — safety spec, CI, multi-TU, adversarial tests, performance and peer review | **Both** | [Issue #23](https://github.com/haseeb-heaven/c-plus/issues/23) |
 
 Modern standard-library feature expansion is **P1 / deferred**. Earlier issues were closed as superseded, **not completed**. No open PR should be treated as a completed safety guarantee.
