@@ -71,6 +71,7 @@ build_run zero_alloc "$ROOT/tests/core/positive/zero_alloc.c"
 build_run thread_guard_ok "$ROOT/tests/core/positive/thread_guard_ok.cp"
 build_run allocator_fuzz "$ROOT/tests/core/allocator_fuzz.c"
 build_run checked_copy_overlap "$ROOT/tests/core/positive/checked_copy_overlap.c"
+build_run null_outparam "$ROOT/tests/core/positive/null_outparam.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -102,6 +103,15 @@ if "$CPLUS" build "$ROOT/tests/core/positive/multi_tu_resource_main.c" \
   ok multi_tu_resource
 else
   bad multi_tu_resource "multi-TU resource build/run failed"
+fi
+
+if "$CPLUS" build "$ROOT/tests/core/multi_tu_hp/part_a.cp" \
+   "$ROOT/tests/core/multi_tu_hp/part_b.cp" \
+   -I "$ROOT/tests/core/multi_tu_hp" -o "$OUT/multi_tu_hp" \
+   >"$OUT/multi_tu_hp.log" 2>&1 && "$OUT/multi_tu_hp"; then
+  ok multi_tu_hp
+else
+  bad multi_tu_hp "multi-TU .hp class build/link/run failed"
 fi
 
 echo "core safety: ownership warnings"

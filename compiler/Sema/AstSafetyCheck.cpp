@@ -138,6 +138,14 @@ public:
   bool VisitUnaryOperator(UnaryOperator *op) {
     if (!report_)
       return true;
+    if (op->getOpcode() == UO_AddrOf) {
+      // Address taken: a libc out-parameter may write a non-null value.
+      const Expr *sub = op->getSubExpr()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          nullVars_.erase(vd->getNameAsString());
+      return true;
+    }
     if (op->getOpcode() == UO_Deref) {
       const Expr *sub = op->getSubExpr();
       if (isNullConstant(sub) || nullVarOf(sub))

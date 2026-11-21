@@ -121,9 +121,9 @@ raw libc with Clang -O2 on the same 2,000,000-iteration workload:
 Latest library-boundary run:
 
 ```text
-c+ safe : real 0.74s
-clang C : real 0.39s
-clang UB: real 0.41s
+c+ safe : real 0.55s
+clang C : real 0.48s
+clang UB: real 0.40s
 ```
 
 The raw-clang difference includes C+ UBSan instrumentation; the `clang UB`
@@ -184,3 +184,28 @@ is AST/CFG analysis plus Clang UBSan instrumentation.
 - No whole-program cross-TU ABI/ownership verification.
 - `goto`/`longjmp` bypass deterministic cleanup.
 - The libc replacement wrappers do not validate buffer sizes.
+
+## Compiler performance evidence (`tests/core/perf.sh`)
+
+Measured on macOS arm64, Apple clang 16, same tiny C source:
+
+| configuration | compile time | peak compiler RSS | executable size |
+| --- | --- | --- | --- |
+| c+ safe | 0.32 s | 38 MB | 33,736 B |
+| c+ legacy | 0.10 s | 28 MB | 33,744 B |
+| clang -O2 | 0.02 s | 28 MB | 33,432 B |
+
+The safe-mode driver currently costs ~0.3 s mostly because it constructs a
+second Clang AST for safety checks on every translation unit. This is the
+primary measured compile-time bottleneck, not the lowering stages. No checks
+were removed to improve these numbers. Optimisation work remains open.
+
+## Multi-TU status
+
+Issue #4 duplicate symbols from `.hp` class members are fixed by emitting
+header-lowered class members as `static inline` (`headerMode` in
+`CPlusRewriter.cpp`), adapting the proposal in Agent 2's PR #17. Regression:
+`tests/core/multi_tu_hp/` (two `.cp` TUs including the same `.hp`, class
+constructor/method/destructor, clean link and exact-once cleanup). The same
+fix also eliminates the need for separate-token `-I dir` parsing, which was
+fixed in `compiler/Main.cpp`.

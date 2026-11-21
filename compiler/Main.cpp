@@ -188,6 +188,13 @@ int main(int argc, char **argv) {
         opts.output = argv[++i];
       continue;
     }
+    // gcc-style two-token options: -I dir, -D NAME, -U NAME, -L dir, -l lib.
+    if ((a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") &&
+        i + 1 < argc) {
+      opts.extraArgs.push_back(a);
+      opts.extraArgs.push_back(argv[++i]);
+      continue;
+    }
     if (a == "--emit-c") {
       if (i + 1 < argc)
         opts.emitC = argv[++i];
