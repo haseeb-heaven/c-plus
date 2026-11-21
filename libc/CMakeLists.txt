@@ -6,7 +6,8 @@ add_library(cplus_hardened_libc STATIC
   log/log.c
   src/errno/errno.c
   src/stdlib/alloc.c
-  src/stdlib/stdlib_extra.c
+  src/src/stdlib/stdlib_extra.c
+  src/stdlib/stdlib_extra2.c
   src/string/memory.c
   src/string/string.c
   src/string/extra.c
