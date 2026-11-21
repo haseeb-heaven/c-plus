@@ -154,6 +154,7 @@ build_expect_stderr double_move_warning "$ROOT/tests/safety/double_move_warning.
 echo "core safety: rejected"
 build_expect_stderr move_chain "$ROOT/tests/safety/move_chain.c" "use of moved-from"
 expect_reject borrow_after_move "$ROOT/tests/safety/borrow_after_move.c"
+expect_reject borrow_invalid_destructor "$ROOT/tests/safety/borrow_invalid_destructor.cp"
 expect_reject managed_escape_expr "$ROOT/tests/safety/managed_escape_expr.c"
 expect_reject multi_dim_negative "$ROOT/tests/safety/multi_dim_negative.c"
 expect_trap alloc_overflow_mul "$ROOT/tests/safety/alloc_overflow_mul.cp" 107

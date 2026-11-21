@@ -8,7 +8,7 @@ not a claim of complete memory safety.
 | ordinary C / libc compatibility | cases/c_abi, cases/hello, core/libc_valid, core/libc_matrix/valid_malloc | positive |
 | resource copy/assignment rejected | compile_fail/resource_copy, resource_assign | negative |
 | move + moved-from rejection | cases/resource_move, compile_fail/use_after_move, core/move_chain_ok, safety/moved_from_warning | positive/negative |
-| borrow escape / conflict | compile_fail/borrow_escape, safety/borrow_after_move, safety/borrow_conflict, core/borrow_field_ok | positive/negative |
+| borrow escape / conflict | compile_fail/borrow_escape, safety/borrow_after_move, safety/borrow_invalid_destructor, safety/borrow_conflict, core/borrow_field_ok | positive/negative |
 | double free | safety/malloc_double_free, compile_fail/double_release, core/double_release_alias, safety/interproc_double_free | negative |
 | direct / alias UAF | safety/uaf_direct, safety/uaf_alias, core/uaf_conditional | positive/negative |
 | managed double/invalid release | runtime_fail/double_release, runtime_fail/freed_len, core/freed_len | runtime trap |

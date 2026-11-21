@@ -38,6 +38,8 @@ public:
     nonVolatileGlobals_ = globals;
   }
   const std::set<std::string> &handlers() const { return handlers_; }
+  const std::set<std::string> &destructors() const { return destructors_; }
+  void setDestructors(const std::set<std::string> &d) { destructors_ = d; }
   const std::set<std::string> &nonVolatileGlobals() const {
     return nonVolatileGlobals_;
   }
@@ -75,23 +77,27 @@ public:
   void markReleased(const std::string &name) {
     if (name.empty())
       return;
+    releasedVars_.insert(name);
     auto it = aliasGroups_.find(name);
     if (it != aliasGroups_.end())
       for (const auto &alias : it->second)
         releasedVars_.insert(alias);
-    else
-      releasedVars_.insert(name);
+    for (const auto &entry : borrowOwner_)
+      if (entry.second == name)
+        releasedVars_.insert(entry.first);
   }
 
   void clearReleased(const std::string &name) {
     if (name.empty())
       return;
+    releasedVars_.erase(name);
     auto it = aliasGroups_.find(name);
     if (it != aliasGroups_.end())
       for (const auto &alias : it->second)
         releasedVars_.erase(alias);
-    else
-      releasedVars_.erase(name);
+    for (const auto &entry : borrowOwner_)
+      if (entry.second == name)
+        releasedVars_.erase(entry.first);
   }
 
   bool isReleased(const Expr *expr) const {
@@ -517,10 +523,18 @@ public:
       baseName = "memmove";
     else if (baseName.rfind("__builtin___strcpy_chk", 0) == 0)
       baseName = "strcpy";
+    if (!report_ && name.size() > 5 &&
+        name.compare(name.size() - 5, 5, "_drop") == 0 &&
+        call->getNumArgs() >= 1) {
+      destructors_.insert(name);
+    }
     if (report_) {
       const VarDecl *ptrVar = nullptr;
       if (call->getNumArgs() >= 1) {
         const Expr *arg = call->getArg(0)->IgnoreParenImpCasts();
+        if (const auto *uo = dyn_cast<UnaryOperator>(arg))
+          if (uo->getOpcode() == UO_AddrOf)
+            arg = uo->getSubExpr()->IgnoreParenImpCasts();
         if (const auto *ref = dyn_cast<DeclRefExpr>(arg))
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
             ptrVar = vd;
@@ -544,13 +558,16 @@ public:
           if (const auto *parm = dyn_cast<ParmVarDecl>(pref->getDecl()))
             userFrees_[currentFunction_].insert(parm->getFunctionScopeIndex());
       }
-      if ((baseName == "free" || baseName == "cplus_release") && ptrVar) {
-        if (releasedVars_.count(ptrVar->getNameAsString()))
+      bool isAllocatorFree = (baseName == "free" ||
+                              baseName == "cplus_release");
+      bool invalidates = isAllocatorFree ||
+                         destructors_.count(name) != 0;
+      if (invalidates && ptrVar) {
+        if (isAllocatorFree && releasedVars_.count(ptrVar->getNameAsString()))
           report(call->getBeginLoc(), "double free of '" +
                                           ptrVar->getNameAsString() + "'");
-        else
-          if (conditionalDepth_ == 0)
-            markReleased(ptrVar->getNameAsString());
+        else if (conditionalDepth_ == 0)
+          markReleased(ptrVar->getNameAsString());
       }
       if (baseName == "realloc") {
         // Do NOT mark the old pointer released: on failure realloc returns
@@ -718,6 +735,7 @@ public:
   std::map<std::string, std::string> borrowOwner_;
   std::map<std::string, std::set<std::string>> writeBorrows_;
   std::set<std::string> movedVars_;
+  std::set<std::string> destructors_;
 };
 
 } // namespace
@@ -751,6 +769,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   SafetyVisitor check(ast->getASTContext(), diags, filename, true);
   check.setHandlers(collect.handlers());
   check.setGlobals(collect.nonVolatileGlobals());
+  check.setDestructors(collect.destructors());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // CFG/dataflow definite-initialization analysis on each function body.
