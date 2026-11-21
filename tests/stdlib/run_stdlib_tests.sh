@@ -239,7 +239,7 @@ done
 
 if matches "coverage"; then
   if python3 "$ROOT/tests/stdlib/coverage.py" >"$OUT/coverage.txt" 2>&1; then
-    pass "coverage"
+    pass "coverage (API surface reachability; execution coverage: coverage_exec.sh)"
     sed 's/^/       /' "$OUT/coverage.txt"
   else
     fail "coverage" "below threshold; see build/stdlib-tests/coverage.txt"

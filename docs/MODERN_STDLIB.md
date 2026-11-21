@@ -192,6 +192,20 @@ The runner builds the vendored C once, generates the FFmpeg fixture, compiles
 each test/example with the real C+ compiler, runs it (dummy SDL/audio drivers)
 and diffs stdout against recorded expectations.
 
+## What "coverage" means here (and what it does not)
+
+`tests/stdlib/coverage.py` measures **API surface reachability**: every public
+function/method is checked for a call site in a test or example.  It is *not*
+execution coverage — a function can be named in a test that never runs that
+path.  `tests/stdlib/coverage_exec.sh` is the execution measurement: it
+preprocesses a test into one unit, compiles it with `-fprofile-instr-generate
+-fcoverage-mapping`, runs it and reports executed lines with `llvm-cov`.
+On this host the per-header attribution collapses to the lowered unit (the
+`#line` mapping is lost through the driver's preprocess step, and Homebrew's
+LLVM tools are unusable here — see LIMITATIONS.md), so the script reports the
+lowered-unit number and CI/Linux is where per-header execution coverage is
+verified.  Both are reported separately; neither is claimed to be the other.
+
 Coverage is measured from the headers' public API against every test and
 example (destructors count as covered when their type is used, because RAII
 calls them).  Gate: **>= 80% per library** — current worst is 88.9%.
@@ -214,7 +228,14 @@ tests/stress/cplus_stress_10       -> 10 passed, 0 failed
 tests/cp_breaker.sh                -> 24 passed, 0 failed
 ```
 
-`classic_bug34_longjmp` is a pre-existing `develop` failure (the compiler warns
+`classic_bug34_longjmp` is a **baseline** failure, verified unchanged here:
+`git diff origin/develop...HEAD -- compiler/` is empty (the compiler is
+byte-identical to `develop`), and the case file itself is untouched.  The
+current behaviour is a warning (`'setjmp' bypasses C+ deterministic cleanup`)
+rather than the rejection the `compile_fail` entry expects.  The responsible
+workstream is **#12** ("guarantee deterministic cleanup on all exits and reject
+unsafe unwinding"), with #1/#5 as parents; it is not a library defect and no
+stdlib code is involved.  `classic_bug34_longjmp` is a pre-existing `develop` failure (the compiler warns
 instead of rejecting `setjmp`/`longjmp`); it does not involve the library, and
 `compiler/` and `runtime/` are untouched on this branch.
 

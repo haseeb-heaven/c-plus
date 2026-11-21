@@ -24,7 +24,7 @@ int main(void) {
             const yyjson_val *root = yyjson_doc_get_root(doc);
             const yyjson_val *stars = yyjson_obj_get(root, "stars");
             sink += yyjson_get_int(stars);
-            yyjson_doc_free((yyjson_doc *)doc);
+            yyjson_doc_free(doc);
         }
     }
     clock_gettime(CLOCK_MONOTONIC, &t1);
