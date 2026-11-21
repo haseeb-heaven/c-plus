@@ -42,6 +42,9 @@ size_t cplus_fread(void*,size_t,size_t,FILE*); size_t cplus_fwrite(const void*,s
 int cplus_snprintf(char*,size_t,const char*,...); int cplus_vsnprintf(char*,size_t,const char*,va_list);
 int cplus_printf(const char*,...); int cplus_fprintf(FILE*,const char*,...);
 int cplus_scanf(const char*,...); int cplus_fscanf(FILE*,const char*,...);
+int cplus_sprintf(char*,const char*,...); int cplus_vsprintf(char*,const char*,va_list);
+int cplus_sscanf(const char*,const char*,...); int cplus_vsscanf(const char*,const char*,va_list);
+int cplus_vfprintf(FILE*,const char*,va_list); int cplus_vprintf(const char*,va_list); int cplus_vfscanf(FILE*,const char*,va_list);
 int cplus_fseek(FILE*,long,int); long cplus_ftell(FILE*); int cplus_fflush(FILE*);
 int cplus_remove(const char*); int cplus_rename(const char*,const char*);
 char *cplus_fgets(char*,int,FILE*); int cplus_fputs(const char*,FILE*);

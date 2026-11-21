@@ -21,6 +21,13 @@ int putchar(int c);
 int getchar(void);
 int puts(const char *s);
 void perror(const char *s);
+int sprintf(char *str, const char *format, ...);
+int vsprintf(char *str, const char *format, va_list ap);
+int sscanf(const char *str, const char *format, ...);
+int vsscanf(const char *str, const char *format, va_list ap);
+int vfprintf(FILE *stream, const char *format, va_list ap);
+int vprintf(const char *format, va_list ap);
+int vfscanf(FILE *stream, const char *format, va_list ap);
 #ifdef __cplusplus
 }
 #endif
