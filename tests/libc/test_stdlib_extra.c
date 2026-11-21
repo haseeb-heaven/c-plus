@@ -13,7 +13,7 @@ int main(void){
     char *e=NULL; assert(cplus_strtol("12x",&e,10)==12 && e && *e=='x');
     int a[5]={5,1,4,2,3}; cplus_qsort(a,5,sizeof(int),icmp);
     assert(a[0]==1 && a[4]==5);
-    int k=4; int *f=(int*)cplus_bsearch(&k,a,5,sizeof(int),icmp);
+    int k=4; const int *f=(const int*)cplus_bsearch(&k,a,5,sizeof(int),icmp);
     assert(f && *f==4);
     puts("stdlib_extra: ok");
     return 0;

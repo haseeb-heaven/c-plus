@@ -7,7 +7,7 @@ int main(void) {
     void *p = NULL;
     assert(malloc_s(&p, 8) == CPLUS_SAFE_OK);
     memcpy(p, "abc", 4);
-    void *old = p;
+    void *const old = p;
     assert(realloc_s(&p, (size_t)-1) == CPLUS_SAFE_ENOMEM);
     assert(p == old); /* preserved */
     assert(realloc_s(&p, 32) == CPLUS_SAFE_OK);

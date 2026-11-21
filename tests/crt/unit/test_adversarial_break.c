@@ -42,7 +42,7 @@ int main(void) {
 
     /* alloc */
     void *p=NULL; assert(malloc_s(&p,16)==CPLUS_SAFE_OK);
-    void *old=p; assert(realloc_s(&p,(size_t)-1)==CPLUS_SAFE_ENOMEM); assert(p==old);
+    void *const old=p; assert(realloc_s(&p,(size_t)-1)==CPLUS_SAFE_ENOMEM); assert(p==old);
     free_s(&p); assert(p==NULL);
     free_s(&p);
     void *q=NULL; assert(calloc_s(&q,(size_t)-1,2)==CPLUS_SAFE_EOVERFLOW);
