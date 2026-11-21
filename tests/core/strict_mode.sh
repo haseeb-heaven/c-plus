@@ -58,6 +58,7 @@ expect_accept safe_malloc_strict  --strict  "$FIX/safe_malloc.c"
 expect_accept safe_realloc_strict --strict "$FIX/safe_realloc.c"
 expect_warn_then_reject unverified_realloc "$FIX/unverified_realloc.c"
 expect_warn_then_reject unverified_thread  "$FIX/unverified_thread.c"
+expect_warn_then_reject branch_uaf "$ROOT/tests/safety/branch_uaf.c"
 
 # UAF diagnostic must name the pointer and show the source-location chain.
 "$CPLUS" check --default "$FIX/uaf_chain.c" >"$OUT/chain.stdout" 2>"$OUT/chain.stderr" || true

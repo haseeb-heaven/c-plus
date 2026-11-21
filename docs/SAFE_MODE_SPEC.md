@@ -46,11 +46,11 @@ declared safe subset.
 | ownership transfer on return / cplus_move | IMPLEMENTED | resource_move, move_return |
 | use-after-move rejection | IMPLEMENTED | use_after_move, moved_from_warning |
 | use-after-free (direct + simple alias, straight-line, realloc success branch, interprocedural return of freed pointer) | IMPLEMENTED | uaf_direct, uaf_alias, libc_alias_uaf, realloc_success_alias_uaf, interproc_return_uaf |
-| double-free (same var + simple alias + interproc free) | IMPLEMENTED | malloc_double_free, interproc_double_free, double_release_alias |
+| double-free (same var + simple alias + interproc free + branch paths) | IMPLEMENTED | malloc_double_free, interproc_double_free, double_release_alias, branch_double_free |
 | invalid frees (stack/global object, string literal, array, interior pointer) | IMPLEMENTED | invalid_free_stack, invalid_free_global, invalid_free_string, invalid_free_array, invalid_free_interior, release_stack_pointer; `p + 0` accepted |
 | shared vs exclusive mutable borrows (fields) | PARTIAL | borrow_mut_conflict, borrow_field_ok; containers not covered |
 | non-lexical lifetimes | UNSUPPORTED | lexical statement-level state only |
-| pointer alias tracking across branches/loops | PARTIAL | alias groups straight-line; branch state conservatively suppressed |
+| pointer alias tracking across branches/loops | PARTIAL -> IMPROVED | may-release state collected from if/loop bodies; definite double-free rejected, possible UAF warned in DEFAULT and rejected in STRICT; reassignment to fresh/null clears may-state |
 | definite initialization | IMPLEMENTED | uninit, uninit_branch, init_all_branches (CFG dataflow) |
 | nullability | IMPLEMENTED (provable cases) | null_deref, null_outparam |
 | provenance / arbitrary casts | UNSUPPORTED | documented gap |

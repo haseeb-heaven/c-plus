@@ -54,6 +54,28 @@ struct FreeCallFinder : RecursiveASTVisitor<FreeCallFinder> {
   }
 };
 
+/// Collect variables released anywhere inside a statement (used to build
+/// may-release state across branches and loops).
+struct ReleaseCollector : RecursiveASTVisitor<ReleaseCollector> {
+  std::set<std::string> released;
+
+  bool VisitCallExpr(CallExpr *c) {
+    if (!c->getDirectCallee() || c->getNumArgs() < 1)
+      return true;
+    std::string n = c->getDirectCallee()->getNameAsString();
+    if (n != "free" && n != "cplus_release")
+      return true;
+    const Expr *arg = c->getArg(0)->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(arg))
+      if (uo->getOpcode() == UO_AddrOf)
+        arg = uo->getSubExpr()->IgnoreParenImpCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(arg))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        released.insert(vd->getNameAsString());
+    return true;
+  }
+};
+
 class SafetyVisitor : public RecursiveASTVisitor<SafetyVisitor> {
 public:
   SafetyVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string filename,
@@ -82,6 +104,12 @@ public:
   }
   void setFunctionsReturningFreed(const std::set<std::string> &s) {
     functionsReturningFreed_ = s;
+  }
+  const std::set<std::string> &maybeReleasedVars() const {
+    return maybeReleasedVars_;
+  }
+  void setMaybeReleasedVars(const std::set<std::string> &s) {
+    maybeReleasedVars_ = s;
   }
   const std::set<std::string> &nonVolatileGlobals() const {
     return nonVolatileGlobals_;
@@ -230,6 +258,10 @@ public:
     return releasedVars_.count(varNameOf(expr)) != 0;
   }
 
+  bool isMaybeReleased(const Expr *expr) const {
+    return maybeReleasedVars_.count(varNameOf(expr)) != 0;
+  }
+
   // Do not propagate release state across branches: a free in one branch is
   // not a guarantee on every path.
   std::string ownerOfAddress(const Expr *sub) const {
@@ -295,9 +327,20 @@ public:
     return !owner.empty() && containsAssignFrom(s->getThen(), owner, tmp);
   }
 
+  void collectMayRelease(Stmt *body) {
+    if (!body)
+      return;
+    ReleaseCollector collector;
+    collector.TraverseStmt(body);
+    maybeReleasedVars_.insert(collector.released.begin(),
+                              collector.released.end());
+  }
+
   bool TraverseIfStmt(IfStmt *s) {
     ++conditionalDepth_;
     if (!report_) {
+      collectMayRelease(s->getThen());
+      collectMayRelease(s->getElse());
       // First pass: record realloc calls whose result is handled by an
       // explicit success/failure branch so the STRICT mode does not reject
       // the documented-safe realloc pattern as unverified.
@@ -327,18 +370,24 @@ public:
   }
   bool TraverseForStmt(ForStmt *s) {
     ++conditionalDepth_;
+    if (!report_)
+      collectMayRelease(s->getBody());
     bool r = RecursiveASTVisitor::TraverseForStmt(s);
     --conditionalDepth_;
     return r;
   }
   bool TraverseWhileStmt(WhileStmt *s) {
     ++conditionalDepth_;
+    if (!report_)
+      collectMayRelease(s->getBody());
     bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
     --conditionalDepth_;
     return r;
   }
   bool TraverseDoStmt(DoStmt *s) {
     ++conditionalDepth_;
+    if (!report_)
+      collectMayRelease(s->getBody());
     bool r = RecursiveASTVisitor::TraverseDoStmt(s);
     --conditionalDepth_;
     return r;
@@ -457,8 +506,14 @@ public:
         assignedVars_.insert(varNameOf(op->getLHS()));
       return true;
     }
-    if (op->isAssignmentOp())
-      assignedVars_.insert(varNameOf(op->getLHS()));
+    if (op->isAssignmentOp()) {
+      std::string lhsName = varNameOf(op->getLHS());
+      assignedVars_.insert(lhsName);
+      // A fresh value (allocation or null) makes may-release state stale.
+      const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
+      if (isNullConstant(rhs) || isa<CallExpr>(rhs))
+        maybeReleasedVars_.erase(lhsName);
+    }
     if (op->isAdditiveOp()) {
       const Expr *lhs = op->getLHS();
       const Expr *rhs = op->getRHS();
@@ -542,6 +597,10 @@ public:
       if (isReleased(sub))
         reportUaf(op->getBeginLoc(), varNameOf(sub),
                   "dereference of released pointer '" + varNameOf(sub) + "'");
+      else if (isMaybeReleased(sub) && conditionalDepth_ == 0)
+        warnAt(op->getBeginLoc(),
+               "possible use-after-free: '" + varNameOf(sub) +
+                   "' may have been released on a branch path");
       else if (movedVars_.count(varNameOf(sub)))
         report(op->getBeginLoc(), "use-after-move: dereference of moved resource");
       else if (isNullConstant(sub) || nullVarOf(sub))
@@ -787,12 +846,17 @@ public:
       bool invalidates = isAllocatorFree ||
                          destructors_.count(name) != 0;
       if (invalidates && ptrVar) {
-        if (isAllocatorFree && releasedVars_.count(ptrVar->getNameAsString()))
-          report(call->getBeginLoc(), "double free of '" +
-                                          ptrVar->getNameAsString() + "'");
+        std::string pname = ptrVar->getNameAsString();
+        if (isAllocatorFree && releasedVars_.count(pname))
+          report(call->getBeginLoc(), "double free of '" + pname + "'");
+        else if (isAllocatorFree && conditionalDepth_ == 0 &&
+                 maybeReleasedVars_.count(pname) &&
+                 !releasedVars_.count(pname))
+          report(call->getBeginLoc(),
+                 "double free of '" + pname + "' on some branch path");
         else if (conditionalDepth_ == 0) {
-          releaseLocs_[ptrVar->getNameAsString()] = call->getBeginLoc();
-          markReleased(ptrVar->getNameAsString());
+          releaseLocs_[pname] = call->getBeginLoc();
+          markReleased(pname);
         }
       }
       if (baseName == "realloc" &&
@@ -1048,6 +1112,7 @@ private:
   std::map<std::string, llvm::APSInt> constLocals_;
   std::set<std::string> assignedVars_;
   std::set<std::string> functionsReturningFreed_;
+  std::set<std::string> maybeReleasedVars_;
   const FunctionDecl *currentFnDecl_ = nullptr;
   std::string currentFunction_;
 
@@ -1102,6 +1167,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setConstLocals(collect.constLocals());
   check.setAssignedVars(collect.assignedVars());
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
+  check.setMaybeReleasedVars(collect.maybeReleasedVars());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // CFG/dataflow definite-initialization analysis on each function body.
