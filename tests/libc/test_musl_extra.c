@@ -38,3 +38,16 @@ int main(void){
 
     return 0;
 }
+/* additional: memmem */
+#include <assert.h>
+#include <string.h>
+void *cplus_memmem(const void*,size_t,const void*,size_t);
+__attribute__((constructor)) static void run_memmem(void){
+    const char *hay="hello world hello";
+    assert(cplus_memmem(hay,17,"world",5)==hay+6);
+    assert(cplus_memmem(hay,17,"hello",5)==hay);
+    assert(cplus_memmem(hay,17,"xyz",3)==NULL);
+    for(int i=0;i<10;i++) assert(cplus_memmem(hay,17,"world",5)==hay+6);
+    assert(cplus_memmem(hay,17,"",0)==hay);
+    assert(cplus_memmem("ab",2,"abc",3)==NULL);
+}
