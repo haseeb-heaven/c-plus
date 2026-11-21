@@ -368,6 +368,7 @@ private:
         borrows_.clear();
         moved_.clear();
         movedOwners_.clear();
+        explicitlyDropped_.clear();
       }
     }
 
@@ -396,6 +397,10 @@ private:
         loops_.back().bodyPos == static_cast<int>(scopes_.size()) - 1)
       loops_.pop_back();
 
+    // A name declared in this scope no longer suppresses cleanup for a
+    // later, unrelated variable with the same name.
+    for (const auto &v : s.vars)
+      explicitlyDropped_.erase(v.name);
     bool wasFunction = s.functionBody;
     scopes_.pop_back();
     if (functionDepth_ > 0)
@@ -411,6 +416,19 @@ private:
       return;
     }
     // Track explicit moves so a borrow of the moved owner can be rejected.
+    // An explicit T_drop(&owner) consumes the automatic cleanup obligation.
+    if (t.text.size() > 5 &&
+        t.text.compare(t.text.size() - 5, 5, "_drop") == 0) {
+      size_t lp = nextSig(i);
+      if (isPunct(lp, "(")) {
+        size_t amp = nextSig(lp);
+        size_t target = nextSig(amp);
+        if (isPunct(amp, "&") && target < toks_.size() &&
+            toks_[target].kind == TokKind::Identifier &&
+            owned_.count(toks_[target].text))
+          explicitlyDropped_.insert(toks_[target].text);
+      }
+    }
     if (t.text == "cplus_move") {
       size_t lp = nextSig(i);
       if (isPunct(lp, "(")) {
@@ -540,7 +558,7 @@ private:
       const auto &vars = scopes_[p - 1].vars;
       for (size_t k = vars.size(); k > 0; --k) {
         const OwnedVar &v = vars[k - 1];
-        if (v.name == exclude)
+        if (v.name == exclude || explicitlyDropped_.count(v.name))
           continue;
         if (v.isDefer)
           out += v.deferText + "; ";
@@ -765,6 +783,7 @@ private:
   std::map<std::string, std::string> borrows_;
   std::set<std::string> moved_;
   std::set<std::string> movedOwners_;
+  std::set<std::string> explicitlyDropped_;
   size_t skipMoveArg_ = kNPos;
 
   std::vector<Scope> scopes_;
