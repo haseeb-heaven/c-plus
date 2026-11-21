@@ -1,8 +1,14 @@
 # C+ safety measurements
 
-Reproduce with `python3 tests/metrics/measure.py` and
-`python3 tests/core/redteam_100.py`. Machine-readable results are written to
-`tests/out/metrics/report.json`.
+Reproduce with `python3 tests/metrics/measure.py`,
+`python3 tests/core/redteam_100.py` and
+`python3 tests/core/brutal_memory_fuzz.py`. Machine-readable results are
+written to `tests/out/metrics/report.json`.
+
+Parallel-agent verification (one agent auditing, one authoring the brutal
+fuzzer, one running the fast suites) produced: all fast suites green, the
+brutal fuzzer's 82 initial mismatches reduced to 0 after fixes, and 16,944
+mass-fuzz plus 1,200 cross-TU programs passing.
 
 ## Axes the compiler is judged by
 
@@ -25,6 +31,15 @@ must-accept safe programs. Result: **110/110 with 0 mismatches**. The suite
 covers alias UAF, branch/loop/interprocedural UAF, realloc failure paths,
 destructor invalidation, invalid frees, bounds and libc overflows, nullability,
 uninitialized state, provenance, resource moves, threads and FFI.
+
+A second, larger adversarial suite, `tests/core/brutal_memory_fuzz.py`,
+generates **688 seeded programs** across 8 categories (UAF, double free,
+invalid free, overflow, null/uninitialized, provenance, ownership, threads)
+with 486 must-reject, 110 strict-only and 92 must-accept cases. Result:
+**688/688 with 0 mismatches**. It found and we fixed holes in constant-sized
+libc copies, nested struct-field frees, cross-thread frees of shared globals,
+stack-array borrows passed to threads, and a single-worker thread-race false
+positive.
 
 ## Notable gaps (honest)
 
