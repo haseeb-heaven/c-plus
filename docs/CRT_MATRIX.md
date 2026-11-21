@@ -1,90 +1,47 @@
-# CRT contract matrix (#22)
+# CRT matrix (Agent 2 / #22)
 
-> Evidence-based. "Safe" is never claimed for raw C; each row states the
-> protection class, boundary, and how it was verified.
+Evidence-based matrix for shipped scope. No full ISO C claim.
 
-## Legend
+| Function | Class | Header | Impl | Example | Unit | Fuzz | Notes |
+|---|---|---|---|---|---|---|---|
+| cplus_malloc | IMPLEMENTED | libc/install-include/cplus_libc.h | libc/src/stdlib/alloc.c | n/a (libc) | tests/libc/test_libc_basic.c | no | platform allocator backend, overflow checks |
+| cplus_calloc | IMPLEMENTED | cplus_libc.h | alloc.c | n/a | libc basic | no | overflow checked |
+| cplus_realloc | IMPLEMENTED | cplus_libc.h | alloc.c | n/a | libc basic | no | preserves old on failure by backend contract |
+| cplus_free | IMPLEMENTED | cplus_libc.h | alloc.c | n/a | libc basic | no | |
+| cplus_memcpy | IMPLEMENTED | cplus_libc.h | libc/src/string/memory.c | n/a | libc basic | no | not bounds-safe for unknown raw pointers |
+| cplus_memmove | IMPLEMENTED | cplus_libc.h | memory.c | n/a | libc basic | no | overlap-safe |
+| cplus_memset | IMPLEMENTED | cplus_libc.h | memory.c | n/a | libc basic | no | |
+| cplus_memcmp | IMPLEMENTED | cplus_libc.h | memory.c | n/a | libc basic | no | |
+| cplus_strlen/strcpy/strncpy/strcat/strncat/strcmp/strncmp | IMPLEMENTED | cplus_libc.h | libc/src/string/string.c | n/a | libc basic | no | raw C bounds still need compiler proof |
+| cplus_memcpy_s | CHECKED-OPTIONAL | stdlib/safe/safe_memory.h | Intel safestringlib | examples/crt/memcpy_s.c | tests/crt/unit/test_memcpy_s.c | fuzz_memory.c smoke | pinned MIT upstream |
+| cplus_memmove_s | CHECKED-OPTIONAL | safe_memory.h | Intel safestringlib | examples/crt/memmove_s.c | unit | fuzz_memory.c smoke | |
+| cplus_memset_s | CHECKED-OPTIONAL | safe_memory.h | Intel safestringlib | examples/crt/memset_s.c | unit | fuzz_memory.c smoke | |
+| cplus_memcmp_s | CHECKED-OPTIONAL | safe_memory.h | Intel safestringlib | examples/crt/memcmp_s.c | unit | fuzz_memory.c smoke | |
+| cplus_memzero_s | CHECKED-OPTIONAL | safe_memory.h | Intel safestringlib | examples/crt/memzero_s.c | unit | fuzz_memory.c smoke | |
+| cplus_strcpy_s | CHECKED-OPTIONAL | stdlib/safe/safe_string.h | Intel safestringlib | examples/crt/strcpy_s.c | unit | fuzz_strings.c smoke | |
+| cplus_strncpy_s | CHECKED-OPTIONAL | safe_string.h | Intel safestringlib | examples/crt/strncpy_s.c | unit | fuzz_strings.c smoke | |
+| cplus_strcat_s | CHECKED-OPTIONAL | safe_string.h | Intel safestringlib | examples/crt/strcat_s.c | unit | fuzz_strings.c smoke | |
+| cplus_strncat_s | CHECKED-OPTIONAL | safe_string.h | Intel safestringlib | examples/crt/strncat_s.c | unit | fuzz_strings.c smoke | |
+| cplus_strcmp_s | CHECKED-OPTIONAL | safe_string.h | Intel safestringlib | examples/crt/strcmp_s.c | unit | fuzz_strings.c smoke | |
+| cplus_strnlen_s | CHECKED-OPTIONAL | safe_string.h | Intel safestringlib | examples/crt/strnlen_s.c | unit | fuzz_strings.c smoke | |
+| malloc_s/calloc_s/realloc_s/free_s | C+ EXTENSION (not MS/Apple CRT) | stdlib/safe/safe_alloc.h | stdlib/safe/src/safe_alloc.c | examples/crt/*alloc*_s.c | unit | fuzz_allocator.c smoke | explicit error codes |
+| cplus_fopen_s/fclose_s | CHECKED-OPTIONAL adapter | stdlib/safe/safe_io.h | stdlib/safe/src/safe_io.c | examples/crt/fopen_s.c fclose_s.c | unit | fuzz_stdio.c smoke | platform-backed |
+| cplus_fread_s/fwrite_s | CHECKED-OPTIONAL adapter | safe_io.h | safe_io.c | examples | unit | fuzz_stdio.c smoke | bounds-checked count |
+| cplus_snprintf_s/vsnprintf_s/sprintf_s/vsprintf_s | CHECKED-OPTIONAL adapter | stdlib/safe/safe_format.h | stdlib/safe/src/safe_format.c | examples | unit | fuzz_format.c smoke | bounded; not full Annex K parity |
+| cplus_printf_s/fprintf_s/scanf_s/fscanf_s | adapter | safe_format.h | safe_format.c | examples | unit | no | platform-backed; scanf unsafe with unbounded %s |
 
-- **SAFE+ACCEPTED**: valid case accepted by native libc and C+ build; behavior matches contract.
-- **UNSAFE+REJECTED**: invalid case rejected by checked API / runtime constraint / platform mechanism with documented error.
-- **EXPLICIT UNSAFE BOUNDARY**: cannot be made safe without compiler proof or is undefined in C; not executed as UB.
-- **KNOWN BUG/NOT YET SUPPORTED**: gap recorded honestly.
-
-## Native capability probe (this host)
-
-Generated via `tests/crt/native_safety_probe.c` and `tests/crt/probe_native.c`:
-
-| capability | observed (macOS arm64, Apple clang 16) |
-|---|---|
-| _FORTIFY_SOURCE | 2 |
-| __builtin_object_size | yes |
-| __builtin_dynamic_object_size | yes |
-| Annex K __STDC_LIB_EXT1__ | none |
-| ASan compile feature | no (feature macro in normal build) |
-| UBSan compile feature | no |
-| TSan compile feature | no |
-| bounds_safety | no |
-| Apple libc | yes |
-| UCRT | no |
-| glibc/musl | no/no |
-
-ASan runtime on this host is unusable for the preloaded C+ runtime environment (`CHECK failed: sanitizer_malloc_mac.inc` / preloading issue recorded in prior runs); treat ASan as **KNOWN BUG/NOT YET SUPPORTED on this host** and require Linux CI.
-
-## API matrix
-
-| API | Contract (owner/extent/lifetime/error) | Safe+Accepted evidence | Unsafe+Rejected / boundary | Class | Notes |
-|---|---|---|---|---|---|
-| `malloc` | returns owned object or NULL; owner must be freed once | `alloc.c`, `adversarial_defined.c` | overflow/oom -> NULL; double-free/UAF/alias invalidation are UB | ACCEPTED + EXPLICIT UNSAFE BOUNDARY | no alias provenance proof |
-| `calloc` | same as malloc; zeroed; count*size overflow must not allocate wrong size | `alloc.c`, `test_safe_alloc.c` | overflow returns NULL/ENOMEM (`calloc_s`) | ACCEPTED/REJECTED | some impls may not detect all overflows; `calloc_s` checks |
-| `realloc` | on success new owner, old invalid; on failure old owner preserved | `alloc.c`, `contract_violations.c`, `test_safe_alloc.c` | failure preserves owner; zero-size semantics platform-defined | ACCEPTED + boundary | `realloc_s` preserves owner |
-| `free` | frees valid owned heap pointer or NULL | `alloc.c` | double free/UAF/invalid pointer UB | EXPLICIT UNSAFE BOUNDARY | `free_s` nulls owner location only |
-| `memcpy` | src/dst valid, non-overlap, extents valid | `memory_ops.c` | overlap UB; size>dmax rejected by `cplus_memcpy_s` | ACCEPTED + REJECTED/BOUNDARY | checked variant uses Intel safestringlib |
-| `memmove` | allows overlap, valid extents | `memory_ops.c`, `adversarial_defined.c` | invalid extents rejected by `memmove_s` | ACCEPTED/REJECTED | |
-| `memset` | valid dst extent | `memset_ops.c`, `test_safe_memory.c` | n>dmax rejected by `memset_s` | ACCEPTED/REJECTED | |
-| `memcmp_s` | valid extents, diff out | `test_safe_memory.c` | invalid args error | ACCEPTED/REJECTED | |
-| `memzero_s` | valid dst extent | `test_safe_memory.c` | invalid args error | ACCEPTED/REJECTED | |
-| `strcpy` | dst has enough capacity incl NUL; src NUL-terminated | `string_ops.c` | insufficient capacity is UB for raw strcpy | EXPLICIT UNSAFE BOUNDARY | use `strcpy_s` or proven bounds |
-| `strncpy` | bounded copy; may not NUL-terminate | `strncpy_ops.c` | truncation/no-NUL pitfall | ACCEPTED + boundary | |
-| `strcat` | dst has capacity for existing+src+NUL | `string_ops.c` | overflow UB raw | EXPLICIT UNSAFE BOUNDARY | checked `strcat_s` |
-| `strlen`/`strnlen_s` | str readable until NUL/smax | `string_ops.c`, `test_safe_string.c` | NULL -> 0 for `strnlen_s` | ACCEPTED/REJECTED | |
-| `printf/snprintf/fprintf` | format valid; output buffer extent valid | `printf_ops.c`, `test_safe_format.c` | truncation reported by snprintf; format mismatch UB in raw varargs misuse | ACCEPTED + boundary | wrappers do not parse format |
-| `scanf/fscanf` | pointers valid for conversions; bounded `%Ns` | `format_ops.c`, `test_safe_format.c` | invalid conversion returns 0/EOF; unbounded `%s` unsafe | ACCEPTED + EXPLICIT UNSAFE BOUNDARY | |
-| `fopen/fclose/fread/fwrite` | valid path/mode; FILE* lifetime unique/valid | `stdio_ops.c`, `test_safe_io.c`, `contract_violations.c` | missing file NULL+errno; invalid handle UB | ACCEPTED + boundary | no double-close proof in raw C |
-
-## Checked extension APIs (C+ optional, not standard CRT)
-
-| API | Contract | Evidence | Error class |
-|---|---|---|---|
-| `malloc_s` | out!=NULL, bytes>0 normalized, returns CPLUS_SAFE_* | `test_safe_alloc.c`, examples | EINVAL/ENOMEM |
-| `calloc_s` | overflow checked, zeroed | `test_safe_alloc.c` | EOVERFLOW/ENOMEM |
-| `realloc_s` | owner preserved on failure | `test_safe_alloc.c` | ENOMEM/EINVAL |
-| `free_s` | nulls owner location, no-op on NULL | `test_safe_alloc.c` | boundary: aliases remain invalid |
-
-## Adversarial/UB boundaries (NOT executed)
-
-These are **EXPLICIT UNSAFE BOUNDARY** unless Agent 1 proves them in safe mode:
-
-- Double free / UAF / alias-after-free
-- Out-of-bounds write/read through raw pointer
-- Overlapping memcpy
-- `fclose` twice / use after close
-- Unbounded `%s` in scanf into fixed buffer
-- Writing through invalidated realloc old pointer
-- Data races on FILE*/objects without synchronization
-
-## Test commands
+## Verification commands (executed on this host)
 
 ```sh
-sh tests/crt/run_crt_tests.sh          # plain C CRT conformance corpus
-sh tests/crt/run_safecrt_tests.sh      # safe CRT wrapper unit tests
-sh build/safe/build_safecrt.sh         # build libcplus_safecrt.a
-# examples
-for f in examples/crt/*.c; do clang -Istdlib/safe -Ithird_party/intel-safestringlib/include "$f" build/safe/libcplus_safecrt.a -o /tmp/ex; /tmp/ex; done
+sh tests/crt/run_all_crt.sh          # CRT corpus 10/0, safecrt 6/0, examples 26/0, fuzz smoke 4/0 (legacy script) 
+sh tests/crt/unit/run_unit_tests.sh  # 26/26
+sh tests/crt/fuzz/run_fuzz_smoke.sh  # 5/5
+sh tests/libc/run_libc_tests.sh      # 1/1
 ```
 
-## Known gaps
+## Explicit gaps
 
-- ASan/libFuzzer unavailable/broken on this macOS host for this runtime layout; Linux CI required for #23.
-- Intel safestringlib subset is vendored but not all Annex K APIs exposed.
-- `scanf_s`/format APIs are wrappers; they do not provide full Annex K constraint semantics on all platforms.
-- No compiler proof for alias/UAF/extents; Agent 1 owns enforcement.
+- Not full ISO C coverage.
+- No host CRT replacement.
+- libFuzzer/ASan/UBSan real runs need Linux CI.
+- Raw C unknown-capacity/provenance/UAF cannot be fully fixed by libc alone.
