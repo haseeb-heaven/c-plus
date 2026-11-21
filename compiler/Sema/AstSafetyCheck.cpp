@@ -334,7 +334,7 @@ public:
     PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
     Diag d;
     d.level = DiagLevel::Warning;
-    d.message = message;
+    d.message = "[" + diagnosticCategory(message) + "] " + message;
     d.file = filename_;
     if (ploc.isValid()) {
       d.line = ploc.getLine();
@@ -497,6 +497,20 @@ public:
       if (baseName == "strcpy" && call->getNumArgs() >= 2) {
         checkStringCopy(call);
       }
+      if (baseName == "cplus_strcpy" && call->getNumArgs() >= 3) {
+        const Expr *cap = call->getArg(1)->IgnoreParenImpCasts();
+        const auto *lit = dyn_cast<StringLiteral>(
+            call->getArg(2)->IgnoreParenImpCasts());
+        Expr::EvalResult r;
+        if (lit && cap->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+          unsigned long long capacity = r.Val.getInt().getZExtValue();
+          if (lit->getLength() + 1 > capacity)
+            report(call->getBeginLoc(),
+                   "checked string copy needs " +
+                       std::to_string(lit->getLength() + 1) +
+                       " bytes but capacity is " + std::to_string(capacity));
+        }
+      }
       // User-function effect summaries: a function that frees its parameter
       // transfers that obligation to the call site.
       auto uit = userFrees_.find(name);
@@ -560,11 +574,32 @@ public:
   }
 
 private:
+  static std::string diagnosticCategory(const std::string &message) {
+    if (message.find("double free") != std::string::npos)
+      return "CPLUS-SAFE-FREE";
+    if (message.find("use-after-free") != std::string::npos ||
+        message.find("dereference of released") != std::string::npos)
+      return "CPLUS-SAFE-LIFETIME";
+    if (message.find("realloc") != std::string::npos)
+      return "CPLUS-SAFE-REALLOC";
+    if (message.find("borrow") != std::string::npos ||
+        message.find("move") != std::string::npos)
+      return "CPLUS-SAFE-BORROW";
+    if (message.find("copy of") != std::string::npos ||
+        message.find("exceeds destination") != std::string::npos ||
+        message.find("array index") != std::string::npos ||
+        message.find("pointer arithmetic") != std::string::npos)
+      return "CPLUS-SAFE-BOUNDS";
+    if (message.find("null pointer") != std::string::npos)
+      return "CPLUS-SAFE-LIFETIME";
+    return "CPLUS-SAFE-FFI";
+  }
+
   void report(SourceLocation loc, const std::string &message) {
     PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
     Diag d;
     d.level = DiagLevel::Error;
-    d.message = message;
+    d.message = "[" + diagnosticCategory(message) + "] " + message;
     d.file = filename_;
     if (ploc.isValid()) {
       d.line = ploc.getLine();

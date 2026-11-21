@@ -128,6 +128,23 @@ else
   bad multi_tu_hp "multi-TU .hp class build/link/run failed"
 fi
 
+build_run malloc_valid "$ROOT/tests/core/positive/malloc_valid.c"
+build_run realloc_success "$ROOT/tests/core/positive/realloc_success.c"
+build_run memcpy_valid "$ROOT/tests/core/positive/memcpy_valid.c"
+build_run strcpy_valid "$ROOT/tests/core/positive/strcpy_valid.c"
+build_run strcpy_s_valid "$ROOT/tests/core/positive/strcpy_s_valid.c"
+build_run raii_early_return "$ROOT/tests/core/positive/raii_early_return.cp"
+
+expect_reject malloc_alias_uaf "$ROOT/tests/safety/malloc_alias_uaf.c"
+expect_reject malloc_double_free "$ROOT/tests/safety/malloc_double_free.c"
+expect_reject realloc_failure "$ROOT/tests/safety/realloc_failure.c"
+expect_reject memcpy_overflow "$ROOT/tests/safety/memcpy_overflow.c"
+expect_reject strcpy_overflow "$ROOT/tests/safety/strcpy_overflow.c"
+expect_reject strcpy_s_invalid_size "$ROOT/tests/safety/strcpy_s_invalid_size.c"
+expect_reject borrow_escape "$ROOT/tests/safety/borrow_escape.c"
+expect_reject borrow_mut_conflict "$ROOT/tests/safety/borrow_mut_conflict.c"
+expect_reject thread_invalid_sharing "$ROOT/tests/safety/thread_invalid_sharing.c"
+
 echo "core safety: ownership warnings"
 build_expect_stderr moved_from_warning "$ROOT/tests/safety/moved_from_warning.cp" "use of moved-from"
 build_expect_stderr double_move_warning "$ROOT/tests/safety/double_move_warning.cp" "moved more than once"
@@ -152,7 +169,7 @@ expect_reject null_deref "$ROOT/tests/safety/null_deref.c"
 echo "core safety: traps"
 expect_reject double_release "$ROOT/tests/safety/double_release.cp"
 expect_trap uaf_check "$ROOT/tests/safety/uaf_check.cp" 105
-expect_trap string_overflow "$ROOT/tests/safety/string_overflow.c" 101
+expect_reject string_overflow "$ROOT/tests/safety/string_overflow.c"
 expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 134
 expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 134
 expect_trap strnlen_null "$ROOT/tests/safety/strnlen_null.c" 134

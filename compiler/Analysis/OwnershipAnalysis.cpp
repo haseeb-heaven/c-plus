@@ -218,32 +218,65 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
 namespace cplus {
 FunctionEffect libcEffect(llvm::StringRef name) {
   FunctionEffect e;
-  if (name == "malloc" || name == "calloc") {
+  if (name == "malloc" || name == "calloc" || name == "malloc_s" ||
+      name == "calloc_s") {
     e.allocates = true;
     e.returnsOwned = true;
-  } else if (name == "realloc") {
+    e.mayFail = true;
+    e.category = "CPLUS-SAFE-ALLOC";
+  } else if (name == "realloc" || name == "realloc_s") {
     e.allocates = true;
     e.returnsOwned = true;
-    e.frees = true; // only on success; see caller-side conservative handling
+    e.frees = true; // only on success; branch-sensitive handling is future work
     e.freedArg = 0;
-  } else if (name == "free" || name == "cplus_release") {
+    e.mayFail = true;
+    e.category = "CPLUS-SAFE-REALLOC";
+  } else if (name == "free" || name == "cplus_release" || name == "free_s") {
     e.frees = true;
     e.freedArg = 0;
-  } else if (name == "memcpy" || name == "memmove" || name == "strcpy" ||
-             name == "strcat" || name == "memset") {
+    e.nullableArg = true; // free(NULL) is defined
+    e.category = "CPLUS-SAFE-FREE";
+  } else if (name == "memcpy" || name == "memmove" || name == "memcpy_s" ||
+             name == "memmove_s" || name == "memset") {
     e.borrows = true;
     e.writes = true;
-  } else if (name == "strlen" || name == "strcmp" || name == "fputs") {
+    e.destArg = 0;
+    e.sizeArg = (name == "memcpy_s" || name == "memmove_s") ? 1 : -1;
+    e.checkedSize = e.sizeArg >= 0;
+    e.category = "CPLUS-SAFE-BOUNDS";
+  } else if (name == "strcpy" || name == "strcpy_s" ||
+             name == "strncpy" || name == "strncpy_s" ||
+             name == "strcat" || name == "strcat_s") {
     e.borrows = true;
-  } else if (name == "fopen") {
+    e.writes = true;
+    e.destArg = 0;
+    e.sizeArg = (name.find("_s") != std::string::npos ||
+                 name == "strncpy") ? 1 : -1;
+    e.checkedSize = e.sizeArg >= 0;
+    e.category = "CPLUS-SAFE-CRT";
+  } else if (name == "strlen" || name == "strnlen_s" || name == "strcmp") {
+    e.borrows = true;
+    e.category = "CPLUS-SAFE-CRT";
+  } else if (name == "fopen" || name == "fopen_s") {
     e.allocates = true;
     e.returnsOwned = true;
+    e.mayFail = true;
+    e.category = "CPLUS-SAFE-CRT";
   } else if (name == "fclose") {
     e.frees = true;
     e.freedArg = 0;
+    e.category = "CPLUS-SAFE-CRT";
   } else if (name == "fread" || name == "fwrite") {
     e.borrows = true;
     e.writes = true;
+    e.mayFail = true;
+    e.category = "CPLUS-SAFE-CRT";
+  } else if (name == "snprintf" || name == "sprintf_s" ||
+             name == "snprintf_s" || name == "scanf_s") {
+    e.writes = true;
+    e.checkedSize = name.starts_with("sn") || name.find("_s") != std::string::npos;
+    e.mayFail = true;
+    e.category = "CPLUS-SAFE-CRT";
   }
   return e;
 }

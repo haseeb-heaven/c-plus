@@ -51,3 +51,35 @@ This is **not** yet Rust-level safety; it is a specified, tested subset.
 | Xr0 | `cd306c23def6` | Apache-2.0 | effect-contract design reference |
 | Rust | system rustc | MIT/Apache-2.0 | semantics reference and benchmark baseline |
 | LLVM/Clang (installed) | Apple clang 16 | Apache-2.0 LLVM | AST/CFG/dataflow linked directly |
+
+## Standard libc / checked-function contract table (compiler recognition)
+
+| API | nullability | ownership | extents / effects | failure behavior | static diagnostic |
+| --- | --- | --- | --- | --- | --- |
+| `malloc`, `calloc` | arg n/a | returns owned allocation | size expression recorded where constant | may return NULL; errno unchanged | allocation effect summary; overflow delegated to libc |
+| `realloc` | arg may be NULL | returns owned; old alias invalid only on success | copies min(old,new) bytes | failure keeps original valid | `CPLUS-SAFE-REALLOC` warning; success/failure branch tracking pending |
+| `free`, `cplus_release` | NULL allowed | consumes owner | n/a | no return | `CPLUS-SAFE-FREE` on double free |
+| `memcpy`, `memmove` | non-NULL for n>0 | borrow only | dst extent + n; writes dst | native semantics | `CPLUS-SAFE-BOUNDS` on provable overflow |
+| `memset` | non-NULL | borrow only | dst extent + n; writes | native | `CPLUS-SAFE-BOUNDS` |
+| `strcpy`, `strncpy`, `strcat` | non-NULL | borrow only | dst capacity + literal/source length | native | `CPLUS-SAFE-CRT` on literal overflow |
+| `strlen` | non-NULL | read-only borrow | reads until NUL | native | `CPLUS-SAFE-CRT` |
+| `fopen` | path non-NULL | returns owned FILE* | n/a | may return NULL | `CPLUS-SAFE-CRT` effect summary |
+| `fclose` | non-NULL | consumes FILE* | n/a | native | `CPLUS-SAFE-CRT` |
+| `fread`, `fwrite` | non-NULL buffers | borrow; writes dest | count*size arithmetic | short reads/writes are native | `CPLUS-SAFE-CRT` unknown-size cases not claimed |
+| `strcpy_s`, `strncpy_s`, `strcat_s`, `memcpy_s`, `memmove_s`, `memset_s`, `strnlen_s`, `sprintf_s`, `snprintf_s`, `fopen_s` | platform-specific | borrow/own per native API | explicit capacity argument | native CRT semantics | `CPLUS-SAFE-CRT`; exact signature from Agent 2 capability layer |
+| `malloc_s`, `calloc_s`, `realloc_s`, `free_s` | proposed C+ names only | same model as ordinary calls | allocation size | native-like failure semantics | `CPLUS-SAFE-ALLOC/FREE/REALLOC`; **not** Microsoft/Apple APIs |
+
+Apple Bounds Safety (`__counted_by`, `__sized_by`, dynamic bounds and
+compiler-inserted checks) was studied from the public documentation and pinned
+swiftlang/llvm-project tree, but the installed Apple Clang 16 rejects
+`-fbounds-safety`. Copying `ptrcheck.h` alone is not enabled or claimed.
+Microsoft Secure CRT and Intel safestringlib are treated as checked-runtime
+references only; Agent 2 owns any library adaptation. Intel safestringlib
+(f4491915) is MIT; CORAL has no licence and was not copied.
+
+Structured diagnostic categories emitted by the Clang AST checker:
+`CPLUS-SAFE-ALLOC`, `CPLUS-SAFE-FREE`, `CPLUS-SAFE-REALLOC`,
+`CPLUS-SAFE-BOUNDS`, `CPLUS-SAFE-BORROW`, `CPLUS-SAFE-LIFETIME`,
+`CPLUS-SAFE-FFI`, `CPLUS-SAFE-CRT`. Each includes file, line, API reason and
+expected/inferred bounds where known. Logging remains opt-in and does not log
+buffer contents.

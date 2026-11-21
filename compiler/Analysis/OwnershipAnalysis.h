@@ -17,7 +17,13 @@ struct FunctionEffect {
   bool borrows = false;        ///< observes a pointer argument without taking ownership
   bool writes = false;         ///< writes through a pointer/size argument
   bool returnsOwned = false;   ///< return value transfers ownership
+  bool nullableArg = false;    ///< pointer argument may be NULL
+  bool checkedSize = false;    ///< has an explicit destination-capacity argument
+  bool mayFail = false;        ///< failure is reported in return value/errno
   int freedArg = -1;           ///< argument index freed, when known
+  int destArg = -1;            ///< destination buffer argument, when known
+  int sizeArg = -1;            ///< destination capacity argument, when known
+  const char *category = "CPLUS-SAFE-FFI"; ///< diagnostic category
 };
 
 /// Known libc effects. Unknown functions are NOT assumed safe.
