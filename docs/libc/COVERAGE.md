@@ -12,7 +12,7 @@ Tracks what is actually shipped/verified on `agent/modern-stdlib` (PR #17). **No
 | Adversarial mitigations | `tests/crt/adversarial/test_*.c` | 4 passed, 0 failed |
 | Fuzz smoke | `sh tests/crt/fuzz/run_fuzz_smoke.sh` | 4 passed, 0 failed |
 | Combined fuzz | `tests/crt/fuzz/fuzz_all_safe_apis.c`, `fuzz_all_exported.c` | 2000+1500 iterations, ok, no crash |
-| Libc tests | `sh tests/libc/run_libc_tests.sh` | 25 passed, 0 failed |
+| Libc tests | `sh tests/libc/run_libc_tests.sh` | 27 passed, 0 failed |
 | Libc install smoke | `sh tests/libc/install_smoke.sh` | ok |
 | CTL containers | `sh tests/ctl/run_ctl_tests.sh` | 7 passed, 0 failed (vector, string, deque, list, set, map, unordered_set) |
 | Libc coverage | `sh tests/libc/coverage_libc.sh` | all modules >=80% line; stdio 80%, stdio2 91.67%, others 97-100% |
@@ -46,3 +46,12 @@ Intel safestringlib-backed (MIT, pinned `f4491915cc682556ed64d4eb6a2461d8eed2eb0
 - Real libFuzzer/ASan/UBSan CI on Linux runners (workflow added; remote result unverified here).
 - Cross-platform ABI/SDK matrix and Agent 1 contract enforcement interop.
 - Raw C UB/provenance/unknown-capacity cannot be made safe by libc alone.
+
+## musl-derived functions (copied upstream, pinned 7813e91, MIT)
+
+`cplus_memccpy, cplus_stpcpy, cplus_stpncpy, cplus_strtok_r, cplus_strsep,`
+`cplus_memmem, cplus_strverscmp, cplus_strcasestr, cplus_strchrnul,`
+`cplus_div, cplus_ldiv, cplus_lldiv, cplus_llabs, cplus_atoll`
+— implemented in `libc/src/string/musl_extra.c` and `libc/src/stdlib/musl_stdlib_extra.c`,
+provenance in `libc/upstream/musl/PROVENANCE.md`, tests in
+`tests/libc/test_musl_extra.c` and `tests/libc/test_musl_stdlib_extra.c`.
