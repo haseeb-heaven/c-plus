@@ -20,7 +20,7 @@ Document any edits in git history; initial copy preserves upstream content.
 
 ## Additional copied (2026-11-22)
 
-- src/string/memccpy.c stpcpy.c stpncpy.c strtok_r.c strsep.c memmem.c
+- src/string/memccpy.c stpcpy.c stpncpy.c strtok_r.c strsep.c memmem.c strverscmp.c strcasestr.c strchrnul.c
 - Integrated as cplus_memccpy/cplus_stpcpy/cplus_stpncpy/cplus_strtok_r/cplus_strsep
   in libc/src/string/musl_extra.c (verbatim bodies renamed; strtok_r uses C+
   strspn/strcspn; logging added). Tests: tests/libc/test_musl_extra.c.

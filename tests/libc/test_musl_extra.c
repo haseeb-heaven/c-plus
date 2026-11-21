@@ -51,3 +51,28 @@ __attribute__((constructor)) static void run_memmem(void){
     assert(cplus_memmem(hay,17,"",0)==hay);
     assert(cplus_memmem("ab",2,"abc",3)==NULL);
 }
+/* additional: strverscmp / strcasestr / strchrnul */
+#include <assert.h>
+#include <string.h>
+int cplus_strverscmp(const char*,const char*);
+char *cplus_strcasestr(const char*,const char*);
+char *cplus_strchrnul(const char*,int);
+__attribute__((constructor)) static void run_extra2(void){
+    assert(cplus_strverscmp("a1","a2")<0);
+    assert(cplus_strverscmp("a2","a10")<0);
+    assert(cplus_strverscmp("a1","a1")==0);
+    assert(cplus_strverscmp("1.2","1.10")<0);
+    for(int i=0;i<10;i++) assert(cplus_strverscmp("x9","x10")<0);
+
+    const char *hay="Hello World";
+    assert(cplus_strcasestr(hay,"world")==hay+6);
+    assert(cplus_strcasestr(hay,"HELLO")==hay);
+    assert(cplus_strcasestr(hay,"zzz")==NULL);
+    for(int i=0;i<10;i++) assert(cplus_strcasestr(hay,"world")!=NULL);
+
+    const char *s="abcdef";
+    assert(cplus_strchrnul(s,'d')==s+3);
+    assert(cplus_strchrnul(s,'z')==s+6);
+    assert(cplus_strchrnul(s,0)==s+6);
+    for(int i=0;i<10;i++) assert(cplus_strchrnul(s,'c')==s+2);
+}

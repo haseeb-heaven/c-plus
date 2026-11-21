@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <limits.h>
+#include <ctype.h>
 #include <string.h>
 #include "../../log/log.h"
 
@@ -204,4 +205,60 @@ void *cplus_memmem(const void *h0, size_t k, const void *n0, size_t l)
     if (l==3) return threebyte_memmem(h, k, n);
     if (l==4) return fourbyte_memmem(h, k, n);
     return twoway_memmem(h, h+k, n, l);
+}
+
+/* musl: src/string/strverscmp.c (isdigit is libc; no logging change) */
+int cplus_strverscmp(const char *l0, const char *r0)
+{
+    cplus_libc_log("strverscmp", "enter");
+    const unsigned char *l = (const void *)l0;
+    const unsigned char *r = (const void *)r0;
+    size_t i, dp, j;
+    int z = 1;
+    for (dp=i=0; l[i]==r[i]; i++) {
+        int c = l[i];
+        if (!c) return 0;
+        if (!isdigit(c)) dp=i+1, z=1;
+        else if (c!='0') z=0;
+    }
+    if (l[dp]-'1'<9U && r[dp]-'1'<9U) {
+        for (j=i; isdigit(l[j]); j++)
+            if (!isdigit(r[j])) return 1;
+        if (isdigit(r[j])) return -1;
+    } else if (z && dp<i && (isdigit(l[i]) || isdigit(r[i]))) {
+        return (unsigned char)(l[i]-'0') - (unsigned char)(r[i]-'0');
+    }
+    return l[i] - r[i];
+}
+
+/* musl: src/string/strcasestr.c (strncasecmp -> cplus_strncasecmp) */
+int cplus_strncasecmp(const char *a, const char *b, size_t n);
+char *cplus_strcasestr(const char *h, const char *n)
+{
+    cplus_libc_log("strcasestr", "enter");
+    size_t l = strlen(n);
+    if (!l) return (char *)h;
+    for (; *h; h++) if (!cplus_strncasecmp(h, n, l)) return (char *)h;
+    return 0;
+}
+
+/* musl: src/string/strchrnul.c (renamed; weak_alias dropped) */
+char *cplus_strchrnul(const char *s, int c)
+{
+    cplus_libc_log("strchrnul", "enter");
+    c = (unsigned char)c;
+    if (!c) return (char *)s + strlen(s);
+#ifdef __GNUC__
+    {
+        typedef size_t __attribute__((__may_alias__)) word;
+        const word *w;
+        for (; (uintptr_t)s % ALIGN; s++)
+            if (!*s || *(unsigned char *)s == c) return (char *)s;
+        size_t k = ONES * c;
+        for (w = (void *)s; !HASZERO(*w) && !HASZERO(*w^k); w++);
+        s = (void *)w;
+    }
+#endif
+    for (; *s && *(unsigned char *)s != c; s++);
+    return (char *)s;
 }
