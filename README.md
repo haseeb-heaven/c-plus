@@ -32,17 +32,6 @@ C+ is an **experimental** compiler extension for C. The goal is to make existing
 
 **How to follow / contribute:** Read an [open issue](https://github.com/haseeb-heaven/c-plus/issues), reproduce the problem or run the listed test, follow [CONTRIBUTING.md](CONTRIBUTING.md), and open a focused PR against [`develop`](https://github.com/haseeb-heaven/c-plus/tree/develop) referencing the issue (`Refs #N`; use `Fixes #N` only when all acceptance criteria are met). Agents work independently: compiler/runtime in [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16), libraries in [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17). Review tests and CI before merging; `main` publishes validated `develop` snapshots. **No automatic merges.**
 
-C+ is ordinary C with a deliberately small set of additions: deterministic
-resource cleanup, lightweight struct-based classes and managed allocations.
-Use `.cp` and `.hp` for modern C+ sources and headers; `.c` and `.h` keep
-working exactly as before.
-
-It is **a feature layer over an existing open-source C toolchain**, not a new
-language runtime and not a rewrite of C. The `c+` driver lowers the C+
-additions to plain C, then hands that C to the host Clang driver for parsing,
-type checking, optimisation, code generation and linking. Programs are normal
-native executables and interoperate with libc, POSIX and any C library.
-
 ```text
 .c source (C + a few C+ constructs)
         |
@@ -80,7 +69,7 @@ Compile and run a program:
 | `c+ run file.c [-o out]` | build, then run it |
 | `c+ check file.c` | lower and type-check without linking |
 | `c+ test [pattern]` | run the automated test suite |
-| `c+ demos` | build and check all six demos |
+| `c+ demos` | build and check included demos |
 | `c+ bench [pattern]` | compare safe C+, legacy C+ and plain C |
 
 Options: `--release` (`-O2`, safety checks remain on), `--debug` (default),
@@ -88,116 +77,135 @@ Options: `--release` (`-O2`, safety checks remain on), `--debug` (default),
 the lowered C), `--keep-temp`, `-Werror`, `--verbose`, and `--` to pass extra
 arguments to the C compiler.
 
-## What C+ adds
+## Normal C vs C+: side-by-side
 
-A resource has a destructor and is destroyed deterministically when it leaves
-scope — including on `return`, `break` and `continue`:
+**C+ is still C.** The goal is familiar source code, struct-backed methods, automatic cleanup, stronger static ownership and bounds checks, the **native C ABI**, and Clang-optimized executables. The examples distinguish **existing syntax** from **future safety guarantees**. The full safety contract is tracked in [#1](https://github.com/haseeb-heaven/c-plus/issues/1).
 
-```c
-#include <stdio.h>
-#include "cplus/cplus.h"
+### 1. Memory management — manual free vs managed ownership
 
-resource struct File {
+<table><tr><th width="50%">Normal C</th><th width="50%">C+ — implemented managed syntax</th></tr><tr><td><pre lang="c"><code>int *numbers = malloc(100 * sizeof(int));
+if (!numbers) return 1;
+numbers[0] = 42;
+free(numbers);</code></pre></td><td><pre lang="c"><code>managed int *numbers =
+    cplus_new_array(int, 100);
+numbers[0] = 42;
+/* Auto-cleanup at scope exit. */</code></pre></td></tr></table>
+
+
+C+ inserts cleanup on supported scope exits. **Full lifetime safety is not yet guaranteed**, especially for escaped aliases and raw pointers.
+
+### 2. RAII — manual file closing vs guaranteed cleanup
+
+<table><tr><th width="50%">Normal C</th><th width="50%">C+ — implemented RAII subset</th></tr><tr><td><pre lang="c"><code>int save(void) {
+    FILE *f = fopen("log.txt", "w");
+    if (!f) return -1;
+    if (fprintf(f, "Hello") &lt; 0) {
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+    return 0;
+}</code></pre></td><td><pre lang="c"><code>resource struct File {
     FILE *handle;
 };
-
-void File_drop(File *self) {
-    if (self->handle != NULL) {
-        fclose(self->handle);
-        self->handle = NULL;
-    }
+void File_drop(File *f) {
+    if (f-&gt;handle) fclose(f-&gt;handle);
 }
+int save(void) {
+    File f = {fopen("log.txt", "w")};
+    if (!f.handle) return -1;
+    if (fprintf(f.handle, "Hello") &lt; 0)
+        return -1;
+    return 0; /* automatically closes */
+}</code></pre></td></tr></table>
 
-File File_open(const char *path) {
-    File f;
-    f.handle = fopen(path, "w");
-    return f;                  /* ownership moves to the caller */
-}
 
-int main(void) {
-    File log = File_open("app.log");   /* closed at scope exit */
-    fprintf(log.handle, "hello\n");
-    return 0;
-}
-```
+The compiler generates destructor calls on supported exits, including early returns. Exactly-once cleanup across **all** complex control flow remains under verification.
 
-A class is a struct plus functions; `p.m(x)` and `p->m(x)` are sugar for
-`T_m(&p, x)` and `T_m(p, x)`. Constructors and a `drop` destructor are
-supported and integrate with RAII:
+### 3. Classes — keep the C struct model
 
-```c
-class Counter {
+<table><tr><th width="50%">Normal C</th><th width="50%">C+ — implemented class syntax</th></tr><tr><td><pre lang="c"><code>typedef struct {
     int value;
-
-    void add(int n) { self->value += n; }
-
-    int get(void) { return self->value; }
-};
-
-int main(void) {
-    Counter c = {0};
-    c.add(5);
-    printf("%d\n", c.get());
+} Counter;
+void Counter_add(Counter *c, int n) {
+    c-&gt;value += n;
 }
+Counter c = {0};
+Counter_add(&amp;c, 5);</code></pre></td><td><pre lang="c"><code>class Counter {
+    int value;
+    void add(int n) {
+        this-&gt;value += n;
+    }
+};
+Counter c = {0};
+c.add(5);</code></pre></td></tr></table>
 
-/* With a constructor and destructor:
- * class Point {
- *     Point(int a, int b) { self->x = a; self->y = b; }
- *     void drop(void) { ... }
- * };
- * Point p = Point(1, 2);   // Point_ctor(1, 2), auto Point_drop(&p)
- */
+
+C+ classes lower to **structs and functions**; they do not require the C++ object model, inheritance or virtual dispatch. Use `this->`, not `self->`. Multi-file header linkage is tracked in [#4](https://github.com/haseeb-heaven/c-plus/issues/4).
+
+### 4. Array bounds — similar source, stronger compiler checks
+
+<table><tr><th width="50%">Normal C</th><th width="50%">C+ — bounds-safety target</th></tr><tr><td><pre lang="c"><code>int values[3] = {10, 20, 30};
+int index = get_index();
+printf("%d", values[index]);
+/* Invalid index: undefined behavior. */</code></pre></td><td><pre lang="c"><code>int values[3] = {10, 20, 30};
+int index = get_index();
+print(values[index]);
+/* Goal: reject provably bad indices;
+   check uncertain indices if bounded. */</code></pre></td></tr></table>
+
+
+Current C+ provides **partial** static checks and sanitizer instrumentation. Apple-style counted/sized pointer contracts are an **integration target**, not full existing protection. [Apple Bounds Safety](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html).
+
+### 5. Borrow checking — reject dangling aliases
+
+<table><tr><th width="50%">Normal C</th><th width="50%">C+ — intended diagnostic, NOT guaranteed today</th></tr><tr><td><pre lang="c"><code>int *p = malloc(sizeof(int));
+if (!p) return 1;
+int *q = p;
+free(p);
+*q = 100; /* use-after-free */</code></pre></td><td><pre lang="c"><code>managed int *p = cplus_new(int);
+int *q = p;  /* borrowed alias */
+cplus_release(p);
+*q = 100;
+/* TARGET COMPILE ERROR:
+   q may point to freed memory. */</code></pre></td></tr></table>
+
+
+This is intentionally invalid code. A complete ownership checker should reject the dangling alias by following moves, borrows, lifetimes, escapes and calls. **Current C+ does not catch every UAF**. [Cake](https://github.com/thradams/cake) provides relevant static ownership design ideas.
+
+### 6. Native speed — existing compiler and C ecosystem
+
+```text
+Existing C (.c/.h)      Modern C+ (.cp/.hp)
+         \                    /
+           C+ safety / lowering
+           - classes -> C functions
+           - RAII cleanup
+           - ownership + bounds analysis
+                     |
+                 Clang/LLVM
+            optimize + generate code
+                     |
+              native executable
+              libc + C libraries
 ```
 
-Fixed arrays carry a compile-time length; allocations made through the C+
-allocator carry a tracked length too. `auto` infers types from the
-initialiser:
+C+ should **not** reinvent libc, memory-copy functions or native optimizers. Compiler/runtime safety checks may still add overhead; [benchmarks](benchmarks/) must compare equivalent C and C+ workloads.
 
-```c
-int values[] = {10, 30, 50};
-auto total = 0;
-for (auto i = 0; i < values.len; i++)
-    total += values[i];   /* values.len is a literal 3 */
-```
+### Current capability vs goal
 
-```c
-int *heap = (int *)cplus_alloc(sizeof(int) * 3);
-printf("%zu\n", heap.len);   /* 3, folded from sizeof(int) * 3 */
-```
+| Capability | Today | Target |
+| --- | --- | --- |
+| C compatibility and native C ABI | Supported subset; `--legacy-c` mode | Broad compatible C source and explicit unsafe FFI |
+| Lightweight struct-based classes | Implemented subset | Robust, multi-TU lowering |
+| Managed memory and RAII | Implemented subset | Sound ownership and exactly-once cleanup |
+| Borrow/lifetime checking | Partial | Flow-sensitive, interprocedural safety |
+| Bounds checking | Partial + sanitizers | Apple-style bounds for supported pointer types |
+| Use-after-free and data-race protection | Incomplete | Defined, enforced safe subset |
+| Native speed | Clang backend; measured overhead | Competitive, reproducibly benchmarked code |
+| C → modern C+ conversion | Planned | Optional Clang AST-based modernizer |
 
-Modern, format-free I/O is built in:
-
-```c
-int n;
-char name[32];
-scan(n, name);              /* no format string, no & */
-print("n=", n, "name=", name);   /* n= 42 name= Ada */
-```
-
-`print` dispatches by C type; `scan` takes lvalues directly and bounds string
-reads. Classes can be created with `auto state = (State){0};`.
-
-Out-of-bounds accesses that can be proven wrong at compile time are errors:
-both `values[10]` and `for (i = 0; i < 5; i++) values[i]` fail to compile in
-safe mode. Indices only known at run time are checked by UBSan.
-
-Default arguments and range-based loops are also supported:
-
-```c
-int *get_data(size_t size = 0);   /* get_data() -> get_data(0) */
-for (auto v : values) { ... }      /* counted loop over values.len */
-```
-
-Managed memory is released at scope exit:
-
-```c
-managed Buffer *b = cplus_new(Buffer);
-b->size = 1024;                /* no free() needed */
-```
-
-Ordinary `.c` files need no changes and compile unchanged. See
-[`docs/LANGUAGE.md`](docs/LANGUAGE.md) for the full syntax, and the `demos/`
-directory for complete programs.
+See [STATUS](docs/STATUS.md) and [LIMITATIONS](docs/LIMITATIONS.md) before relying on a safety claim. [#18](https://github.com/haseeb-heaven/c-plus/issues/18) tracks automatic migration of legacy C into modern C+.
 
 ## Standard library
 
@@ -233,7 +241,7 @@ still required for the full specification is tracked in
 ## Verification
 
 ```sh
-./tests/run_tests.sh      # 24 positive, compile-fail and runtime-fail tests
+./tests/run_tests.sh      # compiler positive, negative and runtime-fail tests
 ./demos/run_demos.sh      # sixteen demos
 ./benchmarks/run_bench.sh # reproducible benchmark table
 ```
@@ -248,7 +256,7 @@ own machine for current numbers.
 - `compiler/Sema/` — C+ lexer, syntax lowering and cleanup insertion
 - `compiler/Driver/` — compilation pipeline and backend invocation
 - `runtime/` — small C runtime for managed memory and primitives
-- `include/cplus/` — stable C ABI used by generated code
+- `runtime/include/cplus/` — stable C ABI used by generated code
 - `tests/`, `demos/`, `benchmarks/` — executable evidence
 
 ## Examples
