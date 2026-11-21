@@ -4,6 +4,8 @@
 
 > **Cake-style static ownership + C++-style deterministic RAII + Apple-style bounds enforcement + Clang optimization, while retaining existing C source compatibility and the native C ABI.**
 
+> **P0 non-negotiable safety target (not yet achieved):** In C+ safe mode, accepted code in a clearly specified **safe subset** must meet Rust-comparable compile-time ownership, borrow/lifetime and concurrency safety. Unproven memory operations must **fail closed** or be explicitly marked unsafe/FFI; sanitizer warnings/traps alone are not Rust-level proof. Dynamic bounds checks are permitted, as in Rust. Unrestricted legacy C remains a separate compatibility/unsafe mode. Native C ABI does not imply all raw C pointer operations can be safe. See [#1](https://github.com/haseeb-heaven/c-plus/issues/1) and [ROADMAP](docs/ROADMAP.md).
+
 C+ is an **experimental** compiler extension for C. The goal is to make existing C projects easier to maintain and progressively safer: lightweight struct-backed classes, reliable automatic cleanup, ownership/borrowing, checked memory operations and efficient native code. Standard libraries wrap **existing** libc/platform/C libraries; C+ does not replace libc, glibc, Clang, or the C ABI. Real C++ source support is a separate, future frontend concern—not a current compatibility claim.
 
 **This is the design target, not a claim that full memory safety has been achieved.** The current safe subset, verified functionality, unsupported operations and performance costs are documented in [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md) and [the core-safety issue](https://github.com/haseeb-heaven/c-plus/issues/1). Ordinary legacy C can remain usable in compatibility mode, which is **not** memory-safe by default.
