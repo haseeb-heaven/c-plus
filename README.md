@@ -1,318 +1,177 @@
 # C+
 
-## Goal: modern, safer C without abandoning C
+**Modern C. Rust-grade safety by design. C ABI. Native performance.**
 
-> **Cake-style static ownership + C++-style deterministic RAII + Apple-style bounds enforcement + Clang optimization, while retaining existing C source compatibility and the native C ABI.**
+> **Goal:** extend familiar C with **Rust-like compile-time ownership and borrowing**, **C++-style deterministic RAII**, and **optional modern syntax** such as lightweight classes, String and Vector—without requiring C++ inheritance, a garbage collector or a replacement libc.
 
-C+ is an **experimental** compiler extension for C. The goal is to make existing C projects easier to maintain and progressively safer: lightweight struct-backed classes, reliable automatic cleanup, ownership/borrowing, checked memory operations and efficient native code. Standard libraries wrap **existing** libc/platform/C libraries; C+ does not replace libc, glibc, Clang, or the C ABI. Real C++ source support is a separate, future frontend concern—not a current compatibility claim.
+**Status: experimental.** The full Rust-grade safe-subset guarantee is **not implemented or independently verified yet**. This README distinguishes the desired architecture from the compiler's current behavior. See [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md) and the [roadmap](docs/ROADMAP.md).
 
-**This is the design target, not a claim that full memory safety has been achieved.** The current safe subset, verified functionality, unsupported operations and performance costs are documented in [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md) and [the core-safety issue](https://github.com/haseeb-heaven/c-plus/issues/1). Ordinary legacy C can remain usable in compatibility mode, which is **not** memory-safe by default.
+## What C+ ships
 
-### Proven foundations to reuse
+**C+ is one toolchain with two deliverables:**
 
-| Capability | Project / source | C+ integration goal |
-| --- | --- | --- |
-| Ownership, borrowed views, nullability | [Cake](https://github.com/thradams/cake) | Flow-sensitive static ownership using Clang AST/CFG |
-| Compiler, native optimization and diagnostics | [LLVM/Clang](https://github.com/llvm/llvm-project) | Reuse the existing C toolchain rather than reinvent it |
-| Checked-pointer design and C migration | [Checked C + 3C](https://github.com/checkedc/checkedc-clang) | Gradual checked-pointer/migration research |
-| Bounds-safe C | [Apple Bounds Safety Clang](https://github.com/swiftlang/llvm-project) · [documentation](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html) | Integrate supported `-fbounds-safety`/pointer annotations; do not assume every host Clang supports them |
-| Deterministic cleanup and RAII | [Cforall](https://github.com/cforall/cforall) · Clang/C++ semantics | Exactly-once resource cleanup without a mandatory GC |
-| Temporal-safety reference | [Fil-C](https://github.com/pizlonator/fil-c) | Study strong UAF protection and runtime/ABI tradeoffs; not a drop-in no-GC solution |
-| Native C memory and string operations | [libc / Microsoft Secure CRT](https://learn.microsoft.com/en-us/cpp/c-runtime-library/security-features-in-the-crt) | Reuse platform libraries, keep the compiler-required runtime minimal |
+1. **The C+ safety compiler (Agent 1):** compile-time ownership, borrowing, alias and lifetime validation; RAII; fail-closed safe mode; Clang/LLVM optimization; unchanged ordinary C syntax.
+2. **The C+ hardened standard library (Agent 2):** compiled and installable C standard-library implementations (initially allocation, memory, strings and I/O), compatible public headers, selected checked `*_s` APIs, machine-readable compiler contracts, opt-in logging, example programs, unit tests, fuzz targets and SDK packaging. Reuse appropriately licensed upstream implementations and preserve C ABI/observable C behavior.
 
-### Two library workstreams — not three, and not a new libc
+The **bundled library is required as a project deliverable**, not merely wrappers around platform libc. Not all ISO C library functions or platforms are implemented yet. Interoperation with system libc remains necessary where fully replacing a platform runtime is unsafe/unsupported. `malloc_s` and related allocation `_s` APIs are **optional C+ extensions**, not standardized Microsoft/Apple CRT functions.
 
-| Workstream | What C+ provides | Who works on it |
-| --- | --- | --- |
-| **1. Safer existing C standard library** | Keep writing **ordinary** `malloc`, `free`, `memcpy`, `strcpy`, `printf`, `fopen`, etc. C+ uses Clang-based bounds, ownership, borrow/lifetime analysis and supported native fortified/checked CRT mechanisms to prevent or diagnose unsafe operations where possible. **No glibc fork, no mandatory `malloc_s`/`free_s` rewrite.** | **Both agents (P0)** — Agent 1 compiler, Agent 2 CRT tests/adapters; [#19](https://github.com/haseeb-heaven/c-plus/issues/19), [#1](https://github.com/haseeb-heaven/c-plus/issues/1), [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
-| **2. Modern C+ libraries** | Optional struct-backed classes, owned String/Vector/File/Result, **GUI, logging, JSON, graphics, networking, HTTP, async, audio, images and video**. Wrap established libraries and OS APIs with RAII, checked sizes, explicit owners/borrows and errors. | **Agent 2** — [#3](https://github.com/haseeb-heaven/c-plus/issues/3), [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
+**No automatic magic:** passing a raw `char *` to `strcpy` does not reveal its allocated length to the library. The compiler must establish sound contracts and bounds, use proven dynamic enforcement, or reject the operation in strict safe mode. Full Rust-like safety for arbitrary unchanged C, universal zero overhead, and better-than-C performance are **not current guarantees**.
 
-**Same C source; better compiler enforcement (target, not yet universally implemented):**
+See [#21 — compiler](https://github.com/haseeb-heaven/c-plus/issues/21), [#22 — bundled hardened libc](https://github.com/haseeb-heaven/c-plus/issues/22), and [#23 — SDK verification](https://github.com/haseeb-heaven/c-plus/issues/23).
 
-<table><tr><th width="50%">Normal Clang C</th><th width="50%">C+ with native libc (goal)</th></tr><tr><td><pre lang="c"><code>char name[8];
-strcpy(name, "Hello World");
-/* Potential buffer overflow */</code></pre></td><td><pre lang="c"><code>char name[8];
-strcpy(name, "Hello World");
-/* Compile-time diagnostic:
-   destination too small */</code></pre></td></tr></table>
-
-For safe code, `malloc(size)`, `free(ptr)`, `memcpy` and other existing libc functions **retain their familiar names and platform-defined behavior**. For unknown sizes or pointer lifetimes, runtime checks, annotations or explicit unsafe boundaries may be needed; a compiler cannot infer every bound or lifetime from raw C pointers. Existing optional checked APIs such as Microsoft's `strcpy_s(dst, dst_size, src)` can be used where available, but a separate C+ Safe CRT family is **not** a project requirement.
-
-**Optional modern C+ interfaces (illustrative; available features depend on branch):**
-
-```c
-string label = string("Hello C+");
-vector values = vector();
-values.push_back(42);
-
-/* Modern modules also cover GUI, logging and JSON
-   with RAII wrappers over established native C libraries. */
-```
-
-**Native implementations and references:** [Apple libc](https://github.com/apple-oss-distributions/Libc), [Apple bounds-safe Clang](https://github.com/swiftlang/llvm-project) ([documentation](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html)), [Microsoft Secure CRT](https://learn.microsoft.com/en-us/cpp/c-runtime-library/security-features-in-the-crt), [LLVM/Clang](https://github.com/llvm/llvm-project), [glibc](https://sourceware.org/git/?p=glibc.git), [musl](https://git.musl-libc.org/cgit/musl). Modern modules reuse [SDL3](https://github.com/libsdl-org/SDL), [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear), [yyjson](https://github.com/ibireme/yyjson), [libcurl](https://github.com/curl/curl), [libuv](https://github.com/libuv/libuv), [miniaudio](https://github.com/mackron/miniaudio), [stb](https://github.com/nothings/stb) and [FFmpeg](https://github.com/FFmpeg/FFmpeg) where appropriate. No blanket promise of proven safety or unchanged performance.
-
-**Current top priority:** Both agents work on [#19 — existing libc/CRT safety](https://github.com/haseeb-heaven/c-plus/issues/19). Agent 1 implements compiler analysis; Agent 2 implements isolated CRT conformance/portability tests and native safety adapters. Modern GUI/JSON/logging feature expansion is paused until this shared milestone is verified. They work on separate branches/PRs to avoid conflicting edits.
-
-### Roadmap and tracking
-
-| Priority | Issue | Work |
-| --- | --- | --- |
-| P0 | [#1 — Compiler ownership, borrowing, RAII and bounds](https://github.com/haseeb-heaven/c-plus/issues/1) | Agent 1 · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
-| P0 | [#19 — **Workstream 1: safer existing libc/CRT**](https://github.com/haseeb-heaven/c-plus/issues/19) | **Both agents** · compiler checks + CRT conformance/platform adapters |
-| P1 | [#3 — **Workstream 2: modern C+ libraries, including GUI/logging/JSON**](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17); former [#20](https://github.com/haseeb-heaven/c-plus/issues/20) scope merged here |
-| P0 | [#4 — Multi-TU and RAII linkage](https://github.com/haseeb-heaven/c-plus/issues/4) | Agent 1, coordinate with Agent 2 |
-| P1 | [#8 — Tests, fuzzing, CI, benchmarks](https://github.com/haseeb-heaven/c-plus/issues/8) | Both agents |
-| P2 | [#18 — Legacy C → modern C+ AST modernizer](https://github.com/haseeb-heaven/c-plus/issues/18) | Later |
-
-**Contribute:** follow [CONTRIBUTING.md](CONTRIBUTING.md), pick an [issue](https://github.com/haseeb-heaven/c-plus/issues), run its tests and open a PR against [`develop`](https://github.com/haseeb-heaven/c-plus/tree/develop). Agent branches/PRs stay separate and require review. See the [detailed roadmap](docs/ROADMAP.md).
+## The design in one picture
 
 ```text
-.c source (C + a few C+ constructs)
-        |
-        |  c+ : lex -> lower C+ syntax -> insert cleanup -> plain C
-        v
-   clang driver : parse / typecheck / optimise / codegen / link
-        |
-        v
-   native executable
+                    FAMILIAR C + OPTIONAL MODERN C+
+                   .c / .h          .cp / .hp
+                          |
+            C+ compiler: Clang AST/CFG + lowering
+                  |                      |
+      SAFE MODE (default)         LEGACY / UNSAFE C
+      ownership + borrowing       compatible C/FFI;
+      lifetimes + aliasing        no safety guarantee
+      RAII + bounds contracts
+      reject unproven hazards
+                  |                      |
+                  +----------+-----------+
+                             |
+                        Clang / LLVM
+                             |
+                     optimized native code
+                             |
+            system libc / native C ABI / C libraries
 ```
+
+**Critical distinction:** the target is **Rust-comparable memory and thread safety for an explicitly defined safe subset**, not mathematical proof that arbitrary, unchanged C programs are safe. An unknown pointer lifetime or unverified FFI operation must be **rejected in safe mode or require an explicit, audited unsafe boundary**. Rust itself permits unsafe FFI and performs runtime bounds checks for dynamic indices.
+
+## What makes C+ different?
+
+| Project | Primary approach | Key difference from C+'s goal |
+| --- | --- | --- |
+| **C+ (this project)** | **Target:** Rust-like *static* ownership/borrowing + RAII + C-style syntax + optional classes/Vector + native C ABI | Not there yet. Prioritizes fail-closed safe mode, deterministic cleanup and no mandatory GC. |
+| **[Xr0](https://xr0.dev/)** | Verification of existing C using contracts and static proofs | Focuses on verification rather than a modern C language and library layer; current loop/recursion coverage is limited. |
+| **[SafeC](https://github.com/safec-org/SafeC)** | Separate C-evolution language claiming compile-time-first memory safety and zero-overhead design | **An overlapping goal, not proof C+ is unique.** Compare supported subset, compiler tests and overhead before claiming an advantage. |
+| **[Fil-C](https://fil-c.org/how)** | Memory-safe C/C++ implementation using runtime capability checks and garbage collection | Aims to run much more existing C/C++ unchanged, but uses a different runtime/ABI and adds runtime cost. |
+| **[Cforall](https://cforall.uwaterloo.ca/)** | Extends ISO C with modern type, productivity and RAII features | Strong C ergonomics and cleanup, but not an established Rust-style complete static borrow-checking guarantee. |
+| **[C3](https://c3-lang.org/)** | Modern C-derived systems language with contracts and native libraries | Similar modern-C ergonomics; not equivalent to Rust's compile-time borrow checker by default. |
+
+**We do not claim C+ is currently safer, faster or more complete than these projects.** The differentiator to *prove* is the combination of strict safe-mode ownership, familiar C interoperability and low runtime cost. Review upstream implementation evidence, not just design statements.
+
+## Safety and performance contract
+
+- **Compile-time first:** Enforce unique ownership, moves, borrowed lifetimes, exclusive mutation, alias invalidation, safe thread transfer and deterministic resource cleanup. If proof is unavailable, **fail closed** in safe mode or require an explicit unsafe boundary.
+- **Safe existing libc:** Continue to use ordinary `malloc`, `free`, `memcpy`, `strcpy`, `fopen`, etc. Model their ownership, buffer sizes, failure and lifetime effects through verified contracts. No new required `malloc_s/free_s` API and no libc fork.
+- **RAII without a mandatory GC:** Owned resources receive cleanup on supported scope exits; nonlocal control flow that defeats safe cleanup must be rejected or marked unsafe.
+- **Near-zero *incremental* overhead where proven:** Static checks and RAII lowering do not inherently require per-access runtime metadata. **Zero runtime overhead is an optimization goal for statically proven cases, not a blanket guarantee.** Dynamic bounds checks, managed allocation bookkeeping and safety instrumentation can cost CPU/memory. Rust also performs dynamic bounds checks.
+- **Native ABI:** Preserve C layouts/calling conventions at supported interfaces; external code remains an explicit trust/contract boundary. A native C ABI alone does not make FFI memory-safe.
+- **No general C++ frontend:** C+ accepts a C-compatible subset with extensions; it does **not** compile arbitrary C++20/23 code.
+
+## Modern C features (opt-in)
+
+| Feature | C+ model | Current status |
+| --- | --- | --- |
+| **Classes/methods** | Struct-backed methods and `this->`; no C++ inheritance or virtual machinery | Implemented subset; multi-TU integration still under review |
+| **RAII** | `resource struct` with `T_drop(T*)`; compiler inserts cleanup | Implemented subset; control-flow gaps remain |
+| **Ownership/borrowing** | Move-only owners, checked borrows and safe lifetime rules | Partial; broad alias/field/container/cross-function verification is P0 |
+| **String / Vector / collections** | Optional owned/borrowed native library types | In development on [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
+| **Optional libraries** | File, Result, JSON, logging, GUI, HTTP, async, audio/video, etc. | Experimental, feature expansion deferred until safety milestone passes |
+
+### Example: familiar C + RAII
+
+```c
+#include <stdio.h>
+
+resource struct File {
+    FILE *handle;
+};
+
+void File_drop(File *f) {
+    if (f->handle) fclose(f->handle);
+}
+
+int main(void) {
+    File log = {fopen("log.txt", "w")};
+    if (!log.handle) return 1;
+    fputs("Hello C+\n", log.handle);
+    return 0; // destructor inserted on supported scope exit
+}
+```
+
+### Example: lightweight C+ class
+
+```c
+class Counter {
+    int value;
+
+    void add(int n) {
+        this->value += n;
+    }
+};
+
+Counter c = {0};
+c.add(5);
+```
+
+Classes lower to C structs and functions. String/Vector APIs live in optional `.hp` library modules, **not** in a rewritten libc; check [modern stdlib docs](docs/MODERN_STDLIB.md) and PR #17 for exact supported syntax.
+
+### Target rejection: borrowed alias after free
+
+```c
+int *p = malloc(sizeof(int));
+if (!p) return 1;
+int *alias = p;
+free(p);
+*alias = 42;  // TARGET: safe-mode compile error
+```
+
+**This is a target diagnostic, NOT an example of a fully working guarantee today.** Safe mode must eventually track ownership across aliases, calls, containers and threads; current implementation still has gaps. Where the compiler cannot establish safety, reject or require an explicit unsafe boundary.
 
 ## Quick start
 
-Build the driver (needs CMake, a C++20 compiler and LLVM/Clang development
-packages; pass `-DLLVM_DIR=... -DClang_DIR=...` if they are not auto-detected):
+Requirements: CMake, a C++20 compiler, LLVM/Clang development packages.
 
 ```sh
 cmake -S . -B build
 cmake --build build --target c+ -- -j4
-```
 
-Compile and run a program:
-
-```sh
 ./build/c+ build demos/A_hello.c -o hello
 ./hello
-# or: ./build/c+ run demos/A_hello.c -o hello
 ```
 
-## Commands
-
-| command | meaning |
+| Command | Purpose |
 | --- | --- |
-| `c+ build file.c [-o out]` | lower and compile to a native executable |
-| `c+ run file.c [-o out]` | build, then run it |
-| `c+ check file.c` | lower and type-check without linking |
-| `c+ test [pattern]` | run the automated test suite |
-| `c+ demos` | build and check included demos |
-| `c+ bench [pattern]` | compare safe C+, legacy C+ and plain C |
+| `./build/c+ build file.c -o app` | Compile native executable |
+| `./build/c+ run file.c -o app` | Build and execute |
+| `./build/c+ check file.c` | Parse/check without linking |
+| `./build/c+ test` | Automated tests |
+| `./build/c+ demos` | Demo suite |
+| `./build/c+ bench` | Benchmark suite |
+| `--release` | Optimized build; existing checks retained |
+| `--legacy-c` | Compatibility path, **not memory-safe** |
+| `--emit-c FILE` | Inspect lowered C code |
 
-Options: `--release` (`-O2`, safety checks remain on), `--debug` (default),
-`--legacy-c` (compatibility mode, **not** memory safe), `--emit-c FILE` (dump
-the lowered C), `--keep-temp`, `-Werror`, `--verbose`, and `--` to pass extra
-arguments to the C compiler.
+## Roadmap: one P0 safety milestone, two agents
 
-## Normal C vs C+: side-by-side
-
-**C+ is still C.** The goal is familiar source code, struct-backed methods, automatic cleanup, stronger static ownership and bounds checks, the **native C ABI**, and Clang-optimized executables. The examples distinguish **existing syntax** from **future safety guarantees**. The full safety contract is tracked in [#1](https://github.com/haseeb-heaven/c-plus/issues/1).
-
-### 1. Memory safety — same existing libc, stronger C+ checks
-
-<table><tr><th width="50%">Normal C</th><th width="50%">C+ — same code, enhanced analysis (goal)</th></tr><tr><td><pre lang="c"><code>int *numbers = malloc(100 * sizeof(int));
-if (!numbers) return 1;
-numbers[0] = 42;
-free(numbers);</code></pre></td><td><pre lang="c"><code>int *numbers = malloc(100 * sizeof(int));
-if (!numbers) return 1;
-numbers[0] = 42;
-free(numbers);
-/* Compile-time checks for size,
-   lifetime and ownership where provable */</code></pre></td></tr></table>
-
-**No second allocator API needed.** C+ analyzes ordinary libc calls and reuses native CRT behavior. It should reject provably unsafe operations and apply supported checks when necessary. **This is the target safety contract, not a claim every ordinary C allocation is currently verified.** See [#19](https://github.com/haseeb-heaven/c-plus/issues/19) and [#1](https://github.com/haseeb-heaven/c-plus/issues/1).
-
-Optional `managed int *numbers = cplus_new_array(int, 100);` and automatic RAII are **additional language features**, not replacements for libc.
-
-### 2. RAII — manual file closing vs guaranteed cleanup
-
-<table><tr><th width="50%">Normal C</th><th width="50%">C+ — implemented RAII subset</th></tr><tr><td><pre lang="c"><code>int save(void) {
-    FILE *f = fopen("log.txt", "w");
-    if (!f) return -1;
-    if (fprintf(f, "Hello") &lt; 0) {
-        fclose(f);
-        return -1;
-    }
-    fclose(f);
-    return 0;
-}</code></pre></td><td><pre lang="c"><code>resource struct File {
-    FILE *handle;
-};
-void File_drop(File *f) {
-    if (f-&gt;handle) fclose(f-&gt;handle);
-}
-int save(void) {
-    File f = {fopen("log.txt", "w")};
-    if (!f.handle) return -1;
-    if (fprintf(f.handle, "Hello") &lt; 0)
-        return -1;
-    return 0; /* automatically closes */
-}</code></pre></td></tr></table>
-
-
-The compiler generates destructor calls on supported exits, including early returns. Exactly-once cleanup across **all** complex control flow remains under verification.
-
-### 3. Classes — keep the C struct model
-
-<table><tr><th width="50%">Normal C</th><th width="50%">C+ — implemented class syntax</th></tr><tr><td><pre lang="c"><code>typedef struct {
-    int value;
-} Counter;
-void Counter_add(Counter *c, int n) {
-    c-&gt;value += n;
-}
-Counter c = {0};
-Counter_add(&amp;c, 5);</code></pre></td><td><pre lang="c"><code>class Counter {
-    int value;
-    void add(int n) {
-        this-&gt;value += n;
-    }
-};
-Counter c = {0};
-c.add(5);</code></pre></td></tr></table>
-
-
-C+ classes lower to **structs and functions**; they do not require the C++ object model, inheritance or virtual dispatch. Use `this->`, not `self->`. Multi-file header linkage is tracked in [#4](https://github.com/haseeb-heaven/c-plus/issues/4).
-
-### 4. Array bounds — similar source, stronger compiler checks
-
-<table><tr><th width="50%">Normal C</th><th width="50%">C+ — bounds-safety target</th></tr><tr><td><pre lang="c"><code>int values[3] = {10, 20, 30};
-int index = get_index();
-printf("%d", values[index]);
-/* Invalid index: undefined behavior. */</code></pre></td><td><pre lang="c"><code>int values[3] = {10, 20, 30};
-int index = get_index();
-print(values[index]);
-/* Goal: reject provably bad indices;
-   check uncertain indices if bounded. */</code></pre></td></tr></table>
-
-
-Current C+ provides **partial** static checks and sanitizer instrumentation. Apple-style counted/sized pointer contracts are an **integration target**, not full existing protection. [Apple Bounds Safety](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html).
-
-### 5. Borrow checking — reject dangling aliases
-
-<table><tr><th width="50%">Normal C</th><th width="50%">C+ — intended diagnostic, NOT guaranteed today</th></tr><tr><td><pre lang="c"><code>int *p = malloc(sizeof(int));
-if (!p) return 1;
-int *q = p;
-free(p);
-*q = 100; /* use-after-free */</code></pre></td><td><pre lang="c"><code>managed int *p = cplus_new(int);
-int *q = p;  /* borrowed alias */
-cplus_release(p);
-*q = 100;
-/* TARGET COMPILE ERROR:
-   q may point to freed memory. */</code></pre></td></tr></table>
-
-
-This is intentionally invalid code. A complete ownership checker should reject the dangling alias by following moves, borrows, lifetimes, escapes and calls. **Current C+ does not catch every UAF**. [Cake](https://github.com/thradams/cake) provides relevant static ownership design ideas.
-
-### 6. Native speed — existing compiler and C ecosystem
-
-```text
-Existing C (.c/.h)      Modern C+ (.cp/.hp)
-         \                    /
-           C+ safety / lowering
-           - classes -> C functions
-           - RAII cleanup
-           - ownership + bounds analysis
-                     |
-                 Clang/LLVM
-            optimize + generate code
-                     |
-              native executable
-              libc + C libraries
-```
-
-C+ should **not** reinvent libc, memory-copy functions or native optimizers. Compiler/runtime safety checks may still add overhead; [benchmarks](benchmarks/) must compare equivalent C and C+ workloads.
-
-### Current capability vs goal
-
-| Capability | Today | Target |
+| Task | Owner | Links |
 | --- | --- | --- |
-| C compatibility and native C ABI | Supported subset; `--legacy-c` mode | Broad compatible C source and explicit unsafe FFI |
-| Lightweight struct-based classes | Implemented subset | Robust, multi-TU lowering |
-| Managed memory and RAII | Implemented subset | Sound ownership and exactly-once cleanup |
-| Borrow/lifetime checking | Partial | Flow-sensitive, interprocedural safety |
-| Bounds checking | Partial + sanitizers | Apple-style bounds for supported pointer types |
-| Use-after-free and data-race protection | Incomplete | Defined, enforced safe subset |
-| Native speed | Clang backend; measured overhead | Competitive, reproducibly benchmarked code |
-| C → modern C+ conversion | Planned | Optional Clang AST-based modernizer |
+| **Sound safe-mode compiler** — ownership, borrows, alias/field/loop/cross-TU lifetimes, RAII, concurrency and fail-closed FFI | **Agent 1** | [Issue #21](https://github.com/haseeb-heaven/c-plus/issues/21) · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
+| **Bundled hardened libc implementation** — real compiled stdlib functions, standard C headers, `*_s` checked APIs, compiler contracts, platform adapters, logging, examples, fuzzing and installable SDK | **Agent 2** | [Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
+| **Evidence & merge gate** — safety spec, CI, multi-TU, adversarial tests, performance and peer review | **Both** | [Issue #23](https://github.com/haseeb-heaven/c-plus/issues/23) |
 
-See [STATUS](docs/STATUS.md) and [LIMITATIONS](docs/LIMITATIONS.md) before relying on a safety claim. [#18](https://github.com/haseeb-heaven/c-plus/issues/18) tracks automatic migration of legacy C into modern C+.
+Modern standard-library feature expansion is **P1 / deferred**. Earlier issues were closed as superseded, **not completed**. No open PR should be treated as a completed safety guarantee.
 
-## Library architecture
-
-**Only two library workstreams:**
-
-1. **Existing libc/CRT, made safer by C+ compiler checks** — study Apple, Microsoft and Clang bounds/fortify/checked-CRT techniques, preserve existing function names and ABI. [Issue #19](https://github.com/haseeb-heaven/c-plus/issues/19).
-2. **One modern C+ library** — core String/Vector/File/Result **plus** optional GUI, logging, JSON, HTTP, graphics, audio, video and other modules, all wrapping established native libraries. [Issue #3](https://github.com/haseeb-heaven/c-plus/issues/3).
-
-The third-party integrations previously described as a third pillar are **part of workstream 2**, not a standalone product; [#20](https://github.com/haseeb-heaven/c-plus/issues/20) is consolidated into #3. Existing work is experimental, including unmerged [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17). See [ROADMAP](docs/ROADMAP.md) and [STATUS](docs/STATUS.md).
-
-## Safety model
-
-C+ also has a small borrow checker: a pointer borrowed from a local resource
-or managed allocation may be used while the owner is alive, but returning
-that borrow or using it after `cplus_move(owner)` is a compile error. See
-`docs/LIMITATIONS.md` for what this does **not** cover.
-
-Safe mode (the default) rejects statically known out-of-bounds array indices
-at compile time (`-Werror=array-bounds`), so `arr[10]` on an `int[3]` produces
-no executable. Indices only known at run time are checked by UBSan
-`undefined,bounds,null,alignment` with `-fno-sanitize-recover=all`, so a
-detected failure aborts instead of continuing with corrupted state. Runtime ownership errors use distinct
-exit codes (see `runtime/include/cplus/cplus.h`). `--legacy-c` disables all of this
-and should not be considered safe.
-
-The evidence-backed capability matrix is in [`docs/STATUS.md`](docs/STATUS.md);
-the honest limitations are in [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md). The
-lowering pipeline is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), the
-compiler-foundation decision in [`docs/FOUNDATION.md`](docs/FOUNDATION.md), the
-safety assumptions in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), and the
-comparison with Fil-C and Goose in [`docs/RELATED.md`](docs/RELATED.md). Work
-still required for the full specification is tracked in
-[`docs/ROADMAP.md`](docs/ROADMAP.md).
-
-## Verification
+## Verify it
 
 ```sh
-./tests/run_tests.sh      # compiler positive, negative and runtime-fail tests
-./demos/run_demos.sh      # sixteen demos
-./benchmarks/run_bench.sh # reproducible benchmark table
+./tests/run_tests.sh
+./demos/run_demos.sh
+./benchmarks/run_bench.sh
 ```
 
-Benchmarks compare safe C+, legacy C+ (same lowering, checks off) and plain
-`clang -O2`, so the cost of language features is separated from the cost of
-runtime checks. Recorded results are in `docs/LIMITATIONS.md`; rerun on your
-own machine for current numbers.
+The project must publish actual passing and failing tests, explicit unsupported safe operations, runtime-check overhead, and comparisons against equivalently optimized Clang C and Rust. Test counts and runtime line coverage **are not a percentage of memory safety**.
 
-## Layout
+See [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [ROADMAP](docs/ROADMAP.md).
 
-- `compiler/Sema/` — C+ lexer, syntax lowering and cleanup insertion
-- `compiler/Driver/` — compilation pipeline and backend invocation
-- `runtime/` — small C runtime for managed memory and primitives
-- `runtime/include/cplus/` — stable C ABI used by generated code
-- `tests/`, `demos/`, `benchmarks/` — executable evidence
+## Contributing and license
 
-## Examples
-
-Larger real applications (games, a student database and a macOS system
-monitor) are in `examples/`. See [`examples/README.md`](examples/README.md).
-
-## Logging
-
-Compiler and runtime logging are opt-in via `c+ build --log --log-level debug`.
-See [`docs/LOGGING.md`](docs/LOGGING.md).
-
-## Contributing
-
-Branching and release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).
-Development happens on `develop` and feature branches. `main` is the published baseline and should be synchronized only with reviewed `develop` commits. Open [issues](https://github.com/haseeb-heaven/c-plus/issues) for scope and use linked PRs for evidence; do not merge agent branches without review.
-
-## License
-
-See [`LICENSE`](LICENSE).
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). License: [LICENSE](LICENSE).
