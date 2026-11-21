@@ -1127,7 +1127,7 @@ private:
   /// without taking any C+ lock is a data race.
   void checkDataRaces() {
     collectGlobals();
-    std::set<std::string> workers;
+    std::map<std::string, int> workerCounts;
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (!isIdent(i, "pthread_create"))
         continue;
@@ -1142,10 +1142,12 @@ private:
         continue;
       std::string name = baseName(args[2].first, args[2].second);
       if (!name.empty())
-        workers.insert(name);
+        ++workerCounts[name];
     }
     for (const auto &entry : funcs_) {
-      if (!workers.count(entry.first))
+      // A single thread does not create a race; require the same entry to be
+      // passed to at least two pthread_create calls.
+      if (workerCounts[entry.first] < 2)
         continue;
       const FuncSig &sig = entry.second;
       bool locked = false;

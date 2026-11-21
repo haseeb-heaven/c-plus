@@ -31,6 +31,9 @@ python3 tests/metrics/measure.py
 echo "== 100-scenario adversarial red team =="
 python3 tests/core/redteam_100.py
 
+echo "== brutal memory-bug fuzz =="
+python3 tests/core/brutal_memory_fuzz.py
+
 echo "== strict/default modes =="
 ./tests/core/strict_mode.sh
 

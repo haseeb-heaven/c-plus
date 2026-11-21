@@ -58,7 +58,20 @@ struct FreeCallFinder : RecursiveASTVisitor<FreeCallFinder> {
 struct GlobalWriteFinder : RecursiveASTVisitor<GlobalWriteFinder> {
   const std::set<std::string> &globals;
   std::set<std::string> written;
+  std::set<std::string> freed;
   explicit GlobalWriteFinder(const std::set<std::string> &g) : globals(g) {}
+
+  bool VisitCallExpr(CallExpr *c) {
+    if (!c->getDirectCallee() || c->getNumArgs() < 1)
+      return true;
+    std::string n = c->getDirectCallee()->getNameAsString();
+    if (n != "free" && n != "cplus_release")
+      return true;
+    std::string arg = nameOf(c->getArg(0)->IgnoreParenCasts());
+    if (globals.count(arg))
+      freed.insert(arg);
+    return true;
+  }
 
   static std::string nameOf(const Expr *e) {
     if (!e)
@@ -216,6 +229,11 @@ public:
           return;
         }
         if (const auto *ase = dyn_cast<ArraySubscriptExpr>(sub)) {
+          if (isa<MemberExpr>(ase->getBase()->IgnoreParenImpCasts())) {
+            report(loc, "invalid free of address of struct field element via " +
+                            api);
+            return;
+          }
           std::string base = varNameOf(ase->getBase());
           const auto *bref = dyn_cast<DeclRefExpr>(
               ase->getBase()->IgnoreParenImpCasts());
@@ -797,9 +815,17 @@ public:
     const Expr *dst = call->getArg(dstIdx)->IgnoreParenImpCasts();
     const Expr *n = call->getArg(sizeIdx)->IgnoreParenImpCasts();
     Expr::EvalResult amount;
-    if (!n->EvaluateAsInt(amount, ctx_) || !amount.Val.isInt())
-      return;
-    long long bytes = amount.Val.getInt().getSExtValue();
+    long long bytes = 0;
+    if (n->EvaluateAsInt(amount, ctx_) && amount.Val.isInt()) {
+      bytes = amount.Val.getInt().getSExtValue();
+    } else {
+      // Constant-propagate an unmodified local `int n = <literal>;`.
+      std::string name = varNameOf(n);
+      auto it = constLocals_.find(name);
+      if (name.empty() || it == constLocals_.end() || assignedVars_.count(name))
+        return;
+      bytes = it->second.getSExtValue();
+    }
     if (bytes <= 0)
       return;
     const auto *ref = dyn_cast<DeclRefExpr>(dst);
@@ -1083,17 +1109,16 @@ public:
     }
     if (name == "pthread_create" && call->getNumArgs() >= 4) {
       const Expr *arg = call->getArg(3)->IgnoreParenImpCasts();
-      if (const auto *uo = dyn_cast<UnaryOperator>(arg)) {
-        if (uo->getOpcode() == UO_AddrOf) {
-          const Expr *sub = uo->getSubExpr()->IgnoreParenImpCasts();
-          if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
-            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
-              if (vd->hasLocalStorage())
-                warnAt(call->getBeginLoc(),
-                       "stack borrow passed to thread: '" +
-                           vd->getNameAsString() + "'");
-        }
-      }
+      const Expr *borrowed = arg;
+      if (const auto *uo = dyn_cast<UnaryOperator>(arg))
+        if (uo->getOpcode() == UO_AddrOf)
+          borrowed = uo->getSubExpr()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(borrowed))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (vd->hasLocalStorage())
+            warnAt(call->getBeginLoc(),
+                   "stack borrow passed to thread: '" +
+                       vd->getNameAsString() + "'");
     }
     return true;
   }
@@ -1353,6 +1378,19 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
       continue;
     GlobalWriteFinder gw(collect.allGlobals());
     gw.TraverseStmt(entryFn->getBody());
+    for (const auto &g : gw.freed) {
+      auto lit = collect.threadEntryLocs().find(entry.first);
+      Diag d;
+      d.level = DiagLevel::Error;
+      d.message = "double free of shared global '" + g +
+                  "' across multiple threads";
+      d.file = filename;
+      if (lit != collect.threadEntryLocs().end()) {
+        PresumedLoc p = raceCtx.getSourceManager().getPresumedLoc(lit->second);
+        if (p.isValid()) { d.line = p.getLine(); d.column = p.getColumn(); }
+      }
+      diags.report(std::move(d));
+    }
     for (const auto &g : gw.written) {
       auto lit = collect.threadEntryLocs().find(entry.first);
       Diag d;
