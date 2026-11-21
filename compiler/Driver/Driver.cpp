@@ -292,6 +292,8 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
         os << ":" << d.column;
       os << ": ";
     }
+    DRIVER_LOG(CLOG_WARN, "diagnostic %s %s:%u: %s", level, file.c_str(),
+               d.line, d.message.c_str());
     os << level << ": " << d.message << "\n";
     if (!d.help.empty())
       os << "help: " << d.help << "\n";
