@@ -20,56 +20,49 @@ C+ is an **experimental** compiler extension for C. The goal is to make existing
 | Temporal-safety reference | [Fil-C](https://github.com/pizlonator/fil-c) | Study strong UAF protection and runtime/ABI tradeoffs; not a drop-in no-GC solution |
 | Native C memory and string operations | [libc / Microsoft Secure CRT](https://learn.microsoft.com/en-us/cpp/c-runtime-library/security-features-in-the-crt) | Reuse platform libraries, keep the compiler-required runtime minimal |
 
-### What C+ must provide: three safer C library pillars
+### Two library workstreams — not three, and not a new libc
 
-**C+ provides both safer versions of familiar C APIs and optional new libraries.** It is **not** simply a `malloc` → `managed` syntax replacement. The underlying implementation should reuse existing libc/CRT and third-party C libraries, with Clang-based compiler checks and C+ resource ownership where appropriate.
-
-| Pillar | What developers get | Tracking |
+| Workstream | What C+ provides | Who works on it |
 | --- | --- | --- |
-| **1. C+ Safe CRT** | A portable checked C API family: `malloc_s`, `calloc_s`, `realloc_s`, `free_s`, `strcpy_s`, `memcpy_s`, `memmove_s`, `strcat_s`, safe input/formatting/files; plus compiler analysis for **existing** `malloc`/`free`/`memcpy` calls | [#19](https://github.com/haseeb-heaven/c-plus/issues/19), compiler checks [#1](https://github.com/haseeb-heaven/c-plus/issues/1) |
-| **2. Modern C+ core libraries** | Lightweight `string`, `vector`, `file`, error/Result, slices, threads, filesystem and networking with owned/borrowed handles and RAII | [#3](https://github.com/haseeb-heaven/c-plus/issues/3) |
-| **3. Safe third-party wrappers** | RAII/lifetime-safe native C API adapters for yyjson, SDL3, Nuklear, libcurl, libuv, miniaudio, stb and FFmpeg | [#20](https://github.com/haseeb-heaven/c-plus/issues/20) |
+| **1. Safer existing C standard library** | Keep writing **ordinary** `malloc`, `free`, `memcpy`, `strcpy`, `printf`, `fopen`, etc. C+ uses Clang-based bounds, ownership, borrow/lifetime analysis and supported native fortified/checked CRT mechanisms to prevent or diagnose unsafe operations where possible. **No glibc fork, no mandatory `malloc_s`/`free_s` rewrite.** | **Agent 1** — [#19](https://github.com/haseeb-heaven/c-plus/issues/19), [#1](https://github.com/haseeb-heaven/c-plus/issues/1), [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
+| **2. Modern C+ libraries** | Optional struct-backed classes, owned String/Vector/File/Result, **GUI, logging, JSON, graphics, networking, HTTP, async, audio, images and video**. Wrap established libraries and OS APIs with RAII, checked sizes, explicit owners/borrows and errors. | **Agent 2** — [#3](https://github.com/haseeb-heaven/c-plus/issues/3), [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
 
-**Two ways to write C+:**
+**Same C source; better compiler enforcement (target, not yet universally implemented):**
+
+<table><tr><th width="50%">Normal Clang C</th><th width="50%">C+ with native libc (goal)</th></tr><tr><td><pre lang="c"><code>char name[8];
+strcpy(name, "Hello World");
+/* Potential buffer overflow */</code></pre></td><td><pre lang="c"><code>char name[8];
+strcpy(name, "Hello World");
+/* Compile-time diagnostic:
+   destination too small */</code></pre></td></tr></table>
+
+For safe code, `malloc(size)`, `free(ptr)`, `memcpy` and other existing libc functions **retain their familiar names and platform-defined behavior**. For unknown sizes or pointer lifetimes, runtime checks, annotations or explicit unsafe boundaries may be needed; a compiler cannot infer every bound or lifetime from raw C pointers. Existing optional checked APIs such as Microsoft's `strcpy_s(dst, dst_size, src)` can be used where available, but a separate C+ Safe CRT family is **not** a project requirement.
+
+**Optional modern C+ interfaces (illustrative; available features depend on branch):**
 
 ```c
-/* (1) Opt-in C+ Safe CRT — proposed APIs, not implemented yet */
-int *numbers = malloc_s(100 * sizeof(int));
-if (numbers != NULL) {
-    numbers[0] = 42;
-    free_s(numbers);
-}
-char name[64];
-strcpy_s(name, sizeof(name), "Ada");
+string label = string("Hello C+");
+vector values = vector();
+values.push_back(42);
+
+/* Modern modules also cover GUI, logging and JSON
+   with RAII wrappers over established native C libraries. */
 ```
 
-```c
-/* (2) Optional modern C+ core + third-party libraries —
-   representative C+ API style; actual supported APIs vary by branch */
-string message = string("Hello");
-message.append(" C+");
-vector numbers = vector();
-numbers.push_back(42);
-error err = error();
-json document = json("{\"ok\":true}", &err);
-/* destructors release owned resources */
-```
+**Native implementations and references:** [Apple libc](https://github.com/apple-oss-distributions/Libc), [Apple bounds-safe Clang](https://github.com/swiftlang/llvm-project) ([documentation](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html)), [Microsoft Secure CRT](https://learn.microsoft.com/en-us/cpp/c-runtime-library/security-features-in-the-crt), [LLVM/Clang](https://github.com/llvm/llvm-project), [glibc](https://sourceware.org/git/?p=glibc.git), [musl](https://git.musl-libc.org/cgit/musl). Modern modules reuse [SDL3](https://github.com/libsdl-org/SDL), [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear), [yyjson](https://github.com/ibireme/yyjson), [libcurl](https://github.com/curl/curl), [libuv](https://github.com/libuv/libuv), [miniaudio](https://github.com/mackron/miniaudio), [stb](https://github.com/nothings/stb) and [FFmpeg](https://github.com/FFmpeg/FFmpeg) where appropriate. No blanket promise of proven safety or unchanged performance.
 
-**Explicit contract:** A function ending in `_s` is not automatically memory-safe. Destination buffers often need a capacity argument; unchecked aliases, pointer provenance and unknown source sizes still matter. `malloc_s` and `free_s` are **proposed C+ functions, not Microsoft Secure CRT standard APIs**. Where Microsoft defines `strcpy_s`, `memcpy_s`, etc., retain its signature/behavior on supported systems or use a distinct C+ API name. Never advertise the whole library as verified before tests establish the supported guarantees.
+### Roadmap and tracking
 
-### Roadmap: seven focused issues
-
-| Priority | Issue | Responsibility |
+| Priority | Issue | Work |
 | --- | --- | --- |
-| P0 | [#1 — Compiler ownership, RAII, bounds and memory/thread safety](https://github.com/haseeb-heaven/c-plus/issues/1) | Agent 1 · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
-| P0 | [#19 — **Pillar 1: C+ Safe CRT**](https://github.com/haseeb-heaven/c-plus/issues/19) | Agent 1: compiler contracts; Agent 2: new checked API layer after current stabilization |
-| P0 | [#3 — **Pillar 2: modern C+ core libraries**](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
-| P0 | [#4 — Multi-TU headers, class symbols and RAII](https://github.com/haseeb-heaven/c-plus/issues/4) | Agent 1; Agent 2 provides reproductions |
-| P1 | [#20 — **Pillar 3: safe third-party wrappers**](https://github.com/haseeb-heaven/c-plus/issues/20) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
-| P1 | [#8 — CI, fuzzing, diagnostics and speed](https://github.com/haseeb-heaven/c-plus/issues/8) | Both agents, respective code |
-| P2 | [#18 — Legacy C → modern C+ modernizer](https://github.com/haseeb-heaven/c-plus/issues/18) | Future phase; Clang AST rewrite |
+| P0 | [#1 — Compiler ownership, borrowing, RAII and bounds](https://github.com/haseeb-heaven/c-plus/issues/1) | Agent 1 · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
+| P0 | [#19 — **Workstream 1: safer existing libc/CRT**](https://github.com/haseeb-heaven/c-plus/issues/19) | Agent 1 · Apple/Microsoft/Clang hardening research and compatible compiler integration |
+| P0 | [#3 — **Workstream 2: modern C+ libraries, including GUI/logging/JSON**](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17); former [#20](https://github.com/haseeb-heaven/c-plus/issues/20) scope merged here |
+| P0 | [#4 — Multi-TU and RAII linkage](https://github.com/haseeb-heaven/c-plus/issues/4) | Agent 1, coordinate with Agent 2 |
+| P1 | [#8 — Tests, fuzzing, CI, benchmarks](https://github.com/haseeb-heaven/c-plus/issues/8) | Both agents |
+| P2 | [#18 — Legacy C → modern C+ AST modernizer](https://github.com/haseeb-heaven/c-plus/issues/18) | Later |
 
-**How to follow / contribute:** Choose an [open issue](https://github.com/haseeb-heaven/c-plus/issues), read its acceptance criteria, reproduce a failing case, follow [CONTRIBUTING.md](CONTRIBUTING.md), and open a focused PR against [`develop`](https://github.com/haseeb-heaven/c-plus/tree/develop). Link the issue (`Refs #N`; `Fixes #N` only once fully implemented). Compiler/runtime [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) and library [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) remain separate. Review and test before merging. [Detailed phase roadmap](docs/ROADMAP.md).
+**Contribute:** follow [CONTRIBUTING.md](CONTRIBUTING.md), pick an [issue](https://github.com/haseeb-heaven/c-plus/issues), run its tests and open a PR against [`develop`](https://github.com/haseeb-heaven/c-plus/tree/develop). Agent branches/PRs stay separate and require review. See the [detailed roadmap](docs/ROADMAP.md).
 
 ```text
 .c source (C + a few C+ constructs)
@@ -120,24 +113,21 @@ arguments to the C compiler.
 
 **C+ is still C.** The goal is familiar source code, struct-backed methods, automatic cleanup, stronger static ownership and bounds checks, the **native C ABI**, and Clang-optimized executables. The examples distinguish **existing syntax** from **future safety guarantees**. The full safety contract is tracked in [#1](https://github.com/haseeb-heaven/c-plus/issues/1).
 
-### 1. Memory safety — existing libc, safer C-style APIs, and optional managed ownership
+### 1. Memory safety — same existing libc, stronger C+ checks
 
-<table><tr><th width="50%">Normal C</th><th width="50%">C+ Safe CRT — proposed</th></tr><tr><td><pre lang="c"><code>int *numbers = malloc(100 * sizeof(int));
+<table><tr><th width="50%">Normal C</th><th width="50%">C+ — same code, enhanced analysis (goal)</th></tr><tr><td><pre lang="c"><code>int *numbers = malloc(100 * sizeof(int));
 if (!numbers) return 1;
 numbers[0] = 42;
-free(numbers);</code></pre></td><td><pre lang="c"><code>int *numbers = malloc_s(100 * sizeof(int));
+free(numbers);</code></pre></td><td><pre lang="c"><code>int *numbers = malloc(100 * sizeof(int));
 if (!numbers) return 1;
 numbers[0] = 42;
-free_s(numbers);
+free(numbers);
+/* Compile-time checks for size,
+   lifetime and ownership where provable */</code></pre></td></tr></table>
 
-/* Optional C+ Safe CRT API,
-   proposed, not yet implemented */</code></pre></td></tr></table>
+**No second allocator API needed.** C+ analyzes ordinary libc calls and reuses native CRT behavior. It should reject provably unsafe operations and apply supported checks when necessary. **This is the target safety contract, not a claim every ordinary C allocation is currently verified.** See [#19](https://github.com/haseeb-heaven/c-plus/issues/19) and [#1](https://github.com/haseeb-heaven/c-plus/issues/1).
 
-**First goal:** provide a safer, opt-in C-style CRT API that **still looks like C**, backed by established libc/CRT functions and compiler checks; see [#19](https://github.com/haseeb-heaven/c-plus/issues/19). Ordinary `malloc`, `free` and `memcpy` must also remain usable, with as much static safety analysis as the declared safe subset can support; see [#1](https://github.com/haseeb-heaven/c-plus/issues/1).
-
-**Second option:** modern C+ also supports `managed int *numbers = cplus_new_array(int, 100);` with compiler-inserted cleanup on supported exits. That is an **additional** facility, *not* the replacement for a Safe CRT.
-
-**Status:** `malloc_s`/`free_s` are planned C+ API names, not existing functions or portable Microsoft CRT calls. Allocation tracking alone cannot guarantee memory safety. `strcpy_s(dst, dst_size, src)` and `memcpy_s(dst, dst_size, src, n)` require checked contracts and may already exist on some targets.
+Optional `managed int *numbers = cplus_new_array(int, 100);` and automatic RAII are **additional language features**, not replacements for libc.
 
 ### 2. RAII — manual file closing vs guaranteed cleanup
 
@@ -254,9 +244,12 @@ See [STATUS](docs/STATUS.md) and [LIMITATIONS](docs/LIMITATIONS.md) before relyi
 
 ## Library architecture
 
-The **Safe CRT** ([#19](https://github.com/haseeb-heaven/c-plus/issues/19)) adds checked C-style memory/string/I/O alternatives. The **C+ core library** ([#3](https://github.com/haseeb-heaven/c-plus/issues/3)) adds RAII `.hp` types such as String, Vector, File, errors and threads. The **third-party adapters** ([#20](https://github.com/haseeb-heaven/c-plus/issues/20)) wrap real C libraries including yyjson, SDL3, Nuklear, libcurl, libuv, miniaudio, stb and FFmpeg.
+**Only two library workstreams:**
 
-These are **separate workstreams**, and each needs explicit ownership, buffer, lifetime, error, portability and benchmark contracts. Existing code is experimental; many wrappers are still in unmerged [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17). See [STDLIB](docs/STDLIB.md), [STATUS](docs/STATUS.md) and [ROADMAP](docs/ROADMAP.md).
+1. **Existing libc/CRT, made safer by C+ compiler checks** — study Apple, Microsoft and Clang bounds/fortify/checked-CRT techniques, preserve existing function names and ABI. [Issue #19](https://github.com/haseeb-heaven/c-plus/issues/19).
+2. **One modern C+ library** — core String/Vector/File/Result **plus** optional GUI, logging, JSON, HTTP, graphics, audio, video and other modules, all wrapping established native libraries. [Issue #3](https://github.com/haseeb-heaven/c-plus/issues/3).
+
+The third-party integrations previously described as a third pillar are **part of workstream 2**, not a standalone product; [#20](https://github.com/haseeb-heaven/c-plus/issues/20) is consolidated into #3. Existing work is experimental, including unmerged [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17). See [ROADMAP](docs/ROADMAP.md) and [STATUS](docs/STATUS.md).
 
 ## Safety model
 
