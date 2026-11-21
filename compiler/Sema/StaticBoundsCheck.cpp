@@ -89,7 +89,12 @@ public:
         checkZeroAlloc(i);
         checkFflushStdin(i);
         checkVla(i);
-        if (isIdent(i, "alloca"))
+        // Ignore tokens that are part of a preprocessor directive such as
+        // `#include <alloca.h>` — merely including the header is not a call.
+        bool inDirective = false;
+        for (size_t k = i; k > 0 && toks_[k].line == toks_[i].line; --k)
+          if (isPunct(k - 1, "#")) { inDirective = true; break; }
+        if (isIdent(i, "alloca") && !inDirective)
           errorAt(toks_[i], "alloca has no bounds checking; use cplus_alloc");
         if (isIdent(i, "setjmp") || isIdent(i, "longjmp"))
           warningAt(toks_[i], std::string("'") + toks_[i].text +
