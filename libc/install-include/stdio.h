@@ -17,6 +17,10 @@ int printf(const char *format, ...);
 int fprintf(FILE *stream, const char *format, ...);
 int scanf(const char *format, ...);
 int fscanf(FILE *stream, const char *format, ...);
+int putchar(int c);
+int getchar(void);
+int puts(const char *s);
+void perror(const char *s);
 #ifdef __cplusplus
 }
 #endif

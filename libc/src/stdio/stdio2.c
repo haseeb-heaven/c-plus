@@ -12,3 +12,8 @@ int cplus_putc(int c,FILE *s){ cplus_libc_log("putc","enter"); return putc(c,s);
 int cplus_feof(FILE *s){ cplus_libc_log("feof","enter"); return feof(s); }
 int cplus_ferror(FILE *s){ cplus_libc_log("ferror","enter"); return ferror(s); }
 void cplus_clearerr(FILE *s){ cplus_libc_log("clearerr","enter"); clearerr(s); }
+
+int cplus_putchar(int c){ cplus_libc_log("putchar","enter"); return putchar(c); }
+int cplus_getchar(void){ cplus_libc_log("getchar","enter"); return getchar(); }
+int cplus_puts(const char *s){ cplus_libc_log("puts","enter"); return puts(s); }
+void cplus_perror(const char *s){ cplus_libc_log("perror","enter"); perror(s); }
