@@ -33,3 +33,6 @@ benchmarks/out/
 examples/out/
 
 *.plist
+
+__pycache__/
+*.pyc
