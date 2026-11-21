@@ -52,6 +52,14 @@ int cplus_getc(FILE*); int cplus_putc(int,FILE*);
 int cplus_feof(FILE*); int cplus_ferror(FILE*); void cplus_clearerr(FILE*);
 int cplus_putchar(int); int cplus_getchar(void); int cplus_puts(const char*); void cplus_perror(const char*);
 int *__cplus_errno_location(void); void cplus_libc_log_set_enabled(int);
+/* math/time/locale platform-backed */
+double cplus_fabs(double); double cplus_sqrt(double); double cplus_sin(double); double cplus_cos(double); double cplus_tan(double);
+double cplus_pow(double,double); double cplus_exp(double); double cplus_log(double); double cplus_log10(double);
+double cplus_floor(double); double cplus_ceil(double); double cplus_fmod(double,double);
+long cplus_time(long*); double cplus_difftime(long,long); long cplus_clock(void);
+struct tm; struct tm *cplus_gmtime(const long*); struct tm *cplus_localtime(const long*); long cplus_mktime(struct tm*);
+size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
+char *cplus_setlocale(int,const char*); struct lconv; struct lconv *cplus_localeconv(void);
 #ifdef __cplusplus
 }
 #endif
