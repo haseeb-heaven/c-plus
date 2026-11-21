@@ -28,12 +28,21 @@ int   cplus_strncmp(const char*,const char*,size_t);
 char *cplus_strchr(const char*,int);
 char *cplus_strrchr(const char*,int);
 char *cplus_strstr(const char*,const char*);
-int   cplus_isalpha(int); int cplus_isdigit(int); int cplus_isspace(int);
+void *cplus_memrchr(const void*,int,size_t);
+int cplus_strcasecmp(const char*,const char*);
+int cplus_strncasecmp(const char*,const char*,size_t);
+char *cplus_strdup(const char*);
+int cplus_isalpha(int); int cplus_isdigit(int); int cplus_isspace(int); int cplus_isalnum(int); int cplus_isupper(int); int cplus_islower(int); int cplus_isxdigit(int); int cplus_isprint(int); int cplus_isgraph(int); int cplus_ispunct(int); int cplus_iscntrl(int); int cplus_toupper(int); int cplus_tolower(int);
 FILE *cplus_fopen(const char*,const char*); int cplus_fclose(FILE*);
 size_t cplus_fread(void*,size_t,size_t,FILE*); size_t cplus_fwrite(const void*,size_t,size_t,FILE*);
 int cplus_snprintf(char*,size_t,const char*,...); int cplus_vsnprintf(char*,size_t,const char*,va_list);
 int cplus_printf(const char*,...); int cplus_fprintf(FILE*,const char*,...);
 int cplus_scanf(const char*,...); int cplus_fscanf(FILE*,const char*,...);
+int cplus_fseek(FILE*,long,int); long cplus_ftell(FILE*); int cplus_fflush(FILE*);
+int cplus_remove(const char*); int cplus_rename(const char*,const char*);
+char *cplus_fgets(char*,int,FILE*); int cplus_fputs(const char*,FILE*);
+int cplus_getc(FILE*); int cplus_putc(int,FILE*);
+int cplus_feof(FILE*); int cplus_ferror(FILE*); void cplus_clearerr(FILE*);
 #ifdef __cplusplus
 }
 #endif
