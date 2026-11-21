@@ -214,3 +214,37 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
 }
 
 } // namespace cplus
+
+namespace cplus {
+FunctionEffect libcEffect(llvm::StringRef name) {
+  FunctionEffect e;
+  if (name == "malloc" || name == "calloc") {
+    e.allocates = true;
+    e.returnsOwned = true;
+  } else if (name == "realloc") {
+    e.allocates = true;
+    e.returnsOwned = true;
+    e.frees = true; // only on success; see caller-side conservative handling
+    e.freedArg = 0;
+  } else if (name == "free" || name == "cplus_release") {
+    e.frees = true;
+    e.freedArg = 0;
+  } else if (name == "memcpy" || name == "memmove" || name == "strcpy" ||
+             name == "strcat" || name == "memset") {
+    e.borrows = true;
+    e.writes = true;
+  } else if (name == "strlen" || name == "strcmp" || name == "fputs") {
+    e.borrows = true;
+  } else if (name == "fopen") {
+    e.allocates = true;
+    e.returnsOwned = true;
+  } else if (name == "fclose") {
+    e.frees = true;
+    e.freedArg = 0;
+  } else if (name == "fread" || name == "fwrite") {
+    e.borrows = true;
+    e.writes = true;
+  }
+  return e;
+}
+} // namespace cplus

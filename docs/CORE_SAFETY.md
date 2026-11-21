@@ -270,3 +270,30 @@ managed aliases, does not instrument ordinary dereferences, and its 1024-slot
 ring can evict entries (after which reuse may mask a stale alias).
 
 These are explicitly not claims of universal temporal safety.
+
+## Function-level existing-libc safety matrix (evidence, not coverage claim)
+
+| C API | C+ compiler recognition | runtime/native enforcement | safe-subset status | remaining bypasses |
+| --- | --- | --- | --- | --- |
+| `malloc(n)` | allocation effect; size expression recorded where constant | libc malloc; C+ metadata only for `cplus_alloc` family | valid C unchanged | raw alias escapes |
+| `calloc(n,s)` | allocation effect; overflow delegated to libc | native calloc | valid C unchanged | unknown provenance |
+| `realloc(p,n)` | effect summary marks `frees(arg)` only on success (conservative); token checker rejects `p = realloc(p,n)` in safe mode | native realloc semantics preserved | safe-mode restriction documented | success/failure branch not fully tracked |
+| `free(p)` / `cplus_release(p)` | same-variable double release rejected; interprocedural `frees(arg)` summary for user functions | deterministic 104/105 for managed allocations; libc for raw free | managed safe subset | raw alias double free not statically proven |
+| `memcpy` / `memmove` | constant count vs fixed array destination; FORTIFY builtins recognized | native memmove/memcpy + UBSan | valid C unchanged; unsafe counts rejected | pointer destinations, dynamic lengths, unknown source extent |
+| `strcpy` / `strcat` | literal vs fixed destination capacity | native libc + UBSan | literal overflow rejected | runtime strings |
+| `strlen` | read-only borrow effect only | native libc | valid C unchanged | none claimed beyond Clang checks |
+| `fopen`/`fclose` | owned handle effect summary | native FILE* + RAII wrappers | valid C unchanged | FILE* aliases across TUs |
+| `fread`/`fwrite` | writes/count effect; ignored count warning only for bare call | native stdio, EOF/errno unchanged | valid C unchanged | partial I/O semantics remain libc-owned |
+
+This is a **per-function status table**, not a claim like “81% of libc is safe”.
+The 81% figure earlier in this document referred only to C+ runtime line
+coverage. See `docs/CAPABILITIES.md` for the probed native toolchain features.
+
+## Interprocedural summary prototype
+
+`compiler/Analysis/OwnershipAnalysis.cpp` exposes a small effect table
+(`allocates`, `frees(arg)`, `borrows`, `writes`, `returnsOwned`) for known libc
+calls. `AstSafetyCheck.cpp` collects the same shape for simple user functions
+that call `free(parameter)` and propagates it to call sites. Tests:
+`interproc_double_free` (rejected) and `interproc_borrow` (accepted).
+Unknown functions are not assumed safe.

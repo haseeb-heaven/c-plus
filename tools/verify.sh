@@ -13,6 +13,9 @@ ctest --test-dir build --output-on-failure
 echo "== tests =="
 ./tests/run_tests.sh
 
+echo "== native capabilities =="
+./tests/core/capabilities.sh >/dev/null
+
 echo "== quarantine semantics =="
 ./tests/core/quarantine/run.sh
 

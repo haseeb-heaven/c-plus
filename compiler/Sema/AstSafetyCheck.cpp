@@ -3,6 +3,8 @@
 #include "Diagnostics.h"
 #include "Analysis/OwnershipAnalysis.h"
 
+#include <llvm/ADT/StringRef.h>
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
@@ -304,6 +306,12 @@ public:
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
             ptrVar = vd;
       }
+      if ((baseName == "free" || baseName == "cplus_release") && call->getNumArgs() >= 1) {
+        const Expr *arg0 = call->getArg(0)->IgnoreParenImpCasts();
+        if (const auto *pref = dyn_cast<DeclRefExpr>(arg0))
+          if (const auto *parm = dyn_cast<ParmVarDecl>(pref->getDecl()))
+            userFrees_[currentFunction_].insert(parm->getFunctionScopeIndex());
+      }
       if ((baseName == "free" || baseName == "cplus_release") && ptrVar) {
         if (releasedVars_.count(ptrVar->getNameAsString()))
           report(call->getBeginLoc(), "double free of '" +
@@ -311,16 +319,40 @@ public:
         else
           releasedVars_.insert(ptrVar->getNameAsString());
       }
-      if (baseName == "realloc" && ptrVar && call->getNumArgs() >= 1) {
-        // `p = realloc(p, n)` invalidates the old pointer on success.
-        if (isIdentExpr(call->getArg(0), ptrVar))
-          releasedVars_.insert(ptrVar->getNameAsString());
+      if (baseName == "realloc") {
+        // Do NOT mark the old pointer released: on failure realloc returns
+        // NULL and the original block remains owned by the caller.  Alias
+        // invalidation is only valid on the success branch, which the current
+        // analysis does not track; leave it unknown instead of unsoundly
+        // reporting a later free as a double free.
+        warnAt(call->getBeginLoc(),
+               "realloc result and original pointer require explicit "
+               "success/failure handling; alias state is unknown");
       }
       if ((baseName == "memcpy" || baseName == "memmove") && call->getNumArgs() >= 3) {
         checkBoundedCopy(call);
       }
       if (baseName == "strcpy" && call->getNumArgs() >= 2) {
         checkStringCopy(call);
+      }
+      // User-function effect summaries: a function that frees its parameter
+      // transfers that obligation to the call site.
+      auto uit = userFrees_.find(name);
+      if (uit != userFrees_.end() && !uit->second.empty()) {
+        for (int idx : uit->second) {
+          if (idx < 0 || (unsigned)idx >= call->getNumArgs())
+            continue;
+          const Expr *arg = call->getArg(idx)->IgnoreParenImpCasts();
+          const auto *ref = dyn_cast<DeclRefExpr>(arg);
+          const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+          if (!vd)
+            continue;
+          if (releasedVars_.count(vd->getNameAsString()))
+            report(call->getBeginLoc(), "double free after call to '" + name +
+                                            "' which frees its argument");
+          else
+            releasedVars_.insert(vd->getNameAsString());
+        }
       }
     }
     if (name == "pthread_create" && call->getNumArgs() >= 4) {
@@ -391,6 +423,7 @@ public:
   std::set<std::string> nonVolatileGlobals_;
   std::set<std::string> nullVars_;
   std::set<std::string> releasedVars_;
+  std::map<std::string, std::set<int>> userFrees_;
 };
 
 } // namespace
