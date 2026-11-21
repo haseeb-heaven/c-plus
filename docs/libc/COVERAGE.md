@@ -12,10 +12,10 @@ Tracks what is actually shipped/verified on `agent/modern-stdlib` (PR #17). **No
 | Adversarial mitigations | `tests/crt/adversarial/test_*.c` | 4 passed, 0 failed |
 | Fuzz smoke | `sh tests/crt/fuzz/run_fuzz_smoke.sh` | 4 passed, 0 failed |
 | Combined fuzz | `tests/crt/fuzz/fuzz_all_safe_apis.c`, `fuzz_all_exported.c` | 2000+1500 iterations, ok, no crash |
-| Libc tests | `sh tests/libc/run_libc_tests.sh` | 30 passed, 0 failed |
+| Libc tests | `sh tests/libc/run_libc_tests.sh` | 31 passed, 0 failed |
 | Libc fuzz | `sh tests/libc/run_fuzz.sh` | fuzz_libc: ok (5000 iters) |
 | Libc install smoke | `sh tests/libc/install_smoke.sh` | ok |
-| CTL containers | `sh tests/ctl/run_ctl_tests.sh` | 7 passed, 0 failed (vector, string, deque, list, set, map, unordered_set) |
+| CTL containers | `sh tests/ctl/run_ctl_tests.sh` | 11 passed, 0 failed (vector, string, deque, list, set, map, unordered_set, stack, queue, priority_queue, forward_list) |
 | yyjson (upstream API) | `sh tests/json/run_json_tests.sh` | 1 passed, 0 failed |
 | Exceptions (exceptions4c) | `sh tests/exceptions/run_except_tests.sh` | 2 passed, 0 failed |
 | Libc coverage | `sh tests/libc/coverage_libc.sh` | all modules >=80% line; stdio 80%, stdio2 91.67%, others 97-100% |
