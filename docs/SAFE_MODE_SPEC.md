@@ -13,7 +13,7 @@ This is the exact, versioned contract for the C+ safety modes.
 
 Both safety modes share the same analysis. The only difference is how
 *unverified* operations are handled: `warnAt()` emits a warning in DEFAULT and
-an error in STRICT. Proven errors (use-after-free, double free, overflow,
+an error in STRICT. Proven errors (use-after-free, double free, invalid free, overflow,
 null dereference, definite-initialization failures) are always rejected in
 both safety modes. The documented-safe `realloc` success/failure pattern is
 pre-detected so it is not reported as an unverified operation in either mode.
@@ -47,6 +47,7 @@ declared safe subset.
 | use-after-move rejection | IMPLEMENTED | use_after_move, moved_from_warning |
 | use-after-free (direct + simple alias, straight-line, realloc success branch) | IMPLEMENTED | uaf_direct, uaf_alias, libc_alias_uaf, realloc_success_alias_uaf |
 | double-free (same var + simple alias + interproc free) | IMPLEMENTED | malloc_double_free, interproc_double_free, double_release_alias |
+| invalid frees (stack/global object, string literal, array, interior pointer) | IMPLEMENTED | invalid_free_stack, invalid_free_global, invalid_free_string, invalid_free_array, invalid_free_interior, release_stack_pointer; `p + 0` accepted |
 | shared vs exclusive mutable borrows (fields) | PARTIAL | borrow_mut_conflict, borrow_field_ok; containers not covered |
 | non-lexical lifetimes | UNSUPPORTED | lexical statement-level state only |
 | pointer alias tracking across branches/loops | PARTIAL | alias groups straight-line; branch state conservatively suppressed |

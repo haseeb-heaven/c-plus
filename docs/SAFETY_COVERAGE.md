@@ -21,7 +21,8 @@ not a claim of complete memory safety.
 | multi-TU / .hp linkage | core/multi_tu, multi_tu_resource, multi_tu_hp, multi_tu_lib | positive |
 | threads / guards | cases/concurrency_mutex, core/thread_guard_ok, safety/thread_global_write, thread_invalid_sharing | positive/negative |
 | quarantine / stale alias | core/quarantine, core/quarantine/run.sh | runtime semantics |
-| fuzz / checker robustness | core/fuzz_checker.sh (120 inputs), core/adversarial_fuzz.py (144 unsafe + 80 positive), core/mass_fuzz_all.sh (3 seeds x 4,712 = 14,136 generated programs; 14,136 DEFAULT checks + 14,136 STRICT checks + ~3,923 differential clang syntax checks + ~576 debug/release build-and-run executions; 0 failures), core/cross_tu_fuzz.py (1,200 two-file programs; 4,800 per-TU checks, 1,200 C+ links/runs, 1,200 differential clang builds; 0 failures) | fuzz |
+| invalid free | safety/invalid_free_stack, invalid_free_global, invalid_free_string, invalid_free_array, invalid_free_interior, release_stack_pointer; core/positive/free_zero_offset (p+0 accepted); mass_fuzz free_* families | positive/negative |
+| fuzz / checker robustness | core/fuzz_checker.sh (120 inputs), core/adversarial_fuzz.py (144 unsafe + 80 positive), core/mass_fuzz_all.sh (3 seeds x 5,000 = 15,000 generated programs; 15,000 DEFAULT checks + 15,000 STRICT checks + ~4,067 differential clang syntax checks + ~576 debug/release build-and-run executions; 0 failures), core/cross_tu_fuzz.py (1,200 two-file programs; 4,800 per-TU checks, 1,200 C+ links/runs, 1,200 differential clang builds; 0 failures) | fuzz |
 | DEFAULT / STRICT modes | core/strict_mode.sh (16 cases: proven errors rejected in both, unverified ops warned in DEFAULT and rejected in STRICT, safe realloc accepted in STRICT, UAF source-location chain) | positive/negative |
 | logging categories | tests/logging_test.sh | positive |
 

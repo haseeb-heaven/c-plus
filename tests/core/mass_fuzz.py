@@ -101,6 +101,20 @@ int main(void){{ (void)bad(); return 0; }}""", True)
     add(f"countof_ptr_{n}", f"""#include "cplus/cplus.h"
 size_t f(int *p){{ return countof(p)+{n}; }}
 int main(void){{ return 0; }}""", True)
+    add(f"free_stack_{n}", f"""#include <stdlib.h>
+int main(void){{ int local[{n}]={{0}}; int *p=&local[0]; free(p); return 0; }}""",
+        True, "CPLUS-OWNER")
+    add(f"free_global_{n}", f"""#include <stdlib.h>
+static int g[{n}];
+int main(void){{ free(&g[0]); return 0; }}""", True, "CPLUS-OWNER")
+    add(f"free_array_{n}", f"""#include <stdlib.h>
+int main(void){{ char a[{n}]={{0}}; free(a); return 0; }}""", True, "CPLUS-OWNER")
+    add(f"free_interior_{n}", f"""#include <stdlib.h>
+int main(void){{ int *p=malloc({n}*sizeof(int)); if(!p)return 2; free(p+1); return 0; }}""",
+        True, "CPLUS-OWNER")
+    add(f"free_string_{n}", """#include <stdlib.h>
+int main(void) { const char *s = "abcdefghijklmnop"; free((void *)s); return 0; }""",
+        True, "CPLUS-OWNER")
 
     add(f"malloc_ok_{n}", f"""#include <stdlib.h>
 int main(void){{ int *p=malloc({n}*sizeof(int)); if(!p)return 1; p[0]={n}; int v=p[0]; free(p); return v=={n}?0:1; }}""",
@@ -130,6 +144,9 @@ int main(void){{ struct S s={{0}}; int *a=&s.x[0]; int *b=&s.x[{n-1}]; *a=1; *b=
         False)
     cok = "abc"[:k]
     add(f"checked_copy_ok_{n}", f'#include "cplus/cplus.h"\nint main(void){{ char d[{n}]={{0}}; return cplus_strcpy(d,sizeof(d),"{cok}")=={len(cok)}?0:1; }}',
+        False)
+    add(f"free_zero_ok_{n}", f"""#include <stdlib.h>
+int main(void){{ int *p=malloc({n}*sizeof(int)); if(!p)return 1; free(p+0); return 0; }}""",
         False)
 
 # ---------------------------------------------------------------------------

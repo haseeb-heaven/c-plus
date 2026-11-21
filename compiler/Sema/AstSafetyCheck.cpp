@@ -77,6 +77,89 @@ public:
     return vd ? vd->getNameAsString() : std::string();
   }
 
+  /// Detect frees of objects that cannot be the start of an allocation.
+  /// These are always bugs in C and are rejected in both safety modes.
+  void checkInvalidFree(SourceLocation loc, const Expr *arg,
+                        const std::string &api) {
+    if (!arg)
+      return;
+    const Expr *e = arg->IgnoreParenImpCasts();
+
+    if (isa<StringLiteral>(e)) {
+      report(loc, "invalid free of string literal via " + api);
+      return;
+    }
+
+    if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
+      if (uo->getOpcode() == UO_AddrOf) {
+        const Expr *sub = uo->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *ref = dyn_cast<DeclRefExpr>(sub)) {
+          const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+          if (vd && !vd->getType()->isPointerType()) {
+            report(loc, "invalid free of address of non-heap object '" +
+                            vd->getNameAsString() + "' via " + api);
+            return;
+          }
+        }
+        if (const auto *ase = dyn_cast<ArraySubscriptExpr>(sub)) {
+          std::string base = varNameOf(ase->getBase());
+          const auto *bref = dyn_cast<DeclRefExpr>(
+              ase->getBase()->IgnoreParenImpCasts());
+          const auto *bvd = bref ? dyn_cast<VarDecl>(bref->getDecl()) : nullptr;
+          if (bvd && bvd->getType()->isArrayType()) {
+            report(loc, "invalid free of array element '" + bvd->getNameAsString() +
+                            "' via " + api);
+            return;
+          }
+          Expr::EvalResult r;
+          if (!base.empty() && ase->getIdx()->EvaluateAsInt(r, ctx_) &&
+              r.Val.isInt() && r.Val.getInt() != 0) {
+            report(loc, "invalid free of interior pointer '" + base +
+                            "' via " + api);
+            return;
+          }
+        }
+      }
+    }
+
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e)) {
+      const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+      if (vd && vd->getType()->isArrayType()) {
+        report(loc, "invalid free of array '" + vd->getNameAsString() +
+                        "' via " + api);
+        return;
+      }
+    }
+
+    // Pointer variables known to point at non-heap storage: `T *p = &obj;`
+    // or `const char *s = "literal";`.
+    std::string name = varNameOf(arg->IgnoreParenCasts());
+    if (!name.empty()) {
+      if (stringPtrs_.count(name)) {
+        report(loc, "invalid free of string-literal pointer '" + name +
+                        "' via " + api);
+        return;
+      }
+      auto bit = borrowOwner_.find(name);
+      if (bit != borrowOwner_.end()) {
+        report(loc, "invalid free of address of non-heap object '" + name +
+                        "' via " + api);
+        return;
+      }
+    }
+
+    if (const auto *bo = dyn_cast<BinaryOperator>(e)) {
+      if (bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) {
+        Expr::EvalResult r;
+        if (bo->getRHS()->EvaluateAsInt(r, ctx_) && r.Val.isInt() &&
+            r.Val.getInt() != 0) {
+          report(loc, "invalid free of interior pointer '" +
+                          varNameOf(bo->getLHS()) + "' via " + api);
+        }
+      }
+    }
+  }
+
   void markReleased(const std::string &name) {
     if (name.empty())
       return;
@@ -273,6 +356,8 @@ public:
             allocLocs_[vd->getNameAsString()] = vd->getBeginLoc();
         }
       }
+      if (isa<StringLiteral>(init->IgnoreParenCasts()))
+        stringPtrs_.insert(vd->getNameAsString());
     }
     if (!vd->getType()->isPointerType())
       return true;
@@ -569,6 +654,8 @@ public:
       }
       bool isAllocatorFree = (baseName == "free" ||
                               baseName == "cplus_release");
+      if (isAllocatorFree && call->getNumArgs() >= 1)
+        checkInvalidFree(call->getBeginLoc(), call->getArg(0), baseName);
       bool invalidates = isAllocatorFree ||
                          destructors_.count(name) != 0;
       if (invalidates && ptrVar) {
@@ -679,7 +766,8 @@ public:
 private:
   static std::string diagnosticCategory(const std::string &message) {
     std::string category = "CPLUS-FFI";
-    if (message.find("double free") != std::string::npos)
+    if (message.find("double free") != std::string::npos ||
+        message.find("invalid free") != std::string::npos)
       category = "CPLUS-OWNER";
     else if (message.find("use-after-move") != std::string::npos)
       category = "CPLUS-OWNER";
@@ -794,6 +882,7 @@ private:
   std::map<std::string, SourceLocation> allocLocs_;
   std::map<std::string, SourceLocation> aliasLocs_;
   std::map<std::string, SourceLocation> releaseLocs_;
+  std::set<std::string> stringPtrs_;
   std::string currentFunction_;
 
 public:

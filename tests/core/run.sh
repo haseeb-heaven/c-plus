@@ -54,6 +54,7 @@ echo "core safety: positive"
 build_run raii_basic "$ROOT/tests/core/positive/raii_basic.cp"
 build_run move_and_borrow "$ROOT/tests/core/positive/move_and_borrow.cp"
 build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
+build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"
 build_run init_all_branches "$ROOT/tests/core/positive/init_all_branches.c"
 build_run pointer_one_past "$ROOT/tests/core/positive/pointer_one_past.c"
 build_run explicit_drop_once "$ROOT/tests/core/positive/explicit_drop_once.cp"
@@ -177,7 +178,13 @@ expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 134
 expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 134
 expect_trap strnlen_null "$ROOT/tests/safety/strnlen_null.c" 134
 expect_reject double_release_alias "$ROOT/tests/safety/double_release_from_alias.c"
-expect_trap release_stack_pointer "$ROOT/tests/safety/release_stack_pointer.c" 105
+# Stronger guarantee: the compiler rejects releasing a stack address outright.
+expect_reject release_stack_pointer "$ROOT/tests/safety/release_stack_pointer.c"
+expect_reject invalid_free_stack "$ROOT/tests/safety/invalid_free_stack.c"
+expect_reject invalid_free_interior "$ROOT/tests/safety/invalid_free_interior.c"
+expect_reject invalid_free_global "$ROOT/tests/safety/invalid_free_global.c"
+expect_reject invalid_free_string "$ROOT/tests/safety/invalid_free_string.c"
+expect_reject invalid_free_array "$ROOT/tests/safety/invalid_free_array.c"
 
 if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
    -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \
