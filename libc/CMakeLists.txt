@@ -8,6 +8,7 @@ add_library(cplus_hardened_libc STATIC
   src/stdlib/alloc.c
   src/stdlib/stdlib_extra.c
   src/stdlib/stdlib_extra2.c
+  src/stdlib/stdlib_extra3.c
   src/stdlib/musl_stdlib_extra.c
   src/string/memory.c
   src/string/string.c
