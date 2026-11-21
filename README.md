@@ -24,7 +24,7 @@ C+ is an **experimental** compiler extension for C. The goal is to make existing
 
 | Workstream | What C+ provides | Who works on it |
 | --- | --- | --- |
-| **1. Safer existing C standard library** | Keep writing **ordinary** `malloc`, `free`, `memcpy`, `strcpy`, `printf`, `fopen`, etc. C+ uses Clang-based bounds, ownership, borrow/lifetime analysis and supported native fortified/checked CRT mechanisms to prevent or diagnose unsafe operations where possible. **No glibc fork, no mandatory `malloc_s`/`free_s` rewrite.** | **Agent 1** — [#19](https://github.com/haseeb-heaven/c-plus/issues/19), [#1](https://github.com/haseeb-heaven/c-plus/issues/1), [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
+| **1. Safer existing C standard library** | Keep writing **ordinary** `malloc`, `free`, `memcpy`, `strcpy`, `printf`, `fopen`, etc. C+ uses Clang-based bounds, ownership, borrow/lifetime analysis and supported native fortified/checked CRT mechanisms to prevent or diagnose unsafe operations where possible. **No glibc fork, no mandatory `malloc_s`/`free_s` rewrite.** | **Both agents (P0)** — Agent 1 compiler, Agent 2 CRT tests/adapters; [#19](https://github.com/haseeb-heaven/c-plus/issues/19), [#1](https://github.com/haseeb-heaven/c-plus/issues/1), [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
 | **2. Modern C+ libraries** | Optional struct-backed classes, owned String/Vector/File/Result, **GUI, logging, JSON, graphics, networking, HTTP, async, audio, images and video**. Wrap established libraries and OS APIs with RAII, checked sizes, explicit owners/borrows and errors. | **Agent 2** — [#3](https://github.com/haseeb-heaven/c-plus/issues/3), [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
 
 **Same C source; better compiler enforcement (target, not yet universally implemented):**
@@ -51,13 +51,15 @@ values.push_back(42);
 
 **Native implementations and references:** [Apple libc](https://github.com/apple-oss-distributions/Libc), [Apple bounds-safe Clang](https://github.com/swiftlang/llvm-project) ([documentation](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html)), [Microsoft Secure CRT](https://learn.microsoft.com/en-us/cpp/c-runtime-library/security-features-in-the-crt), [LLVM/Clang](https://github.com/llvm/llvm-project), [glibc](https://sourceware.org/git/?p=glibc.git), [musl](https://git.musl-libc.org/cgit/musl). Modern modules reuse [SDL3](https://github.com/libsdl-org/SDL), [Nuklear](https://github.com/Immediate-Mode-UI/Nuklear), [yyjson](https://github.com/ibireme/yyjson), [libcurl](https://github.com/curl/curl), [libuv](https://github.com/libuv/libuv), [miniaudio](https://github.com/mackron/miniaudio), [stb](https://github.com/nothings/stb) and [FFmpeg](https://github.com/FFmpeg/FFmpeg) where appropriate. No blanket promise of proven safety or unchanged performance.
 
+**Current top priority:** Both agents work on [#19 — existing libc/CRT safety](https://github.com/haseeb-heaven/c-plus/issues/19). Agent 1 implements compiler analysis; Agent 2 implements isolated CRT conformance/portability tests and native safety adapters. Modern GUI/JSON/logging feature expansion is paused until this shared milestone is verified. They work on separate branches/PRs to avoid conflicting edits.
+
 ### Roadmap and tracking
 
 | Priority | Issue | Work |
 | --- | --- | --- |
 | P0 | [#1 — Compiler ownership, borrowing, RAII and bounds](https://github.com/haseeb-heaven/c-plus/issues/1) | Agent 1 · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
-| P0 | [#19 — **Workstream 1: safer existing libc/CRT**](https://github.com/haseeb-heaven/c-plus/issues/19) | Agent 1 · Apple/Microsoft/Clang hardening research and compatible compiler integration |
-| P0 | [#3 — **Workstream 2: modern C+ libraries, including GUI/logging/JSON**](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17); former [#20](https://github.com/haseeb-heaven/c-plus/issues/20) scope merged here |
+| P0 | [#19 — **Workstream 1: safer existing libc/CRT**](https://github.com/haseeb-heaven/c-plus/issues/19) | **Both agents** · compiler checks + CRT conformance/platform adapters |
+| P1 | [#3 — **Workstream 2: modern C+ libraries, including GUI/logging/JSON**](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17); former [#20](https://github.com/haseeb-heaven/c-plus/issues/20) scope merged here |
 | P0 | [#4 — Multi-TU and RAII linkage](https://github.com/haseeb-heaven/c-plus/issues/4) | Agent 1, coordinate with Agent 2 |
 | P1 | [#8 — Tests, fuzzing, CI, benchmarks](https://github.com/haseeb-heaven/c-plus/issues/8) | Both agents |
 | P2 | [#18 — Legacy C → modern C+ AST modernizer](https://github.com/haseeb-heaven/c-plus/issues/18) | Later |
