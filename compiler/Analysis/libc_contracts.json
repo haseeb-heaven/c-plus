@@ -1,0 +1,606 @@
+{
+  "version": 1,
+  "description": "C+ compiler-visible libc contracts. Agent 2 must match these in libc/contracts.",
+  "functions": {
+    "malloc": {
+      "params": [
+        "size_t bytes"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "bytes",
+      "effects": [
+        "allocates"
+      ],
+      "borrow": [],
+      "failure": "returns NULL",
+      "diagnostics": "CPLUS-SAFE-ALLOC",
+      "dynamic": [
+        "null-check"
+      ]
+    },
+    "calloc": {
+      "params": [
+        "size_t count",
+        "size_t size"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "count*size (overflow-checked)",
+      "effects": [
+        "allocates",
+        "zero-init"
+      ],
+      "borrow": [],
+      "failure": "returns NULL",
+      "diagnostics": "CPLUS-SAFE-ALLOC",
+      "dynamic": [
+        "overflow-check",
+        "null-check"
+      ]
+    },
+    "realloc": {
+      "params": [
+        "void *ptr",
+        "size_t size"
+      ],
+      "nullableArgs": [
+        0
+      ],
+      "ownership": "returns_owned",
+      "transfer": "success-only old alias invalid",
+      "extent": "size",
+      "effects": [
+        "allocates",
+        "frees-on-success"
+      ],
+      "borrow": [],
+      "failure": "returns NULL; original valid",
+      "diagnostics": "CPLUS-SAFE-REALLOC",
+      "dynamic": [
+        "success-branch alias invalidation (planned)"
+      ]
+    },
+    "free": {
+      "params": [
+        "void *ptr"
+      ],
+      "nullableArgs": [
+        0
+      ],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": null,
+      "effects": [
+        "frees"
+      ],
+      "borrow": [],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-FREE",
+      "dynamic": [
+        "managed double/invalid release"
+      ]
+    },
+    "memcpy": {
+      "params": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-BOUNDS",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ]
+    },
+    "memmove": {
+      "params": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst",
+        "overlap-safe"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-BOUNDS",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ]
+    },
+    "memset": {
+      "params": [
+        "void *dst",
+        "int c",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-BOUNDS",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ]
+    },
+    "strcpy": {
+      "params": [
+        "char *dst",
+        "const char *src"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(src)+1 <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ]
+    },
+    "strncpy": {
+      "params": [
+        "char *dst",
+        "const char *src",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ]
+    },
+    "strcat": {
+      "params": [
+        "char *dst",
+        "const char *src"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(dst)+strlen(src)+1 <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ]
+    },
+    "strlen": {
+      "params": [
+        "const char *s"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "reads until NUL",
+      "effects": [
+        "reads"
+      ],
+      "borrow": [
+        "s"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": []
+    },
+    "fopen": {
+      "params": [
+        "const char *path",
+        "const char *mode"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": null,
+      "effects": [
+        "allocates FILE*"
+      ],
+      "borrow": [],
+      "failure": "returns NULL",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "null-check"
+      ]
+    },
+    "fclose": {
+      "params": [
+        "FILE *stream"
+      ],
+      "nullableArgs": [],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": null,
+      "effects": [
+        "frees FILE*"
+      ],
+      "borrow": [],
+      "failure": "native errno",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": []
+    },
+    "fread": {
+      "params": [
+        "void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size*nmemb <= buffer capacity",
+      "effects": [
+        "writes ptr",
+        "advances stream"
+      ],
+      "borrow": [
+        "ptr",
+        "stream"
+      ],
+      "failure": "short read/EOF",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "return-value convention"
+      ]
+    },
+    "fwrite": {
+      "params": [
+        "const void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size*nmemb <= buffer extent",
+      "effects": [
+        "reads ptr",
+        "advances stream"
+      ],
+      "borrow": [
+        "ptr",
+        "stream"
+      ],
+      "failure": "short write",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "return-value convention"
+      ]
+    },
+    "strcpy_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "strncpy_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "strcat_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "memcpy_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "memmove_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "memset_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "strnlen_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "sprintf_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "snprintf_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "fopen_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT"
+    },
+    "malloc_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension"
+    },
+    "calloc_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension"
+    },
+    "realloc_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension"
+    },
+    "free_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension"
+    }
+  }
+}

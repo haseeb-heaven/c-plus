@@ -4,6 +4,9 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Analysis/CFG.h>
+#include "llvm/Support/JSON.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 #include <clang/Basic/SourceManager.h>
 
 #include <algorithm>
@@ -216,7 +219,76 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
 } // namespace cplus
 
 namespace cplus {
+static std::map<std::string, FunctionEffect> &loadedContracts() {
+  static std::map<std::string, FunctionEffect> contracts;
+  static bool attempted = false;
+  if (attempted)
+    return contracts;
+  attempted = true;
+
+  std::string path = "compiler/Analysis/libc_contracts.json";
+#ifdef CPLUS_CONTRACT_PATH
+  std::string installed = CPLUS_CONTRACT_PATH;
+#elif defined(CPLUS_SOURCE_DIR)
+  std::string installed = std::string(CPLUS_SOURCE_DIR) +
+                          "/compiler/Analysis/libc_contracts.json";
+  if (llvm::sys::fs::exists(installed))
+    path = installed;
+#endif
+  auto buf = llvm::MemoryBuffer::getFile(path);
+  if (!buf) {
+    std::string exe = llvm::sys::fs::getMainExecutable("c+", nullptr);
+    if (!exe.empty()) {
+      llvm::SmallString<256> dir(llvm::sys::path::parent_path(exe));
+      llvm::sys::path::append(dir, "..", "share", "cplus",
+                              "libc_contracts.json");
+      if (llvm::sys::fs::exists(dir))
+        path = std::string(dir.str());
+    }
+    buf = llvm::MemoryBuffer::getFile(path);
+  }
+  if (!buf)
+    return contracts;
+  auto parsed = llvm::json::parse((*buf)->getBuffer());
+  if (!parsed) {
+    llvm::consumeError(parsed.takeError());
+    return contracts;
+  }
+  const llvm::json::Object *root = parsed->getAsObject();
+  if (!root)
+    return contracts;
+  const llvm::json::Object *functions = root->getObject("functions");
+  if (!functions)
+    return contracts;
+  for (const auto &entry : *functions) {
+    const llvm::json::Object *spec = entry.second.getAsObject();
+    if (!spec)
+      continue;
+    FunctionEffect e;
+    auto effectList = spec->getArray("effects");
+    if (effectList)
+      for (const auto &v : *effectList) {
+        auto s = v.getAsString();
+        if (!s) continue;
+        if (*s == "allocates") e.allocates = true;
+        else if (*s == "frees") e.frees = true;
+        else if (*s == "frees-on-success") e.frees = true;
+        else if (*s == "writes") e.writes = true;
+        else if (*s == "reads") e.borrows = true;
+      }
+    auto ownership = spec->getString("ownership");
+    if (ownership == "returns_owned") e.returnsOwned = true;
+    e.category = "CPLUS-SAFE-CRT";
+    contracts[entry.first.str()] = e;
+  }
+  return contracts;
+}
+
 FunctionEffect libcEffect(llvm::StringRef name) {
+  auto &contracts = loadedContracts();
+  auto it = contracts.find(name.str());
+  if (it != contracts.end())
+    return it->second;
   FunctionEffect e;
   if (name == "malloc" || name == "calloc" || name == "malloc_s" ||
       name == "calloc_s") {

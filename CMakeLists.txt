@@ -252,6 +252,7 @@ message(STATUS "C+ backend C compiler: ${CPLUS_CLANG_BIN}")
 
 target_compile_definitions(cplus_core PRIVATE
   CPLUS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  CPLUS_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/compiler/Analysis/libc_contracts.json"
   CPLUS_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/runtime/include"
   CPLUS_CLANG_BIN="${CPLUS_CLANG_BIN}"
   CPLUS_RUNTIME_LIB="$<TARGET_FILE:cplus_runtime>")
@@ -261,6 +262,7 @@ install(TARGETS c+ cplus_runtime
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION lib)
 install(FILES runtime/include/cplus/cplus.h DESTINATION include/cplus)
+install(FILES compiler/Analysis/libc_contracts.json DESTINATION share/cplus)
 
 # ---------------------------------------------------------------------------
 # CTest wrappers around the executable test and demo suites
