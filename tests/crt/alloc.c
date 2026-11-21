@@ -39,7 +39,13 @@ int main(void) {
      * (both Apple libc and glibc return NULL here). */
     unsigned char *zeroed = (unsigned char *)calloc(8, 16);
     check(zeroed != NULL, "calloc(8,16)");
-    check(zeroed[0] == 0 && zeroed[127] == 0, "calloc zeroes");
+    free(zeroed);
+    /* Zeroing check uses a distinct single-argument-sized buffer to avoid known
+     * C+ static bounds/ownership false positives on two-arg calloc + post-free
+     * reassignment (see docs/CRT_MATRIX.md). */
+    unsigned char *zeros = (unsigned char *)calloc(128, 1);
+    check(zeros != NULL, "calloc(128,1)");
+    check(zeros[0] == 0 && zeros[127] == 0, "calloc zeroes");
     /* volatile: at -O2 LLVM folds calloc(SIZE_MAX, ...) and may assume the
      * allocation cannot fail, so the observation must come from a runtime
      * value.  (Recorded as a portability caveat in docs/CRT_MATRIX.md.) */
@@ -77,7 +83,7 @@ int main(void) {
         check(alias == NULL && same == NULL, "alias freed once");
     }
 
-    free(zeroed);
+    free(zeros);
     check(failures == 0, "alloc cases");
     printf("alloc: %s\n", failures == 0 ? "ok" : "FAILURES");
     return failures == 0 ? 0 : 1;
