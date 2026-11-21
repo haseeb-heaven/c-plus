@@ -60,6 +60,7 @@ long cplus_time(long*); double cplus_difftime(long,long); long cplus_clock(void)
 struct tm; struct tm *cplus_gmtime(const long*); struct tm *cplus_localtime(const long*); long cplus_mktime(struct tm*);
 size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
 char *cplus_setlocale(int,const char*); struct lconv; struct lconv *cplus_localeconv(void);
+void (*cplus_signal(int, void(*)(int)))(int); int cplus_raise(int);
 #ifdef __cplusplus
 }
 #endif

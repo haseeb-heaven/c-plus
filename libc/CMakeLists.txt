@@ -23,6 +23,7 @@ add_library(cplus_hardened_libc STATIC
   src/math/math.c
   src/time/time.c
   src/locale/locale.c
+  src/signal/signal.c
 )
 target_include_directories(cplus_hardened_libc PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
