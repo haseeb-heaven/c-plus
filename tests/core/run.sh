@@ -62,6 +62,10 @@ build_run recursive_resource "$ROOT/tests/core/positive/recursive_resource.cp"
 build_run partial_init "$ROOT/tests/core/positive/partial_init.cp"
 build_run double_explicit_drop "$ROOT/tests/core/positive/double_explicit_drop.cp"
 build_run safe_memory "$ROOT/tests/core/positive/safe_memory.c"
+build_run move_chain_ok "$ROOT/tests/core/positive/move_chain_ok.cp"
+build_run managed_len_fold "$ROOT/tests/core/positive/managed_len_fold.c"
+build_run nested_raii "$ROOT/tests/core/positive/nested_raii.cp"
+build_run borrow_valid "$ROOT/tests/core/positive/borrow_valid.cp"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -91,6 +95,10 @@ build_expect_stderr moved_from_warning "$ROOT/tests/safety/moved_from_warning.cp
 build_expect_stderr double_move_warning "$ROOT/tests/safety/double_move_warning.cp" "moved more than once"
 
 echo "core safety: rejected"
+build_expect_stderr move_chain "$ROOT/tests/safety/move_chain.c" "use of moved-from"
+expect_reject borrow_after_move "$ROOT/tests/safety/borrow_after_move.c"
+expect_reject managed_escape_expr "$ROOT/tests/safety/managed_escape_expr.c"
+expect_reject multi_dim_negative "$ROOT/tests/safety/multi_dim_negative.c"
 expect_reject constructor_early_return "$ROOT/tests/safety/constructor_early_return.cp"
 expect_reject bounds_loop "$ROOT/tests/safety/bounds_loop.c"
 expect_reject uninit_branch "$ROOT/tests/safety/uninit_branch.c"
@@ -103,6 +111,10 @@ expect_trap double_release "$ROOT/tests/safety/double_release.cp" 104
 expect_trap uaf_check "$ROOT/tests/safety/uaf_check.cp" 105
 expect_trap string_overflow "$ROOT/tests/safety/string_overflow.c" 101
 expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 102
+expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 102
+expect_trap strnlen_null "$ROOT/tests/safety/strnlen_null.c" 102
+expect_trap double_release_alias "$ROOT/tests/safety/double_release_from_alias.c" 104
+expect_trap release_stack_pointer "$ROOT/tests/safety/release_stack_pointer.c" 105
 
 if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
    -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \
