@@ -12,6 +12,7 @@ add_library(cplus_hardened_libc STATIC
   src/string/string.c
   src/string/extra.c
   src/string/extra2.c
+  src/string/extra3.c
   src/stdio/stdio.c
   src/stdio/stdio2.c
   src/ctype/ctype.c
