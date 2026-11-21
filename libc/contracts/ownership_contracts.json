@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "generated_for": "cplus-hardened-libc",
+  "notes": "Agent 1 compiler enforces proofs; this file describes library contracts. Not a safety proof.",
+  "functions": [
+    {"name":"cplus_malloc","params":[{"name":"size","type":"size_t","bounds":"n/a"}],"return":{"type":"void*","ownership":"owned_or_null","nullability":"nullable"},"errors":["ENOMEM"],"thread_safety":"mt-safe"},
+    {"name":"cplus_calloc","params":[{"name":"nmemb","type":"size_t"},{"name":"size","type":"size_t"}],"return":{"type":"void*","ownership":"owned_or_null_zeroed","nullability":"nullable"},"errors":["ENOMEM","EOVERFLOW"],"thread_safety":"mt-safe"},
+    {"name":"cplus_realloc","params":[{"name":"ptr","type":"void*","ownership":"owned_or_null"},{"name":"size","type":"size_t"}],"return":{"type":"void*","ownership":"owned_or_null_on_success_preserve_old_on_fail","nullability":"nullable"},"errors":["ENOMEM"],"thread_safety":"mt-safe"},
+    {"name":"cplus_free","params":[{"name":"ptr","type":"void*","ownership":"owned_or_null"}],"return":{"type":"void"},"post":{"invalidates":"ptr_and_aliases_unsound"},"thread_safety":"mt-safe"},
+    {"name":"cplus_memcpy","params":[{"name":"dest","writable_bytes":"n"},{"name":"src","readable_bytes":"n"},{"name":"n","type":"size_t"}],"return":{"type":"void*","alias":"dest"},"pre":["!overlap","valid_ranges"],"thread_safety":"mt-safe if ranges disjoint"},
+    {"name":"cplus_strcpy_s","params":[{"name":"dest","writable_bytes":"dmax"},{"name":"dmax","type":"rsize_t"},{"name":"src","type":"const char*","null_terminated":"required"}],"return":{"type":"errno_t"},"errors":["ESNULLP","ESZEROL","ESLEMAX","ESNOSPC"],"thread_safety":"mt-safe if ranges disjoint"}
+  ]
+}
