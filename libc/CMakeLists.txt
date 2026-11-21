@@ -15,6 +15,9 @@ add_library(cplus_hardened_libc STATIC
   src/stdio/stdio.c
   src/stdio/stdio2.c
   src/ctype/ctype.c
+  src/math/math.c
+  src/time/time.c
+  src/locale/locale.c
 )
 target_include_directories(cplus_hardened_libc PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
