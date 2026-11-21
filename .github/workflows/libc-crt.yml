@@ -25,6 +25,8 @@ jobs:
         run: sh tests/libc/install_smoke.sh
       - name: Fuzz smoke
         run: sh tests/crt/fuzz/run_fuzz_smoke.sh
+      - name: CTL container tests
+        run: sh tests/ctl/run_ctl_tests.sh
       - name: Combined fuzz harness
         run: |
           clang -O2 -Wall -Wextra -pedantic -std=c99 -Istdlib/safe -Ithird_party/intel-safestringlib/include tests/crt/fuzz/fuzz_all_safe_apis.c build/safe/libcplus_safecrt.a -o /tmp/fuzz_all
