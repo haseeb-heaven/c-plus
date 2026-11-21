@@ -29,3 +29,5 @@ cplus_rewritten.c
 scratch
 
 benchmarks/out/
+
+examples/out/

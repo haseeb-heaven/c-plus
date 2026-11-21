@@ -16,6 +16,9 @@ echo "== tests =="
 echo "== cli compatibility =="
 ./tests/cli_compat_test.sh
 
+echo "== complex examples (build only) =="
+./examples/build_examples.sh
+
 echo "== breaker v3 =="
 bash tests/stress/cplus_breaker_v3/run.sh
 

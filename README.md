@@ -219,6 +219,11 @@ own machine for current numbers.
 - `include/cplus/` — stable C ABI used by generated code
 - `tests/`, `demos/`, `benchmarks/` — executable evidence
 
+## Examples
+
+Larger real applications (games, a student database and a macOS system
+monitor) are in `examples/`. See [`examples/README.md`](examples/README.md).
+
 ## Logging
 
 Compiler and runtime logging are opt-in via `c+ build --log --log-level debug`.
