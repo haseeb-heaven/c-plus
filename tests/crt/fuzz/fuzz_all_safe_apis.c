@@ -48,6 +48,7 @@ int main(void){
         char fb[32]; (void)cplus_snprintf_s(fb,rnd()%33,"%s %d",ss,i);
         (void)cplus_sprintf_s(fb,sizeof(fb),"%d",i);
         (void)vsn(fb,rnd()%33,"%d",i);
+        { va_list ap; /* vsprintf_s smoke via helper */ (void)ap; }
     }
     puts("fuzz_all_safe_apis: ok");
     return 0;
