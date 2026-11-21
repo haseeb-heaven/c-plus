@@ -38,10 +38,8 @@ CFG
 SC_DEFS="-Dmemcpy_s=cplus_sc_memcpy_s -D_memcpy_s_chk=cplus_sc__memcpy_s_chk -Dmemmove_s=cplus_sc_memmove_s -D_memmove_s_chk=cplus_sc__memmove_s_chk -Dmemset_s=cplus_sc_memset_s -D_memset_s_chk=cplus_sc__memset_s_chk -Dmemcmp_s=cplus_sc_memcmp_s -D_memcmp_s_chk=cplus_sc__memcmp_s_chk -Dmemzero_s=cplus_sc_memzero_s -D_memzero_s_chk=cplus_sc__memzero_s_chk -Dstrcpy_s=cplus_sc_strcpy_s -D_strcpy_s_chk=cplus_sc__strcpy_s_chk -Dstrncpy_s=cplus_sc_strncpy_s -D_strncpy_s_chk=cplus_sc__strncpy_s_chk -Dstrcat_s=cplus_sc_strcat_s -D_strcat_s_chk=cplus_sc__strcat_s_chk -Dstrncat_s=cplus_sc_strncat_s -D_strncat_s_chk=cplus_sc__strncat_s_chk -Dstrnlen_s=cplus_sc_strnlen_s -D_strnlen_s_chk=cplus_sc__strnlen_s_chk -D_strtok_s_chk=cplus_sc__strtok_s_chk -Dstrcmp_s=cplus_sc_strcmp_s -D_strcmp_s_chk=cplus_sc__strcmp_s_chk -Dabort_handler_s=cplus_sc_abort_handler_s -Dignore_handler_s=cplus_sc_ignore_handler_s -Dset_mem_constraint_handler_s=cplus_sc_set_mem_constraint_handler_s -Dset_str_constraint_handler_s=cplus_sc_set_str_constraint_handler_s -Dinvoke_safe_mem_constraint_handler=cplus_sc_invoke_safe_mem_constraint_handler -Dinvoke_safe_str_constraint_handler=cplus_sc_invoke_safe_str_constraint_handler"
 
 INC_SC="-I$OUT -I$SC/include -I$SC/src -I$ROOT/stdlib/safe"
-INC_UP="-I$UP/include -I$UP/safeclib -I$ROOT/stdlib/safe"
 CFLAGS_SC="-O2 -std=c99 -D__STDC_WANT_LIB_EXT1__=0 $SC_DEFS -Wno-unused-parameter -Wno-missing-field-initializers -Wno-macro-redefined $INC_SC"
-CFLAGS_UP="-O2 -std=c99 -D__STDC_WANT_LIB_EXT1__=0 -include $UP/rename_symbols.h -Wno-unused-parameter $INC_UP"
-CFLAGS_W="-O2 -Wall -Wextra -pedantic -std=c99 -I$SC/include -I$UP/include -I$ROOT/stdlib/safe"
+CFLAGS_W="-O2 -Wall -Wextra -pedantic -std=c99 -I$SC/include -I$ROOT/stdlib/safe"
 
 for f in \
   "$SC"/src/abort_handler_s.c \
@@ -66,10 +64,7 @@ for f in \
   "$CC" $CFLAGS_SC -c "$f" -o "$OUT/sc_$base.o"
 done
 
-for f in "$UP"/safeclib/*.c; do
-  base=$(basename "$f" .c)
-  "$CC" $CFLAGS_UP -c "$f" -o "$OUT/up_$base.o"
-done
+# Intel safestringlib retained in third_party for provenance/reference only; not compiled/linked.
 
 for f in "$ROOT"/stdlib/safe/src/*.c; do
   base=$(basename "$f" .c)

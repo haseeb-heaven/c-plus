@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.16)
 project(cplus_safecrt C)
 set(CMAKE_C_STANDARD 99)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/intel-safestringlib ${CMAKE_BINARY_DIR}/intel-safestringlib)
-
 add_library(cplus_safecrt STATIC
   src/safe_alloc.c
   src/safe_error.c
@@ -14,5 +12,4 @@ add_library(cplus_safecrt STATIC
   src/safe_platform.c
   src/safe_string.c
 )
-target_include_directories(cplus_safecrt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/intel-safestringlib/include)
-target_link_libraries(cplus_safecrt PUBLIC cplus_safestringlib)
+target_include_directories(cplus_safecrt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/safeclib/include)

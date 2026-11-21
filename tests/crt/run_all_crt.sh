@@ -9,7 +9,7 @@ sh tests/crt/run_safecrt_tests.sh
 echo "== Safe CRT examples =="
 sh scripts/build_safecrt.sh >/dev/null
 CC=${CPLUS_CLANG:-clang}
-INC="-Istdlib/safe -Ithird_party/intel-safestringlib/include"
+INC="-Istdlib/safe -Ithird_party/safeclib/include -Ithird_party/intel-safestringlib/include"
 LIB=build/safe/libcplus_safecrt.a
 OUT=build/safe/examples; mkdir -p "$OUT"
 pass=0; fail=0
