@@ -29,7 +29,7 @@
 - Safeclib-backed mem/str adapters: return safeclib `errno_t`; log TRACE on entry and ERROR on non-zero constraint/error results. `strtok_s` logs WARN on null result; `strnlen_s` is a size query and logs TRACE only.
 - Alloc adapters: validate out/inout args, return `CPLUS_SAFE_*` codes, log ERROR on invalid/overflow/OOM, DEBUG on success.
 - IO adapters: validate args/stream pointers, return `CPLUS_SAFE_*`/errno as implemented, log WARN/ERROR on failures, DEBUG on success, TRACE on hot read/write paths.
-- Format adapters: platform-backed bounded `vsnprintf` family; null format/invalid dest+dmax return -1 with ERROR log. scanf-family negative returns log WARN (EOF/error), printf/fprintf/snprintf-family format/runtime failures log ERROR.
+- Format adapters: platform-backed bounded `vsnprintf` family; null format/invalid dest+dmax return -1, set `errno=EINVAL`, and log ERROR. printf/fprintf/snprintf-family format/runtime failures return -1, set `errno` (preserving the underlying libc value), and log ERROR; scanf-family negative returns log WARN (EOF/error) and leave `errno` as set by libc. Bounded variants follow the C99 `snprintf` truncation contract (bounded, NUL-terminated, returns would-be length); `sprintf_s/vsprintf_s` are aliases of that bounded behavior, not Annex K.
 - Logging remains metadata-only, OFF by default, and avoids dumping user buffers/secrets.
 
 ## Not-safe-by-name audit
