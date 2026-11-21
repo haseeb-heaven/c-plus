@@ -7,13 +7,22 @@ Tracks what is actually shipped/verified on `agent/modern-stdlib` (PR #17). **No
 | Area | Command | Result |
 |---|---|---|
 | CRT corpus | `sh tests/crt/run_crt_tests.sh` | 10 passed, 0 failed |
-| Safe CRT unit | `sh tests/crt/unit/run_unit_tests.sh` | 28+ passed, 0 failed (includes 10-scenario/adversarial suites) |
+| Safe CRT unit | `sh tests/crt/unit/run_unit_tests.sh` | 73 passed, 0 failed |
 | Safe CRT examples | `sh tests/crt/run_all_crt.sh` (examples stage) | 26 passed, 0 failed |
+| Adversarial mitigations | `tests/crt/adversarial/test_*.c` | 4 passed, 0 failed |
 | Fuzz smoke | `sh tests/crt/fuzz/run_fuzz_smoke.sh` | 4 passed, 0 failed |
-| Combined fuzz | `tests/crt/fuzz/fuzz_all_safe_apis.c`, `tests/crt/fuzz/fuzz_all_exported.c` | 2000+1500 iterations, ok, no crash |
-| Libc tests | `sh tests/libc/run_libc_tests.sh` | 13 passed, 0 failed |
+| Combined fuzz | `tests/crt/fuzz/fuzz_all_safe_apis.c`, `fuzz_all_exported.c` | 2000+1500 iterations, ok, no crash |
+| Libc tests | `sh tests/libc/run_libc_tests.sh` | 25 passed, 0 failed |
 | Libc install smoke | `sh tests/libc/install_smoke.sh` | ok |
+| CTL containers | `sh tests/ctl/run_ctl_tests.sh` | 3 passed, 0 failed |
 | Libc coverage | `sh tests/libc/coverage_libc.sh` | all modules >=80% line; stdio 80%, stdio2 91.67%, others 97-100% |
+
+### Telemetry (per-API counters)
+
+`stdlib/safe/src/safe_stats.c` exposes `cplus_safe_stat_record/reset/get/dump`;
+every hardened adapter (memory/string/alloc/io/format/error) records calls/ok/fail.
+This is diagnostic telemetry, not a safety guarantee. Verified by
+`tests/crt/unit/test_safe_stats.c`.
 
 ## Shipped libc slice (`libc/`)
 
