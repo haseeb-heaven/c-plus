@@ -2,12 +2,22 @@
 
 > **P0 goal, NOT YET ACHIEVED:** C+ safe mode must offer Rust-comparable static ownership, borrowing/lifetime and safe concurrency for its **explicitly defined supported safe subset**. Unknown unsafe operations **fail closed** or require marked, audited unsafe/FFI boundaries. Dynamic bounds checks may be used when they guarantee safety, as in Rust. Legacy unrestricted C remains a separate compatibility/unsafe mode. Keep familiar C syntax and the native C ABI without claiming arbitrary legacy C is memory-safe.
 
+## PRODUCT REQUIREMENT: SHIP COMPILER + HARDENED STANDARD LIBRARY
+
+C+ is **two shipped components together**, not compiler-only plus optional wrappers:
+- **Agent 1:** C+ Clang-based safe-mode compiler and complete function-effect/ownership/bounds contract integration. Unchanged standard C source syntax, strict safe-mode diagnostics and C ABI. Correctly link the selected supported C+ hardened libc.
+- **Agent 2:** **Actual compiled and packaged hardened C standard library** under `libc/**` plus `third_party/**`, source compatibility, optional `*_s` checked APIs, opt-in nonrecursive logging, examples for every delivered method, unit tests, fuzzing, license manifest and SDK installation. Reuse or carefully adapt upstream licensed source. On unsupported platform functions use explicit compatibility/fallback rather than replacing OS libc incorrectly. Prioritize alloc/memory/string, then stdio, then remaining ISO C families.
+
+A bundled libc cannot automatically make an arbitrary legacy pointer safe: ordinary `strcpy(dst,src)` exposes no destination size; the compiler must establish bounds or reject/perform sound runtime checking. **No new source syntax required**; `malloc_s` is a proposed C+ extension, not a standardized Microsoft/Apple CRT function. Static proofs can remove runtime ownership overhead, but dynamic checks may cost time.
+
+**Definition of done:** a clean installation of C+ includes the compiler, headers, selected hardened libc binaries, checked functions, link/install tooling and real safety/ABI tests on claimed platforms. No shipping claim for incomplete ISO C library coverage; track each function precisely.
+
 ## Active issues — only three
 
 | Priority | Work | Owner / branch | Pull request |
 | --- | --- | --- | --- |
 | **P0** | [#21 — Sound fail-closed ownership, borrowing, lifetimes and race prevention](https://github.com/haseeb-heaven/c-plus/issues/21) | **Agent 1**, `agent/core-safety` | [#16](https://github.com/haseeb-heaven/c-plus/pull/16) |
-| **P0** | [#22 — Safe existing libc/CRT contracts, portable checks and adversarial fixtures](https://github.com/haseeb-heaven/c-plus/issues/22) | **Agent 2**, `agent/modern-stdlib` | [#17](https://github.com/haseeb-heaven/c-plus/pull/17) |
+| **P0** | [#22 — Implement and ship hardened libc/CRT, checked APIs, logging, examples and tests](https://github.com/haseeb-heaven/c-plus/issues/22) | **Agent 2**, `agent/modern-stdlib` | [#17](https://github.com/haseeb-heaven/c-plus/pull/17) |
 | **P0** | [#23 — CI, negative-test evidence, cross-TU integration and release gates](https://github.com/haseeb-heaven/c-plus/issues/23) | **Both agents** | Both PRs |
 
 **Previous issues #1, #3, #4, #8, #18 and #19 are closed as superseded, not completed.** Existing work remains on its branches. Do not close or auto-merge PR #16 or #17.
@@ -16,7 +26,7 @@
 
 **Agent 1 — compiler:** Clang AST/CFG/dataflow/IR; owner and borrow semantics, alias/provenance/lifetime tracking; moving/borrowing across fields, loops, branches, functions, containers and threads; reliable static error diagnostics, safe RAII and sound unsafe/FFI boundaries. No shallow heuristics advertised as safety. Fix realloc failure/success rules. Resolve PR #16 conflicts and SonarCloud first.
 
-**Agent 2 — libc/verification:** Build testable contracts and portable native adapters for the **same** libc APIs (`malloc/calloc/realloc/free`, `memcpy/memmove`, `strcpy/strcat/strlen`, formatting, `FILE*` I/O). Use existing Apple/Microsoft/glibc/musl libc and supported fortification; preserve C ABI, error semantics and existing function names. Write `tests/crt/**` positive and adversarial negative fixtures covering aliases, UAF, double-free, unknown sizes, realloc errors, thread ownership and FFI lifetime. Do not add compiler changes or copy whole libc. Freeze new modern-library features.
+**Agent 2 — bundled libc/verification:** Build and ship actual compiled implementations, checked APIs, contract definitions, opt-in logging, installable headers and SDK components for the **same** libc APIs (`malloc/calloc/realloc/free`, `memcpy/memmove`, `strcpy/strcat/strlen`, formatting, `FILE*` I/O). Use existing Apple/Microsoft/glibc/musl libc and supported fortification; preserve C ABI, error semantics and existing function names. Write `tests/crt/**` positive and adversarial negative fixtures covering aliases, UAF, double-free, unknown sizes, realloc errors, thread ownership and FFI lifetime. Do not add compiler changes or copy whole libc. Freeze new modern-library features.
 
 **Modern C+ libraries (P1, deferred):** Existing String, Vector, collections, File, GUI, logging, JSON, HTTP, async, media wrappers remain under PR #17 for preservation/bug fixes; **no feature expansion** until the P0 safety gate is met.
 
