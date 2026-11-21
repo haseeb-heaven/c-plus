@@ -61,7 +61,7 @@ declared safe subset.
 | container ownership | UNSUPPORTED | Agent 2 library layer owns this; compiler contract only |
 | function-effect summaries | PARTIAL | libcEffect JSON + simple user `frees(arg)` |
 | cross-TU contracts | PARTIAL | JSON installed; no cross-TU ownership ABI check |
-| thread ownership / race prevention | PARTIAL | stack-borrow warning, unsynchronised global write rejection; no full race proof |
+| thread ownership / race prevention | PARTIAL -> IMPROVED | stack-borrow warning, unsynchronised global write rejection, shared global mutated by multiple pthread_create entries detected (DEFAULT warning / STRICT error); no full race proof |
 | deterministic RAII | IMPLEMENTED (supported exits) | raii_basic, nested_raii, raii_early_return, loop_cleanup |
 | goto/longjmp cleanup | UNSUPPORTED (warning) | classic_bug34; explicit unsafe boundary planned |
 | hardened libc contract recognition | IMPLEMENTED (v2 schema) | libc_contracts.json, libc_matrix |

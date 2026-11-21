@@ -206,6 +206,11 @@ int main(void){{ int *q=make_fresh(); if(!q)return 1; *q=3; int v=*q; free(q); r
     add(f"branch_null_ok_{n}", f"""#include <stdlib.h>
 int main(int argc,char**argv){{ int *p=malloc({n}); if(!p)return 1; if(argc>1){{ free(p); p=0; }} free(p); return 0; }}""",
         False)
+    add(f"thread_single_ok_{n}", f"""#include <pthread.h>
+static volatile int shared_{n}=0;
+static void *worker(void *arg){{ (void)arg; for(int i=0;i<{n};i++) shared_{n}++; return 0; }}
+int main(void){{ pthread_t t; pthread_create(&t,0,worker,0); pthread_join(t,0); return 0; }}""",
+        False)
 
 # ---------------------------------------------------------------------------
 # Dimension 3: seeded mutation fuzz over composable safe/unsafe patterns.

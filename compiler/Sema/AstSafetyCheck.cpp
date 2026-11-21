@@ -54,6 +54,40 @@ struct FreeCallFinder : RecursiveASTVisitor<FreeCallFinder> {
   }
 };
 
+/// Find writes to named global variables inside a thread entry function.
+struct GlobalWriteFinder : RecursiveASTVisitor<GlobalWriteFinder> {
+  const std::set<std::string> &globals;
+  std::set<std::string> written;
+  explicit GlobalWriteFinder(const std::set<std::string> &g) : globals(g) {}
+
+  static std::string nameOf(const Expr *e) {
+    if (!e)
+      return std::string();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenImpCasts()))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        return vd->getNameAsString();
+    return std::string();
+  }
+
+  bool VisitBinaryOperator(BinaryOperator *op) {
+    if (op->isAssignmentOp()) {
+      std::string n = nameOf(op->getLHS());
+      if (globals.count(n))
+        written.insert(n);
+    }
+    return true;
+  }
+
+  bool VisitUnaryOperator(UnaryOperator *op) {
+    if (op->isIncrementOp() || op->isDecrementOp()) {
+      std::string n = nameOf(op->getSubExpr());
+      if (globals.count(n))
+        written.insert(n);
+    }
+    return true;
+  }
+};
+
 /// Collect variables released anywhere inside a statement (used to build
 /// may-release state across branches and loops).
 struct ReleaseCollector : RecursiveASTVisitor<ReleaseCollector> {
@@ -110,6 +144,13 @@ public:
   }
   void setMaybeReleasedVars(const std::set<std::string> &s) {
     maybeReleasedVars_ = s;
+  }
+  const std::set<std::string> &allGlobals() const { return allGlobals_; }
+  const std::map<std::string, int> &threadEntryCounts() const {
+    return threadEntryCounts_;
+  }
+  const std::map<std::string, SourceLocation> &threadEntryLocs() const {
+    return threadEntryLocs_;
   }
   const std::set<std::string> &nonVolatileGlobals() const {
     return nonVolatileGlobals_;
@@ -433,9 +474,11 @@ public:
   }
 
   bool VisitVarDecl(VarDecl *vd) {
-    if (!report_ && vd->hasGlobalStorage() &&
-        !vd->getType().isVolatileQualified())
-      nonVolatileGlobals_.insert(vd->getNameAsString());
+    if (!report_ && vd->hasGlobalStorage()) {
+      allGlobals_.insert(vd->getNameAsString());
+      if (!vd->getType().isVolatileQualified())
+        nonVolatileGlobals_.insert(vd->getNameAsString());
+    }
     if (!report_) {
       // Record local integer constants for constant-propagated bounds checks.
       if (vd->hasLocalStorage() && vd->getType()->isIntegerType() &&
@@ -928,6 +971,17 @@ public:
         }
       }
     }
+    if (!report_ && name == "pthread_create" && call->getNumArgs() >= 3) {
+      std::string entry;
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              call->getArg(2)->IgnoreParenImpCasts()))
+        if (const auto *nd = dyn_cast<NamedDecl>(ref->getDecl()))
+          entry = nd->getNameAsString();
+      if (!entry.empty()) {
+        ++threadEntryCounts_[entry];
+        threadEntryLocs_[entry] = call->getBeginLoc();
+      }
+    }
     if (name == "pthread_create" && call->getNumArgs() >= 4) {
       const Expr *arg = call->getArg(3)->IgnoreParenImpCasts();
       if (const auto *uo = dyn_cast<UnaryOperator>(arg)) {
@@ -1113,6 +1167,9 @@ private:
   std::set<std::string> assignedVars_;
   std::set<std::string> functionsReturningFreed_;
   std::set<std::string> maybeReleasedVars_;
+  std::set<std::string> allGlobals_;
+  std::map<std::string, int> threadEntryCounts_;
+  std::map<std::string, SourceLocation> threadEntryLocs_;
   const FunctionDecl *currentFnDecl_ = nullptr;
   std::string currentFunction_;
 
@@ -1169,6 +1226,49 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
+
+  // Thread-race heuristic: the same entry function passed to more than one
+  // pthread_create that writes a global has unsynchronised shared mutable
+  // state. Reject in STRICT, warn in DEFAULT.
+  ASTContext &raceCtx = ast->getASTContext();
+  for (const auto &entry : collect.threadEntryCounts()) {
+    if (entry.second < 2)
+      continue;
+    const FunctionDecl *entryFn = nullptr;
+    struct FnFinder : RecursiveASTVisitor<FnFinder> {
+      const std::string &want;
+      const FunctionDecl **out;
+      explicit FnFinder(const std::string &w, const FunctionDecl **o)
+          : want(w), out(o) {}
+      bool VisitFunctionDecl(FunctionDecl *fd) {
+        if (!*out && fd->getNameAsString() == want)
+          *out = fd;
+        return true;
+      }
+    } finder(entry.first, &entryFn);
+    finder.TraverseDecl(raceCtx.getTranslationUnitDecl());
+    if (!entryFn || !entryFn->getBody())
+      continue;
+    GlobalWriteFinder gw(collect.allGlobals());
+    gw.TraverseStmt(entryFn->getBody());
+    for (const auto &g : gw.written) {
+      auto lit = collect.threadEntryLocs().find(entry.first);
+      Diag d;
+      d.level = strict ? DiagLevel::Error : DiagLevel::Warning;
+      d.message = "[" + std::string("CPLUS-FFI") +
+                  "] multiple threads mutate shared global '" + g +
+                  "' without synchronization";
+      d.file = filename;
+      if (lit != collect.threadEntryLocs().end()) {
+        PresumedLoc p = raceCtx.getSourceManager().getPresumedLoc(lit->second);
+        if (p.isValid()) {
+          d.line = p.getLine();
+          d.column = p.getColumn();
+        }
+      }
+      diags.report(std::move(d));
+    }
+  }
 
   // CFG/dataflow definite-initialization analysis on each function body.
   class FunctionRunner
