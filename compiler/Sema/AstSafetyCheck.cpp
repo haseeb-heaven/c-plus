@@ -266,7 +266,7 @@ public:
     if (!call || !call->getDirectCallee() || call->getNumArgs() < 1)
       return;
     std::string callee = call->getDirectCallee()->getNameAsString();
-    if (callee != "malloc" && callee != "calloc")
+    if (callee != "malloc" && callee != "calloc" && callee != "realloc")
       return;
     const Expr *arg = call->getArg(0)->IgnoreParenImpCasts();
 
