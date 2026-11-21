@@ -24,3 +24,9 @@ Document any edits in git history; initial copy preserves upstream content.
 - Integrated as cplus_memccpy/cplus_stpcpy/cplus_stpncpy/cplus_strtok_r/cplus_strsep
   in libc/src/string/musl_extra.c (verbatim bodies renamed; strtok_r uses C+
   strspn/strcspn; logging added). Tests: tests/libc/test_musl_extra.c.
+
+## Additional copied stdlib (2026-11-22)
+
+- src/stdlib/div.c ldiv.c lldiv.c llabs.c atoll.c
+- Integrated as cplus_div/ldiv/lldiv/llabs/atoll (verbatim renamed; logging).
+  Tests: tests/libc/test_musl_stdlib_extra.c.
