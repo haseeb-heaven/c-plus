@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 CC=${CPLUS_CLANG:-clang}
 OUT="$ROOT/build/safe"
 mkdir -p "$OUT"
