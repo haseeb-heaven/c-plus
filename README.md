@@ -1,5 +1,37 @@
 # C+
 
+## Goal: modern, safer C without abandoning C
+
+> **Cake-style static ownership + C++-style deterministic RAII + Apple-style bounds enforcement + Clang optimization, while retaining existing C source compatibility and the native C ABI.**
+
+C+ is an **experimental** compiler extension for C. The goal is to make existing C projects easier to maintain and progressively safer: lightweight struct-backed classes, reliable automatic cleanup, ownership/borrowing, checked memory operations and efficient native code. Standard libraries wrap **existing** libc/platform/C libraries; C+ does not replace libc, glibc, Clang, or the C ABI. Real C++ source support is a separate, future frontend concern—not a current compatibility claim.
+
+**This is the design target, not a claim that full memory safety has been achieved.** The current safe subset, verified functionality, unsupported operations and performance costs are documented in [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md) and [the core-safety issue](https://github.com/haseeb-heaven/c-plus/issues/1). Ordinary legacy C can remain usable in compatibility mode, which is **not** memory-safe by default.
+
+### Proven foundations to reuse
+
+| Capability | Project / source | C+ integration goal |
+| --- | --- | --- |
+| Ownership, borrowed views, nullability | [Cake](https://github.com/thradams/cake) | Flow-sensitive static ownership using Clang AST/CFG |
+| Compiler, native optimization and diagnostics | [LLVM/Clang](https://github.com/llvm/llvm-project) | Reuse the existing C toolchain rather than reinvent it |
+| Checked-pointer design and C migration | [Checked C + 3C](https://github.com/checkedc/checkedc-clang) | Gradual checked-pointer/migration research |
+| Bounds-safe C | [Apple Bounds Safety Clang](https://github.com/swiftlang/llvm-project) · [documentation](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html) | Integrate supported `-fbounds-safety`/pointer annotations; do not assume every host Clang supports them |
+| Deterministic cleanup and RAII | [Cforall](https://github.com/cforall/cforall) · Clang/C++ semantics | Exactly-once resource cleanup without a mandatory GC |
+| Temporal-safety reference | [Fil-C](https://github.com/pizlonator/fil-c) | Study strong UAF protection and runtime/ABI tradeoffs; not a drop-in no-GC solution |
+| Native C memory and string operations | [libc / Microsoft Secure CRT](https://learn.microsoft.com/en-us/cpp/c-runtime-library/security-features-in-the-crt) | Reuse platform libraries, keep the compiler-required runtime minimal |
+
+### Roadmap: five umbrella issues
+
+| Priority | GitHub issue | Owner / work |
+| --- | --- | --- |
+| P0 | [#1 — Ownership, borrowing, memory/thread safety and RAII](https://github.com/haseeb-heaven/c-plus/issues/1) | Agent 1 · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
+| P0 | [#4 — Multi-translation-unit `.hp` class/RAII linkage](https://github.com/haseeb-heaven/c-plus/issues/4) | Agent 1, coordinated with Agent 2 |
+| P0 | [#3 — Safe modern standard library](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
+| P1 | [#8 — Tests, CI, diagnostics and reproducible benchmarks](https://github.com/haseeb-heaven/c-plus/issues/8) | Both agents, in owned modules |
+| P2 | [#18 — Legacy C → modern C+ source migration](https://github.com/haseeb-heaven/c-plus/issues/18) | Future milestone; Clang AST rewriting |
+
+**How to follow / contribute:** Read an [open issue](https://github.com/haseeb-heaven/c-plus/issues), reproduce the problem or run the listed test, follow [CONTRIBUTING.md](CONTRIBUTING.md), and open a focused PR against [`develop`](https://github.com/haseeb-heaven/c-plus/tree/develop) referencing the issue (`Refs #N`; use `Fixes #N` only when all acceptance criteria are met). Agents work independently: compiler/runtime in [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16), libraries in [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17). Review tests and CI before merging; `main` publishes validated `develop` snapshots. **No automatic merges.**
+
 C+ is ordinary C with a deliberately small set of additions: deterministic
 resource cleanup, lightweight struct-based classes and managed allocations.
 Use `.cp` and `.hp` for modern C+ sources and headers; `.c` and `.h` keep
@@ -169,7 +201,7 @@ directory for complete programs.
 
 ## Standard library
 
-The C+ standard library is provided as `.hp` headers in `include/stdlib/`:
+The C+ standard library is provided as `.hp` headers in `stdlib/`:
 owned `String`, growable `IntVec`, RAII `File`, `Mutex`/`Guard`, I/O helpers and
 RAII sockets. They are thin typed wrappers over libc/POSIX, not a rewrite of
 the C runtime. See [`docs/STDLIB.md`](docs/STDLIB.md).
@@ -232,8 +264,7 @@ See [`docs/LOGGING.md`](docs/LOGGING.md).
 ## Contributing
 
 Branching and release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md).
-`main`/`master` are stable-release branches only; development happens on
-`develop` and `features/<topic>` branches.
+Development happens on `develop` and feature branches. `main` is the published baseline and should be synchronized only with reviewed `develop` commits. Open [issues](https://github.com/haseeb-heaven/c-plus/issues) for scope and use linked PRs for evidence; do not merge agent branches without review.
 
 ## License
 
