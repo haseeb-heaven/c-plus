@@ -67,19 +67,27 @@ class string {
         return this->chars[index];
     }
 
+    /* Never NULL, even after drop(): callers treat it as an empty string. */
     const char *c_str(void) {
-        return this->chars;
+        return this->chars != NULL ? this->chars : "";
     }
 
     int equals(const char *other) {
         size_t other_count = strlen(other);
+        if (this->chars == NULL)
+            return other_count == 0;
         if (other_count != this->count)
             return 0;
+        if (this->count == 0)
+            return 1;
         return memcmp(this->chars, other, this->count) == 0;
     }
 
     int compare(const char *other) {
-        int r = strcmp(this->chars, other);
+        int r;
+        if (this->chars == NULL)
+            return (other == NULL || other[0] == '\0') ? 0 : -1;
+        r = strcmp(this->chars, other);
         if (r < 0)
             return -1;
         if (r > 0)
@@ -89,7 +97,7 @@ class string {
 
     long find(const char *needle) {
         const char *hit;
-        if (needle == NULL)
+        if (this->chars == NULL || needle == NULL)
             return -1;
         hit = strstr(this->chars, needle);
         if (hit == NULL)
@@ -103,7 +111,10 @@ class string {
         if (want <= this->space)
             return 0;
         fresh = (char *)cplus_alloc(want);
-        memcpy(fresh, this->chars, this->count + 1);
+        if (this->chars != NULL)
+            memcpy(fresh, this->chars, this->count + 1);
+        else
+            fresh[0] = '\0';
         if (this->chars != NULL)
             cplus_release(this->chars);
         this->chars = fresh;
@@ -115,10 +126,19 @@ class string {
         size_t extra = text == NULL ? 0 : strlen(text);
         size_t need;
         size_t want;
+        size_t offset = 0;
+        int aliases = 0;
         if (extra == 0)
             return 0;
         if (this->count > SIZE_MAX - extra - 1)
             return -1;
+        /* Self-append or an overlapping source: remember where the source sits
+         * so reallocation cannot invalidate it, and copy with memmove below. */
+        if (this->chars != NULL && text >= this->chars &&
+            text <= this->chars + this->count) {
+            aliases = 1;
+            offset = (size_t)(text - this->chars);
+        }
         need = this->count + extra + 1;
         if (need > this->space) {
             want = need;
@@ -130,7 +150,10 @@ class string {
             if (string_reserve(this, want) != 0)
                 return -1;
         }
-        memcpy(this->chars + this->count, text, extra);
+        if (aliases)
+            memmove(this->chars + this->count, this->chars + offset, extra);
+        else
+            memcpy(this->chars + this->count, text, extra);
         this->count += extra;
         this->chars[this->count] = '\0';
         return 0;
@@ -154,7 +177,8 @@ class string {
             n = available;
         if (n + 1 > out_size)
             n = out_size - 1;
-        memcpy(out, this->chars + start, n);
+        if (n > 0 && this->chars != NULL)
+            memmove(out, this->chars + start, n);
         out[n] = '\0';
         return 0;
     }
@@ -182,7 +206,8 @@ class string {
                     size_t n = i - start;
                     if (n + 1 > out_size)
                         n = out_size - 1;
-                    memcpy(out, this->chars + start, n);
+                    if (n > 0 && this->chars != NULL)
+                        memmove(out, this->chars + start, n);
                     out[n] = '\0';
                     return 0;
                 }

@@ -1,0 +1,120 @@
+diff --git a/compiler/Driver/Driver.cpp b/compiler/Driver/Driver.cpp
+index 93de433..4c42965 100644
+--- a/compiler/Driver/Driver.cpp
++++ b/compiler/Driver/Driver.cpp
+@@ -304,8 +304,9 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
+ /// Lower one translation unit (source file or header) to plain C.
+ std::string lowerUnit(const std::string &text, const std::string &name,
+                       DiagnosticEngine &diags, Mode mode, bool *ok,
+-                      RewrittenSource *outRewritten = nullptr) {
+-  RewrittenSource rewritten = rewriteCPlusSource(text, diags, name);
++                      RewrittenSource *outRewritten = nullptr,
++                      bool headerMode = false) {
++  RewrittenSource rewritten = rewriteCPlusSource(text, diags, name, headerMode);
+   if (mode == Mode::Safe)
+     checkStaticBounds(text, rewritten.arrayLengths, diags, name);
+   LoweredSource lowered =
+@@ -395,7 +396,7 @@ std::string preprocessModernHeaders(
+                 bool ok = false;
+                 RewrittenSource headerInfo;
+                 std::string lowered = lowerUnit(header, path, diags, mode, &ok,
+-                                                &headerInfo);
++                                                &headerInfo, true);
+                 for (const auto &cls : headerInfo.classTypes)
+                   registerExternalClass(
+                       cls, lowered.find(cls + "_ctor(") != std::string::npos);
+diff --git a/compiler/Sema/CPlusRewriter.cpp b/compiler/Sema/CPlusRewriter.cpp
+index d319c99..3f821b8 100644
+--- a/compiler/Sema/CPlusRewriter.cpp
++++ b/compiler/Sema/CPlusRewriter.cpp
+@@ -230,8 +230,9 @@ std::string lineDirective(const std::string &file, unsigned line) {
+ class Lowerer {
+ public:
+   Lowerer(const std::vector<Token> &toks, DiagnosticEngine &diags,
+-          const std::string &filename)
+-      : ts(toks), diags_(diags), filename_(filename) {}
++          const std::string &filename, bool headerMode)
++      : ts(toks), diags_(diags), filename_(filename),
++        headerMode_(headerMode) {}
+ 
+   RewrittenSource run() {
+     collectDeclarations();
+@@ -803,6 +804,15 @@ private:
+     }
+   }
+ 
++  /// A class defined in a `.hp` header is emitted with internal linkage so the
++  /// header can be included from any number of translation units.  Members are
++  /// inline definitions, so `static inline` gives each TU a private copy
++  /// without -Wunused-function noise.
++  void emitMemberLinkage() {
++    if (headerMode_)
++      emit("static inline ");
++  }
++
+   void emitResource(const ResourceInfo &r) {
+     // Drop the `resource` keyword.  If the user wrote `resource Name {`,
+     // synthesise the `struct` keyword.
+@@ -837,12 +847,15 @@ private:
+     }
+     emit("};\n");
+     emit("typedef struct " + c.name + " " + c.name + ";\n");
+-    if (c.hasDrop)
++    if (c.hasDrop) {
++      emitMemberLinkage();
+       emit("void " + c.name + "_drop(" + c.name + " *self);\n");
++    }
+ 
+     for (const auto &m : c.methods) {
+       emit(lineDirective(filename_, ts[m.itemStart].line));
+       if (m.name == c.name) {
++        emitMemberLinkage();
+         emit(c.name + " " + c.name + "_ctor(");
+         std::string params = joinTokens(ts, m.lparen + 1, m.rparen);
+         params.erase(0, params.find_first_not_of(' '));
+@@ -863,8 +876,10 @@ private:
+       if (ret.empty()) {
+         diags_.error("method '" + m.name + "' is missing a return type",
+                      filename_, ts[m.nameIdx].line, ts[m.nameIdx].column);
++        emitMemberLinkage();
+         emit("void ");
+       } else {
++        emitMemberLinkage();
+         emit(ret);
+         emit(" ");
+       }
+@@ -1473,6 +1488,7 @@ private:
+   bool ctorBody_ = false;
+   bool inMethod_ = false;
+   size_t skipTo_ = kNPos;
++  bool headerMode_ = false;
+ 
+   std::map<size_t, int> extraBraces_;
+   unsigned rangeCounter_ = 0;
+@@ -1508,9 +1524,10 @@ private:
+ 
+ RewrittenSource rewriteCPlusSource(const std::string &source,
+                                    DiagnosticEngine &diags,
+-                                   const std::string &filename) {
++                                   const std::string &filename,
++                                   bool headerMode) {
+   std::vector<Token> toks = lexCPlus(source);
+-  Lowerer lowerer(toks, diags, filename);
++  Lowerer lowerer(toks, diags, filename, headerMode);
+   return lowerer.run();
+ }
+ 
+diff --git a/compiler/Sema/CPlusRewriter.h b/compiler/Sema/CPlusRewriter.h
+index b3b93a1..ab4bb93 100644
+--- a/compiler/Sema/CPlusRewriter.h
++++ b/compiler/Sema/CPlusRewriter.h
+@@ -14,7 +14,8 @@ namespace cplus {
+ /// See src/Sema/CPlusRewriter.cpp for the transformation rules.
+ RewrittenSource rewriteCPlusSource(const std::string &source,
+                                    DiagnosticEngine &diags,
+-                                   const std::string &filename);
++                                   const std::string &filename,
++                                   bool headerMode = false);
+ 
+ /// Register a class declared in a lowered `.hp` header so that a later
+ /// translation unit can resolve method calls and constructor sugar for it.

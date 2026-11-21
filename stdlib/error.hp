@@ -18,19 +18,32 @@
 #define STDLIB_EOF 1   /* end of input, not a failure */
 #define STDLIB_FAIL -1 /* failure; see the error      */
 
+/* Stable, ABI-friendly error categories (issue #3).  EOF is signalled by the
+ * STDLIB_EOF return value rather than an error record. */
+#define STDLIB_CATEGORY_OK 0
+#define STDLIB_CATEGORY_INVALID 1
+#define STDLIB_CATEGORY_RANGE 2
+#define STDLIB_CATEGORY_IO 3
+#define STDLIB_CATEGORY_MEMORY 4
+#define STDLIB_CATEGORY_BOUNDS 5
+
 #define STDLIB_ERROR_SIZE 256
 
 static inline void error_reset(void *target);
 static inline void error_fail(void *target, cplus_exit_code code,
                               const char *message);
+static inline void error_fail_cat(void *target, int category,
+                                  cplus_exit_code code, const char *message);
 
 class error {
     int failed;
+    int kind;
     cplus_exit_code status;
     char text[STDLIB_ERROR_SIZE];
 
     error(void) {
         this->failed = 0;
+        this->kind = STDLIB_CATEGORY_OK;
         this->status = CPLUS_EXIT_OK;
         this->text[0] = '\0';
     }
@@ -51,12 +64,23 @@ class error {
         return this->text;
     }
 
+    /* Stable category recorded when the error was set, so callers never have
+     * to interpret cplus_exit_code themselves. */
+    int category(void) {
+        return this->failed ? this->kind : STDLIB_CATEGORY_OK;
+    }
+
     void clear(void) {
         error_reset(this);
     }
 
     void set(cplus_exit_code code_value, const char *message) {
         error_fail(this, code_value, message);
+    }
+
+    void set_category(int category, cplus_exit_code code_value,
+                      const char *message) {
+        error_fail_cat(this, category, code_value, message);
     }
 };
 
@@ -65,17 +89,31 @@ static inline void error_reset(void *target) {
     if (slot == NULL)
         return;
     slot->failed = 0;
+    slot->kind = STDLIB_CATEGORY_OK;
     slot->status = CPLUS_EXIT_OK;
     slot->text[0] = '\0';
 }
 
 static inline void error_fail(void *target, cplus_exit_code code,
                               const char *message) {
+    int category = STDLIB_CATEGORY_INVALID;
+    if (code == CPLUS_EXIT_IO)
+        category = STDLIB_CATEGORY_IO;
+    else if (code == CPLUS_EXIT_RESOURCE)
+        category = STDLIB_CATEGORY_MEMORY;
+    else if (code == CPLUS_EXIT_BOUNDS)
+        category = STDLIB_CATEGORY_BOUNDS;
+    error_fail_cat(target, category, code, message);
+}
+
+static inline void error_fail_cat(void *target, int category,
+                                  cplus_exit_code code, const char *message) {
     error *slot = (error *)target;
     size_t i = 0;
     if (slot == NULL)
         return;
     slot->failed = 1;
+    slot->kind = category;
     slot->status = code;
     if (message != NULL) {
         while (message[i] != '\0' && i + 1 < STDLIB_ERROR_SIZE) {

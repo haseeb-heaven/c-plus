@@ -13,6 +13,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,6 +58,20 @@ static inline int read_line(char *buf, size_t size, error *err) {
     }
     {
         size_t n = strlen(buf);
+        /* No hidden truncation: a full buffer with no newline and no EOF means
+         * the line did not fit.  Drain the remainder so the stream stays
+         * aligned, then report it. */
+        if (n == size - 1 && buf[n - 1] != '\n' && buf[n - 1] != '\r' &&
+            !feof(stdin)) {
+            int c;
+            do {
+                c = fgetc(stdin);
+            } while (c != EOF && c != '\n');
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "read_line: line longer than the buffer");
+            buf[0] = '\0';
+            return STDLIB_FAIL;
+        }
         while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
             buf[--n] = '\0';
     }
@@ -77,11 +93,13 @@ static inline int read_int(int *out, error *err) {
     errno = 0;
     value = strtol(token, &end, 10);
     if (end == token || *end != '\0') {
-        error_fail(err, CPLUS_EXIT_IO, "read_int: not an integer");
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_int: not an integer");
         return STDLIB_FAIL;
     }
     if (errno == ERANGE || value < INT_MIN || value > INT_MAX) {
-        error_fail(err, CPLUS_EXIT_IO, "read_int: out of range");
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_int: out of range");
         return STDLIB_FAIL;
     }
     *out = (int)value;
@@ -103,11 +121,13 @@ static inline int read_long(long *out, error *err) {
     errno = 0;
     value = strtoll(token, &end, 10);
     if (end == token || *end != '\0') {
-        error_fail(err, CPLUS_EXIT_IO, "read_long: not an integer");
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_long: not an integer");
         return STDLIB_FAIL;
     }
     if (errno == ERANGE || value < LONG_MIN || value > LONG_MAX) {
-        error_fail(err, CPLUS_EXIT_IO, "read_long: out of range");
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_long: out of range");
         return STDLIB_FAIL;
     }
     *out = (long)value;
@@ -129,11 +149,15 @@ static inline int read_float(float *out, error *err) {
     errno = 0;
     value = strtof(token, &end);
     if (end == token || *end != '\0') {
-        error_fail(err, CPLUS_EXIT_IO, "read_float: not a number");
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_float: not a number");
         return STDLIB_FAIL;
     }
-    if (errno == ERANGE) {
-        error_fail(err, CPLUS_EXIT_IO, "read_float: out of range");
+    /* Policy: reject overflow and non-finite values (inf/nan) rather than
+     * letting them propagate silently. */
+    if (errno == ERANGE || !isfinite(value)) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_float: out of range or not finite");
         return STDLIB_FAIL;
     }
     *out = value;
@@ -155,11 +179,13 @@ static inline int read_double(double *out, error *err) {
     errno = 0;
     value = strtod(token, &end);
     if (end == token || *end != '\0') {
-        error_fail(err, CPLUS_EXIT_IO, "read_double: not a number");
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_double: not a number");
         return STDLIB_FAIL;
     }
-    if (errno == ERANGE) {
-        error_fail(err, CPLUS_EXIT_IO, "read_double: out of range");
+    if (errno == ERANGE || !isfinite(value)) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "read_double: out of range or not finite");
         return STDLIB_FAIL;
     }
     *out = value;

@@ -140,6 +140,12 @@ static inline image image_from_pixels(const unsigned char *source, int width,
         error_fail(err, CPLUS_EXIT_IO, "image_from_pixels: invalid dimensions");
         return out;
     }
+    /* Checked arithmetic: the byte count must not wrap size_t. */
+    if ((size_t)width > SIZE_MAX / (size_t)channels ||
+        (size_t)width * (size_t)channels > SIZE_MAX / (size_t)height) {
+        error_fail(err, CPLUS_EXIT_BOUNDS, "image_from_pixels: size overflow");
+        return out;
+    }
     total = (size_t)width * (size_t)height * (size_t)channels;
     /* stbi_image_free() is free(); allocate from the same allocator. */
     out.pixels = (unsigned char *)malloc(total);

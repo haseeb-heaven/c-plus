@@ -8,6 +8,7 @@
 #ifndef CPLUS_STD_FILE_HP
 #define CPLUS_STD_FILE_HP
 
+#include <limits.h>
 #include <stdio.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
@@ -32,6 +33,10 @@ class file {
     int read(char *buf, size_t size, error *err) {
         size_t n;
         error_reset(err);
+        if (buf == NULL || size == 0) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "file::read: null buffer or zero length");
+            return STDLIB_FAIL;
+        }
         if (this->stream == NULL) {
             error_fail(err, CPLUS_EXIT_IO, "file::read: null handle");
             return STDLIB_FAIL;
@@ -50,6 +55,11 @@ class file {
     int read_line(char *buf, size_t size, error *err) {
         size_t n = 0;
         error_reset(err);
+        if (buf == NULL || size == 0 || size > (size_t)INT_MAX) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED,
+                       "file::read_line: invalid buffer or length");
+            return STDLIB_FAIL;
+        }
         if (this->stream == NULL) {
             error_fail(err, CPLUS_EXIT_IO, "file::read_line: null handle");
             return STDLIB_FAIL;
@@ -68,13 +78,17 @@ class file {
     }
 
     int write(const char *text) {
-        if (this->stream == NULL)
+        if (this->stream == NULL || text == NULL)
             return 0;
         return fputs(text, this->stream) != EOF;
     }
 
     int write_bytes(const char *data, size_t size, error *err) {
         error_reset(err);
+        if (size > 0 && data == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "file::write_bytes: null buffer");
+            return STDLIB_FAIL;
+        }
         if (this->stream == NULL) {
             error_fail(err, CPLUS_EXIT_IO, "file::write_bytes: null handle");
             return STDLIB_FAIL;

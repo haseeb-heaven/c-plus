@@ -99,7 +99,10 @@ static size_t http_sink_write(char *ptr, size_t size, size_t nmemb,
     size_t bytes = size * nmemb;
     if (sink == NULL)
         return 0;
-    if (sink->used + bytes + 1 > sink->size) {
+    /* Overflow-safe: `used` never exceeds `size - 1`, so the subtraction
+     * cannot wrap, and an oversized chunk cannot wrap the sum either. */
+    if (sink->size == 0 || sink->used >= sink->size ||
+        bytes > sink->size - sink->used - 1) {
         size_t room = sink->size > sink->used + 1 ? sink->size - sink->used - 1 : 0;
         memcpy(sink->buf + sink->used, ptr, room);
         sink->used += room;
@@ -115,10 +118,14 @@ static size_t http_sink_write(char *ptr, size_t size, size_t nmemb,
 
 class http_client {
     CURL *handle;
+    /* Owned copy: libcurl keeps the pointer, so the caller's http_headers may
+     * die before the request is performed. */
+    struct curl_slist *header_copy;
 
     http_client(error *err) {
         error_reset(err);
         this->handle = curl_easy_init();
+        this->header_copy = NULL;
         if (this->handle == NULL)
             error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
     }
@@ -155,17 +162,42 @@ class http_client {
     }
 
     int set_headers(http_headers *headers, error *err) {
+        struct curl_slist *copy = NULL;
+        struct curl_slist *line;
         error_reset(err);
         if (this->handle == NULL || headers == NULL) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers: invalid argument");
             return STDLIB_FAIL;
         }
+        for (line = headers->list; line != NULL; line = line->next) {
+            struct curl_slist *fresh = curl_slist_append(copy, line->data);
+            if (fresh == NULL) {
+                if (copy != NULL)
+                    curl_slist_free_all(copy);
+                error_fail(err, CPLUS_EXIT_RESOURCE, "http_client::set_headers: copy failed");
+                return STDLIB_FAIL;
+            }
+            copy = fresh;
+        }
+        if (this->header_copy != NULL)
+            curl_slist_free_all(this->header_copy);
+        this->header_copy = copy;
         if (curl_easy_setopt(this->handle, CURLOPT_HTTPHEADER,
-                             headers->list) != CURLE_OK) {
+                             this->header_copy) != CURLE_OK) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers failed");
             return STDLIB_FAIL;
         }
         return STDLIB_OK;
+    }
+
+    /* Number of header lines the client owns (proof that set_headers copied
+     * the caller's list instead of borrowing it). */
+    int header_lines(void) {
+        int count = 0;
+        struct curl_slist *line;
+        for (line = this->header_copy; line != NULL; line = line->next)
+            count++;
+        return count;
     }
 
     /* Shared body of get/post: writes at most size-1 response bytes. */
@@ -184,12 +216,16 @@ class http_client {
         sink.overflow = 0;
         buf[0] = '\0';
 
-        curl_easy_setopt(this->handle, CURLOPT_URL, url);
-        curl_easy_setopt(this->handle, CURLOPT_WRITEFUNCTION, http_sink_write);
-        curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, &sink);
-        if (body != NULL) {
-            curl_easy_setopt(this->handle, CURLOPT_POSTFIELDS, body);
-            curl_easy_setopt(this->handle, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
+        if (curl_easy_setopt(this->handle, CURLOPT_URL, url) != CURLE_OK ||
+            curl_easy_setopt(this->handle, CURLOPT_WRITEFUNCTION,
+                             http_sink_write) != CURLE_OK ||
+            curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, &sink) != CURLE_OK ||
+            (body != NULL &&
+             (curl_easy_setopt(this->handle, CURLOPT_POSTFIELDS, body) != CURLE_OK ||
+              curl_easy_setopt(this->handle, CURLOPT_POSTFIELDSIZE,
+                               (long)strlen(body)) != CURLE_OK))) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::request: setopt failed");
+            return STDLIB_FAIL;
         }
         rc = curl_easy_perform(this->handle);
         if (rc != CURLE_OK) {
@@ -232,6 +268,10 @@ class http_client {
         if (this->handle != NULL) {
             curl_easy_cleanup(this->handle);
             this->handle = NULL;
+        }
+        if (this->header_copy != NULL) {
+            curl_slist_free_all(this->header_copy);
+            this->header_copy = NULL;
         }
     }
 };

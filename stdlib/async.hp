@@ -8,6 +8,7 @@
 #define CPLUS_STD_ASYNC_HP
 
 #include <fcntl.h>
+#include <stdlib.h>
 #include <uv.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
@@ -59,41 +60,58 @@ class loop {
         return (unsigned long long)uv_now(&this->native_loop);
     }
 
+    /* Drains pending closes (bounded) before releasing the loop memory: a
+     * handle whose uv_close() has not completed would otherwise point at freed
+     * memory. */
     void drop(void) {
-        if (this->initialized) {
-            uv_run(&this->native_loop, UV_RUN_NOWAIT); /* finish pending closes */
-            uv_loop_close(&this->native_loop);
-            this->initialized = 0;
+        int guard = 0;
+        if (!this->initialized)
+            return;
+        while (uv_loop_alive(&this->native_loop) && guard < 1000) {
+            uv_run(&this->native_loop, UV_RUN_NOWAIT);
+            guard++;
         }
+        if (uv_loop_close(&this->native_loop) != 0)
+            cplus_log(CPLUS_LOG_WARN, "loop::drop: libuv loop still busy");
+        this->initialized = 0;
     }
 };
 
+/* uv_close() is asynchronous: the handle memory must outlive the close. */
+static inline void timer_release_handle(uv_handle_t *handle) {
+    free(handle);
+}
+
 class timer {
-    uv_timer_t native_timer;
+    uv_timer_t *handle;
     uv_loop_t *owner_loop;
     int initialized;
 
     /* Takes the native loop: a constructor must not use `->`. */
     timer(uv_loop_t *owner_loop, error *err) {
-        do {
-            error_reset(err);
-            this->owner_loop = NULL;
-            this->initialized = 0;
-            if (owner_loop == NULL) {
-                error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer: invalid loop");
-                break;
-            }
-            if (uv_timer_init(owner_loop, &this->native_timer) != 0) {
+        error_reset(err);
+        this->handle = NULL;
+        this->owner_loop = NULL;
+        this->initialized = 0;
+        if (owner_loop == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer: invalid loop");
+        } else {
+            this->handle = (uv_timer_t *)malloc(sizeof(uv_timer_t));
+            if (this->handle == NULL) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "timer: out of memory");
+            } else if (uv_timer_init(owner_loop, this->handle) != 0) {
+                free(this->handle);
+                this->handle = NULL;
                 error_fail(err, CPLUS_EXIT_RESOURCE, "timer: uv_timer_init failed");
-                break;
+            } else {
+                this->owner_loop = owner_loop;
+                this->initialized = 1;
             }
-            this->owner_loop = owner_loop;
-            this->initialized = 1;
-        } while (0);
+        }
     }
 
     int valid(void) {
-        return this->initialized != 0;
+        return this->initialized != 0 && this->handle != NULL;
     }
 
     /* repeat_ms of 0 fires once; user is reachable as handle->data. */
@@ -104,9 +122,8 @@ class timer {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer::start: invalid timer");
             return STDLIB_FAIL;
         }
-        this->native_timer.data = user;
-        if (uv_timer_start(&this->native_timer, callback, timeout_ms,
-                           repeat_ms) != 0) {
+        this->handle->data = user;
+        if (uv_timer_start(this->handle, callback, timeout_ms, repeat_ms) != 0) {
             error_fail(err, CPLUS_EXIT_IO, "timer::start: uv_timer_start failed");
             return STDLIB_FAIL;
         }
@@ -119,7 +136,7 @@ class timer {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer::stop: invalid timer");
             return STDLIB_FAIL;
         }
-        if (uv_timer_stop(&this->native_timer) != 0) {
+        if (uv_timer_stop(this->handle) != 0) {
             error_fail(err, CPLUS_EXIT_IO, "timer::stop: uv_timer_stop failed");
             return STDLIB_FAIL;
         }
@@ -129,18 +146,30 @@ class timer {
     int is_active(void) {
         if (!this->valid())
             return 0;
-        return uv_is_active((const uv_handle_t *)&this->native_timer) ? 1 : 0;
+        return uv_is_active((const uv_handle_t *)this->handle) ? 1 : 0;
     }
 
+    /* The handle lives on the heap and is released by the close callback, so
+     * dropping the timer can never free memory libuv still references.  The
+     * loop is drained (bounded) until the close completes. */
     void drop(void) {
-        if (this->initialized) {
-            uv_timer_stop(&this->native_timer);
-            uv_close((uv_handle_t *)&this->native_timer, NULL);
-            if (this->owner_loop != NULL)
-                uv_run(this->owner_loop, UV_RUN_NOWAIT);
-            this->initialized = 0;
-            this->owner_loop = NULL;
+        if (!this->initialized)
+            return;
+        if (this->handle != NULL) {
+            uv_timer_stop(this->handle);
+            this->handle->data = NULL;
+            uv_close((uv_handle_t *)this->handle, timer_release_handle);
+            this->handle = NULL;
+            if (this->owner_loop != NULL) {
+                int guard = 0;
+                while (uv_loop_alive(this->owner_loop) && guard < 1000) {
+                    uv_run(this->owner_loop, UV_RUN_NOWAIT);
+                    guard++;
+                }
+            }
         }
+        this->owner_loop = NULL;
+        this->initialized = 0;
     }
 };
 
