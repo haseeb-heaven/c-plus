@@ -8,6 +8,6 @@ cmake -S "$ROOT/libc" -B "$BLD" -DCMAKE_INSTALL_PREFIX="$INST" >/tmp/libc_cmake.
 cmake --build "$BLD" >/tmp/libc_build.log 2>&1
 cmake --install "$BLD" >/tmp/libc_install.log 2>&1
 test -f "$INST/lib/libcplus_hardened_libc.a"
-test -f "$INST/include/cplus-libc/string.h"
+test -f "$INST/include/cplus-libc/cplus_libc.h"
 test -f "$INST/share/cplus-libc/contracts/contracts.json"
 echo "install smoke: ok"

@@ -4,13 +4,15 @@
 #include <stdio.h>
 
 int cplus_vsnprintf_s(char *dest, size_t dmax, const char *fmt, va_list ap) {
-    if (!fmt) return -1;
-    if (!dest && dmax != 0) return -1;
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "vsnprintf_s", "enter");
+    if (!fmt) { cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "vsnprintf_s", "null format"); return -1; }
+    if (!dest && dmax != 0) { cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "vsnprintf_s", "invalid dest/dmax"); return -1; }
     int n = vsnprintf(dest, dmax, fmt, ap);
     if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "vsnprintf_s", "format error");
     return n;
 }
 int cplus_snprintf_s(char *dest, size_t dmax, const char *fmt, ...) {
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "snprintf_s", "enter");
     va_list ap; va_start(ap, fmt);
     int n = cplus_vsnprintf_s(dest, dmax, fmt, ap);
     va_end(ap);
@@ -18,30 +20,38 @@ int cplus_snprintf_s(char *dest, size_t dmax, const char *fmt, ...) {
 }
 int cplus_printf_s(const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "printf_s", "enter");
+    if (!fmt) { cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "printf_s", "null format"); return -1; }
     va_list ap; va_start(ap, fmt);
     int n = vprintf(fmt, ap);
     va_end(ap);
+    if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "printf_s", "io/format error");
     return n;
 }
 int cplus_fprintf_s(FILE *stream, const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fprintf_s", "enter");
+    if (!fmt) { cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fprintf_s", "null format"); return -1; }
     va_list ap; va_start(ap, fmt);
     int n = vfprintf(stream, fmt, ap);
     va_end(ap);
+    if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fprintf_s", "io/format error");
     return n;
 }
 int cplus_scanf_s(const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "scanf_s", "enter");
+    if (!fmt) { cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "scanf_s", "null format"); return -1; }
     va_list ap; va_start(ap, fmt);
     int n = vscanf(fmt, ap);
     va_end(ap);
+    if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "scanf_s", "io/format error or EOF");
     return n;
 }
 int cplus_fscanf_s(FILE *stream, const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fscanf_s", "enter");
+    if (!fmt) { cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fscanf_s", "null format"); return -1; }
     va_list ap; va_start(ap, fmt);
     int n = vfscanf(stream, fmt, ap);
     va_end(ap);
+    if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "fscanf_s", "io/format error or EOF");
     return n;
 }
 int cplus_vsprintf_s(char *dest, size_t dmax, const char *fmt, va_list ap) {
