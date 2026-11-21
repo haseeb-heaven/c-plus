@@ -1,63 +1,95 @@
-/* C+ standard library: RAII TCP listener/connection over POSIX sockets. */
+/* C+ standard library: RAII TCP listener/connection over POSIX sockets.
+ *
+ * A handle records whether it owns its descriptor.  Descriptors 0, 1 and 2 are
+ * never closed by a destructor: a zero-initialised handle has fd 0 and must
+ * not close stdin, and a moved-from handle has fd -1 and closes nothing.
+ */
 #ifndef CPLUS_STD_NET_HP
 #define CPLUS_STD_NET_HP
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include "cplus/cplus.h"
 
 resource struct Listener {
     int fd;
+    int borrowed;
 };
 
-void Listener_drop(Listener *self) {
+static inline void Listener_drop(Listener *self) {
     cplus_log(CPLUS_LOG_DEBUG, "Listener_drop fd=%d", self->fd);
-    if (self->fd >= 0) {
+    if (!self->borrowed && self->fd > 2)
         close(self->fd);
-        self->fd = -1;
-    }
+    self->fd = -1;
+    self->borrowed = 0;
 }
 
-Listener Listener_bind(int port) {
-    cplus_log(CPLUS_LOG_DEBUG, "Listener_bind port=%d", port);
-    Listener l;
-    l.fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (l.fd < 0)
-        return l;
+static inline int Listener_valid(const Listener *self) {
+    return self->fd > 2;
+}
+
+static inline Listener Listener_bind(int port) {
+    Listener listener;
     int yes = 1;
-    setsockopt(l.fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
     struct sockaddr_in addr;
+
+    listener.fd = -1;
+    listener.borrowed = 0;
+
+    listener.fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (listener.fd < 0)
+        return listener;
+
+    setsockopt(listener.fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons((unsigned short)port);
-    if (bind(l.fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
-        listen(l.fd, 1) != 0) {
-        close(l.fd);
-        l.fd = -1;
+    if (bind(listener.fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
+        listen(listener.fd, 1) != 0) {
+        close(listener.fd);
+        listener.fd = -1;
     }
-    return l;
+    return listener;
+}
+
+/* Wraps an existing descriptor without taking ownership of closing it. */
+static inline Listener Listener_borrow(int fd) {
+    Listener listener;
+    listener.fd = fd;
+    listener.borrowed = 1;
+    return listener;
 }
 
 resource struct Connection {
     int fd;
+    int borrowed;
 };
 
-void Connection_drop(Connection *self) {
+static inline void Connection_drop(Connection *self) {
     cplus_log(CPLUS_LOG_DEBUG, "Connection_drop fd=%d", self->fd);
-    if (self->fd >= 0) {
+    if (!self->borrowed && self->fd > 2)
         close(self->fd);
-        self->fd = -1;
-    }
+    self->fd = -1;
+    self->borrowed = 0;
 }
 
-Connection Connection_accept(Listener *listener) {
-    cplus_log(CPLUS_LOG_DEBUG, "Connection_accept fd=%d", listener->fd);
-    Connection c;
-    c.fd = accept(listener->fd, NULL, NULL);
-    return c;
+static inline int Connection_valid(const Connection *self) {
+    return self->fd > 2;
+}
+
+static inline Connection Connection_accept(Listener *listener) {
+    Connection conn;
+    conn.fd = -1;
+    conn.borrowed = 0;
+    if (listener == NULL || !Listener_valid(listener))
+        return conn;
+    conn.fd = accept(listener->fd, NULL, NULL);
+    return conn;
 }
 
 #endif

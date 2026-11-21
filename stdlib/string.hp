@@ -1,47 +1,217 @@
 /* C+ standard library: owned string.
- * Thin safe wrapper over libc string functions; no new string engine. */
+ *
+ * A thin, RAII-safe wrapper over libc string/memory functions; there is no
+ * second string engine here.  `String` owns its buffer and frees it in
+ * drop(); StringView is a borrowed, non-owning window used to read characters
+ * without transferring ownership.
+ */
 #ifndef CPLUS_STD_STRING_HP
 #define CPLUS_STD_STRING_HP
 
 #include <string.h>
 #include "cplus/cplus.h"
 
+/* Borrowed view of a character range.  It points into an owner (usually a
+ * String) and never lengthens that owner's life or frees anything. */
+typedef struct StringView {
+    const char *data;
+    size_t length;
+} StringView;
+
+static inline StringView StringView_make(const char *data, size_t length) {
+    StringView view;
+    view.data = data;
+    view.length = length;
+    return view;
+}
+
+static inline size_t StringView_len(const StringView *self) {
+    return self->length;
+}
+
+static inline const char *StringView_data(const StringView *self) {
+    return self->data;
+}
+
+static inline int StringView_eq(const StringView *self, const char *other) {
+    size_t n = strlen(other);
+    if (n != self->length)
+        return 0;
+    if (n == 0)
+        return 1;
+    return memcmp(self->data, other, n) == 0;
+}
+
 class String {
     char *data;
     size_t length;
+    size_t capacity;
 
     String(const char *text) {
-        size_t n = strlen(text);
+        size_t n = text == NULL ? 0 : strlen(text);
         cplus_log(CPLUS_LOG_DEBUG, "String ctor len=%zu", n);
-        self->data = (char *)cplus_alloc(n + 1);
-        memcpy(self->data, text, n + 1);
-        self->length = n;
+        this->data = (char *)cplus_alloc(n + 1);
+        if (n > 0)
+            memcpy(this->data, text, n);
+        this->data[n] = '\0';
+        this->length = n;
+        this->capacity = n + 1;
     }
 
     size_t len(void) {
-        cplus_log(CPLUS_LOG_TRACE, "String len=%zu", self->length);
-        return self->length;
+        return this->length;
+    }
+
+    size_t capacity(void) {
+        return this->capacity;
     }
 
     char at(size_t index) {
-        cplus_log(CPLUS_LOG_TRACE, "String at=%zu len=%zu", index,
-                  self->length);
-        if (index >= self->length)
+        if (index >= this->length)
             return '\0';
-        return self->data[index];
+        return this->data[index];
     }
 
     const char *c_str(void) {
-        cplus_log(CPLUS_LOG_TRACE, "String c_str");
-        return self->data;
+        return this->data;
+    }
+
+    int eq(const char *other) {
+        size_t other_len = strlen(other);
+        if (other_len != this->length)
+            return 0;
+        return memcmp(this->data, other, this->length) == 0;
+    }
+
+    int compare(const char *other) {
+        int r = strcmp(this->data, other);
+        if (r < 0)
+            return -1;
+        if (r > 0)
+            return 1;
+        return 0;
+    }
+
+    long find(const char *needle) {
+        const char *hit;
+        if (needle == NULL)
+            return -1;
+        hit = strstr(this->data, needle);
+        if (hit == NULL)
+            return -1;
+        return (long)(hit - this->data);
+    }
+
+    /* Ensure room for `want` bytes (including the terminator). */
+    int reserve(size_t want) {
+        char *fresh;
+        if (want <= this->capacity)
+            return 0;
+        fresh = (char *)cplus_alloc(want);
+        memcpy(fresh, this->data, this->length + 1);
+        if (this->data != NULL)
+            cplus_release(this->data);
+        this->data = fresh;
+        this->capacity = want;
+        return 0;
+    }
+
+    int append(const char *text) {
+        size_t extra = text == NULL ? 0 : strlen(text);
+        size_t need;
+        size_t want;
+        if (extra == 0)
+            return 0;
+        if (this->length > SIZE_MAX - extra - 1)
+            return -1;
+        need = this->length + extra + 1;
+        if (need > this->capacity) {
+            want = need;
+            if (this->capacity > 0 && this->capacity <= SIZE_MAX / 2) {
+                want = this->capacity * 2;
+                if (want < need)
+                    want = need;
+            }
+            if (this->reserve(want) != 0)
+                return -1;
+        }
+        memcpy(this->data + this->length, text, extra);
+        this->length += extra;
+        this->data[this->length] = '\0';
+        return 0;
+    }
+
+    void clear(void) {
+        if (this->data != NULL)
+            this->data[0] = '\0';
+        this->length = 0;
+    }
+
+    /* Copy up to `count` characters starting at `start` into `out`. */
+    int substring(size_t start, size_t count, char *out, size_t out_size) {
+        size_t available;
+        size_t n;
+        if (out == NULL || out_size == 0)
+            return -1;
+        if (start > this->length)
+            return -1;
+        available = this->length - start;
+        n = count < available ? count : available;
+        if (n + 1 > out_size)
+            n = out_size - 1;
+        memcpy(out, this->data + start, n);
+        out[n] = '\0';
+        return 0;
+    }
+
+    /* Number of separator-delimited fields (1 when the separator is absent). */
+    size_t field_count(char sep) {
+        size_t fields = 1;
+        size_t i;
+        for (i = 0; i < this->length; i++)
+            if (this->data[i] == sep)
+                fields++;
+        return fields;
+    }
+
+    /* Copy the `index`-th separator-delimited field into `out`. */
+    int field(char sep, size_t index, char *out, size_t out_size) {
+        size_t current = 0;
+        size_t start = 0;
+        size_t i;
+        if (out == NULL || out_size == 0)
+            return -1;
+        for (i = 0; i <= this->length; i++) {
+            if (i == this->length || this->data[i] == sep) {
+                if (current == index) {
+                    size_t n = i - start;
+                    if (n + 1 > out_size)
+                        n = out_size - 1;
+                    memcpy(out, this->data + start, n);
+                    out[n] = '\0';
+                    return 0;
+                }
+                current++;
+                start = i + 1;
+            }
+        }
+        return -1;
+    }
+
+    StringView view(void) {
+        StringView borrowed;
+        borrowed.data = this->data;
+        borrowed.length = this->length;
+        return borrowed;
     }
 
     void drop(void) {
-        cplus_log(CPLUS_LOG_DEBUG, "String drop len=%zu", self->length);
-        if (self->data != NULL) {
-            cplus_release(self->data);
-            self->data = NULL;
-            self->length = 0;
+        cplus_log(CPLUS_LOG_DEBUG, "String drop len=%zu", this->length);
+        if (this->data != NULL) {
+            cplus_release(this->data);
+            this->data = NULL;
+            this->length = 0;
+            this->capacity = 0;
         }
     }
 };

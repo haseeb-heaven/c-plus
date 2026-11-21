@@ -19,12 +19,18 @@ translation unit.
 
 | header | contents | underlying API |
 | --- | --- | --- |
-| `stdlib/string.hp` | `class String` with `len()`, `at()`, `c_str()`, RAII `drop()` | `strlen`, `memcpy`, `cplus_alloc` |
-| `stdlib/vector.hp` | `class IntVec` with `push()`, `at()`, `len()`, RAII `drop()` | `cplus_alloc` / `cplus_release` |
-| `stdlib/file.hp` | `resource File`, `File_open()`, `File_write()` | `fopen`, `fputs`, `fclose` |
-| `stdlib/thread.hp` | `resource Mutex` / `Guard`, `Mutex_new()`, `Guard_lock()` | pthread wrappers in the C+ runtime |
-| `stdlib/io.hp` | format-free `println()`, `echo_int()` | `print()` from `cplus/cplus.h` |
-| `stdlib/net.hp` | `resource Listener` / `Connection`, bind/accept | POSIX sockets |
+| `stdlib/error.hp` | `StdError` recoverable error value, `STDLIB_OK`/`EOF`/`FAIL` | `cplus_exit_code` |
+| `stdlib/string.hp` | `class String` (`len`, `at`, `c_str`, `eq`, `compare`, `find`, `append`, `reserve`, `clear`, `substring`, `field_count`, `field`, `view`, `drop`) and borrowed `StringView` | `strlen`, `memcmp`, `strstr`, `cplus_alloc` |
+| `stdlib/vector.hp` | `class IntVec` (`push`, `pop`, `get`, `at`, `reserve`, `clear`, `len`, `capacity`, `drop`) | `cplus_alloc` / `cplus_release` |
+| `stdlib/file.hp` | `resource File`, `File_open`, `File_borrow`, `File_read`, `File_read_line`, `File_write`, `File_write_bytes`, `File_seek`, `File_flush`, `File_valid` | `fopen`, `fread`, `fgets`, `fputs`, `fwrite`, `fseek`, `fflush`, `fclose` |
+| `stdlib/thread.hp` | `resource Mutex` / `Guard`, `Mutex_new`, `Guard_lock`, `Mutex_valid`, `Guard_holds` | pthread wrappers in the C+ runtime |
+| `stdlib/io.hp` | format-free `println()`, `echo_int()` and recoverable `read_line`, `read_int`, `read_long`, `read_float`, `read_double` | `print()` from `cplus/cplus.h`; `fgets`, `strtol`, `strtoll`, `strtof`, `strtod`, `errno` |
+| `stdlib/net.hp` | `resource Listener` / `Connection`, `Listener_bind`, `Listener_borrow`, `Connection_accept`, validity checks | POSIX sockets |
+| `stdlib/json.hp` | `resource JsonDoc`, borrowed `JsonRef`, `resource JsonBuilder` over yyjson | `third_party/yyjson` (MIT) |
+
+Detailed ownership rules, the recoverable-error model, vendored-upstream
+provenance and the open compiler-side gaps are in
+[`MODERN_STDLIB.md`](MODERN_STDLIB.md).
 
 ## Example
 
@@ -53,6 +59,13 @@ int main(void) {
 
 - Every owning type has a `drop` (or `T_drop`) function and gets deterministic
   cleanup at scope exit, including early returns.
+- Recoverable failures (bad input, end of input, missing file, malformed JSON)
+  are returned as `StdError` values with a status code; they never abort.
+- Destructors are zero-init safe: a default-constructed handle closes nothing,
+  and socket destructors never touch descriptors 0, 1 or 2.
+- Every function defined in a `.hp` is `static inline`, so the same header can
+  be included from several translation units without duplicate symbols.  Class
+  members are the one remaining exception (see `MODERN_STDLIB.md`).
 - `String` and `IntVec` allocate through the C+ allocator, so double release
   and invalid release are detected.
 - The library does not hide C: you can still pass `FILE *`, `int` sockets and

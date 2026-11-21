@@ -1,4 +1,9 @@
-/* C+ standard library: growable int vector with a tracked length. */
+/* C+ standard library: growable int vector with a tracked length.
+ *
+ * Storage comes from the C+ managed allocator (cplus_alloc / cplus_release);
+ * there is no second allocator here.  Growth is overflow-checked and every
+ * mutation that can fail reports it through its return value.
+ */
 #ifndef CPLUS_STD_VECTOR_HP
 #define CPLUS_STD_VECTOR_HP
 
@@ -10,50 +15,91 @@ class IntVec {
     size_t capacity;
 
     IntVec(void) {
-        cplus_log(CPLUS_LOG_DEBUG, "IntVec ctor");
-        self->data = NULL;
-        self->length = 0;
-        self->capacity = 0;
+        this->data = NULL;
+        this->length = 0;
+        this->capacity = 0;
     }
 
     size_t len(void) {
-        cplus_log(CPLUS_LOG_TRACE, "IntVec len=%zu", self->length);
-        return self->length;
+        return this->length;
     }
 
-    void push(int value) {
-        cplus_log(CPLUS_LOG_TRACE, "IntVec push value=%d", value);
-        if (self->length == self->capacity) {
-            size_t next = self->capacity == 0 ? 4 : self->capacity * 2;
-            cplus_log(CPLUS_LOG_DEBUG, "IntVec grow %zu -> %zu",
-                      self->capacity, next);
-            int *fresh = (int *)cplus_alloc(sizeof(int) * next);
-            size_t i;
-            for (i = 0; i < self->length; i++)
-                fresh[i] = self->data[i];
-            if (self->data != NULL)
-                cplus_release(self->data);
-            self->data = fresh;
-            self->capacity = next;
-        }
-        self->data[self->length++] = value;
+    size_t capacity(void) {
+        return this->capacity;
     }
 
-    int at(size_t index) {
-        cplus_log(CPLUS_LOG_TRACE, "IntVec at=%zu len=%zu", index,
-                  self->length);
-        if (index >= self->length)
+    /* Grow the buffer to hold at least `want` elements.  0 on success. */
+    int reserve(size_t want) {
+        int *fresh;
+        size_t i;
+        if (want <= this->capacity)
             return 0;
-        return self->data[index];
+        if (want > SIZE_MAX / sizeof(int))
+            return -1;
+        fresh = (int *)cplus_alloc(sizeof(int) * want);
+        for (i = 0; i < this->length; i++)
+            fresh[i] = this->data[i];
+        if (this->data != NULL)
+            cplus_release(this->data);
+        this->data = fresh;
+        this->capacity = want;
+        return 0;
+    }
+
+    int push(int value) {
+        if (this->length == this->capacity) {
+            size_t want = 4;
+            if (this->capacity > 0) {
+                if (this->capacity > (SIZE_MAX / 2) / sizeof(int))
+                    return -1;
+                want = this->capacity * 2;
+            }
+            if (this->reserve(want) != 0)
+                return -1;
+        }
+        this->data[this->length++] = value;
+        return 0;
+    }
+
+    /* Compatibility accessor: returns 0 for an out-of-range index. */
+    int at(size_t index) {
+        if (index >= this->length)
+            return 0;
+        return this->data[index];
+    }
+
+    /* Checked access: 0 on success, -1 when `index` is out of range. */
+    int get(size_t index, int *out) {
+        if (out == NULL)
+            return -1;
+        if (index >= this->length)
+            return -1;
+        *out = this->data[index];
+        return 0;
+    }
+
+    /* Remove the last element into `out`: 0 on success, -1 when empty. */
+    int pop(int *out) {
+        if (out == NULL)
+            return -1;
+        if (this->length == 0)
+            return -1;
+        *out = this->data[this->length - 1];
+        this->length--;
+        return 0;
+    }
+
+    void clear(void) {
+        this->length = 0;
     }
 
     void drop(void) {
-        cplus_log(CPLUS_LOG_DEBUG, "IntVec drop len=%zu", self->length);
-        if (self->data != NULL) {
-            cplus_release(self->data);
-            self->data = NULL;
-            self->length = 0;
-            self->capacity = 0;
+        cplus_log(CPLUS_LOG_DEBUG, "IntVec drop len=%zu", this->length);
+        if (this->data != NULL) {
+            cplus_release(this->data);
+            this->data = NULL;
+            this->length = 0;
+            this->capacity = 0;
         }
     }
 };

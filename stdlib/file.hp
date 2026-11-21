@@ -1,34 +1,137 @@
-/* C+ standard library: RAII file handle over stdio FILE. */
+/* C+ standard library: RAII file handle over stdio FILE.
+ *
+ * Ownership is explicit: a File either owns its FILE* (drop closes it) or
+ * borrows one (drop leaves it alone, so wrapping stdout/stderr is safe).  A
+ * zero-initialised File has a NULL handle and closes nothing.  Normal I/O
+ * failures are recoverable and reported through StdError.
+ */
 #ifndef CPLUS_STD_FILE_HP
 #define CPLUS_STD_FILE_HP
 
 #include <stdio.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
 
 resource struct File {
     FILE *handle;
+    int borrowed;
 };
 
-void File_drop(File *self) {
-    cplus_log(CPLUS_LOG_DEBUG, "File_drop handle=%p", (void *)self->handle);
-    if (self->handle != NULL) {
+static inline void File_drop(File *self) {
+    if (self->handle != NULL && !self->borrowed)
         fclose(self->handle);
-        self->handle = NULL;
-    }
+    self->handle = NULL;
+    self->borrowed = 0;
 }
 
-File File_open(const char *path, const char *mode) {
+/* Opens a file; the handle is NULL when the open fails. */
+static inline File File_open(const char *path, const char *mode) {
     cplus_log(CPLUS_LOG_DEBUG, "File_open %s %s", path, mode);
-    File f;
-    f.handle = fopen(path, mode);
-    return f;
+    File file;
+    file.handle = fopen(path, mode);
+    file.borrowed = 0;
+    return file;
 }
 
-int File_write(File *self, const char *text) {
-    cplus_log(CPLUS_LOG_TRACE, "File_write handle=%p", (void *)self->handle);
+/* Wraps an existing stream (stdin/stdout/stderr) without taking ownership. */
+static inline File File_borrow(FILE *handle) {
+    File file;
+    file.handle = handle;
+    file.borrowed = 1;
+    return file;
+}
+
+static inline int File_valid(const File *self) {
+    return self->handle != NULL;
+}
+
+static inline int File_write(File *self, const char *text) {
     if (self->handle == NULL)
         return 0;
     return fputs(text, self->handle) != EOF;
+}
+
+static inline int File_write_bytes(File *self, const char *data, size_t size,
+                                   StdError *err) {
+    StdError_init(err);
+    if (self->handle == NULL) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_write_bytes: null handle");
+        return STDLIB_FAIL;
+    }
+    if (fwrite(data, 1, size, self->handle) != size) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_write_bytes: short write");
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+/* Reads up to `size` bytes; STDLIB_EOF at end of file. */
+static inline int File_read(File *self, char *buf, size_t size, StdError *err) {
+    size_t n;
+    StdError_init(err);
+    if (self->handle == NULL) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_read: null handle");
+        return STDLIB_FAIL;
+    }
+    n = fread(buf, 1, size, self->handle);
+    if (n == 0) {
+        if (ferror(self->handle)) {
+            StdError_set(err, CPLUS_EXIT_IO, "File_read: stream error");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_EOF;
+    }
+    return STDLIB_OK;
+}
+
+/* Reads one line (newline stripped); STDLIB_EOF at end of file. */
+static inline int File_read_line(File *self, char *buf, size_t size,
+                                 StdError *err) {
+    size_t n;
+    StdError_init(err);
+    if (self->handle == NULL) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_read_line: null handle");
+        return STDLIB_FAIL;
+    }
+    if (fgets(buf, (int)size, self->handle) == NULL) {
+        if (feof(self->handle))
+            return STDLIB_EOF;
+        StdError_set(err, CPLUS_EXIT_IO, "File_read_line: stream error");
+        return STDLIB_FAIL;
+    }
+    n = 0;
+    while (buf[n] != '\0')
+        n++;
+    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+        buf[--n] = '\0';
+    return STDLIB_OK;
+}
+
+static inline int File_seek(File *self, long offset, int whence,
+                            StdError *err) {
+    StdError_init(err);
+    if (self->handle == NULL) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_seek: null handle");
+        return STDLIB_FAIL;
+    }
+    if (fseek(self->handle, offset, whence) != 0) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_seek: cannot seek");
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+static inline int File_flush(File *self, StdError *err) {
+    StdError_init(err);
+    if (self->handle == NULL) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_flush: null handle");
+        return STDLIB_FAIL;
+    }
+    if (fflush(self->handle) != 0) {
+        StdError_set(err, CPLUS_EXIT_IO, "File_flush: cannot flush");
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
 }
 
 #endif

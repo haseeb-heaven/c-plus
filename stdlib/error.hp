@@ -1,0 +1,62 @@
+/* C+ standard library: recoverable error results.
+ *
+ * Ordinary library failures - bad input, end of input, a missing file, an
+ * allocation that the caller wants to see fail - are reported through a
+ * StdError value and a status code.  Nothing in this header terminates the
+ * process; fatal safety violations stay the runtime's job (cplus_fatal).
+ *
+ * The code field reuses the runtime safety taxonomy (cplus_exit_code) so that
+ * libc-level failures and runtime failures share one namespace.  When the
+ * runtime grows a recoverable-error ABI, this type will delegate to it.
+ */
+#ifndef CPLUS_STD_ERROR_HP
+#define CPLUS_STD_ERROR_HP
+
+#include "cplus/cplus.h"
+
+/* Status returned by library operations. */
+#define STDLIB_OK 0    /* success                              */
+#define STDLIB_EOF 1   /* end of input, not a failure          */
+#define STDLIB_FAIL -1 /* failure; the StdError carries details */
+
+#define STDLIB_ERROR_SIZE 256
+
+typedef struct StdError {
+    int failed;
+    cplus_exit_code code;
+    char message[STDLIB_ERROR_SIZE];
+} StdError;
+
+static inline void StdError_init(StdError *self) {
+    self->failed = 0;
+    self->code = CPLUS_EXIT_OK;
+    self->message[0] = '\0';
+}
+
+static inline int StdError_failed(const StdError *self) {
+    return self->failed != 0;
+}
+
+static inline int StdError_code(const StdError *self) {
+    return (int)self->code;
+}
+
+static inline const char *StdError_message(const StdError *self) {
+    return self->message;
+}
+
+static inline void StdError_set(StdError *self, cplus_exit_code code,
+                                const char *text) {
+    size_t i = 0;
+    self->failed = 1;
+    self->code = code;
+    if (text != NULL) {
+        while (text[i] != '\0' && i + 1 < STDLIB_ERROR_SIZE) {
+            self->message[i] = text[i];
+            i++;
+        }
+    }
+    self->message[i] = '\0';
+}
+
+#endif
