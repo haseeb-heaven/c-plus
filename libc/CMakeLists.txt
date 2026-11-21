@@ -22,6 +22,7 @@ add_library(cplus_hardened_libc STATIC
   src/stdio/stdio.c
   src/stdio/stdio2.c
   src/ctype/ctype.c
+  src/wchar/wchar.c
   src/ctype/ctype2.c
   src/ctype/ctype3.c
   src/math/math.c

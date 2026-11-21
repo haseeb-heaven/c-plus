@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <wchar.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -57,6 +58,10 @@ int cplus_getc(FILE*); int cplus_putc(int,FILE*);
 int cplus_feof(FILE*); int cplus_ferror(FILE*); void cplus_clearerr(FILE*);
 int cplus_putchar(int); int cplus_getchar(void); int cplus_puts(const char*); void cplus_perror(const char*);
 int *__cplus_errno_location(void); void cplus_libc_log_set_enabled(int);
+/* wide char (platform-backed) */
+size_t cplus_wcslen(const wchar_t*); wchar_t *cplus_wcscpy(wchar_t*,const wchar_t*); wchar_t *cplus_wcsncpy(wchar_t*,const wchar_t*,size_t);
+int cplus_wcscmp(const wchar_t*,const wchar_t*); int cplus_wcsncmp(const wchar_t*,const wchar_t*,size_t); wchar_t *cplus_wcscat(wchar_t*,const wchar_t*);
+wchar_t *cplus_wcsstr(const wchar_t*,const wchar_t*); wchar_t *cplus_wmemcpy(wchar_t*,const wchar_t*,size_t); wchar_t *cplus_wmemmove(wchar_t*,const wchar_t*,size_t); wchar_t *cplus_wmemset(wchar_t*,wchar_t,size_t); int cplus_wmemcmp(const wchar_t*,const wchar_t*,size_t);
 /* math/time/locale platform-backed */
 double cplus_fabs(double); double cplus_sqrt(double); double cplus_sin(double); double cplus_cos(double); double cplus_tan(double);
 double cplus_pow(double,double); double cplus_exp(double); double cplus_log(double); double cplus_log10(double);
