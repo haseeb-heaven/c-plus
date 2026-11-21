@@ -367,6 +367,7 @@ private:
         owned_.clear();
         borrows_.clear();
         moved_.clear();
+        movedOwners_.clear();
       }
     }
 
@@ -415,12 +416,27 @@ private:
       if (isPunct(lp, "(")) {
         size_t arg = nextSig(lp);
         if (arg < toks_.size() && toks_[arg].kind == TokKind::Identifier &&
-            owned_.count(toks_[arg].text))
+            owned_.count(toks_[arg].text)) {
+          if (movedOwners_.count(toks_[arg].text))
+            warningAt("resource '" + toks_[arg].text +
+                          "' is moved more than once",
+                      toks_[arg]);
+          movedOwners_.insert(toks_[arg].text);
           moved_.insert(toks_[arg].text);
+          skipMoveArg_ = arg;
+        }
       }
       atStmtStart_ = false;
       return;
     }
+    if (i == skipMoveArg_) {
+      skipMoveArg_ = kNPos;
+      atStmtStart_ = false;
+      return;
+    }
+    if (movedOwners_.count(t.text))
+      warningAt("use of moved-from resource '" + t.text + "'", t,
+                "the handle was zeroed by cplus_move");
     auto borrow = borrows_.find(t.text);
     if (borrow != borrows_.end() && moved_.count(borrow->second)) {
       errorAt("borrow '" + t.text + "' of '" + borrow->second +
@@ -748,6 +764,8 @@ private:
   std::map<std::string, OwnedVar> owned_;
   std::map<std::string, std::string> borrows_;
   std::set<std::string> moved_;
+  std::set<std::string> movedOwners_;
+  size_t skipMoveArg_ = kNPos;
 
   std::vector<Scope> scopes_;
   std::vector<LoopInfo> loops_;
