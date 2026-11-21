@@ -1,4 +1,4 @@
-# C+ roadmap — two library workstreams, one safer C compiler
+# C+ roadmap — Rust-grade safe subset, existing libc, modern C+ libraries
 
 > **Goal:** improve existing C rather than replace it: Cake-style static ownership + C++-style deterministic RAII + Apple-style bounds safety + Clang-optimized native execution, preserving C syntax and the native C ABI.
 
@@ -7,6 +7,20 @@
 2. **One optional Modern C+ Library** for String, Vector, File, Result, collections, GUI, logging, JSON, graphics, input, networking, HTTP, async, audio, images and video. Use small RAII/checked-lifetime `.hp` wrappers over native APIs; do not reinvent existing parsers or graphics engines.
 
 Compiler ownership, bounds, RAII and diagnostics support both workstreams; they are a compiler responsibility, **not a third library**. See [README](../README.md), [STATUS](STATUS.md), [LIMITATIONS](LIMITATIONS.md). Claims below are **goals until verified**.
+
+## NON-NEGOTIABLE P0: Rust-grade compile-time memory safety for the verified C+ safe subset (2026-11-21)
+
+**Goal (not achieved today):** Safe-mode C+ must provide Rust-comparable *temporal safety, ownership/borrowing and race-freedom* statically for every accepted program **within the explicitly defined safe subset**. Dynamic bounds/index checks are permitted where runtime sizes cannot be known (Rust does this too). No declaration of success until the contract is validated by exhaustive negative fixtures, fuzzing, differential/sanitizer evidence and independent review. Legacy unrestricted C remains a separate **unsafe/compatibility** mode. Preserving syntax and C ABI does NOT mean declaring arbitrary raw-pointer operations safe.
+
+**Fail closed, rather than only warn.** A program that cannot satisfy the ownership/lifetime/provenance/exclusivity rules must: (1) fail safe-mode compilation, or (2) require an explicit, reviewed unsafe/FFI boundary with checked contracts; never silently downgrade to "UBSan will hopefully catch it". Unsafe blocks/FFI are trusted obligations, just as unsafe Rust is, and must not be misrepresented as statically proven safe. If raw memory access cannot be statically justified, require checked pointer/view types or a proven runtime bounds contract. No false claims that simply retaining the traditional C ABI guarantees safety.
+
+**Compiler requirements (Agent 1):** move beyond token/name heuristic sets. Build sound flow-sensitive and interprocedural ownership/lifetime/alias analysis over Clang AST/CFG, ideally a suitable lowered IR; unique owners, move-only ownership, mutable XOR shared borrow, non-escaping borrows, partial moves, structs/fields/arrays/containers, branches/loops/recursion, callbacks, thread transfer and synchronized sharing, dynamic allocation invalidation and correct realloc failure semantics. Model destructors across all safe exits; forbid or isolate unsafe goto/longjmp paths. Explicit provenance/nullability/bounds contracts, including libc calls, callbacks and FFI. Avoid saying the analysis is sound before proving coverage of the declared subset.
+
+**Agent 2:** develop adversarial acceptance corpus and portable existing libc contracts/adapters: `malloc/calloc/realloc/free`, `memcpy/memmove`, `strcpy/strcat/strlen`, `printf/scanf`, `FILE*`, platform-native fortification; verify the compiler rejects UAF through aliases/functions/containers, outliving borrows, double-free, invalid invalidation, data races and insufficient buffer extents. Track false negatives, false positives, real ABI and sanitizer parity. Maintain modern library work but freeze feature expansion; unsafe FFI adapters must be individually documented and bounded.
+
+**Milestone acceptance:** A published safe-mode specification; an explicit table of which C operations are permitted and which are rejected/unsafe; positive and negative integration tests *that actually execute in CI*; multi-TU/interprocedural tests; negative tests for aliases/loops/fields/FFI and thread races; deterministic cleanup; measurable overhead vs equivalent C/Rust builds; no remaining known counterexample inside the declared safe subset. A testcase that should be rejected but passes is a blocking defect, not "partial support." Keep PRs unmerged until their relevant gate is met. Do not claim unrestricted C is 100% memory-safe or Rust-equivalent.
+
+**Design references:** Rust safe/unsafe boundaries https://doc.rust-lang.org/book/ch20-01-unsafe-rust.html ; Xr0 contracts https://xr0.dev/learn ; Fil-C runtime tradeoffs https://fil-c.org/how ; Cforall RAII https://cforall.uwaterloo.ca/ ; C3 contracts/runtime checks https://c3-lang.org/language-common/contracts/ . Xr0's subset is incomplete; Fil-C uses dynamic checking + GC/different ABI; Cforall and C3 are not demonstrated Rust-complete compile-time borrow-checking solutions. Adopt techniques, not unsupported equivalence claims.
 
 ## CURRENT P0 — shared safer existing libc/CRT milestone (both agents)
 
