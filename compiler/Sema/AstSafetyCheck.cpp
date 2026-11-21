@@ -243,10 +243,8 @@ public:
         if (uo->getOpcode() == UO_AddrOf) {
           std::string owner = ownerOfAddress(uo->getSubExpr());
           if (!owner.empty()) {
-            auto it = writeBorrows_.find(owner);
-            if (it != writeBorrows_.end() && !it->second.empty())
-              report(vd->getBeginLoc(), "conflicting mutable borrow of '" +
-                                            owner + "'");
+            // Multiple aliases are valid C.  Track the owner only for
+            // lifetime invalidation; do not impose Rust-style exclusivity.
             borrowOwner_[vd->getNameAsString()] = owner;
           }
         }
@@ -340,24 +338,6 @@ public:
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
 
-      // A write through a recorded borrow makes it the exclusive mutator.
-      const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
-      std::string borrowName;
-      if (const auto *uo = dyn_cast<UnaryOperator>(lhs)) {
-        if (uo->getOpcode() == UO_Deref)
-          borrowName = varNameOf(uo->getSubExpr());
-      } else if (const auto *me = dyn_cast<MemberExpr>(lhs)) {
-        if (me->isArrow())
-          borrowName = varNameOf(me->getBase());
-      }
-      auto bit = borrowOwner_.find(borrowName);
-      if (bit != borrowOwner_.end()) {
-        auto &writers = writeBorrows_[bit->second];
-        if (!writers.empty() && !writers.count(borrowName))
-          report(op->getBeginLoc(), "mutable borrow conflict on '" +
-                                        bit->second + "'");
-        writers.insert(borrowName);
-      }
     }
     return true;
   }
@@ -708,6 +688,15 @@ private:
     Diag d;
     d.level = DiagLevel::Error;
     d.message = "[" + diagnosticCategory(message) + "] " + message;
+    if (message.find("use-after-free") != std::string::npos)
+      d.help = "suggested correction: do not dereference after release; copy "
+               "the data or transfer ownership with cplus_move()";
+    else if (message.find("double free") != std::string::npos)
+      d.help = "suggested correction: release each owner exactly once; use "
+               "cplus_move() to transfer ownership";
+    else if (message.find("uninitialized") != std::string::npos)
+      d.help = "suggested correction: initialize the variable on every path "
+               "before reading it";
     d.file = filename_;
     if (ploc.isValid()) {
       d.line = ploc.getLine();

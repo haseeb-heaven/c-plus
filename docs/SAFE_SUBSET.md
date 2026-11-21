@@ -22,7 +22,6 @@ This is **not** yet Rust-level safety; it is a specified, tested subset.
   straight-line code, interprocedural `frees(arg)` double free;
 - constant/pointer-arithmetic out-of-bounds on known arrays;
 - null dereference from a provably null initializer;
-- mutable borrow conflicts on the same owner field;
 - provably oversized `memcpy`/`memmove` byte count and literal `strcpy`;
 - `goto`/`longjmp` warnings in safe mode; full rejection is pending;
 - safe-subset restrictions: raw `realloc(p,n)`, zero-size raw allocation.

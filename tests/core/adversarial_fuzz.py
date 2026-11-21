@@ -55,8 +55,6 @@ int main(void){{ int *p=malloc({n}); int *q=p; free(p); free(q); return 0; }}"""
     checked_src = "abcdefghi"[:max(2, n)]
     add_unsafe(f"checked_copy_bad_{n}", f"""#include "cplus/cplus.h"
 int main(void){{ char d[{n}]; return cplus_strcpy(d,2,"{checked_src}"); }}""", "CPLUS-LIBC")
-    add_unsafe(f"borrow_conflict_{n}", f"""struct S {{ int x[{n}]; }};
-int main(void){{ struct S s={{0}}; int *a=&s.x[0]; int *b=&s.x[1]; *a=1; *b=2; return s.x[0]; }}""", "CPLUS-BORROW")
     add_unsafe(f"realloc_alias_{n}", f"""#include <stdlib.h>
 int main(void){{ int *p=malloc({n}); int *q=p; void *t=realloc(p,{n}*2); if(t){{p=t;return *q;}} free(p); return 0; }}""", "CPLUS-LIFETIME")
     add_unsafe(f"resource_copy_{n}", f"""resource struct R {{ int v[{n}]; }};
@@ -81,6 +79,8 @@ int main(void){{ int *p=malloc({n}); void *t=realloc(p,{n}*2); if(t) p=t; if(!p)
     add_positive(f"null_check_{n}", f"#include <stdlib.h>\nint main(void){{ int *p=malloc({n}); if(!p)return 1; *p=3; free(p); return 0; }}")
     add_positive(f"init_all_branches_{n}", f"int main(int argc,char**argv){{ int x; if(argc>{n}) x=1; else x=2; return x>0?0:1; }}")
     ok_str = "abc"[:max(1, n-1)]
+    add_positive(f"alias_writes_{n}", f"""struct S {{ int x[{n}]; }};
+int main(void){{ struct S s={{0}}; int *a=&s.x[0]; int *b=&s.x[1]; *a=1; *b=2; return s.x[0]==1?0:1; }}""")
     add_positive(f"strcpy_ok_{n}", f"#include <string.h>\nint main(void){{ char d[{n}]; strcpy(d,\"{ok_str}\"); return d[0]=='{ok_str[0]}'?0:1; }}")
     m = min(4, n)
     add_positive(f"memcpy_ok_{n}", f"#include <string.h>\nint main(void){{ char d[{n}]; char s[4]={{'a','b','c',0}}; memcpy(d,s,{m}); return d[0]=='a'?0:1; }}")

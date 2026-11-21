@@ -5,5 +5,5 @@ int main(void) {
   int *b = &s.x;
   *a = 1;
   *b = 2;
-  return s.x;
+  return 0;
 }
