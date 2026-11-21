@@ -14,7 +14,7 @@ RAII constructs.  No exceptions, no `longjmp`, no mandatory GC, no new syntax.
 ### One library, three areas
 
 The deliverable is a single optional modern C+ library: **core** (`string`,
-`string_view`, `vector`, `slice`, `error`, `file`, `fs`, `time`, `log`,
+`string_view`, `vector`, `slice`, `intmap`, `strmap`, `error`, `file`, `fs`, `time`, `log`,
 `mutex`/`guard`, `listener`/`connection`), **adapters** (JSON, HTTP, async,
 GUI/window/graphics/input, audio, image, video) and **the tooling around them**
 (tests, coverage gate, benchmarks).  There is deliberately **no separate

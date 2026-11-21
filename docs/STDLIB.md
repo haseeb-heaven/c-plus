@@ -35,6 +35,7 @@ int main(void) {
 | `stdlib/file.hp` | `file` (`is_open`, `read`, `read_line`, `write`, `write_bytes`, `seek`, `flush`, `native`, `drop`), `file_borrow` | `fopen`, `fread`, `fgets`, `fputs`, `fwrite`, `fseek`, `fflush`, `fclose` |
 | `stdlib/thread.hp` | `mutex` (`is_valid`, `lock`, `unlock`, `native`, `drop`), `guard` (`holds`, `unlock`, `drop`) | runtime mutex wrappers |
 | `stdlib/net.hp` | `listener` (`is_valid`, `descriptor`, `bound_port`, `accept`, `drop`), `connection` (`is_valid`, `descriptor`, `read`, `write`, `drop`), `listener_borrow`, `connection_borrow` | POSIX sockets |
+| `stdlib/collections.hp` | `intmap` (`size`, `valid`, `put`, `get`, `contains`, `remove`, `clear`, `grow`, `drop`) and `strmap` with owned keys (same surface, `const char *` keys) | `cplus_alloc` / `cplus_release`, open addressing with tombstones |
 | `stdlib/log.hp` | `log_sink` (`valid`, `native`, `level`, `set_level`, `enabled`, `write`, `info`, `warn`, `failure`, `drop`), `log_open_file`, `log_stderr`, `log_stdout`, `log_level_name`, `log_level_parse` | libc stdio (`fwrite`, `flockfile`), ISO-8601 timestamps |
 | `stdlib/fs.hp` | `fs_exists`, `fs_is_file`, `fs_is_dir`, `fs_size`, `fs_remove`, `fs_rename`, `fs_mkdir` | `stat`, `unlink`, `rename`, `mkdir` |
 | `stdlib/time.hp` | `time_now_ns/ms`, `time_monotonic_ns/ms`, `time_sleep_ms`, `time_format_iso8601` | `clock_gettime`, `nanosleep`, `gmtime_r`, `strftime` |
