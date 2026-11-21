@@ -16,6 +16,7 @@ add_library(cplus_hardened_libc STATIC
   src/stdio/stdio.c
   src/stdio/stdio2.c
   src/ctype/ctype.c
+  src/ctype/ctype2.c
   src/math/math.c
   src/time/time.c
   src/locale/locale.c
