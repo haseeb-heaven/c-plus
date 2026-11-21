@@ -1,0 +1,32 @@
+name: libc-crt
+
+on:
+  push:
+    branches: [develop, agent/modern-stdlib, agent/core-safety]
+  pull_request:
+    branches: [develop]
+
+jobs:
+  linux-crt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build
+      - name: Build safe CRT
+        run: sh build/safe/build_safecrt.sh
+      - name: CRT unit tests
+        run: sh tests/crt/unit/run_unit_tests.sh
+      - name: CRT all checks
+        run: sh tests/crt/run_all_crt.sh
+      - name: Libc tests
+        run: sh tests/libc/run_libc_tests.sh
+      - name: Libc install smoke
+        run: sh tests/libc/install_smoke.sh
+      - name: Fuzz smoke
+        run: sh tests/crt/fuzz/run_fuzz_smoke.sh
+      - name: ASan+UBSan smoke
+        run: |
+          set -eu
+          clang -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -Istdlib/safe -Ithird_party/intel-safestringlib/include tests/crt/unit/test_memcpy_s.c build/safe/libcplus_safecrt.a -o /tmp/test_memcpy_asan
+          /tmp/test_memcpy_asan
