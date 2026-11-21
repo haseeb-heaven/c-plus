@@ -39,7 +39,7 @@ SC_DEFS="-Dmemcpy_s=cplus_sc_memcpy_s -D_memcpy_s_chk=cplus_sc__memcpy_s_chk -Dm
 
 INC_SC="-I$OUT -I$SC/include -I$SC/src -I$ROOT/stdlib/safe"
 CFLAGS_SC="-O2 -std=c99 -D__STDC_WANT_LIB_EXT1__=0 $SC_DEFS -Wno-unused-parameter -Wno-missing-field-initializers -Wno-macro-redefined $INC_SC"
-CFLAGS_W="-O2 -Wall -Wextra -pedantic -std=c99 -I$SC/include -I$ROOT/stdlib/safe"
+CFLAGS_W="-O2 -Wall -Wextra -pedantic -std=c99 -I$SC/include -I$ROOT/stdlib/safe -I$ROOT/third_party/exceptions4c"
 
 for f in \
   "$SC"/src/abort_handler_s.c \
@@ -67,10 +67,12 @@ done
 
 # Intel safestringlib retained in third_party for provenance/reference only; not compiled/linked.
 
+"$CC" -O2 -Wall -Wextra -std=c11 -I"$ROOT/third_party/exceptions4c" -c "$ROOT/third_party/exceptions4c/exceptions4c.c" -o "$OUT/e4c_exceptions4c.o"
+
 for f in "$ROOT"/stdlib/safe/src/*.c; do
   base=$(basename "$f" .c)
   "$CC" $CFLAGS_W -I$SC/include -c "$f" -o "$OUT/w_$base.o"
 done
 
-ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/w_*.o
+ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/w_*.o "$OUT"/e4c_*.o
 echo "$OUT/libcplus_safecrt.a"

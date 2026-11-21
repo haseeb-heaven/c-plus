@@ -9,6 +9,7 @@ candidates are recorded with the reason. No candidate is adopted automatically.
 |---|---|---|---|
 | rurban/safeclib `90b076e9…` | MIT | **Adopted (primary checked backend)** | Vendored `third_party/safeclib/`; dependency-closed mem/str subset compiled with `-D` symbol prefixing (`cplus_sc_*`); C+ adapters `cplus_*`. |
 | intel/safestringlib `f4491915…` | MIT | **Vendored (reference)** | `third_party/intel-safestringlib/`. Overlapping mem/str runtime no longer linked; retained for provenance/parity checks until full removal is verified. |
+| guillermocalvo/exceptions4c `9f787958…` | Apache-2.0 | **Adopted** | Unified exception engine (TRY/CATCH/FINALLY/THROW + thread-local contexts). `third_party/exceptions4c/`; glue in `stdlib/safe/safe_except.{h,c}`. Tests `tests/exceptions/`. |
 | rurban/ctl `ede5f455…` | MIT | **Adopted** | `third_party/ctl/` header-only typed C containers (vector/string/deque/list/map/set). Tests in `tests/ctl/`. |
 | musl `7813e911…` | MIT | **Vendored (reference)** | `libc/upstream/musl/` — selected standard implementations used as reference/provenance for the C+ libc slice. |
 | llvm/llvm-project (libc) | Apache-2.0 with LLVM exception | **Deferred** | Large, CMake-heavy; not dependency-closed for this tree. Revisit for math/printf parity with a pinned subset. |
