@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     if (passThrough) {
-      opts.extraArgs.push_back(a);
+      opts.extraArgs.emplace_back(a);
       continue;
     }
     if (a == "--version" || a == "-V") {
@@ -191,8 +191,8 @@ int main(int argc, char **argv) {
     // gcc-style two-token options: -I dir, -D NAME, -U NAME, -L dir, -l lib.
     if ((a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") &&
         i + 1 < argc) {
-      opts.extraArgs.push_back(a);
-      opts.extraArgs.push_back(argv[++i]);
+      opts.extraArgs.emplace_back(a);
+      opts.extraArgs.emplace_back(argv[++i]);
       continue;
     }
     if (a == "--emit-c") {
@@ -207,14 +207,14 @@ int main(int argc, char **argv) {
         a.rfind("-std=", 0) == 0 || a.rfind("-W", 0) == 0 ||
         a.rfind("-f", 0) == 0 || a == "-pthread" || a == "-shared" ||
         a == "-pedantic" || a == "-ansi" || a == "-pipe") {
-      opts.extraArgs.push_back(a);
+      opts.extraArgs.emplace_back(a);
       continue;
     }
     if (a.size() > 1 && a[0] == '-' && a != "-") {
-      opts.extraArgs.push_back(a);
+      opts.extraArgs.emplace_back(a);
       continue;
     }
-    positional.push_back(a);
+    positional.emplace_back(a);
   }
 
   if (positional.empty()) {

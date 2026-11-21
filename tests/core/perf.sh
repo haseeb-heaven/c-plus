@@ -16,6 +16,7 @@ for cmd in "c+ safe" "c+ legacy" "clang O2"; do
     "clang O2")
       /usr/bin/time -l /usr/bin/clang -std=gnu17 -O2 -fsyntax-only "$SRC" \
         >"$OUT/$cmd.out" 2>"$OUT/$cmd.time" || true ;;
+    *) echo "unknown configuration: $cmd" >&2 ;;
   esac
   printf '%-12s %s %s\n' "$cmd" "$(grep real "$OUT/$cmd.time" | tr -s ' ')" \
     "$(grep 'maximum resident set size' "$OUT/$cmd.time" | tr -s ' ')"

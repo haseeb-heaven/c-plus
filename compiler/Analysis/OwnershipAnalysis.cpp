@@ -125,14 +125,14 @@ private:
   ASTContext &ctx_;
   const std::set<const VarDecl *> &tracked_;
   std::set<const VarDecl *> &init_;
-  CfgReportFn report_;
+  const CfgReportFn &report_;
   std::set<const Stmt *> &reported_;
 };
 
 } // namespace
 
 void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
-                                 CfgReportFn report) {
+                                 const CfgReportFn &report) {
   if (!fd->doesThisDeclarationHaveABody() || !fd->getBody())
     return;
   CFG::BuildOptions opts;

@@ -14,7 +14,7 @@ using CfgReportFn =
 
 /// Path-sensitive definite-initialization check over Clang's CFG.
 void checkDefiniteInitialization(clang::ASTContext &ctx,
-                                 clang::FunctionDecl *fd, CfgReportFn report);
+                                 clang::FunctionDecl *fd, const CfgReportFn &report);
 
 } // namespace cplus
 
