@@ -1,0 +1,9 @@
+#ifndef CPLUS_SAFE_ERROR_H
+#define CPLUS_SAFE_ERROR_H
+#define CPLUS_SAFE_OK        0
+#define CPLUS_SAFE_EINVAL    22
+#define CPLUS_SAFE_ENOMEM    12
+#define CPLUS_SAFE_EOVERFLOW 75
+#define CPLUS_SAFE_ERANGE    34
+#define CPLUS_SAFE_EUNAVAIL  95
+#endif

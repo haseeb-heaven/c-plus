@@ -22,7 +22,7 @@ run_case() { # file
     FAIL=$((FAIL + 1)); FAILED="$FAILED
   - $name: C+ build failed (see build/crt/$name.cplus.log)"; printf '  FAIL %s (build)\n' "$name"; return
   fi
-  if ! "$CC" -O2 -o "$OUT/$name.cc" "tests/crt/$1" >"$OUT/$name.cc.log" 2>&1; then
+  if ! "$CC" -O2 -pthread -o "$OUT/$name.cc" "tests/crt/$1" >"$OUT/$name.cc.log" 2>&1; then
     FAIL=$((FAIL + 1)); FAILED="$FAILED
   - $name: native build failed"; printf '  FAIL %s (native build)\n' "$name"; return
   fi
@@ -42,8 +42,12 @@ run_case() { # file
 printf 'CRT conformance (C+ safe mode vs native clang -O2)\n'
 for src in tests/crt/*.c; do
   [ -e "$src" ] || continue
-  case "$src" in *probe_native.c|*bench_*.c) continue ;; esac
-  run_case "$(basename "$src")"
+  base=$(basename "$src")
+  case "$base" in
+    *probe_native.c|*native_safety_probe.c|*bench_*.c) continue ;;
+    test_safe_*.c) continue ;;  # needs safe crt headers/lib; run by run_safecrt_tests.sh
+  esac
+  run_case "$base"
 done
 
 printf '\nNative facility probe\n'

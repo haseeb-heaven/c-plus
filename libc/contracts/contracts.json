@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "library": "cplus-hardened-libc",
+  "apis": [
+    {"name":"malloc","header":"stdlib.h","ownership":"returns owned or NULL","bounds":"bytes argument","invalid":"size overflow impl-defined; allocator failure NULL","errors":"errno may be ENOMEM"},
+    {"name":"calloc","header":"stdlib.h","ownership":"returns owned zeroed or NULL","bounds":"count*size overflow checked","invalid":"overflow -> NULL","errors":"ENOMEM"},
+    {"name":"realloc","header":"stdlib.h","ownership":"on success transfers; on failure preserves old","bounds":"bytes","invalid":"NULL ptr acts as malloc; bytes 0 impl-defined","errors":"ENOMEM"},
+    {"name":"free","header":"stdlib.h","ownership":"invalidates owner","bounds":"must be prior malloc/calloc/realloc","invalid":"NULL no-op; double free/UAF UB","errors":"none"},
+    {"name":"memcpy","header":"string.h","ownership":"none","bounds":"n bytes readable/writable","invalid":"overlap UB; null+nonzero UB","errors":"none"},
+    {"name":"memmove","header":"string.h","ownership":"none","bounds":"n bytes","invalid":"null+nonzero UB","errors":"none"},
+    {"name":"memset","header":"string.h","ownership":"none","bounds":"n bytes writable","invalid":"null+nonzero UB","errors":"none"},
+    {"name":"strlen","header":"string.h","ownership":"none","bounds":"NUL-terminated readable","invalid":"nonterminated UB","errors":"none"},
+    {"name":"strcpy","header":"string.h","ownership":"none","bounds":"dest capacity >= src+1","invalid":"overflow UB","errors":"none"}
+  ]
+}

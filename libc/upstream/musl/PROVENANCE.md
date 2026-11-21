@@ -1,0 +1,19 @@
+# musl libc provenance
+
+- Upstream: https://git.musl-libc.org/git/musl
+- Commit: 7813e9119eb5fe681b6750b8a033a0490bca0941
+- License: MIT (see COPYRIGHT)
+- Use: selectively copied minimal allocation/string/errno/ctype sources for C+ hardened libc bundle.
+
+## Copied
+
+- COPYRIGHT
+- src/malloc/* (malloc.c etc. as present)
+- src/string/memcpy.c memmove.c memset.c memcmp.c strlen.c strcpy.c strncpy.c strcat.c strncat.c strcmp.c strncmp.c strchr.c strrchr.c strstr.c memchr.c
+- src/errno/__errno_location.c
+- src/ctype/isalpha.c isdigit.c isspace.c
+- include/errno.h string.h stdlib.h stdio.h ctype.h (reference; C+ headers are in libc/include)
+
+## Adaptations
+
+Document any edits in git history; initial copy preserves upstream content.

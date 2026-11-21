@@ -1,76 +1,90 @@
-# Existing-libc safety: conformance corpus and platform matrix (#19)
+# CRT contract matrix (#22)
 
-Scope: make **existing C standard-library calls** safer without replacing libc,
-without a `malloc_s`/`free_s` family, and without changing libc semantics.
-Agent 1 owns the compiler side (#19 / PR #16); this document and the corpus in
-`tests/crt/` are the Agent 2 share.
+> Evidence-based. "Safe" is never claimed for raw C; each row states the
+> protection class, boundary, and how it was verified.
 
-## Corpus
+## Legend
 
-`tests/crt/run_crt_tests.sh` compiles each case **unchanged** twice — once with
-`c+ build` (safe mode) and once with `clang -O2` — runs both, and requires equal
-exit status and byte-identical stdout. Undefined behaviour is documented in the
-case comments, never executed.
+- **SAFE+ACCEPTED**: valid case accepted by native libc and C+ build; behavior matches contract.
+- **UNSAFE+REJECTED**: invalid case rejected by checked API / runtime constraint / platform mechanism with documented error.
+- **EXPLICIT UNSAFE BOUNDARY**: cannot be made safe without compiler proof or is undefined in C; not executed as UB.
+- **KNOWN BUG/NOT YET SUPPORTED**: gap recorded honestly.
 
-| case | covers |
-| --- | --- |
-| `alloc.c` | `malloc`/`calloc`/`realloc`/`free` valid paths, `free(NULL)`, `calloc` multiplication overflow → `NULL`, failed `realloc` preserves the owner, alias freed once |
-| `memory_ops.c` | `memcpy` non-overlapping, zero length, `memmove` overlapping (both directions), `memchr`, `memcmp` |
-| `string_ops.c` | `strlen`/`strnlen`, `strcpy`/`strcat` that fit, `snprintf` truncation contract, `strchr`/`strrchr`/`strstr`/`strncmp` |
-| `format_ops.c` | `snprintf` sizing/truncation, `fscanf` conversions, invalid conversion → `0`, end of input, stream stays usable |
-| `stdio_ops.c` | `fopen`/`fwrite`/`fflush`/`fclose`, short read at EOF, `feof`/`ferror`, `fseek`/`ftell`, missing file → `NULL` |
+## Native capability probe (this host)
 
-Result on this host: **5 passed, 0 failed** (C+ safe mode == native `clang -O2`).
+Generated via `tests/crt/native_safety_probe.c` and `tests/crt/probe_native.c`:
 
-## Native facilities actually available (probe output)
+| capability | observed (macOS arm64, Apple clang 16) |
+|---|---|
+| _FORTIFY_SOURCE | 2 |
+| __builtin_object_size | yes |
+| __builtin_dynamic_object_size | yes |
+| Annex K __STDC_LIB_EXT1__ | none |
+| ASan compile feature | no (feature macro in normal build) |
+| UBSan compile feature | no |
+| TSan compile feature | no |
+| bounds_safety | no |
+| Apple libc | yes |
+| UCRT | no |
+| glibc/musl | no/no |
 
-`tests/crt/probe_native.c`, macOS arm64, Apple clang 16:
+ASan runtime on this host is unusable for the preloaded C+ runtime environment (`CHECK failed: sanitizer_malloc_mac.inc` / preloading issue recorded in prior runs); treat ASan as **KNOWN BUG/NOT YET SUPPORTED on this host** and require Linux CI.
 
-| facility | result |
-| --- | --- |
-| `_FORTIFY_SOURCE` | 2 (both builds) |
-| `__builtin_object_size` | yes |
-| `__builtin_dynamic_object_size` | yes |
-| `__builtin___memcpy_chk` | yes |
-| `__builtin_add_overflow` | yes |
-| C11 Annex K (`__STDC_LIB_EXT1__`) | **none** |
-| Microsoft UCRT secure CRT | **unavailable** (not `_WIN32`) |
-| glibc fortify / `malloc_usable_size` | n/a (not glibc) |
+## API matrix
 
-## Function matrix
+| API | Contract (owner/extent/lifetime/error) | Safe+Accepted evidence | Unsafe+Rejected / boundary | Class | Notes |
+|---|---|---|---|---|---|
+| `malloc` | returns owned object or NULL; owner must be freed once | `alloc.c`, `adversarial_defined.c` | overflow/oom -> NULL; double-free/UAF/alias invalidation are UB | ACCEPTED + EXPLICIT UNSAFE BOUNDARY | no alias provenance proof |
+| `calloc` | same as malloc; zeroed; count*size overflow must not allocate wrong size | `alloc.c`, `test_safe_alloc.c` | overflow returns NULL/ENOMEM (`calloc_s`) | ACCEPTED/REJECTED | some impls may not detect all overflows; `calloc_s` checks |
+| `realloc` | on success new owner, old invalid; on failure old owner preserved | `alloc.c`, `contract_violations.c`, `test_safe_alloc.c` | failure preserves owner; zero-size semantics platform-defined | ACCEPTED + boundary | `realloc_s` preserves owner |
+| `free` | frees valid owned heap pointer or NULL | `alloc.c` | double free/UAF/invalid pointer UB | EXPLICIT UNSAFE BOUNDARY | `free_s` nulls owner location only |
+| `memcpy` | src/dst valid, non-overlap, extents valid | `memory_ops.c` | overlap UB; size>dmax rejected by `cplus_memcpy_s` | ACCEPTED + REJECTED/BOUNDARY | checked variant uses Intel safestringlib |
+| `memmove` | allows overlap, valid extents | `memory_ops.c`, `adversarial_defined.c` | invalid extents rejected by `memmove_s` | ACCEPTED/REJECTED | |
+| `memset` | valid dst extent | `memset_ops.c`, `test_safe_memory.c` | n>dmax rejected by `memset_s` | ACCEPTED/REJECTED | |
+| `memcmp_s` | valid extents, diff out | `test_safe_memory.c` | invalid args error | ACCEPTED/REJECTED | |
+| `memzero_s` | valid dst extent | `test_safe_memory.c` | invalid args error | ACCEPTED/REJECTED | |
+| `strcpy` | dst has enough capacity incl NUL; src NUL-terminated | `string_ops.c` | insufficient capacity is UB for raw strcpy | EXPLICIT UNSAFE BOUNDARY | use `strcpy_s` or proven bounds |
+| `strncpy` | bounded copy; may not NUL-terminate | `strncpy_ops.c` | truncation/no-NUL pitfall | ACCEPTED + boundary | |
+| `strcat` | dst has capacity for existing+src+NUL | `string_ops.c` | overflow UB raw | EXPLICIT UNSAFE BOUNDARY | checked `strcat_s` |
+| `strlen`/`strnlen_s` | str readable until NUL/smax | `string_ops.c`, `test_safe_string.c` | NULL -> 0 for `strnlen_s` | ACCEPTED/REJECTED | |
+| `printf/snprintf/fprintf` | format valid; output buffer extent valid | `printf_ops.c`, `test_safe_format.c` | truncation reported by snprintf; format mismatch UB in raw varargs misuse | ACCEPTED + boundary | wrappers do not parse format |
+| `scanf/fscanf` | pointers valid for conversions; bounded `%Ns` | `format_ops.c`, `test_safe_format.c` | invalid conversion returns 0/EOF; unbounded `%s` unsafe | ACCEPTED + EXPLICIT UNSAFE BOUNDARY | |
+| `fopen/fclose/fread/fwrite` | valid path/mode; FILE* lifetime unique/valid | `stdio_ops.c`, `test_safe_io.c`, `contract_violations.c` | missing file NULL+errno; invalid handle UB | ACCEPTED + boundary | no double-close proof in raw C |
 
-| family | native facility used | constraints / error handling | protection class | expected corpus result | upstream / licence | benchmark |
-| --- | --- | --- | --- | --- | --- | --- |
-| `malloc`/`calloc`/`realloc`/`free` | libc + `__builtin_add_overflow` in callers | overflow → `NULL`; `free(NULL)` no-op; failed `realloc` keeps owner; **use-after-free and double free are not detected** for raw pointers | runtime guard (overflow only), otherwise unprotected | passes | Apple Libc (APSL), glibc (LGPL-2.1+), musl (MIT) | malloc/free 200k: 0.034 ms native vs 0.171 ms C+ safe |
-| `memcpy`/`memmove` | `__builtin___memcpy_chk`, `-D_FORTIFY_SOURCE=2` | overlap with `memcpy` is UB (documented, not executed); `memmove` overlap defined | compile diagnostic only when the object size is known at the call site | passes | same libcs; Clang/LLVM (Apache-2.0 WITH LLVM-exception) | 64 × 1 MiB copy: 1.40 ms native vs 3.16 ms C+ safe |
-| `strcpy`/`strcat`/`strlen` | fortify when the destination size is known; `strnlen` for bounded reads | unbounded copy overflow is UB and **unprotected for unknown-size pointers**; `snprintf` is the defined bounded path | compile diagnostic (known extent) / none | passes | same libcs | — |
-| `snprintf`/`scanf` | libc; `-Werror=format-security` (C+ safe mode) | truncation returns the untruncated length; `snprintf(NULL,0,…)` sizing; `scanf` invalid conversion returns `0`, EOF is distinct | compile diagnostic (format) + runtime return contract | passes | same libcs | snprintf 200k: 15.5 ms native vs 26.8 ms C+ safe |
-| `fopen`/`fread`/`fwrite`/`fclose` | libc | short read at EOF is a return value; `ferror` for errors; `fclose` twice is UB (not executed) | unprotected (return-value contract only) | passes | same libcs | — |
+## Checked extension APIs (C+ optional, not standard CRT)
 
-**Caveat on the benchmarks:** `c+ --release` keeps the mandated sanitizer set,
-so these are cost-of-safety numbers, not codegen comparisons; the *native*
-column is plain `clang -O2` on the same file.
+| API | Contract | Evidence | Error class |
+|---|---|---|---|
+| `malloc_s` | out!=NULL, bytes>0 normalized, returns CPLUS_SAFE_* | `test_safe_alloc.c`, examples | EINVAL/ENOMEM |
+| `calloc_s` | overflow checked, zeroed | `test_safe_alloc.c` | EOVERFLOW/ENOMEM |
+| `realloc_s` | owner preserved on failure | `test_safe_alloc.c` | ENOMEM/EINVAL |
+| `free_s` | nulls owner location, no-op on NULL | `test_safe_alloc.c` | boundary: aliases remain invalid |
 
-## Findings for Agent 1 (compiler)
+## Adversarial/UB boundaries (NOT executed)
 
-1. **Static bounds pass mis-sizes expression array bounds.** `int buf[1 << 20]`
-   is treated as length **1**: `c+ build --release tests/crt/bench_crt.c`
-   reports `out-of-bounds access: index 63 reaches past array 'destination' of
-   length 1`.  Repro is the committed benchmark; using a macro/identifier for
-   the bound avoids it.  This is a false positive on valid C.
-2. **Allocation-failure observation is optimiser-sensitive.** At `-O2` LLVM can
-   fold `calloc(SIZE_MAX, k)` and assume the allocation cannot fail, so a NULL
-   check may be optimised away.  Corpus cases therefore call through
-   `noinline` helpers with `volatile` sizes; worth a note in the compiler's
-   allocation diagnostics.
+These are **EXPLICIT UNSAFE BOUNDARY** unless Agent 1 proves them in safe mode:
 
-## Remaining gaps (no claim that all C is safe)
+- Double free / UAF / alias-after-free
+- Out-of-bounds write/read through raw pointer
+- Overlapping memcpy
+- `fclose` twice / use after close
+- Unbounded `%s` in scanf into fixed buffer
+- Writing through invalidated realloc old pointer
+- Data races on FILE*/objects without synchronization
 
-- Raw `strcpy`/`strcat`/`sprintf` into an undersized or unknown-size buffer is
-  still UB; fortify only helps when the object size is visible.
-- No Annex K and no UCRT secure APIs on this platform; a portable `*_s` family
-  is explicitly out of scope (issue #19 is about existing calls).
-- `safeclib` was not vendored (licence/audit cost); it is an optional adapter
-  only if the owner asks for it.
-- Data races, provenance errors and use-after-free of raw pointers are outside
-  what any of these facilities detect.
+## Test commands
+
+```sh
+sh tests/crt/run_crt_tests.sh          # plain C CRT conformance corpus
+sh tests/crt/run_safecrt_tests.sh      # safe CRT wrapper unit tests
+sh build/safe/build_safecrt.sh         # build libcplus_safecrt.a
+# examples
+for f in examples/crt/*.c; do clang -Istdlib/safe -Ithird_party/intel-safestringlib/include "$f" build/safe/libcplus_safecrt.a -o /tmp/ex; /tmp/ex; done
+```
+
+## Known gaps
+
+- ASan/libFuzzer unavailable/broken on this macOS host for this runtime layout; Linux CI required for #23.
+- Intel safestringlib subset is vendored but not all Annex K APIs exposed.
+- `scanf_s`/format APIs are wrappers; they do not provide full Annex K constraint semantics on all platforms.
+- No compiler proof for alias/UAF/extents; Agent 1 owns enforcement.
