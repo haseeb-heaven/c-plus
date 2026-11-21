@@ -223,10 +223,36 @@ private:
     }
   }
 
+  static std::string categoryOf(const std::string &message) {
+    if (message.find("realloc") != std::string::npos)
+      return "CPLUS-REALLOC";
+    if (message.find("allocation") != std::string::npos ||
+        message.find("malloc") != std::string::npos)
+      return "CPLUS-OWNER";
+    if (message.find("bounds") != std::string::npos ||
+        message.find("array index") != std::string::npos ||
+        message.find("out-of-bounds") != std::string::npos ||
+        message.find("pointer arithmetic") != std::string::npos ||
+        message.find("VLA") != std::string::npos)
+      return "CPLUS-BOUNDS";
+    if (message.find("borrow") != std::string::npos)
+      return "CPLUS-BORROW";
+    if (message.find("goto") != std::string::npos ||
+        message.find("longjmp") != std::string::npos)
+      return "CPLUS-RAII";
+    return "CPLUS-FFI";
+  }
+
+  static std::string tagged(const std::string &message) {
+    if (message.rfind("[CPLUS-", 0) == 0)
+      return message;
+    return "[" + categoryOf(message) + "] " + message;
+  }
+
   void errorAt(const Token &at, const std::string &message) {
     Diag d;
     d.level = DiagLevel::Error;
-    d.message = message;
+    d.message = tagged(message);
     d.file = filename_;
     d.line = at.line;
     d.column = at.column;
@@ -237,7 +263,7 @@ private:
   void warningAt(const Token &at, const std::string &message) {
     Diag d;
     d.level = DiagLevel::Warning;
-    d.message = message;
+    d.message = tagged(message);
     d.file = filename_;
     d.line = at.line;
     d.column = at.column;
@@ -250,9 +276,9 @@ private:
               size_t extent) {
     Diag d;
     d.level = DiagLevel::Error;
-    d.message = "out-of-bounds access: index " + std::to_string(index) +
+    d.message = tagged("out-of-bounds access: index " + std::to_string(index) +
                 " reaches past array '" + name + "' of length " +
-                std::to_string(extent);
+                std::to_string(extent));
     d.file = filename_;
     d.line = at.line;
     d.column = at.column;

@@ -21,7 +21,7 @@ not a claim of complete memory safety.
 | multi-TU / .hp linkage | core/multi_tu, multi_tu_resource, multi_tu_hp, multi_tu_lib | positive |
 | threads / guards | cases/concurrency_mutex, core/thread_guard_ok, safety/thread_global_write, thread_invalid_sharing | positive/negative |
 | quarantine / stale alias | core/quarantine, core/quarantine/run.sh | runtime semantics |
-| fuzz / checker robustness | core/fuzz_checker.sh (120 generated inputs) | fuzz |
+| fuzz / checker robustness | core/fuzz_checker.sh (120 inputs), core/adversarial_fuzz.py (152 unsafe + 72 positive generated programs, 0 failures) | fuzz |
 | logging categories | tests/logging_test.sh | positive |
 
 Runtime line coverage target: >=80%. Latest measured: **320/395 lines (81%)**

@@ -16,6 +16,9 @@ echo "== tests =="
 echo "== perf comparison =="
 ./tests/core/perf_compare.sh >/dev/null
 
+echo "== adversarial fuzz =="
+python3 tests/core/adversarial_fuzz.py
+
 echo "== contracts and SDK smoke =="
 python3 tests/core/validate_contracts.py
 ./tests/core/sdk_smoke.sh

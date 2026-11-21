@@ -100,6 +100,19 @@ public:
 
   // Do not propagate release state across branches: a free in one branch is
   // not a guarantee on every path.
+  std::string ownerOfAddress(const Expr *sub) const {
+    if (!sub)
+      return std::string();
+    const Expr *e = sub->IgnoreParenImpCasts();
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e))
+      e = ase->getBase()->IgnoreParenImpCasts();
+    std::string owner = varNameOf(e);
+    if (owner.empty())
+      if (const auto *me = dyn_cast<MemberExpr>(e))
+        owner = varNameOf(me->getBase());
+    return owner;
+  }
+
   bool containsAssignFrom(const Stmt *node, const std::string &lhs,
                           const std::string &rhs) const {
     if (!node)
@@ -222,11 +235,7 @@ public:
       const Expr *init = vd->getInit()->IgnoreParenImpCasts();
       if (const auto *uo = dyn_cast<UnaryOperator>(init)) {
         if (uo->getOpcode() == UO_AddrOf) {
-          const Expr *sub = uo->getSubExpr();
-          std::string owner = varNameOf(sub);
-          if (owner.empty())
-            if (const auto *me = dyn_cast<MemberExpr>(sub))
-              owner = varNameOf(me->getBase());
+          std::string owner = ownerOfAddress(uo->getSubExpr());
           if (!owner.empty()) {
             auto it = writeBorrows_.find(owner);
             if (it != writeBorrows_.end() && !it->second.empty())
@@ -614,6 +623,9 @@ public:
   bool VisitArraySubscriptExpr(ArraySubscriptExpr *subscript) {
     if (!report_)
       return true;
+    if (isReleased(subscript->getBase()))
+      report(subscript->getBeginLoc(),
+             "use-after-free: subscript of released pointer");
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
     QualType baseType = base->getType();
     const auto *arrayType = ctx_.getAsConstantArrayType(baseType);
@@ -658,18 +670,19 @@ private:
       category = "CPLUS-BOUNDS";
     else if (message.find("RAII") != std::string::npos)
       category = "CPLUS-RAII";
-    else if (message.find("null pointer") != std::string::npos)
+    else if (message.find("null pointer") != std::string::npos ||
+             message.find("uninitialized") != std::string::npos)
       category = "CPLUS-LIFETIME";
     else if (message.find("libc") != std::string::npos ||
              message.find("string copy") != std::string::npos)
       category = "CPLUS-LIBC";
     // Keep the older prefix for continuity with existing fixtures/docs.
     if (category == "CPLUS-BOUNDS")
-      return category + " [CPLUS-SAFE-BOUNDS";
+      return category + "] [CPLUS-SAFE-BOUNDS";
     if (category == "CPLUS-LIFETIME")
-      return category + " [CPLUS-SAFE-LIFETIME";
+      return category + "] [CPLUS-SAFE-LIFETIME";
     if (category == "CPLUS-FREE")
-      return category + " [CPLUS-SAFE-FREE";
+      return category + "] [CPLUS-SAFE-FREE";
     return category;
   }
 
@@ -753,7 +766,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
             PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
             Diag d;
             d.level = DiagLevel::Error;
-            d.message = msg;
+            d.message = "[CPLUS-LIFETIME] " + msg;
             d.file = file_;
             if (ploc.isValid()) {
               d.line = ploc.getLine();
