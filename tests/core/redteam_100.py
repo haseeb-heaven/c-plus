@@ -100,7 +100,7 @@ add("array_one_past", "int main(void){int a[4]={0};int*p=a+4;(void)p;return 0;}"
 # --- null / uninitialized / provenance (15) ---
 add("null_deref", "int main(void){int*p=0;*p=1;return 0;}", "reject")
 add("null_checked", "#include <stdlib.h>\nint main(void){int*p=malloc(4);if(!p)return 1;*p=1;free(p);return 0;}", "accept")
-add("null_from_fn", "#include <stdlib.h>\nint*f(void){return 0;}int main(void){int*p=f();*p=1;return 0;}", "accept")
+add("null_from_fn", "#include <stdlib.h>\nint*f(void){return 0;}int main(void){int*p=f();*p=1;return 0;}", "reject")
 add("uninit_var", "int main(void){int x;return x;}", "reject")
 add("uninit_branch", "int main(int c,char**v){int x;if(c>1)x=3;return x;}", "reject")
 add("uninit_all_branches", "int main(int c,char**v){int x;if(c>1)x=3;else x=4;return x;}", "accept")

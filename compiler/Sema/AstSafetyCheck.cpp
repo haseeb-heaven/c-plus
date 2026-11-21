@@ -152,6 +152,12 @@ public:
   void setFunctionsReturningFreed(const std::set<std::string> &s) {
     functionsReturningFreed_ = s;
   }
+  const std::set<std::string> &nullReturningFunctions() const {
+    return nullReturningFunctions_;
+  }
+  void setNullReturningFunctions(const std::set<std::string> &s) {
+    nullReturningFunctions_ = s;
+  }
   const std::set<std::string> &maybeReleasedVars() const {
     return maybeReleasedVars_;
   }
@@ -555,6 +561,34 @@ public:
     return true;
   }
 
+  // Conservatively record functions whose every return yields a null
+  // constant. Any pointer initialized from such a call is provably null, so
+  // a later dereference can be diagnosed. We require at least one return and
+  // that all returns are null; a function with any non-null return (or a
+  // valueless `return;`) is deliberately left untracked to limit false
+  // positives.
+  bool VisitFunctionDecl(FunctionDecl *fd) {
+    if (report_ || !fd || !fd->getBody())
+      return true;
+    struct ReturnFinder : RecursiveASTVisitor<ReturnFinder> {
+      const SafetyVisitor &owner;
+      bool allNull = true;
+      bool sawReturn = false;
+      explicit ReturnFinder(const SafetyVisitor &o) : owner(o) {}
+      bool VisitReturnStmt(ReturnStmt *r) {
+        sawReturn = true;
+        if (!owner.isNullConstant(r->getRetValue()))
+          allNull = false;
+        return true;
+      }
+    };
+    ReturnFinder finder(*this);
+    finder.TraverseStmt(fd->getBody());
+    if (finder.sawReturn && finder.allNull)
+      nullReturningFunctions_.insert(fd->getNameAsString());
+    return true;
+  }
+
   bool VisitReturnStmt(ReturnStmt *s) {
     if (report_ || !s->getRetValue() || !currentFnDecl_ ||
         !currentFnDecl_->getBody())
@@ -623,6 +657,19 @@ public:
     if (isNullConstant(vd->getInit())) {
       nullVars_.insert(vd->getNameAsString());
       return true;
+    }
+    // A call to a function whose every return is a null constant also yields
+    // a provably null pointer. Guarded dereferences such as `if (p) ... *p`
+    // stay accepted: TraverseIfStmt suppresses the null state for that branch.
+    if (const Expr *init = vd->getInit()) {
+      if (const auto *call = dyn_cast<CallExpr>(init->IgnoreParenCasts())) {
+        if (call->getDirectCallee() &&
+            nullReturningFunctions_.count(
+                call->getDirectCallee()->getNameAsString())) {
+          nullVars_.insert(vd->getNameAsString());
+          return true;
+        }
+      }
     }
     // `T *q = p;` creates a simple alias and inherits the release state.
     std::string initName = varNameOf(vd->getInit());
@@ -1299,6 +1346,7 @@ private:
   std::map<std::string, llvm::APSInt> constLocals_;
   std::set<std::string> assignedVars_;
   std::set<std::string> functionsReturningFreed_;
+  std::set<std::string> nullReturningFunctions_;
   std::set<std::string> maybeReleasedVars_;
   std::set<std::string> allGlobals_;
   std::map<std::string, int> threadEntryCounts_;
@@ -1357,6 +1405,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setConstLocals(collect.constLocals());
   check.setAssignedVars(collect.assignedVars());
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
+  check.setNullReturningFunctions(collect.nullReturningFunctions());
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
