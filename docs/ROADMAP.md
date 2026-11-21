@@ -8,6 +8,19 @@
 
 Compiler ownership, bounds, RAII and diagnostics support both workstreams; they are a compiler responsibility, **not a third library**. See [README](../README.md), [STATUS](STATUS.md), [LIMITATIONS](LIMITATIONS.md). Claims below are **goals until verified**.
 
+## CURRENT P0 — shared safer existing libc/CRT milestone (both agents)
+
+**This milestone takes precedence over modern-library feature expansion.** Both agents work on issue [#19](https://github.com/haseeb-heaven/c-plus/issues/19), independently on separate branches and PRs:
+
+| Agent | Immediate deliverable | Ownership boundary |
+| --- | --- | --- |
+| **1 — PR #16** | Clang AST/CFG analysis and diagnostics for existing `malloc/calloc/realloc/free`, `memcpy/memmove`, `strcpy/strcat` and I/O; fix `realloc` success/failure semantics; ownership/bounds/lifetime checks; resolve conflicts and SonarCloud | `compiler/**`, minimal `runtime/**`, core/safety tests |
+| **2 — PR #17** | **Same libc safety milestone**, from the library/testing side: portable `tests/crt/**` matrix, native Apple/Microsoft/glibc/musl API availability probes, checked/fortified call examples, error/ABI conformance, failure-path and performance tests. Maintain existing `stdlib/**` but **freeze new modern features**. No new libc fork or mandatory `malloc_s/free_s`. | `tests/crt/**`, `stdlib/**` test/adapters/docs; no independent compiler/runtime edits |
+
+**Milestone exit criteria:** For each libc API family, document (1) unchanged C source test, (2) invalid case, (3) compile-time rejection vs runtime check vs unprotected/unknown, (4) semantics/ABI compatibility, (5) matching Clang and C+ sanitizer/optimization flags, (6) real test results. Resolve PR #16 conflicts; coordinate Agent 2 against its updated compiler; pass required CI and review prior to merging.
+
+**After the shared milestone:** review/merge Agent 1 first; Agent 2 updates its branch and passes combined tests; then finish/merge Agent 2's modern wrappers. Advanced GUI/JSON/logging expansion is **P1, not the current P0**.
+
 ## Architecture
 
 ```text
@@ -31,8 +44,8 @@ Existing C source (.c/.h)          Modern C+ source (.cp/.hp)
 | Priority | Issue | Owner / PR |
 | --- | --- | --- |
 | P0 | [#1 — Compiler core safety: ownership, borrowing, RAII, bounds, concurrency](https://github.com/haseeb-heaven/c-plus/issues/1) | Agent 1 · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16) |
-| P0 | [#19 — **Workstream 1: safer existing libc/CRT usage**](https://github.com/haseeb-heaven/c-plus/issues/19) | Agent 1 · same branch, compiler instrumentation |
-| P0 | [#3 — **Workstream 2: modern C+ library + native GUI/log/JSON/etc.**](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
+| P0 | [#19 — **Workstream 1: safer existing libc/CRT usage**](https://github.com/haseeb-heaven/c-plus/issues/19) | **BOTH agents** · Agent 1 compiler; Agent 2 libc verification and native adapters |
+| P1 | [#3 — **Workstream 2: modern C+ library + native GUI/log/JSON/etc.**](https://github.com/haseeb-heaven/c-plus/issues/3) | Agent 2 · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17) |
 | P0 | [#4 — Multi-TU class/RAII linkage](https://github.com/haseeb-heaven/c-plus/issues/4) | Agent 1 with Agent 2 integration tests |
 | P1 | [#8 — CI, fuzzing, diagnostics, benchmarks and portability](https://github.com/haseeb-heaven/c-plus/issues/8) | Both agents |
 | P2 | [#18 — Optional legacy C → modern C+ modernizer](https://github.com/haseeb-heaven/c-plus/issues/18) | Future |
