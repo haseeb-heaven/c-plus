@@ -11,6 +11,17 @@ Design order, as instructed: **safety, memory safety and RAII first; features
 second; speed measured, not assumed.**  The language stays small: C plus the C+
 RAII constructs.  No exceptions, no `longjmp`, no mandatory GC, no new syntax.
 
+### One library, three areas
+
+The deliverable is a single optional modern C+ library: **core** (`string`,
+`string_view`, `vector`, `slice`, `error`, `file`, `fs`, `time`, `log`,
+`mutex`/`guard`, `listener`/`connection`), **adapters** (JSON, HTTP, async,
+GUI/window/graphics/input, audio, image, video) and **the tooling around them**
+(tests, coverage gate, benchmarks).  There is deliberately **no separate
+"Safe CRT" product**: improving raw `malloc`/`strcpy` safety is the compiler's
+job (Agent 1, #19/#16), and platform `strcpy_s` stays a platform API.  See the
+scope note in PR #17.
+
 ## 1. Surface: C++-flavoured, C underneath
 
 Types are nouns, construction names the type, operations are methods:
@@ -117,18 +128,6 @@ Note on ownership: this change touches `compiler/` (`CPlusRewriter`,
 member signatures), defaults to off, and is covered by the tests above plus the
 whole repo suite, but it should be reviewed and integrated by Agent 1 rather
 than assumed.
-
-## 5b. Safe CRT (Pillar 1)
-
-`stdlib/safe_crt/safe_crt.hp` is a separate, portable, opt-in checked C API
-with the contract in [`SAFE_CRT.md`](SAFE_CRT.md); it is not part of
-`cplus/cplus.h` and does not touch the runtime.  Names are `cplus_*_s` so a
-program can include the system headers without an ABI/declaration conflict.
-Implemented: memory, copy, strings, bounded format, file I/O and checked
-parsing, each with an explicit extent and a recoverable `error`.  Deliberately
-not reimplemented: a `scanf` format parser (bounded `scan_line`/`scan_int`
-replace it) — full `scanf_s` and the compiler-side recognition of the checked
-family are listed as planned in the contract (Agent 1 side).
 
 ## 6. Vendored and linked upstreams
 

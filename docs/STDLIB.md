@@ -35,9 +35,9 @@ int main(void) {
 | `stdlib/file.hp` | `file` (`is_open`, `read`, `read_line`, `write`, `write_bytes`, `seek`, `flush`, `native`, `drop`), `file_borrow` | `fopen`, `fread`, `fgets`, `fputs`, `fwrite`, `fseek`, `fflush`, `fclose` |
 | `stdlib/thread.hp` | `mutex` (`is_valid`, `lock`, `unlock`, `native`, `drop`), `guard` (`holds`, `unlock`, `drop`) | runtime mutex wrappers |
 | `stdlib/net.hp` | `listener` (`is_valid`, `descriptor`, `bound_port`, `accept`, `drop`), `connection` (`is_valid`, `descriptor`, `read`, `write`, `drop`), `listener_borrow`, `connection_borrow` | POSIX sockets |
+| `stdlib/log.hp` | `log_sink` (`valid`, `native`, `level`, `set_level`, `enabled`, `write`, `info`, `warn`, `failure`, `drop`), `log_open_file`, `log_stderr`, `log_stdout`, `log_level_name`, `log_level_parse` | libc stdio (`fwrite`, `flockfile`), ISO-8601 timestamps |
 | `stdlib/fs.hp` | `fs_exists`, `fs_is_file`, `fs_is_dir`, `fs_size`, `fs_remove`, `fs_rename`, `fs_mkdir` | `stat`, `unlink`, `rename`, `mkdir` |
 | `stdlib/time.hp` | `time_now_ns/ms`, `time_monotonic_ns/ms`, `time_sleep_ms`, `time_format_iso8601` | `clock_gettime`, `nanosleep`, `gmtime_r`, `strftime` |
-| `stdlib/safe_crt/safe_crt.hp` | checked C API: `cplus_malloc_s`, `calloc_s`, `realloc_s`, `free_s`, `memcpy_s`, `memmove_s`, `strcpy_s`, `strncpy_s`, `strcat_s`, `strncat_s`, `sprintf_s`, `asprintf_s`, `fopen_s`, `fread_s`, `fwrite_s`, `scan_line`, `scan_int`, `parse_int`, `parse_double` | libc + contract in `SAFE_CRT.md` |
 | `stdlib/json.hp` | `json` (`valid`, `root`, `drop`), `json_view` (`valid`, `is_*`, `get_int`, `get_double`, `get_bool`, `get_string`, `size`, `at`, `member`, `write`), `json_builder` (`valid`, `add_int`, `add_double`, `add_bool`, `add_string`, `write`, `drop`), `json_parse_file`, `json_free` | yyjson 0.13.0 |
 | `stdlib/image.hp` | `image` (`valid`, `width`, `height`, `channels`, `size_bytes`, `pixel`, `write_png`, `write_bmp`, `drop`), `image_from_pixels`, `image_from_memory` | stb_image / stb_image_write |
 | `stdlib/audio.hp` | `audio_context`, `audio_device`, `audio_engine`, `audio_sound`, `audio_decoder`, `decoder_from_memory`, `audio_sleep_ms` | miniaudio |

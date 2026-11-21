@@ -1,0 +1,209 @@
+/* C+ standard library: logging with levels, structured fields and RAII sinks.
+ *
+ * Thin layer over libc stdio (the mature native backend) - no logging
+ * framework is reimplemented.  A sink owns a FILE* (or borrows stderr/stdout),
+ * filters by severity, and serialises writes with flockfile(), so concurrent
+ * threads cannot interleave a line.  Failures are recoverable `error` values.
+ */
+#ifndef CPLUS_STD_LOG_HP
+#define CPLUS_STD_LOG_HP
+
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/time.hp"
+
+#define LOG_TRACE 0
+#define LOG_DEBUG 1
+#define LOG_INFO 2
+#define LOG_WARN 3
+#define LOG_ERROR 4
+#define LOG_FATAL 5
+
+#define LOG_LEVELS 6
+#define LOG_LINE_SIZE 512
+
+static inline const char *log_level_name(int level) {
+    switch (level) {
+    case LOG_TRACE:
+        return "TRACE";
+    case LOG_DEBUG:
+        return "DEBUG";
+    case LOG_INFO:
+        return "INFO";
+    case LOG_WARN:
+        return "WARN";
+    case LOG_ERROR:
+        return "ERROR";
+    case LOG_FATAL:
+        return "FATAL";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+static inline int log_level_parse(const char *text, error *err) {
+    int level;
+    error_reset(err);
+    if (text == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "log_level_parse: null text");
+        return -1;
+    }
+    for (level = 0; level < LOG_LEVELS; level++) {
+        if (strcasecmp(text, log_level_name(level)) == 0)
+            return level;
+    }
+    error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                   "log_level_parse: unknown level");
+    return -1;
+}
+
+class log_sink {
+    FILE *stream;
+    int owns;
+    int threshold;
+
+    log_sink(FILE *stream, int owns, int threshold) {
+        this->stream = stream;
+        this->owns = owns;
+        this->threshold = threshold;
+    }
+
+    int valid(void) {
+        return this->stream != NULL;
+    }
+
+    FILE *native(void) {
+        return this->stream;
+    }
+
+    int level(void) {
+        return this->threshold;
+    }
+
+    void set_level(int level) {
+        this->threshold = level;
+    }
+
+    int enabled(int severity) {
+        return this->valid() && severity >= this->threshold;
+    }
+
+    /* Writes one line: timestamp, level, message, optional key=value fields,
+     * and the source location.  The whole line is written under the stream
+     * lock, so concurrent threads cannot interleave it. */
+    int write(int severity, const char *message, const char *const *keys,
+              const long long *values, size_t field_count, const char *file,
+              int line, error *err) {
+        char stamp[32];
+        char text[LOG_LINE_SIZE];
+        int used;
+        size_t i;
+        error_reset(err);
+        if (!this->valid()) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "log_sink::write: invalid sink");
+            return STDLIB_FAIL;
+        }
+        if (field_count > 0 && (keys == NULL || values == NULL)) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "log_sink::write: null field arrays");
+            return STDLIB_FAIL;
+        }
+        if (!this->enabled(severity))
+            return STDLIB_OK;
+        stamp[0] = '\0';
+        if (time_format_iso8601(time_now_ns(), stamp, sizeof(stamp), err) !=
+            STDLIB_OK)
+            stamp[0] = '\0';
+        used = snprintf(text, sizeof(text), "%s %-5s %s", stamp,
+                        log_level_name(severity),
+                        message != NULL ? message : "");
+        for (i = 0; i < field_count && used > 0 &&
+                    (size_t)used < sizeof(text);
+             i++) {
+            used += snprintf(text + used, sizeof(text) - (size_t)used,
+                             " %s=%lld", keys[i] != NULL ? keys[i] : "?",
+                             values[i]);
+        }
+        if (used > 0 && (size_t)used < sizeof(text)) {
+            if (file != NULL)
+                used += snprintf(text + used, sizeof(text) - (size_t)used,
+                                 " (%s:%d)", file, line);
+            if ((size_t)used < sizeof(text) - 1)
+                used += snprintf(text + used, sizeof(text) - (size_t)used,
+                                 "\n");
+        }
+        if (used < 0 || (size_t)used >= sizeof(text)) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "log_sink::write: line truncated");
+            return STDLIB_FAIL;
+        }
+        flockfile(this->stream);
+        if (fwrite(text, 1, (size_t)used, this->stream) != (size_t)used) {
+            funlockfile(this->stream);
+            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                           "log_sink::write: write failed");
+            return STDLIB_FAIL;
+        }
+        fflush(this->stream);
+        funlockfile(this->stream);
+        return STDLIB_OK;
+    }
+
+    int info(const char *message, error *err) {
+        return this->write(LOG_INFO, message, NULL, NULL, 0, NULL, 0, err);
+    }
+
+    int warn(const char *message, error *err) {
+        return this->write(LOG_WARN, message, NULL, NULL, 0, NULL, 0, err);
+    }
+
+    int failure(const char *message, error *err) {
+        return this->write(LOG_ERROR, message, NULL, NULL, 0, NULL, 0, err);
+    }
+
+    /* Owned sink closes its file; borrowed sinks (stderr/stdout) do not. */
+    void drop(void) {
+        if (this->stream != NULL && this->owns)
+            fclose(this->stream);
+        this->stream = NULL;
+        this->owns = 0;
+    }
+};
+
+/* Owned file sink; check valid() before writing. */
+static inline log_sink log_open_file(const char *path, int threshold,
+                                     error *err) {
+    log_sink sink = log_sink(NULL, 0, threshold);
+    error_reset(err);
+    if (path == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "log_open_file: null path");
+        return sink;
+    }
+    sink.stream = fopen(path, "a");
+    if (sink.stream == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       "log_open_file: cannot open log file");
+        return sink;
+    }
+    sink.owns = 1;
+    return sink;
+}
+
+/* Borrowed sinks: dropping them must never close the process's streams. */
+static inline log_sink log_stderr(int threshold) {
+    log_sink sink = log_sink(stderr, 0, threshold);
+    return sink;
+}
+
+static inline log_sink log_stdout(int threshold) {
+    log_sink sink = log_sink(stdout, 0, threshold);
+    return sink;
+}
+
+#endif
