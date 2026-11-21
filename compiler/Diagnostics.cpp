@@ -7,6 +7,13 @@
 namespace cplus {
 
 void DiagnosticEngine::report(Diag d) {
+  // Macro expansions can visit the same expression several times; emit the
+  // identical diagnostic once so users don't see duplicated errors.
+  for (const auto &prev : diags_)
+    if (prev.level == d.level && prev.message == d.message &&
+        prev.file == d.file && prev.line == d.line &&
+        prev.column == d.column)
+      return;
   switch (d.level) {
   case DiagLevel::Error:
   case DiagLevel::Fatal:
