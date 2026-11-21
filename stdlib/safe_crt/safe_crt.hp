@@ -1,0 +1,343 @@
+/* C+ Safe CRT: opt-in, portable, checked C-style functions.
+ *
+ * Separate module: nothing here is added to cplus/cplus.h or the runtime.  The
+ * rules are the ones a C programmer already knows, plus an explicit capacity
+ * and a recoverable `error *` out-parameter.
+ *
+ * Namespace: the `cplus_` prefix (and `_s` suffix) avoids ABI/declaration
+ * conflicts with Microsoft's `strcpy_s`/`memcpy_s`, whose signatures and error
+ * semantics differ.  See docs/SAFE_CRT.md for the full contract.
+ *
+ * What this layer can and cannot do: it prevents overflow, undersized buffers,
+ * NULL and overlap mistakes at the call site.  It cannot prevent use-after-free
+ * of a pointer it did not allocate, pointer-provenance errors, or data races.
+ */
+#ifndef CPLUS_SAFE_CRT_HP
+#define CPLUS_SAFE_CRT_HP
+
+#include <errno.h>
+#include <limits.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+/* ---- memory ------------------------------------------------------------- */
+
+/* Zero size is rejected: the C library's malloc(0) is implementation-defined. */
+static inline void *cplus_malloc_s(size_t size, error *err) {
+    void *block;
+    error_reset(err);
+    if (size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "malloc_s: zero size");
+        return NULL;
+    }
+    block = malloc(size);
+    if (block == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                       "malloc_s: allocation failed");
+    return block;
+}
+
+static inline void *cplus_calloc_s(size_t count, size_t element, error *err) {
+    void *block;
+    error_reset(err);
+    if (count == 0 || element == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "calloc_s: zero count or element size");
+        return NULL;
+    }
+    if (count > SIZE_MAX / element) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "calloc_s: size multiplication overflows");
+        return NULL;
+    }
+    block = calloc(count, element);
+    if (block == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                       "calloc_s: allocation failed");
+    return block;
+}
+
+/* On failure the original block is untouched and still owned by the caller. */
+static inline void *cplus_realloc_s(void *block, size_t size, error *err) {
+    void *fresh;
+    error_reset(err);
+    if (size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "realloc_s: zero size (use free_s)");
+        return NULL;
+    }
+    if (block == NULL)
+        return cplus_malloc_s(size, err);
+    fresh = realloc(block, size);
+    if (fresh == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                       "realloc_s: allocation failed");
+    return fresh;
+}
+
+/* Frees and clears the caller's pointer, so a second free_s is a no-op. */
+static inline void cplus_free_s(void **block) {
+    if (block == NULL || *block == NULL)
+        return;
+    free(*block);
+    *block = NULL;
+}
+
+/* ---- memory copy -------------------------------------------------------- */
+
+static inline int ranges_overlap(const void *a, size_t a_size, const void *b,
+                                 size_t b_size) {
+    const char *a_low = (const char *)a;
+    const char *a_high = a_low + a_size;
+    const char *b_low = (const char *)b;
+    const char *b_high = b_low + b_size;
+    if (a_size == 0 || b_size == 0)
+        return 0;
+    return a_low < b_high && b_low < a_high;
+}
+
+/* Overlap is an error here: use memmove_s for overlapping ranges. */
+static inline int cplus_memcpy_s(void *destination, size_t destination_size,
+                                 const void *source, size_t size, error *err) {
+    error_reset(err);
+    if (destination == NULL || source == NULL || destination_size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "memcpy_s: null buffer or zero destination size");
+        return STDLIB_FAIL;
+    }
+    if (size > destination_size) {
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "memcpy_s: source exceeds destination extent");
+        return STDLIB_FAIL;
+    }
+    if (ranges_overlap(destination, destination_size, source, size)) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "memcpy_s: ranges overlap (use memmove_s)");
+        return STDLIB_FAIL;
+    }
+    if (size > 0)
+        memcpy(destination, source, size);
+    return STDLIB_OK;
+}
+
+static inline int cplus_memmove_s(void *destination, size_t destination_size,
+                                  const void *source, size_t size, error *err) {
+    error_reset(err);
+    if (destination == NULL || source == NULL || destination_size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "memmove_s: null buffer or zero destination size");
+        return STDLIB_FAIL;
+    }
+    if (size > destination_size) {
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "memmove_s: source exceeds destination extent");
+        return STDLIB_FAIL;
+    }
+    if (size > 0)
+        memmove(destination, source, size);
+    return STDLIB_OK;
+}
+
+/* ---- strings ------------------------------------------------------------ */
+
+/* On any failure the destination is set to the empty string (as Microsoft's
+ * strcpy_s does), so a partial copy is never observable. */
+static inline int cplus_strcpy_s(char *destination, size_t destination_size,
+                                 const char *source, error *err) {
+    size_t needed;
+    error_reset(err);
+    if (destination == NULL || destination_size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strcpy_s: null destination or zero capacity");
+        return STDLIB_FAIL;
+    }
+    if (source == NULL) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strcpy_s: null source");
+        return STDLIB_FAIL;
+    }
+    needed = strlen(source) + 1;
+    if (needed > destination_size ||
+        ranges_overlap(destination, destination_size, source, needed)) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "strcpy_s: destination too small or ranges overlap");
+        return STDLIB_FAIL;
+    }
+    memcpy(destination, source, needed);
+    return STDLIB_OK;
+}
+
+static inline int cplus_strcat_s(char *destination, size_t destination_size,
+                                 const char *source, error *err) {
+    size_t used;
+    size_t needed;
+    error_reset(err);
+    if (destination == NULL || destination_size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strcat_s: null destination or zero capacity");
+        return STDLIB_FAIL;
+    }
+    if (source == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strcat_s: null source");
+        return STDLIB_FAIL;
+    }
+    /* A destination without a terminator inside its extent is invalid. */
+    used = strnlen(destination, destination_size);
+    if (used == destination_size) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strcat_s: destination is not terminated");
+        return STDLIB_FAIL;
+    }
+    needed = strlen(source);
+    if (needed >= destination_size - used ||
+        ranges_overlap(destination, destination_size, source, needed + 1)) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "strcat_s: destination too small or ranges overlap");
+        return STDLIB_FAIL;
+    }
+    memmove(destination + used, source, needed + 1);
+    return STDLIB_OK;
+}
+
+/* Bounded formatting: truncation is an error, never silent. */
+static inline int cplus_sprintf_s(char *destination, size_t destination_size,
+                                  error *err, const char *format, ...) {
+    va_list args;
+    int written;
+    error_reset(err);
+    if (destination == NULL || destination_size == 0 || format == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "sprintf_s: null buffer or format");
+        return STDLIB_FAIL;
+    }
+    va_start(args, format);
+    written = vsnprintf(destination, destination_size, format, args);
+    va_end(args);
+    if (written < 0 || (size_t)written >= destination_size) {
+        destination[destination_size - 1] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "sprintf_s: output truncated");
+        return STDLIB_FAIL;
+    }
+    return written;
+}
+
+/* ---- files -------------------------------------------------------------- */
+
+static inline FILE *cplus_fopen_s(const char *path, const char *mode,
+                                  error *err) {
+    FILE *stream;
+    error_reset(err);
+    if (path == NULL || mode == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fopen_s: null path or mode");
+        return NULL;
+    }
+    stream = fopen(path, mode);
+    if (stream == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       "fopen_s: cannot open file");
+    return stream;
+}
+
+/* Returns elements read; a short read is reported by the return value, an
+ * error only by the error record. */
+static inline size_t cplus_fread_s(void *destination, size_t destination_size,
+                                   size_t element, size_t count, FILE *stream,
+                                   error *err) {
+    error_reset(err);
+    if (destination == NULL || stream == NULL || element == 0 || count == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fread_s: invalid argument");
+        return 0;
+    }
+    if (count > destination_size / element) {
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "fread_s: request exceeds destination extent");
+        return 0;
+    }
+    {
+        size_t got = fread(destination, element, count, stream);
+        if (got < count && ferror(stream))
+            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                           "fread_s: stream error");
+        return got;
+    }
+}
+
+static inline size_t cplus_fwrite_s(const void *source, size_t element,
+                                    size_t count, FILE *stream, error *err) {
+    error_reset(err);
+    if (source == NULL || stream == NULL || element == 0 || count == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fwrite_s: invalid argument");
+        return 0;
+    }
+    {
+        size_t put = fwrite(source, element, count, stream);
+        if (put != count)
+            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                           "fwrite_s: short write");
+        return put;
+    }
+}
+
+/* ---- checked parsing ---------------------------------------------------- */
+
+static inline int cplus_parse_int(const char *text, int *out, error *err) {
+    char *end;
+    long value;
+    error_reset(err);
+    if (text == NULL || out == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "parse_int: null argument");
+        return STDLIB_FAIL;
+    }
+    end = (char *)text;
+    errno = 0;
+    value = strtol(text, &end, 10);
+    if (end == text || *end != '\0' || errno == ERANGE || value < INT_MIN ||
+        value > INT_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "parse_int: not an in-range integer");
+        return STDLIB_FAIL;
+    }
+    *out = (int)value;
+    return STDLIB_OK;
+}
+
+static inline int cplus_parse_double(const char *text, double *out,
+                                     error *err) {
+    char *end;
+    double value;
+    error_reset(err);
+    if (text == NULL || out == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "parse_double: null argument");
+        return STDLIB_FAIL;
+    }
+    end = (char *)text;
+    errno = 0;
+    value = strtod(text, &end);
+    if (end == text || *end != '\0' || errno == ERANGE || !isfinite(value)) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "parse_double: not a finite number");
+        return STDLIB_FAIL;
+    }
+    *out = value;
+    return STDLIB_OK;
+}
+
+#endif
