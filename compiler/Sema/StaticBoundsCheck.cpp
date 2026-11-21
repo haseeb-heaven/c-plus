@@ -927,17 +927,43 @@ private:
     for (const auto &entry : funcs_) {
       for (const char *fn : kStateful) {
         unsigned count = 0;
-        size_t first = kNPos;
-        for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k)
-          if (isIdent(k, fn)) {
-            if (first == kNPos)
-              first = k;
-            ++count;
+        size_t first = kNPos, last = kNPos;
+        std::set<std::string> saved;
+        for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
+          if (!isIdent(k, fn))
+            continue;
+          if (first == kNPos)
+            first = k;
+          last = k;
+          ++count;
+          // `v = strtok(...)` records a saved result that a later call
+          // invalidates.
+          size_t eq = k;
+          while (eq > entry.second.bodyOpen && trivia(eq - 1))
+            --eq;
+          if (eq > entry.second.bodyOpen && isPunct(eq - 1, "=")) {
+            size_t lhs = eq - 1;
+            while (lhs > entry.second.bodyOpen && trivia(lhs - 1))
+              --lhs;
+            --lhs;
+            if (lhs >= entry.second.bodyOpen &&
+                toks_[lhs].kind == TokKind::Identifier)
+              saved.insert(toks_[lhs].text);
           }
-        if (count > 1 && first != kNPos)
-          errorAt(toks_[first], std::string("'") + fn +
-                                    "' keeps static state; a second call "
-                                    "invalidates earlier results");
+        }
+        if (count > 1 && first != kNPos) {
+          bool used_after = false;
+          for (size_t k = last + 1; k <= entry.second.bodyClose; ++k)
+            if (toks_[k].kind == TokKind::Identifier &&
+                saved.count(toks_[k].text))
+              used_after = true;
+          const std::string msg = std::string("'") + fn +
+              "' keeps static state; a second call invalidates earlier results";
+          if (used_after)
+            errorAt(toks_[first], msg);
+          else
+            warningAt(toks_[first], msg);
+        }
       }
     }
   }

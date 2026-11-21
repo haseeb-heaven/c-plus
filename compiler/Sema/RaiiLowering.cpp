@@ -68,9 +68,10 @@ std::string quoteFile(const std::string &file) {
 class Lowering {
 public:
   Lowering(const std::string &source, std::vector<std::string> resourceTypes,
-           DiagnosticEngine &diags, const std::string &filename, Mode mode)
+           DiagnosticEngine &diags, const std::string &filename, Mode mode,
+           bool strict = false)
       : source_(source), toks_(lexCPlus(source)), diags_(diags),
-        filename_(filename), mode_(mode) {
+        filename_(filename), mode_(mode), strict_(strict) {
     for (auto &t : resourceTypes)
       resourceTypes_.insert(t);
   }
@@ -452,9 +453,14 @@ private:
       atStmtStart_ = false;
       return;
     }
-    if (movedOwners_.count(t.text))
-      warningAt("use of moved-from resource '" + t.text + "'", t,
-                "the handle was zeroed by cplus_move");
+    if (movedOwners_.count(t.text) && mode_ != Mode::LegacyC) {
+      if (strict_)
+        errorAt("use-after-move: use of moved-from resource '" + t.text + "'",
+                t, "the handle was zeroed by cplus_move");
+      else
+        warningAt("use of moved-from resource '" + t.text + "'", t,
+                  "the handle was zeroed by cplus_move");
+    }
     auto borrow = borrows_.find(t.text);
     if (borrow != borrows_.end() && moved_.count(borrow->second)) {
       errorAt("borrow '" + t.text + "' of '" + borrow->second +
@@ -777,6 +783,7 @@ private:
   DiagnosticEngine &diags_;
   std::string filename_;
   Mode mode_;
+  bool strict_ = false;
 
   std::set<std::string> resourceTypes_;
   std::map<std::string, OwnedVar> owned_;
@@ -806,8 +813,9 @@ private:
 LoweredSource lowerRaii(const std::string &source,
                         std::vector<std::string> resourceTypes,
                         DiagnosticEngine &diags, const std::string &filename,
-                        Mode mode) {
-  Lowering lowering(source, std::move(resourceTypes), diags, filename, mode);
+                        Mode mode, bool strict) {
+  Lowering lowering(source, std::move(resourceTypes), diags, filename, mode,
+                    strict);
   return lowering.run();
 }
 

@@ -307,12 +307,13 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
 std::string lowerUnit(const std::string &text, const std::string &name,
                       DiagnosticEngine &diags, Mode mode, bool *ok,
                       RewrittenSource *outRewritten = nullptr,
-                      bool headerMode = false) {
+                      bool headerMode = false, bool strict = false) {
   RewrittenSource rewritten = rewriteCPlusSource(text, diags, name, headerMode);
   if (mode == Mode::Safe)
     checkStaticBounds(text, rewritten.arrayLengths, diags, name);
   LoweredSource lowered =
-      lowerRaii(rewritten.text, rewritten.resourceTypes, diags, name, mode);
+      lowerRaii(rewritten.text, rewritten.resourceTypes, diags, name, mode,
+                strict);
   if (outRewritten)
     *outRewritten = rewritten;
   *ok = !diags.hasErrors();
@@ -534,7 +535,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     DRIVER_LOG(CLOG_DEBUG, "lowering %s", input.c_str());
     bool ok = false;
-    std::string loweredText = lowerUnit(source, input, diags, opts.mode, &ok);
+    std::string loweredText = lowerUnit(source, input, diags, opts.mode, &ok,
+                                        nullptr, false, opts.strict);
     DRIVER_LOG(CLOG_DEBUG, "lowered %s (%zu bytes)", input.c_str(),
                loweredText.size());
     if (opts.mode == Mode::Safe)

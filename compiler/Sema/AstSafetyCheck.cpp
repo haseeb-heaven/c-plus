@@ -192,7 +192,7 @@ public:
                         const std::string &api) {
     if (!arg)
       return;
-    const Expr *e = arg->IgnoreParenImpCasts();
+    const Expr *e = arg->IgnoreParenCasts();
 
     if (isa<StringLiteral>(e)) {
       report(loc, "invalid free of string literal via " + api);
@@ -209,6 +209,11 @@ public:
                             vd->getNameAsString() + "' via " + api);
             return;
           }
+        }
+        if (const auto *me = dyn_cast<MemberExpr>(sub)) {
+          report(loc, "invalid free of address of struct field '" +
+                          varNameOf(me->getBase()) + "' via " + api);
+          return;
         }
         if (const auto *ase = dyn_cast<ArraySubscriptExpr>(sub)) {
           std::string base = varNameOf(ase->getBase());
@@ -333,6 +338,17 @@ public:
     return false;
   }
 
+  static bool containsReturn(const Stmt *node) {
+    if (!node)
+      return false;
+    if (isa<ReturnStmt>(node))
+      return true;
+    for (const Stmt *child : node->children())
+      if (containsReturn(child))
+        return true;
+    return false;
+  }
+
   bool detectReallocSuccess(const IfStmt *s, std::string &owner,
                             std::string &tmp,
                             const CallExpr **out = nullptr) const {
@@ -340,16 +356,26 @@ public:
       return false;
     const Expr *condExpr = s->getCond();
     const Expr *tmpRef = nullptr;
-    if (const auto *bo = dyn_cast<BinaryOperator>(condExpr)) {
-      tmp = varNameOf(bo->getLHS());
-      tmpRef = bo->getLHS()->IgnoreParenImpCasts();
-      if (tmp.empty()) {
-        tmp = varNameOf(bo->getRHS());
-        tmpRef = bo->getRHS()->IgnoreParenImpCasts();
+    bool negated = false;
+    if (const auto *uo = dyn_cast<UnaryOperator>(condExpr->IgnoreParenImpCasts())) {
+      if (uo->getOpcode() == UO_LNot) {
+        negated = true;
+        tmpRef = uo->getSubExpr()->IgnoreParenImpCasts();
+        tmp = varNameOf(tmpRef);
       }
-    } else {
-      tmp = varNameOf(condExpr);
-      tmpRef = condExpr->IgnoreParenImpCasts();
+    }
+    if (!negated) {
+      if (const auto *bo = dyn_cast<BinaryOperator>(condExpr)) {
+        tmp = varNameOf(bo->getLHS());
+        tmpRef = bo->getLHS()->IgnoreParenImpCasts();
+        if (tmp.empty()) {
+          tmp = varNameOf(bo->getRHS());
+          tmpRef = bo->getRHS()->IgnoreParenImpCasts();
+        }
+      } else {
+        tmp = varNameOf(condExpr);
+        tmpRef = condExpr->IgnoreParenImpCasts();
+      }
     }
     if (tmp.empty() || !tmpRef)
       return false;
@@ -365,11 +391,25 @@ public:
     owner = varNameOf(call->getArg(0));
     if (out)
       *out = call;
+    if (negated && containsReturn(s->getThen()))
+      return !owner.empty(); // failure branch exits: ownership is explicit
     return !owner.empty() && containsAssignFrom(s->getThen(), owner, tmp);
   }
 
   void collectMayRelease(Stmt *body) {
     if (!body)
+      return;
+    // A branch that returns cannot leave a may-release state at the join
+    // point. Skipping it avoids false positives for realloc-failure cleanup
+    // like `void *t = realloc(p,n); if (!t) { free(p); return 1; }`.
+    struct ExitFinder : RecursiveASTVisitor<ExitFinder> {
+      bool exits = false;
+      bool VisitReturnStmt(ReturnStmt *) { exits = true; return true; }
+      bool VisitContinueStmt(ContinueStmt *) { exits = true; return true; }
+      bool VisitBreakStmt(BreakStmt *) { exits = true; return true; }
+    } exits;
+    exits.TraverseStmt(body);
+    if (exits.exits)
       return;
     ReleaseCollector collector;
     collector.TraverseStmt(body);
@@ -390,10 +430,24 @@ public:
       if (detectReallocSuccess(s, owner, tmp, &rc) && rc)
         handledReallocs_.insert(rc->getBeginLoc().getRawEncoding());
     }
+    bool negatedGuard = false;
+    if (s->getCond())
+      if (const auto *uo = dyn_cast<UnaryOperator>(
+              s->getCond()->IgnoreParenImpCasts()))
+        negatedGuard = uo->getOpcode() == UO_LNot;
     if (report_) {
       std::string owner, tmp;
       if (detectReallocSuccess(s, owner, tmp)) {
         bool r = TraverseStmt(s->getCond());
+        if (negatedGuard) {
+          // The then-branch is the FAILURE path (e.g. `if(!t){free(p);
+          // return 1;}`). Ownership stays with the original allocation.
+          r &= TraverseStmt(s->getThen());
+          if (s->getElse())
+            r &= TraverseStmt(s->getElse());
+          --conditionalDepth_;
+          return r;
+        }
         // Inside the success branch the old pointer and its aliases are
         // invalid; outside it they remain valid (failure path).
         markReleased(owner);
@@ -405,7 +459,17 @@ public:
         return r;
       }
     }
+    // `if (p) { ... }` tests the pointer for non-null. Suppress the provably
+    // null state for that branch so a valid guarded dereference is not a
+    // false positive. With an else branch the null path remains checked.
+    std::set<std::string> savedNulls = nullVars_;
+    if (report_ && !s->getElse()) {
+      std::string condVar = varNameOf(s->getCond());
+      if (!condVar.empty())
+        nullVars_.erase(condVar);
+    }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
+    nullVars_ = savedNulls;
     --conditionalDepth_;
     return r;
   }
@@ -505,7 +569,7 @@ public:
     }
     // `T *b = &owner;` records a borrow for lifetime/conflict checks.
     if (vd->getType()->isPointerType() && vd->getInit()) {
-      const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      const Expr *init = vd->getInit()->IgnoreParenCasts();
       if (const auto *uo = dyn_cast<UnaryOperator>(init)) {
         if (uo->getOpcode() == UO_AddrOf) {
           std::string owner = ownerOfAddress(uo->getSubExpr());
@@ -514,6 +578,8 @@ public:
             // lifetime invalidation; do not impose Rust-style exclusivity.
             borrowOwner_[vd->getNameAsString()] = owner;
             aliasLocs_[vd->getNameAsString()] = vd->getBeginLoc();
+            if (releasedVars_.count(owner))
+              releasedVars_.insert(vd->getNameAsString());
           }
         }
       }
@@ -670,8 +736,15 @@ public:
   }
 
   bool VisitMemberExpr(MemberExpr *member) {
-    if (!report_ || !member->isArrow())
+    if (!report_)
       return true;
+    if (!member->isArrow()) {
+      // Direct member access on a moved resource is also use-after-move.
+      if (movedVars_.count(varNameOf(member->getBase())))
+        report(member->getBeginLoc(),
+               "use-after-move: member access through moved resource");
+      return true;
+    }
     if (isReleased(member->getBase()))
       reportUaf(member->getBeginLoc(), ownerOfAddress(member->getBase()),
                 "member access through released pointer");
@@ -785,12 +858,15 @@ public:
   }
 
   /// Null pointers passed to libc read/write APIs are contract violations.
-  void checkLibcNullSource(const CallExpr *call, const std::string &api) {
-    if (call->getNumArgs() < 2)
+  void checkLibcNullSource(const CallExpr *call, const std::string &api,
+                           unsigned idx = 1) {
+    if (call->getNumArgs() <= idx)
       return;
-    const Expr *src = call->getArg(1)->IgnoreParenCasts();
+    const Expr *src = call->getArg(idx)->IgnoreParenCasts();
     if (isNullConstant(src) || nullVarOf(src))
-      report(call->getBeginLoc(), "null source pointer passed to " + api);
+      report(call->getBeginLoc(), "null pointer argument " +
+                                      std::to_string(idx) + " passed to " +
+                                      api);
   }
 
   /// Detect strcpy from a short string literal into a smaller array.  Source
@@ -935,6 +1011,8 @@ public:
         checkBoundedCopy(call, "fill");
       }
       if (baseName == "strcpy" && call->getNumArgs() >= 2) {
+        if (isa<StringLiteral>(call->getArg(0)->IgnoreParenCasts()))
+          report(call->getBeginLoc(), "write to string literal via strcpy");
         checkStringCopy(call);
         checkLibcNullSource(call, baseName);
       }
@@ -950,6 +1028,13 @@ public:
           call->getNumArgs() >= 2) {
         checkBoundedWrite(call, 0, 1, "format write");
       }
+      if (baseName == "memcmp" && call->getNumArgs() >= 3) {
+        checkLibcNullSource(call, baseName, 0);
+        checkLibcNullSource(call, baseName, 1);
+      }
+      if ((baseName == "strlen" || baseName == "strcmp" ||
+           baseName == "strnlen") && call->getNumArgs() >= 1)
+        checkLibcNullSource(call, baseName, 0);
       if (baseName == "cplus_strcpy" && call->getNumArgs() >= 3) {
         const Expr *cap = call->getArg(1)->IgnoreParenImpCasts();
         const auto *lit = dyn_cast<StringLiteral>(
@@ -1019,6 +1104,9 @@ public:
     if (isReleased(subscript->getBase()))
       reportUaf(subscript->getBeginLoc(), ownerOfAddress(subscript->getBase()),
                 "subscript of released pointer");
+    else if (isNullConstant(subscript->getBase()) ||
+             nullVarOf(subscript->getBase()))
+      report(subscript->getBeginLoc(), "null pointer subscript");
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
     QualType baseType = base->getType();
     const auto *arrayType = ctx_.getAsConstantArrayType(baseType);

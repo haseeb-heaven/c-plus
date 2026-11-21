@@ -25,6 +25,12 @@ echo "== mass fuzz (thousands of cases, multi-seed) =="
 echo "== cross-TU fuzz (two-file programs) =="
 python3 tests/core/cross_tu_fuzz.py
 
+echo "== acceptance / detection / false-positive metrics =="
+python3 tests/metrics/measure.py
+
+echo "== 100-scenario adversarial red team =="
+python3 tests/core/redteam_100.py
+
 echo "== strict/default modes =="
 ./tests/core/strict_mode.sh
 
