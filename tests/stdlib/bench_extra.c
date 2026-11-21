@@ -21,10 +21,10 @@ int main(void) {
     for (i = 0; i < 20000; i++) {
         yyjson_doc *doc = yyjson_read(text, strlen(text), YYJSON_READ_NOFLAG);
         if (doc != NULL) {
-            yyjson_val *root = yyjson_doc_get_root(doc);
-            yyjson_val *stars = yyjson_obj_get(root, "stars");
+            const yyjson_val *root = yyjson_doc_get_root(doc);
+            const yyjson_val *stars = yyjson_obj_get(root, "stars");
             sink += yyjson_get_int(stars);
-            yyjson_doc_free(doc);
+            yyjson_doc_free((yyjson_doc *)doc);
         }
     }
     clock_gettime(CLOCK_MONOTONIC, &t1);
@@ -33,10 +33,9 @@ int main(void) {
     clock_gettime(CLOCK_MONOTONIC, &t0);
     for (i = 0; i < 200; i++) {
         FILE *f = fopen("tests/stdlib/data/sample.json", "r");
-        char buf[512];
         if (f != NULL) {
-            size_t n;
-            while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+            char buf[512];
+            while (fread(buf, 1, sizeof(buf), f) > 0)
                 sink += buf[0];
             fclose(f);
         }

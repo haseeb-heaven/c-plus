@@ -20,11 +20,12 @@ $CC -O2 tests/stdlib/bench_plain.c -o "$OUT/plain_fast" || exit 1
 "$CPLUS" build --release tests/stdlib/bench_compare.cp -o "$OUT/cplus_fast" >/dev/null || exit 1
 
 run3extra() { # name -> best-of-three "json_ms file_ms alloc_ms"
-  f="$OUT/$1.runs"
+  name="$1"
+  f="$OUT/$name.runs"
   : >"$f"
   i=0
   while [ $i -lt 3 ]; do
-    "$OUT/$1" >>"$f"
+    "$OUT/$name" >>"$f"
     i=$((i + 1))
   done
   awk 'NR==1 {a=$1; b=$2; c=$3} {if ($1<a) a=$1; if ($2<b) b=$2; if ($3<c) c=$3}
@@ -32,11 +33,12 @@ run3extra() { # name -> best-of-three "json_ms file_ms alloc_ms"
 }
 
 run3() { # name -> best-of-three "vector_ms string_ms checksum"
-  f="$OUT/$1.runs"
+  name="$1"
+  f="$OUT/$name.runs"
   : >"$f"
   i=0
   while [ $i -lt 3 ]; do
-    "$OUT/$1" >>"$f"
+    "$OUT/$name" >>"$f"
     i=$((i + 1))
   done
   awk 'NR==1 {v=$1; s=$2} {if ($1<v) v=$1; if ($2<s) s=$2; sum=$3}

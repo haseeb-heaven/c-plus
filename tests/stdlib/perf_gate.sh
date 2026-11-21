@@ -26,13 +26,18 @@ $CC $SAFE tests/stdlib/bench_extra.c -Ithird_party/yyjson -Lbuild/ext -lyyjson \
   -o "$OUT/extra_cplus" >/dev/null || exit 1
 
 ratio() { # a b -> a/b rounded
-  awk -v a="$1" -v b="$2" 'BEGIN { if (b <= 0) print 0; else printf "%.2f", a/b }'
+  left="$1"
+  right="$2"
+  awk -v a="$left" -v b="$right" 'BEGIN { if (b <= 0) print 0; else printf "%.2f", a/b }'
 }
 
 fail=0
 check() { # name value threshold
-  awk -v n="$1" -v v="$2" -v t="$3" 'BEGIN { exit !(v <= t) }' || {
-    echo "FAIL $1: ratio $2 exceeds $3" >&2
+  label="$1"
+  value="$2"
+  limit="$3"
+  awk -v v="$value" -v t="$limit" 'BEGIN { exit !(v <= t) }' || {
+    echo "FAIL $label: ratio $value exceeds $limit" >&2
     fail=1
   }
 }

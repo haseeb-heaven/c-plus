@@ -118,6 +118,18 @@ member signatures), defaults to off, and is covered by the tests above plus the
 whole repo suite, but it should be reviewed and integrated by Agent 1 rather
 than assumed.
 
+## 5b. Safe CRT (Pillar 1)
+
+`stdlib/safe_crt/safe_crt.hp` is a separate, portable, opt-in checked C API
+with the contract in [`SAFE_CRT.md`](SAFE_CRT.md); it is not part of
+`cplus/cplus.h` and does not touch the runtime.  Names are `cplus_*_s` so a
+program can include the system headers without an ABI/declaration conflict.
+Implemented: memory, copy, strings, bounded format, file I/O and checked
+parsing, each with an explicit extent and a recoverable `error`.  Deliberately
+not reimplemented: a `scanf` format parser (bounded `scan_line`/`scan_int`
+replace it) — full `scanf_s` and the compiler-side recognition of the checked
+family are listed as planned in the contract (Agent 1 side).
+
 ## 6. Vendored and linked upstreams
 
 Only the approved subset is copied into `third_party/`; no upstream checkout is
@@ -244,4 +256,5 @@ runtime - not in the library.
 
 The build recipe does help where it can: vendored libraries are compiled once
 (`third_party/*_impl.c`), so no test or application re-lowers yyjson,
-miniaudio, stb, Nuklear or SDL3.
+miniaudio, stb, Nuklear or SDL3.  The stdlib itself is header-only apart from
+the compiled-once upstream units.

@@ -67,14 +67,12 @@ int main(int argc, char **argv) {
         closedir(d);
     }
     {
-        long i;
         unsigned char *buf = (unsigned char *)malloc(2048);
         if (buf == NULL)
             return 1;
-        for (i = 0; i < runs; i++) {
+        for (long i = 0; i < runs; i++) {
             size_t len = (size_t)(next_rand() % 2048);
-            size_t k;
-            for (k = 0; k < len; k++)
+            for (size_t k = 0; k < len; k++)
                 buf[k] = (unsigned char)(next_rand() & 0xff);
             LLVMFuzzerTestOneInput(buf, len);
         }

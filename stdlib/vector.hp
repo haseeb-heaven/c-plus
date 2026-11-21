@@ -9,6 +9,52 @@
 
 #include "cplus/cplus.h"
 
+/* Borrowed, bounds-checked window over ints.  It never owns storage and is
+ * invalidated by the owner's growth or destruction. */
+class slice {
+    int *items;
+    size_t count;
+
+    slice(int *items, size_t count) {
+        this->items = items;
+        this->count = count;
+    }
+
+    size_t size(void) {
+        return this->count;
+    }
+
+    int valid(void) {
+        return this->items != NULL && this->count > 0;
+    }
+
+    /* 0 on success, -1 when the index is outside the slice. */
+    int at_checked(size_t index, int *out) {
+        if (out == NULL)
+            return -1;
+        if (this->items == NULL || index >= this->count)
+            return -1;
+        *out = this->items[index];
+        return 0;
+    }
+
+    /* Sub-slice [start, start+n) clamped to the extent; empty when start is
+     * outside the slice. */
+    slice sub(size_t start, size_t length) {
+        slice empty = slice(NULL, 0);
+        size_t available;
+        if (this->items == NULL || start >= this->count)
+            return empty;
+        available = this->count - start;
+        if (length > available)
+            length = available;
+        {
+            slice part = slice(this->items + start, length);
+            return part;
+        }
+    }
+};
+
 class vector {
     int *items;
     size_t used;
@@ -91,6 +137,12 @@ class vector {
 
     void clear(void) {
         this->used = 0;
+    }
+
+    /* Borrowed view of the current contents. */
+    slice view(void) {
+        slice borrowed = slice(this->items, this->used);
+        return borrowed;
     }
 
     void drop(void) {

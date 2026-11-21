@@ -30,37 +30,39 @@ fi
 echo "fuzz mode: $MODE"
 
 build() { # name
-  case "$1" in
+  target="$1"
+  case "$target" in
     fuzz_json) libs="$CPLUS_LIBS" ;;
     *) libs="" ;;
   esac
   if [ "$MODE" = "libfuzzer" ]; then
-    "$CPLUS" build "tests/stdlib/fuzz/$1.cp" $FUZZER_FLAGS $libs -o "$OUT/$1" \
-      >"$OUT/$1.build.log" 2>&1 || return 1
+    "$CPLUS" build "tests/stdlib/fuzz/$target.cp" $FUZZER_FLAGS $libs \
+      -o "$OUT/$target" >"$OUT/$target.build.log" 2>&1 || return 1
   else
-    "$CPLUS" build "tests/stdlib/fuzz/$1.cp" $libs -L"$OUT" -lfuzzmain \
-      -o "$OUT/$1" >"$OUT/$1.build.log" 2>&1 || return 1
+    "$CPLUS" build "tests/stdlib/fuzz/$target.cp" $libs -L"$OUT" -lfuzzmain \
+      -o "$OUT/$target" >"$OUT/$target.build.log" 2>&1 || return 1
   fi
   return 0
 }
 
-run() { # name corpus-subdir
-  if [ "$TARGET" != "all" ] && [ "$TARGET" != "$1" ]; then return 0; fi
-  if ! build "$1"; then
-    echo "FAIL build $1 (see $OUT/$1.build.log)" >&2
+run() { # name
+  target="$1"
+  if [ "$TARGET" != "all" ] && [ "$TARGET" != "$target" ]; then return 0; fi
+  if ! build "$target"; then
+    echo "FAIL build $target (see $OUT/$target.build.log)" >&2
     FAIL=1
     return 0
   fi
   if [ "$MODE" = "libfuzzer" ]; then
-    "$OUT/$1" -runs="$RUNS" -max_len=2048 "tests/stdlib/fuzz/corpus" \
-      >"$OUT/$1.run.log" 2>&1
+    "$OUT/$target" -runs="$RUNS" -max_len=2048 "tests/stdlib/fuzz/corpus" \
+      >"$OUT/$target.run.log" 2>&1
   else
-    "$OUT/$1" tests/stdlib/fuzz/corpus "$RUNS" >"$OUT/$1.run.log" 2>&1
+    "$OUT/$target" tests/stdlib/fuzz/corpus "$RUNS" >"$OUT/$target.run.log" 2>&1
   fi
   if [ $? -eq 0 ]; then
-    printf 'ok   %s (%s inputs, %s)\n' "$1" "$RUNS" "$MODE"
+    printf 'ok   %s (%s inputs, %s)\n' "$target" "$RUNS" "$MODE"
   else
-    echo "FAIL $1 (see $OUT/$1.run.log)" >&2
+    echo "FAIL $target (see $OUT/$target.run.log)" >&2
     FAIL=1
   fi
 }

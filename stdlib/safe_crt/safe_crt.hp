@@ -340,4 +340,180 @@ static inline int cplus_parse_double(const char *text, double *out,
     return STDLIB_OK;
 }
 
+/* Count-limited copies: truncation is an error, never silent. */
+static inline int cplus_strncpy_s(char *destination, size_t destination_size,
+                                  const char *source, size_t count, error *err) {
+    size_t needed;
+    error_reset(err);
+    if (destination == NULL || destination_size == 0 || count == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strncpy_s: invalid buffer or count");
+        return STDLIB_FAIL;
+    }
+    if (source == NULL) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strncpy_s: null source");
+        return STDLIB_FAIL;
+    }
+    needed = strlen(source);
+    if (needed > count || needed + 1 > destination_size ||
+        ranges_overlap(destination, destination_size, source, needed + 1)) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "strncpy_s: would truncate, overflow or overlap");
+        return STDLIB_FAIL;
+    }
+    memcpy(destination, source, needed + 1);
+    return STDLIB_OK;
+}
+
+static inline int cplus_strncat_s(char *destination, size_t destination_size,
+                                  const char *source, size_t count, error *err) {
+    size_t used;
+    size_t needed;
+    error_reset(err);
+    if (destination == NULL || destination_size == 0 || count == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strncat_s: invalid buffer or count");
+        return STDLIB_FAIL;
+    }
+    if (source == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strncat_s: null source");
+        return STDLIB_FAIL;
+    }
+    used = strnlen(destination, destination_size);
+    if (used == destination_size) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "strncat_s: destination is not terminated");
+        return STDLIB_FAIL;
+    }
+    needed = strlen(source);
+    if (needed > count || needed >= destination_size - used ||
+        ranges_overlap(destination, destination_size, source, needed + 1)) {
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "strncat_s: would truncate, overflow or overlap");
+        return STDLIB_FAIL;
+    }
+    memmove(destination + used, source, needed + 1);
+    return STDLIB_OK;
+}
+
+/* Owned, formatted string: release with cplus_free_s. */
+static inline char *cplus_asprintf_s(error *err, const char *format, ...) {
+    va_list args;
+    va_list probe;
+    char *text;
+    int needed;
+    error_reset(err);
+    if (format == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "asprintf_s: null format");
+        return NULL;
+    }
+    va_start(args, format);
+    va_copy(probe, args);
+    needed = vsnprintf(NULL, 0, format, probe);
+    va_end(probe);
+    if (needed < 0) {
+        va_end(args);
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "asprintf_s: formatting failed");
+        return NULL;
+    }
+    text = (char *)malloc((size_t)needed + 1);
+    if (text == NULL) {
+        va_end(args);
+        error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                       "asprintf_s: allocation failed");
+        return NULL;
+    }
+    if (vsnprintf(text, (size_t)needed + 1, format, args) != needed) {
+        free(text);
+        va_end(args);
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       "asprintf_s: formatting failed");
+        return NULL;
+    }
+    va_end(args);
+    return text;
+}
+
+/* Bounded stream alternatives to scanf: no format parser is reimplemented.
+ * EOF is a return value, truncation is an error. */
+static inline int cplus_scan_line(FILE *stream, char *destination,
+                                  size_t destination_size, error *err) {
+    size_t n;
+    error_reset(err);
+    if (stream == NULL || destination == NULL || destination_size == 0 ||
+        destination_size > (size_t)INT_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "scan_line: invalid argument");
+        return STDLIB_FAIL;
+    }
+    if (fgets(destination, (int)destination_size, stream) == NULL) {
+        if (feof(stream))
+            return STDLIB_EOF;
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       "scan_line: stream error");
+        return STDLIB_FAIL;
+    }
+    n = strlen(destination);
+    if (n == destination_size - 1 && destination[n - 1] != '\n' &&
+        !feof(stream)) {
+        int c;
+        do {
+            c = fgetc(stream);
+        } while (c != EOF && c != '\n');
+        destination[0] = '\0';
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "scan_line: line longer than the buffer");
+        return STDLIB_FAIL;
+    }
+    while (n > 0 && (destination[n - 1] == '\n' || destination[n - 1] == '\r'))
+        destination[--n] = '\0';
+    return STDLIB_OK;
+}
+
+static inline int cplus_scan_int(FILE *stream, int *out, error *err) {
+    char token[64];
+    char *end;
+    long value;
+    int c;
+    size_t stored = 0;
+    error_reset(err);
+    if (stream == NULL || out == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "scan_int: null argument");
+        return STDLIB_FAIL;
+    }
+    do {
+        c = fgetc(stream);
+    } while (c != EOF && (c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+                          c == '\f' || c == '\v'));
+    if (c == EOF)
+        return STDLIB_EOF;
+    while (c != EOF && !(c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+                         c == '\f' || c == '\v')) {
+        if (stored + 1 < sizeof(token))
+            token[stored++] = (char)c;
+        c = fgetc(stream);
+    }
+    token[stored] = '\0';
+    end = token;
+    errno = 0;
+    value = strtol(token, &end, 10);
+    if (end == token || *end != '\0' || errno == ERANGE || value < INT_MIN ||
+        value > INT_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "scan_int: not an in-range integer");
+        return STDLIB_FAIL;
+    }
+    *out = (int)value;
+    return STDLIB_OK;
+}
+
 #endif
