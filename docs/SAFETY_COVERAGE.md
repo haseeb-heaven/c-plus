@@ -22,7 +22,7 @@ not a claim of complete memory safety.
 | threads / guards | cases/concurrency_mutex, core/thread_guard_ok, safety/thread_global_write, thread_invalid_sharing | positive/negative |
 | quarantine / stale alias | core/quarantine, core/quarantine/run.sh | runtime semantics |
 | fuzz / checker robustness | core/fuzz_checker.sh (120 inputs), core/adversarial_fuzz.py (144 unsafe + 80 positive generated programs, 0 failures) | fuzz |
-| DEFAULT / STRICT modes | core/strict_mode.sh (11 cases: proven errors rejected in both, unverified ops warned in DEFAULT and rejected in STRICT, safe realloc accepted in STRICT) | positive/negative |
+| DEFAULT / STRICT modes | core/strict_mode.sh (16 cases: proven errors rejected in both, unverified ops warned in DEFAULT and rejected in STRICT, safe realloc accepted in STRICT, UAF source-location chain) | positive/negative |
 | logging categories | tests/logging_test.sh | positive |
 
 Runtime line coverage target: >=80%. Latest measured: **320/395 lines (81%)**

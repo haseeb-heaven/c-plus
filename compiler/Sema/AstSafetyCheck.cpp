@@ -261,7 +261,16 @@ public:
             // Multiple aliases are valid C.  Track the owner only for
             // lifetime invalidation; do not impose Rust-style exclusivity.
             borrowOwner_[vd->getNameAsString()] = owner;
+            aliasLocs_[vd->getNameAsString()] = vd->getBeginLoc();
           }
+        }
+      }
+      if (const auto *call = dyn_cast<CallExpr>(init)) {
+        if (call->getDirectCallee()) {
+          std::string callee = call->getDirectCallee()->getNameAsString();
+          if (callee == "malloc" || callee == "calloc" || callee == "realloc" ||
+              callee.rfind("cplus_new", 0) == 0)
+            allocLocs_[vd->getNameAsString()] = vd->getBeginLoc();
         }
       }
     }
@@ -274,6 +283,7 @@ public:
     // `T *q = p;` creates a simple alias and inherits the release state.
     std::string initName = varNameOf(vd->getInit());
     if (!initName.empty() && conditionalDepth_ == 0) {
+      aliasLocs_[vd->getNameAsString()] = vd->getBeginLoc();
       auto &group = aliasGroups_[vd->getNameAsString()];
       auto other = aliasGroups_[initName];
       group.insert(vd->getNameAsString());
@@ -371,7 +381,8 @@ public:
     if (op->getOpcode() == UO_Deref) {
       const Expr *sub = op->getSubExpr();
       if (isReleased(sub))
-        report(op->getBeginLoc(), "use-after-free: dereference of released pointer");
+        reportUaf(op->getBeginLoc(), varNameOf(sub),
+                  "dereference of released pointer '" + varNameOf(sub) + "'");
       else if (movedVars_.count(varNameOf(sub)))
         report(op->getBeginLoc(), "use-after-move: dereference of moved resource");
       else if (isNullConstant(sub) || nullVarOf(sub))
@@ -387,7 +398,8 @@ public:
     if (!report_ || !member->isArrow())
       return true;
     if (isReleased(member->getBase()))
-      report(member->getBeginLoc(), "use-after-free: member access through released pointer");
+      reportUaf(member->getBeginLoc(), ownerOfAddress(member->getBase()),
+                "member access through released pointer");
     else if (movedVars_.count(varNameOf(member->getBase())))
       report(member->getBeginLoc(), "use-after-move: member access through moved resource");
     else if (nullVarOf(member->getBase()))
@@ -563,8 +575,10 @@ public:
         if (isAllocatorFree && releasedVars_.count(ptrVar->getNameAsString()))
           report(call->getBeginLoc(), "double free of '" +
                                           ptrVar->getNameAsString() + "'");
-        else if (conditionalDepth_ == 0)
+        else if (conditionalDepth_ == 0) {
+          releaseLocs_[ptrVar->getNameAsString()] = call->getBeginLoc();
           markReleased(ptrVar->getNameAsString());
+        }
       }
       if (baseName == "realloc" &&
           handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0) {
@@ -639,8 +653,8 @@ public:
     if (!report_)
       return true;
     if (isReleased(subscript->getBase()))
-      report(subscript->getBeginLoc(),
-             "use-after-free: subscript of released pointer");
+      reportUaf(subscript->getBeginLoc(), ownerOfAddress(subscript->getBase()),
+                "subscript of released pointer");
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
     QualType baseType = base->getType();
     const auto *arrayType = ctx_.getAsConstantArrayType(baseType);
@@ -725,12 +739,61 @@ private:
     diags_.report(std::move(d));
   }
 
+  /// Use-after-free diagnostic with the origin/alias/release source chain.
+  void reportUaf(SourceLocation loc, const std::string &var,
+                 const std::string &what) {
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = "[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: " + what;
+    d.help = "suggested correction: do not use after release; copy the data "
+             "or transfer ownership with cplus_move()";
+    d.file = filename_;
+    PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
+    if (ploc.isValid()) {
+      d.line = ploc.getLine();
+      d.column = ploc.getColumn();
+      if (std::string(ploc.getFilename()) != filename_)
+        d.file = ploc.getFilename();
+    }
+    // Resolve the owner behind an alias so the chain covers allocation and
+    // release sites recorded under the original variable name.
+    std::string root = var;
+    auto git = aliasGroups_.find(var);
+    if (git != aliasGroups_.end())
+      for (const auto &candidate : git->second)
+        if (allocLocs_.count(candidate) || releaseLocs_.count(candidate)) {
+          root = candidate;
+          break;
+        }
+    auto addNoteFor = [&](const char *label,
+                          const std::map<std::string, SourceLocation> &m,
+                          const std::string &key) {
+      auto it = m.find(key);
+      if (it == m.end())
+        return;
+      PresumedLoc p = ctx_.getSourceManager().getPresumedLoc(it->second);
+      if (!p.isValid())
+        return;
+      Diag n;
+      n.message = std::string(label) + p.getFilename() + ":" +
+                  std::to_string(p.getLine());
+      d.notes.push_back(std::move(n));
+    };
+    addNoteFor("allocation: ", allocLocs_, root);
+    addNoteFor("alias created: ", aliasLocs_, var);
+    addNoteFor("owner released: ", releaseLocs_, root);
+    diags_.report(std::move(d));
+  }
+
   ASTContext &ctx_;
   DiagnosticEngine &diags_;
   std::string filename_;
   bool report_;
   bool strict_ = false;
   std::set<unsigned> handledReallocs_;
+  std::map<std::string, SourceLocation> allocLocs_;
+  std::map<std::string, SourceLocation> aliasLocs_;
+  std::map<std::string, SourceLocation> releaseLocs_;
   std::string currentFunction_;
 
 public:

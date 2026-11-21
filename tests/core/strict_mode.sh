@@ -59,6 +59,18 @@ expect_accept safe_realloc_strict --strict "$FIX/safe_realloc.c"
 expect_warn_then_reject unverified_realloc "$FIX/unverified_realloc.c"
 expect_warn_then_reject unverified_thread  "$FIX/unverified_thread.c"
 
+# UAF diagnostic must name the pointer and show the source-location chain.
+"$CPLUS" check --default "$FIX/uaf_chain.c" >"$OUT/chain.stdout" 2>"$OUT/chain.stderr" || true
+for needle in "dereference of released pointer 'q'" "note: allocation:" \
+              "note: alias created:" "note: owner released:" \
+              "suggested correction:"; do
+  if grep -q "$needle" "$OUT/chain.stderr"; then
+    ok "diag-chain $needle"
+  else
+    bad "diag-chain" "missing: $needle"
+  fi
+done
+
 echo ""
 echo "strict/default modes: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

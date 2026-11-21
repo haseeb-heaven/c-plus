@@ -18,7 +18,7 @@ null dereference, definite-initialization failures) are always rejected in
 both safety modes. The documented-safe `realloc` success/failure pattern is
 pre-detected so it is not reported as an unverified operation in either mode.
 
-Regression suite: `tests/core/strict_mode.sh` (11 cases).
+Regression suite: `tests/core/strict_mode.sh` (16 cases).
 
 ## Pipeline
 
