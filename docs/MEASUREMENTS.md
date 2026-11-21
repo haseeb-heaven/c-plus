@@ -1,0 +1,39 @@
+# C+ safety measurements
+
+Reproduce with `python3 tests/metrics/measure.py` and
+`python3 tests/core/redteam_100.py`. Machine-readable results are written to
+`tests/out/metrics/report.json`.
+
+## Axes the compiler is judged by
+
+| metric | DEFAULT | STRICT |
+| --- | --- | --- |
+| safe C programs accepted (curated real C + repo positives) | **82/82 (100%)** | **82/82 (100%)** |
+| false positives (safe programs rejected) | **0** | **0** |
+| genuine memory bugs detected (tests/safety corpus) | 45/62 (72.6%) | 51/62 (82.3%) |
+
+The 51 curated programs in `tests/metrics/safe_corpus/` are ordinary ISO C with
+no annotations, no renames and no new syntax; all 51 compile cleanly under
+`clang -Wall -Wextra -Werror`. The remaining 31 are the repository's positive C
+fixtures (excluding one documented borderline branch-UAF case).
+
+## Adversarial red team
+
+`tests/core/redteam_100.py` runs **110 hand-crafted scenarios** in both modes:
+65 must-reject memory errors, 8 strict-only unverified operations and 37
+must-accept safe programs. Result: **110/110 with 0 mismatches**. The suite
+covers alias UAF, branch/loop/interprocedural UAF, realloc failure paths,
+destructor invalidation, invalid frees, bounds and libc overflows, nullability,
+uninitialized state, provenance, resource moves, threads and FFI.
+
+## Notable gaps (honest)
+
+The 11 undetected safety fixtures are mostly outside the declared sound subset:
+wrong `malloc` byte count with a compatible pointer type, deliberately
+conflicting aliases that the project now accepts as valid C, branch-conditional
+UAF (warn in DEFAULT / reject in STRICT), `longjmp` cleanup warnings, and
+double release after an unverified `realloc`. They are retained as regression
+fixtures and documented rather than claimed as detected.
+
+These figures measure the declared subset, not Rust-equivalent safety for
+arbitrary C.
