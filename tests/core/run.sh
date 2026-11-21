@@ -60,6 +60,7 @@ build_run explicit_drop_once "$ROOT/tests/core/positive/explicit_drop_once.cp"
 build_run loop_cleanup "$ROOT/tests/core/positive/loop_cleanup.cp"
 build_run recursive_resource "$ROOT/tests/core/positive/recursive_resource.cp"
 build_run partial_init "$ROOT/tests/core/positive/partial_init.cp"
+build_run double_explicit_drop "$ROOT/tests/core/positive/double_explicit_drop.cp"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -71,6 +72,12 @@ else
   bad multi_tu "build/link/run failed"
 fi
 
+if "$CPLUS" build "$ROOT/tests/core/positive/recursive_resource.cp" --release -o "$OUT/release_recursive" \
+   >"$OUT/release_recursive.log" 2>&1 && "$OUT/release_recursive"; then
+  ok release_recursive
+else
+  bad release_recursive "release recursive build/run failed"
+fi
 if "$CPLUS" build "$ROOT/tests/safety/release_mode.cp" --release -o "$OUT/release_mode" \
    >"$OUT/release_mode.log" 2>&1 && "$OUT/release_mode"; then
   ok release_mode
@@ -83,6 +90,7 @@ build_expect_stderr moved_from_warning "$ROOT/tests/safety/moved_from_warning.cp
 build_expect_stderr double_move_warning "$ROOT/tests/safety/double_move_warning.cp" "moved more than once"
 
 echo "core safety: rejected"
+expect_reject constructor_early_return "$ROOT/tests/safety/constructor_early_return.cp"
 expect_reject bounds_loop "$ROOT/tests/safety/bounds_loop.c"
 expect_reject uninit_branch "$ROOT/tests/safety/uninit_branch.c"
 expect_reject pointer_arithmetic "$ROOT/tests/safety/pointer_arithmetic.c"

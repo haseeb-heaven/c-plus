@@ -96,4 +96,4 @@ enforced with C+ AST/token analysis and UBSan.
   `pthread_create`; existing RAII mutex/Guard and data-race token checks remain.
   This is a warning, not full race-freedom enforcement.
 
-Core-safety runner now has 22 cases, plus a 14-case scratch-style probe script (`tests/core/scratch_probe.sh`). Full suites remain green.
+Core-safety runner now has 25 cases, plus a 14-case scratch-style probe script (`tests/core/scratch_probe.sh`). Full suites remain green.
