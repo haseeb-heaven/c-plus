@@ -276,7 +276,8 @@ public:
     Expr::EvalResult hr;
     if (arg->EvaluateAsInt(hr, ctx_) && hr.Val.isInt()) {
       llvm::APSInt hv = hr.Val.getInt();
-      if ((hv.isUnsigned() && hv.isMaxValue()) ||
+      if (hv.isNegative() ||
+          (hv.isUnsigned() && hv.isMaxValue()) ||
           hv.getZExtValue() >= (1ULL << 40)) {
         if (report_)
           nullVars_.insert(vd->getNameAsString());
