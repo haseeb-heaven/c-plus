@@ -79,3 +79,21 @@ enforced with C+ AST/token analysis and UBSan.
 - Cross-TU ABI mismatches: not detected (single-TU compiler).
 - `goto`/`longjmp`/`exit` bypass RAII; warnings only.
 - Arbitrary pointer arithmetic and legacy C FFI are outside the safe subset.
+
+## P0 issue progress (agent/core-safety)
+
+- **#12 RAII** — covered by deterministic cleanup lowering, moved-from
+  warnings, exactly-once tests and non-local-jump warnings. Not fully CFG-
+  verified for every exotic exit; documented as partial.
+- **#13 Definite initialization** — added a Clang CFG dataflow check in
+  `compiler/Analysis/OwnershipAnalysis.cpp` with path-sensitive intersection
+  at joins. Address-taken locals are treated as initialized (output-parameter
+  convention), which is conservative and documented.
+- **#14 Checked pointers** — added AST-based pointer-arithmetic bounds checks
+  (direct array variables, one-past-end allowed) alongside existing UBSan and
+  static bounds analysis. General provenance/casts remain unsupported.
+- **#15 Thread safety** — added an AST warning for passing a stack borrow to
+  `pthread_create`; existing RAII mutex/Guard and data-race token checks remain.
+  This is a warning, not full race-freedom enforcement.
+
+Core-safety runner now has 18 cases. Full suites remain green.

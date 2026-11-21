@@ -87,6 +87,7 @@ separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 add_library(cplus_core STATIC
   compiler/Diagnostics.cpp
   compiler/SourceManager.cpp
+  compiler/Analysis/OwnershipAnalysis.cpp
   compiler/Sema/SemaCPlus.cpp
   compiler/Sema/CPlusLexer.cpp
   compiler/Sema/CPlusRewriter.cpp

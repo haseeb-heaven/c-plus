@@ -1,6 +1,7 @@
 #include "Sema/AstSafetyCheck.h"
 
 #include "Diagnostics.h"
+#include "Analysis/OwnershipAnalysis.h"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
@@ -85,6 +86,33 @@ public:
   bool VisitBinaryOperator(BinaryOperator *op) {
     if (!report_)
       return true;
+    if (op->isAdditiveOp()) {
+      const Expr *lhs = op->getLHS();
+      const Expr *rhs = op->getRHS();
+      const VarDecl *arrayVar = nullptr;
+      const Expr *indexExpr = nullptr;
+      if (const auto *ref = dyn_cast<DeclRefExpr>(lhs->IgnoreParenImpCasts()))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (vd->getType()->isArrayType()) {
+            arrayVar = vd;
+            indexExpr = rhs;
+          }
+      if (arrayVar && indexExpr) {
+        Expr::EvalResult r;
+        if (indexExpr->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+          long long offset = r.Val.getInt().getSExtValue();
+          const auto *at = ctx_.getAsConstantArrayType(arrayVar->getType());
+          if (at) {
+            long long extent =
+                static_cast<long long>(at->getSize().getZExtValue());
+            if ((op->getOpcode() == BO_Add && offset > extent) ||
+                (op->getOpcode() == BO_Sub && offset > 0))
+              report(op->getBeginLoc(), "pointer arithmetic outside array '" +
+                                            arrayVar->getNameAsString() + "'");
+          }
+        }
+      }
+    }
     // A comparison against NULL means the code is explicitly checking the
     // pointer; do not report later dereferences of it as provably null.
     if (op->isEqualityOp()) {
@@ -136,6 +164,21 @@ public:
         report(loc, "signal-modified global must be volatile sig_atomic_t");
   }
 
+  void warnAt(SourceLocation loc, const std::string &message) {
+    PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
+    Diag d;
+    d.level = DiagLevel::Warning;
+    d.message = message;
+    d.file = filename_;
+    if (ploc.isValid()) {
+      d.line = ploc.getLine();
+      d.column = ploc.getColumn();
+      if (std::string(ploc.getFilename()) != filename_)
+        d.file = ploc.getFilename();
+    }
+    diags_.report(std::move(d));
+  }
+
   bool VisitCallExpr(CallExpr *call) {
     const FunctionDecl *callee = call->getDirectCallee();
     if (!callee)
@@ -157,6 +200,20 @@ public:
       if (unsafe.count(name))
         report(call->getBeginLoc(), "'" + name +
                                         "' is not async-signal-safe");
+    }
+    if (name == "pthread_create" && call->getNumArgs() >= 4) {
+      const Expr *arg = call->getArg(3)->IgnoreParenImpCasts();
+      if (const auto *uo = dyn_cast<UnaryOperator>(arg)) {
+        if (uo->getOpcode() == UO_AddrOf) {
+          const Expr *sub = uo->getSubExpr()->IgnoreParenImpCasts();
+          if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
+            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+              if (vd->hasLocalStorage())
+                warnAt(call->getBeginLoc(),
+                       "stack borrow passed to thread: '" +
+                           vd->getNameAsString() + "'");
+        }
+      }
     }
     return true;
   }
@@ -245,6 +302,39 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setHandlers(collect.handlers());
   check.setGlobals(collect.nonVolatileGlobals());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
+
+  // CFG/dataflow definite-initialization analysis on each function body.
+  class FunctionRunner
+      : public RecursiveASTVisitor<FunctionRunner> {
+  public:
+    FunctionRunner(ASTContext &ctx, const std::string &file,
+                   DiagnosticEngine &diags)
+        : ctx_(ctx), file_(file), diags_(diags) {}
+    bool VisitFunctionDecl(FunctionDecl *fd) {
+      checkDefiniteInitialization(
+          ctx_, fd, [this](SourceLocation loc, const std::string &msg) {
+            PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
+            Diag d;
+            d.level = DiagLevel::Error;
+            d.message = msg;
+            d.file = file_;
+            if (ploc.isValid()) {
+              d.line = ploc.getLine();
+              d.column = ploc.getColumn();
+              if (std::string(ploc.getFilename()) != file_)
+                d.file = ploc.getFilename();
+            }
+            diags_.report(std::move(d));
+          });
+      return true;
+    }
+  private:
+    ASTContext &ctx_;
+    std::string file_;
+    DiagnosticEngine &diags_;
+  };
+  FunctionRunner runner(ast->getASTContext(), filename, diags);
+  runner.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 }
 
 } // namespace cplus

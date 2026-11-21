@@ -54,6 +54,9 @@ echo "core safety: positive"
 build_run raii_basic "$ROOT/tests/core/positive/raii_basic.cp"
 build_run move_and_borrow "$ROOT/tests/core/positive/move_and_borrow.cp"
 build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
+build_run init_all_branches "$ROOT/tests/core/positive/init_all_branches.c"
+build_run pointer_one_past "$ROOT/tests/core/positive/pointer_one_past.c"
+build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
 if "$CPLUS" build "$ROOT/tests/core/positive/multi_tu_main.c" \
@@ -77,6 +80,8 @@ build_expect_stderr double_move_warning "$ROOT/tests/safety/double_move_warning.
 
 echo "core safety: rejected"
 expect_reject bounds_loop "$ROOT/tests/safety/bounds_loop.c"
+expect_reject uninit_branch "$ROOT/tests/safety/uninit_branch.c"
+expect_reject pointer_arithmetic "$ROOT/tests/safety/pointer_arithmetic.c"
 expect_reject uninit "$ROOT/tests/safety/uninit.c"
 expect_reject null_deref "$ROOT/tests/safety/null_deref.c"
 
