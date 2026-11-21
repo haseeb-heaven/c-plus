@@ -31,6 +31,9 @@ struct DriverOptions {
   std::string emitC; // if non-empty, write the lowered C here
   Mode mode = Mode::Safe;
   OptMode opt = OptMode::Debug;
+  // DEFAULT (false): report proven errors, warn on unverified operations.
+  // STRICT (true): reject unverified operations rather than warn.
+  bool strict = false;
   bool verbose = false;
   bool warningsAsErrors = false;
   bool keepTemp = false;

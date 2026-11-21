@@ -1,7 +1,24 @@
 # C+ SAFE mode specification v1 (Agent 1)
 
-This is the exact, versioned contract for `--release`/default safe mode.
+This is the exact, versioned contract for the C+ safety modes.
 `--legacy-c` preserves ordinary C semantics and makes no safety claim.
+
+## Operating modes
+
+| mode | flag | proven memory errors | unverified operations |
+| --- | --- | --- | --- |
+| DEFAULT | `--default` (implicit if no `--strict`) | rejected | warning (not advertised as fully memory-safe) |
+| STRICT | `--strict` | rejected | rejected (fail closed, never a silent downgrade) |
+| LEGACY | `--legacy-c` | not analyzed | no safety claim |
+
+Both safety modes share the same analysis. The only difference is how
+*unverified* operations are handled: `warnAt()` emits a warning in DEFAULT and
+an error in STRICT. Proven errors (use-after-free, double free, overflow,
+null dereference, definite-initialization failures) are always rejected in
+both safety modes. The documented-safe `realloc` success/failure pattern is
+pre-detected so it is not reported as an unverified operation in either mode.
+
+Regression suite: `tests/core/strict_mode.sh` (11 cases).
 
 ## Pipeline
 

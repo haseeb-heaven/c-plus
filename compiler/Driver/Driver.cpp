@@ -538,7 +538,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     DRIVER_LOG(CLOG_DEBUG, "lowered %s (%zu bytes)", input.c_str(),
                loweredText.size());
     if (opts.mode == Mode::Safe)
-      checkAstSafety(loweredText, input, base, diags);
+      checkAstSafety(loweredText, input, base, diags, opts.strict);
     printDiagnostics(diags, errs, input);
     if (diags.hasErrors())
       return 1;

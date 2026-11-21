@@ -34,6 +34,7 @@ struct Options {
   std::string emitC;
   Mode mode = Mode::Safe;
   OptMode opt = OptMode::Debug;
+  bool strict = false;
   bool verbose = false;
   bool warningsAsErrors = false;
   bool keepTemp = false;
@@ -69,6 +70,8 @@ void printUsage(raw_ostream &os) {
   os << "  --release        -O2 (runtime safety checks stay on)\n";
   os << "  --debug          -O0 plus debug info (default)\n";
   os << "  --legacy-c       legacy C compatibility mode (NOT memory safe)\n";
+  os << "  --default        DEFAULT mode: report proven errors, warn if unverified\n";
+  os << "  --strict         STRICT mode: reject unverified operations (fail closed)\n";
   os << "  -o <file>        output path\n";
   os << "  --emit-c <file>  write the lowered C source for inspection\n";
   os << "  --keep-temp      keep the generated C file\n";
@@ -143,6 +146,14 @@ int main(int argc, char **argv) {
     }
     if (a == "--legacy-c" || a == "--legacy") {
       opts.mode = Mode::LegacyC;
+      continue;
+    }
+    if (a == "--strict") {
+      opts.strict = true;
+      continue;
+    }
+    if (a == "--default") {
+      opts.strict = false;
       continue;
     }
     if (a == "-Werror") {
@@ -276,6 +287,7 @@ int main(int argc, char **argv) {
   d.emitC = opts.emitC;
   d.mode = opts.mode;
   d.opt = opts.opt;
+  d.strict = opts.strict;
   d.verbose = opts.verbose;
   d.warningsAsErrors = opts.warningsAsErrors;
   d.keepTemp = opts.keepTemp;

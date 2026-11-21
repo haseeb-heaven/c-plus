@@ -19,6 +19,9 @@ echo "== perf comparison =="
 echo "== adversarial fuzz =="
 python3 tests/core/adversarial_fuzz.py
 
+echo "== strict/default modes =="
+./tests/core/strict_mode.sh
+
 echo "== contracts and SDK smoke =="
 python3 tests/core/validate_contracts.py
 ./tests/core/sdk_smoke.sh

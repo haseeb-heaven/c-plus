@@ -40,6 +40,9 @@ public:
   const std::set<std::string> &handlers() const { return handlers_; }
   const std::set<std::string> &destructors() const { return destructors_; }
   void setDestructors(const std::set<std::string> &d) { destructors_ = d; }
+  void setStrict(bool strict) { strict_ = strict; }
+  void setHandledReallocs(const std::set<unsigned> &s) { handledReallocs_ = s; }
+  const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
   const std::set<std::string> &nonVolatileGlobals() const {
     return nonVolatileGlobals_;
   }
@@ -135,7 +138,8 @@ public:
   }
 
   bool detectReallocSuccess(const IfStmt *s, std::string &owner,
-                            std::string &tmp) const {
+                            std::string &tmp,
+                            const CallExpr **out = nullptr) const {
     if (!s->getCond())
       return false;
     const Expr *condExpr = s->getCond();
@@ -163,11 +167,22 @@ public:
         call->getNumArgs() < 1)
       return false;
     owner = varNameOf(call->getArg(0));
+    if (out)
+      *out = call;
     return !owner.empty() && containsAssignFrom(s->getThen(), owner, tmp);
   }
 
   bool TraverseIfStmt(IfStmt *s) {
     ++conditionalDepth_;
+    if (!report_) {
+      // First pass: record realloc calls whose result is handled by an
+      // explicit success/failure branch so the STRICT mode does not reject
+      // the documented-safe realloc pattern as unverified.
+      std::string owner, tmp;
+      const CallExpr *rc = nullptr;
+      if (detectReallocSuccess(s, owner, tmp, &rc) && rc)
+        handledReallocs_.insert(rc->getBeginLoc().getRawEncoding());
+    }
     if (report_) {
       std::string owner, tmp;
       if (detectReallocSuccess(s, owner, tmp)) {
@@ -390,7 +405,9 @@ public:
   void warnAt(SourceLocation loc, const std::string &message) {
     PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
     Diag d;
-    d.level = DiagLevel::Warning;
+    // DEFAULT mode warns about unverified operations; STRICT mode fails
+    // closed by promoting them to errors (no silent warning downgrade).
+    d.level = strict_ ? DiagLevel::Error : DiagLevel::Warning;
     d.message = "[" + diagnosticCategory(message) + "] " + message;
     d.file = filename_;
     if (ploc.isValid()) {
@@ -549,7 +566,8 @@ public:
         else if (conditionalDepth_ == 0)
           markReleased(ptrVar->getNameAsString());
       }
-      if (baseName == "realloc") {
+      if (baseName == "realloc" &&
+          handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0) {
         // Do NOT mark the old pointer released: on failure realloc returns
         // NULL and the original block remains owned by the caller.  Alias
         // invalidation is only valid on the success branch, which the current
@@ -711,6 +729,8 @@ private:
   DiagnosticEngine &diags_;
   std::string filename_;
   bool report_;
+  bool strict_ = false;
+  std::set<unsigned> handledReallocs_;
   std::string currentFunction_;
 
 public:
@@ -731,7 +751,7 @@ public:
 
 void checkAstSafety(const std::string &loweredC, const std::string &filename,
                     const std::vector<std::string> &backendArgs,
-                    DiagnosticEngine &diags) {
+                    DiagnosticEngine &diags, bool strict) {
   // Keep only parse-relevant flags; sanitizer and warning-as-error flags can
   // make the in-memory AST parse fail for unrelated reasons.
   std::vector<std::string> args;
@@ -756,9 +776,11 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   collect.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   SafetyVisitor check(ast->getASTContext(), diags, filename, true);
+  check.setStrict(strict);
   check.setHandlers(collect.handlers());
   check.setGlobals(collect.nonVolatileGlobals());
   check.setDestructors(collect.destructors());
+  check.setHandledReallocs(collect.handledReallocs());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // CFG/dataflow definite-initialization analysis on each function body.
