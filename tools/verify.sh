@@ -22,6 +22,9 @@ python3 tests/core/adversarial_fuzz.py
 echo "== mass fuzz (thousands of cases, multi-seed) =="
 ./tests/core/mass_fuzz_all.sh
 
+echo "== cross-TU fuzz (two-file programs) =="
+python3 tests/core/cross_tu_fuzz.py
+
 echo "== strict/default modes =="
 ./tests/core/strict_mode.sh
 
