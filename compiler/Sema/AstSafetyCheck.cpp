@@ -100,8 +100,70 @@ public:
 
   // Do not propagate release state across branches: a free in one branch is
   // not a guarantee on every path.
+  bool containsAssignFrom(const Stmt *node, const std::string &lhs,
+                          const std::string &rhs) const {
+    if (!node)
+      return false;
+    if (const auto *bo = dyn_cast<BinaryOperator>(node)) {
+      if (bo->isAssignmentOp() && varNameOf(bo->getLHS()) == lhs &&
+          varNameOf(bo->getRHS()) == rhs)
+        return true;
+    }
+    for (const Stmt *child : node->children())
+      if (containsAssignFrom(child, lhs, rhs))
+        return true;
+    return false;
+  }
+
+  bool detectReallocSuccess(const IfStmt *s, std::string &owner,
+                            std::string &tmp) const {
+    if (!s->getCond())
+      return false;
+    const Expr *condExpr = s->getCond();
+    const Expr *tmpRef = nullptr;
+    if (const auto *bo = dyn_cast<BinaryOperator>(condExpr)) {
+      tmp = varNameOf(bo->getLHS());
+      tmpRef = bo->getLHS()->IgnoreParenImpCasts();
+      if (tmp.empty()) {
+        tmp = varNameOf(bo->getRHS());
+        tmpRef = bo->getRHS()->IgnoreParenImpCasts();
+      }
+    } else {
+      tmp = varNameOf(condExpr);
+      tmpRef = condExpr->IgnoreParenImpCasts();
+    }
+    if (tmp.empty() || !tmpRef)
+      return false;
+    const auto *ref = dyn_cast<DeclRefExpr>(tmpRef);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd || !vd->getInit())
+      return false;
+    const auto *call = dyn_cast<CallExpr>(vd->getInit()->IgnoreParenImpCasts());
+    if (!call || !call->getDirectCallee() ||
+        call->getDirectCallee()->getNameAsString() != "realloc" ||
+        call->getNumArgs() < 1)
+      return false;
+    owner = varNameOf(call->getArg(0));
+    return !owner.empty() && containsAssignFrom(s->getThen(), owner, tmp);
+  }
+
   bool TraverseIfStmt(IfStmt *s) {
     ++conditionalDepth_;
+    if (report_) {
+      std::string owner, tmp;
+      if (detectReallocSuccess(s, owner, tmp)) {
+        bool r = TraverseStmt(s->getCond());
+        // Inside the success branch the old pointer and its aliases are
+        // invalid; outside it they remain valid (failure path).
+        markReleased(owner);
+        r &= TraverseStmt(s->getThen());
+        clearReleased(owner);
+        if (s->getElse())
+          r &= TraverseStmt(s->getElse());
+        --conditionalDepth_;
+        return r;
+      }
+    }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
     --conditionalDepth_;
     return r;
@@ -575,24 +637,40 @@ public:
 
 private:
   static std::string diagnosticCategory(const std::string &message) {
+    std::string category = "CPLUS-FFI";
     if (message.find("double free") != std::string::npos)
-      return "CPLUS-SAFE-FREE";
-    if (message.find("use-after-free") != std::string::npos ||
-        message.find("dereference of released") != std::string::npos)
-      return "CPLUS-SAFE-LIFETIME";
-    if (message.find("realloc") != std::string::npos)
-      return "CPLUS-SAFE-REALLOC";
-    if (message.find("borrow") != std::string::npos ||
-        message.find("move") != std::string::npos)
-      return "CPLUS-SAFE-BORROW";
-    if (message.find("copy of") != std::string::npos ||
-        message.find("exceeds destination") != std::string::npos ||
-        message.find("array index") != std::string::npos ||
-        message.find("pointer arithmetic") != std::string::npos)
-      return "CPLUS-SAFE-BOUNDS";
-    if (message.find("null pointer") != std::string::npos)
-      return "CPLUS-SAFE-LIFETIME";
-    return "CPLUS-SAFE-FFI";
+      category = "CPLUS-OWNER";
+    else if (message.find("use-after-move") != std::string::npos)
+      category = "CPLUS-OWNER";
+    else if (message.find("use-after-free") != std::string::npos ||
+             message.find("dereference of released") != std::string::npos)
+      category = "CPLUS-LIFETIME";
+    else if (message.find("borrow") != std::string::npos)
+      category = "CPLUS-BORROW";
+    else if (message.find("alias state") != std::string::npos)
+      category = "CPLUS-ALIAS";
+    else if (message.find("realloc") != std::string::npos)
+      category = "CPLUS-REALLOC";
+    else if (message.find("copy of") != std::string::npos ||
+             message.find("exceeds destination") != std::string::npos ||
+             message.find("array index") != std::string::npos ||
+             message.find("pointer arithmetic") != std::string::npos)
+      category = "CPLUS-BOUNDS";
+    else if (message.find("RAII") != std::string::npos)
+      category = "CPLUS-RAII";
+    else if (message.find("null pointer") != std::string::npos)
+      category = "CPLUS-LIFETIME";
+    else if (message.find("libc") != std::string::npos ||
+             message.find("string copy") != std::string::npos)
+      category = "CPLUS-LIBC";
+    // Keep the older prefix for continuity with existing fixtures/docs.
+    if (category == "CPLUS-BOUNDS")
+      return category + " [CPLUS-SAFE-BOUNDS";
+    if (category == "CPLUS-LIFETIME")
+      return category + " [CPLUS-SAFE-LIFETIME";
+    if (category == "CPLUS-FREE")
+      return category + " [CPLUS-SAFE-FREE";
+    return category;
   }
 
   void report(SourceLocation loc, const std::string &message) {

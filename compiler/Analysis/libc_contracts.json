@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "description": "C+ compiler-visible libc contracts. Agent 2 must match these in libc/contracts.",
+  "version": 2,
+  "description": "C+ compiler-visible libc contracts (v2). Agent 2 must match these in libc/contracts.",
   "functions": {
     "malloc": {
       "params": [
@@ -18,6 +18,21 @@
       "diagnostics": "CPLUS-SAFE-ALLOC",
       "dynamic": [
         "null-check"
+      ],
+      "paramTypes": [
+        "size_t bytes"
+      ],
+      "pointerBounds": "bytes",
+      "allocationSize": "bytes",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "calloc": {
@@ -39,6 +54,22 @@
       "dynamic": [
         "overflow-check",
         "null-check"
+      ],
+      "paramTypes": [
+        "size_t count",
+        "size_t size"
+      ],
+      "pointerBounds": "count*size (overflow-checked)",
+      "allocationSize": "count*size (overflow-checked)",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "realloc": {
@@ -61,6 +92,24 @@
       "diagnostics": "CPLUS-SAFE-REALLOC",
       "dynamic": [
         "success-branch alias invalidation (planned)"
+      ],
+      "paramTypes": [
+        "void *ptr",
+        "size_t size"
+      ],
+      "pointerBounds": "size",
+      "allocationSize": "size",
+      "ownershipTransfer": "success-only old alias invalid",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [
+        "frees-on-success"
+      ],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL; original valid",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "free": {
@@ -81,6 +130,23 @@
       "diagnostics": "CPLUS-SAFE-FREE",
       "dynamic": [
         "managed double/invalid release"
+      ],
+      "paramTypes": [
+        "void *ptr"
+      ],
+      "pointerBounds": null,
+      "allocationSize": null,
+      "ownershipTransfer": "arg",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [
+        "frees"
+      ],
+      "returnState": "consumes",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "memcpy": {
@@ -104,6 +170,23 @@
       "diagnostics": "CPLUS-SAFE-BOUNDS",
       "dynamic": [
         "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "memmove": {
@@ -128,6 +211,23 @@
       "diagnostics": "CPLUS-SAFE-BOUNDS",
       "dynamic": [
         "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "memset": {
@@ -150,6 +250,23 @@
       "diagnostics": "CPLUS-SAFE-BOUNDS",
       "dynamic": [
         "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "void *dst",
+        "int c",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "strcpy": {
@@ -172,6 +289,22 @@
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
         "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "char *dst",
+        "const char *src"
+      ],
+      "pointerBounds": "strlen(src)+1 <= dst_capacity",
+      "allocationSize": "strlen(src)+1 <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "strncpy": {
@@ -195,6 +328,23 @@
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
         "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "char *dst",
+        "const char *src",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "strcat": {
@@ -217,6 +367,22 @@
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
         "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "char *dst",
+        "const char *src"
+      ],
+      "pointerBounds": "strlen(dst)+strlen(src)+1 <= dst_capacity",
+      "allocationSize": "strlen(dst)+strlen(src)+1 <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "strlen": {
@@ -235,7 +401,24 @@
       ],
       "failure": "none",
       "diagnostics": "CPLUS-SAFE-CRT",
-      "dynamic": []
+      "dynamic": [],
+      "paramTypes": [
+        "const char *s"
+      ],
+      "pointerBounds": "reads until NUL",
+      "allocationSize": "reads until NUL",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [
+        "reads"
+      ],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "fopen": {
       "params": [
@@ -254,6 +437,22 @@
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
         "null-check"
+      ],
+      "paramTypes": [
+        "const char *path",
+        "const char *mode"
+      ],
+      "pointerBounds": null,
+      "allocationSize": null,
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "fclose": {
@@ -270,7 +469,24 @@
       "borrow": [],
       "failure": "native errno",
       "diagnostics": "CPLUS-SAFE-CRT",
-      "dynamic": []
+      "dynamic": [],
+      "paramTypes": [
+        "FILE *stream"
+      ],
+      "pointerBounds": null,
+      "allocationSize": null,
+      "ownershipTransfer": "arg",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [
+        "frees FILE*"
+      ],
+      "returnState": "consumes",
+      "failureBehavior": "native errno",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "fread": {
       "params": [
@@ -295,6 +511,24 @@
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
         "return-value convention"
+      ],
+      "paramTypes": [
+        "void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "pointerBounds": "size*nmemb <= buffer capacity",
+      "allocationSize": "size*nmemb <= buffer capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "short read/EOF",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "fwrite": {
@@ -320,6 +554,24 @@
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
         "return-value convention"
+      ],
+      "paramTypes": [
+        "const void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "pointerBounds": "size*nmemb <= buffer extent",
+      "allocationSize": "size*nmemb <= buffer extent",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "short write",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
       ]
     },
     "strcpy_s": {
@@ -340,7 +592,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "strncpy_s": {
       "params": [
@@ -360,7 +627,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "strcat_s": {
       "params": [
@@ -380,7 +662,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "memcpy_s": {
       "params": [
@@ -400,7 +697,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "memmove_s": {
       "params": [
@@ -420,7 +732,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "memset_s": {
       "params": [
@@ -440,7 +767,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "strnlen_s": {
       "params": [
@@ -460,7 +802,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "sprintf_s": {
       "params": [
@@ -480,7 +837,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "snprintf_s": {
       "params": [
@@ -500,7 +872,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "fopen_s": {
       "params": [
@@ -520,7 +907,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "platform/checked CRT"
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "malloc_s": {
       "params": [
@@ -540,7 +942,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "C+ extension"
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "calloc_s": {
       "params": [
@@ -560,7 +977,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "C+ extension"
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "realloc_s": {
       "params": [
@@ -580,7 +1012,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "C+ extension"
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     },
     "free_s": {
       "params": [
@@ -600,7 +1047,22 @@
         "capacity and error checks"
       ],
       "optional": true,
-      "origin": "C+ extension"
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
     }
   }
 }

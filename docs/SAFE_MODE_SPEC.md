@@ -1,0 +1,65 @@
+# C+ SAFE mode specification v1 (Agent 1)
+
+This is the exact, versioned contract for `--release`/default safe mode.
+`--legacy-c` preserves ordinary C semantics and makes no safety claim.
+
+## Pipeline
+
+```text
+Clang AST -> Clang CFG -> pointer/ownership state -> library contracts ->
+flow-sensitive verification -> source lowering -> RAII cleanup ->
+Clang/LLVM native codegen
+```
+
+Clang libraries are linked directly; no parser, CFG engine or optimiser is
+reimplemented. Ownership rules never rely on string/token matching.
+
+## Abstract state
+
+Each tracked pointer/owner has one of:
+`UNINITIALIZED`, `OWNED`, `BORROWED_SHARED`, `BORROWED_MUTABLE`, `MOVED`,
+`FREED`, `NULL`, `UNKNOWN`. Unknown is conservative and fails closed in the
+declared safe subset.
+
+## Guarantee status
+
+| guarantee | status | evidence |
+| --- | --- | --- |
+| unique ownership of resource/managed locals | IMPLEMENTED | resource_copy, resource_assign, move tests |
+| ownership transfer on return / cplus_move | IMPLEMENTED | resource_move, move_return |
+| use-after-move rejection | IMPLEMENTED | use_after_move, moved_from_warning |
+| use-after-free (direct + simple alias, straight-line, realloc success branch) | IMPLEMENTED | uaf_direct, uaf_alias, libc_alias_uaf, realloc_success_alias_uaf |
+| double-free (same var + simple alias + interproc free) | IMPLEMENTED | malloc_double_free, interproc_double_free, double_release_alias |
+| shared vs exclusive mutable borrows (fields) | PARTIAL | borrow_mut_conflict, borrow_field_ok; containers not covered |
+| non-lexical lifetimes | UNSUPPORTED | lexical statement-level state only |
+| pointer alias tracking across branches/loops | PARTIAL | alias groups straight-line; branch state conservatively suppressed |
+| definite initialization | IMPLEMENTED | uninit, uninit_branch, init_all_branches (CFG dataflow) |
+| nullability | IMPLEMENTED (provable cases) | null_deref, null_outparam |
+| provenance / arbitrary casts | UNSUPPORTED | documented gap |
+| buffer bounds (constant/simple loops/multidim) | IMPLEMENTED | constant_oob, loop_oob, multidim_bounds |
+| dynamic bounds checks | PARTIAL | UBSan + FORTIFY; not a complete spatial guarantee |
+| struct/field ownership | PARTIAL | field borrow conflict; field move not complete |
+| container ownership | UNSUPPORTED | Agent 2 library layer owns this; compiler contract only |
+| function-effect summaries | PARTIAL | libcEffect JSON + simple user `frees(arg)` |
+| cross-TU contracts | PARTIAL | JSON installed; no cross-TU ownership ABI check |
+| thread ownership / race prevention | PARTIAL | stack-borrow warning, unsynchronised global write rejection; no full race proof |
+| deterministic RAII | IMPLEMENTED (supported exits) | raii_basic, nested_raii, raii_early_return, loop_cleanup |
+| goto/longjmp cleanup | UNSUPPORTED (warning) | classic_bug34; explicit unsafe boundary planned |
+| hardened libc contract recognition | IMPLEMENTED (v2 schema) | libc_contracts.json, libc_matrix |
+
+## Safe-mode diagnostics
+
+Categories: `CPLUS-OWNER`, `CPLUS-BORROW`, `CPLUS-LIFETIME`, `CPLUS-ALIAS`,
+`CPLUS-BOUNDS`, `CPLUS-REALLOC`, `CPLUS-LIBC`, `CPLUS-RAII`, `CPLUS-FFI`.
+Legacy `CPLUS-SAFE-*` prefixes are retained for fixture continuity.
+
+Diagnostics include file, line, column, API/ownership reason and expected vs
+inferred bounds where known. Opt-in logging emits the same categories without
+printing buffer contents.
+
+## Unsafe/FFI boundary
+
+Unknown functions are not assumed safe. Calls whose effects cannot be proven
+from the v2 contract schema remain outside the safe subset. Standard C source
+and ABI are preserved; no mandatory `_Owner`, `defer`, `borrow`, `unsafe`,
+`malloc_s` or `free_s` syntax is introduced.

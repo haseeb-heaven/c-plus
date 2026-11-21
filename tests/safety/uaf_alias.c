@@ -1,2 +1,2 @@
 #include <stdlib.h>
-int main(void){ int *p=malloc(sizeof(int)); int *q=p; free(p); return *q; }
+int main(void){ int *p=malloc(sizeof(int)); int *q=p; free(p); return *q; }  // NOSONAR intentional safe-mode safety fixture

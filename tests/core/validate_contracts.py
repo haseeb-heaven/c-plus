@@ -10,7 +10,7 @@ missing = sorted(required - set(doc["functions"]))
 if missing:
     print("missing contracts:", ", ".join(missing)); sys.exit(1)
 for name, spec in doc["functions"].items():
-    for key in ("params","ownership","effects","diagnostics","failure"):
+    for key in ("params","ownership","effects","diagnostics","failure","paramTypes","pointerBounds","allocationSize","ownershipTransfer","borrowLifetime","readEffects","writeEffects","freeEffects","returnState","threadAssumptions"):
         if key not in spec:
             print(f"{name}: missing {key}"); sys.exit(1)
     if not spec["diagnostics"].startswith("CPLUS-SAFE-"):

@@ -15,7 +15,7 @@ not a claim of complete memory safety.
 | bounds (constant, loop, multidim, pointer arithmetic) | compile_fail/constant_oob, loop_oob, multidim_bounds, classic_bug26_ptr_arith; runtime_fail/bounds | positive/negative/runtime |
 | null dereference | compile_fail/null_deref, safety/null_deref, core/null_outparam | positive/negative |
 | definite initialization | compile_fail/uninit, safety/uninit_branch, core/init_all_branches | positive/negative |
-| realloc safety | safety/realloc_success, safety/realloc_failure, safety/double_release_after_realloc, core/libc_matrix/realloc_* | positive/negative |
+| realloc safety | safety/realloc_success, safety/realloc_failure, safety/realloc_success_alias_uaf, safety/double_release_after_realloc, core/libc_matrix/realloc_* | positive/negative |
 | checked copies | core/libc_matrix/memcpy_overlap, strcpy_literal, strcpy_s_valid/invalid_size | positive/negative |
 | RAII exits and order | cases/resource_scope, nested_scopes, loop_cleanup, core/raii_basic, nested_raii, raii_early_return | positive |
 | multi-TU / .hp linkage | core/multi_tu, multi_tu_resource, multi_tu_hp, multi_tu_lib | positive |
