@@ -9,12 +9,14 @@ add_library(cplus_hardened_libc STATIC
   src/stdlib/stdlib_extra.c
   src/stdlib/stdlib_extra2.c
   src/stdlib/stdlib_extra3.c
+  src/stdlib/stdlib_extra4.c
   src/stdlib/musl_stdlib_extra.c
   src/string/memory.c
   src/string/string.c
   src/string/extra.c
   src/string/extra2.c
   src/string/extra3.c
+  src/string/string_extra4.c
   src/string/strtok.c
   src/string/musl_extra.c
   src/string/strndup.c

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
+#include <inttypes.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,12 +33,14 @@ char *cplus_strrchr(const char*,int);
 char *cplus_strstr(const char*,const char*);
 void *cplus_memrchr(const void*,int,size_t);
 int cplus_strcasecmp(const char*,const char*);
+char *cplus_strsignal(int); int cplus_strcoll(const char*,const char*); size_t cplus_strxfrm(char*,const char*,size_t);
 int cplus_strncasecmp(const char*,const char*,size_t);
 char *cplus_strdup(const char*);
 char *cplus_strerror(int); char *cplus_strtok(char*,const char*); char *cplus_strndup(const char*,size_t);
 void *cplus_memccpy(void*,const void*,int,size_t); char *cplus_stpcpy(char*,const char*); char *cplus_stpncpy(char*,const char*,size_t); char *cplus_strtok_r(char*,const char*,char**); char *cplus_strsep(char**,const char*); void *cplus_memmem(const void*,size_t,const void*,size_t);
 div_t cplus_div(int,int); ldiv_t cplus_ldiv(long,long); lldiv_t cplus_lldiv(long long,long long); long long cplus_llabs(long long); long long cplus_atoll(const char*);
-long long cplus_strtoll(const char*,char**,int); unsigned long long cplus_strtoull(const char*,char**,int); double cplus_strtod(const char*,char**); double cplus_atof(const char*);
+long long cplus_strtoll(const char*,char**,int); unsigned long long cplus_strtoull(const char*,char**,int); double cplus_strtod(const char*,char**); double cplus_atof(const char*); float cplus_strtof(const char*,char**); long double cplus_strtold(const char*,char**);
+int cplus_setenv(const char*,const char*,int); int cplus_unsetenv(const char*); int cplus_putenv(char*); int cplus_rand_r(unsigned int*); intmax_t cplus_imaxabs(intmax_t); imaxdiv_t cplus_imaxdiv(intmax_t,intmax_t);
 int cplus_strverscmp(const char*,const char*); char *cplus_strcasestr(const char*,const char*); char *cplus_strchrnul(const char*,int);
 int cplus_isalpha(int); int cplus_isdigit(int); int cplus_isspace(int); int cplus_isalnum(int); int cplus_isupper(int); int cplus_islower(int); int cplus_isxdigit(int); int cplus_isprint(int); int cplus_isgraph(int); int cplus_ispunct(int); int cplus_iscntrl(int); int cplus_isblank(int); int cplus_isascii(int); int cplus_toascii(int); int cplus_toupper(int); int cplus_tolower(int);
 int cplus_abs(int); long cplus_labs(long); int cplus_atoi(const char*); long cplus_atol(const char*); long cplus_strtol(const char*,char**,int); unsigned long cplus_strtoul(const char*,char**,int);
