@@ -12,6 +12,8 @@ int cplus_printf_s(const char *fmt, ...);
 int cplus_fprintf_s(FILE *stream, const char *fmt, ...);
 int cplus_scanf_s(const char *fmt, ...);
 int cplus_fscanf_s(FILE *stream, const char *fmt, ...);
+int cplus_sprintf_s(char *dest, size_t dmax, const char *fmt, ...);
+int cplus_vsprintf_s(char *dest, size_t dmax, const char *fmt, va_list ap);
 #if defined(__cplusplus)
 }
 #endif

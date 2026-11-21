@@ -20,6 +20,7 @@ errno_t cplus_strcpy_s(char *dest, rsize_t dmax, const char *src);
 errno_t cplus_strncpy_s(char *dest, rsize_t dmax, const char *src, rsize_t slen);
 errno_t cplus_strcat_s(char *dest, rsize_t dmax, const char *src);
 errno_t cplus_strncat_s(char *dest, rsize_t dmax, const char *src, rsize_t slen);
+errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *indicator);
 rsize_t cplus_strnlen_s(const char *str, rsize_t smax);
 #if defined(__cplusplus)
 }

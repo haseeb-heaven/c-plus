@@ -9,6 +9,7 @@
 #define strcat_s cplus_upstream_strcat_s
 #define strncat_s cplus_upstream_strncat_s
 #define strnlen_s cplus_upstream_strnlen_s
+#define strcmp_s cplus_upstream_strcmp_s
 #define invoke_safe_mem_constraint_handler cplus_upstream_invoke_safe_mem_constraint_handler
 #define invoke_safe_str_constraint_handler cplus_upstream_invoke_safe_str_constraint_handler
 #define set_mem_constraint_handler_s cplus_upstream_set_mem_constraint_handler_s

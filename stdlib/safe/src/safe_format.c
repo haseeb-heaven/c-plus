@@ -40,3 +40,13 @@ int cplus_fscanf_s(FILE *stream, const char *fmt, ...) {
     va_end(ap);
     return n;
 }
+int cplus_vsprintf_s(char *dest, size_t dmax, const char *fmt, va_list ap) {
+    /* Portable adapter: enforces dest/dmax then delegates to vsnprintf. */
+    return cplus_vsnprintf_s(dest, dmax, fmt, ap);
+}
+int cplus_sprintf_s(char *dest, size_t dmax, const char *fmt, ...) {
+    va_list ap; va_start(ap, fmt);
+    int n = cplus_vsprintf_s(dest, dmax, fmt, ap);
+    va_end(ap);
+    return n;
+}

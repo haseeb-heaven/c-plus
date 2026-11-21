@@ -35,6 +35,7 @@
 - safeclib/strcat_s.c
 - safeclib/strncat_s.c
 - safeclib/strnlen_s.c
+- safeclib/strcmp_s.c
 
 ### Upstream tests copied for reference
 - unittests/test_memcpy_s.c
@@ -42,7 +43,10 @@
 - unittests/test_memset_s.c
 - unittests/test_strcpy_s.c
 - unittests/test_strcat_s.c
+- unittests/test_strcmp_s.c
 
 ## Local adaptations
 
-- None yet at copy time; any later patch must be listed here with rationale.
+- 2026-11-21: added `strcmp_s.c` and `unittests/test_strcmp_s.c` from same upstream commit for string comparison coverage.
+- 2026-11-21: build uses `rename_symbols.h` to prefix upstream exported symbols with `cplus_upstream_` to avoid CRT symbol collisions.
+- 2026-11-21: `safeclib_private.h` includes `<stdlib.h>` for clang C99 build; no behavior change intended.

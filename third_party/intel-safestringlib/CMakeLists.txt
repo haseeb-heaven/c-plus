@@ -18,6 +18,7 @@ add_library(cplus_safestringlib STATIC
   safeclib/strncat_s.c
   safeclib/strncpy_s.c
   safeclib/strnlen_s.c
+  safeclib/strcmp_s.c
 )
 target_include_directories(cplus_safestringlib PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include

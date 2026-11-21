@@ -18,6 +18,10 @@ int main(void){
     assert(strcmp(d,"abc")==0);
     assert(cplus_strnlen_s("abcd",10)==4);
     assert(cplus_strnlen_s(NULL,10)==0);
+    int ind=42;
+    assert(cplus_strcmp_s("abc",3,"abc",&ind)==0 && ind==0);
+    assert(cplus_strcmp_s("abc",3,"abd",&ind)==0 && ind<0);
+    assert(cplus_strcmp_s(NULL,3,"abd",&ind)!=0);
     puts("test_safe_string: ok");
     return 0;
 }
