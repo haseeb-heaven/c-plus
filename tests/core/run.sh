@@ -74,6 +74,7 @@ build_run checked_copy_overlap "$ROOT/tests/core/positive/checked_copy_overlap.c
 build_run null_outparam "$ROOT/tests/core/positive/null_outparam.c"
 build_run libc_valid "$ROOT/tests/core/positive/libc_valid.c"
 build_run interproc_borrow "$ROOT/tests/core/positive/interproc_borrow.c"
+build_run expr_array_bound "$ROOT/tests/core/positive/expr_array_bound.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 

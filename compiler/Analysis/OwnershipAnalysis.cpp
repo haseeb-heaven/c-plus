@@ -125,7 +125,7 @@ private:
   ASTContext &ctx_;
   const std::set<const VarDecl *> &tracked_;
   std::set<const VarDecl *> &init_;
-  const CfgReportFn &report_;
+  CfgReportFn report_;
   std::set<const Stmt *> &reported_;
 };
 

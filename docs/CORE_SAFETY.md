@@ -297,3 +297,22 @@ calls. `AstSafetyCheck.cpp` collects the same shape for simple user functions
 that call `free(parameter)` and propagates it to call sites. Tests:
 `interproc_double_free` (rejected) and `interproc_borrow` (accepted).
 Unknown functions are not assumed safe.
+
+## Coordination with Agent 2 (shared P0 issue #19)
+
+Agent 2 owns platform/CRT conformance fixtures under `tests/crt/**` and the
+`docs/CRT_MATRIX.md` verification matrix. Agent 1 owns compiler recognition,
+effect summaries, diagnostics and minimal runtime contracts. Compiler-owned
+diagnostics consumed by those fixtures:
+
+- `double free of <var>`
+- `copy of N bytes exceeds destination <var>`
+- `string copy of N chars plus NUL exceeds destination <var>`
+- `array index N exceeds length M`
+- `null pointer dereference`
+- safe-subset restrictions: `raw realloc...`, `zero-size allocation...`
+
+Known limitations reported by Agent 2 and verified here: expression-sized
+arrays resolve correctly via Clang AST (regression added); `calloc(SIZE_MAX,k)`
+can be folded by Clang -O2, so allocation-failure fixtures need
+`noinline`/volatile designs. Neither agent assumes unknown functions are safe.
