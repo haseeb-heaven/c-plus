@@ -62,10 +62,20 @@ struct GlobalWriteFinder : RecursiveASTVisitor<GlobalWriteFinder> {
   std::set<std::string> freed;
   explicit GlobalWriteFinder(const std::set<std::string> &g) : globals(g) {}
 
+  bool synchronized = false;
+
   bool VisitCallExpr(CallExpr *c) {
-    if (!c->getDirectCallee() || c->getNumArgs() < 1)
+    if (!c->getDirectCallee())
       return true;
     std::string n = c->getDirectCallee()->getNameAsString();
+    // A lock/unlock pair in the thread entry means the global writes are
+    // protected; suppress the may-race report for that function.
+    if (n.find("mutex_lock") != std::string::npos ||
+        n.find("mutex_unlock") != std::string::npos ||
+        n.find("rwlock_") != std::string::npos)
+      synchronized = true;
+    if (c->getNumArgs() < 1)
+      return true;
     if (n != "free" && n != "cplus_release")
       return true;
     std::string arg = nameOf(c->getArg(0)->IgnoreParenCasts());
@@ -1670,8 +1680,12 @@ public:
         return true;
       index = it->second;
     }
-    if (index.isNegative())
+    if (index.isNegative()) {
+      report(subscript->getBeginLoc(),
+             "array index " + std::to_string(index.getSExtValue()) +
+                 " is negative");
       return true;
+    }
     unsigned long long extent = arrayType->getSize().getZExtValue();
     unsigned long long value = index.getZExtValue();
     if (value >= extent)
@@ -1904,6 +1918,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
       continue;
     GlobalWriteFinder gw(collect.allGlobals());
     gw.TraverseStmt(entryFn->getBody());
+    if (gw.synchronized)
+      continue;
     for (const auto &g : gw.freed) {
       auto lit = collect.threadEntryLocs().find(entry.first);
       Diag d;

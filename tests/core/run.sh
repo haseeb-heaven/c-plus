@@ -53,6 +53,7 @@ expect_trap() {
 echo "core safety: positive"
 build_run raii_basic "$ROOT/tests/core/positive/raii_basic.cp"
 build_run move_and_borrow "$ROOT/tests/core/positive/move_and_borrow.cp"
+build_run method_array_element "$ROOT/tests/core/positive/method_array_element.cp"
 build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
 build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"
 build_run bounds_var_index_ok "$ROOT/tests/core/positive/bounds_var_index_ok.c"

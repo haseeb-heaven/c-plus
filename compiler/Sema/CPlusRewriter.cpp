@@ -1443,6 +1443,15 @@ private:
       return false;
 
     size_t op = ts.nextSig(i);
+    // Allow a method call on an array element: `vec[0].method()`.
+    size_t receiverEnd = i;
+    if (ts.isPunct(op, "[")) {
+      size_t close = ts.matchBracket(op);
+      if (close == kNPos || close <= op)
+        return false;
+      receiverEnd = close;
+      op = ts.nextSig(close);
+    }
     if (!ts.isPunct(op, ".") && !ts.isPunct(op, "->"))
       return false;
     bool arrow = ts.isPunct(op, "->");
@@ -1464,12 +1473,10 @@ private:
       return false;
 
     emit(className + "_" + ts[methodIdx].text + "(");
-    if (arrow)
-      emitToken(i);
-    else {
+    if (!arrow)
       emit("&");
-      emitToken(i);
-    }
+    for (size_t k = i; k <= receiverEnd; ++k)
+      emitToken(k);
     size_t firstArg = ts.nextSig(lparen);
     if (!ts.isPunct(firstArg, ")"))
       emit(", ");

@@ -947,7 +947,7 @@ private:
       for (const char *fn : kStateful) {
         unsigned count = 0;
         size_t first = kNPos, last = kNPos;
-        std::set<std::string> saved;
+        std::map<std::string, size_t> savedAt;
         for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
           if (!isIdent(k, fn))
             continue;
@@ -967,15 +967,19 @@ private:
             --lhs;
             if (lhs >= entry.second.bodyOpen &&
                 toks_[lhs].kind == TokKind::Identifier)
-              saved.insert(toks_[lhs].text);
+              savedAt[toks_[lhs].text] = k;
           }
         }
         if (count > 1 && first != kNPos) {
           bool used_after = false;
           for (size_t k = last + 1; k <= entry.second.bodyClose; ++k)
-            if (toks_[k].kind == TokKind::Identifier &&
-                saved.count(toks_[k].text))
-              used_after = true;
+            if (toks_[k].kind == TokKind::Identifier) {
+              auto sit = savedAt.find(toks_[k].text);
+              // Only a result saved by an EARLIER call is invalidated. Using
+              // the variable assigned by the last call is safe.
+              if (sit != savedAt.end() && sit->second < last)
+                used_after = true;
+            }
           const std::string msg = std::string("'") + fn +
               "' keeps static state; a second call invalidates earlier results";
           if (used_after)
