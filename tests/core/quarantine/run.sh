@@ -5,9 +5,18 @@ CC=${CPLUS_BIN:-$ROOT/build/c+}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 OUT="$ROOT/tests/out/core/quarantine"
 mkdir -p "$OUT"
-for n in stale_check raw_deref eviction; do
+for n in stale_check eviction; do
   "$CC" build "$HERE/$n.c" -o "$OUT/$n" >"$OUT/$n.build.log" 2>&1
 done
+# raw_deref is a deliberate use-after-free.  If the compiler rejects it at
+# compile time that is a stronger guarantee than the runtime quarantine; only
+# build the binary when the checker accepts the source.
+raw_rejected=0
+if "$CC" build "$HERE/raw_deref.c" -o "$OUT/raw_deref" >"$OUT/raw_deref.build.log" 2>&1; then
+  raw_rejected=0
+else
+  raw_rejected=1
+fi
 
 # 1. With quarantine, an explicit liveness check detects a stale alias.
 rc=0
@@ -18,10 +27,16 @@ else
   echo "FAIL stale alias check rc=$rc"; exit 1
 fi
 
-# 2. Without an explicit check, raw dereference remains UB (quarantine does
-#    not instrument dereferences).
-CPLUS_QUARANTINE=1 "$OUT/raw_deref" >"$OUT/deref.stdout" 2>"$OUT/deref.stderr" || true
-echo "INFO raw dereference with quarantine produced no C+ trap (still UB)"
+# 2. Without an explicit check, raw dereference is either rejected by the
+#    compiler (preferred) or, if accepted, remains UB (quarantine does not
+#    instrument dereferences).
+if [ "$raw_rejected" -eq 1 ]; then
+  grep -q 'use-after-free' "$OUT/raw_deref.build.log"
+  echo "PASS raw dereference rejected at compile time (stronger than quarantine)"
+else
+  CPLUS_QUARANTINE=1 "$OUT/raw_deref" >"$OUT/deref.stdout" 2>"$OUT/deref.stderr" || true
+  echo "INFO raw dereference with quarantine produced no C+ trap (still UB)"
+fi
 
 # 3. Eviction of >1024 entries must not crash; the stale check may still
 #    succeed if malloc does not reuse that exact address.
