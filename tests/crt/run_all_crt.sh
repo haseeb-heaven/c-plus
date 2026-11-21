@@ -19,6 +19,15 @@ for f in examples/crt/*.c; do
 done
 echo "examples: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
+echo "== Adversarial mitigation suite =="
+pass=0; fail=0
+for t in tests/crt/adversarial/test_*.c; do
+  [ -e "$t" ] || continue
+  b=build/safe/adv_$(basename "$t" .c)
+  if $CC -O2 -Wall -Wextra -pedantic -std=c99 $INC "$t" "$LIB" -o "$b" >/tmp/adv.log 2>&1 && "$b" >/tmp/adv.out 2>&1; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $t"; tail -20 /tmp/adv.log || true; tail -20 /tmp/adv.out || true; fi
+done
+echo "adversarial mitigations: $pass passed, $fail failed"
+[ "$fail" -eq 0 ]
 echo "== Safe CRT fuzz smoke =="
 pass=0; fail=0
 for t in tests/crt/fuzz/fuzz_memcpy_s.c tests/crt/fuzz/fuzz_strcpy_s.c tests/crt/fuzz/fuzz_alloc_s.c tests/crt/fuzz/fuzz_format_s.c; do
