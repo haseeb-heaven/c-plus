@@ -109,7 +109,7 @@ Core-safety runner now has 25 cases, plus a 14-case scratch-style probe script (
 `tests/core/coverage.sh` builds `runtime/cplus_runtime.c` with gcov
 instrumentation, runs `tests/core/coverage_driver.c` (including intercepted
 fatal paths via `cplus_fatal_hook`) and reports line coverage. Target: >=80%
-for the runtime library. Current result: **337/414 lines (81%)**, covering
+for the runtime library. Current result: **338/415 lines (81%)**, covering
 fatal paths through the test hook, allocator growth, zero-size paths and I/O. Runtime logging is gated by a global level set from
 `CPLUS_LOG_LEVEL` when `--log` is used; without it, logging has no effect.
 
@@ -128,3 +128,9 @@ The raw-clang difference includes C+ UBSan instrumentation; the `clang UB`
 line is the equivalent sanitizer baseline. Overhead varies with machine load;
 the script is the source of truth. This is a narrow measured
 boundary, not a claim that all of libc is safe or Rust-equivalent.
+
+## Bug fixes found by new tests
+
+- `cplus_realloc` previously kept the old pointer live, so releasing an old
+  alias was silently accepted. It now releases the old allocation, making
+  stale aliases detectable (double release / invalid length query).

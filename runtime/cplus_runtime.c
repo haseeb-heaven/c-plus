@@ -251,14 +251,15 @@ void *cplus_realloc(void *ptr, size_t size) {
     cplus_release(ptr);
     return NULL;
   }
-  /* Managed allocations are scope-owned, so reallocation makes a fresh block
-   * instead of invalidating pointers held elsewhere. */
+  /* cplus_realloc is an ownership transfer: the old pointer is released and
+   * every old alias becomes a dangling pointer, so stale use is detected. */
   void *fresh = cplus_alloc(size);
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
   if (slot)
     memcpy(fresh, ptr, size < slot->size ? size : slot->size);
   cplus_alloc_unlock();
+  cplus_release(ptr);
   return fresh;
 }
 

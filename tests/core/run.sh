@@ -66,6 +66,8 @@ build_run move_chain_ok "$ROOT/tests/core/positive/move_chain_ok.cp"
 build_run managed_len_fold "$ROOT/tests/core/positive/managed_len_fold.c"
 build_run nested_raii "$ROOT/tests/core/positive/nested_raii.cp"
 build_run borrow_valid "$ROOT/tests/core/positive/borrow_valid.cp"
+build_run realloc_chain "$ROOT/tests/core/positive/realloc_chain.c"
+build_run zero_alloc "$ROOT/tests/core/positive/zero_alloc.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -99,6 +101,9 @@ build_expect_stderr move_chain "$ROOT/tests/safety/move_chain.c" "use of moved-f
 expect_reject borrow_after_move "$ROOT/tests/safety/borrow_after_move.c"
 expect_reject managed_escape_expr "$ROOT/tests/safety/managed_escape_expr.c"
 expect_reject multi_dim_negative "$ROOT/tests/safety/multi_dim_negative.c"
+expect_trap alloc_overflow_mul "$ROOT/tests/safety/alloc_overflow_mul.cp" 107
+expect_trap double_release_after_realloc "$ROOT/tests/safety/double_release_after_realloc.c" 104
+expect_reject alias_borrow_escape "$ROOT/tests/safety/alias_borrow_escape.c"
 expect_reject constructor_early_return "$ROOT/tests/safety/constructor_early_return.cp"
 expect_reject bounds_loop "$ROOT/tests/safety/bounds_loop.c"
 expect_reject uninit_branch "$ROOT/tests/safety/uninit_branch.c"
