@@ -22,6 +22,7 @@ errno_t cplus_strcat_s(char *dest, rsize_t dmax, const char *src);
 errno_t cplus_strncat_s(char *dest, rsize_t dmax, const char *src, rsize_t slen);
 errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *indicator);
 rsize_t cplus_strnlen_s(const char *str, rsize_t smax);
+char *cplus_strtok_s(char *dest, rsize_t *dmax, const char *delim, char **ptr);
 #if defined(__cplusplus)
 }
 #endif

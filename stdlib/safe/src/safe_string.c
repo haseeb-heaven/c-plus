@@ -7,6 +7,7 @@ extern errno_t cplus_sc_strcat_s(char *dest, rsize_t dmax, const char *src);
 extern errno_t cplus_sc_strncat_s(char *dest, rsize_t dmax, const char *src, rsize_t slen);
 extern errno_t cplus_sc_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *indicator);
 extern rsize_t cplus_sc_strnlen_s(const char *str, rsize_t smax);
+extern char *cplus_sc__strtok_s_chk(char *restrict dest, rsize_t *restrict dmaxp, const char *restrict src, char **restrict ptr, size_t destbos, size_t srcbos);
 
 errno_t cplus_strcpy_s(char *dest, rsize_t dmax, const char *src) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strcpy_s", "enter");
@@ -41,5 +42,13 @@ errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *ind
 rsize_t cplus_strnlen_s(const char *str, rsize_t smax) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strnlen_s", "enter");
     rsize_t r = cplus_sc_strnlen_s(str, smax);
+    return r;
+}
+
+
+char *cplus_strtok_s(char *dest, rsize_t *dmax, const char *delim, char **ptr) {
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strtok_s", "enter");
+    char *r = cplus_sc__strtok_s_chk(dest, dmax, delim, ptr, (size_t)-1, (size_t)-1);
+    if (!r) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "strtok_s", "null");
     return r;
 }
