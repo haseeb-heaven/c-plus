@@ -26,6 +26,7 @@ char *strpbrk(const char *s, const char *accept);
 char *strdup(const char *s);
 char *strerror(int errnum);
 char *strtok(char *str, const char *delim);
+char *strndup(const char *s, size_t n);
 int strcasecmp(const char *s1, const char *s2);
 int strncasecmp(const char *s1, const char *s2, size_t n);
 #ifdef __cplusplus
