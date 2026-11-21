@@ -109,7 +109,7 @@ Core-safety runner now has 49 cases, plus a 14-case scratch-style probe script (
 `tests/core/coverage.sh` builds `runtime/cplus_runtime.c` with gcov
 instrumentation, runs `tests/core/coverage_driver.c` (including intercepted
 fatal paths via `cplus_fatal_hook`) and reports line coverage. Target: >=80%
-for the runtime library. Current result: **338/415 lines (81%)**, covering
+for the runtime library. Current result: **308/382 lines (80%)** after removing redundant wrappers, covering
 fatal paths through the test hook, allocator growth, zero-size paths and I/O. Runtime logging is gated by a global level set from
 `CPLUS_LOG_LEVEL` when `--log` is used; without it, logging has no effect.
 
@@ -118,10 +118,12 @@ fatal paths through the test hook, allocator growth, zero-size paths and I/O. Ru
 `tests/core/libc_bench.sh` compares the safe bounded-memory wrappers against
 raw libc with Clang -O2 on the same 2,000,000-iteration workload:
 
+Latest library-boundary run:
+
 ```text
-c+ safe : real 0.58s
-clang C : real 0.16s
-clang UB: real 0.33s
+c+ safe : real 0.74s
+clang C : real 0.39s
+clang UB: real 0.41s
 ```
 
 The raw-clang difference includes C+ UBSan instrumentation; the `clang UB`
@@ -145,3 +147,40 @@ boundary, not a claim that all of libc is safe or Rust-equivalent.
 - Thread guard: synchronized shared counter across two threads passes with
   RAII lock/unlock. An unsynchronized global write in a thread function is
   rejected.
+
+## Provenance and reuse audit (PR #16 architecture correction)
+
+| upstream | pinned commit | license | precise reused interface/file | actual integration |
+| --- | --- | --- | --- | --- |
+| llvm/llvm-project | `14fee62eb543` | Apache-2.0 WITH LLVM exceptions | `clang/include/clang/AST`, `clang/include/clang/Analysis/CFG.h` | linked installed Clang 16 static libs; `OwnershipAnalysis.cpp` uses `CFG::buildCFG`; no source copied |
+| swiftlang/llvm-project | `ca74e48841e5` | Apache-2.0 WITH LLVM exceptions | `clang/lib/Sema/SemaBoundsSafety.cpp`, `clang/lib/Headers/ptrcheck.h` | inspected only; installed clang has no `-fbounds-safety`; fallback documented |
+| checkedc/checkedc-clang | `a2843eae17d9` | Apache-2.0 WITH LLVM exceptions | `clang/docs/checkedc/Implementation-Notes.md` | design reference for checked-pointer contracts only; no code copied |
+| cforall/cforall | `a726980cfaa5` | BSD 3-clause | constructor/destructor lowering docs | design reference for RAII; no code copied |
+| pizlonator/fil-c | `d9041afd6b11` | LLVM Apache-2.0 + runtime terms | `https://fil-c.org/how`, capability architecture | studied only; no GC/ABI/runtime copied |
+| thradams/cake | `2da2afd1759a` | GPLv3 + AI-use restriction | docs/README only | **excluded**: license forbids AI/reference use |
+| 0xA1M/clog | default branch | MIT | `clog.h` | vendored as `cplus/clog.h`, MIT preserved in `third_party/clog/LICENSE` |
+
+### Reclassification of runtime APIs
+
+| API | classification | evidence / decision |
+| --- | --- | --- |
+| `cplus_alloc`, `cplus_zalloc`, `cplus_alloc_array`, `cplus_release`, `cplus_check_live`, `cplus_alloc_bytes/count` | **compiler-required runtime primitive** | required by managed ownership side table; overflow checked |
+| `cplus_check_bounds`, `cplus_check_index`, `cplus_fatal`, `cplus_check_nonnull`, `cplus_resource_check_borrow` | **compiler-required ABI** | emitted by lowering for deterministic safety failures |
+| `cplus_move`, `cplus_zero` | **compiler-required helper** | ownership transfer zeroes source handle |
+| `cplus_memcpy`, `cplus_memmove` | **redundant handwritten wrapper -> libc** | inline aliases to system `memmove`; do NOT prove region validity |
+| `cplus_strnlen` | **redundant handwritten wrapper -> libc** | system `strnlen` |
+| `cplus_strcpy` | **optional compatibility helper -> libc** | system `snprintf` bounded copy + truncation abort |
+| `cplus_mutex_*`, `cplus_tls_*` | **platform primitive** | thin wrappers over pthread APIs |
+
+The four memory/string helpers are not compiler code-generation requirements;
+no lowering emits them. They remain only for source compatibility and are
+explicitly documented as not providing spatial safety. Real bounds enforcement
+is AST/CFG analysis plus Clang UBSan instrumentation.
+
+### Unsupported guarantees (explicit)
+
+- No complete use-after-free detection (ASan/TSan broken on this host).
+- No Rust-style provenance for arbitrary casts/pointer arithmetic.
+- No whole-program cross-TU ABI/ownership verification.
+- `goto`/`longjmp` bypass deterministic cleanup.
+- The libc replacement wrappers do not validate buffer sizes.

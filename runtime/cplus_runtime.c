@@ -268,51 +268,6 @@ void cplus_zero(void *p, size_t size) {
     memset(p, 0, size);
 }
 
-void *cplus_memcpy(void *dest, const void *src, size_t n) {
-  cplus_log(CPLUS_LOG_TRACE, "cplus_memcpy dest=%p src=%p n=%zu", dest, src, n);
-  if (n == 0)
-    return dest;
-  if (!dest || !src)
-    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "null pointer", NULL, 0,
-                      "cplus_memcpy with zero count requires non-null pointers");
-  return memmove(dest, src, n); /* overlap-safe even when called as memcpy */
-}
-
-void *cplus_memmove(void *dest, const void *src, size_t n) {
-  cplus_log(CPLUS_LOG_TRACE, "cplus_memmove dest=%p src=%p n=%zu", dest, src,
-            n);
-  if (n == 0)
-    return dest;
-  if (!dest || !src)
-    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "null pointer", NULL, 0,
-                      "cplus_memmove requires non-null pointers");
-  return memmove(dest, src, n);
-}
-
-size_t cplus_strnlen(const char *s, size_t max) {
-  cplus_log(CPLUS_LOG_TRACE, "cplus_strnlen max=%zu", max);
-  if (!s)
-    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "null pointer", NULL, 0,
-                      "cplus_strnlen requires a non-null pointer");
-  size_t n = 0;
-  while (n < max && s[n] != '\0')
-    ++n;
-  return n;
-}
-
-int cplus_strcpy(char *dest, size_t dest_size, const char *src) {
-  cplus_log(CPLUS_LOG_TRACE, "cplus_strcpy dest_size=%zu", dest_size);
-  if (!dest || !src || dest_size == 0)
-    cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "invalid string buffer", NULL, 0,
-                      "cplus_strcpy requires non-null pointers and space");
-  size_t len = cplus_strnlen(src, dest_size);
-  if (len >= dest_size)
-    cplus_print_fatal(CPLUS_EXIT_BOUNDS, "string overflow", NULL, 0,
-                      "source string does not fit in destination");
-  memcpy(dest, src, len + 1);
-  return (int)len;
-}
-
 void cplus_release(void *ptr) {
   if (!ptr)
     return;

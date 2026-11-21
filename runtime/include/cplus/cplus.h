@@ -13,6 +13,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 /* -------------------------------------------------------------------------
@@ -114,12 +115,31 @@ void *cplus_realloc(void *ptr, size_t size);
 /* Zero `size` bytes at `p`.  Used by the cplus_move() ownership transfer. */
 void cplus_zero(void *p, size_t size);
 
-/* Bounded memory/string helpers for safe C+ code.  These are runtime
- * primitives, not language features; Agent 2's .hp wrappers can build on them. */
-void *cplus_memcpy(void *dest, const void *src, size_t n);
-void *cplus_memmove(void *dest, const void *src, size_t n);
-size_t cplus_strnlen(const char *s, size_t max);
-int cplus_strcpy(char *dest, size_t dest_size, const char *src);
+/* OPTIONAL compatibility helpers - NOT a memory-safety primitive.
+ *
+ * PR #16 architecture correction: these do not prove that source/destination
+ * regions are valid or large enough.  Actual byte/string work is delegated to
+ * the system C library (memmove / strnlen / snprintf).  Compiler-enforced
+ * safety comes from AST/CFG bounds analysis and Clang/LLVM instrumentation,
+ * not from these functions.  They are kept only for source compatibility. */
+static inline void *cplus_memcpy(void *dest, const void *src, size_t n) {
+  return memmove(dest, src, n); /* overlap-safe superset of memcpy */
+}
+static inline void *cplus_memmove(void *dest, const void *src, size_t n) {
+  return memmove(dest, src, n);
+}
+static inline size_t cplus_strnlen(const char *s, size_t max) {
+  return strnlen(s, max); /* POSIX/libc; never scans past max */
+}
+static inline int cplus_strcpy(char *dest, size_t dest_size, const char *src) {
+  int written = snprintf(dest, dest_size, "%s", src); /* libc bounded copy */
+  if (written < 0)
+    cplus_fatal(CPLUS_EXIT_IO, "string copy failed", NULL, 0, "snprintf");
+  if ((size_t)written >= dest_size)
+    cplus_fatal(CPLUS_EXIT_BOUNDS, "string overflow", NULL, 0,
+                "source does not fit in destination");
+  return written;
+}
 
 /* Explicit release of a managed allocation.  Safe to call exactly once.
  * Calling it twice is a detected double-free, not silent corruption. */

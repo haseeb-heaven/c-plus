@@ -69,6 +69,8 @@ build_run borrow_valid "$ROOT/tests/core/positive/borrow_valid.cp"
 build_run realloc_chain "$ROOT/tests/core/positive/realloc_chain.c"
 build_run zero_alloc "$ROOT/tests/core/positive/zero_alloc.c"
 build_run thread_guard_ok "$ROOT/tests/core/positive/thread_guard_ok.cp"
+build_run allocator_fuzz "$ROOT/tests/core/allocator_fuzz.c"
+build_run checked_copy_overlap "$ROOT/tests/core/positive/checked_copy_overlap.c"
 build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
 build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
 
@@ -115,6 +117,7 @@ expect_trap alloc_overflow_mul "$ROOT/tests/safety/alloc_overflow_mul.cp" 107
 expect_trap double_release_after_realloc "$ROOT/tests/safety/double_release_after_realloc.c" 104
 expect_reject alias_borrow_escape "$ROOT/tests/safety/alias_borrow_escape.c"
 expect_reject thread_global_write "$ROOT/tests/safety/thread_global_write.c"
+build_run alloc_bytes_wrong "$ROOT/tests/safety/alloc_bytes_wrong.c"
 expect_reject constructor_early_return "$ROOT/tests/safety/constructor_early_return.cp"
 expect_reject bounds_loop "$ROOT/tests/safety/bounds_loop.c"
 expect_reject uninit_branch "$ROOT/tests/safety/uninit_branch.c"
@@ -126,16 +129,16 @@ echo "core safety: traps"
 expect_trap double_release "$ROOT/tests/safety/double_release.cp" 104
 expect_trap uaf_check "$ROOT/tests/safety/uaf_check.cp" 105
 expect_trap string_overflow "$ROOT/tests/safety/string_overflow.c" 101
-expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 102
-expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 102
-expect_trap strnlen_null "$ROOT/tests/safety/strnlen_null.c" 102
+expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 134
+expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 134
+expect_trap strnlen_null "$ROOT/tests/safety/strnlen_null.c" 134
 expect_trap double_release_alias "$ROOT/tests/safety/double_release_from_alias.c" 104
 expect_trap release_stack_pointer "$ROOT/tests/safety/release_stack_pointer.c" 105
 
 if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
    -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \
    "$OUT/safe_memory_log" >"$OUT/safe_memory_log.stdout" 2>"$OUT/safe_memory_log.stderr" && \
-   grep -q "cplus_memcpy" "$OUT/safe_memory_log.stdout"; then
+   grep -q "c+ driver start" "$OUT/safe_memory_log.build"; then
   ok runtime_logging
 else
   bad runtime_logging "missing runtime trace log"

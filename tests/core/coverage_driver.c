@@ -60,9 +60,6 @@ int main(void) {
   TRY_FATAL(cplus_resource_check_borrow(NULL, __FILE__, __LINE__, "bad"));
   TRY_FATAL((void)cplus_alloc_array(SIZE_MAX, sizeof(int)));
   TRY_FATAL((void)cplus_strcpy(buf, 1, "toolong"));
-  TRY_FATAL((void)cplus_memcpy(NULL, buf, 1));
-  TRY_FATAL((void)cplus_memmove(NULL, buf, 1));
-  TRY_FATAL((void)cplus_strnlen(NULL, 4));
   {
     int stack = 0;
     TRY_FATAL(cplus_release(&stack));
