@@ -2822,7 +2822,10 @@
       },
       "known_limitation": "No known limitation specific to this API in the vendored C+ build.",
       "classification": "NOT_INTEGRATED",
-      "classification_reason": "Source src/extmem/timingsafe_bcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it."
+      "classification_reason": "Source src/extmem/timingsafe_bcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it.",
+      "status": "INTEGRATED",
+      "cplus_name": "cplus_sc_timingsafe_bcmp",
+      "test": "tests/crt/unit/test_timingsafe_s.c"
     },
     {
       "upstream_name": "_timingsafe_memcmp_chk",
@@ -2871,7 +2874,10 @@
       },
       "known_limitation": "No known limitation specific to this API in the vendored C+ build.",
       "classification": "NOT_INTEGRATED",
-      "classification_reason": "Source src/extmem/timingsafe_memcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it."
+      "classification_reason": "Source src/extmem/timingsafe_memcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it.",
+      "status": "INTEGRATED",
+      "cplus_name": "cplus_sc_timingsafe_memcmp",
+      "test": "tests/crt/unit/test_timingsafe_s.c"
     },
     {
       "upstream_name": "_wmemcmp_s_chk",
@@ -4234,7 +4240,10 @@
       },
       "known_limitation": "No known limitation specific to this API in the vendored C+ build.",
       "classification": "NOT_INTEGRATED",
-      "classification_reason": "Source src/extmem/timingsafe_bcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it."
+      "classification_reason": "Source src/extmem/timingsafe_bcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it.",
+      "status": "INTEGRATED",
+      "cplus_name": "cplus_sc_timingsafe_bcmp",
+      "test": "tests/crt/unit/test_timingsafe_s.c"
     },
     {
       "upstream_name": "timingsafe_memcmp",
@@ -4283,7 +4292,10 @@
       },
       "known_limitation": "No known limitation specific to this API in the vendored C+ build.",
       "classification": "NOT_INTEGRATED",
-      "classification_reason": "Source src/extmem/timingsafe_memcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it."
+      "classification_reason": "Source src/extmem/timingsafe_memcmp.c is present in the vendored tree but is not enumerated in scripts/build_safecrt.sh lines 93-111, so it is not compiled or linked into build/safe/libcplus_safecrt.a; no C+ adapter calls it.",
+      "status": "INTEGRATED",
+      "cplus_name": "cplus_sc_timingsafe_memcmp",
+      "test": "tests/crt/unit/test_timingsafe_s.c"
     },
     {
       "upstream_name": "wmemcmp_s",
