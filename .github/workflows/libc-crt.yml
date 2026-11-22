@@ -45,6 +45,12 @@ jobs:
         run: sh tests/libc/run_corpus_tests.sh
       - name: Per-method scenario suites (1000+ each, 10-30 runtime scenarios)
         run: sh tests/scenarios/run_scenarios.sh
+      - name: Per-method unit and logging-parity suites
+        run: sh tests/methods/run_methods.sh
+      - name: Hundred-scenario per-method suites
+        run: sh tests/methods/run_hundred.sh
+      - name: C+/Rust safety conformance (12 gates)
+        run: sh tests/conformance/run_conformance.sh
       - name: Libc install smoke
         run: sh tests/libc/install_smoke.sh
       - name: C/C++ header compatibility matrix
