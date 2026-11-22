@@ -137,27 +137,30 @@ Totals are deterministic: 9 notes → `api_failures==9`, `callback calls==9`,
 the category bitmask contains INVALID, BOUNDS, MEMORY, OWNERSHIP and IO. The
 callback is reset to `NULL` and telemetry disabled before exit.
 
-## 3. Contract bugs reproduced (headers not edited)
+## 3. Contract defect reproduced and fixed (CF4)
 
-Both CF4 discrepancies have the same root cause: `fgets()` stops after
+Both exact-fit discrepancies had the same root cause: `fgets()` stops after
 writing `size-1` bytes **without** setting `feof()`. `file.hp::read_line`
-decides "line did not fit" with `n == size-1 && buf[n-1] != '\n' && !feof()`,
-so it drains the remainder and reports `STDLIB_FAIL` / `BOUNDS` even though
-the content fits. `io.hp::read_line` peeks the next byte with `fgetc()` and
+decided "line did not fit" with `n == size-1 && buf[n-1] != '\n' && !feof()`,
+so it drained the remainder and reported `STDLIB_FAIL` / `BOUNDS` even though
+the content fitted. `io.hp::read_line` peeks the next byte with `fgetc()` and
 treats `'\n'`, `'\r'` or `EOF` as an exact fit.
 
-| # | Content / buffer | `io::read_line` | `file::read_line` | Contract reference |
+| # | Content / buffer | `io::read_line` | `file::read_line` before fix | after fix |
 | --- | --- | --- | --- | --- |
-| 1 | `"last"` at physical EOF, size 5 | `OK`, `"last"` | `FAIL`, empty, `BOUNDS` | `DEEP_FILE_CONTRACT.md` §"a full buffer with no terminator **and no EOF** means the line did not fit" — here EOF *is* reached |
-| 2 | `"abcd\n"` with size 5 | `OK`, `"abcd"` | `FAIL`, empty, `BOUNDS` | `DEEP_FILE_CONTRACT.md` calls itself a mirror of hardened `io.hp`; `io.hp` explicitly accepts a delimiter immediately after the buffer |
+| 1 | `"last"` at physical EOF, size 5 | `OK`, `"last"` | `FAIL`, empty, `BOUNDS` | `OK`, `"last"` |
+| 2 | `"abcd\n"` with size 5 | `OK`, `"abcd"` | `FAIL`, empty, `BOUNDS` | `OK`, `"abcd"` |
+| 3 | `"abcdef\n"` with size 5 | `FAIL`, drained | `FAIL`, drained | `FAIL`, drained (unchanged) |
 
-Both paths are recoverable and leak-free (the drain loop realigns the
-stream: a following `"Z\n"` line is still read correctly). The test **pins
-the observed `file.hp` behaviour** rather than asserting a fix, and labels the
-checks `*_discrepancy` / `*_mismatch_reproduced` so the difference stays
-visible. A future header fix would flip checks
-`cf4_file_full_buffer_eof_discrepancy`, `cf4_file_exact_fit_discrepancy` and
-the two `*_mismatch_reproduced` checks; no other check is affected.
+The fix ports `io.hp`'s peek logic into `file.hp::read_line`: after `fgets`, a
+full buffer with no in-buffer terminator peeks one byte; `\n`, `\r` (with CRLF
+consumed) or `EOF` is accepted as an exact fit, any other byte triggers the
+existing drain-and-`BOUNDS` path. Genuine overlong lines still drain and fail.
+
+The CF4 checks were updated from pinning the discrepancy to asserting the
+aligned behavior: `cf4_file_full_buffer_eof_aligned`,
+`cf4_file_exact_fit_aligned`, `cf4_cross_family_aligned` and
+`cf4_eof_aligned`. Total remains 18 CF4 checks, 0 failures.
 
 ## 4. Build and run commands
 

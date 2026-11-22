@@ -16,8 +16,8 @@
  *        its allocation generation (never dereferenced after the transfer).
  *   CF4  file::read_line into a char string buffer at the 1-byte and exact-fit
  *        boundaries; the error record carries the documented category.  Also
- *        reproduces the file.hp vs io.hp exact-fit discrepancy (both paths
- *        are recoverable, neither uses a stale buffer).
+ *        boundaries; exact-fit now aligns with io.hp after the file.hp fix
+ *        (both paths are recoverable, neither uses a stale buffer).
  *   CF5  json document/builder holding a value copied from a temporary string
  *        (via string_view) that is dropped before the document is read.
  *   CF6  a single error callback installed for every family plus telemetry
@@ -356,25 +356,23 @@ int main(void) {
                       cf4_err.ok() == 1,
                   "cf4_stream_stays_aligned");
 
-        /* Contract difference (documented, not a forced pass): a line whose
-         * content is exactly size-1 bytes at physical EOF FITS the buffer, and
-         * io.hp::read_line accepts it.  file.hp::read_line relies on feof(),
-         * which libc has not set yet after fgets() consumed exactly size-1
-         * bytes, so it drains to EOF and reports FAIL / BOUNDS.  The current
-         * behaviour is pinned here so the discrepancy stays visible. */
+        /* REGRESSION (was a real defect): a line whose content is exactly
+         * size-1 bytes at physical EOF FITS the buffer.  io.hp::read_line
+         * peeks the next byte and accepts it; file.hp used to rely on feof(),
+         * which libc has not set after fgets() consumed exactly size-1 bytes,
+         * and wrongly reported FAIL / BOUNDS.  file.hp now uses the same peek
+         * logic, so both readers must agree. */
         cf4_file_eof_status = cf4_stream.read_line(cf4_buffer, 5, &cf4_err);
-        cf_expect(cf4_file_eof_status == STDLIB_FAIL &&
-                      cf4_buffer[0] == '\0' &&
-                      cf4_err.category() == STDLIB_CATEGORY_BOUNDS &&
-                      cf4_err.code() == (int)CPLUS_EXIT_BOUNDS,
-                  "cf4_file_full_buffer_eof_discrepancy");
+        cf_expect(cf4_file_eof_status == STDLIB_OK &&
+                      strcmp(cf4_buffer, "last") == 0 && cf4_err.ok() == 1,
+                  "cf4_file_full_buffer_eof_aligned");
         cf4_status = cf4_stream.read_line(cf4_buffer, 5, &cf4_err);
         cf_expect(cf4_status == STDLIB_EOF && cf4_err.ok() == 1, "cf4_eof");
         cf4_stream.drop();
 
         /* Cross-family boundary: content length == size-1 followed by '\n'.
-         * io.hp peeks the delimiter and accepts it; file.hp reports BOUNDS.
-         * Both outcomes are recoverable; neither reads a stale buffer. */
+         * After the exact-fit fix both readers peek the delimiter and accept
+         * it; neither reads a stale buffer. */
         {
             FILE *cf4_saved_stdin = stdin;
             FILE *cf4_io_source = tmpfile();
@@ -401,16 +399,15 @@ int main(void) {
 
             cf4_file_status = cf4_file_source.read_line(cf4_file_buffer, 5,
                                                         &cf4_err);
-            cf_expect(cf4_file_status == STDLIB_FAIL &&
-                          cf4_file_buffer[0] == '\0' &&
-                          cf4_err.category() == STDLIB_CATEGORY_BOUNDS,
-                      "cf4_file_exact_fit_discrepancy");
-            cf_expect(cf4_io_status != cf4_file_status,
-                      "cf4_cross_family_mismatch_reproduced");
+            cf_expect(cf4_file_status == STDLIB_OK &&
+                          strcmp(cf4_file_buffer, "abcd") == 0 &&
+                          cf4_err.ok() == 1,
+                      "cf4_file_exact_fit_aligned");
+            cf_expect(cf4_io_status == cf4_file_status,
+                      "cf4_cross_family_aligned");
 
-            /* Second, independent discrepancy: content length == size-1 at
-             * physical EOF.  io.hp peeks fgetc(), sees EOF and accepts the
-             * full line; file.hp sees !feof() and reports BOUNDS. */
+            /* Second exact-fit boundary at physical EOF: both readers now
+             * peek fgetc(), see EOF and accept the full line. */
             {
                 FILE *cf4_io_eof_source = tmpfile();
                 char cf4_io_eof_buffer[8];
@@ -425,8 +422,8 @@ int main(void) {
                               strcmp(cf4_io_eof_buffer, "last") == 0 &&
                               cf4_err.ok() == 1,
                           "cf4_io_full_buffer_eof");
-                cf_expect(cf4_io_eof_status != cf4_file_eof_status,
-                          "cf4_eof_mismatch_reproduced");
+                cf_expect(cf4_io_eof_status == cf4_file_eof_status,
+                          "cf4_eof_aligned");
                 fclose(cf4_io_eof_source);
             }
 
