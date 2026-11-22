@@ -6,7 +6,7 @@ Frequently used but WITHOUT a compiler contract: 27
 
 | function | corpus occurrences |
 | --- | ---: |
-| printf | 132 |
+| printf | 133 |
 | scanf | 19 |
 | pthread_create | 16 |
 | pthread_join | 13 |
@@ -14,8 +14,8 @@ Frequently used but WITHOUT a compiler contract: 27
 | snprintf | 7 |
 | puts | 6 |
 | fprintf | 5 |
-| longjmp | 4 |
 | setjmp | 4 |
+| longjmp | 4 |
 | getenv | 3 |
 | strcmp | 3 |
 | pthread_mutex_unlock | 3 |

@@ -1639,6 +1639,10 @@ public:
       if (isa<StringLiteral>(init->IgnoreParenCasts())) {
         stringPtrs_.insert(vd);
       }
+      if (const auto *cle = dyn_cast<CompoundLiteralExpr>(
+              init->IgnoreParenCasts()))
+        if (const auto *cat = ctx_.getAsConstantArrayType(cle->getType()))
+          compoundLiteralVars_[vd] = cat->getSize().getZExtValue();
       if (const auto *call = dyn_cast<CallExpr>(init)) {
         if (call->getDirectCallee() &&
             functionsReturningFreed_.count(
@@ -2855,6 +2859,13 @@ public:
         checkSourceExtent(call, 1, 2);
         checkLibcNullSource(call, baseName);
       }
+      if (baseName == "strncpy" && call->getNumArgs() >= 3) {
+        // strncpy pads the destination with NULs, so a count larger than a
+        // literal source is not a source over-read.
+        if (!isa<StringLiteral>(call->getArg(1)->IgnoreParenCasts()))
+          checkSourceExtent(call, 1, 2);
+        checkLibcNullSource(call, baseName);
+      }
       if (baseName == "memset" && call->getNumArgs() >= 3) {
         checkBoundedCopy(call, "fill");
       }
@@ -3041,16 +3052,42 @@ public:
           unsigned long long es = ctx_.getTypeSize(elem) / 8u;
           if (es == 0)
             return true;
-          if ((unsigned long long)idx * es >= (unsigned long long)hs->bytes)
+          // The flexible array begins AFTER the struct's fixed prefix;
+          // ignoring that prefix misses one-past-end accesses.
+          unsigned long long prefix = 0;
+          if (const auto *pt = ownerExpr->getType()->getAs<PointerType>())
+            prefix = ctx_.getTypeSize(pt->getPointeeType()) / 8u;
+          if (prefix + (unsigned long long)idx * es >=
+              (unsigned long long)hs->bytes)
             report(subscript->getBeginLoc(),
                    "flexible array index " + std::to_string(idx) +
                        " exceeds heap allocation of " +
-                       std::to_string(hs->bytes) + " bytes");
+                       std::to_string(hs->bytes) + " bytes (including "
+                       "struct prefix)");
           return true;
         }
       }
     }
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
+    unsigned long long compExtent = 0;
+    if (const auto *cle = dyn_cast<CompoundLiteralExpr>(base))
+      if (const auto *cat = ctx_.getAsConstantArrayType(cle->getType()))
+        compExtent = cat->getSize().getZExtValue();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(base))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        auto it = compoundLiteralVars_.find(vd);
+        if (it != compoundLiteralVars_.end())
+          compExtent = it->second;
+      }
+    if (compExtent) {
+      long long ci = 0;
+      if (evalIndexValue(subscript->getIdx(), ci) && ci >= 0 &&
+          (unsigned long long)ci >= compExtent)
+        report(subscript->getBeginLoc(),
+               "array index " + std::to_string(ci) +
+                   " exceeds compound literal of length " +
+                   std::to_string(compExtent));
+    }
     QualType baseType = base->getType();
     const auto *arrayType = ctx_.getAsConstantArrayType(baseType);
     if (!arrayType)
@@ -3227,6 +3264,7 @@ private:
   std::map<std::string, SourceLocation> aliasLocs_;
   std::map<std::string, SourceLocation> releaseLocs_;
   std::set<const VarDecl *> stringPtrs_;
+  std::map<const VarDecl *, unsigned long long> compoundLiteralVars_;
   std::map<std::string, HeapAllocState> heapAllocs_;
   std::set<const VarDecl *> heapWritten_;
   std::set<const VarDecl *> heapInterior_;

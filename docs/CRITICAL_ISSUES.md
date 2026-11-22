@@ -10,7 +10,7 @@ supports.
 to 91 safe programs (48 mutants). Detection rate is reported per family
 (zero-size allocation, shrunk array, missing free, removed null guard) in
 `tests/out/metrics/mutation/report.txt`. Families with low detection are
-explicit gaps, not hidden. The 28 gaps in `bugs51_97` are also listed by name.
+explicit gaps, not hidden. The 25 remaining gaps in `bugs51_97` are listed by name; flexible-array prefix, strncpy source extent and compound-literal bounds gaps were closed with paired regressions in `tests/core/gap_close_suite.py`.
 
 ## 2. Library coverage is incomplete
 

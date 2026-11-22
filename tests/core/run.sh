@@ -300,6 +300,13 @@ else
   bad p0_correctness_suite "$(head -1 "$OUT/p0_correctness.log")"
 fi
 
+# Paired negative/positive regressions for closed pointer/bounds/lifetime gaps.
+if python3 "$ROOT/tests/core/gap_close_suite.py" >"$OUT/gap_close.log" 2>&1; then
+  ok gap_close_suite
+else
+  bad gap_close_suite "$(head -3 "$OUT/gap_close.log")"
+fi
+
 # End-to-end: compiler + runtime + contracts + sanitizer + multi-TU linkage.
 if python3 "$ROOT/tests/core/integration_suite.py" >"$OUT/integration.log" 2>&1; then
   ok integration_suite
