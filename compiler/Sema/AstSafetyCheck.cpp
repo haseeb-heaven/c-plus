@@ -2030,6 +2030,32 @@ public:
       checkHeapSubscript(subscript, subscript->getBeginLoc());
       return true;
     }
+    // Flexible array member: `p->items[i]` where p is a heap allocation with
+    // a known byte extent. The FAM begins at the struct's fixed-size prefix.
+    if (const auto *me = dyn_cast<MemberExpr>(
+            subscript->getBase()->IgnoreParenImpCasts())) {
+      const Expr *ownerExpr = me->getBase();
+      if (const HeapAllocState *hs = heapStateOf(ownerExpr)) {
+        const auto *field = dyn_cast<FieldDecl>(me->getMemberDecl());
+        const auto *famType = field ? ctx_.getAsIncompleteArrayType(field->getType())
+                                    : nullptr;
+        if (famType) {
+          long long idx = 0;
+          if (!evalIndexValue(subscript->getIdx(), idx) || idx < 0)
+            return true;
+          QualType elem = famType->getElementType();
+          unsigned long long es = ctx_.getTypeSize(elem) / 8u;
+          if (es == 0)
+            return true;
+          if ((unsigned long long)idx * es >= (unsigned long long)hs->bytes)
+            report(subscript->getBeginLoc(),
+                   "flexible array index " + std::to_string(idx) +
+                       " exceeds heap allocation of " +
+                       std::to_string(hs->bytes) + " bytes");
+          return true;
+        }
+      }
+    }
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
     QualType baseType = base->getType();
     const auto *arrayType = ctx_.getAsConstantArrayType(baseType);
