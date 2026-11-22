@@ -3508,36 +3508,36 @@
           "api": "roundeven",
           "kind": "function",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/math/math_c23.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition. No cplus_ wrapper and no host declaration gated for C17 baseline; not shipped on this branch."
+          "test_file": "tests/libc/test_math_c23.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "math.h",
           "api": "roundevenf",
           "kind": "function",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/math/math_c23.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition. No cplus_ wrapper and no host declaration gated for C17 baseline; not shipped on this branch."
+          "test_file": "tests/libc/test_math_c23.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "math.h",
           "api": "roundevenl",
           "kind": "function",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/math/math_c23.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition. No cplus_ wrapper and no host declaration gated for C17 baseline; not shipped on this branch."
+          "test_file": "tests/libc/test_math_c23.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "math.h",
@@ -9448,48 +9448,48 @@
           "api": "mbrtoc16",
           "kind": "function",
           "c_version": "C11",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/uchar/uchar.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C11 UTF-16/UTF-32 conversion. Host <uchar.h> absent (compile probe failed); no cplus_ implementation. Use the wchar.h multibyte wrappers (cplus_mbrtowc/cplus_wcrtomb) as a UTF-32-in-wchar_t substitute only, with a documented wchar_t-size caveat."
+          "test_file": "tests/libc/test_uchar.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "uchar.h",
           "api": "c16rtomb",
           "kind": "function",
           "c_version": "C11",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/uchar/uchar.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C11 UTF-16/UTF-32 conversion. Host <uchar.h> absent (compile probe failed); no cplus_ implementation. Use the wchar.h multibyte wrappers (cplus_mbrtowc/cplus_wcrtomb) as a UTF-32-in-wchar_t substitute only, with a documented wchar_t-size caveat."
+          "test_file": "tests/libc/test_uchar.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "uchar.h",
           "api": "mbrtoc32",
           "kind": "function",
           "c_version": "C11",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/uchar/uchar.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C11 UTF-16/UTF-32 conversion. Host <uchar.h> absent (compile probe failed); no cplus_ implementation. Use the wchar.h multibyte wrappers (cplus_mbrtowc/cplus_wcrtomb) as a UTF-32-in-wchar_t substitute only, with a documented wchar_t-size caveat."
+          "test_file": "tests/libc/test_uchar.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "uchar.h",
           "api": "c32rtomb",
           "kind": "function",
           "c_version": "C11",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/uchar/uchar.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C11 UTF-16/UTF-32 conversion. Host <uchar.h> absent (compile probe failed); no cplus_ implementation. Use the wchar.h multibyte wrappers (cplus_mbrtowc/cplus_wcrtomb) as a UTF-32-in-wchar_t substitute only, with a documented wchar_t-size caveat."
+          "test_file": "tests/libc/test_uchar.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "uchar.h",
@@ -10059,132 +10059,132 @@
           "api": "wcscoll",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "wcsxfrm",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "wcschr",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "wcsrchr",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "wcspbrk",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "wcsspn",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "wcscspn",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "wmemchr",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "fgetws",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "fputws",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
           "api": "mbsinit",
           "kind": "function",
           "c_version": "C95",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/wchar/wchar_gaps.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <wchar.h> but no cplus_ wrapper is declared in cplus_libc.h and no source definition exists. The host <wchar.h> provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_wchar_gaps.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "wchar.h",
@@ -10716,72 +10716,72 @@
           "api": "cacos",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "casin",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "catan",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "cacosh",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "casinh",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "catanh",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
@@ -10980,72 +10980,72 @@
           "api": "cacosf",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "casinf",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "catanf",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "cacoshf",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "casinhf",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "catanhf",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
@@ -11244,72 +11244,72 @@
           "api": "cacosl",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "casinl",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "catanl",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "cacoshl",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "casinhl",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
           "api": "catanhl",
           "kind": "function",
           "c_version": "C99",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "PLATFORM_BACKED",
+          "source_file": "libc/src/complex/complex_inverse.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Required by ISO C <complex.h> but no cplus_ wrapper exists. Host provides it, but this library does not expose a namespaced entry point."
+          "test_file": "tests/libc/test_complex_inverse.c",
+          "limitation": "Host-delegated or copied from pinned musl; see source provenance."
         },
         {
           "header": "complex.h",
@@ -11665,10 +11665,11 @@
     "total_apis": 948,
     "by_classification": {
       "HOST/COMPILER-PROVIDED": 359,
+      "PLATFORM_BACKED": 435,
+      "MISSING": 75,
+      "UNSUPPORTED": 49,
       "IMPLEMENTED_BUNDLED": 26,
-      "MISSING": 111,
-      "PLATFORM_BACKED": 403,
-      "UNSUPPORTED": 49
+      "IMPLEMENTED_UPSTREAM": 4
     },
     "by_c_version": {
       "C11": 125,
