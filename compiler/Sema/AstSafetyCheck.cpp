@@ -793,8 +793,16 @@ public:
 
   bool isReleased(const Expr *expr) const {
     std::string key = lvalueKey(expr);
-    return releasedVars_.count(varNameOf(expr)) != 0 ||
-           (!key.empty() && releasedFields_.count(key) != 0);
+    if (releasedVars_.count(varNameOf(expr)) != 0 ||
+        (!key.empty() && releasedFields_.count(key) != 0))
+      return true;
+    // A field alias of an already-released field is also dangling.
+    auto it = fieldAliases_.find(key);
+    if (it != fieldAliases_.end())
+      for (const auto &alias : it->second)
+        if (releasedFields_.count(alias))
+          return true;
+    return false;
   }
 
   bool isMaybeReleased(const Expr *expr, SourceLocation at = {}) const {
@@ -1415,8 +1423,23 @@ public:
 
   bool VisitBinaryOperator(BinaryOperator *op) {
     if (!report_) {
-      if (op->isAssignmentOp())
+      if (op->isAssignmentOp()) {
         assignedVars_.insert(varNameOf(op->getLHS()));
+        // Chained field assignment `a[0].p = a[1].p = malloc(...)`: both
+        // field lvalues alias the same allocation. Record the group so
+        // releasing one invalidates the other.
+        std::string lk = lvalueKey(op->getLHS());
+        const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
+        if (!lk.empty())
+          if (const auto *bo = dyn_cast<BinaryOperator>(rhs))
+            if (bo->isAssignmentOp()) {
+              std::string rk = lvalueKey(bo->getLHS());
+              if (!rk.empty() && rk != lk) {
+                fieldAliases_[lk].insert(rk);
+                fieldAliases_[rk].insert(lk);
+              }
+            }
+      }
       return true;
     }
     // An unsigned value compared with zero via < is always false: the check
@@ -2417,6 +2440,7 @@ public:
   std::set<std::string> nullVars_;
   std::set<std::string> releasedVars_;
   std::set<std::string> releasedFields_;
+  std::map<std::string, std::set<std::string>> fieldAliases_;
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
