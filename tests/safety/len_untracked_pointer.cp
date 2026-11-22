@@ -1,11 +1,9 @@
 #include <stdio.h>
 #include "cplus/cplus.h"
 #include <stdlib.h>
-int main(void) {
-  int *arr = malloc(sizeof(int) * 5);
-  int *ptr = arr;
-  arr[0]=10; arr[1]=20; arr[3]=30;
-  print("Ptr is ", *ptr);
+int main(int argc, char **argv) {
+  (void)argv;
+  int *arr = malloc(argc * sizeof(int));  // runtime size: no tracked length
   print("Arr len is ", arr.len);
   return 0;
 }

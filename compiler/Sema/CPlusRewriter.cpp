@@ -1012,7 +1012,7 @@ private:
   void collectDynamicPointers() {
     static const std::set<std::string> kAllocators = {
         "cplus_alloc", "cplus_zalloc", "cplus_realloc", "cplus_new",
-        "cplus_new_array"};
+        "cplus_new_array", "malloc", "calloc"};
     for (size_t i = 0; i < ts.size(); ++i) {
       if (ts[i].kind != TokKind::Identifier ||
           !kAllocators.count(ts[i].text))
@@ -1045,6 +1045,25 @@ private:
       size_t exprFrom = kNPos, exprTo = kNPos;
       if (ts.isIdent(i, "cplus_new")) {
         expr = "1";
+      } else if (ts.isIdent(i, "malloc") || ts.isIdent(i, "calloc")) {
+        // Derive the element count from the explicit allocation size only when
+        // it is a constant expression. Never infer a length from pointer
+        // arithmetic or a runtime value: those remain untracked.
+        size_t sizeFrom = argStart, sizeTo = argEnd;
+        if (ts.isIdent(i, "calloc")) {
+          if (comma == kNPos)
+            continue;
+          sizeFrom = ts.nextSig(comma);
+          sizeTo = rp;
+          // `calloc(count, size)` gives count elements of `size` bytes, and
+          // the pointee type is `*name`, so count = count*size / sizeof(*name).
+        }
+        if (!isConstantSizeExpr(sizeFrom, sizeTo))
+          continue;
+        exprFrom = sizeFrom;
+        exprTo = sizeTo;
+        std::string sizeExpr = "(" + joinTokens(ts, sizeFrom, sizeTo) + ")";
+        expr = sizeExpr + " / sizeof(*@NAME@)";
       } else if (ts.isIdent(i, "cplus_new_array")) {
         if (comma == kNPos)
           continue;
@@ -1475,8 +1494,26 @@ private:
     else if (selfClass && (ts[i].text == kw::kSelf ||
                            ts[i].text == "this"))
       className = selfClass->name;
-    else
+    else {
+      // A method-style call on a plain pointer/array is invalid. Give a
+      // clear C+ error instead of Clang's "not a structure or union".
+      size_t dot = ts.nextSig(i);
+      if (ts.isPunct(dot, ".") || ts.isPunct(dot, "->")) {
+        size_t member = ts.nextSig(dot);
+        if (member < ts.size() && ts[member].kind == TokKind::Identifier &&
+            ts.isPunct(ts.nextSig(member), "(")) {
+          diags_.error("'" + ts[member].text + "()' cannot be called on '" +
+                           ts[i].text + "'; use the .len property on a static "
+                           "array or C+ managed allocation",
+                       filename_, ts[i].line, ts[i].column);
+          emit("0");
+          skipTo_ = member;
+          changed_ = true;
+          return true;
+        }
+      }
       return false;
+    }
 
     size_t op = ts.nextSig(i);
     // Allow a method call on an array element: `vec[0].method()`.
