@@ -2158,6 +2158,33 @@ private:
   }
 
   /// Negative-value facts in scope at `pos`, or null when none are known.
+  /// True if an earlier `if (x < 0) return;` guard makes the negative fact
+  /// irrelevant past this point (the code cannot continue with x < 0).
+  bool guardedNegative(size_t pos, const std::string &name) const {
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (!(sig.bodyOpen <= pos && pos <= sig.bodyClose))
+        continue;
+      for (size_t k = sig.bodyOpen; k + 5 < pos; ++k) {
+        if (!isIdent(k, "if"))
+          continue;
+        size_t lp = nextSig(k);
+        if (!isPunct(lp, "("))
+          continue;
+        size_t a = nextSig(lp);
+        if (a >= toks_.size() || toks_[a].kind != TokKind::Identifier ||
+            toks_[a].text != name)
+          continue;
+        size_t op = nextSig(a), zero = nextSig(op), rp = nextSig(zero);
+        if (op < toks_.size() && isPunct(op, "<") && zero < toks_.size() &&
+            toks_[zero].text == "0" && rp < toks_.size() && isPunct(rp, ")") &&
+            isIdent(nextSig(rp), "return"))
+          return true;
+      }
+    }
+    return false;
+  }
+
   const std::set<std::string> *negativeFactsAt(size_t pos) const {
     for (const auto &entry : funcs_) {
       const FuncSig &sig = entry.second;
@@ -2202,7 +2229,8 @@ private:
         size_t id = nextSig(close);
         if (id >= to || toks_[id].kind != TokKind::Identifier)
           continue;
-        if (neg->count(toks_[id].text)) {
+        if (neg->count(toks_[id].text) &&
+            !guardedNegative(i, toks_[id].text)) {
           errorAt(toks_[k], "negative length '" + toks_[id].text +
                                 "' converted to size_t becomes a huge size");
           reported = true;
@@ -2223,7 +2251,8 @@ private:
         only = k;
       }
       if (single && only != kNPos && toks_[only].kind == TokKind::Identifier &&
-          neg->count(toks_[only].text))
+          neg->count(toks_[only].text) &&
+          !guardedNegative(i, toks_[only].text))
         errorAt(toks_[only], "negative length '" + toks_[only].text +
                                  "' passed as an unsigned size");
     }
