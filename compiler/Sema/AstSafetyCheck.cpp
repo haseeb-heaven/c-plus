@@ -1599,6 +1599,15 @@ public:
     const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
     if (!vd)
       return;
+    // Heap allocation with a known byte extent.
+    if (const HeapAllocState *hs = heapStateOf(dst)) {
+      if ((unsigned long long)bytes > (unsigned long long)hs->bytes)
+        report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
+                                        " bytes exceeds heap allocation '" +
+                                        vd->getNameAsString() + "' of " +
+                                        std::to_string(hs->bytes) + " bytes");
+      return;
+    }
     const auto *at = ctx_.getAsConstantArrayType(vd->getType());
     if (!at)
       return;

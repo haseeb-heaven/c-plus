@@ -165,6 +165,7 @@ expect_reject pointer_subtract_arrays "$ROOT/tests/safety/pointer_subtract_array
 expect_reject len_untracked_pointer "$ROOT/tests/safety/len_untracked_pointer.cp"
 expect_reject len_expired_pointer "$ROOT/tests/safety/len_expired_pointer.cp"
 expect_reject null_assignment_deref "$ROOT/tests/safety/null_assignment_deref.cp"
+expect_reject heap_extent_libc_overflow "$ROOT/tests/safety/heap_extent_libc_overflow.c"
 expect_reject realloc_failure "$ROOT/tests/safety/realloc_failure.c"
 expect_reject realloc_success_alias_uaf "$ROOT/tests/safety/realloc_success_alias_uaf.c"
 expect_reject memcpy_overflow "$ROOT/tests/safety/memcpy_overflow.c"
