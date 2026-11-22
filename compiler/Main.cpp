@@ -74,8 +74,9 @@ void printUsage(raw_ostream &os) {
   os << "  --legacy-c       legacy C compatibility mode (NOT memory safe)\n";
   os << "  --default        DEFAULT mode: report proven errors, warn if unverified\n";
   os << "  --strict         STRICT mode: reject unverified operations (fail closed)\n";
-  os << "  --sanitize=NAME  runtime sanitizers: none|address|undefined|address,undefined\n";
-  os << "                   (Safe mode defaults to undefined; --no-sanitize disables all)\n";
+  os << "  --sanitize=LIST  comma-separated: none|address|undefined|memory|thread|\n";
+  os << "                   leak|cfi|integer (Safe mode defaults to undefined)\n";
+  os << "  --no-sanitize    plain unsanitized build (alias: --sanitize=none)\n";
   os << "  -o <file>        output path\n";
   os << "  --emit-c <file>  write the lowered C source for inspection\n";
   os << "  --keep-temp      keep the generated C file\n";
@@ -160,7 +161,8 @@ int main(int argc, char **argv) {
       opts.strict = false;
       continue;
     }
-    if (a == "--sanitize" || a.rfind("--sanitize=", 0) == 0) {
+    if (a == "--sanitize" || a.rfind("--sanitize=", 0) == 0 ||
+        a.rfind("-fsanitize=", 0) == 0) {
       std::string value;
       if (a == "--sanitize") {
         if (i + 1 >= argc) {
@@ -168,24 +170,49 @@ int main(int argc, char **argv) {
           return 1;
         }
         value = argv[++i];
+      } else if (a.rfind("-fsanitize=", 0) == 0) {
+        value = a.substr(strlen("-fsanitize="));
       } else {
         value = a.substr(strlen("--sanitize="));
       }
-      if (value == "none" || value == "off") {
-        opts.sanitizer = Sanitizer::None;
-      } else if (value == "address" || value == "asan") {
-        opts.sanitizer = Sanitizer::Address;
-      } else if (value == "undefined" || value == "ubsan") {
-        opts.sanitizer = Sanitizer::Undefined;
-      } else if (value == "address,undefined" ||
-                 value == "undefined,address" || value == "asan+ubsan" ||
-                 value == "all") {
-        opts.sanitizer = Sanitizer::Both;
-      } else {
-        errs() << "error: invalid --sanitize value '" << value
-               << "' (expected none|address|undefined|address,undefined)\n";
-        return 1;
+      Sanitizer selected = Sanitizer::None;
+      size_t pos = 0;
+      while (pos <= value.size()) {
+        size_t comma = value.find_first_of(",+", pos);
+        std::string name = value.substr(
+            pos, comma == std::string::npos ? std::string::npos : comma - pos);
+        if (name == "none" || name == "off") {
+          selected = Sanitizer::None;
+        } else if (name == "address" || name == "asan") {
+          selected = selected | Sanitizer::Address;
+        } else if (name == "undefined" || name == "ubsan") {
+          selected = selected | Sanitizer::Undefined;
+        } else if (name == "memory" || name == "msan") {
+          selected = selected | Sanitizer::Memory;
+        } else if (name == "thread" || name == "tsan") {
+          selected = selected | Sanitizer::Thread;
+        } else if (name == "leak" || name == "lsan") {
+          selected = selected | Sanitizer::Leak;
+        } else if (name == "cfi") {
+          selected = selected | Sanitizer::Cfi;
+        } else if (name == "integer" || name == "unsigned" ||
+                   name == "unsigned-integer-overflow") {
+          selected = selected | Sanitizer::Integer;
+        } else if (name == "all") {
+          selected = Sanitizer::Address | Sanitizer::Undefined |
+                     Sanitizer::Thread | Sanitizer::Leak | Sanitizer::Cfi |
+                     Sanitizer::Integer;
+        } else {
+          errs() << "error: invalid sanitizer '" << name
+                 << "' (expected none|address|undefined|memory|thread|leak|"
+                    "cfi|integer)\n";
+          return 1;
+        }
+        if (comma == std::string::npos)
+          break;
+        pos = comma + 1;
       }
+      opts.sanitizer = selected;
       opts.sanitizerExplicit = true;
       continue;
     }

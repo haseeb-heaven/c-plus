@@ -72,12 +72,22 @@ def choose_backend():
 CLANG, EXTRA = choose_backend()
 
 CASES = [
-    ("heap_overflow", "address", "AddressSanitizer: heap-buffer-overflow"),
-    ("stack_overflow", "address", "AddressSanitizer: stack-buffer-overflow"),
-    ("use_after_free", "address", "AddressSanitizer: heap-use-after-free"),
-    ("double_free", "address", "AddressSanitizer: attempting double-free"),
-    ("flex_array_overflow", "address", "AddressSanitizer: heap-buffer-overflow"),
-    ("ubsan_overflow", "undefined", "runtime error: signed integer overflow"),
+    ("heap_overflow", "address", "AddressSanitizer: heap-buffer-overflow", False),
+    ("stack_overflow", "address", "AddressSanitizer: stack-buffer-overflow", False),
+    ("global_overflow", "address", "AddressSanitizer: global-buffer-overflow", False),
+    ("use_after_free", "address", "AddressSanitizer: heap-use-after-free", False),
+    ("double_free", "address", "AddressSanitizer: attempting double-free", False),
+    ("flex_array_overflow", "address", "AddressSanitizer: heap-buffer-overflow", False),
+    ("cplus_alloc_overflow", "address", "AddressSanitizer: heap-buffer-overflow", False),
+    ("leak", "leak", "ERROR: LeakSanitizer: detected memory leaks", False),
+    ("ubsan_overflow", "undefined", "runtime error: signed integer overflow", False),
+    ("invalid_shift", "undefined", "runtime error: shift exponent", False),
+    ("null_deref", "undefined", "runtime error: load of null pointer", False),
+    ("misaligned", "undefined", "store to misaligned address", False),
+    ("unsigned_overflow", "integer", "runtime error: unsigned integer overflow", False),
+    ("race", "thread", "WARNING: ThreadSanitizer: data race", True),
+    ("invalid_indirect_call", "cfi",
+     "runtime error: control flow integrity check", True),
 ]
 
 results = []
@@ -87,11 +97,14 @@ base_env["ASAN_OPTIONS"] = "detect_leaks=0"
 base_env["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
 
 
-def build_run(src, mode, name, verbose=False):
+def build_run(src, mode, name, verbose=False, legacy=False):
     exe = OUT / f"{name}.bin"
     if exe.exists():
         exe.unlink()
-    cmd = [CC, "build", f"--sanitize={mode}"]
+    cmd = [CC, "build"]
+    if legacy:
+        cmd.append("--legacy-c")
+    cmd.append(f"--sanitize={mode}")
     if verbose:
         cmd.append("--verbose")
     cmd += [str(src), "-o", str(exe)]
@@ -106,8 +119,8 @@ def build_run(src, mode, name, verbose=False):
     return r, b.stderr + b.stdout
 
 
-for name, mode, expected in CASES:
-    r, build_out = build_run(SRC / f"{name}.c", mode, name)
+for name, mode, expected, legacy in CASES:
+    r, build_out = build_run(SRC / f"{name}.c", mode, name, legacy=legacy)
     if r is None:
         results.append((name, "negative", False, expected,
                         "build failed: " + build_out.strip().splitlines()[-1][:100]))
@@ -119,7 +132,8 @@ for name, mode, expected in CASES:
                          f"exit {r.returncode}")[:120]))
 
 # Safe program under each configuration must exit cleanly with no diagnostic.
-for mode in ["none", "address", "undefined", "address,undefined"]:
+for mode in ["none", "address", "undefined", "address,undefined",
+             "leak", "cfi", "integer"]:
     name = "clean_" + mode.replace(",", "_")
     r, build_out = build_run(SRC / "clean.c", mode, name)
     if r is None:
@@ -130,6 +144,40 @@ for mode in ["none", "address", "undefined", "address,undefined"]:
     bad = ("AddressSanitizer" in diag or "runtime error:" in diag)
     ok = r.returncode == 0 and not bad
     results.append((name, "positive", ok, "exit 0", f"exit {r.returncode}"))
+
+r, build_out = build_run(SRC / "clean_thread.c", "thread", "clean_thread",
+                         legacy=True)
+if r is None:
+    results.append(("clean_thread", "positive", False, "exit 0",
+                    "build failed: " + build_out.strip().splitlines()[-1][:100]))
+else:
+    diag = r.stderr + r.stdout
+    bad = "WARNING: ThreadSanitizer" in diag or "runtime error:" in diag
+    ok = r.returncode == 0 and not bad
+    results.append(("clean_thread", "positive", ok, "exit 0", f"exit {r.returncode}"))
+
+# Unsupported explicit selections and conflicting combinations are diagnosed.
+unsupported = subprocess.run(
+    [CC, "build", "--sanitize=memory", str(SRC / "clean.c"), "-o",
+     str(OUT / "never.bin")], capture_output=True, text=True, env=base_env,
+    timeout=240)
+results.append(("msan_explicit_error", "capability",
+                unsupported.returncode != 0 and
+                "not supported by the selected backend" in
+                (unsupported.stderr + unsupported.stdout),
+                "explicit unsupported diagnostic",
+                (unsupported.stderr + unsupported.stdout).strip().splitlines()[-1][:110]))
+
+conflict = subprocess.run(
+    [CC, "build", "--sanitize=address,thread", str(SRC / "clean.c"), "-o",
+     str(OUT / "never.bin")], capture_output=True, text=True, env=base_env,
+    timeout=240)
+results.append(("conflict_explicit_error", "config",
+                conflict.returncode != 0 and
+                "unsupported sanitizer combination" in
+                (conflict.stderr + conflict.stdout),
+                "explicit conflict diagnostic",
+                (conflict.stderr + conflict.stdout).strip().splitlines()[-1][:110]))
 
 # Flag plumbing: both compile and link commands must carry the flags.
 def linked_symbols(name):
@@ -159,6 +207,13 @@ results.append(("combined_compile_flags", "config", ok,
                 "both sanitizer flags at compile",
                 f"asan={'-fsanitize=address' in verbose_both} "
                 f"ubsan={'-fsanitize=undefined' in verbose_both}"))
+
+_, verbose_rt = build_run(SRC / "clean.c", "address", "runtime_instr",
+                          verbose=True)
+ok = "cplus_runtime.c" in verbose_rt and "-fsanitize=address" in verbose_rt
+results.append(("runtime_instrumented", "config", ok,
+                "runtime source compiled with sanitizer",
+                f"source={'cplus_runtime.c' in verbose_rt}"))
 
 passed = sum(1 for _, _, ok, _, _ in results if ok)
 lines = [f"sanitizer suite: {passed}/{len(results)} passed "

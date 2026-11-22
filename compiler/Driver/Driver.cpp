@@ -518,6 +518,183 @@ std::string preprocessModernHeaders(
   return result;
 }
 
+/// Locate the runtime source so it can be instrumented for sanitizer builds.
+static std::string runtimeSourcePath() {
+  std::string root = findSourceRoot();
+  if (root.empty())
+    return std::string();
+  std::string candidate = joinPath(root, "runtime/cplus_runtime.c");
+  return fileExists(candidate) ? candidate : std::string();
+}
+
+static Sanitizer effectiveSanitizer(const DriverOptions &opts) {
+  if (!opts.sanitizerExplicit && opts.mode == Mode::LegacyC)
+    return Sanitizer::None;
+  return opts.sanitizer;
+}
+
+/// Return a human-readable conflict when two sanitizers cannot coexist.
+static std::string sanitizerConflict(Sanitizer s) {
+  if (wants(s, Sanitizer::Address) && wants(s, Sanitizer::Thread))
+    return "address and thread sanitizers cannot be combined";
+  if (wants(s, Sanitizer::Address) && wants(s, Sanitizer::Memory))
+    return "address and memory sanitizers cannot be combined";
+  if (wants(s, Sanitizer::Thread) && wants(s, Sanitizer::Memory))
+    return "thread and memory sanitizers cannot be combined";
+  if (wants(s, Sanitizer::Leak) &&
+      (wants(s, Sanitizer::Address) || wants(s, Sanitizer::Thread) ||
+       wants(s, Sanitizer::Memory)))
+    return "leak sanitizer must be selected alone or with undefined/cfi/integer";
+  if (wants(s, Sanitizer::Cfi) &&
+      (wants(s, Sanitizer::Memory) || wants(s, Sanitizer::Thread)))
+    return "cfi cannot be combined with memory or thread sanitizers";
+  return std::string();
+}
+
+/// Flags for one sanitizer bit. CFI needs LTO and non-trapping mode so a
+/// violation produces a diagnostic instead of a silent SIGTRAP.
+static void addSanitizerFlags(std::vector<std::string> &args, Sanitizer san) {
+  if (wants(san, Sanitizer::Address))
+    args.push_back("-fsanitize=address");
+  if (wants(san, Sanitizer::Undefined))
+    args.push_back("-fsanitize=undefined,bounds,null,alignment");
+  if (wants(san, Sanitizer::Memory))
+    args.push_back("-fsanitize=memory");
+  if (wants(san, Sanitizer::Thread)) {
+    args.push_back("-fsanitize=thread");
+    args.push_back("-pthread");
+  }
+  if (wants(san, Sanitizer::Leak))
+    args.push_back("-fsanitize=leak");
+  if (wants(san, Sanitizer::Cfi)) {
+    args.push_back("-fsanitize=cfi");
+    args.push_back("-flto");
+    args.push_back("-fvisibility=hidden");
+    args.push_back("-fno-sanitize-trap=cfi");
+  }
+  if (wants(san, Sanitizer::Integer))
+    args.push_back("-fsanitize=unsigned-integer-overflow,"
+                   "implicit-integer-truncation,"
+                   "implicit-integer-arithmetic-value-change");
+  if (san != Sanitizer::None) {
+    args.push_back("-fno-sanitize-recover=all");
+    args.push_back("-fno-omit-frame-pointer");
+    args.push_back("-g"); // debug info for actionable stack traces
+  }
+}
+
+static const char *sanitizerBitName(Sanitizer bit) {
+  switch (bit) {
+  case Sanitizer::Address: return "address";
+  case Sanitizer::Undefined: return "undefined";
+  case Sanitizer::Memory: return "memory";
+  case Sanitizer::Thread: return "thread";
+  case Sanitizer::Leak: return "leak";
+  case Sanitizer::Cfi: return "cfi";
+  case Sanitizer::Integer: return "integer";
+  default: return "none";
+  }
+}
+
+/// Probe source and expected diagnostic for a sanitizer bit.
+struct SanProbe {
+  const char *source;
+  const char *needle;
+};
+
+static SanProbe probeFor(Sanitizer bit) {
+  switch (bit) {
+  case Sanitizer::Address:
+    return {"#include <stdlib.h>\nint main(void){int*p=malloc(4);if(!p)return 1;"
+            "volatile int i=4;p[i]=1;free(p);return 0;}\n",
+            "ERROR: AddressSanitizer:"};
+  case Sanitizer::Undefined:
+    return {"int main(void){int x=2147483647;volatile int y=1;"
+            "return (x+y)==0?0:1;}\n", "runtime error:"};
+  case Sanitizer::Memory:
+    return {"int main(void){int x; return x;}\n", "use-of-uninitialized-value"};
+  case Sanitizer::Thread:
+    return {"#include <pthread.h>\nstatic int x;static void*t(void*a){(void)a;"
+            "x++;return 0;}\nint main(void){pthread_t a,b;"
+            "pthread_create(&a,0,t,0);pthread_create(&b,0,t,0);"
+            "pthread_join(a,0);pthread_join(b,0);return 0;}\n",
+            "WARNING: ThreadSanitizer:"};
+  case Sanitizer::Leak:
+    return {"#include <stdlib.h>\nint main(void){void*p=malloc(32);(void)p;"
+            "return 0;}\n", "ERROR: LeakSanitizer:"};
+  case Sanitizer::Cfi:
+    return {"typedef void(*F)(void);static int w(int x){return x;}"
+            "int main(void){F f=(F)&w;f();return 0;}\n",
+            "control flow integrity check"};
+  case Sanitizer::Integer:
+    return {"#include <stdint.h>\nint main(void){uint32_t x=4294967295u;"
+            "volatile uint32_t o=1;return (int)(x+o);}\n",
+            "unsigned integer overflow"};
+  default:
+    return {"", ""};
+  }
+}
+
+/// Probe the selected backend for a sanitizer. Compile support AND a real
+/// runtime diagnostic must both work; a successful compile alone is not
+/// evidence of support. Results are cached per process.
+static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
+                               const std::vector<std::string> &extra) {
+  static std::map<std::string, bool> cache;
+  std::string key = clang + "|" + std::to_string(static_cast<unsigned>(bit));
+  for (const auto &a : extra)
+    key += "|" + a;
+  auto it = cache.find(key);
+  if (it != cache.end())
+    return it->second;
+  SanProbe probe = probeFor(bit);
+  if (!probe.source || !*probe.source)
+    return cache[key] = false;
+  llvm::SmallString<256> srcPath, exePath;
+  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".c", srcPath))
+    return cache[key] = false;
+  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath))
+    return cache[key] = false;
+  {
+    std::ofstream os(srcPath.c_str());
+    os << probe.source;
+  }
+  std::vector<std::string> flags;
+  addSanitizerFlags(flags, bit);
+  std::string cmd = "'" + clang + "' -std=gnu17 -g";
+  for (const auto &a : extra)
+    cmd += " '" + a + "'";
+  for (const auto &f : flags)
+    if (f.rfind("-fsanitize=", 0) == 0 || f == "-fno-sanitize-trap=cfi" ||
+        f == "-flto" || f == "-fvisibility=hidden")
+      cmd += " '" + f + "'";
+  std::string compileLog = std::string(srcPath.str()) + ".compile.log";
+  cmd += " -o '" + std::string(exePath.str()) + "' '" + std::string(srcPath.str()) +
+         "' > '" + compileLog + "' 2>&1";
+  int rc = system(cmd.c_str());
+  if (rc != 0) {
+    llvm::sys::fs::remove(srcPath);
+    llvm::sys::fs::remove(compileLog);
+    return cache[key] = false;
+  }
+  std::string runLog = std::string(exePath.str()) + ".log";
+  std::string runCmd = "exec 2>/dev/null; "
+                       "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 '" +
+                       std::string(exePath.str()) + "' > /dev/null 2> '" +
+                       runLog + "'";
+  (void)system(runCmd.c_str());
+  std::ifstream log(runLog);
+  std::stringstream buf;
+  buf << log.rdbuf();
+  std::string output = buf.str();
+  llvm::sys::fs::remove(srcPath);
+  llvm::sys::fs::remove(exePath);
+  llvm::sys::fs::remove(compileLog);
+  llvm::sys::fs::remove(runLog);
+  return cache[key] = (output.find(probe.needle) != std::string::npos &&
+                       output.find("CHECK failed") == std::string::npos);
+}
+
 static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   std::vector<std::string> args;
   args.push_back(opts.mode == Mode::LegacyC ? "-std=gnu89" : "-std=gnu17");
@@ -554,17 +731,8 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   // Runtime sanitizers. Flags are part of `base`, which is used for both
   // per-file compilation and the final link, so the sanitizer runtime is
   // linked into the executable as well.
-  Sanitizer san = opts.sanitizer;
-  if (!opts.sanitizerExplicit && opts.mode == Mode::LegacyC)
-    san = Sanitizer::None; // legacy builds are unsanitized unless requested
-  if (sanitizerWantsAddress(san))
-    args.push_back("-fsanitize=address");
-  if (sanitizerWantsUndefined(san))
-    args.push_back("-fsanitize=undefined,bounds,null,alignment");
-  if (san != Sanitizer::None) {
-    args.push_back("-fno-sanitize-recover=all");
-    args.push_back("-fno-omit-frame-pointer");
-  }
+  Sanitizer san = effectiveSanitizer(opts);
+  addSanitizerFlags(args, san);
   if (opts.warningsAsErrors)
     args.push_back("-Werror");
   if (opts.verbose)
@@ -594,6 +762,30 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   }
 
   const std::string clang = findClangBinary();
+  // Validate the sanitizer selection before doing any work. Never silently
+  // ignore an option or let an unsupported combination fail later at link.
+  Sanitizer san = effectiveSanitizer(opts);
+  if (!sanitizerConflict(san).empty()) {
+    errs << "error: unsupported sanitizer combination: "
+         << sanitizerConflict(san) << "\n";
+    return 1;
+  }
+  if (opts.sanitizerExplicit) {
+    static const Sanitizer kBits[] = {
+        Sanitizer::Address, Sanitizer::Undefined, Sanitizer::Memory,
+        Sanitizer::Thread,  Sanitizer::Leak,      Sanitizer::Cfi,
+        Sanitizer::Integer};
+    for (Sanitizer bit : kBits) {
+      if (!wants(san, bit))
+        continue;
+      if (!sanitizerSupported(bit, clang, opts.extraArgs)) {
+        errs << "error: sanitizer '" << sanitizerBitName(bit)
+             << "' is not supported by the selected backend ("
+             << clang << "); detected by a compile-and-run probe\n";
+        return 1;
+      }
+    }
+  }
   std::string output = opts.output;
   if (output.empty() && !opts.preprocessOnly) {
     if (opts.compileOnly)
@@ -605,6 +797,38 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   }
   std::vector<std::string> base = backendArgs(opts);
   std::vector<std::string> objects;
+  bool instrumentedRuntime = false;
+  if (san != Sanitizer::None) {
+    std::string runtimeSrc = runtimeSourcePath();
+    if (runtimeSrc.empty()) {
+      errs << "warning: C+ runtime source not found; runtime library will "
+              "not be instrumented by the selected sanitizers\n";
+    } else {
+      llvm::SmallString<256> objPath;
+      if (llvm::sys::fs::createTemporaryFile("cplus_runtime_san", ".o",
+                                             objPath)) {
+        errs << "error: cannot create temporary object for runtime "
+                "instrumentation\n";
+        return 1;
+      }
+      std::vector<std::string> rtArgs = base;
+      rtArgs.push_back("-c");
+      rtArgs.push_back("-o");
+      rtArgs.push_back(std::string(objPath.str()));
+      rtArgs.push_back(runtimeSrc);
+      for (const auto &a : opts.extraArgs)
+        rtArgs.push_back(a);
+      if (runProgram(clang, rtArgs) != 0) {
+        errs << "error: failed to compile instrumented C+ runtime\n";
+        llvm::sys::fs::remove(objPath);
+        return 1;
+      }
+      objects.push_back(std::string(objPath.str()));
+      instrumentedRuntime = true;
+      DRIVER_LOG(CLOG_INFO, "instrumented runtime: %s",
+                 runtimeSrc.c_str());
+    }
+  }
   std::vector<TempFile> guards;
   std::string pidSuffix = std::to_string(::getpid());
 
@@ -728,9 +952,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   std::vector<std::string> linkArgs = base;
   for (const auto &obj : objects)
     linkArgs.push_back(obj);
-  std::string runtime = runtimeLibArg();
-  if (!runtime.empty())
-    linkArgs.push_back(runtime);
+  if (!instrumentedRuntime) {
+    std::string runtime = runtimeLibArg();
+    if (!runtime.empty())
+      linkArgs.push_back(runtime);
+  }
   for (const auto &a : opts.extraArgs)
     linkArgs.push_back(a);
   linkArgs.push_back("-o");

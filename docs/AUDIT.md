@@ -62,10 +62,16 @@ allocator as the C+-specific layer.
 
 ## Remaining blockers (verified, not assumed)
 
-- **Use-after-free:** AddressSanitizer aborts inside its own runtime on this
-  host (`sanitizer_malloc_mac.inc:189`). TSan also fails with "Interceptors
-  are not working". No automatic stale-dereference detection is possible
-  here. `cplus_check_live()` provides an explicit check.
+- **Use-after-free with the default backend:** Apple clang 16's
+  AddressSanitizer aborts inside its own runtime on this host
+  (`sanitizer_malloc_mac.inc:189`), and its TSan interceptors also fail. With
+  Homebrew clang 23 (plus `-isysroot`), `--sanitize=address` detects UAF,
+  double free, heap/stack/global overflow and flexible-array overflow, and
+  `--sanitize=thread` detects data races; the driver now probes actual
+  detection before accepting an explicit sanitizer request. See
+  `docs/CAPABILITIES.md` for the full matrix and `tests/core/sanitizer_suite.py`
+  for the diagnostic assertions. `cplus_check_live()` remains available as an
+  explicit check in unsanitized builds.
 - **Clang bounds safety:** unsupported by the available clang binary.
 - **Full data-race prevention:** only direct global writes in thread entry
   functions are diagnosed; atomics, aliases and helper-thread patterns are

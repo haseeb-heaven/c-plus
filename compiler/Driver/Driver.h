@@ -24,19 +24,32 @@ namespace llvm { class raw_ostream; }
 namespace cplus {
 
 /// Runtime sanitizers selected for the generated binary. These are added to
-/// BOTH the compile and the final link command lines.
-enum class Sanitizer {
-  None = 0,      ///< no sanitizers (plain build)
-  Address = 1,   ///< AddressSanitizer (heap/stack/use-after-free)
-  Undefined = 2, ///< UndefinedBehaviorSanitizer
-  Both = 3,      ///< ASan + UBSan in one build
+/// BOTH the compile and the final link command lines. Values are a bitmask so
+/// compatible combinations can be expressed.
+enum class Sanitizer : unsigned {
+  None = 0,
+  Address = 1u << 0,   ///< AddressSanitizer
+  Undefined = 1u << 1, ///< UndefinedBehaviorSanitizer
+  Memory = 1u << 2,    ///< MemorySanitizer (Linux x86-64 only)
+  Thread = 1u << 3,    ///< ThreadSanitizer
+  Leak = 1u << 4,      ///< LeakSanitizer
+  Cfi = 1u << 5,       ///< Control Flow Integrity (requires LTO)
+  Integer = 1u << 6,   ///< unsigned overflow / suspicious conversions
 };
 
-inline bool sanitizerWantsAddress(Sanitizer s) {
-  return s == Sanitizer::Address || s == Sanitizer::Both;
+inline Sanitizer operator|(Sanitizer a, Sanitizer b) {
+  return static_cast<Sanitizer>(static_cast<unsigned>(a) |
+                                static_cast<unsigned>(b));
 }
-inline bool sanitizerWantsUndefined(Sanitizer s) {
-  return s == Sanitizer::Undefined || s == Sanitizer::Both;
+inline Sanitizer operator&(Sanitizer a, Sanitizer b) {
+  return static_cast<Sanitizer>(static_cast<unsigned>(a) &
+                                static_cast<unsigned>(b));
+}
+inline bool wants(Sanitizer set, Sanitizer bit) {
+  return (set & bit) != Sanitizer::None;
+}
+inline Sanitizer bothAsanUbsan() {
+  return Sanitizer::Address | Sanitizer::Undefined;
 }
 
 struct DriverOptions {
