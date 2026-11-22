@@ -1204,6 +1204,19 @@ public:
     }
     // An unsigned value compared with zero via < is always false: the check
     // can never protect anything, so it is a provable logic bug.
+    // Subtracting pointers into different allocations is undefined behaviour.
+    if (op->getOpcode() == BO_Sub && op->getType()->isIntegerType() &&
+        op->getLHS()->getType()->isPointerType()) {
+      std::string lhs = varNameOf(op->getLHS());
+      std::string rhs = varNameOf(op->getRHS());
+      auto li = heapAllocs_.find(lhs), ri = heapAllocs_.find(rhs);
+      if (!lhs.empty() && !rhs.empty() && lhs != rhs &&
+          li != heapAllocs_.end() && ri != heapAllocs_.end() &&
+          li->second.decl != ri->second.decl)
+        report(op->getBeginLoc(),
+               "pointer subtraction between distinct allocations '" + lhs +
+                   "' and '" + rhs + "' is undefined");
+    }
     if ((op->getOpcode() == BO_LT && isNullConstant(op->getRHS()) &&
          !op->getLHS()->getType().isNull() &&
          op->getLHS()->getType()->isUnsignedIntegerType()) ||
