@@ -255,6 +255,12 @@ else
   bad quarantine_uaf "build failed"
 fi
 
+# Format-string / stdio review corpus (25 scenarios): all must be rejected
+# in STRICT mode. Fixtures are generated from scratch/review inputs.
+for f in "$ROOT"/tests/safety/fmt25_*.c; do
+  expect_strict_reject "$(basename "$f" .c)" "$f"
+done
+
 echo
 echo "core safety: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

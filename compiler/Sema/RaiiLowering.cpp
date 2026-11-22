@@ -1098,6 +1098,7 @@ private:
     std::vector<std::map<std::string, LocalVar>> scopes(1);
     std::map<std::string, RawAlloc> live;          // live on the linear path
     std::set<std::string> closedFiles;             // fopen results already closed
+    std::map<std::string, std::set<std::string>> fileAliases; // FILE* copies
     std::set<std::string> nullChecked;            // fopen vars with a null test
     // `p -> (inner local, scope index)` for `p = &innerLocal`.
     std::map<std::string, std::pair<std::string, int>> dangling;
@@ -1219,8 +1220,16 @@ private:
         if (!lhsName.empty() && rhs < closeIdx &&
             toks_[rhs].kind == TokKind::Identifier && lhsName != toks_[rhs].text) {
           auto rit = live.find(toks_[rhs].text);
-          if (rit != live.end())
+          if (rit != live.end()) {
+            // `FILE *f2 = f1;` is an alias, not an ownership transfer. Track
+            // the copy so fclose through either name invalidates both.
+            LocalVar *lv = lookupLocal(lhsName);
+            if (rit->second.kind == AllocKind::Fopen && lv && lv->isPointer) {
+              fileAliases[lhsName].insert(toks_[rhs].text);
+              fileAliases[toks_[rhs].text].insert(lhsName);
+            }
             rit->second.escaped = true;
+          }
         }
 
         if (!lhsName.empty() && (isDerefLhs(lhs) || params.count(lhsName))) {
@@ -1319,6 +1328,10 @@ private:
                                "' from fopen",
                            t, "test the fopen result before closing it");
               closedFiles.insert(name);
+              auto ait = fileAliases.find(name);
+              if (ait != fileAliases.end())
+                for (const auto &a : ait->second)
+                  closedFiles.insert(a);
             }
             live.erase(it); // freed on this path
           }
@@ -1412,10 +1425,17 @@ private:
         // used again (this also catches `fclose(f); fprintf(f, ...);`).
         size_t lp = nextSig(i);
         size_t arg = isPunct(lp, "(") ? nextSig(lp) : kNPos;
-        if (arg < closeIdx && toks_[arg].kind == TokKind::Identifier &&
-            closedFiles.count(toks_[arg].text))
-          plainError("use of closed FILE* '" + toks_[arg].text + "'", t,
-                     "the stream was already closed");
+        bool closed = false;
+        if (arg < closeIdx && toks_[arg].kind == TokKind::Identifier) {
+          closed = closedFiles.count(toks_[arg].text) != 0;
+          auto ait = fileAliases.find(toks_[arg].text);
+          if (!closed && ait != fileAliases.end())
+            for (const auto &a : ait->second)
+              if (closedFiles.count(a)) { closed = true; break; }
+          if (closed)
+            plainError("use of closed FILE* '" + toks_[arg].text + "'", t,
+                       "the stream was already closed");
+        }
       } else if (isIdent(i, "if")) {
         noteFopenNullChecks(i);
       } else if (toks_[i].kind == TokKind::Identifier &&

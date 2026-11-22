@@ -69,6 +69,7 @@ public:
     checkUnalignedCasts();       // bug 46
     checkDataRaces();
     checkStaticBufferCalls();
+    checkGetenvInvalidation();
     checkCtypeChar();
     checkUncheckedIo();
     checkConstCastMutation();
@@ -955,7 +956,7 @@ private:
 
   void checkStaticBufferCalls() {
     static const char *const kStateful[] = {"strtok", "asctime", "gmtime",
-                                            "localtime", "inet_ntoa"};
+                                            "localtime", "inet_ntoa", "strerror"};
     for (const auto &entry : funcs_) {
       for (const char *fn : kStateful) {
         unsigned count = 0;
@@ -1039,6 +1040,43 @@ private:
       size_t arg = nextSig(nextSig(i));
       if (arg < toks_.size() && plainChars.count(toks_[arg].text))
         errorAt(toks_[arg], "cast a plain char to unsigned char before <ctype.h>");
+    }
+  }
+
+  // getenv() returns a pointer into the environ table; any later setenv()
+  // may reallocate it, leaving earlier results dangling.
+  void checkGetenvInvalidation() {
+    for (const auto &entry : funcs_) {
+      std::map<std::string, size_t> saved;
+      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
+        if (!isIdent(k, "getenv"))
+          continue;
+        size_t eq = k;
+        while (eq > entry.second.bodyOpen && trivia(eq - 1)) --eq;
+        if (eq > entry.second.bodyOpen && isPunct(eq - 1, "=")) {
+          size_t lhs = eq - 1;
+          while (lhs > entry.second.bodyOpen && trivia(lhs - 1)) --lhs;
+          if (lhs > entry.second.bodyOpen)
+            saved[toks_[lhs - 1].text] = k;
+        }
+      }
+      if (saved.empty())
+        continue;
+      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
+        if (!isIdent(k, "setenv"))
+          continue;
+        for (size_t u = k + 1; u <= entry.second.bodyClose; ++u) {
+          if (toks_[u].kind != TokKind::Identifier)
+            continue;
+          auto it = saved.find(toks_[u].text);
+          if (it != saved.end() && it->second < k) {
+            errorAt(toks_[it->second],
+                    "getenv result '" + it->first +
+                        "' may dangle after setenv reallocates environ");
+            break;
+          }
+        }
+      }
     }
   }
 

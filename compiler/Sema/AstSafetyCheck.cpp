@@ -9,6 +9,7 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/ParentMapContext.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Frontend/PCHContainerOperations.h>
@@ -24,6 +25,37 @@ using namespace clang;
 
 namespace cplus {
 namespace {
+
+/// True when a scanf-style format contains an unbounded `%s` conversion
+/// (no field width), which can overflow any fixed-size destination array.
+inline bool hasUnboundedStringConversion(const StringLiteral *fmt) {
+  llvm::StringRef s = fmt->getBytes();
+  for (size_t i = 0; i + 1 < s.size(); ++i) {
+    if (s[i] != '%')
+      continue;
+    size_t j = i + 1;
+    bool width = false;
+    while (j < s.size() &&
+           (s[j] == '-' || s[j] == '+' || s[j] == '#' || s[j] == '0' ||
+            (s[j] >= '1' && s[j] <= '9')))
+      width = true, ++j;
+    if (j < s.size() && s[j] == 's' && !width)
+      return true;
+  }
+  return false;
+}
+
+/// True for stdio format functions whose first/second argument must be a
+/// literal format string. Shared by direct-call and function-pointer checks.
+inline bool isFormatFunctionName(const std::string &n) {
+  static const std::set<std::string> kNames = {
+      "printf", "fprintf", "sprintf", "snprintf", "vprintf", "vfprintf",
+      "vsprintf", "vsnprintf", "printf_s", "fprintf_s", "sprintf_s",
+      "snprintf_s", "cplus_printf_s", "cplus_fprintf_s",
+      "cplus_snprintf_s", "cplus_sprintf_s", "scanf", "fscanf", "sscanf",
+      "scanf_s", "fscanf_s", "sscanf_s"};
+  return kNames.count(n) != 0;
+}
 
 /// Find a free/release call on a named variable inside a function body.
 struct FreeCallFinder : RecursiveASTVisitor<FreeCallFinder> {
@@ -156,6 +188,12 @@ public:
   }
   void setFieldAliases(const std::map<std::string, std::set<std::string>> &m) {
     fieldAliases_ = m;
+  }
+  const std::map<std::string, std::string> &formatFnAliases() const {
+    return formatFnAliases_;
+  }
+  void setFormatFnAliases(const std::map<std::string, std::string> &m) {
+    formatFnAliases_ = m;
   }
   void setHandledReallocs(const std::set<unsigned> &s) { handledReallocs_ = s; }
   const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
@@ -970,6 +1008,43 @@ public:
   }
 
   bool TraverseIfStmt(IfStmt *s) {
+    // `n = fread(buf, ...); if (n == 0) return buf[0];` — when fread returns
+    // zero it wrote nothing, so the destination array is uninitialized.
+    if (report_ && s->getCond() && s->getThen()) {
+      const BinaryOperator *eq = dyn_cast<BinaryOperator>(
+          s->getCond()->IgnoreParenCasts());
+      if (eq && eq->getOpcode() == BO_EQ) {
+        auto zeroVar = [&](const Expr *e) -> std::string {
+          Expr::EvalResult r;
+          if (e->IgnoreParenCasts()->EvaluateAsInt(r, ctx_) && r.Val.isInt() &&
+              r.Val.getInt() == 0)
+            return "ZERO";
+          if (const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenCasts()))
+            return ref->getDecl()->getNameAsString();
+          return std::string();
+        };
+        std::string a = zeroVar(eq->getLHS()), b = zeroVar(eq->getRHS());
+        std::string resultVar;
+        if (a == "ZERO" && b != "ZERO") resultVar = b;
+        else if (b == "ZERO" && a != "ZERO") resultVar = a;
+        auto rit = freadResults_.find(resultVar);
+        if (rit != freadResults_.end()) {
+          const std::string &dest = rit->second;
+          std::function<void(const Stmt *)> scan = [&](const Stmt *n) {
+            if (!n) return;
+            if (const auto *sub = dyn_cast<ArraySubscriptExpr>(n))
+              if (const auto *ref = dyn_cast<DeclRefExpr>(
+                      sub->getBase()->IgnoreParenCasts()))
+                if (ref->getDecl()->getNameAsString() == dest)
+                  report(sub->getBeginLoc(),
+                         "read of uninitialized array '" + dest +
+                             "'; fread returned zero and wrote nothing");
+            for (const Stmt *c : n->children()) scan(c);
+          };
+          scan(s->getThen());
+        }
+      }
+    }
     ++conditionalDepth_;
     if (!report_) {
       collectMayRelease(s->getThen());
@@ -1273,6 +1348,15 @@ public:
   }
 
   bool VisitVarDecl(VarDecl *vd) {
+    if (!report_ && vd->getInit()) {
+      // `int (*fn)(const char*, ...) = printf;` — calling through fn must
+      // still enforce the literal-format rule.
+      const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(init))
+        if (const auto *fd = dyn_cast<FunctionDecl>(ref->getDecl()))
+          if (isFormatFunctionName(fd->getNameAsString()))
+            formatFnAliases_[vd->getNameAsString()] = fd->getNameAsString();
+    }
     if (!report_ && vd->hasGlobalStorage()) {
       allGlobals_.insert(vd->getNameAsString());
       if (!vd->getType().isVolatileQualified())
@@ -1923,11 +2007,19 @@ public:
     std::string name = callee ? callee->getNameAsString() : std::string();
     if (!callee) {
       const Expr *calleeExpr = call->getCallee()->IgnoreParenImpCasts();
-      if (const auto *ref = dyn_cast<DeclRefExpr>(calleeExpr))
+      if (const auto *ref = dyn_cast<DeclRefExpr>(calleeExpr)) {
         callee = dyn_cast<FunctionDecl>(ref->getDecl());
-      if (!callee)
+        if (!callee)
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+            auto it = formatFnAliases_.find(vd->getNameAsString());
+            if (it != formatFnAliases_.end()) {
+              name = it->second;
+              callee = nullptr; // indirect call through a function-pointer alias
+            }
+          }
+      }
+      if (!callee && name.empty())
         return true;
-      name = callee->getNameAsString();
     }
 
     // Format-string safety (CWE-134): the format argument must be a string
@@ -1970,6 +2062,53 @@ public:
               report(call->getBeginLoc(), msg);
             else
               warnAt(call->getBeginLoc(), msg);
+          } else if (isScanf) {
+            if (const auto *lit = dyn_cast<StringLiteral>(fmt))
+              if (hasUnboundedStringConversion(lit))
+                for (unsigned a = fmtIdx + 1; a < call->getNumArgs(); ++a) {
+                  const Expr *arg = call->getArg(a)->IgnoreParenCasts();
+                  const auto *ref = dyn_cast<DeclRefExpr>(arg);
+                  const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl())
+                                       : nullptr;
+                  if (vd && vd->getType()->isArrayType()) {
+                    std::string msg = "unbounded '%s' in " + name +
+                                      " writes into fixed-size array '" +
+                                      vd->getNameAsString() +
+                                      "'; add a field width";
+                    if (strict_) report(call->getBeginLoc(), msg);
+                    else warnAt(call->getBeginLoc(), msg);
+                  }
+                }
+          } else if (isPrintf) {
+            // A fixed char array whose initializer has no NUL byte cannot be
+            // passed to %s without an over-read.
+            for (unsigned a = fmtIdx + 1; a < call->getNumArgs(); ++a) {
+              const Expr *arg = call->getArg(a)->IgnoreParenCasts();
+              const auto *ref = dyn_cast<DeclRefExpr>(arg);
+              const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+              if (!vd || !vd->getInit())
+                continue;
+              const auto *cat = ctx_.getAsConstantArrayType(vd->getType());
+              if (!cat || !cat->getElementType()->isCharType())
+                continue;
+              bool terminated = false;
+              if (const auto *il = dyn_cast<InitListExpr>(
+                      vd->getInit()->IgnoreParenImpCasts())) {
+                for (const Expr *el : il->inits()) {
+                  Expr::EvalResult er;
+                  if (el->EvaluateAsInt(er, ctx_) && er.Val.isInt() &&
+                      er.Val.getInt() == 0)
+                    terminated = true;
+                }
+              } else if (const auto *sl = dyn_cast<StringLiteral>(
+                             vd->getInit()->IgnoreParenImpCasts())) {
+                terminated = sl->getLength() < cat->getSize().getZExtValue();
+              }
+              if (!terminated)
+                report(call->getBeginLoc(),
+                       "char array '" + vd->getNameAsString() +
+                           "' has no NUL terminator; %s will over-read");
+            }
           }
         }
       }
@@ -2137,6 +2276,133 @@ public:
                "realloc result and original pointer require explicit "
                "success/failure handling; alias state is unknown");
       }
+      // fread/fwrite multiply size * count in size_t; a constant product that
+      // wraps is a buffer-overflow / truncated-transfer bug.
+      if (baseName == "fread" && call->getNumArgs() >= 1) {
+        for (const auto &p : ctx_.getParents(*call)) {
+          const VarDecl *resultVar = nullptr;
+          if (const auto *pvd = p.get<VarDecl>())
+            if (pvd->getInit() && pvd->getInit()->IgnoreParenImpCasts() == call)
+              resultVar = pvd;
+          if (const auto *bo = p.get<BinaryOperator>())
+            if (bo->isAssignmentOp())
+              if (const auto *ref = dyn_cast<DeclRefExpr>(
+                      bo->getLHS()->IgnoreParenCasts()))
+                resultVar = dyn_cast<VarDecl>(ref->getDecl());
+          if (resultVar)
+            if (const auto *dr = dyn_cast<DeclRefExpr>(
+                    call->getArg(0)->IgnoreParenCasts()))
+              if (const auto *dv = dyn_cast<VarDecl>(dr->getDecl()))
+                freadResults_[resultVar->getNameAsString()] =
+                    dv->getNameAsString();
+        }
+      }
+      if ((baseName == "fread" || baseName == "fwrite") &&
+          call->getNumArgs() >= 3) {
+        auto constInt = [&](const Expr *e, unsigned long long &out) -> bool {
+          Expr::EvalResult r;
+          if (e->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+            out = r.Val.getInt().getZExtValue();
+            return true;
+          }
+          if (const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenCasts()))
+            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+              auto it = constLocals_.find(vd->getNameAsString());
+              if (it != constLocals_.end()) {
+                out = it->second.getZExtValue();
+                return true;
+              }
+            }
+          return false;
+        };
+        unsigned long long sz = 0, cnt = 0;
+        if (constInt(call->getArg(1), sz) && constInt(call->getArg(2), cnt) &&
+            sz != 0 && cnt > (unsigned long long)-1 / sz)
+          report(call->getBeginLoc(),
+                 "size * count overflows size_t in " + baseName +
+                     "; the requested transfer wraps to a small value");
+      }
+      // Ignoring the fgets return value leaves an uninitialized local buffer
+      // readable on EOF/errors (the function returns NULL without writing).
+      if (baseName == "fgets" && call->getNumArgs() >= 1) {
+        bool bare = false;
+        for (const auto &p : ctx_.getParents(*call)) {
+          if (const auto *s = p.get<Stmt>())
+            bare = isa<CompoundStmt>(s) || isa<IfStmt>(s);
+        }
+        if (bare) {
+          const Expr *dst = call->getArg(0)->IgnoreParenCasts();
+          if (const auto *ref = dyn_cast<DeclRefExpr>(dst))
+            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+              if (!vd->hasInit() && vd->getType()->isArrayType())
+                report(call->getBeginLoc(),
+                       "ignored fgets return value leaves '" +
+                           vd->getNameAsString() +
+                           "' uninitialized on EOF; check the result");
+        }
+      }
+      // A NULL FILE* passed to a stdio function dereferences null in libc.
+      if ((baseName == "fgets" || baseName == "fread" ||
+           baseName == "fprintf" || baseName == "printf_s" ||
+           baseName == "fscanf") &&
+          call->getNumArgs() >= 1) {
+        unsigned streamIdx = (baseName == "fgets" || baseName == "fread" ||
+                              baseName == "fscanf")
+                                 ? 2 : 0;
+        if (streamIdx < call->getNumArgs() &&
+            isNullConstant(call->getArg(streamIdx)->IgnoreParenCasts()))
+          report(call->getBeginLoc(),
+                 "null FILE* passed to " + baseName);
+      }
+      // sizeof(pointer) as a size argument is the pointer width, not the
+      // capacity of the pointed-to buffer (e.g. fgets(buf, sizeof(buf), ...)
+      // where buf is a char* parameter).
+      if ((baseName == "fgets" || baseName == "fread") && call->getNumArgs() >= 2) {
+        const Expr *sz = call->getArg(1)->IgnoreParenCasts();
+        if (const auto *ue = dyn_cast<UnaryExprOrTypeTraitExpr>(sz))
+          if (ue->getKind() == UETT_SizeOf && !ue->isArgumentType() &&
+              ue->getArgumentExpr()) {
+            const Expr *a = ue->getArgumentExpr()->IgnoreParenCasts();
+            if (const auto *ref = dyn_cast<DeclRefExpr>(a))
+              if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+                QualType t = vd->getType();
+                if (const auto *pt = t->getAs<PointerType>())
+                  report(call->getBeginLoc(),
+                         "sizeof(" + pt->getPointeeType().getAsString() +
+                             "*) is the pointer size, not the buffer size");
+              }
+          }
+      }
+      // fgets/fread destination capacity: a constant size argument larger
+      // than the fixed destination array is a stack overflow.
+      if ((baseName == "fgets" || baseName == "fread") && call->getNumArgs() >= 3) {
+        unsigned dstIdx = 0, sizeIdx = (baseName == "fgets") ? 1 : 2;
+        const Expr *dst = call->getArg(dstIdx)->IgnoreParenCasts();
+        long long amount = 0;
+        Expr::EvalResult r;
+        if (call->getArg(sizeIdx)->EvaluateAsInt(r, ctx_) && r.Val.isInt())
+          amount = r.Val.getInt().getSExtValue();
+        if (baseName == "fread") {
+          Expr::EvalResult r2;
+          if (call->getArg(1)->EvaluateAsInt(r2, ctx_) && r2.Val.isInt())
+            amount *= r2.Val.getInt().getSExtValue();
+        }
+        const auto *dref = dyn_cast<DeclRefExpr>(dst);
+        const auto *vd = dref ? dyn_cast<VarDecl>(dref->getDecl()) : nullptr;
+        if (vd && amount > 0) {
+          if (const auto *at = ctx_.getAsConstantArrayType(vd->getType())) {
+            unsigned long long cap = at->getSize().getZExtValue();
+            QualType elem = at->getElementType();
+            unsigned es = ctx_.getTypeSize(elem) / 8u;
+            if (es) cap *= es;
+            if ((unsigned long long)amount > cap)
+              report(call->getBeginLoc(),
+                     baseName + " reads " + std::to_string(amount) +
+                         " bytes into destination '" + vd->getNameAsString() +
+                         "' of " + std::to_string(cap) + " bytes");
+          }
+        }
+      }
       if ((baseName == "memcpy" || baseName == "memmove") && call->getNumArgs() >= 3) {
         checkBoundedCopy(call);
         checkSourceExtent(call, 1, 2);
@@ -2164,6 +2430,28 @@ public:
       if ((baseName == "snprintf" || baseName == "vsnprintf") &&
           call->getNumArgs() >= 2) {
         checkBoundedWrite(call, 0, 1, "format write");
+        // `int n = snprintf(buf, cap, ...); buf[n] = 0;` — n is the length
+        // that WOULD have been written and may exceed cap.
+        for (const auto &p : ctx_.getParents(*call)) {
+          if (const auto *pvd = p.get<VarDecl>())
+            if (pvd->getInit() && pvd->getInit()->IgnoreParenImpCasts() == call) {
+              if (const auto *dr = dyn_cast<DeclRefExpr>(
+                      call->getArg(0)->IgnoreParenCasts()))
+                if (const auto *dv = dyn_cast<VarDecl>(dr->getDecl()))
+                  snprintfResults_[pvd->getNameAsString()] =
+                      dv->getNameAsString();
+            }
+          if (const auto *bo = p.get<BinaryOperator>())
+            if (bo->isAssignmentOp())
+              if (const auto *ref = dyn_cast<DeclRefExpr>(
+                      bo->getLHS()->IgnoreParenCasts()))
+                if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+                  if (const auto *dr = dyn_cast<DeclRefExpr>(
+                          call->getArg(0)->IgnoreParenCasts()))
+                    if (const auto *dv = dyn_cast<VarDecl>(dr->getDecl()))
+                      snprintfResults_[vd->getNameAsString()] =
+                          dv->getNameAsString();
+        }
       }
       if (baseName == "memcmp" && call->getNumArgs() >= 3) {
         checkLibcNullSource(call, baseName, 0);
@@ -2237,6 +2525,18 @@ public:
   bool VisitArraySubscriptExpr(ArraySubscriptExpr *subscript) {
     if (!report_)
       return true;
+    if (const auto *iref = dyn_cast<DeclRefExpr>(
+            subscript->getIdx()->IgnoreParenCasts())) {
+      auto it = snprintfResults_.find(iref->getDecl()->getNameAsString());
+      if (it != snprintfResults_.end())
+        if (const auto *bref = dyn_cast<DeclRefExpr>(
+                subscript->getBase()->IgnoreParenCasts()))
+          if (bref->getDecl()->getNameAsString() == it->second)
+            report(subscript->getBeginLoc(),
+                   "snprintf return value used as index into its destination "
+                   "'" + it->second +
+                       "'; it may exceed the buffer capacity on truncation");
+    }
     if (isReleased(subscript->getBase()))
       reportUaf(subscript->getBeginLoc(), ownerOfAddress(subscript->getBase()),
                 "subscript of released pointer");
@@ -2453,6 +2753,9 @@ public:
   std::set<std::string> releasedVars_;
   std::set<std::string> releasedFields_;
   std::map<std::string, std::set<std::string>> fieldAliases_;
+  std::map<std::string, std::string> formatFnAliases_;
+  std::map<std::string, std::string> snprintfResults_;
+  std::map<std::string, std::string> freadResults_;
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
@@ -2479,11 +2782,46 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   // Tooling infers language from the filename suffix; a .cp suffix would be
   // treated as C++.  Use a synthetic .c name for the in-memory buffer.
   std::string astFile = filename + ".c";
-  IgnoringDiagConsumer ignore;
+  // Capture Clang's format-security/format warnings instead of discarding
+  // them. In STRICT they are promoted to errors; in DEFAULT they warn.
+  class FormatWarnConsumer : public clang::DiagnosticConsumer {
+  public:
+    FormatWarnConsumer(DiagnosticEngine &d, const std::string &f, bool strict)
+        : diags(d), file(f), strict(strict) {}
+    void HandleDiagnostic(clang::DiagnosticsEngine::Level level,
+                          const clang::Diagnostic &info) override {
+      clang::DiagnosticConsumer::HandleDiagnostic(level, info);
+      if (level != clang::DiagnosticsEngine::Warning &&
+          level != clang::DiagnosticsEngine::Error)
+        return;
+      llvm::SmallString<256> msg;
+      info.FormatDiagnostic(msg);
+      std::string s(msg.str());
+      if (s.find("format") == std::string::npos &&
+          s.find("conversion") == std::string::npos &&
+          s.find("field width") == std::string::npos &&
+          s.find("precision") == std::string::npos)
+        return;
+      Diag d;
+      d.level = (strict || level == clang::DiagnosticsEngine::Error)
+                    ? DiagLevel::Error : DiagLevel::Warning;
+      d.message = "[CPLUS-FFI] " + s;
+      d.file = file;
+      if (info.hasSourceManager() && info.getLocation().isValid()) {
+        PresumedLoc p = info.getSourceManager().getPresumedLoc(info.getLocation());
+        if (p.isValid()) { d.line = p.getLine(); d.column = p.getColumn(); }
+      }
+      diags.report(std::move(d));
+    }
+  private:
+    DiagnosticEngine &diags;
+    std::string file;
+    bool strict;
+  } fmtConsumer(diags, filename, strict);
   std::unique_ptr<ASTUnit> ast = tooling::buildASTFromCodeWithArgs(
       loweredC, args, astFile, "cplus-ast-check",
       std::make_shared<PCHContainerOperations>(),
-      tooling::getClangStripDependencyFileAdjuster(), {}, &ignore);
+      tooling::getClangStripDependencyFileAdjuster(), {}, &fmtConsumer);
   if (!ast || ast->getDiagnostics().hasErrorOccurred())
     return; // AST parse failed; do not guess from a broken AST.
 
@@ -2496,6 +2834,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setGlobals(collect.nonVolatileGlobals());
   check.setDestructors(collect.destructors());
   check.setFieldAliases(collect.fieldAliases());
+  check.setFormatFnAliases(collect.formatFnAliases());
   check.setHandledReallocs(collect.handledReallocs());
   check.setConstLocals(collect.constLocals());
   check.setAssignedVars(collect.assignedVars());
