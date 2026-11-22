@@ -31,3 +31,6 @@ scratch
 benchmarks/out/
 
 examples/out/
+
+# Ignore all Apple property-list files
+*.plist
