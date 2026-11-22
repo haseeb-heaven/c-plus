@@ -136,11 +136,14 @@ and misaligned pointer use, and the undefined-behaviour checks that ship in
 UBSan's `undefined` group (including signed integer overflow). It does **not**
 give a complete spatial/temporal memory-safety guarantee:
 
-- **No use-after-free detection.** AddressSanitizer was tested and is broken
-  on this machine: even a trivial program aborts during initialisation with
-  `AddressSanitizer: CHECK failed: sanitizer_malloc_mac.inc:189`. Enabling it
-  would produce a tool that crashes in its own runtime, so it is not used and
-  no use-after-free claim is made.
+- **Use-after-free detection requires a working ASan backend.** Apple clang
+  16's ASan aborts during initialisation on this host
+  (`AddressSanitizer: CHECK failed: sanitizer_malloc_mac.inc:189`), so the
+  default build does not enable it. `--sanitize=address` (or
+  `address,undefined`) is available with a working backend such as Homebrew
+  clang 23 plus an explicit `-isysroot`; see `docs/CAPABILITIES.md`. The
+  sanitizer suite verifies the diagnostics on that backend, but the default
+  build still makes no UAF-detection claim.
 - A stale managed pointer whose address has already been reused can be
   misattributed to the new allocation. The bounded cache catches the common
   immediate double-release case (tested), not every stale-pointer case.

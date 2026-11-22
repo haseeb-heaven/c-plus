@@ -34,6 +34,8 @@ struct Options {
   std::string emitC;
   Mode mode = Mode::Safe;
   OptMode opt = OptMode::Debug;
+  Sanitizer sanitizer = Sanitizer::Undefined;
+  bool sanitizerExplicit = false;
   bool strict = false;
   bool verbose = false;
   bool warningsAsErrors = false;
@@ -72,6 +74,8 @@ void printUsage(raw_ostream &os) {
   os << "  --legacy-c       legacy C compatibility mode (NOT memory safe)\n";
   os << "  --default        DEFAULT mode: report proven errors, warn if unverified\n";
   os << "  --strict         STRICT mode: reject unverified operations (fail closed)\n";
+  os << "  --sanitize=NAME  runtime sanitizers: none|address|undefined|address,undefined\n";
+  os << "                   (Safe mode defaults to undefined; --no-sanitize disables all)\n";
   os << "  -o <file>        output path\n";
   os << "  --emit-c <file>  write the lowered C source for inspection\n";
   os << "  --keep-temp      keep the generated C file\n";
@@ -154,6 +158,40 @@ int main(int argc, char **argv) {
     }
     if (a == "--default") {
       opts.strict = false;
+      continue;
+    }
+    if (a == "--sanitize" || a.rfind("--sanitize=", 0) == 0) {
+      std::string value;
+      if (a == "--sanitize") {
+        if (i + 1 >= argc) {
+          errs() << "error: --sanitize requires a value\n";
+          return 1;
+        }
+        value = argv[++i];
+      } else {
+        value = a.substr(strlen("--sanitize="));
+      }
+      if (value == "none" || value == "off") {
+        opts.sanitizer = Sanitizer::None;
+      } else if (value == "address" || value == "asan") {
+        opts.sanitizer = Sanitizer::Address;
+      } else if (value == "undefined" || value == "ubsan") {
+        opts.sanitizer = Sanitizer::Undefined;
+      } else if (value == "address,undefined" ||
+                 value == "undefined,address" || value == "asan+ubsan" ||
+                 value == "all") {
+        opts.sanitizer = Sanitizer::Both;
+      } else {
+        errs() << "error: invalid --sanitize value '" << value
+               << "' (expected none|address|undefined|address,undefined)\n";
+        return 1;
+      }
+      opts.sanitizerExplicit = true;
+      continue;
+    }
+    if (a == "--no-sanitize") {
+      opts.sanitizer = Sanitizer::None;
+      opts.sanitizerExplicit = true;
       continue;
     }
     if (a == "-Werror") {
@@ -293,6 +331,8 @@ int main(int argc, char **argv) {
   d.emitC = opts.emitC;
   d.mode = opts.mode;
   d.opt = opts.opt;
+  d.sanitizer = opts.sanitizer;
+  d.sanitizerExplicit = opts.sanitizerExplicit;
   d.strict = opts.strict;
   d.verbose = opts.verbose;
   d.warningsAsErrors = opts.warningsAsErrors;

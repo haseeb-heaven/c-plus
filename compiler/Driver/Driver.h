@@ -23,6 +23,22 @@ namespace llvm { class raw_ostream; }
 
 namespace cplus {
 
+/// Runtime sanitizers selected for the generated binary. These are added to
+/// BOTH the compile and the final link command lines.
+enum class Sanitizer {
+  None = 0,      ///< no sanitizers (plain build)
+  Address = 1,   ///< AddressSanitizer (heap/stack/use-after-free)
+  Undefined = 2, ///< UndefinedBehaviorSanitizer
+  Both = 3,      ///< ASan + UBSan in one build
+};
+
+inline bool sanitizerWantsAddress(Sanitizer s) {
+  return s == Sanitizer::Address || s == Sanitizer::Both;
+}
+inline bool sanitizerWantsUndefined(Sanitizer s) {
+  return s == Sanitizer::Undefined || s == Sanitizer::Both;
+}
+
 struct DriverOptions {
   std::string command; // "build", "run", "check"
   std::string input;
@@ -31,6 +47,10 @@ struct DriverOptions {
   std::string emitC; // if non-empty, write the lowered C here
   Mode mode = Mode::Safe;
   OptMode opt = OptMode::Debug;
+  // Safe mode defaults to UBSan; --sanitize=... overrides, --sanitize=none
+  // disables all runtime sanitizers.
+  Sanitizer sanitizer = Sanitizer::Undefined;
+  bool sanitizerExplicit = false;
   // DEFAULT (false): report proven errors, warn on unverified operations.
   // STRICT (true): reject unverified operations rather than warn.
   bool strict = false;

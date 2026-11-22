@@ -269,6 +269,14 @@ else
   bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
 fi
 
+# Configurable sanitizers: ASan, UBSan, combined and none. Each negative case
+# must print the exact sanitizer diagnostic, not merely exit non-zero.
+if python3 "$ROOT/tests/core/sanitizer_suite.py" >"$OUT/sanitizer.log" 2>&1; then
+  ok sanitizer_suite
+else
+  bad sanitizer_suite "$(head -1 "$OUT/sanitizer.log")"
+fi
+
 # bugs51..bugs97 corpus: 188 unique compile-time scenarios + 19 runtime cases.
 if python3 "$ROOT/tests/core/bugs51_97_suite.py" >"$OUT/bugs51_97.log" 2>&1; then
   ok bugs51_97_suite

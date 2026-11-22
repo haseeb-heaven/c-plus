@@ -547,12 +547,23 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
     } else {
       args.push_back("-w");
     }
-    args.push_back("-fsanitize=undefined,bounds,null,alignment");
-    args.push_back("-fno-sanitize-recover=all");
-    args.push_back("-fno-omit-frame-pointer");
     args.push_back("-DCPLUS_SAFE=1");
   } else {
     args.push_back("-DCPLUS_LEGACY_C=1");
+  }
+  // Runtime sanitizers. Flags are part of `base`, which is used for both
+  // per-file compilation and the final link, so the sanitizer runtime is
+  // linked into the executable as well.
+  Sanitizer san = opts.sanitizer;
+  if (!opts.sanitizerExplicit && opts.mode == Mode::LegacyC)
+    san = Sanitizer::None; // legacy builds are unsanitized unless requested
+  if (sanitizerWantsAddress(san))
+    args.push_back("-fsanitize=address");
+  if (sanitizerWantsUndefined(san))
+    args.push_back("-fsanitize=undefined,bounds,null,alignment");
+  if (san != Sanitizer::None) {
+    args.push_back("-fno-sanitize-recover=all");
+    args.push_back("-fno-omit-frame-pointer");
   }
   if (opts.warningsAsErrors)
     args.push_back("-Werror");
