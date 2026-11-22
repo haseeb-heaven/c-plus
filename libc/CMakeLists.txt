@@ -66,6 +66,9 @@ set(LIBC_SOURCES
   src/wchar/wchar_gaps.c
   src/uchar/uchar.c
   src/c23_small_gaps.c
+  src/c23_upstream_small.c
+  src/uchar/uchar_c23.c
+  src/math/math_c23_upstream.c
   src/math/math_c23.c
   src/math/math_c23_musl.c
   src/math/math_gaps.c

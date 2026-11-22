@@ -7826,12 +7826,12 @@
           "api": "memset_explicit",
           "kind": "function",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/c23_upstream_small.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition: constant-time, non-optimizable memset. No cplus_ wrapper and no shipped implementation; use cplus_memset only if compiler barrier is acceptable."
+          "test_file": "tests/libc/test_c23_upstream_small.c",
+          "limitation": "LLVM libc llvmorg-20.1.1 body (Apache-2.0 WITH LLVM-exception); host-backed wrapper used on glibc >= 2.38."
         }
       ]
     },
@@ -11666,8 +11666,8 @@
     "by_classification": {
       "HOST/COMPILER-PROVIDED": 359,
       "PLATFORM_BACKED": 476,
-      "IMPLEMENTED_UPSTREAM": 7,
-      "MISSING": 28,
+      "IMPLEMENTED_UPSTREAM": 8,
+      "MISSING": 27,
       "UNSUPPORTED": 49,
       "IMPLEMENTED_BUNDLED": 29
     },

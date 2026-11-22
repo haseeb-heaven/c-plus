@@ -72,6 +72,9 @@ SRCS="
   libc/src/wchar/wchar_gaps.c
   libc/src/uchar/uchar.c
   libc/src/c23_small_gaps.c
+  libc/src/c23_upstream_small.c
+  libc/src/uchar/uchar_c23.c
+  libc/src/math/math_c23_upstream.c
   libc/src/math/math_c23.c
   libc/src/math/math_c23_musl.c
   libc/src/math/math_gaps.c
