@@ -93,7 +93,7 @@ for src in "$ROOT"/tests/compile_fail/*.c "$ROOT"/tests/compile_fail/*.cp; do
   fi
   if [ -f "$ROOT/tests/compile_fail/$name.err" ]; then
     want=$(cat "$ROOT/tests/compile_fail/$name.err")
-    if ! grep -q "$want" "$OUT/$name.log"; then
+    if ! grep -qF "$want" "$OUT/$name.log"; then
       fail "$name" "diagnostic does not contain '$want'; see tests/out/$name.log"
       continue
     fi

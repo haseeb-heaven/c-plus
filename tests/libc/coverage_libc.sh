@@ -14,7 +14,7 @@ fi
 OUT="$ROOT/build/libc-cov"
 rm -rf "$OUT"
 mkdir -p "$OUT"
-CFLAGS="-O0 -g -Wall -Wextra -pedantic -std=c99 -fprofile-instr-generate -fcoverage-mapping -Ilibc -Ilibc/include"
+CFLAGS="-O0 -g -Wall -Wextra -pedantic -std=c99 -fprofile-instr-generate -fcoverage-mapping -Ilibc -Ilibc/include -Ilibc/install-include"
 SRCS="
   libc/log/log.c
   libc/src/errno/errno.c
@@ -87,8 +87,9 @@ done
 ar rcs "$OUT/libcplus_hardened_cov.a" $OBJS
 pass=0; fail=0
 for t in tests/libc/test_*.c; do
+  case "$t" in *_attack.c|*/test_corpus_format.c) continue ;; esac # adversarial suite has its own runner
   b="$OUT/$(basename "$t" .c)"
-  if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include \
+  if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include -Ilibc/install-include \
       "$t" "$OUT/libcplus_hardened_cov.a" -lm -lpthread -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then
     if LLVM_PROFILE_FILE="$OUT/$(basename "$t" .c).profraw" "$b" >"$OUT/$(basename "$t" .c).out" 2>&1; then
       pass=$((pass + 1))
