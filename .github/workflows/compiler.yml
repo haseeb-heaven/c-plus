@@ -35,7 +35,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm-dev libclang-dev cmake \
-                                  ninja-build python3 rustc
+                                  ninja-build python3 rustc \
+                                  libprotobuf-dev protobuf-compiler-grpc \
+                                  libgrpc++-dev libabsl-dev libzstd-dev
       - name: Configure
         run: |
           LLVM_VER="$(llvm-config --version | cut -d. -f1)"
