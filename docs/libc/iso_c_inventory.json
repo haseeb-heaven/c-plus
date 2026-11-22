@@ -3472,36 +3472,36 @@
           "api": "exp10",
           "kind": "function",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/math/math_c23_musl.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition. No cplus_ wrapper and no host declaration gated for C17 baseline; not shipped on this branch."
+          "test_file": "tests/libc/test_math_c23_musl.c",
+          "limitation": "Copied verbatim from musl at pinned commit; long double uses binary64 branch only."
         },
         {
           "header": "math.h",
           "api": "exp10f",
           "kind": "function",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/math/math_c23_musl.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition. No cplus_ wrapper and no host declaration gated for C17 baseline; not shipped on this branch."
+          "test_file": "tests/libc/test_math_c23_musl.c",
+          "limitation": "Copied verbatim from musl at pinned commit; long double uses binary64 branch only."
         },
         {
           "header": "math.h",
           "api": "exp10l",
           "kind": "function",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_UPSTREAM",
+          "source_file": "libc/src/math/math_c23_musl.c",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition. No cplus_ wrapper and no host declaration gated for C17 baseline; not shipped on this branch."
+          "test_file": "tests/libc/test_math_c23_musl.c",
+          "limitation": "Copied verbatim from musl at pinned commit; long double uses binary64 branch only."
         },
         {
           "header": "math.h",
@@ -11666,10 +11666,10 @@
     "by_classification": {
       "HOST/COMPILER-PROVIDED": 359,
       "PLATFORM_BACKED": 435,
-      "MISSING": 75,
+      "IMPLEMENTED_UPSTREAM": 7,
+      "MISSING": 72,
       "UNSUPPORTED": 49,
-      "IMPLEMENTED_BUNDLED": 26,
-      "IMPLEMENTED_UPSTREAM": 4
+      "IMPLEMENTED_BUNDLED": 26
     },
     "by_c_version": {
       "C11": 125,

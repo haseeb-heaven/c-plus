@@ -72,6 +72,7 @@ SRCS="
   libc/src/uchar/uchar.c
   libc/src/c23_small_gaps.c
   libc/src/math/math_c23.c
+  libc/src/math/math_c23_musl.c
   libc/src/math/math_gaps.c
   libc/src/math/math_float.c
   libc/src/math/math_ldouble.c
