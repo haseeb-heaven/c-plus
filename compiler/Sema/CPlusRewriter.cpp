@@ -1402,14 +1402,28 @@ private:
       return false;
     bool isStatic = arrays_.count(ts[i].text) != 0;
     bool isDynamic = dynamicPointers_.count(ts[i].text) != 0;
-    if (!isStatic && !isDynamic)
-      return false;
     size_t dot = ts.nextSig(i);
     if (!ts.isPunct(dot, "."))
       return false;
     size_t member = ts.nextSig(dot);
     if (!ts.isIdent(member, "len"))
       return false;
+    // `obj.len()` is a method call on a class/String/Vector, not the array
+    // length property; leave it to the method-call rewriter.
+    if (ts.isPunct(ts.nextSig(member), "("))
+      return false;
+    if (!isStatic && !isDynamic) {
+      // A pointer with no C+ length metadata (e.g. raw malloc) cannot have
+      // `.len` inferred: pointer arithmetic is never used to guess a length.
+      // Replace with 0 so Clang does not emit a cascade of follow-on errors.
+      diags_.error("'.len' requires a static array or a C+ managed allocation; "
+                   "pointer '" + ts[i].text + "' has no tracked length",
+                   filename_, ts[i].line, ts[i].column);
+      emit("0");
+      skipTo_ = member;
+      changed_ = true;
+      return true;
+    }
     if (isStatic) {
       emit("(" + std::to_string(arrays_[ts[i].text]) + ")");
     } else {
