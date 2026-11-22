@@ -916,6 +916,39 @@ public:
       if (const auto *uo = dyn_cast<UnaryOperator>(
               s->getCond()->IgnoreParenImpCasts()))
         negatedGuard = uo->getOpcode() == UO_LNot;
+    // `if (!p) p = &x;` — the assignment in the then arm makes p non-null
+    bool keepErase = false;
+    // on both paths after the statement.
+    if (report_ && negatedGuard && s->getThen()) {
+      std::string n = varNameOf(
+          cast<UnaryOperator>(s->getCond()->IgnoreParenImpCasts())
+              ->getSubExpr());
+      if (!n.empty()) {
+        bool assigns = false;
+        std::function<void(const Stmt *)> scan = [&](const Stmt *node) {
+          if (!node || assigns)
+            return;
+          if (const auto *bo = dyn_cast<BinaryOperator>(node))
+            if (bo->isAssignmentOp() && varNameOf(bo->getLHS()) == n)
+              assigns = true;
+          for (const Stmt *c : node->children())
+            scan(c);
+        };
+        if (scan(s->getThen()), assigns) {
+          nullVars_.erase(n);
+          keepErase = true;
+        }
+      }
+    }
+    // `if (!p) return; else ...`: the else arm is the non-null path.
+    if (report_ && negatedGuard && s->getElse() &&
+        containsReturn(s->getThen())) {
+      std::string n = varNameOf(
+          cast<UnaryOperator>(s->getCond()->IgnoreParenImpCasts())
+              ->getSubExpr());
+      if (!n.empty())
+        nullVars_.erase(n);
+    }
     if (report_) {
       std::string owner, tmp;
       if (detectReallocSuccess(s, owner, tmp)) {
@@ -944,7 +977,6 @@ public:
     // null state for that branch so a valid guarded dereference is not a
     // false positive. With an else branch the null path remains checked.
     std::set<std::string> savedNulls = nullVars_;
-    bool keepErase = false;
     if (report_ && !s->getElse()) {
       std::string condVar = varNameOf(s->getCond());
       if (const auto *uo = dyn_cast_or_null<UnaryOperator>(
@@ -958,11 +990,30 @@ public:
               s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
         if (bo->isEqualityOp() && containsReturn(s->getThen())) {
           std::string n = varNameOf(bo->getLHS());
-          if (!n.empty())
+          if (n.empty() && isNullConstant(bo->getLHS()))
+            n = varNameOf(bo->getRHS());
+          if (!n.empty()) {
             guardedFromConst_.insert(n);
+            // `if (p == 0) return;` proves p is non-null afterwards.
+            condVar = n;
+            keepErase = true;
+          }
         }
       if (!condVar.empty())
         nullVars_.erase(condVar);
+    }
+    // `if (p) {...} else return;` — the else path exits, so after the if p
+    // is non-null. Also guard the then arm itself.
+    if (report_ && s->getElse() && containsReturn(s->getElse())) {
+      std::string condVar = varNameOf(s->getCond());
+      if (const auto *uo = dyn_cast_or_null<UnaryOperator>(
+              s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
+        if (uo->getOpcode() == UO_LNot)
+          condVar = varNameOf(uo->getSubExpr());
+      if (!condVar.empty()) {
+        nullVars_.erase(condVar);
+        keepErase = true;
+      }
     }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
     if (!keepErase)
@@ -1196,6 +1247,29 @@ public:
     return true;
   }
 
+  bool TraverseBinaryOperator(BinaryOperator *op) {
+    if (!report_ ||
+        (op->getOpcode() != BO_LAnd && op->getOpcode() != BO_LOr))
+      return RecursiveASTVisitor::TraverseBinaryOperator(op);
+    // `p && *p` and `!p || *p` short-circuit: the deref is reachable only
+    // when p is non-null, so suppress the null fact in that operand.
+    std::string condVar = varNameOf(op->getLHS());
+    if (const auto *uo = dyn_cast<UnaryOperator>(
+            op->getLHS()->IgnoreParenImpCasts()))
+      if (uo->getOpcode() == UO_LNot)
+        condVar = varNameOf(uo->getSubExpr());
+    std::string saved = nonNullBranch_;
+    bool removed = !condVar.empty() && nullVars_.erase(condVar) > 0;
+    if (removed)
+      nonNullBranch_ = condVar;
+    bool r = TraverseStmt(op->getLHS());
+    r &= TraverseStmt(op->getRHS());
+    nonNullBranch_ = saved;
+    if (removed)
+      nullVars_.insert(condVar);
+    return r;
+  }
+
   bool TraverseConditionalOperator(ConditionalOperator *op) {
     if (!report_)
       return RecursiveASTVisitor::TraverseConditionalOperator(op);
@@ -1368,12 +1442,18 @@ public:
         // null until it is reassigned or guarded.
         if (lhsVar && lhsVar->getType()->isPointerType())
           nullVars_.insert(lhsVar->getNameAsString());
-        const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
-        clearReleased(varNameOf(lhs));
-        // Releasing then resetting to null makes any may-release fact stale.
-        maybeReleasedVars_.erase(varNameOf(lhs));
       } else if (lhsVar) {
         nullVars_.erase(lhsVar->getNameAsString());
+      }
+      const Expr *rhsExpr = op->getRHS()->IgnoreParenImpCasts();
+      if (isNullConstant(rhsExpr) ||
+          (isa<UnaryOperator>(rhsExpr) &&
+           cast<UnaryOperator>(rhsExpr)->getOpcode() == UO_AddrOf)) {
+        // Resetting a released pointer to null or to a fresh object address
+        // makes it live again.
+        const Expr *lhsExpr = op->getLHS()->IgnoreParenImpCasts();
+        clearReleased(varNameOf(lhsExpr));
+        maybeReleasedVars_.erase(varNameOf(lhsExpr));
       }
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
@@ -1720,6 +1800,10 @@ public:
                          destructors_.count(name) != 0;
       if (invalidates && ptrVar) {
         std::string pname = ptrVar->getNameAsString();
+        // free(NULL) / cplus_release(NULL) is well-defined and does not
+        // create a dangling owner.
+        if (isAllocatorFree && nullVars_.count(pname))
+          return true;
         if (isAllocatorFree && releasedVars_.count(pname))
           report(call->getBeginLoc(), "double free of '" + pname + "'");
         else if (isAllocatorFree && conditionalDepth_ == 0 &&
