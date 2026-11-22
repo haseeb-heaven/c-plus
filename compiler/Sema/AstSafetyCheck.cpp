@@ -151,6 +151,12 @@ public:
   const std::set<std::string> &destructors() const { return destructors_; }
   void setDestructors(const std::set<std::string> &d) { destructors_ = d; }
   void setStrict(bool strict) { strict_ = strict; }
+  const std::map<std::string, std::set<std::string>> &fieldAliases() const {
+    return fieldAliases_;
+  }
+  void setFieldAliases(const std::map<std::string, std::set<std::string>> &m) {
+    fieldAliases_ = m;
+  }
   void setHandledReallocs(const std::set<unsigned> &s) { handledReallocs_ = s; }
   const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
   void setConstLocals(const std::map<std::string, llvm::APSInt> &m) { constLocals_ = m; }
@@ -2483,6 +2489,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setHandlers(collect.handlers());
   check.setGlobals(collect.nonVolatileGlobals());
   check.setDestructors(collect.destructors());
+  check.setFieldAliases(collect.fieldAliases());
   check.setHandledReallocs(collect.handledReallocs());
   check.setConstLocals(collect.constLocals());
   check.setAssignedVars(collect.assignedVars());
