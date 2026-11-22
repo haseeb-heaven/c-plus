@@ -1,0 +1,23 @@
+t5_worker_valid 1
+t5_worker_start 1
+t5_worker_join 1
+t5_worker_counter 1
+t5_worker_rejoin_fails 1
+t5_move_src_holds 1
+t5_move_dst_holds 1
+t5_move_src_inert 1
+t5_move_relock_after 1
+t5_early_return_value 1
+t5_early_relock 1
+t5_cycles_complete 1
+t5_cycles_telemetry_clean 1
+t5_cycles_fd_stable 1
+t5_zero_invalid 1
+t5_zero_native_null 1
+t5_zero_after_drop 1
+t5_zero_guard_holds 1
+t5_zero_guard_released 1
+t5_null_guard_holds 1
+t5_null_guard_safe 1
+t5_null_recover 1
+THREAD_TASK5 22 0

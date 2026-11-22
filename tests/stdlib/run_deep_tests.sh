@@ -61,15 +61,48 @@ flags_for() {
   esac
 }
 
-# Counters, kept per mode; bfail/rfail split the "failed" bucket by phase.
+# Counters, kept per mode. bfail/rfail/ofail split "failed" by phase so a
+# compile error is never confused with a runtime error or an output mismatch.
 for _key in $MODES; do
-  eval "pass_$_key=0; fail_$_key=0; skip_$_key=0; bfail_$_key=0; rfail_$_key=0"
+  eval "pass_$_key=0; fail_$_key=0; skip_$_key=0; bfail_$_key=0; rfail_$_key=0; ofail_$_key=0"
 done
-add_pass()      { eval "pass_$1=\$((pass_$1 + 1))"; }
-add_fail()      { eval "fail_$1=\$((fail_$1 + 1))"; }
-add_skip()      { eval "skip_$1=\$((skip_$1 + 1))"; }
+add_pass()       { eval "pass_$1=\$((pass_$1 + 1))"; }
+add_fail()       { eval "fail_$1=\$((fail_$1 + 1))"; }
+add_skip()       { eval "skip_$1=\$((skip_$1 + 1))"; }
 add_build_fail() { eval "bfail_$1=\$((bfail_$1 + 1))"; }
 add_run_fail()   { eval "rfail_$1=\$((rfail_$1 + 1))"; }
+add_out_fail()   { eval "ofail_$1=\$((ofail_$1 + 1))"; }
+
+# Optional byte-exact expectation fixtures:
+#   tests/stdlib/<name>.expected       -> expected stdout
+#   tests/stdlib/<name>.stderr.expected -> expected stderr
+# A test without fixtures still runs and is checked by exit code; it is listed
+# in the final NO-EXPECTATION section so it is never silently treated as proven.
+no_expectation=""
+compare_output() { # compare_output <name> <key> <stdout> <stderr>
+  _n=$1; _k=$2; _so=$3; _se=$4
+  _eo="tests/stdlib/${_n}.expected"
+  _ee="tests/stdlib/${_n}.stderr.expected"
+  [ -f "$_eo" ] || [ -f "$_ee" ] || {
+    case " $no_expectation " in
+      *" $_n "*) ;;
+      *) no_expectation="$no_expectation $_n" ;;
+    esac
+    return 0
+  }
+  _bad=0
+  _diff="$OUT/${_n}_${_k}.diff"
+  : >"$_diff"
+  if [ -f "$_eo" ] && ! diff -u "$_eo" "$_so" >>"$_diff" 2>&1; then _bad=1; fi
+  if [ -f "$_ee" ] && ! diff -u "$_ee" "$_se" >>"$_diff" 2>&1; then _bad=1; fi
+  if [ "$_bad" -ne 0 ]; then
+    printf 'OUT-FAIL %s (%s): expected stdout/stderr mismatch (see %s)\n' \
+      "$_n" "$(mode_label "$_k")" "$_diff"
+    head -n 10 "$_diff" | sed 's/^/           /'
+    add_fail "$_k"
+    add_out_fail "$_k"
+  fi
+}
 
 # matches <basename> [pattern ...] -> 0 when the basename contains any pattern.
 matches() {
@@ -133,6 +166,7 @@ one() { # one <name> <mode-key> <src>
   if [ "$_rrc" -eq 0 ]; then
     printf 'ok       %s (%s): %s\n' "$_name" "$_label" "$(tail -n 1 "$_out")"
     add_pass "$_key"
+    compare_output "$_name" "$_key" "$_out" "$_err"
   elif [ "$_rrc" -eq 124 ] || [ "$_rrc" -ge 128 ]; then
     printf 'TIMEOUT  %s (%s): run exceeded %ss (rc=%s)\n' \
       "$_name" "$_label" "$RUN_TIMEOUT" "$_rrc"
@@ -168,17 +202,20 @@ if [ "$selected" -eq 0 ]; then
 fi
 
 # Per-mode summary. "failed" is split into build vs runtime for diagnosis.
-printf '\n%-12s %8s %8s %8s %11s %9s\n' \
-  MODE PASSED FAILED SKIPPED BUILD-FAIL RUN-FAIL
+printf '\n%-12s %8s %8s %8s %11s %9s %9s\n' \
+  MODE PASSED FAILED SKIPPED BUILD-FAIL RUN-FAIL OUT-FAIL
 tp=0; tf=0; ts=0
 for _key in $MODES; do
-  eval "_p=\$pass_$_key; _f=\$fail_$_key; _s=\$skip_$_key; _bf=\$bfail_$_key; _rf=\$rfail_$_key"
-  printf '%-12s %8s %8s %8s %11s %9s\n' \
-    "$(mode_label "$_key")" "$_p" "$_f" "$_s" "$_bf" "$_rf"
+  eval "_p=\$pass_$_key; _f=\$fail_$_key; _s=\$skip_$_key; _bf=\$bfail_$_key; _rf=\$rfail_$_key; _of=\$ofail_$_key"
+  printf '%-12s %8s %8s %8s %11s %9s %9s\n' \
+    "$(mode_label "$_key")" "$_p" "$_f" "$_s" "$_bf" "$_rf" "$_of"
   tp=$((tp + _p)); tf=$((tf + _f)); ts=$((ts + _s))
 done
 printf 'deep stdlib tests: %s passed, %s failed, %s skipped (%s file(s) x %s modes)\n' \
   "$tp" "$tf" "$ts" "$selected" "3"
+if [ -n "$no_expectation" ]; then
+  printf 'NO-EXPECTATION (exit code only, no byte-exact fixture):%s\n' "$no_expectation"
+fi
 
 if [ "$tf" -ne 0 ]; then
   exit 1
