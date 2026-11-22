@@ -54,6 +54,7 @@ set(LIBC_SOURCES
   src/fenv/fenv.c
   src/complex/complex.c
   src/thread/thread.c
+  src/thread/threads_c11.c
   src/fenv/fenv_extra.c
   src/time/time_ascii.c
   src/wchar/wchar_numeric.c

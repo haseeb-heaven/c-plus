@@ -60,6 +60,7 @@ SRCS="
   libc/src/fenv/fenv.c
   libc/src/complex/complex.c
   libc/src/thread/thread.c
+  libc/src/thread/threads_c11.c
   libc/src/fenv/fenv_extra.c
   libc/src/time/time_ascii.c
   libc/src/wchar/wchar_numeric.c
