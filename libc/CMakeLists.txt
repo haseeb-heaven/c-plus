@@ -3,6 +3,12 @@ project(cplus_hardened_libc C)
 set(CMAKE_C_STANDARD 99)
 find_package(Threads REQUIRED)
 
+# Optional AddressSanitizer build. OFF by default so ordinary release builds
+# never need ASan headers or runtime. The allocators delegate every logical
+# allocation to a distinct system malloc block, so ASan's own interceptors
+# supply redzones/quarantine; no manual memory poisoning is used.
+option(CPLUS_LIBC_ENABLE_ASAN "Build the C+ libc with AddressSanitizer instrumentation" OFF)
+
 set(LIBC_SOURCES
   log/log.c
   src/errno/errno.c
@@ -62,10 +68,16 @@ set(LIBC_SOURCES
 )
 
 add_library(cplus_hardened_libc STATIC ${LIBC_SOURCES})
-add_library(cplus_hardened_libc_shared SHARED ${LIBC_SOURCES})
-set_target_properties(cplus_hardened_libc_shared PROPERTIES OUTPUT_NAME cplus_hardened_libc)
+set(LIBC_INSTALL_TARGETS cplus_hardened_libc)
+# A sanitizer-instrumented dylib cannot resolve the ASan runtime on macOS;
+# the ASan configuration therefore produces the static library only.
+if(NOT CPLUS_LIBC_ENABLE_ASAN)
+  add_library(cplus_hardened_libc_shared SHARED ${LIBC_SOURCES})
+  set_target_properties(cplus_hardened_libc_shared PROPERTIES OUTPUT_NAME cplus_hardened_libc)
+  list(APPEND LIBC_INSTALL_TARGETS cplus_hardened_libc_shared)
+endif()
 
-foreach(tgt IN ITEMS cplus_hardened_libc cplus_hardened_libc_shared)
+foreach(tgt IN ITEMS ${LIBC_INSTALL_TARGETS})
   target_include_directories(${tgt}
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -76,9 +88,13 @@ foreach(tgt IN ITEMS cplus_hardened_libc cplus_hardened_libc_shared)
   )
   target_compile_options(${tgt} PRIVATE -Wall -Wextra -Wpedantic)
   target_link_libraries(${tgt} PRIVATE m Threads::Threads)
+  if(CPLUS_LIBC_ENABLE_ASAN)
+    target_compile_options(${tgt} PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
+    target_link_options(${tgt} PRIVATE INTERFACE -fsanitize=address)
+  endif()
 endforeach()
 
-install(TARGETS cplus_hardened_libc cplus_hardened_libc_shared
+install(TARGETS ${LIBC_INSTALL_TARGETS}
   EXPORT cplus_hardened_libcTargets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
