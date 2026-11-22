@@ -168,6 +168,36 @@ public:
       walk(uo->getSubExpr());
       return;
     }
+    if (const auto *call = dyn_cast<CallExpr>(s)) {
+      // Writing functions initialise their output buffer through `&var`.
+      const FunctionDecl *fd = call->getDirectCallee();
+      if (fd && LocalCollector::isOutputFunction(fd->getName()) &&
+          call->getNumArgs() >= 1) {
+        const Expr *arg = call->getArg(0)->IgnoreParenCasts();
+        if (const auto *uo = dyn_cast<UnaryOperator>(arg))
+          if (uo->getOpcode() == UO_AddrOf)
+            markInitialized(uo->getSubExpr());
+      }
+      // Raw bounded-copy APIs also write through their first argument.
+      std::string n = fd ? fd->getName().str() : std::string();
+      bool rawWriter = n.find("memcpy") != std::string::npos ||
+                       n.find("memmove") != std::string::npos ||
+                       n == "memset" || n.find("strcpy") != std::string::npos ||
+                       n.find("va_start") != std::string::npos ||
+                       n.find("printf") != std::string::npos;
+      if (rawWriter && call->getNumArgs() >= 1) {
+        const Expr *arg = call->getArg(0)->IgnoreParenCasts();
+        if (n.find("va_start") != std::string::npos) {
+          markInitialized(arg); // __builtin_va_start takes the lvalue directly
+        } else if (const auto *uo = dyn_cast<UnaryOperator>(arg)) {
+          if (uo->getOpcode() == UO_AddrOf)
+            markInitialized(uo->getSubExpr());
+        }
+      }
+      for (const Stmt *child : s->children())
+        walk(child);
+      return;
+    }
     if (const auto *ds = dyn_cast<DeclStmt>(s)) {
       for (const Decl *d : ds->decls())
         if (const auto *vd = dyn_cast<VarDecl>(d)) {

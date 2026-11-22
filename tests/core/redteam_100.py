@@ -90,7 +90,7 @@ add("strcat_oob", "#include <string.h>\nint main(void){char d[4]=\"a\";strcat(d,
 add("strncpy_oob", "#include <string.h>\nint main(void){char d[4];strncpy(d,\"abcdefgh\",8);return 0;}", "reject")
 add("snprintf_oob", "#include <stdio.h>\nint main(void){char d[4];snprintf(d,100,\"%s\",\"abc\");return 0;}", "reject")
 add("memcpy_null_src", "#include <string.h>\nint main(void){char d[8];char*s=0;memcpy(d,s,4);return 0;}", "reject")
-add("memcpy_null_dst", "#include <string.h>\nint main(void){char*d=0;char s[4]={0};memcpy(d,s,4);return 0;}", "accept")
+add("memcpy_null_dst", "#include <string.h>\nint main(void){char*d=0;char s[4]={0};memcpy(d,s,4);return 0;}", "reject")
 add("memcpy_zero", "#include <string.h>\nint main(void){char d[4];char s[4]={0};memcpy(d,s,0);return 0;}", "accept")
 add("alloc_zero", "#include <stdlib.h>\nint main(void){int*p=malloc(0);free(p);return 0;}", "strict")
 add("alloc_size_overflow", "#include <stdlib.h>\nint main(void){size_t n=(size_t)-1;int*p=malloc(n*sizeof(int));if(!p)return 1;free(p);return 0;}", "reject")

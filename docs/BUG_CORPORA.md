@@ -16,6 +16,25 @@ Current results (DEFAULT / STRICT):
 | bugs52 | 37 / 39 of 52 | leaks on exceptional paths, scope escapes, field ownership, uninitialized heap reads, container/arena cases |
 | bugs52b | 14 / 20 of 52 | TOCTOU/data races, deep recursion, mmap/file-size faults, dynamic-library lifetime, variadic ABI, tagged pointers, cleanup attributes |
 
+## bugs51–bugs97 corpus (c-plus-stdlib/scratch)
+
+A further **47 files / 188 unique scenarios** were generated into
+`c-plus-stdlib/scratch/bugs51.cp` … `bugs97.cp` by
+`c-plus-stdlib/scratch/generate_bugs.py`. Names use the `bug51_…`–`bug97_…`
+prefix and do not overlap the existing 1–50 catalogs.
+
+Each scenario has machine-readable markers (`EXPECT: reject|warn|accept|gap`,
+`DIAG: exact substring`, `GAP: reason`). The harness
+`tests/core/bugs51_97_suite.py` compiles every scenario in isolation and
+asserts the exact diagnostic for enforced rules; safe counterparts are also
+built and executed (19 runtime cases). It is wired into `tests/core/run.sh`.
+
+Result: **207/207 checks pass**, of which **160 scenarios are enforced**,
+**28 are explicitly documented gaps** (path/field-sensitive ownership,
+pthread/fd state, special-purpose analyses), and 19 are runtime executions.
+Gaps are recorded in `tests/out/core/bugs51_97/report.txt`; they are never
+silently treated as safe.
+
 ## Honest scope
 
 Many examples are **not statically provable without rejecting valid C**:

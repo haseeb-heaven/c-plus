@@ -1143,11 +1143,19 @@ public:
           --conditionalDepth_;
           return r;
         }
+        // `p = tmp` inside the success branch rebinds the owner to the new
+        // block; only that name becomes live again, stale aliases stay dead.
+        std::string savedRebind = reallocRebindOwner_;
+        if (!owner.empty() && !tmp.empty()) {
+          reallocRebindOwner_ = owner;
+          reallocRebindTemp_ = tmp;
+        }
         // Inside the success branch the old pointer and its aliases are
         // invalid; outside it they remain valid (failure path).
         markReleased(owner);
         r &= TraverseStmt(s->getThen());
         clearReleased(owner);
+        reallocRebindOwner_ = savedRebind;
         if (s->getElse())
           r &= TraverseStmt(s->getElse());
         --conditionalDepth_;
@@ -1578,6 +1586,11 @@ public:
       }
       return true;
     }
+    // `p = reallocTemp` rebinds only the owner name; stale aliases stay dead.
+    if (!reallocRebindOwner_.empty() && op->isAssignmentOp() &&
+        varNameOf(op->getLHS()) == reallocRebindOwner_ &&
+        varNameOf(op->getRHS()) == reallocRebindTemp_)
+      releasedVars_.erase(reallocRebindOwner_);
     // An unsigned value compared with zero via < is always false: the check
     // can never protect anything, so it is a provable logic bug.
     // Subtracting or relationally comparing pointers into different objects
@@ -2292,8 +2305,11 @@ public:
         // Exact field lvalue: record its release even when the argument is
         // not a plain variable reference (free(s.p), free(a[0].p)).
         std::string fkey = lvalueKey(call->getArg(0));
-        if (!fkey.empty() && conditionalDepth_ == 0)
+        if (!fkey.empty() && conditionalDepth_ == 0) {
+          if (releasedFields_.count(fkey))
+            report(call->getBeginLoc(), "double free of '" + fkey + "'");
           releasedFields_.insert(fkey);
+        }
       }
       bool invalidates = isAllocatorFree ||
                          destructors_.count(name) != 0;
@@ -2323,6 +2339,18 @@ public:
           markReleased(pname);
         }
       }
+      // Provably-null arguments to libc APIs that dereference them are
+      // contract violations even when the JSON contract has no nullableArgs.
+      {
+        static const std::set<std::string> kDerefApis = {
+            "memcpy", "memmove", "memset", "strcpy", "strncpy", "strcat",
+            "strncat", "strlen", "strcmp", "strncmp", "fgets", "fread",
+            "fwrite", "fprintf", "fscanf", "puts", "print"};
+        if (kDerefApis.count(baseName))
+          for (unsigned a = 0; a < call->getNumArgs(); ++a)
+            if (call->getArg(a)->getType()->isPointerType())
+              checkLibcNullSource(call, baseName, a);
+      }
       // Contract-driven check: a function whose JSON contract declares a
       // nullable pointer argument must not receive a provably-null value.
       FunctionEffect contract = libcEffect(baseName);
@@ -2347,6 +2375,66 @@ public:
         warnAt(call->getBeginLoc(),
                "realloc result and original pointer require explicit "
                "success/failure handling; alias state is unknown");
+      }
+      // Allocation sizes computed from local constants: detect size_t wrap.
+      if ((baseName == "malloc" || baseName == "calloc" ||
+           baseName == "realloc") && call->getNumArgs() >= 1) {
+        auto apToU64 = [](const llvm::APSInt &v) -> unsigned long long {
+          return v.isNegative()
+                     ? static_cast<unsigned long long>(v.getSExtValue())
+                     : v.getZExtValue();
+        };
+        std::function<bool(const Expr *, unsigned long long &, bool &)> evalU64 =
+            [&](const Expr *e, unsigned long long &out, bool &overflow) -> bool {
+          if (!e) return false;
+          const Expr *x = e->IgnoreParenCasts();
+          Expr::EvalResult r;
+          if (x->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+            out = apToU64(r.Val.getInt());
+            return true;
+          }
+          if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+              auto it = constLocals_.find(vd->getNameAsString());
+              if (it != constLocals_.end() && !assignedVars_.count(vd->getNameAsString())) {
+                out = apToU64(it->second);
+                return true;
+              }
+            }
+          if (const auto *bo = dyn_cast<BinaryOperator>(x)) {
+            unsigned long long a = 0, b = 0;
+            if (!evalU64(bo->getLHS(), a, overflow) ||
+                !evalU64(bo->getRHS(), b, overflow))
+              return false;
+            if (bo->getOpcode() == BO_Mul) {
+              if (a != 0 && b > (unsigned long long)-1 / a) {
+                overflow = true;
+                return true;
+              }
+              out = a * b;
+              return true;
+            }
+            if (bo->getOpcode() == BO_Add) {
+              if (a > (unsigned long long)-1 - b) {
+                overflow = true;
+                return true;
+              }
+              out = a + b;
+              return true;
+            }
+          }
+          return false;
+        };
+        unsigned sizeIdx = (baseName == "realloc") ? 1 : 0;
+        if (sizeIdx < call->getNumArgs()) {
+          unsigned long long v = 0;
+          bool overflow = false;
+          if (evalU64(call->getArg(sizeIdx), v, overflow))
+            if (overflow)
+              report(call->getBeginLoc(),
+                     "allocation size wraps size_t; check the multiplication "
+                     "before allocating");
+        }
       }
       // fread/fwrite multiply size * count in size_t; a constant product that
       // wraps is a buffer-overflow / truncated-transfer bug.
@@ -2703,6 +2791,18 @@ public:
   bool VisitArraySubscriptExpr(ArraySubscriptExpr *subscript) {
     if (!report_)
       return true;
+    // A negative constant index is always out of bounds, heap or stack.
+    long long constIdx = 0;
+    if (evalIndexValue(subscript->getIdx(), constIdx) && constIdx < 0) {
+      const Expr *base = subscript->getBase()->IgnoreParenCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(base))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (vd->getType()->isArrayType() && !heapStateOf(base)) {
+            report(subscript->getBeginLoc(),
+                   "negative array index on '" + vd->getNameAsString() + "'");
+            return true;
+          }
+    }
     if (const auto *iref = dyn_cast<DeclRefExpr>(
             subscript->getIdx()->IgnoreParenCasts())) {
       auto it = snprintfResults_.find(iref->getDecl()->getNameAsString());
@@ -2945,6 +3045,7 @@ public:
   std::map<std::string, std::string> freadResults_;
   std::set<std::string> contractIssuesReported_;
   std::set<std::string> guardedSnprintf_;
+  std::string reallocRebindOwner_, reallocRebindTemp_;
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
@@ -2967,6 +3068,9 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
         arg.rfind("-std=", 0) == 0)
       args.push_back(arg);
   }
+#ifdef CPLUS_CLANG_RESOURCE_DIR
+  args.push_back(std::string("-resource-dir=") + CPLUS_CLANG_RESOURCE_DIR);
+#endif
   args.push_back("-fsyntax-only");
   // Tooling infers language from the filename suffix; a .cp suffix would be
   // treated as C++.  Use a synthetic .c name for the in-memory buffer.
@@ -2980,16 +3084,19 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
     void HandleDiagnostic(clang::DiagnosticsEngine::Level level,
                           const clang::Diagnostic &info) override {
       clang::DiagnosticConsumer::HandleDiagnostic(level, info);
-      if (level != clang::DiagnosticsEngine::Warning &&
-          level != clang::DiagnosticsEngine::Error)
-        return;
+      if (level == clang::DiagnosticsEngine::Error) {
+        llvm::SmallString<256> em;
+        info.FormatDiagnostic(em);
+          }
       llvm::SmallString<256> msg;
       info.FormatDiagnostic(msg);
       std::string s(msg.str());
       if (s.find("format") == std::string::npos &&
           s.find("conversion") == std::string::npos &&
           s.find("field width") == std::string::npos &&
-          s.find("precision") == std::string::npos)
+          s.find("precision") == std::string::npos &&
+          s.find("will always overflow") == std::string::npos &&
+          s.find("division by zero") == std::string::npos)
         return;
       Diag d;
       d.level = (strict || level == clang::DiagnosticsEngine::Error)

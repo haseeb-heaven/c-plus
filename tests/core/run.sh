@@ -269,6 +269,13 @@ else
   bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
 fi
 
+# bugs51..bugs97 corpus: 188 unique compile-time scenarios + 19 runtime cases.
+if python3 "$ROOT/tests/core/bugs51_97_suite.py" >"$OUT/bugs51_97.log" 2>&1; then
+  ok bugs51_97_suite
+else
+  bad bugs51_97_suite "$(head -1 "$OUT/bugs51_97.log")"
+fi
+
 echo
 echo "core safety: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

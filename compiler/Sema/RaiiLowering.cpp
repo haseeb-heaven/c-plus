@@ -1424,17 +1424,24 @@ private:
         // A FILE* that came from fopen and was already closed must not be
         // used again (this also catches `fclose(f); fprintf(f, ...);`).
         size_t lp = nextSig(i);
-        size_t arg = isPunct(lp, "(") ? nextSig(lp) : kNPos;
-        bool closed = false;
-        if (arg < closeIdx && toks_[arg].kind == TokKind::Identifier) {
-          closed = closedFiles.count(toks_[arg].text) != 0;
-          auto ait = fileAliases.find(toks_[arg].text);
+        size_t rp = isPunct(lp, "(") ? matchingParen(lp) : kNPos;
+        if (rp == kNPos || rp > closeIdx)
+          rp = closeIdx;
+        // The FILE* is not always argument 0 (fputs(str, f), fread(..., f)).
+        for (size_t k = lp + 1; k < rp; ++k) {
+          if (toks_[k].kind != TokKind::Identifier)
+            continue;
+          const std::string &candidate = toks_[k].text;
+          bool closed = closedFiles.count(candidate) != 0;
+          auto ait = fileAliases.find(candidate);
           if (!closed && ait != fileAliases.end())
             for (const auto &a : ait->second)
               if (closedFiles.count(a)) { closed = true; break; }
-          if (closed)
-            plainError("use of closed FILE* '" + toks_[arg].text + "'", t,
+          if (closed) {
+            plainError("use of closed FILE* '" + candidate + "'", t,
                        "the stream was already closed");
+            break;
+          }
         }
       } else if (isIdent(i, "if")) {
         noteFopenNullChecks(i);
