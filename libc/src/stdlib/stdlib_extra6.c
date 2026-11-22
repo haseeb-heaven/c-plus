@@ -27,5 +27,14 @@ char *cplus_realpath(const char *path, char *resolved) {
 void cplus_qsort_r(void *base, size_t nmemb, size_t size, void *thunk,
                    int (*compar)(void *, const void *, const void *)) {
     cplus_libc_log("qsort_r", "enter");
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    /* BSD/macOS: qsort_r(base, nmemb, size, thunk, compar) */
     qsort_r(base, nmemb, size, thunk, compar);
+#elif defined(__GLIBC__)
+    /* glibc: qsort_r(base, nmemb, size, compar, thunk) — reversed order. */
+    qsort_r(base, nmemb, size, compar, thunk);
+#else
+    /* Unknown qsort_r ABI: do NOT call it with a guessed argument order. */
+    errno = ENOSYS;
+#endif
 }
