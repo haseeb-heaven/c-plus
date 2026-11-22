@@ -138,7 +138,7 @@ add("signal_global", "#include <signal.h>\nstatic int flag;static void h(int s){
 add("unchecked_fread", "#include <stdio.h>\nint main(void){FILE*f=fopen(\"x\",\"rb\");if(!f)return 1;char d[8];fread(d,1,8,f);fclose(f);return 0;}", "reject")
 add("unchecked_fwrite", "#include <stdio.h>\nint main(void){FILE*f=fopen(\"x\",\"wb\");if(!f)return 1;char d[8]={0};fwrite(d,1,8,f);fclose(f);return 0;}", "reject")
 add("fclose_null", "#include <stdio.h>\nint main(void){fclose(0);return 0;}", "accept")
-add("unclosed_file", "#include <stdio.h>\nint main(void){FILE*f=fopen(\"x\",\"r\");if(!f)return 1;return 0;}", "accept")
+add("unclosed_file", "#include <stdio.h>\nint main(void){FILE*f=fopen(\"x\",\"r\");if(!f)return 1;return 0;}", "strict")
 add("ffi_unknown_fn", "int unknown(int);int main(void){return unknown(1);}", "accept")
 add("snprintf_ok", "#include <stdio.h>\nint main(void){char b[32];int n=snprintf(b,sizeof b,\"%d\",7);return n>0?0:1;}", "accept")
 add("atoi_null", "#include <stdlib.h>\nint main(void){char*p=0;return atoi(p);}", "accept")

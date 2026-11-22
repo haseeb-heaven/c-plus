@@ -1202,6 +1202,15 @@ private:
 
         // `*out = p` / `obj.field = p` / `out = p` (out a pointer parameter)
         // transfers the pointer to the caller: not a provable local leak.
+        // `head = n` moves ownership into another local container/list; the
+        // linear scan cannot follow it, so treat it as escaped too.
+        if (!lhsName.empty() && rhs < closeIdx &&
+            toks_[rhs].kind == TokKind::Identifier && lhsName != toks_[rhs].text) {
+          auto rit = live.find(toks_[rhs].text);
+          if (rit != live.end())
+            rit->second.escaped = true;
+        }
+
         if (!lhsName.empty() && (isDerefLhs(lhs) || params.count(lhsName))) {
           if (rhs < closeIdx && toks_[rhs].kind == TokKind::Identifier) {
             auto it = live.find(toks_[rhs].text);
@@ -1356,9 +1365,9 @@ private:
           else
             msg = "allocation '" + kv.first +
                   "' leaks on this return path (no matching free)";
-          plainWarn(msg, t,
-                    "free/close the resource on every return path, or use a "
-                    "C+ managed allocation");
+          strictDiag(msg, t,
+                     "free/close the resource on every return path, or use a "
+                     "C+ managed allocation");
         }
       } else if (isIdent(i, "longjmp")) {
         // The generic longjmp warning is already produced by the bounds
