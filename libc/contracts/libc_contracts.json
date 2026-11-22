@@ -821,72 +821,98 @@
     },
     "sprintf_s": {
       "params": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "char *dest",
+        "size_t dmax",
+        "const char *fmt",
+        "..."
       ],
       "nullableArgs": [],
       "ownership": "borrow",
       "transfer": null,
-      "extent": "explicit capacity argument when required",
+      "extent": "dmax <= tracked/object capacity of dest",
       "effects": [
-        "checked CRT"
+        "checked CRT",
+        "format string validated (CWE-134, no %n)"
       ],
       "borrow": [],
-      "failure": "native/CRT status",
+      "failure": "runtime violation (exit 70) or -1 / EINVAL",
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
-        "capacity and error checks"
+        "capacity and error checks",
+        "non-literal format rejection (CWE-134)",
+        "forbids %n specifier",
+        "UAF and dmax > capacity check"
       ],
+      "format_literal_required": true,
+      "forbids_percent_n": true,
+      "bounds_checked_dest": true,
       "optional": true,
       "origin": "platform/checked CRT",
       "paramTypes": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "char *dest",
+        "size_t dmax",
+        "const char *fmt",
+        "..."
       ],
-      "pointerBounds": "explicit capacity argument",
-      "allocationSize": "explicit capacity argument when required",
+      "pointerBounds": "dmax <= tracked/object capacity",
+      "allocationSize": "explicit dmax <= capacity",
       "ownershipTransfer": null,
-      "borrowLifetime": "call + returned/assigned owner lifetime",
-      "readEffects": [],
-      "writeEffects": [],
+      "borrowLifetime": "call",
+      "readEffects": ["fmt"],
+      "writeEffects": ["dest[0..dmax)"],
       "freeEffects": [],
       "returnState": "borrow",
-      "failureBehavior": "native/CRT status",
+      "failureBehavior": "runtime violation (exit 70) or -1 / EINVAL",
       "threadAssumptions": [
-        "not thread-safe unless externally synchronised"
+        "thread-safe for disjoint buffers"
       ]
     },
     "snprintf_s": {
       "params": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "char *dest",
+        "size_t dmax",
+        "const char *fmt",
+        "..."
       ],
-      "nullableArgs": [],
+      "nullableArgs": [0],
       "ownership": "borrow",
       "transfer": null,
-      "extent": "explicit capacity argument when required",
+      "extent": "dmax <= tracked/object capacity of dest (dest may be NULL iff dmax == 0)",
       "effects": [
-        "checked CRT"
+        "checked CRT",
+        "format string validated (CWE-134, no %n)"
       ],
       "borrow": [],
-      "failure": "native/CRT status",
+      "failure": "runtime violation (exit 70) or -1 / EINVAL",
       "diagnostics": "CPLUS-SAFE-CRT",
       "dynamic": [
-        "capacity and error checks"
+        "capacity and error checks",
+        "non-literal format rejection (CWE-134)",
+        "forbids %n specifier",
+        "UAF and dmax > capacity check"
       ],
+      "format_literal_required": true,
+      "forbids_percent_n": true,
+      "bounds_checked_dest": true,
       "optional": true,
       "origin": "platform/checked CRT",
       "paramTypes": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "char *dest",
+        "size_t dmax",
+        "const char *fmt",
+        "..."
       ],
-      "pointerBounds": "explicit capacity argument",
-      "allocationSize": "explicit capacity argument when required",
+      "pointerBounds": "dmax <= tracked/object capacity",
+      "allocationSize": "explicit dmax <= capacity",
       "ownershipTransfer": null,
-      "borrowLifetime": "call + returned/assigned owner lifetime",
-      "readEffects": [],
-      "writeEffects": [],
+      "borrowLifetime": "call",
+      "readEffects": ["fmt"],
+      "writeEffects": ["dest[0..dmax)"],
       "freeEffects": [],
       "returnState": "borrow",
-      "failureBehavior": "native/CRT status",
+      "failureBehavior": "runtime violation (exit 70) or -1 / EINVAL",
       "threadAssumptions": [
-        "not thread-safe unless externally synchronised"
+        "thread-safe for disjoint buffers"
       ]
     },
     "fopen_s": {

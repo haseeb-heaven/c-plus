@@ -27,4 +27,5 @@ size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, F
 #if defined(__cplusplus)
 }
 #endif
+#include "safe_format.h"
 #endif

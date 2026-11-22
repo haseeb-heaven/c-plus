@@ -57,6 +57,7 @@
     {"standard": "fprintf", "bundled_symbol": "cplus_fprintf", "safe_symbol": "cplus_fprintf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
     {"standard": "scanf", "bundled_symbol": "cplus_scanf", "safe_symbol": "cplus_scanf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
     {"standard": "fscanf", "bundled_symbol": "cplus_fscanf", "safe_symbol": "cplus_fscanf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
+    {"standard": "sscanf", "bundled_symbol": "cplus_sscanf", "safe_symbol": "cplus_sscanf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
     {"standard": "rewind", "bundled_symbol": "cplus_rewind", "safe_symbol": null, "header": "stdio.h", "classification": "HOST-DELEGATED"},
     {"standard": "fgetc", "bundled_symbol": "cplus_fgetc", "safe_symbol": null, "header": "stdio.h", "classification": "HOST-DELEGATED"},
     {"standard": "fputc", "bundled_symbol": "cplus_fputc", "safe_symbol": null, "header": "stdio.h", "classification": "HOST-DELEGATED"},

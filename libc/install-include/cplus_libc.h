@@ -104,12 +104,19 @@ int cplus_rand(void); void cplus_srand(unsigned int); int cplus_atexit(void(*)(v
 void cplus_abort(void); void cplus_exit(int);
 FILE *cplus_fopen(const char*,const char*); int cplus_fclose(FILE*);
 size_t cplus_fread(void*,size_t,size_t,FILE*); size_t cplus_fwrite(const void*,size_t,size_t,FILE*);
-int cplus_snprintf(char*,size_t,const char*,...); int cplus_vsnprintf(char*,size_t,const char*,va_list);
-int cplus_printf(const char*,...); int cplus_fprintf(FILE*,const char*,...);
-int cplus_scanf(const char*,...); int cplus_fscanf(FILE*,const char*,...);
-int cplus_sprintf(char*,const char*,...); int cplus_vsprintf(char*,const char*,va_list);
-int cplus_sscanf(const char*,const char*,...); int cplus_vsscanf(const char*,const char*,va_list);
-int cplus_vfprintf(FILE*,const char*,va_list); int cplus_vprintf(const char*,va_list); int cplus_vfscanf(FILE*,const char*,va_list);
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_LIBC_FMT_PRINTF(f, a) __attribute__((format(printf, f, a)))
+#define CPLUS_LIBC_FMT_SCANF(f, a)  __attribute__((format(scanf, f, a)))
+#else
+#define CPLUS_LIBC_FMT_PRINTF(f, a)
+#define CPLUS_LIBC_FMT_SCANF(f, a)
+#endif
+int cplus_snprintf(char*,size_t,const char*,...) CPLUS_LIBC_FMT_PRINTF(3, 4); int cplus_vsnprintf(char*,size_t,const char*,va_list) CPLUS_LIBC_FMT_PRINTF(3, 0);
+int cplus_printf(const char*,...) CPLUS_LIBC_FMT_PRINTF(1, 2); int cplus_fprintf(FILE*,const char*,...) CPLUS_LIBC_FMT_PRINTF(2, 3);
+int cplus_scanf(const char*,...) CPLUS_LIBC_FMT_SCANF(1, 2); int cplus_fscanf(FILE*,const char*,...) CPLUS_LIBC_FMT_SCANF(2, 3);
+int cplus_sprintf(char*,const char*,...) CPLUS_LIBC_FMT_PRINTF(2, 3); int cplus_vsprintf(char*,const char*,va_list) CPLUS_LIBC_FMT_PRINTF(2, 0);
+int cplus_sscanf(const char*,const char*,...) CPLUS_LIBC_FMT_SCANF(2, 3); int cplus_vsscanf(const char*,const char*,va_list) CPLUS_LIBC_FMT_SCANF(2, 0);
+int cplus_vfprintf(FILE*,const char*,va_list) CPLUS_LIBC_FMT_PRINTF(2, 0); int cplus_vprintf(const char*,va_list) CPLUS_LIBC_FMT_PRINTF(1, 0); int cplus_vfscanf(FILE*,const char*,va_list) CPLUS_LIBC_FMT_SCANF(2, 0);
 int cplus_fseek(FILE*,long,int); long cplus_ftell(FILE*); int cplus_fflush(FILE*);
 int cplus_remove(const char*); int cplus_rename(const char*,const char*);
 char *cplus_fgets(char*,int,FILE*); int cplus_fputs(const char*,FILE*);
