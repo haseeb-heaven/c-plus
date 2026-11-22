@@ -1415,7 +1415,10 @@ public:
     std::string condVar = varNameOf(op->getCond());
     std::string saved = nonNullBranch_;
     bool removed = !condVar.empty() && nullVars_.erase(condVar) > 0;
-    if (removed)
+    // A null test also means the release fact must not apply in the true arm
+    // (a released pointer is often reset to null and then guarded).
+    bool wasReleased = !condVar.empty() && releasedVars_.erase(condVar) > 0;
+    if (removed || wasReleased)
       nonNullBranch_ = condVar;
     bool r = TraverseStmt(op->getCond());
     r &= TraverseStmt(op->getTrueExpr());
@@ -1424,6 +1427,8 @@ public:
     nonNullBranch_ = saved;
     if (removed)
       nullVars_.insert(condVar);
+    if (wasReleased)
+      releasedVars_.insert(condVar);
     return r;
   }
 
@@ -1607,6 +1612,7 @@ public:
         // makes it live again.
         const Expr *lhsExpr = op->getLHS()->IgnoreParenImpCasts();
         clearReleased(varNameOf(lhsExpr));
+        releasedFields_.erase(varNameOf(lhsExpr));
         maybeReleasedVars_.erase(varNameOf(lhsExpr));
       }
       if (handlers_.count(currentFunction_))

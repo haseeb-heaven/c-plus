@@ -56,7 +56,7 @@ add("uaf_addressof_after_free", "#include <stdlib.h>\nint main(void){int*p=mallo
 add("uaf_sizeof_ptr", "#include <stdlib.h>\nint main(void){int*p=malloc(4);free(p);return (int)sizeof p;}", "accept")
 add("uaf_freed_null_reset", "#include <stdlib.h>\nint main(void){int*p=malloc(4);free(p);p=0;return p?*p:0;}", "accept")
 add("uaf_double_alias_free", "#include <stdlib.h>\nint main(void){int*p=malloc(4);int*q=p;free(p);free(q);return 0;}", "reject")
-add("uaf_via_array_of_ptr", "#include <stdlib.h>\nint main(void){int*a[1];a[0]=malloc(4);free(a[0]);return *a[0];}", "accept")
+add("uaf_via_array_of_ptr", "#include <stdlib.h>\nint main(void){int*a[1];a[0]=malloc(4);free(a[0]);return *a[0];}", "reject")
 
 # --- double/invalid free (15) ---
 add("double_free_same", "#include <stdlib.h>\nint main(void){int*p=malloc(8);free(p);free(p);return 0;}", "reject")
@@ -153,7 +153,7 @@ add("strcpy_literal_dest", "#include <string.h>\nint main(void){strcpy((char*)\"
 add("memmove_overlap", "#include <string.h>\nint main(void){char a[16]=\"abcdef\";memmove(a+1,a,6);return a[0]=='a'?0:1;}", "accept")
 add("huge_stack_array", "int main(void){char a[1000000];a[0]=1;return a[0];}", "accept")
 add("alloca_use", "#include <alloca.h>\nint main(void){int*p=alloca(16);p[0]=1;return p[0];}", "strict")
-add("nested_borrow_free", "#include <stdlib.h>\nstruct S{int*p;};int main(void){struct S*s=malloc(sizeof *s);s->p=malloc(4);free(s->p);return *s->p;}", "accept")
+add("nested_borrow_free", "#include <stdlib.h>\nstruct S{int*p;};int main(void){struct S*s=malloc(sizeof *s);s->p=malloc(4);free(s->p);return *s->p;}", "reject")
 
 
 def run(case):

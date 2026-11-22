@@ -973,8 +973,7 @@ private:
 
     if (nameIdx == kNPos || typeIdx == kNPos ||
         ts[typeIdx].kind != TokKind::Identifier) {
-      diags_.error("cannot determine the declared name in this declaration",
-                   filename_, ts[start].line, ts[start].column);
+      // Not a C+ resource declaration we understand; leave ordinary C alone.
       return false;
     }
     const std::string typeName = ts[typeIdx].text;
@@ -1500,10 +1499,10 @@ private:
       size_t dot = ts.nextSig(i);
       if (ts.isPunct(dot, ".") || ts.isPunct(dot, "->")) {
         size_t member = ts.nextSig(dot);
-        if (member < ts.size() && ts[member].kind == TokKind::Identifier &&
+        if (member < ts.size() && ts.isIdent(member, "len") &&
             ts.isPunct(ts.nextSig(member), "(")) {
-          diags_.error("'" + ts[member].text + "()' cannot be called on '" +
-                           ts[i].text + "'; use the .len property on a static "
+          diags_.error("'len()' cannot be called on '" + ts[i].text +
+                           "'; use the .len property on a static "
                            "array or C+ managed allocation",
                        filename_, ts[i].line, ts[i].column);
           emit("0");

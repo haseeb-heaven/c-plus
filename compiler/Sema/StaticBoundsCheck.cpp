@@ -96,7 +96,7 @@ public:
           if (isPunct(k - 1, "#")) { inDirective = true; break; }
         if (isIdent(i, "alloca") && !inDirective)
           errorAt(toks_[i], "alloca has no bounds checking; use cplus_alloc");
-        if (isIdent(i, "setjmp") || isIdent(i, "longjmp"))
+        if ((isIdent(i, "setjmp") || isIdent(i, "longjmp")) && !inDirective)
           warningAt(toks_[i], std::string("'") + toks_[i].text +
                                   "' bypasses C+ deterministic cleanup");
         if (isIdent(i, "unreachable"))
