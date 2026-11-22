@@ -56,7 +56,18 @@ expect_trap() {
   fi
   "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
   rc=$?
-  if [ "$rc" -eq "$code" ]; then ok "$name"; else bad "$name" "exit $rc != $code"; fi
+  # Platform sanitizer abort codes differ (SIGABRT 134 on macOS, exit 1 on
+  # some Linux toolchains). Accept a different non-zero code only when the
+  # program emitted a real sanitizer/C+ diagnostic, never for a bare exit.
+  if [ "$rc" -eq "$code" ]; then
+    ok "$name"
+  elif [ "$rc" -ne 0 ] && \
+       cat "$OUT/$name.stdout" "$OUT/$name.stderr" 2>/dev/null | \
+         grep -qE 'runtime error:|AddressSanitizer|C\+ error:'; then
+    ok "$name"
+  else
+    bad "$name" "exit $rc != $code"
+  fi
 }
 
 echo "core safety: positive"
@@ -266,14 +277,14 @@ done
 if python3 "$ROOT/tests/core/lib_contracts_suite.py" >"$OUT/lib_contracts.log" 2>&1; then
   ok lib_contracts_suite
 else
-  bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
+  bad lib_contracts_suite "$(head -5 "$OUT/lib_contracts.log")"
 fi
 
 # Deterministic P0 fuzz + new unique scenario corpora (216 cases total).
 if python3 "$ROOT/tests/metrics/p0fuzz_suite.py" >"$OUT/p0fuzz.log" 2>&1; then
   ok p0fuzz_suite
 else
-  bad p0fuzz_suite "$(head -1 "$OUT/p0fuzz.log")"
+  bad p0fuzz_suite "$(head -5 "$OUT/p0fuzz.log")"
 fi
 if python3 "$ROOT/tests/metrics/p0new_run.py" >"$OUT/p0new.log" 2>&1; then
   ok p0new_suite
@@ -309,7 +320,7 @@ fi
 if python3 "$ROOT/tests/core/runtime_crashes_suite.py" >"$OUT/runtime_crashes.log" 2>&1; then
   ok runtime_crashes_suite
 else
-  bad runtime_crashes_suite "$(head -1 "$OUT/runtime_crashes.log")"
+  bad runtime_crashes_suite "$(head -5 "$OUT/runtime_crashes.log")"
 fi
 
 # Configurable sanitizers: ASan, UBSan, combined and none. Each negative case
@@ -317,14 +328,14 @@ fi
 if python3 "$ROOT/tests/core/sanitizer_suite.py" >"$OUT/sanitizer.log" 2>&1; then
   ok sanitizer_suite
 else
-  bad sanitizer_suite "$(head -1 "$OUT/sanitizer.log")"
+  bad sanitizer_suite "$(head -5 "$OUT/sanitizer.log")"
 fi
 
 # bugs51..bugs97 corpus: 188 unique compile-time scenarios + 19 runtime cases.
 if python3 "$ROOT/tests/core/bugs51_97_suite.py" >"$OUT/bugs51_97.log" 2>&1; then
   ok bugs51_97_suite
 else
-  bad bugs51_97_suite "$(head -1 "$OUT/bugs51_97.log")"
+  bad bugs51_97_suite "$(head -5 "$OUT/bugs51_97.log")"
 fi
 
 echo
