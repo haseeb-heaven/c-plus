@@ -123,9 +123,17 @@ void cplus_zero(void *p, size_t size);
  * safety comes from AST/CFG bounds analysis and Clang/LLVM instrumentation,
  * not from these functions.  They are kept only for source compatibility. */
 static inline void *cplus_memcpy(void *dest, const void *src, size_t n) {
+  /* A zero-length copy is a no-op. Returning before memmove matters on glibc,
+   * whose declaration marks both arguments nonnull: UBSan's -fsanitize=null
+   * aborts even for n == 0 when NULL is passed (macOS headers omit the
+   * attribute), which made otherwise portable no-op probes fail on Linux. */
+  if (n == 0)
+    return dest;
   return memmove(dest, src, n); /* overlap-safe superset of memcpy */  // NOSONAR: null misuse is an intentional test probe
 }
 static inline void *cplus_memmove(void *dest, const void *src, size_t n) {
+  if (n == 0)
+    return dest; /* same nonnull-attribute portability reason as above */
   return memmove(dest, src, n);  // NOSONAR: null misuse is an intentional test probe
 }
 static inline size_t cplus_strnlen(const char *s, size_t max) {

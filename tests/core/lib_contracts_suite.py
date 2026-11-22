@@ -48,7 +48,8 @@ NEGATIVE = {
         HEAD + "int main(void){char t[4]={'A','B','C','D'};printf(\"%s\",t);return 0;}\n",
         "char array 't' has no NUL terminator; %s will over-read"),
     "gets_unbounded": (
-        HEAD + 'int main(void){char b[8];gets(b);return 0;}\n',
+        HEAD + 'extern char *gets(char *);\n'
+              'int main(void){char b[8];gets(b);return 0;}\n',
         "gets() performs an unbounded write; use fgets with an explicit capacity"),
     "sprintf_unbounded": (
         HEAD + 'int main(void){char b[8];sprintf(b,"long string");return 0;}\n',

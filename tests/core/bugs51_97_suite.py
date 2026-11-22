@@ -105,7 +105,12 @@ RUNTIME_OK = [
     "bug97_004_single_owner_ok",
 ]
 for name in RUNTIME_OK:
-    src = (OUT / f"{name}.c").read_text()
+    scenario_src = OUT / f"{name}.c"
+    if not scenario_src.exists():
+        results.append((name + "[runtime]", "runtime", False, "exit 0",
+                        "scenario source missing (external corpus not checked out)"))
+        continue
+    src = scenario_src.read_text()
     exe = OUT / f"{name}.bin"
     rp = OUT / f"{name}.runtime.c"
     args = {"bug87_003_cleanup_on_all_paths_ok": "2",

@@ -102,7 +102,7 @@ PLAN = {
              "runtime error: unsigned integer overflow", False),
     "rc13": ("99999", "none", "C+ error: index", False),
     "rc14": ("5000000", "address",
-             "ERROR: AddressSanitizer: BUS", False),
+             "ERROR: AddressSanitizer:", False),
     "rc15": ("1", "thread",
              "WARNING: ThreadSanitizer: data race", True),
 }

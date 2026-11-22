@@ -17,6 +17,11 @@ OUT = ROOT / "tests/out/core/sanitizer"
 OUT.mkdir(parents=True, exist_ok=True)
 
 
+def last_line(text):
+    lines = text.strip().splitlines()
+    return lines[-1] if lines else "(no diagnostic)"
+
+
 def sdk_path():
     try:
         r = subprocess.run(["xcrun", "--show-sdk-path"], capture_output=True,
@@ -123,7 +128,7 @@ for name, mode, expected, legacy in CASES:
     r, build_out = build_run(SRC / f"{name}.c", mode, name, legacy=legacy)
     if r is None:
         results.append((name, "negative", False, expected,
-                        "build failed: " + build_out.strip().splitlines()[-1][:100]))
+                        "build failed: " + last_line(build_out)[:100]))
         continue
     diag = r.stderr + r.stdout
     ok = r.returncode != 0 and expected in diag
@@ -138,7 +143,7 @@ r, build_out = build_run(SRC / "runtime_dependent_heap_overflow.c", "address",
 if r is None:
     results.append(("runtime_dependent_heap_overflow", "negative", False,
                     "heap-buffer-overflow via __asan_memset",
-                    "build failed: " + build_out.strip().splitlines()[-1][:100]))
+                    "build failed: " + last_line(build_out)[:100]))
 else:
     diag = r.stderr + r.stdout
     ok = (r.returncode != 0 and
@@ -187,7 +192,7 @@ results.append(("static_check_preserved", "static",
                 static.returncode != 0 and
                 "[CPLUS-BOUNDS]" in static_diag,
                 "CPLUS-BOUNDS error from check",
-                static_diag.strip().splitlines()[-1][:110]))
+                last_line(static_diag)[:110]))
 
 # Safe program under each configuration must exit cleanly with no diagnostic.
 for mode in ["none", "address", "undefined", "address,undefined",
@@ -196,7 +201,7 @@ for mode in ["none", "address", "undefined", "address,undefined",
     r, build_out = build_run(SRC / "clean.c", mode, name)
     if r is None:
         results.append((name, "positive", False, "exit 0",
-                        "build failed: " + build_out.strip().splitlines()[-1][:100]))
+                        "build failed: " + last_line(build_out)[:100]))
         continue
     diag = r.stderr + r.stdout
     bad = ("AddressSanitizer" in diag or "runtime error:" in diag)
@@ -207,7 +212,7 @@ r, build_out = build_run(SRC / "clean_thread.c", "thread", "clean_thread",
                          legacy=True)
 if r is None:
     results.append(("clean_thread", "positive", False, "exit 0",
-                    "build failed: " + build_out.strip().splitlines()[-1][:100]))
+                    "build failed: " + last_line(build_out)[:100]))
 else:
     diag = r.stderr + r.stdout
     bad = "WARNING: ThreadSanitizer" in diag or "runtime error:" in diag
@@ -224,7 +229,7 @@ results.append(("msan_explicit_error", "capability",
                 "not supported by the selected backend" in
                 (unsupported.stderr + unsupported.stdout),
                 "explicit unsupported diagnostic",
-                (unsupported.stderr + unsupported.stdout).strip().splitlines()[-1][:110]))
+                last_line(unsupported.stderr + unsupported.stdout)[:110]))
 
 conflict = subprocess.run(
     [CC, "build", "--sanitize=address,thread", str(SRC / "clean.c"), "-o",
@@ -235,7 +240,7 @@ results.append(("conflict_explicit_error", "config",
                 "unsupported sanitizer combination" in
                 (conflict.stderr + conflict.stdout),
                 "explicit conflict diagnostic",
-                (conflict.stderr + conflict.stdout).strip().splitlines()[-1][:110]))
+                last_line(conflict.stderr + conflict.stdout)[:110]))
 
 # Flag plumbing: both compile and link commands must carry the flags.
 def linked_symbols(name):

@@ -223,11 +223,17 @@ def i_out_write(rng, k):
 
 def i_memset(rng, k):
     # Scalar memset is not treated as definite-init by the checker (an array
-    # memset is), so reading the scalar is still flagged uninitialized.
+    # memset is), so reading the scalar is flagged uninitialized.  Use the
+    # explicit builtin form: a literal `memset` is a libc header macro on
+    # macOS (expanded to __builtin___memset_chk) but a plain declaration on
+    # glibc, so the checker accepts it on Linux and rejects it on macOS.
+    # __builtin_memset has one spelling on every platform and is deliberately
+    # NOT name-matched by the checker's definite-write table, which keeps this
+    # case a reject with the same exact diagnostic substring everywhere.
     v = rng.randint(2, 12)
-    body = STR + (
-        "int main(void){int x;int y=%d;(void)y;memset(&x,0,sizeof x);return x;}"
-        % v)
+    body = STD + (
+        "int main(void){int x;int y=%d;(void)y;"
+        "__builtin_memset(&x,0,sizeof x);return x;}" % v)
     return body, reject(UNINIT)
 
 
