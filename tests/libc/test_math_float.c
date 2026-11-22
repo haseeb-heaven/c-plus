@@ -42,8 +42,8 @@ extern float cplus_nearbyintf(float);
 extern float cplus_rintf(float);
 extern long cplus_lrintf(float);
 extern long long cplus_llrintf(float);
-extern float cplus_lroundf(float);
-extern float cplus_llroundf(float);
+extern long cplus_lroundf(float);
+extern long long cplus_llroundf(float);
 extern float cplus_fabsf(float);
 extern float cplus_fmodf(float, float);
 extern float cplus_remainderf(float, float);
@@ -151,8 +151,8 @@ int main(void) {
     CHECK(cplus_scalblnf(0.5f, 3L), scalblnf(0.5f, 3L));
     l = cplus_lrintf(2.0f); i = lrintf(2.0f); assert(l == i);
     ll = cplus_llrintf(2.0f); { long long h = llrintf(2.0f); assert(ll == h); }
-    CHECK(cplus_lroundf(2.6f), lroundf(2.6f));
-    CHECK(cplus_llroundf(2.6f), llroundf(2.6f));
+    assert(cplus_lroundf(2.6f) == lroundf(2.6f));
+    assert(cplus_llroundf(2.6f) == llroundf(2.6f));
 
     /* --- NaN / infinity: classify, not exact bits --- */
     CHECK_CLASS(cplus_sinf(NAN), sinf(NAN));

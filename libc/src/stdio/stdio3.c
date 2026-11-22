@@ -4,6 +4,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #include "../../log/log.h"
+#include "stdio_internal.h"
 #include <errno.h>
 #include <stdio.h>
 
@@ -13,9 +14,28 @@ int cplus_fgetpos(FILE *stream,fpos_t *pos){ cplus_libc_log("fgetpos","enter"); 
 int cplus_fsetpos(FILE *stream,const fpos_t *pos){ cplus_libc_log("fsetpos","enter"); return fsetpos(stream,pos); }
 int cplus_ungetc(int c,FILE *stream){ cplus_libc_log("ungetc","enter"); return ungetc(c,stream); }
 int cplus_fileno(FILE *stream){ cplus_libc_log("fileno","enter"); return fileno(stream); }
-FILE *cplus_fdopen(int fd,const char *mode){ cplus_libc_log("fdopen","enter"); return fdopen(fd,mode); }
-FILE *cplus_freopen(const char *path,const char *mode,FILE *stream){ cplus_libc_log("freopen","enter"); return freopen(path,mode,stream); }
-FILE *cplus_tmpfile(void){ cplus_libc_log("tmpfile","enter"); return tmpfile(); }
+FILE *cplus_fdopen(int fd,const char *mode){
+    cplus_libc_log("fdopen","enter");
+    FILE *fp = fdopen(fd,mode);
+    if (fp) cplus_stdio_register(fp);
+    return fp;
+}
+FILE *cplus_freopen(const char *path,const char *mode,FILE *stream){
+    cplus_libc_log("freopen","enter");
+    if (!path || !mode) { errno = EINVAL; return NULL; }
+    FILE *fp = freopen(path,mode,stream);
+    if (fp) cplus_stdio_register(fp);
+    return fp;
+}
+FILE *cplus_tmpfile(void){
+    cplus_libc_log("tmpfile","enter");
+    FILE *fp = tmpfile();
+    /* Without this registration the double-close guard can retain a stale
+     * "closed" marker for a recycled FILE* address and cplus_fclose() then
+     * refuses to close the new stream, leaking the descriptor. */
+    if (fp) cplus_stdio_register(fp);
+    return fp;
+}
 void cplus_rewind(FILE *stream){
     cplus_libc_log("rewind","enter");
     if (!stream) { errno = EINVAL; return; }

@@ -4,10 +4,15 @@
  * NOTE: nanf() now lives in the complete float family in math_float.c and is
  * therefore not re-defined here (avoids a duplicate cplus_nanf symbol). */
 #include "../../log/log.h"
+#include <errno.h>
 #include <math.h>
 
 double cplus_fma(double x, double y, double z) { cplus_libc_log("fma", "enter"); return fma(x, y, z); }
-double cplus_remquo(double x, double y, int *quo) { cplus_libc_log("remquo", "enter"); return remquo(x, y, quo); }
+double cplus_remquo(double x, double y, int *quo) {
+    cplus_libc_log("remquo", "enter");
+    if (!quo) { errno = EINVAL; return 0.0; }
+    return remquo(x, y, quo);
+}
 double cplus_logb(double x) { cplus_libc_log("logb", "enter"); return logb(x); }
 int cplus_ilogb(double x) { cplus_libc_log("ilogb", "enter"); return ilogb(x); }
 double cplus_exp2(double x) { cplus_libc_log("exp2", "enter"); return exp2(x); }

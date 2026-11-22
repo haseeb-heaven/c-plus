@@ -22,9 +22,39 @@ static size_t hash_stream(const FILE *f) {
     return (size_t)(x & (STREAM_CACHE_SLOTS - 1u));
 }
 
+/* Open addressing: a single-slot-per-hash cache misclassified a real double
+ * close as an invalid free whenever two streams collided. Linear probing gives
+ * each stream its own slot until the table is full. */
+static size_t stream_find(FILE **table, const FILE *f) {
+    size_t mask = STREAM_CACHE_SLOTS - 1u;
+    size_t i = hash_stream(f);
+    if (!f) return STREAM_CACHE_SLOTS;
+    for (size_t n = 0; n < STREAM_CACHE_SLOTS; ++n) {
+        if (table[i] == NULL) return STREAM_CACHE_SLOTS;
+        if (table[i] == f) return i;
+        i = (i + 1u) & mask;
+    }
+    return STREAM_CACHE_SLOTS;
+}
+static void stream_add(FILE **table, FILE *f) {
+    size_t mask = STREAM_CACHE_SLOTS - 1u;
+    size_t start = hash_stream(f), i = start;
+    if (!f) return;
+    for (size_t n = 0; n < STREAM_CACHE_SLOTS; ++n) {
+        if (table[i] == NULL || table[i] == f) { table[i] = f; return; }
+        i = (i + 1u) & mask;
+    }
+    table[start] = f; /* full: bounded diagnostic only */
+}
+static int stream_remove(FILE **table, FILE *f) {
+    size_t i = stream_find(table, f);
+    if (i == STREAM_CACHE_SLOTS) return 0;
+    table[i] = NULL;
+    return 1;
+}
+
 FILE *cplus_fopen_s(const char *name, const char *mode) {
     FILE *f;
-    size_t idx;
     if (!name || !mode) {
         errno = EINVAL;
         cplus_safe_stat_record("fopen_s", 0);
@@ -36,11 +66,9 @@ FILE *cplus_fopen_s(const char *name, const char *mode) {
         cplus_safe_stat_record("fopen_s", 0);
         return NULL;
     }
-    idx = hash_stream(f);
     pthread_mutex_lock(&g_io_lock);
-    g_live_streams[idx] = f;
-    if (g_closed_streams[idx] == f)
-        g_closed_streams[idx] = NULL;
+    stream_remove(g_closed_streams, f);
+    stream_add(g_live_streams, f);
     pthread_mutex_unlock(&g_io_lock);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fopen_s", "ok");
     cplus_safe_stat_record("fopen_s", 1);
@@ -48,7 +76,6 @@ FILE *cplus_fopen_s(const char *name, const char *mode) {
 }
 
 int cplus_fclose_s(FILE *stream) {
-    size_t idx;
     int was_live = 0;
     int already_closed = 0;
     int rc;
@@ -57,16 +84,12 @@ int cplus_fclose_s(FILE *stream) {
         cplus_safe_stat_record("fclose_s", 0);
         return EOF;
     }
-    idx = hash_stream(stream);
     pthread_mutex_lock(&g_io_lock);
-    if (g_live_streams[idx] == stream) {
-        g_live_streams[idx] = NULL;
-        was_live = 1;
-    } else if (g_closed_streams[idx] == stream) {
+    was_live = stream_remove(g_live_streams, stream);
+    if (!was_live && stream_find(g_closed_streams, stream) < STREAM_CACHE_SLOTS)
         already_closed = 1;
-    }
     if (!already_closed)
-        g_closed_streams[idx] = stream;
+        stream_add(g_closed_streams, stream);
     pthread_mutex_unlock(&g_io_lock);
     if (already_closed && !was_live) {
         errno = EINVAL;

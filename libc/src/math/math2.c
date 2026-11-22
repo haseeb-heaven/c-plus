@@ -1,6 +1,7 @@
 /* Platform-backed math wrappers (C+ libc slice). Delegate to the installed
  * system libm (no vendored upstream); logged per C+ convention. */
 #include "../../log/log.h"
+#include <errno.h>
 #include <math.h>
 
 double cplus_atan2(double y,double x){ cplus_libc_log("atan2","enter"); return atan2(y,x); }
@@ -19,5 +20,7 @@ double cplus_fmin(double x,double y){ cplus_libc_log("fmin","enter"); return fmi
 double cplus_fmax(double x,double y){ cplus_libc_log("fmax","enter"); return fmax(x,y); }
 double cplus_copysign(double x,double y){ cplus_libc_log("copysign","enter"); return copysign(x,y); }
 double cplus_ldexp(double x,int e){ cplus_libc_log("ldexp","enter"); return ldexp(x,e); }
-double cplus_frexp(double x,int *e){ cplus_libc_log("frexp","enter"); return frexp(x,e); }
-double cplus_modf(double x,double *ip){ cplus_libc_log("modf","enter"); return modf(x,ip); }
+double cplus_frexp(double x,int *e){ cplus_libc_log("frexp","enter");
+    if (!e) { errno = EINVAL; return 0.0; } return frexp(x,e); }
+double cplus_modf(double x,double *ip){ cplus_libc_log("modf","enter");
+    if (!ip) { errno = EINVAL; return 0.0; } return modf(x,ip); }

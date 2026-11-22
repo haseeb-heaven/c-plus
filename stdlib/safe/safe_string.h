@@ -55,7 +55,7 @@ char *cplus_strncat_s_auto(char *dest, const char *src, size_t n, size_t known_d
 
 #ifndef CPLUS_SAFE_OBJ_SIZE
 #if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 0)
+#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 1) /* mode 1: exact enclosing object; mode 0 leaks trailing struct bytes */
 #else
 #define CPLUS_SAFE_OBJ_SIZE(p) ((size_t)-1)
 #endif

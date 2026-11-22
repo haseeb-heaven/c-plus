@@ -62,6 +62,44 @@ static size_t meta_recent_idx(const void *p) {
     return meta_hash(p) & (META_RECENT_CAP - 1u);
 }
 
+/* Recently-freed addresses are kept in an OPEN-ADDRESSED table. A direct-mapped
+ * single-slot cache used to misclassify a real double free as an invalid free
+ * whenever two freed pointers collided in the same bucket. Linear probing
+ * gives each distinct address its own slot until the table fills. */
+static size_t recent_find(const void *p) {
+    size_t mask = META_RECENT_CAP - 1u;
+    size_t i = meta_recent_idx(p);
+    if (!p) return META_RECENT_CAP;
+    for (size_t n = 0; n < META_RECENT_CAP; ++n) {
+        if (g_recent[i].ptr == NULL) return META_RECENT_CAP;
+        if (g_recent[i].ptr == p) return i;
+        i = (i + 1u) & mask;
+    }
+    return META_RECENT_CAP;
+}
+static int recent_contains(const void *p) { return recent_find(p) < META_RECENT_CAP; }
+static void recent_remove(const void *p) {
+    size_t i = recent_find(p);
+    if (i < META_RECENT_CAP) { g_recent[i].ptr = NULL; g_recent[i].generation = 0; }
+}
+static void recent_add(const void *p, unsigned long long generation) {
+    size_t mask = META_RECENT_CAP - 1u;
+    size_t start = meta_recent_idx(p);
+    size_t i = start;
+    if (!p) return;
+    for (size_t n = 0; n < META_RECENT_CAP; ++n) {
+        if (g_recent[i].ptr == NULL || g_recent[i].ptr == p) {
+            g_recent[i].ptr = (void *)p;
+            g_recent[i].generation = generation;
+            return;
+        }
+        i = (i + 1u) & mask;
+    }
+    /* Table full: overwrite the bucket's first slot (bounded diagnostic only). */
+    g_recent[start].ptr = (void *)p;
+    g_recent[start].generation = generation;
+}
+
 /* All helpers below require g_meta_lock held. */
 
 static meta_slot *meta_find_addr(uintptr_t addr) {
@@ -142,19 +180,16 @@ static unsigned long long meta_insert(void *p, size_t byte_size, size_t elem_siz
         ++g_live;
         g_live_bytes += byte_size;
     }
-    if (g_recent[meta_recent_idx(p)].ptr == p) {
-        g_recent[meta_recent_idx(p)].ptr = NULL;
-        g_recent[meta_recent_idx(p)].generation = 0;
-    }
+    /* A fresh cplus allocation at a recycled address is live again, so it is
+     * no longer a "recently freed" address. */
+    recent_remove(p);
     return gen;
 }
 
 static void meta_remove(meta_slot *s) {
-    size_t ridx = meta_recent_idx(s->ptr);
     g_live_bytes -= s->byte_size;
     --g_live;
-    g_recent[ridx].ptr = s->ptr;
-    g_recent[ridx].generation = s->generation;
+    recent_add(s->ptr, s->generation);
     s->ptr = META_TOMB;
     s->byte_size = 0;
     s->elem_size = 0;
@@ -243,6 +278,7 @@ void *cplus_calloc(size_t nmemb, size_t size) {
 void *cplus_realloc(void *ptr, size_t size) {
     size_t actual, old_bytes = 0, old_elem = 1u;
     uintptr_t old_addr;
+    unsigned long long old_gen = 0;
     void *p;
     cplus_libc_log("realloc", "enter");
     if (ptr == NULL)
@@ -253,8 +289,7 @@ void *cplus_realloc(void *ptr, size_t size) {
     {
         meta_slot *s = meta_find_addr(old_addr);
         if (!s) {
-            if ((uintptr_t)g_recent[meta_recent_idx(ptr)].ptr == old_addr)
-                ++g_double_frees;
+            if (recent_contains(ptr)) ++g_double_frees;
             else
                 ++g_invalid_frees;
             pthread_mutex_unlock(&g_meta_lock);
@@ -263,6 +298,7 @@ void *cplus_realloc(void *ptr, size_t size) {
         }
         old_bytes = s->byte_size;
         old_elem = s->elem_size ? s->elem_size : 1u;
+        old_gen = s->generation;
         if (inject_fail_locked() || meta_reserve_one() != 0) {
             pthread_mutex_unlock(&g_meta_lock);
             errno = ENOMEM;
@@ -278,7 +314,12 @@ void *cplus_realloc(void *ptr, size_t size) {
     pthread_mutex_lock(&g_meta_lock);
     {
         meta_slot *s = meta_find_addr(old_addr);
-        if (s != NULL) {
+        /* ABA guard: the host realloc() ran with the lock released, so another
+         * thread may have freed the old block and allocated a NEW live block at
+         * the same address. Only a slot with the ORIGINAL generation belongs to
+         * this realloc. Never remove a newer slot (that would silently strip
+         * another thread's live metadata). */
+        if (s != NULL && s->generation == old_gen && old_gen != 0) {
             if ((uintptr_t)p == old_addr) {
                 g_live_bytes -= old_bytes;
                 g_live_bytes += actual;
@@ -313,7 +354,7 @@ int cplus_free_checked(void **inout) {
         if (s != NULL) {
             meta_remove(s);
             release = 1;
-        } else if (g_recent[meta_recent_idx(ptr)].ptr == ptr) {
+        } else if (recent_contains(ptr)) {
             ++g_double_frees;
         } else {
             ++g_invalid_frees;
@@ -502,7 +543,7 @@ unsigned long cplus_alloc_invalid_free_count(void) {
 
 void cplus_alloc_fail_after(long count) {
     pthread_mutex_lock(&g_meta_lock);
-    g_inject = count < 0 ? 0 : count;
+    g_inject = count < 0 ? -1 : count; /* negative disables injection */
     pthread_mutex_unlock(&g_meta_lock);
 }
 

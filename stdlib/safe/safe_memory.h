@@ -54,14 +54,27 @@ int   cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known
 
 #ifndef CPLUS_SAFE_OBJ_SIZE
 #if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 0)
+#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 1) /* mode 1: exact enclosing object; mode 0 leaks trailing struct bytes */
 #else
 #define CPLUS_SAFE_OBJ_SIZE(p) ((size_t)-1)
 #endif
+#endif
+
+#ifndef CPLUS_SAFE_CAT2
 #define CPLUS_SAFE_CAT2(a, b) a##b
+#endif
+
+#ifndef CPLUS_SAFE_CAT
 #define CPLUS_SAFE_CAT(a, b) CPLUS_SAFE_CAT2(a, b)
+#endif
+
+#ifndef CPLUS_SAFE_NARG_
 #define CPLUS_SAFE_NARG_(_1, _2, _3, _4, _5, N, ...) N
-#define CPLUS_SAFE_NARG(...) CPLUS_SAFE_NARG_(__VA_ARGS__, 5, 4, 3, 2, 1, 0)
+#endif
+
+#ifndef CPLUS_SAFE_NARG
+#define CPLUS_SAFE_NARG(...) \
+    CPLUS_SAFE_NARG_(__VA_ARGS__, 5, 4, 3, 2, 1, 0)
 #endif
 
 #ifndef CPLUS_SAFE_NO_UNPREFIXED_MACROS

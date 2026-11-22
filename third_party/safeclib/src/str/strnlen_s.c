@@ -43,7 +43,9 @@
 EXPORT rsize_t _strnlen_s_uchk(const char *str, rsize_t smax) {
     rsize_t count = 0;
 
-    while (*str && smax) {
+    /* SECURITY PATCH (C+): check the bound FIRST. The upstream order read
+     * *str at index smax when the source filled smax bytes with no NUL. */
+    while (smax && *str) {
         count++;
         smax--;
         str++;

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include "../../log/log.h"
+#include "stdio_internal.h"
 
 #define CPLUS_STDIO_TRACK_CAP 256u
 #define CPLUS_STDIO_CLOSED_CAP 256u
@@ -35,22 +36,26 @@ static void cplus_stdio_mark_closed(FILE *stream) {
     }
 }
 
+/* Public-to-this-source: used by stdio3.c for tmpfile/fdopen/freopen too. */
+void cplus_stdio_register(FILE *stream) {
+    if (!stream) return;
+    pthread_mutex_lock(&g_stdio_lock);
+    cplus_stdio_unmark_closed(stream);
+    int found = 0;
+    for (size_t i = 0; i < g_live_stream_count; ++i) {
+        if (g_live_streams[i] == stream) { found = 1; break; }
+    }
+    if (!found && g_live_stream_count < CPLUS_STDIO_TRACK_CAP) {
+        g_live_streams[g_live_stream_count++] = stream;
+    }
+    pthread_mutex_unlock(&g_stdio_lock);
+}
+
 FILE *cplus_fopen(const char *path, const char *mode) {
     cplus_libc_log("fopen","enter");
     if (!path || !mode) { errno = EINVAL; return NULL; }
     FILE *fp = fopen(path, mode);
-    if (fp) {
-        pthread_mutex_lock(&g_stdio_lock);
-        cplus_stdio_unmark_closed(fp);
-        int found = 0;
-        for (size_t i = 0; i < g_live_stream_count; ++i) {
-            if (g_live_streams[i] == fp) { found = 1; break; }
-        }
-        if (!found && g_live_stream_count < CPLUS_STDIO_TRACK_CAP) {
-            g_live_streams[g_live_stream_count++] = fp;
-        }
-        pthread_mutex_unlock(&g_stdio_lock);
-    }
+    if (fp) cplus_stdio_register(fp);
     return fp;
 }
 

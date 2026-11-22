@@ -49,8 +49,8 @@ float cplus_nearbyintf(float x){ cplus_libc_log("nearbyintf","enter"); return ne
 float cplus_rintf(float x){ cplus_libc_log("rintf","enter"); return rintf(x); }
 long cplus_lrintf(float x){ cplus_libc_log("lrintf","enter"); return lrintf(x); }
 long long cplus_llrintf(float x){ cplus_libc_log("llrintf","enter"); return llrintf(x); }
-float cplus_lroundf(float x){ cplus_libc_log("lroundf","enter"); return lroundf(x); }
-float cplus_llroundf(float x){ cplus_libc_log("llroundf","enter"); return llroundf(x); }
+long cplus_lroundf(float x){ cplus_libc_log("lroundf","enter"); return lroundf(x); }
+long long cplus_llroundf(float x){ cplus_libc_log("llroundf","enter"); return llroundf(x); }
 float cplus_fabsf(float x){ cplus_libc_log("fabsf","enter"); return fabsf(x); }
 float cplus_fmodf(float x,float y){ cplus_libc_log("fmodf","enter"); return fmodf(x,y); }
 float cplus_remainderf(float x,float y){ cplus_libc_log("remainderf","enter"); return remainderf(x,y); }
