@@ -2,7 +2,7 @@
 <h1 align="center">C+</h1>
 
 <p align="center">
-  <img src="docs/assets/c-plus-logo.svg" alt="C+ — The safest next version C++ never shipped" width="620">
+  <img src="https://d2ol7oe51mr4n9.cloudfront.net/user_3JErG8zqlGYsweMFsNFFIyLXBPW/d8b86101-36f0-420a-b06f-9f6427f3c909.png" alt="C+ — The safest next version C++ never shipped" width="680">
 </p>
 
 <p align="center">
@@ -23,45 +23,116 @@
 
 C+ keeps familiar C syntax and adds compiler-assisted safety checks, deterministic resource cleanup, managed allocation, and a growing standard-library layer.
 
-## 🛡️ How C+ safety works
+## 🛡️ Safety architecture
 
-C+ uses multiple layers. No single layer can make arbitrary C code safe.
+C+ applies checks at more than one stage. The compiler rejects violations it can prove before execution. Runtime instrumentation catches supported violations that depend on values only known while the program runs. Safer library interfaces add checks at API boundaries.
 
-### 1. Compile-time checks — Clang / LLVM toolchain
+```mermaid
+flowchart TD
+    A["C+ source"] --> B["C+ lexer and rewriter"]
+    B --> C["C+ static analysis"]
+    C --> D{"Provable violation?"}
+    D -- Yes --> E["Compile-time diagnostic"]
+    D -- No --> F["RAII / ownership lowering"]
+    F --> G["Generated C + C+ runtime"]
+    G --> H["Clang checks and UBSan instrumentation"]
+    H --> I["LLVM optimization and native code generation"]
+    I --> J["Executable"]
+    J --> K{"Runtime violation detected?"}
+    K -- Yes --> L["Diagnostic + fail-fast exit"]
+    K -- No --> M["Continue execution"]
+    N["C+ standard and safer libraries"] -. "checked API boundaries" .-> G
+```
 
-Before code generation, C+ lowers its extensions to C and runs static checks using the Clang AST, C+ analysis passes, and Clang diagnostics.
+### 1. Compile-time safety — C+ analysis + Clang
 
-- Rejects provable constant and supported counted-loop out-of-bounds indexes.
-- Detects supported provable null dereferences, ownership copies, use-after-move, and borrowed-pointer escapes.
-- Promotes selected compiler warnings to errors, including uninitialized reads, returning stack addresses, and unsafe format usage.
-- Inserts deterministic cleanup for supported resource scopes.
+Before native code generation, C+ rewrites its language extensions and runs static checks. Its current checks include:
 
-Clang/LLVM then performs C compilation, optimization, code generation, and linking. LLVM is the native backend; the safety checks come from the C+ analysis and Clang diagnostics, not from a claim that LLVM proves every program safe.
+- Provable constant and supported counted-loop out-of-bounds array accesses.
+- Supported provable null dereferences.
+- Ownership copies, use-after-move and borrowed-pointer escape checks.
+- Selected Clang diagnostics promoted to errors, such as array bounds and uninitialized reads.
+- Deterministic cleanup insertion for supported resource scopes.
 
-### 2. Runtime checks — C+ runtime and sanitizers
+Clang handles C parsing, type checking and diagnostics. LLVM handles optimization and native code generation. **LLVM is not, by itself, a proof that a program is memory-safe.**
 
-Safe builds enable Clang's UndefinedBehaviorSanitizer checks for supported bounds, null, alignment, and undefined-behaviour cases. Runtime failures stop execution instead of continuing.
+### 2. Runtime safety — instrumentation + C+ runtime
 
-The C+ runtime also provides:
+Some invalid values cannot be known at compile time. Safe builds use Clang's supported sanitizer instrumentation, including undefined-behaviour, bounds, null and alignment checks. The C+ runtime also provides:
+
+- Checked array-index and pointer helpers.
 - Managed allocation tracking and allocation-size metadata.
 - Detection of managed double-free and invalid release.
-- Explicit live-allocation checks and checked array-index helpers.
+- Explicit checks that a managed allocation is still live.
 - Reverse-order cleanup for managed allocations and resource destructors.
-- Deterministic diagnostics and exit codes for runtime safety failures.
+- Fail-fast diagnostics with deterministic exit codes.
 
-### 3. Standard and safer libraries
+```mermaid
+flowchart TD
+    A["Runtime input / computed index"] --> B["Instrumented array access"]
+    B --> C{"Index within bounds?"}
+    C -- Yes --> D["Perform access"]
+    C -- No --> E["UBSan / C+ runtime diagnostic"]
+    E --> F["Abort: non-zero exit"]
+```
 
-The C+ standard-library layer builds on familiar C/POSIX facilities and adds safer interfaces where implemented.
+### 3. Standard library and safer APIs
 
-- `String` owns its buffer through the C+ managed allocator and releases it at scope cleanup.
-- `IntVec` tracks length and capacity and uses managed storage.
+The library layer reduces common risks at the point where programs use APIs:
+
+- `String` uses managed storage and scope cleanup.
+- `IntVec` tracks length and capacity.
 - Format-free `print` / `scan` helpers reduce format-string mistakes; string input is bounded.
-- Checked library APIs are intended to validate sizes, arguments, and operation results at library boundaries.
+- Checked library functions validate supported sizes, arguments and operation results.
 
-The library work is still partial. The current standard-library headers are a small layer, not a complete ISO C replacement. Additional hardened libc and checked-API integration is tracked in [Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) and [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17).
+The standard library and hardened libc are **in progress**, not a complete ISO C replacement. Library checks complement compiler analysis; they do not make arbitrary raw pointers safe. See [Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) and [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17).
+
+## 🧪 Safety examples
+
+The following examples show the difference between a violation that can be proven before execution and one that is only known at runtime.
+
+**A. Compile-time rejection — known out-of-bounds loop**
+
+```c
+static int grid[4][4];
+
+int main(void) {
+    for (int i = 0; i < 20; i++)
+        grid[i / 4][i % 4] = i; /* i == 16 reaches grid[4][0] */
+    return 0;
+}
+```
+
+The C+ static-bounds check can determine that the loop reaches row 4 in a four-row array and reports an out-of-bounds compile error. The executable is not produced.
+
+**B. Runtime rejection — index only known during execution**
+
+```c
+#include <stdio.h>
+
+static volatile int index_from_runtime = 7;
+
+int main(void) {
+    int values[4] = {10, 20, 30, 40};
+    printf("valid: %d\\n", values[2]);
+    printf("invalid: %d\\n", values[index_from_runtime]);
+    puts("This line must not be reached");
+    return 0;
+}
+```
+
+The `volatile` value prevents the compiler from treating the index as a known constant. The program can compile, but the instrumented runtime detects the invalid index and terminates with a diagnostic. The final line must not execute.
+
+### Safety path at a glance
+
+| Stage | Example | Expected result |
+|:--|:--|:--|
+| Compile time | Counted loop provably reaches `grid[4]` | Compilation rejected |
+| Runtime | Volatile index is `7` for a 4-element array | Runtime diagnostic and abort |
+| Library boundary | Checked API receives an invalid size | Rejected where that API implements the check |
 
 > [!WARNING]
-> **Experimental software — not a blanket memory-safety guarantee.** Raw C pointers and legacy C operations can still be unsafe. General use-after-free detection, complete pointer-arithmetic checking, full borrow checking, and complete ISO C coverage are not implemented. AddressSanitizer is not enabled in the documented macOS environment because its runtime fails during initialization. See [limitations](docs/LIMITATIONS.md).
+> **Experimental software — not a blanket memory-safety guarantee.** General use-after-free detection, complete pointer-arithmetic checking, full borrow checking, and complete ISO C coverage are not implemented. Raw C pointers and legacy C operations can still be unsafe. AddressSanitizer is not enabled in the documented macOS environment because its runtime fails during initialization. See [limitations](docs/LIMITATIONS.md).
 
 ## 🚀 Quick start
 
