@@ -60,3 +60,23 @@ make raw `ptr[x]` on a `malloc(1)` destination safe.
 - `.len` in `compiler/Sema/CPlusRewriter.cpp` currently only recognizes `cplus_alloc`/`cplus_zalloc`/`cplus_realloc`/`cplus_new`/`cplus_new_array`, rejecting `arr.len` on `int *arr = (int *)malloc_s(...)`. SafeCRT/Libc expose `cplus_safe_len(ptr)` and `cplus_alloc_len(ptr)`; see [`docs/patches/agent1-len-managed-allocators.md`](../patches/agent1-len-managed-allocators.md) for the exact compiler change requested from Agent 1 (`c-plus-core`).
 - Passing `&arr` of a `NULL`-initialized pointer to an out-param function triggered `[CPLUS-SAFE-LIFETIME] null pointer subscript` in `c-plus-core`'s binary (`AstSafetyCheck.cpp` in both repos lacks `UO_AddrOf` erasure of `nullVars_`).
 - Note: Multi-TU `.hp` class linkage (`tests/stdlib/multi_tu` and `tests/stdlib/known_gaps/class_linkage`) now compiles, links, and passes cleanly on `agent/modern-stdlib`.
+
+## Stack-escape detection gap (Agent 1 hand-off, 1200-case probe)
+
+`tests/scenarios/scenario_06.c` contains 1200 distinct stack-escape scenarios:
+`c+ check --default` emits 695 `[CPLUS-` diagnostics covering 653 cases, but
+**547 cases are not diagnosed**:
+
+- fixed-size stack arrays stored into global/static pointers or passed to a
+  helper sink (368 cases) — no diagnostic; Clang's `-Wreturn-stack-address`
+  only covers direct returns and is short-circuited when C+ errors fire;
+- compound-literal address escapes (138 cases) — no diagnostic;
+- VLA of `struct` element type (41 cases) — no diagnostic, while scalar VLA
+  escapes are caught (`[CPLUS-OWNER]`).
+
+The existing `[CPLUS-` diagnostics flag the VLA/alloca allocation site
+(`[CPLUS-BOUNDS]` for alloca, `[CPLUS-OWNER]` for scalar VLA), not the escape
+itself. There is no dedicated `[CPLUS-LIFETIME]` stack-escape check. This is a
+compiler-side gap; the libc/SafeCRT layers cannot detect an escaped stack
+address after it has left the frame. Documented for Agent 1, not patched here.
+
