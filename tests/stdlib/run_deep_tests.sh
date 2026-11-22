@@ -97,7 +97,7 @@ one() { # one <name> <mode-key> <src>
   _flags=$(flags_for "$_key")
   _extra=""
   case "$_name" in
-    deep_json*) _extra="-I$ROOT/third_party/yyjson -L$ROOT/build/ext -lyyjson" ;;
+    deep_json*|deep_cross_family) _extra="-I$ROOT/third_party/yyjson -L$ROOT/build/ext -lyyjson" ;;
   esac
 
   # ---- build: always bounded. Capture $? directly; `if ! cmd` would erase it.

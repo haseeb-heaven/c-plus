@@ -101,8 +101,12 @@ pass=0; fail=0
 for t in tests/libc/test_*.c; do
   case "$t" in *_attack.c|*/test_corpus_format.c) continue ;; esac # adversarial suite has its own runner
   b="$OUT/$(basename "$t" .c)"
-  if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include -Ilibc/install-include \
-      "$t" "$OUT/libcplus_hardened_cov.a" -lm -lpthread -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then
+  EXTRA_INC=""; EXTRA_LIB=""
+  case "$t" in
+    *test_alloc_fault_matrix*) EXTRA_INC="-I."; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
+  esac
+  if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC \
+      "$t" "$OUT/libcplus_hardened_cov.a" $EXTRA_LIB -lm -lpthread -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then
     if LLVM_PROFILE_FILE="$OUT/$(basename "$t" .c).profraw" "$b" >"$OUT/$(basename "$t" .c).out" 2>&1; then
       pass=$((pass + 1))
     else

@@ -948,6 +948,39 @@
       ]
     },
     {
+      "name": "cplus_swprintf_checked",
+      "header": "<wchar.h>",
+      "classification": "PLATFORM_BACKED",
+      "source": "libc/src/wchar/wchar_format.c",
+      "test": "tests/libc/test_wchar_format.c",
+      "host_backend": "wchar.h:vswprintf",
+      "contracts": [
+        "preserve_host_semantics",
+        "nonnull:format",
+        "nonnull:destination",
+        "reject_percentage_n_before_host_call",
+        "no_write_on_refusal",
+        "errno:EINVAL_on_refusal",
+        "caller_owned_buffer",
+        "opt_in_logging"
+      ],
+      "logging": {
+        "enabled_by": "cplus_libc_log_set_enabled",
+        "records": [
+          "entry",
+          "result"
+        ],
+        "tests": [
+          "logging_enabled_disabled",
+          "failure_paths",
+          "concurrent_calls"
+        ]
+      },
+      "safety_limitations": [
+        "Tier-2 deny-list only: scans %n (including length and positional forms) before the host call; it is NOT a general format validator. No compile-time wide-format checking on Apple Clang. Buffer capacity n is caller-declared and not independently proven."
+      ]
+    },
+    {
       "name": "cplus_vswprintf",
       "header": "<wchar.h>",
       "classification": "PLATFORM_BACKED",

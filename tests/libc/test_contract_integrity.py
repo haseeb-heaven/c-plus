@@ -352,6 +352,10 @@ def find_c_calls(text: str):
         )
         return_text = text[previous + 1 : match.start()].strip()
         return_text = return_text.split("\n")[-1].strip()
+        # File-local helpers are not exported symbols: do not treat a
+        # `static int foo(...) {` definition as a matrix export.
+        if re.match(r"^static\b", return_text):
+            continue
         results.append((name, return_text, params, terminator))
     return results
 
@@ -419,8 +423,10 @@ def cross_check_repository() -> None:
         return
     data = json.loads(c17_path.read_text())
     functions = data.get("functions", [])
-    if len(functions) != 202:
-        finding(f"cross-check: expected 202 c17 entries, found {len(functions)}")
+    # C17 entry count includes the Tier-2 checked wide-format sibling
+    # cplus_swprintf_checked added by the wide-format %n fix.
+    if len(functions) != 203:
+        finding(f"cross-check: expected 203 c17 entries, found {len(functions)}")
     names = [entry.get("name") for entry in functions]
     duplicates = sorted(name for name, count in collections.Counter(names).items() if count > 1)
     if duplicates:
