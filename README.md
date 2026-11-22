@@ -105,6 +105,17 @@ int main(void) {
 
 The C+ static-bounds check can determine that the loop reaches row 4 in a four-row array and reports an out-of-bounds compile error. The executable is not produced.
 
+**Compiler output**
+
+```text
+c+ demo.cp -o demo
+demo.cp:5:13: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past array 'grid' of length 4
+          grid[i / 4][i % 4] = i; /* i == 16 reaches grid[4][0] */
+              ^
+help: use a bound of grid.len or a smaller index
+haseeb-mir@Haseebs-MacBook-Pro scratch %
+```
+
 **B. Runtime rejection — index only known during execution**
 
 ```c
@@ -122,6 +133,15 @@ int main(void) {
 ```
 
 The `volatile` value prevents the compiler from treating the index as a known constant. The program can compile, but the instrumented runtime detects the invalid index and terminates with a diagnostic. The final line must not execute.
+
+**Runtime output**
+
+```text
+demo.cp:8:30: runtime error: index 7 out of bounds for type 'int[4]'
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior demo.cp:8:30
+valid: 30\\nzsh: abort      ./demo
+haseeb-mir@Haseebs-MacBook-Pro scratch %
+```
 
 ### Safety path at a glance
 
