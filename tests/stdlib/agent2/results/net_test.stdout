@@ -1,0 +1,5 @@
+bound 1 1
+echo ping 4 1 1 1
+zero-init 0 0
+borrowed 1 1
+privileged 0 0

@@ -1,0 +1,2 @@
+BUILD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/foundation.cp --strict --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent2/results/run/foundation
+RUN: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent2/results/run/foundation
