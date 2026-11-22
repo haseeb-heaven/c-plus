@@ -21,6 +21,28 @@ jobs:
         run: sh tests/crt/run_all_crt.sh
       - name: Libc tests
         run: sh tests/libc/run_libc_tests.sh
+      - name: Libc line coverage (>= 80% gate)
+        run: |
+          set -eu
+          # Ubuntu ships versioned llvm-cov/llvm-profdata (e.g. llvm-cov-18).
+          # The coverage script honours LLVM_COV/LLVM_PROFDATA overrides.
+          COV=$(command -v llvm-cov || true)
+          PROF=$(command -v llvm-profdata || true)
+          if [ -z "$COV" ]; then
+            COV=$(ls /usr/bin/llvm-cov-* 2>/dev/null | sort -V | tail -1 || true)
+          fi
+          if [ -z "$PROF" ]; then
+            PROF=$(ls /usr/bin/llvm-profdata-* 2>/dev/null | sort -V | tail -1 || true)
+          fi
+          if [ -z "$COV" ] || [ -z "$PROF" ]; then
+            echo "llvm-cov/llvm-profdata unavailable; cannot enforce coverage gate"
+            exit 1
+          fi
+          LLVM_COV="$COV" LLVM_PROFDATA="$PROF" sh tests/libc/coverage_libc.sh
+      - name: Adversarial attack suites
+        run: sh tests/libc/run_attack_tests.sh
+      - name: Bug-class corpora (thousands of cases)
+        run: sh tests/libc/run_corpus_tests.sh
       - name: Libc install smoke
         run: sh tests/libc/install_smoke.sh
       - name: Fuzz smoke (UBSan)

@@ -70,6 +70,19 @@ See [ISO_C_AUDIT.md](ISO_C_AUDIT.md) for the complete ISO C99/C11 header-by-head
 provenance in `libc/upstream/musl/PROVENANCE.md`, tests in
 `tests/libc/test_musl_extra.c` and `tests/libc/test_musl_stdlib_extra.c`.
 
+## C runtime bug-class coverage
+
+[`C_BUG_CLASS_MATRIX.md`](C_BUG_CLASS_MATRIX.md) catalogues 35 known C runtime
+bug classes with an honest MITIGATED / PARTIAL / NOT FIXABLE BY LIBC status and
+the residual limitation for each. Evidence is produced by the two dedicated
+adversarial runners (thousands of deterministic generated scenarios per class):
+
+    sh tests/libc/run_attack_tests.sh     # targeted break attempts + contract integrity
+    sh tests/libc/run_corpus_tests.sh     # 600-1000+ generated cases per bug class
+
+Every test uses defined inputs; raw-C UB is documented rather than turned into
+a crashing test. No claim of complete memory safety is made.
+
 ## Sanitizer evidence (this host)
 
 - **UBSan**: all 12 new gap-closing test suites pass with
