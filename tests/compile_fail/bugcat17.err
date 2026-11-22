@@ -1,1 +1,1 @@
-[CPLUS-
+signal-modified global must be volatile sig_atomic_t

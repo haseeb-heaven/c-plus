@@ -1,1 +1,1 @@
-[CPLUS-
+raw realloc can lose the original block on failure; use cplu

@@ -1,1 +1,1 @@
-[CPLUS-
+memcpy source and destination overlap; use memmove

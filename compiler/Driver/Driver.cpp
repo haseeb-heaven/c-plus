@@ -215,25 +215,77 @@ std::string findSourceRoot() {
   return std::string();
 }
 
+/// Return an SDK root that actually contains system headers, or "" when the
+/// toolchain does not need one (Linux). Homebrew LLVM on macOS defaults to a
+/// MacOSX27.sdk path that may not exist, so an explicit -isysroot is required.
+static std::string sdkRoot() {
+  if (const char *env = std::getenv("CPLUS_SDKROOT")) {
+    std::string root(env);
+    if (!root.empty() && fileExists(root + "/usr/include/stdio.h"))
+      return root;
+  }
+#if defined(__APPLE__)
+  static const char *candidates[] = {
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/"
+      "Developer/SDKs/MacOSX.sdk",
+  };
+  for (const char *c : candidates)
+    if (fileExists(std::string(c) + "/usr/include/stdio.h"))
+      return c;
+#endif
+  return std::string();
+}
+
+/// -isysroot arguments to add to every backend invocation.
+static std::vector<std::string> sdkArgs() {
+  std::string root = sdkRoot();
+  if (root.empty())
+    return {};
+  return {"-isysroot", root};
+}
+
+/// Probe a compiler candidate by preprocessing a file that includes stdio.h.
+/// A clang whose default sysroot is broken fails this probe.
+static bool clangCanCompile(const std::string &candidate) {
+  if (candidate.empty())
+    return false;
+  std::string probe = "/tmp/.cplus-sdk-probe.c";
+  std::string err;
+  if (!writeFile(probe, "#include <stdio.h>\nint main(void){return 0;}\n", &err))
+    return false;
+  std::vector<std::string> args = sdkArgs();
+  args.push_back("-fsyntax-only");
+  args.push_back(probe);
+  bool ok = runProgram(candidate, args) == 0;
+  llvm::sys::fs::remove(probe);
+  return ok;
+}
+
 std::string findClangBinary() {
   std::string env = envOr("CPLUS_CLANG");
-  if (!env.empty() && fileExists(env))
+  if (!env.empty() && fileExists(env) && clangCanCompile(env))
     return env;
+#if defined(__APPLE__)
+  if (clangCanCompile("/usr/bin/clang"))
+    return "/usr/bin/clang";
+#endif
   if (auto found = llvm::sys::findProgramByName("clang")) {
-    // Prefer the host system compiler: it is the one whose sanitizer runtime
-    // and SDK configuration are known to match the host.
-    std::string p = *found;
-    if (p.find("/opt/homebrew/Cellar/llvm/") == std::string::npos)
-      return p;
+    if (clangCanCompile(*found))
+      return *found;
   }
   for (const char *candidate : {"/usr/bin/clang", "/usr/local/bin/clang"}) {
-    if (fileExists(candidate))
+    if (fileExists(candidate) && clangCanCompile(candidate))
       return candidate;
   }
 #ifdef CPLUS_CLANG_BIN
-  if (fileExists(CPLUS_CLANG_BIN))
+  if (fileExists(CPLUS_CLANG_BIN) && clangCanCompile(CPLUS_CLANG_BIN))
     return CPLUS_CLANG_BIN;
 #endif
+  // No working candidate was found; keep the old fallback so the error is
+  // reported by the backend rather than by driver setup.
+  if (!env.empty())
+    return env;
   return "clang";
 }
 
@@ -474,6 +526,8 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
     args.push_back("-v");
   for (const auto &inc : cplusIncludeArgs())
     args.push_back(inc);
+  for (const auto &a : sdkArgs())
+    args.push_back(a);
   if (opts.logging) {
     args.push_back("-DCPLUS_LOG_RUNTIME=1");
     args.push_back("-DCPLUS_LOG_LEVEL=" +
@@ -634,6 +688,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   if (!runtime.empty())
     linkArgs.push_back(runtime);
   for (const auto &a : opts.extraArgs)
+    linkArgs.push_back(a);
+  for (const auto &a : sdkArgs())
     linkArgs.push_back(a);
   linkArgs.push_back("-o");
   linkArgs.push_back(output);

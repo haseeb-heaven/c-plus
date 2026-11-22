@@ -1,1 +1,1 @@
-[CPLUS-
+alloca has no bounds checking; use cplus_alloc

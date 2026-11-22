@@ -1,1 +1,1 @@
-[CPLUS-
+NaN is never equal to itself; use isnan()
