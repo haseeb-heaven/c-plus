@@ -114,3 +114,10 @@ rather than receive a from-scratch replacement.
 Raw C pointer validity, NUL-termination, destination capacity and format-string
 correctness remain caller responsibilities. A `_s` suffix or a namespaced
 wrapper never makes an arbitrary raw pointer safe.
+
+## Ordinary C APIs
+
+[`ORDINARY_C_SAFETY.md`](ORDINARY_C_SAFETY.md) documents the opt-in layer that
+makes unchanged `malloc`/`memset`/`memcpy`/`strcpy`/`fread`/`printf` calls use
+tracked capacity and compiler format attributes. Regression:
+`tests/crt/unit/test_safe_c_api.c` (included in `run_unit_tests.sh`).

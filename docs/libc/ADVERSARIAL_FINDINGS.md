@@ -63,3 +63,12 @@ compiler rejects at least one representative case per catalog with a
 `[CPLUS-` diagnostic. The catalogs record which patterns the current checker
 catches and which remain runtime-only or unimplemented — no false
 "compiler catches everything" claim.
+
+## Follow-up: ordinary C API hardening (user-reported failure)
+
+| Finding | Root cause | Fix | Evidence |
+|---|---|---|---|
+| `malloc` + `memset(buffer + offset, ...)` overran the allocation; ordinary calls got no C+ protection | (a) no header mapped ordinary names to the checked layer; (b) tracked-capacity lookup matched only the allocation BASE pointer, so interior pointers were "unknown" and writes were allowed | Added `stdlib/safe/safe_c.h` ordinary-C mapping layer; added `cplus_safe_remaining_capacity()` for interior/one-past-end pointers; unknown capacity is now explicit (warning by default, refusal in strict mode) | `scratch/demo` exits 70 with `ESNOSPC 406` instead of SIGSEGV; `tests/crt/unit/test_safe_c_api.c` passes under UBSan; all prior suites remain green |
+
+See [`ORDINARY_C_SAFETY.md`](ORDINARY_C_SAFETY.md) for activation, guarantees
+and limits.

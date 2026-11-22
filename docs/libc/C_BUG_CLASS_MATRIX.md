@@ -18,8 +18,8 @@ Legend:
 
 | # | Bug class (CWE) | Status | What this library does | Residual limitation |
 |---:|---|---|---|---|
-| 1 | Stack buffer overflow (CWE-121) | PARTIAL | Checked `_s` APIs validate `dmax`; `__builtin_object_size` auto-bounds wrappers reject known oversized writes; canary tests. | Raw `cplus_memcpy(dst,src,n)` with caller-supplied wrong `n` is still UB. Compiler/object-size data required. |
-| 2 | Heap buffer overflow (CWE-122) | PARTIAL | Checked allocation metadata (`cplus_alloc_size`, `cplus_alloc_len`) lets callers pass a verified capacity; `_s` APIs check it. | Raw pointers carry no capacity; a wrong `n` passed to a raw API cannot be detected at runtime. |
+| 1 | Stack buffer overflow (CWE-121) | PARTIAL (ordinary APIs hardened via safe_c.h) | Checked `_s` APIs validate `dmax`; `__builtin_object_size` auto-bounds wrappers reject known oversized writes; canary tests. | Raw `cplus_memcpy(dst,src,n)` with caller-supplied wrong `n` is still UB. Compiler/object-size data required. |
+| 2 | Heap buffer overflow (CWE-122) | PARTIAL (interior-pointer capacity tracked) | Checked allocation metadata (`cplus_alloc_size`, `cplus_alloc_len`) lets callers pass a verified capacity; `_s` APIs check it. | Raw pointers carry no capacity; a wrong `n` passed to a raw API cannot be detected at runtime. |
 | 3 | Off-by-one / off-by-N (CWE-193) | PARTIAL | Boundary suites test `n == size`, `n == size+1`, zero and max; checked APIs return defined errors. | Raw APIs preserve ISO C semantics, including UB for `n > capacity`. |
 | 4 | NULL pointer dereference (CWE-476) | PARTIAL | Guarded entry points set `errno = EINVAL` and return a defined failure; null corpus enumerates every guarded API. | Unguarded raw ISO APIs (e.g. `strlen(NULL)`) intentionally keep standard UB. A library cannot redefine standard semantics. |
 | 5 | Use-after-free (CWE-416) | PARTIAL | Live-allocation table + generation counters let `cplus_alloc_is_live` / `cplus_alloc_check_generation` detect stale pointers; `cplus_free_checked` is fail-stop. | Once memory is returned to the host allocator, dereferencing a stale raw pointer is UB and cannot be trapped portably. |
@@ -63,3 +63,11 @@ mostly through checked APIs, metadata and compiler-readable contracts. It does
 **PARTIAL** require the caller to use the checked interface and supply correct
 capacities. Passing the adversarial corpora is evidence of behaviour on the
 tested host — not proof of safety.
+
+## Ordinary-C activation note
+
+Including `stdlib/safe/safe_c.h` maps the ordinary `malloc`/`memset`/`memcpy`/
+`strcpy`/`fread`/`printf` names to the hardened implementations described above.
+This is an explicit, tested compatibility layer (not silent host-libc
+interposition). Unknown pointer capacity is never treated as verified; see
+[`ORDINARY_C_SAFETY.md`](ORDINARY_C_SAFETY.md).
