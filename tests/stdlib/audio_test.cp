@@ -131,5 +131,9 @@ int main(void) {
 
     audio_sound missing_sound = engine.load("/nonexistent/tone.wav", &err);
     print("sound-missing", missing_sound.valid(), err.failed_now());
+
+    audio_sound bad_snd = audio_sound(NULL, NULL, &err);
+    if (bad_snd.valid() || !err.failed_now())
+        return 4;
     return 0;
 }

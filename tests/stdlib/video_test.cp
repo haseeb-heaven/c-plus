@@ -50,5 +50,11 @@ int main(void) {
     char why[128];
     video_error_text(-1, why, sizeof(why));
     print("error-text", why[0] != '\0');
+
+    if (video_codec_id(NULL) != AV_CODEC_ID_NONE)
+        return 4;
+    decoder direct_dec = decoder(NULL, -1, &err);
+    if (direct_dec.valid() || !err.failed_now())
+        return 5;
     return 0;
 }

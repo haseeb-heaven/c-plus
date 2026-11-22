@@ -29,13 +29,15 @@ static inline int event_is_key_up(const SDL_Event *event) {
 }
 
 static inline SDL_Scancode event_scancode(const SDL_Event *event) {
-    if (event == NULL)
+    if (event == NULL ||
+        (event->type != SDL_EVENT_KEY_DOWN && event->type != SDL_EVENT_KEY_UP))
         return SDL_SCANCODE_UNKNOWN;
     return event->key.scancode;
 }
 
 static inline char event_text(const SDL_Event *event) {
-    if (event == NULL || event->type != SDL_EVENT_TEXT_INPUT)
+    if (event == NULL || event->type != SDL_EVENT_TEXT_INPUT ||
+        event->text.text == NULL)
         return '\0';
     return event->text.text[0];
 }
@@ -46,7 +48,7 @@ static inline const bool *keyboard_state(void) {
 }
 
 static inline int key_pressed(const bool *state, SDL_Scancode key) {
-    if (state == NULL)
+    if (state == NULL || (int)key < 0 || (int)key >= (int)SDL_SCANCODE_COUNT)
         return 0;
     return state[key] ? 1 : 0;
 }

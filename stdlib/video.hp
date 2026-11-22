@@ -167,10 +167,16 @@ class decoder {
                 return STDLIB_FAIL;
             }
             if (this->draining)
-                continue;
+                return 1;
             av_packet_unref(this->packet);
             if (av_read_frame(this->owner_format, this->packet) < 0) {
-                avcodec_send_packet(this->codec, NULL); /* flush */
+                rc = avcodec_send_packet(this->codec, NULL); /* flush */
+                if (rc < 0 && rc != AVERROR_EOF) {
+                    video_error_text(rc, why, sizeof(why));
+                    error_fail(err, CPLUS_EXIT_IO,
+                               why[0] != '\0' ? why : "cannot flush decoder");
+                    return STDLIB_FAIL;
+                }
                 this->draining = 1;
                 continue;
             }
@@ -248,26 +254,23 @@ class media {
     }
 
     int video_width(void) {
-        const AVCodecParameters *params;
-        if (!this->valid() || this->video_stream < 0)
-            return 0;
-        params = this->format->streams[this->video_stream]->codecpar;
+        const AVCodecParameters *params =
+            this->valid() ? video_stream_params(this->format, this->video_stream)
+                          : NULL;
         return params != NULL ? params->width : 0;
     }
 
     int video_height(void) {
-        const AVCodecParameters *params;
-        if (!this->valid() || this->video_stream < 0)
-            return 0;
-        params = this->format->streams[this->video_stream]->codecpar;
+        const AVCodecParameters *params =
+            this->valid() ? video_stream_params(this->format, this->video_stream)
+                          : NULL;
         return params != NULL ? params->height : 0;
     }
 
     const char *video_codec(void) {
-        const AVCodecParameters *params;
-        if (!this->valid() || this->video_stream < 0)
-            return "none";
-        params = this->format->streams[this->video_stream]->codecpar;
+        const AVCodecParameters *params =
+            this->valid() ? video_stream_params(this->format, this->video_stream)
+                          : NULL;
         if (params == NULL)
             return "none";
         return avcodec_get_name(params->codec_id);

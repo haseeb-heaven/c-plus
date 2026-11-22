@@ -62,14 +62,39 @@ class surface {
             return STDLIB_FAIL;
         }
         bytes_per_pixel = bpp / 8;
+        if (this->handle->pitch <= 0 ||
+            (size_t)x * (size_t)bytes_per_pixel + 4 > (size_t)this->handle->pitch) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "surface::pixel: row pitch out of bounds");
+            return STDLIB_FAIL;
+        }
         {
-            unsigned char *at = pixels +
-                                (size_t)y * (size_t)this->handle->pitch +
-                                (size_t)x * (size_t)bytes_per_pixel;
+            int locked = 0;
+            unsigned char *at;
+            if (SDL_MUSTLOCK(this->handle)) {
+                if (!SDL_LockSurface(this->handle)) {
+                    error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                                   SDL_GetError());
+                    return STDLIB_FAIL;
+                }
+                locked = 1;
+                pixels = (unsigned char *)this->handle->pixels;
+                if (pixels == NULL) {
+                    SDL_UnlockSurface(this->handle);
+                    error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                                   "surface::pixel: no pixel data");
+                    return STDLIB_FAIL;
+                }
+            }
+            at = pixels +
+                 (size_t)y * (size_t)this->handle->pitch +
+                 (size_t)x * (size_t)bytes_per_pixel;
             out[0] = at[0];
             out[1] = at[1];
             out[2] = at[2];
             out[3] = at[3];
+            if (locked)
+                SDL_UnlockSurface(this->handle);
         }
         return STDLIB_OK;
     }

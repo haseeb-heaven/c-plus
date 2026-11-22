@@ -71,9 +71,9 @@ int main(void) {
     CHECK(st.fail == 1);
 
     {
-        void *p = NULL;
-        CHECK(malloc_s(&p, 64) == CPLUS_SAFE_OK);
-        free_s(&p);
+        void *p = malloc_s(64);
+        CHECK(p != NULL);
+        free_s(p);
     }
     CHECK(cplus_safe_stats_get("malloc_s", &st) == 1 && st.calls == 1 && st.ok == 1);
     CHECK(cplus_safe_stats_get("free_s", &st) == 1 && st.calls == 1 && st.ok == 1);

@@ -10,6 +10,8 @@
 #ifndef CPLUS_STD_JSON_HP
 #define CPLUS_STD_JSON_HP
 
+#include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cplus/cplus.h"
@@ -49,18 +51,36 @@ class json_view {
 
     int get_int(int *out, error *err) {
         error_reset(err);
-        if (out == NULL || !yyjson_is_num(this->value)) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_int: not a number");
+        if (out == NULL || !yyjson_is_int(this->value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_int: not an integer");
             return STDLIB_FAIL;
         }
-        *out = yyjson_get_int(this->value);
+        if (yyjson_is_sint(this->value)) {
+            int64_t v = yyjson_get_sint(this->value);
+            if (v < INT_MIN || v > INT_MAX) {
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "json_view::get_int: out of range");
+                return STDLIB_FAIL;
+            }
+            *out = (int)v;
+        } else {
+            uint64_t u = yyjson_get_uint(this->value);
+            if (u > (uint64_t)INT_MAX) {
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "json_view::get_int: out of range");
+                return STDLIB_FAIL;
+            }
+            *out = (int)u;
+        }
         return STDLIB_OK;
     }
 
     int get_double(double *out, error *err) {
         error_reset(err);
         if (out == NULL || !yyjson_is_num(this->value)) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_double: not a number");
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_double: not a number");
             return STDLIB_FAIL;
         }
         *out = yyjson_get_num(this->value);
@@ -70,7 +90,8 @@ class json_view {
     int get_bool(int *out, error *err) {
         error_reset(err);
         if (out == NULL || !yyjson_is_bool(this->value)) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_bool: not a bool");
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_bool: not a bool");
             return STDLIB_FAIL;
         }
         *out = yyjson_get_bool(this->value) ? 1 : 0;
@@ -81,7 +102,8 @@ class json_view {
     int get_string(const char **out, error *err) {
         error_reset(err);
         if (out == NULL || !yyjson_is_str(this->value)) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_view::get_string: not a string");
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_string: not a string");
             return STDLIB_FAIL;
         }
         *out = yyjson_get_str(this->value);
@@ -131,8 +153,8 @@ class json {
             this->document = yyjson_read_opts((char *)text, strlen(text),
                                               YYJSON_READ_NOFLAG, NULL, &info);
             if (this->document == NULL)
-                error_fail(err, CPLUS_EXIT_UNSUPPORTED,
-                           info.msg != NULL ? info.msg : "JSON parse failed");
+                error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                               info.msg != NULL ? info.msg : "JSON parse failed");
         } while (0);
     }
 
@@ -161,13 +183,14 @@ static inline json json_parse_file(const char *path, error *err) {
     yyjson_read_err info;
     error_reset(err);
     if (path == NULL) {
-        error_fail(err, CPLUS_EXIT_IO, "json::parse_file: null path");
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                       "json::parse_file: null path");
         return out;
     }
     out.document = yyjson_read_file(path, YYJSON_READ_NOFLAG, NULL, &info);
     if (out.document == NULL)
-        error_fail(err, CPLUS_EXIT_IO,
-                   info.msg != NULL ? info.msg : "JSON file read failed");
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       info.msg != NULL ? info.msg : "JSON file read failed");
     return out;
 }
 
@@ -200,12 +223,14 @@ class json_builder {
 
     int add_int(const char *key, int value, error *err) {
         error_reset(err);
-        if (!this->valid()) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_int: invalid builder");
+        if (!this->valid() || key == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_int: invalid argument");
             return STDLIB_FAIL;
         }
         if (!yyjson_mut_obj_add_int(this->document, this->root_value, key, value)) {
-            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_int failed");
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json_builder::add_int failed");
             return STDLIB_FAIL;
         }
         return STDLIB_OK;
@@ -213,12 +238,19 @@ class json_builder {
 
     int add_double(const char *key, double value, error *err) {
         error_reset(err);
-        if (!this->valid()) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_double: invalid builder");
+        if (!this->valid() || key == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_double: invalid argument");
+            return STDLIB_FAIL;
+        }
+        if (!isfinite(value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "json_builder::add_double: non-finite value");
             return STDLIB_FAIL;
         }
         if (!yyjson_mut_obj_add_double(this->document, this->root_value, key, value)) {
-            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_double failed");
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json_builder::add_double failed");
             return STDLIB_FAIL;
         }
         return STDLIB_OK;
@@ -226,12 +258,14 @@ class json_builder {
 
     int add_bool(const char *key, int value, error *err) {
         error_reset(err);
-        if (!this->valid()) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_bool: invalid builder");
+        if (!this->valid() || key == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_bool: invalid argument");
             return STDLIB_FAIL;
         }
         if (!yyjson_mut_obj_add_bool(this->document, this->root_value, key, value != 0)) {
-            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_bool failed");
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json_builder::add_bool failed");
             return STDLIB_FAIL;
         }
         return STDLIB_OK;
@@ -240,12 +274,14 @@ class json_builder {
     /* Copies the value, so the caller keeps ownership of its buffer. */
     int add_string(const char *key, const char *value, error *err) {
         error_reset(err);
-        if (!this->valid() || value == NULL) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "json_builder::add_string: invalid argument");
+        if (!this->valid() || key == NULL || value == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_string: invalid argument");
             return STDLIB_FAIL;
         }
         if (!yyjson_mut_obj_add_strcpy(this->document, this->root_value, key, value)) {
-            error_fail(err, CPLUS_EXIT_RESOURCE, "json_builder::add_string failed");
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json_builder::add_string failed");
             return STDLIB_FAIL;
         }
         return STDLIB_OK;

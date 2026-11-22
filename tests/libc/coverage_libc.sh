@@ -6,27 +6,106 @@ CC=${CPLUS_CLANG:-clang}
 COV=${LLVM_COV:-llvm-cov}
 PROFDATA=${LLVM_PROFDATA:-llvm-profdata}
 if command -v xcrun >/dev/null 2>&1; then
-  COV=$(xcrun --find llvm-cov 2>/dev/null || echo "$COV")
-  PROFDATA=$(xcrun --find llvm-profdata 2>/dev/null || echo "$PROFDATA")
+  found=$({ xcrun --find llvm-cov; } 2>/dev/null || true)
+  [ -n "$found" ] && COV="$found"
+  found=$({ xcrun --find llvm-profdata; } 2>/dev/null || true)
+  [ -n "$found" ] && PROFDATA="$found"
 fi
 OUT="$ROOT/build/libc-cov"
-rm -rf "$OUT"; mkdir -p "$OUT"
-CFLAGS="-O0 -g -fprofile-instr-generate -fcoverage-mapping -Ilibc -Ilibc/include"
-SRCS="libc/log/log.c libc/src/errno/errno.c libc/src/stdlib/alloc.c libc/src/stdlib/stdlib_extra.c libc/src/string/memory.c libc/src/string/string.c libc/src/string/extra.c libc/src/string/extra2.c libc/src/stdio/stdio.c libc/src/stdio/stdio2.c libc/src/ctype/ctype.c"
+rm -rf "$OUT"
+mkdir -p "$OUT"
+CFLAGS="-O0 -g -Wall -Wextra -pedantic -std=c99 -fprofile-instr-generate -fcoverage-mapping -Ilibc -Ilibc/include"
+SRCS="
+  libc/log/log.c
+  libc/src/errno/errno.c
+  libc/src/stdlib/alloc.c
+  libc/src/stdlib/stdlib_extra.c
+  libc/src/stdlib/stdlib_extra2.c
+  libc/src/stdlib/stdlib_extra3.c
+  libc/src/stdlib/stdlib_extra4.c
+  libc/src/stdlib/stdlib_extra5.c
+  libc/src/stdlib/stdlib_extra6.c
+  libc/src/stdlib/assert_extra.c
+  libc/src/stdlib/musl_stdlib_extra.c
+  libc/src/string/extra2.c
+  libc/src/string/extra3.c
+  libc/src/string/string_extra4.c
+  libc/src/string/string_extra5.c
+  libc/src/string/string_extra6.c
+  libc/src/string/strtok.c
+  libc/src/string/musl_extra.c
+  libc/src/string/strndup.c
+  libc/src/string/strerror.c
+  libc/src/string/memory.c
+  libc/src/string/string.c
+  libc/src/string/extra.c
+  libc/src/stdio/stdio.c
+  libc/src/stdio/stdio2.c
+  libc/src/stdio/stdio3.c
+  libc/src/ctype/ctype.c
+  libc/src/ctype/ctype2.c
+  libc/src/ctype/ctype3.c
+  libc/src/wchar/wchar.c
+  libc/src/wctype/wctype.c
+  libc/src/math/math.c
+  libc/src/math/math2.c
+  libc/src/math/math3.c
+  libc/src/math/math4.c
+  libc/src/time/time.c
+  libc/src/time/time_extra.c
+  libc/src/locale/locale.c
+  libc/src/signal/signal.c
+  libc/src/signal/signal2.c
+  libc/src/fenv/fenv.c
+  libc/src/complex/complex.c
+  libc/src/thread/thread.c
+"
 OBJS=""
-for s in $SRCS; do o="$OUT/$(basename "$s" .c).o"; $CC $CFLAGS -c "$s" -o "$o"; OBJS="$OBJS $o"; done
+FIRST_OBJ=""
+OBJ_ARGS=""
+for s in $SRCS; do
+  o="$OUT/$(echo "$s" | tr / _).o"
+  "$CC" $CFLAGS -c "$s" -o "$o"
+  OBJS="$OBJS $o"
+  if [ -z "$FIRST_OBJ" ]; then
+    FIRST_OBJ="$o"
+  else
+    OBJ_ARGS="$OBJ_ARGS -object $o"
+  fi
+done
 ar rcs "$OUT/libcplus_hardened_cov.a" $OBJS
 pass=0; fail=0
 for t in tests/libc/test_*.c; do
   b="$OUT/$(basename "$t" .c)"
-  "$CC" $CFLAGS "$t" "$OUT/libcplus_hardened_cov.a" -o "$b" >/tmp/libc_cov_build.log 2>&1
-  LLVM_PROFILE_FILE="$OUT/$(basename "$t" .c).profraw" "$b" >/tmp/libc_cov_run.log 2>&1 || fail=$((fail+1))
-  pass=$((pass+1))
+  if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include \
+      "$t" "$OUT/libcplus_hardened_cov.a" -lm -lpthread -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then
+    if LLVM_PROFILE_FILE="$OUT/$(basename "$t" .c).profraw" "$b" >"$OUT/$(basename "$t" .c).out" 2>&1; then
+      pass=$((pass + 1))
+    else
+      fail=$((fail + 1))
+      echo "FAIL $(basename "$t")"
+    fi
+  else
+    fail=$((fail + 1))
+    echo "FAIL BUILD $(basename "$t")"
+  fi
 done
 "$PROFDATA" merge -sparse "$OUT"/*.profraw -o "$OUT/libc.profdata"
-# Report per object and total
-for o in $OBJS; do
-  echo "--- $(basename "$o") ---"
-  "$COV" report "$o" -instr-profile="$OUT/libc.profdata" | tail -2
-done
-echo "libc coverage tests: $pass, failures: $fail"
+REPORT="$OUT/report.txt"
+"$COV" report "$FIRST_OBJ" $OBJ_ARGS -instr-profile="$OUT/libc.profdata" >"$REPORT"
+cat "$REPORT"
+echo "libc coverage tests: $pass passed, $fail failed"
+[ "$fail" -eq 0 ]
+python3 - "$REPORT" <<'PY'
+import sys
+lines = open(sys.argv[1]).read().splitlines()
+total_line = [l for l in lines if l.startswith("TOTAL")]
+if not total_line:
+    sys.exit("missing TOTAL line")
+parts = total_line[0].split()
+# Format: TOTAL regions missed reg_cov funcs missed func_cov lines missed line_cov ...
+line_cov = float(parts[9].rstrip("%"))
+print(f"libc total line coverage: {line_cov:.2f}%")
+if line_cov < 80.0:
+    sys.exit(f"libc line coverage {line_cov:.2f}% < 80.0%")
+PY

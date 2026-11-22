@@ -1,55 +1,85 @@
 /* C+ standard library: growable int vector with a tracked size.
  *
- * Storage comes from the C+ managed allocator (cplus_alloc / cplus_release);
- * there is no second allocator here.  Growth is overflow-checked and every
- * mutation that can fail reports it through its return value.
+ * Storage comes from the checked allocator in error.hp (stdlib_alloc /
+ * stdlib_release over the C+ managed allocator); there is no second
+ * allocator here.  Growth is overflow-checked and EVERY mutation that can fail
+ * is failure-atomic: when it returns -1 the vector is exactly as it was
+ * before the call (same buffer, same contents, same size, same capacity).
+ *
+ * Borrowing and invalidation
+ * --------------------------
+ * `view()` returns a borrowed `slice`.  The slice records the vector's
+ * generation counter; the counter is bumped by every operation that can move
+ * or shorten the storage (a reallocation, pop_back, clear, insert, erase,
+ * copy_from, shrink_to_fit, drop).  A slice taken before such an operation
+ * reports stale() == 1, valid() == 0, and refuses reads.  push_back without a
+ * reallocation does not invalidate existing slices.  The check dereferences
+ * the owning vector, so it is only meaningful while that vector object is
+ * still alive (a slice outliving the vector's own storage is a lifetime
+ * error that a library cannot detect).
  */
 #ifndef CPLUS_STD_VECTOR_HP
 #define CPLUS_STD_VECTOR_HP
 
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
 
 /* Borrowed, bounds-checked window over ints.  It never owns storage and is
  * invalidated by the owner's growth or destruction. */
 class slice {
     int *items;
     size_t count;
+    const size_t *generation_ref;
+    size_t generation_at;
 
     slice(int *items, size_t count) {
         this->items = items;
         this->count = count;
+        this->generation_ref = NULL;
+        this->generation_at = 0;
     }
 
     size_t size(void) {
         return this->count;
     }
 
-    int valid(void) {
-        return this->items != NULL && this->count > 0;
+    /* 1 when the owning vector changed shape after this slice was taken. */
+    int stale(void) {
+        return this->generation_ref != NULL &&
+               *this->generation_ref != this->generation_at;
     }
 
-    /* 0 on success, -1 when the index is outside the slice. */
+    int valid(void) {
+        return this->items != NULL && this->count > 0 && !this->stale();
+    }
+
+    /* 0 on success, -1 when the index is outside the slice or it is stale. */
     int at_checked(size_t index, int *out) {
         if (out == NULL)
             return -1;
-        if (this->items == NULL || index >= this->count)
+        if (this->items == NULL || index >= this->count || this->stale()) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "slice::at_checked: index out of range or stale slice");
             return -1;
+        }
         *out = this->items[index];
         return 0;
     }
 
     /* Sub-slice [start, start+n) clamped to the extent; empty when start is
-     * outside the slice. */
+     * outside the slice.  An empty result has size() == 0 and valid() == 0. */
     slice sub(size_t start, size_t length) {
         slice empty = slice(NULL, 0);
         size_t available;
-        if (this->items == NULL || start >= this->count)
+        if (this->items == NULL || start >= this->count || this->stale())
             return empty;
         available = this->count - start;
         if (length > available)
             length = available;
         {
             slice part = slice(this->items + start, length);
+            part.generation_ref = this->generation_ref;
+            part.generation_at = this->generation_at;
             return part;
         }
     }
@@ -59,11 +89,13 @@ class vector {
     int *items;
     size_t used;
     size_t space;
+    size_t generation;
 
     vector(void) {
         this->items = NULL;
         this->used = 0;
         this->space = 0;
+        this->generation = 0;
     }
 
     size_t size(void) {
@@ -74,21 +106,29 @@ class vector {
         return this->space;
     }
 
-    /* Grow the buffer to hold at least `want` elements.  0 on success. */
+    /* Grow the buffer to hold at least `want` elements.  0 on success; -1 on
+     * overflow or allocation failure with the vector untouched. */
     int reserve(size_t want) {
         int *fresh;
         size_t i;
         if (want <= this->space)
             return 0;
-        if (want > SIZE_MAX / sizeof(int))
+        if (want > STDLIB_ALLOC_LIMIT / sizeof(int)) {
+            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                        "vector::reserve: capacity too large");
             return -1;
-        fresh = (int *)cplus_alloc(sizeof(int) * want);
+        }
+        fresh = (int *)stdlib_alloc(sizeof(int) * want);
+        if (fresh == NULL)
+            return -1;
         for (i = 0; i < this->used; i++)
             fresh[i] = this->items[i];
         if (this->items != NULL)
-            cplus_release(this->items);
+            stdlib_release(this->items);
         this->items = fresh;
         this->space = want;
+        this->generation++;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
         return 0;
     }
 
@@ -96,8 +136,11 @@ class vector {
         if (this->used == this->space) {
             size_t want = 4;
             if (this->space > 0) {
-                if (this->space > (SIZE_MAX / 2) / sizeof(int))
+                if (this->space > (STDLIB_ALLOC_LIMIT / sizeof(int)) / 2) {
+                    stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                                "vector::push_back: capacity overflow");
                     return -1;
+                }
                 want = this->space * 2;
             }
             if (vector_reserve(this, want) != 0)
@@ -107,10 +150,14 @@ class vector {
         return 0;
     }
 
-    /* Compatibility accessor: returns 0 for an out-of-range index. */
+    /* Compatibility accessor: returns 0 for an out-of-range index (and counts
+     * a bounds violation in telemetry).  Prefer at_checked. */
     int at(size_t index) {
-        if (index >= this->used)
+        if (index >= this->used) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "vector::at: index out of range");
             return 0;
+        }
         return this->items[index];
     }
 
@@ -118,8 +165,11 @@ class vector {
     int at_checked(size_t index, int *out) {
         if (out == NULL)
             return -1;
-        if (index >= this->used)
+        if (index >= this->used) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "vector::at_checked: index out of range");
             return -1;
+        }
         *out = this->items[index];
         return 0;
     }
@@ -132,25 +182,125 @@ class vector {
             return -1;
         *out = this->items[this->used - 1];
         this->used--;
+        this->generation++;
+        return 0;
+    }
+
+    /* Insert before `index` (index == size() appends).  Failure-atomic. */
+    int insert(size_t index, int value) {
+        size_t i;
+        if (index > this->used)
+            return -1;
+        if (this->used == this->space) {
+            size_t want = 4;
+            if (this->space > 0) {
+                if (this->space > (STDLIB_ALLOC_LIMIT / sizeof(int)) / 2)
+                    return -1;
+                want = this->space * 2;
+            }
+            if (vector_reserve(this, want) != 0)
+                return -1;
+        }
+        for (i = this->used; i > index; i--)
+            this->items[i] = this->items[i - 1];
+        this->items[index] = value;
+        this->used++;
+        this->generation++;
+        return 0;
+    }
+
+    /* Remove the element at `index`; the value goes to *out when out != NULL. */
+    int erase(size_t index, int *out) {
+        size_t i;
+        if (index >= this->used)
+            return -1;
+        if (out != NULL)
+            *out = this->items[index];
+        for (i = index; i + 1 < this->used; i++)
+            this->items[i] = this->items[i + 1];
+        this->used--;
+        this->generation++;
         return 0;
     }
 
     void clear(void) {
         this->used = 0;
+        this->generation++;
     }
 
-    /* Borrowed view of the current contents. */
+    /* Replace the contents with a copy of `other`.  Failure-atomic: on -1 this
+     * vector is unchanged.  Copying a vector onto itself is a no-op. */
+    int copy_from(vector *other) {
+        int *fresh = NULL;
+        size_t i;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "vector::copy_from: null source");
+            return -1;
+        }
+        if (other == this)
+            return 0;
+        if (other->used > 0) {
+            if (other->used > STDLIB_ALLOC_LIMIT / sizeof(int))
+                return -1;
+            fresh = (int *)stdlib_alloc(sizeof(int) * other->used);
+            if (fresh == NULL)
+                return -1;
+            for (i = 0; i < other->used; i++)
+                fresh[i] = other->items[i];
+        }
+        if (this->items != NULL)
+            stdlib_release(this->items);
+        this->items = fresh;
+        this->used = other->used;
+        this->space = other->used;
+        this->generation++;
+        return 0;
+    }
+
+    /* Release unused capacity.  Failure-atomic (the old, larger buffer stays
+     * valid when the smaller allocation fails). */
+    int shrink_to_fit(void) {
+        int *fresh;
+        size_t i;
+        if (this->space == this->used)
+            return 0;
+        if (this->used == 0) {
+            if (this->items != NULL)
+                stdlib_release(this->items);
+            this->items = NULL;
+            this->space = 0;
+            this->generation++;
+            return 0;
+        }
+        fresh = (int *)stdlib_alloc(sizeof(int) * this->used);
+        if (fresh == NULL)
+            return -1;
+        for (i = 0; i < this->used; i++)
+            fresh[i] = this->items[i];
+        stdlib_release(this->items);
+        this->items = fresh;
+        this->space = this->used;
+        this->generation++;
+        return 0;
+    }
+
+    /* Borrowed view of the current contents; see the header comment for the
+     * invalidation rules. */
     slice view(void) {
         slice borrowed = slice(this->items, this->used);
+        borrowed.generation_ref = &this->generation;
+        borrowed.generation_at = this->generation;
         return borrowed;
     }
 
     void drop(void) {
         if (this->items != NULL) {
-            cplus_release(this->items);
+            stdlib_release(this->items);
             this->items = NULL;
             this->used = 0;
             this->space = 0;
+            this->generation++;
         }
     }
 };

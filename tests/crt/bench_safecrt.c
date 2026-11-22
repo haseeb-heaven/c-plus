@@ -27,7 +27,7 @@ int main(void) {
     double t4=now_ms();
     for(int i=0;i<N/10;i++){ void*p=malloc(64); if(p){((char*)p)[0]=1; sink+=((char*)p)[0]; free(p);} }
     double t5=now_ms();
-    for(int i=0;i<N/10;i++){ void*p=NULL; if(malloc_s(&p,64)==CPLUS_SAFE_OK){((char*)p)[0]=1; sink+=((char*)p)[0]; free_s(&p);} }
+    for(int i=0;i<N/10;i++){ void*p=malloc_s(64); if(p){((char*)p)[0]=1; sink+=((char*)p)[0]; free_s(p);} }
     double t6=now_ms();
     printf("memcpy %.3fms memcpy_s %.3fms\n", t1-t0, t2-t1);
     printf("strcpy %.3fms strcpy_s %.3fms\n", t3-t2, t4-t3);

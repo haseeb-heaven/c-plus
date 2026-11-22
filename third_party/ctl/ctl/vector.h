@@ -220,6 +220,8 @@ static inline void JOIN(A, set)(A *self, size_t index, T value)
 static inline void JOIN(A, pop_back)(A *self)
 {
     static T zero;
+    if (self->size == 0)
+        return;
     self->size--;
     JOIN(A, set)(self, self->size, zero);
 }
@@ -228,11 +230,22 @@ static inline void JOIN(A, fit)(A *self, size_t capacity)
 {
     size_t overall = capacity;
     ASSERT(capacity < JOIN(A, max_size)() || !"max_size overflow");
+    if (capacity > JOIN(A, max_size)())
+        return;
     if (MUST_ALIGN_16(T)) // reserve terminating \0 for strings
+    {
+        if (overall > SIZE_MAX - 1)
+            return;
         overall++;
+    }
+    if (overall > SIZE_MAX / sizeof(T))
+        return;
     if (self->vector)
     {
-        self->vector = (T *)realloc(self->vector, overall * sizeof(T));
+        T *fresh = (T *)realloc(self->vector, overall * sizeof(T));
+        if (!fresh)
+            return;
+        self->vector = fresh;
         if (MUST_ALIGN_16(T))
         {
 #if 0
@@ -246,7 +259,12 @@ static inline void JOIN(A, fit)(A *self, size_t capacity)
         }
     }
     else
-        self->vector = (T *)calloc(overall, sizeof(T));
+    {
+        T *fresh = (T *)calloc(overall, sizeof(T));
+        if (!fresh)
+            return;
+        self->vector = fresh;
+    }
     self->capacity = capacity;
 }
 
@@ -329,6 +347,8 @@ static inline void JOIN(A, push_back)(A *self, T value)
 {
     if (self->size == self->capacity)
         JOIN(A, reserve)(self, self->capacity == 0 ? INIT_SIZE : 2 * self->capacity);
+    if (self->size >= self->capacity || !self->vector)
+        return;
     self->size++;
     *JOIN(A, at)(self, self->size - 1) = value;
 #ifdef CTL_STR
@@ -340,6 +360,8 @@ static inline void JOIN(A, emplace_back)(A *self, T *value)
 {
     if (self->size == self->capacity)
         JOIN(A, reserve)(self, self->capacity == 0 ? INIT_SIZE : 2 * self->capacity);
+    if (self->size >= self->capacity || !self->vector)
+        return;
     self->size++;
     *JOIN(A, at)(self, self->size - 1) = *value;
 }

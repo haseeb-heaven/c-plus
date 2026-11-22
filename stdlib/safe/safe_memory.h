@@ -2,6 +2,7 @@
 #define CPLUS_SAFE_MEMORY_H
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -42,6 +43,63 @@ errno_t cplus_memmove_s(void *dest, rsize_t dmax, const void *src, rsize_t smax)
 errno_t cplus_memset_s(void *dest, rsize_t dmax, int value, rsize_t n);
 errno_t cplus_memcmp_s(const void *dest, rsize_t dmax, const void *src, rsize_t smax, int *diff);
 errno_t cplus_memzero_s(void *dest, rsize_t dmax);
+
+/* Standard-C-signature auto-bounds-checked wrappers: use tracked malloc_s
+ * allocation metadata and compile-time __builtin_object_size(p, 0) to catch
+ * heap and stack overflows even when called with standard (dest, src, n). */
+void *cplus_memcpy_s_auto(void *dest, const void *src, size_t n, size_t known_dmax);
+void *cplus_memmove_s_auto(void *dest, const void *src, size_t n, size_t known_dmax);
+void *cplus_memset_s_auto(void *dest, int value, size_t n, size_t known_dmax);
+int   cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s1, size_t known_s2);
+
+#ifndef CPLUS_SAFE_OBJ_SIZE
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 0)
+#else
+#define CPLUS_SAFE_OBJ_SIZE(p) ((size_t)-1)
+#endif
+#define CPLUS_SAFE_CAT2(a, b) a##b
+#define CPLUS_SAFE_CAT(a, b) CPLUS_SAFE_CAT2(a, b)
+#define CPLUS_SAFE_NARG_(_1, _2, _3, _4, _5, N, ...) N
+#define CPLUS_SAFE_NARG(...) CPLUS_SAFE_NARG_(__VA_ARGS__, 5, 4, 3, 2, 1, 0)
+#endif
+
+#ifndef CPLUS_SAFE_NO_UNPREFIXED_MACROS
+#define CPLUS_SAFE_MEMCPY_3(dest, src, n) \
+    cplus_memcpy_s_auto((dest), (src), (n), CPLUS_SAFE_OBJ_SIZE(dest))
+#define CPLUS_SAFE_MEMCPY_4(dest, dmax, src, smax) \
+    cplus_memcpy_s((dest), (dmax), (src), (smax))
+#undef memcpy_s
+#define memcpy_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_MEMCPY_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#define CPLUS_SAFE_MEMMOVE_3(dest, src, n) \
+    cplus_memmove_s_auto((dest), (src), (n), CPLUS_SAFE_OBJ_SIZE(dest))
+#define CPLUS_SAFE_MEMMOVE_4(dest, dmax, src, smax) \
+    cplus_memmove_s((dest), (dmax), (src), (smax))
+#undef memmove_s
+#define memmove_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_MEMMOVE_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#define CPLUS_SAFE_MEMSET_3(dest, val, n) \
+    cplus_memset_s_auto((dest), (val), (n), CPLUS_SAFE_OBJ_SIZE(dest))
+#define CPLUS_SAFE_MEMSET_4(dest, dmax, val, n) \
+    cplus_memset_s((dest), (dmax), (val), (n))
+#undef memset_s
+#define memset_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_MEMSET_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#define CPLUS_SAFE_MEMCMP_3(s1, s2, n) \
+    cplus_memcmp_s_auto((s1), (s2), (n), CPLUS_SAFE_OBJ_SIZE(s1), CPLUS_SAFE_OBJ_SIZE(s2))
+#define CPLUS_SAFE_MEMCMP_5(s1, dmax, s2, smax, diff) \
+    cplus_memcmp_s((s1), (dmax), (s2), (smax), (diff))
+#undef memcmp_s
+#define memcmp_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_MEMCMP_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#undef memzero_s
+#define memzero_s(dest, dmax) cplus_memzero_s((dest), (dmax))
+#endif
 #if defined(__cplusplus)
 }
 #endif

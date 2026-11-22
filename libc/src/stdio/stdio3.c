@@ -4,6 +4,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #include "../../log/log.h"
+#include <errno.h>
 #include <stdio.h>
 
 int cplus_setvbuf(FILE *stream,char *buf,int mode,size_t size){ cplus_libc_log("setvbuf","enter"); return setvbuf(stream,buf,mode,size); }
@@ -15,3 +16,18 @@ int cplus_fileno(FILE *stream){ cplus_libc_log("fileno","enter"); return fileno(
 FILE *cplus_fdopen(int fd,const char *mode){ cplus_libc_log("fdopen","enter"); return fdopen(fd,mode); }
 FILE *cplus_freopen(const char *path,const char *mode,FILE *stream){ cplus_libc_log("freopen","enter"); return freopen(path,mode,stream); }
 FILE *cplus_tmpfile(void){ cplus_libc_log("tmpfile","enter"); return tmpfile(); }
+void cplus_rewind(FILE *stream){
+    cplus_libc_log("rewind","enter");
+    if (!stream) { errno = EINVAL; return; }
+    rewind(stream);
+}
+int cplus_fgetc(FILE *stream){
+    cplus_libc_log("fgetc","enter");
+    if (!stream) { errno = EINVAL; return EOF; }
+    return fgetc(stream);
+}
+int cplus_fputc(int c, FILE *stream){
+    cplus_libc_log("fputc","enter");
+    if (!stream) { errno = EINVAL; return EOF; }
+    return fputc(c, stream);
+}

@@ -1,11 +1,6 @@
-/* Unit: realloc_s(ptr, 0) defined outcome; failed realloc preserves the owner.
- *
- * Second adversarial catalogue (bug199): realloc(ptr, 0) is implementation-
- * defined/UB-adjacent in raw C.  The checked wrapper must give it a defined
- * outcome while keeping the handle owned until free_s.  (bug032): a failed
- * realloc must preserve the caller's original pointer - no leak, no dangling.
- */
+/* Unit: realloc_s(ptr, 0) defined outcome; failed realloc preserves owner. */
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,60 +13,45 @@ int main(void) {
     cplus_safe_log_set_level(CPLUS_SAFE_LOG_OFF);
     cplus_safe_set_constraint_mode(CPLUS_SAFE_CONSTRAINT_IGNORE);
 
-    /* ---- realloc_s(ptr, 0): defined, handle stays owned (bug199) ---- */
-    void *p = NULL;
-    assert(malloc_s(&p, 32) == CPLUS_SAFE_OK);
+    void *p = malloc_s(32);
     assert(p != NULL);
-    assert(realloc_s(&p, 0) == CPLUS_SAFE_OK);
-    assert(p != NULL);                       /* still owned; freed only by free_s */
-    assert(realloc_s(&p, 0) == CPLUS_SAFE_OK);   /* idempotent, still defined */
+    p = realloc_s(p, 0);
     assert(p != NULL);
-    free_s(&p);
-    assert(p == NULL);
+    p = realloc_s(p, 0);
+    assert(p != NULL);
+    free_s(p);
 
-    /* ---- realloc_s(NULL, n) behaves as an allocation ---- */
-    void *q = NULL;
-    assert(realloc_s(&q, 16) == CPLUS_SAFE_OK);
+    void *q = realloc_s(NULL, 16);
     assert(q != NULL);
-    free_s(&q);
-    assert(q == NULL);
+    free_s(q);
 
-    /* ---- failed realloc preserves pointer + contents (bug032) ---- */
-    void *r = NULL;
-    assert(malloc_s(&r, 32) == CPLUS_SAFE_OK);
+    void *r = malloc_s(32);
+    assert(r != NULL);
     memset(r, 0xAB, 32);
-    void *const old = r;
-    assert(realloc_s(&r, (size_t)-1) == CPLUS_SAFE_ENOMEM);
-    assert(r == old);                        /* handle preserved, not leaked */
-    assert(((unsigned char *)r)[0] == 0xAB);
-    assert(((unsigned char *)r)[31] == 0xAB);
-    free_s(&r);
-    assert(r == NULL);
+    errno = 0;
+    assert(realloc_s(r, (size_t)-1) == NULL && errno == EINVAL);
+    assert(cplus_safe_ptr_is_live(r));
+    assert(((unsigned char *)r)[0] == 0xAB && ((unsigned char *)r)[31] == 0xAB);
+    free_s(r);
 
-    /* ---- growing preserves the existing bytes ---- */
-    void *g = NULL;
-    assert(malloc_s(&g, 8) == CPLUS_SAFE_OK);
-    memcpy(g, "wxyz", 5);
-    assert(realloc_s(&g, 128) == CPLUS_SAFE_OK);
+    void *g = malloc_s(8);
     assert(g != NULL);
-    assert(memcmp(g, "wxyz", 5) == 0);
-    free_s(&g);
+    memcpy(g, "wxyz", 5);
+    g = realloc_s(g, 128);
+    assert(g != NULL && memcmp(g, "wxyz", 5) == 0);
+    free_s(g);
 
-    /* ---- same-size realloc is a defined no-op outcome ---- */
-    void *s = NULL;
-    assert(malloc_s(&s, 16) == CPLUS_SAFE_OK);
-    assert(realloc_s(&s, 16) == CPLUS_SAFE_OK);
+    void *s = malloc_s(16);
     assert(s != NULL);
-    free_s(&s);
+    s = realloc_s(s, 16);
+    assert(s != NULL);
+    free_s(s);
 
-    /* ---- NULL handle input rejected; free_s nulls the handle ---- */
-    assert(realloc_s(NULL, 8) == CPLUS_SAFE_EINVAL);
-    void *d = NULL;
-    assert(malloc_s(&d, 8) == CPLUS_SAFE_OK);
-    free_s(&d);
-    assert(d == NULL);
-    free_s(&d);                              /* idempotent double free */
-    free_s(NULL);                            /* no crash */
+    void *d = malloc_s(8);
+    assert(d != NULL);
+    assert(free_checked_s(d) == CPLUS_SAFE_OK);
+    assert(free_checked_s(d) == CPLUS_SAFE_EINVAL);
+    free_s(NULL);
 
     puts("test_realloc_zero_and_failure: ok");
     return 0;

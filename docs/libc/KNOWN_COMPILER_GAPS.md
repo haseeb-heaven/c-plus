@@ -47,10 +47,16 @@ green; the compiler should handle these correctly.
 `tests/crt/adversarial/test_heap_oob_mitigation.c` shows the **same** bug, written
 with the checked API (capacity-tracked allocation + bounded write), is caught:
 
-- `malloc_s(&p, 1)` then `cplus_memcpy_s(p, 1, src, sizeof src)` → non-zero error
+- `void *p = malloc_s(1);` then `cplus_memcpy_s(p, 1, src, sizeof src)` -> non-zero error
   (heap not corrupted); a correct 1-byte write succeeds.
-- `cplus_memcpy_s(buf, 1, "0123456789", 10)` → rejected.
-- `cplus_memset_s(buf, 1, 0, 10)` → rejected.
+- `cplus_memcpy_s(buf, 1, "0123456789", 10)` -> rejected.
+- `cplus_memset_s(buf, 1, 0, 10)` -> rejected.
 
 This is a *runtime* mitigation for callers that use the checked API; it does not
 make raw `ptr[x]` on a `malloc(1)` destination safe.
+
+## 3. `.len` tracking for `malloc_s` / `calloc_s` / `cplus_malloc` & `&var` out-param lifetime false positive
+
+- `.len` in `compiler/Sema/CPlusRewriter.cpp` currently only recognizes `cplus_alloc`/`cplus_zalloc`/`cplus_realloc`/`cplus_new`/`cplus_new_array`, rejecting `arr.len` on `int *arr = (int *)malloc_s(...)`. SafeCRT/Libc expose `cplus_safe_len(ptr)` and `cplus_alloc_len(ptr)`; see [`docs/patches/agent1-len-managed-allocators.md`](../patches/agent1-len-managed-allocators.md) for the exact compiler change requested from Agent 1 (`c-plus-core`).
+- Passing `&arr` of a `NULL`-initialized pointer to an out-param function triggered `[CPLUS-SAFE-LIFETIME] null pointer subscript` in `c-plus-core`'s binary (`AstSafetyCheck.cpp` in both repos lacks `UO_AddrOf` erasure of `nullVars_`).
+- Note: Multi-TU `.hp` class linkage (`tests/stdlib/multi_tu` and `tests/stdlib/known_gaps/class_linkage`) now compiles, links, and passes cleanly on `agent/modern-stdlib`.

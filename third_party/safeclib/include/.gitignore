@@ -1,2 +1,1 @@
-safe_lib_errno.h
-safe_types.h
+# safe_lib_errno.h and safe_types.h are tracked for clean-checkout Linux/macOS builds

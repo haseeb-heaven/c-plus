@@ -16,6 +16,18 @@ int main(void){
     str_clear(&s);
     assert(s.size == 0);
     str_free(&s);
+
+    /* Defensive NULL & bounds guards added by Agent 2 */
+    str null_s = str_init(NULL);
+    assert(null_s.size == 0);
+    str_append(&null_s, NULL);
+    str_append(NULL, "ignored");
+    assert(str_find(&null_s, "x") == SIZE_MAX);
+    assert(str_find(&null_s, NULL) == SIZE_MAX);
+    assert(str_rfind(&null_s, "x") == SIZE_MAX);
+    assert(str_count(&null_s, 'x') == 0);
+    str_free(&null_s);
+
     printf("ctl_string: ok\n");
     return 0;
 }

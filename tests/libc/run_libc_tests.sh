@@ -9,7 +9,7 @@ LIB=$OUT/libcplus_hardened.a
 pass=0; fail=0
 for t in tests/libc/test_*.c; do
   b="$OUT/$(basename "$t" .c)"
-  if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 -Ilibc -Ilibc/include "$t" "$LIB" -o "$b" && "$b" >/tmp/libc_test.out 2>&1; then
+  if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 -Ilibc -Ilibc/include "$t" "$LIB" -lm -pthread -o "$b" && "$b" >/tmp/libc_test.out 2>&1; then
     echo "ok $(basename "$t")"; pass=$((pass+1))
   else
     echo "FAIL $(basename "$t")"; tail -20 /tmp/libc_test.out || true; fail=$((fail+1))

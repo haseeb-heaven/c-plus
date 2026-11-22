@@ -35,10 +35,11 @@ int cplus_strncasecmp(const char *a, const char *b, size_t n){
     return 0;
 }
 char *cplus_strdup(const char *s){
+    extern void *cplus_malloc(size_t);
     cplus_libc_log("strdup","enter");
     if(!s) return NULL;
     size_t n=0; while(s[n]) n++;
-    char *p=(char*)malloc(n+1);
+    char *p=(char*)cplus_malloc(n+1);
     if(!p) return NULL;
     for(size_t i=0;i<=n;i++) p[i]=s[i];
     return p;

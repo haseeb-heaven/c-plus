@@ -1,8 +1,19 @@
-/* C+ standard library: RAII mutex and lock guard over POSIX threads.
+/* C+ standard library: RAII mutex, lock guard, condvar and joinable thread.
  *
- * C++-flavoured: `mutex m = mutex(); { guard g = guard(&m); ... }` locks for
- * the scope and releases in drop().  A zero-initialised mutex or guard has no
- * handle or owner, so its destructor is a no-op rather than a stray unlock.
+ * C++-flavoured:
+ *   mutex m = mutex(); { guard g = guard(&m); ... }
+ *   condvar cv = condvar();
+ *   thread t = thread(); t.start(fn, arg, &err);  // drop() joins if joinable
+ *
+ * Zero-initialised handles hold no OS resources and are safe no-ops in drop().
+ * A guard clears its owner pointer on unlock(), so unlock() + drop() never
+ * double-unlocks.
+ *
+ * Thread-safety guarantees:
+ *   - `mutex` serialises concurrent access; `guard` is single-thread scope-bound.
+ *   - `condvar` requires external `mutex` held around `wait()`.
+ *   - `thread` is move-only; `drop()` joins if still joinable so a thread
+ *     cannot outlive a stack-owned handle.
  *
  * Inside a class body C+ only rewrites `this->method()` calls, so internal
  * cross-object calls use the lowered names (`mutex_lock`, ...).
@@ -10,7 +21,9 @@
 #ifndef CPLUS_STD_THREAD_HP
 #define CPLUS_STD_THREAD_HP
 
+#include <pthread.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
 
 class mutex {
     void *handle;
@@ -60,14 +73,120 @@ class guard {
     }
 
     void unlock(void) {
-        if (this->owner != NULL)
+        if (this->owner != NULL) {
             mutex_unlock(this->owner);
+            this->owner = NULL;
+        }
     }
 
     void drop(void) {
         if (this->owner != NULL)
             mutex_unlock(this->owner);
         this->owner = NULL;
+    }
+};
+
+/* RAII condition variable backed by pthread_cond_t. */
+class condvar {
+    pthread_cond_t *cv;
+
+    condvar(void) {
+        this->cv = (pthread_cond_t *)stdlib_alloc(sizeof(pthread_cond_t));
+        if (this->cv != NULL && pthread_cond_init(this->cv, NULL) != 0) {
+            stdlib_release(this->cv);
+            this->cv = NULL;
+        }
+    }
+
+    int is_valid(void) {
+        return this->cv != NULL;
+    }
+
+    int wait(mutex *m) {
+        if (this->cv == NULL || m == NULL || m->handle == NULL)
+            return -1;
+        return pthread_cond_wait(this->cv, (pthread_mutex_t *)m->handle) == 0
+                   ? 0
+                   : -1;
+    }
+
+    int signal(void) {
+        if (this->cv == NULL)
+            return -1;
+        return pthread_cond_signal(this->cv) == 0 ? 0 : -1;
+    }
+
+    int broadcast(void) {
+        if (this->cv == NULL)
+            return -1;
+        return pthread_cond_broadcast(this->cv) == 0 ? 0 : -1;
+    }
+
+    void drop(void) {
+        if (this->cv != NULL) {
+            pthread_cond_destroy(this->cv);
+            stdlib_release(this->cv);
+            this->cv = NULL;
+        }
+    }
+};
+
+/* RAII joinable thread handle: drop() joins if not already joined. */
+class thread {
+    pthread_t handle;
+    int joinable;
+
+    thread(void) {
+        this->joinable = 0;
+    }
+
+    int is_joinable(void) {
+        return this->joinable != 0;
+    }
+
+    int start(void *(*fn)(void *), void *arg, error *err) {
+        int rc;
+        error_reset(err);
+        if (fn == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "thread::start: null function");
+            return STDLIB_FAIL;
+        }
+        if (this->joinable) {
+            error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE, CPLUS_EXIT_RESOURCE,
+                           "thread::start: thread already running");
+            return STDLIB_FAIL;
+        }
+        rc = pthread_create(&this->handle, NULL, fn, arg);
+        if (rc != 0) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "thread::start: pthread_create failed");
+            return STDLIB_FAIL;
+        }
+        this->joinable = 1;
+        return STDLIB_OK;
+    }
+
+    int join(void **out, error *err) {
+        int rc;
+        error_reset(err);
+        if (!this->joinable) {
+            error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE, CPLUS_EXIT_RESOURCE,
+                           "thread::join: thread is not joinable");
+            return STDLIB_FAIL;
+        }
+        rc = pthread_join(this->handle, out);
+        this->joinable = 0;
+        if (rc != 0) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "thread::join: pthread_join failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->joinable) {
+            pthread_join(this->handle, NULL);
+            this->joinable = 0;
+        }
     }
 };
 

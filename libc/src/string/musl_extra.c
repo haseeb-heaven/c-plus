@@ -179,7 +179,7 @@ static char *twoway_memmem(const unsigned char *h, const unsigned char *z, const
     if (memcmp(n, n+p, ms+1)) { mem0 = 0; p = MAX(ms, l-ms-1) + 1; } else mem0 = l-p;
     mem = 0;
     for (;;) {
-        if (z-h < l) return 0;
+        if ((size_t)(z-h) < l) return 0;
         if (BITOP(byteset, h[l-1], &)) {
             k = l-shift[h[l-1]];
             if (k) { if (k < mem) k = mem; h += k; mem = 0; continue; }

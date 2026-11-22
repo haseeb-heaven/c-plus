@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(cplus_hardened_libc C)
 set(CMAKE_C_STANDARD 99)
+find_package(Threads REQUIRED)
 
-add_library(cplus_hardened_libc STATIC
+set(LIBC_SOURCES
   log/log.c
   src/errno/errno.c
   src/stdlib/alloc.c
@@ -12,6 +13,7 @@ add_library(cplus_hardened_libc STATIC
   src/stdlib/stdlib_extra4.c
   src/stdlib/stdlib_extra5.c
   src/stdlib/stdlib_extra6.c
+  src/stdlib/assert_extra.c
   src/stdlib/musl_stdlib_extra.c
   src/string/memory.c
   src/string/string.c
@@ -30,6 +32,7 @@ add_library(cplus_hardened_libc STATIC
   src/stdio/stdio3.c
   src/ctype/ctype.c
   src/wchar/wchar.c
+  src/wctype/wctype.c
   src/ctype/ctype2.c
   src/ctype/ctype3.c
   src/math/math.c
@@ -40,17 +43,45 @@ add_library(cplus_hardened_libc STATIC
   src/time/time_extra.c
   src/locale/locale.c
   src/signal/signal.c
+  src/signal/signal2.c
   src/fenv/fenv.c
   src/complex/complex.c
   src/thread/thread.c
 )
-target_include_directories(cplus_hardened_libc PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
-  ${CMAKE_CURRENT_SOURCE_DIR}
-)
-target_compile_options(cplus_hardened_libc PRIVATE -Wall -Wextra -Wpedantic)
 
-install(TARGETS cplus_hardened_libc ARCHIVE DESTINATION lib)
+add_library(cplus_hardened_libc STATIC ${LIBC_SOURCES})
+add_library(cplus_hardened_libc_shared SHARED ${LIBC_SOURCES})
+set_target_properties(cplus_hardened_libc_shared PROPERTIES OUTPUT_NAME cplus_hardened_libc)
+
+foreach(tgt IN ITEMS cplus_hardened_libc cplus_hardened_libc_shared)
+  target_include_directories(${tgt}
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/install-include>
+      $<INSTALL_INTERFACE:include/cplus-libc>
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+  target_compile_options(${tgt} PRIVATE -Wall -Wextra -Wpedantic)
+  target_link_libraries(${tgt} PRIVATE m Threads::Threads)
+endforeach()
+
+install(TARGETS cplus_hardened_libc cplus_hardened_libc_shared
+  EXPORT cplus_hardened_libcTargets
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
 install(DIRECTORY install-include/ DESTINATION include/cplus-libc)
 install(DIRECTORY contracts/ DESTINATION share/cplus-libc/contracts)
 install(FILES README.md DESTINATION share/cplus-libc)
+install(EXPORT cplus_hardened_libcTargets
+  NAMESPACE cplus::
+  DESTINATION lib/cmake/cplus_hardened_libc
+)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/cplus_hardened_libcConfig.cmake"
+  "include(\"\${CMAKE_CURRENT_LIST_DIR}/cplus_hardened_libcTargets.cmake\")\n"
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cplus_hardened_libcConfig.cmake"
+  DESTINATION lib/cmake/cplus_hardened_libc
+)

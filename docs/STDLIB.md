@@ -28,16 +28,16 @@ int main(void) {
 
 | header | type / API | underlying |
 | --- | --- | --- |
-| `stdlib/error.hp` | `error` (`ok`, `failed_now`, `code`, `what`, `set`, `clear`) + `STDLIB_OK/EOF/FAIL` | runtime exit codes |
+| `stdlib/error.hp` | `error` (`ok`, `failed_now`, `code`, `category`, `what`, `set`, `set_category`, `clear`), telemetry (`stdlib_telemetry_*`), callbacks, metadata (`stdlib_alloc_*`, `stdlib_transfer_ownership`) | runtime exit codes + checked side-table |
 | `stdlib/io.hp` | `read_line`, `read_int`, `read_long`, `read_float`, `read_double`, `println` | `fgets`, `strtol`, `strtoll`, `strtof`, `strtod`, `errno` |
-| `stdlib/string.hp` | `string` (`size`, `capacity`, `at`, `c_str`, `equals`, `compare`, `find`, `append`, `reserve`, `clear`, `substr`, `count_fields`, `field`, `to_view`, `drop`), `string_view` (`size`, `data`, `equals`) | `strlen`, `memcmp`, `strstr`, `cplus_alloc` |
-| `stdlib/vector.hp` | `vector` (`size`, `capacity`, `reserve`, `push_back`, `pop_back`, `at`, `at_checked`, `clear`, `view`, `drop`) and checked `slice` (`size`, `valid`, `at_checked`, `sub`) | `cplus_alloc` / `cplus_release` |
-| `stdlib/file.hp` | `file` (`is_open`, `read`, `read_line`, `write`, `write_bytes`, `seek`, `flush`, `native`, `drop`), `file_borrow` | `fopen`, `fread`, `fgets`, `fputs`, `fwrite`, `fseek`, `fflush`, `fclose` |
-| `stdlib/thread.hp` | `mutex` (`is_valid`, `lock`, `unlock`, `native`, `drop`), `guard` (`holds`, `unlock`, `drop`) | runtime mutex wrappers |
+| `stdlib/string.hp` | `string` (`size`, `capacity`, `valid`, `at`, `c_str`, `equals`, `compare`, `find`, `append`, `reserve`, `clear`, `copy_from`, `is_valid_utf8`, `substr`, `count_fields`, `field`, `to_view`, `drop`), `string_view` (`size`, `data`, `equals`, `is_valid_utf8`) | `strlen`, `memcmp`, `strstr`, `stdlib_alloc` |
+| `stdlib/vector.hp` | `vector` (`size`, `capacity`, `reserve`, `push_back`, `pop_back`, `insert`, `erase`, `at`, `at_checked`, `clear`, `copy_from`, `shrink_to_fit`, `view`, `drop`) and generation-checked `slice` (`size`, `stale`, `valid`, `at_checked`, `sub`) | `stdlib_alloc` / `stdlib_release` |
+| `stdlib/file.hp` | `file` (`is_open`, `read`, `read_line`, `write`, `write_bytes`, `seek`, `flush`, `close`, `native`, `drop`), `file_borrow`, `file_temp` | `fopen`, `tmpfile`, `fread`, `fgets`, `fputs`, `fwrite`, `fseek`, `fflush`, `fclose` |
+| `stdlib/thread.hp` | `mutex` (`is_valid`, `lock`, `unlock`, `native`, `drop`), `guard` (`holds`, `unlock`, `drop`), `condvar`, `thread` | pthreads + RAII wrappers |
 | `stdlib/net.hp` | `listener` (`is_valid`, `descriptor`, `bound_port`, `accept`, `drop`), `connection` (`is_valid`, `descriptor`, `read`, `write`, `drop`), `listener_borrow`, `connection_borrow` | POSIX sockets |
-| `stdlib/collections.hp` | `intmap` (`size`, `valid`, `put`, `get`, `contains`, `remove`, `clear`, `grow`, `drop`) and `strmap` with owned keys (same surface, `const char *` keys) | `cplus_alloc` / `cplus_release`, open addressing with tombstones |
+| `stdlib/collections.hp` | `intmap`, `strmap`, `intset`, `deque`, `list`, `stack`, `queue` (3-array OOM rollback on maps) | `stdlib_alloc` / `stdlib_release` |
 | `stdlib/log.hp` | `log_sink` (`valid`, `native`, `level`, `set_level`, `enabled`, `write`, `info`, `warn`, `failure`, `drop`), `log_open_file`, `log_stderr`, `log_stdout`, `log_level_name`, `log_level_parse` | libc stdio (`fwrite`, `flockfile`), ISO-8601 timestamps |
-| `stdlib/fs.hp` | `fs_exists`, `fs_is_file`, `fs_is_dir`, `fs_size`, `fs_remove`, `fs_rename`, `fs_mkdir` | `stat`, `unlink`, `rename`, `mkdir` |
+| `stdlib/fs.hp` | `fs_exists`, `fs_is_file`, `fs_is_dir`, `fs_size`, `fs_remove`, `fs_rename`, `fs_mkdir`, `fs_mkdtemp` | `stat`, `unlink`, `rename`, `mkdir`, `mkdtemp` |
 | `stdlib/time.hp` | `time_now_ns/ms`, `time_monotonic_ns/ms`, `time_sleep_ms`, `time_format_iso8601` | `clock_gettime`, `nanosleep`, `gmtime_r`, `strftime` |
 | `stdlib/json.hp` | `json` (`valid`, `root`, `drop`), `json_view` (`valid`, `is_*`, `get_int`, `get_double`, `get_bool`, `get_string`, `size`, `at`, `member`, `write`), `json_builder` (`valid`, `add_int`, `add_double`, `add_bool`, `add_string`, `write`, `drop`), `json_parse_file`, `json_free` | yyjson 0.13.0 |
 | `stdlib/image.hp` | `image` (`valid`, `width`, `height`, `channels`, `size_bytes`, `pixel`, `write_png`, `write_bmp`, `drop`), `image_from_pixels`, `image_from_memory` | stb_image / stb_image_write |

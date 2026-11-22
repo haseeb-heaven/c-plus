@@ -1,9 +1,6 @@
 # Adversarial bug catalogue -> mitigation matrix
 
-Maps the 104 raw-C bug patterns (`tests/crt/adversarial/bug_catalogue.c`) to how
-the C+ hardened layer handles them. This is an **honest** matrix: it separates
-runtime-checked APIs (libc+/safe CRT can catch) from compile-time/static issues
-(Agent 1 compiler) and explicit unsafe boundaries (no libc can catch).
+Maps all 204 bug patterns (`scratch/bugs1.cp`, `scratch/bugs2.cp`, `tests/crt/adversarial/bug_catalogue.c`, and `tests/crt/unit/test_bugs_catalogue_204.c`) to how the C+ hardened layer handles them (using standard-C SafeCRT signatures for `malloc_s`/`calloc_s`/`realloc_s`/`free_s`/`cplus_fopen_s`/`cplus_fclose_s`, `cplus_safe_len`, `cplus_safe_transfer_ownership`, and `cplus_runtime_push_cleanup`). See also [`tests/safety/SCENARIO_MATRIX.md`](../../tests/safety/SCENARIO_MATRIX.md).
 
 Legend:
 - **SAFE-CATCH** — a checked C+ API returns a defined error / avoids the UB when the caller uses it (proved by `tests/crt/adversarial/test_safe_mitigations.c`).
@@ -63,7 +60,7 @@ Legend:
 | 48 | double fclose | SAFE-CATCH | `cplus_fclose_s` 2nd -> EINVAL |
 | 49 | 2D free order | BOUNDARY | ownership (Agent 1) |
 | 50 | FAM missing payload | SAFE-CATCH (opt) | bounded APIs reject; alloc size is caller's |
-| 51 | malloc(0) deref | SAFE-CATCH | `malloc_s(&p,0)` defined non-deref contract |
+| 51 | malloc(0) deref | SAFE-CATCH | `malloc_s(0)` returns defined 1-byte tracked block |
 | 52 | setbuf dangling | BOUNDARY | stream buffer lifetime (Agent 1) |
 | 53 | list traversal UAF | COMPILER | ownership (Agent 1) |
 | 54 | dlist dangling | COMPILER | ownership (Agent 1) |

@@ -68,7 +68,7 @@ class log_sink {
 
     log_sink(FILE *stream, int owns, int threshold) {
         this->stream = stream;
-        this->owns = owns;
+        this->owns = (stream != NULL && owns) ? 1 : 0;
         this->threshold = threshold;
     }
 
@@ -100,7 +100,8 @@ class log_sink {
               int line, error *err) {
         char stamp[32];
         char text[LOG_LINE_SIZE];
-        int used;
+        size_t used = 0;
+        int n;
         size_t i;
         error_reset(err);
         if (!this->valid()) {
@@ -119,31 +120,45 @@ class log_sink {
         if (time_format_iso8601(time_now_ns(), stamp, sizeof(stamp), err) !=
             STDLIB_OK)
             stamp[0] = '\0';
-        used = snprintf(text, sizeof(text), "%s %-5s %s", stamp,
-                        log_level_name(severity),
-                        message != NULL ? message : "");
-        for (i = 0; i < field_count && used > 0 &&
-                    (size_t)used < sizeof(text);
-             i++) {
-            used += snprintf(text + used, sizeof(text) - (size_t)used,
-                             " %s=%lld", keys[i] != NULL ? keys[i] : "?",
-                             values[i]);
-        }
-        if (used > 0 && (size_t)used < sizeof(text)) {
-            if (file != NULL)
-                used += snprintf(text + used, sizeof(text) - (size_t)used,
-                                 " (%s:%d)", file, line);
-            if ((size_t)used < sizeof(text) - 1)
-                used += snprintf(text + used, sizeof(text) - (size_t)used,
-                                 "\n");
-        }
-        if (used < 0 || (size_t)used >= sizeof(text)) {
+        n = snprintf(text, sizeof(text), "%s %-5s %s", stamp,
+                     log_level_name(severity),
+                     message != NULL ? message : "");
+        if (n < 0 || (size_t)n >= sizeof(text)) {
             error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
                            "log_sink::write: line truncated");
             return STDLIB_FAIL;
         }
+        used = (size_t)n;
+        for (i = 0; i < field_count; i++) {
+            n = snprintf(text + used, sizeof(text) - used,
+                         " %s=%lld", keys[i] != NULL ? keys[i] : "?",
+                         values[i]);
+            if (n < 0 || (size_t)n >= sizeof(text) - used) {
+                error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                               "log_sink::write: line truncated");
+                return STDLIB_FAIL;
+            }
+            used += (size_t)n;
+        }
+        if (file != NULL) {
+            n = snprintf(text + used, sizeof(text) - used,
+                         " (%s:%d)", file, line);
+            if (n < 0 || (size_t)n >= sizeof(text) - used) {
+                error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                               "log_sink::write: line truncated");
+                return STDLIB_FAIL;
+            }
+            used += (size_t)n;
+        }
+        if (used + 1 >= sizeof(text)) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "log_sink::write: line truncated");
+            return STDLIB_FAIL;
+        }
+        text[used++] = '\n';
+        text[used] = '\0';
         flockfile(this->stream);
-        if (fwrite(text, 1, (size_t)used, this->stream) != (size_t)used) {
+        if (fwrite(text, 1, used, this->stream) != used) {
             funlockfile(this->stream);
             error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
                            "log_sink::write: write failed");

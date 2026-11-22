@@ -69,4 +69,5 @@ run() { # name
 
 run fuzz_json
 run fuzz_string
+run fuzz_containers
 exit "$FAIL"

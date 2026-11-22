@@ -67,7 +67,6 @@ static inline int str_char_equal(char *a, char *b)
 static inline str str_init(const char *c_str)
 {
     str self = str___INIT();
-    size_t len = strlen(c_str);
 #ifndef _LIBCPP_STD_VER
     size_t min = 15;
 #else
@@ -75,6 +74,9 @@ static inline str str_init(const char *c_str)
 #endif
     self.compare = str_char_compare;
     self.equal = str_char_equal;
+    if (!c_str)
+        return self;
+    size_t len = strlen(c_str);
     str_reserve(&self, len < min ? min : len);
     for (const char *s = c_str; *s; s++)
         str_push_back(&self, *s);
@@ -83,9 +85,15 @@ static inline str str_init(const char *c_str)
 
 static inline void str_append(str *self, const char *s)
 {
+    if (!self || !s)
+        return;
     size_t start = self->size;
     size_t len = strlen(s);
+    if (len > SIZE_MAX - self->size)
+        return;
     str_resize(self, self->size + len, '\0');
+    if (self->size < start + len || !self->vector)
+        return;
     for (size_t i = 0; i < len; i++)
         self->vector[start + i] = s[i];
 }
@@ -120,6 +128,8 @@ static inline char *str_c_str(str *self)
 
 static inline size_t str_find(str *self, const char *s)
 {
+    if (!self || !self->vector || !s)
+        return SIZE_MAX;
     char *c_str = self->vector;
     char *found = strstr(c_str, s);
     if (found)
@@ -129,6 +139,8 @@ static inline size_t str_find(str *self, const char *s)
 
 static inline int str_count(str *self, char c)
 {
+    if (!self || !self->vector)
+        return 0;
     size_t count = 0;
     for (size_t i = 0; i < self->size; i++)
         if (self->vector[i] == c)
@@ -138,6 +150,8 @@ static inline int str_count(str *self, char c)
 
 static inline size_t str_rfind(str *self, const char *s)
 {
+    if (!self || !self->vector || !s)
+        return SIZE_MAX;
     char *c_str = self->vector;
     for (size_t i = self->size; i != SIZE_MAX; i--)
     {

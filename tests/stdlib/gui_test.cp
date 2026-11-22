@@ -103,5 +103,19 @@ int main(void) {
 
     int styled = ui.style_text_color(200, 200, 200);
     print("style", styled);
+
+    if (ui.handle_event(NULL) != 0)
+        return 5;
+    SDL_Event gui_ev;
+    memset(&gui_ev, 0, sizeof(gui_ev));
+    (void)ui.handle_event(&gui_ev);
+    ui.input_begin();
+    ui.input_end();
+    if (ui.window_begin("static_row", 4.0f, 4.0f, 120.0f, 60.0f, 0)) {
+        ui.layout_row_static(24.0f, 80, 1);
+        ui.label("row");
+    }
+    ui.window_end();
+    ui.render(0);
     return 0;
 }

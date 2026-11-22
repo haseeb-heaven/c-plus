@@ -35,8 +35,7 @@ int main(void) {
     cplus_safe_log_set_level(CPLUS_SAFE_LOG_OFF);
     cplus_safe_set_constraint_mode(CPLUS_SAFE_CONSTRAINT_IGNORE);
 
-    void *p = NULL;
-    CHECK(malloc_s(&p, BLK) == CPLUS_SAFE_OK);
+    void *p = malloc_s(BLK);
     CHECK(p != NULL);
     if (!p) {
         printf("bugclass_heap_overflow: FAILURES=%d\n", failures);
@@ -76,8 +75,8 @@ int main(void) {
     CHECK(cplus_memcpy_s(p, USABLE, src, (rsize_t)-1) != 0);
     for (int i = USABLE; i < BLK; ++i) CHECK(((unsigned char *)p)[i] == 0x5A);
 
-    free_s(&p);
-    CHECK(p == NULL);
+    free_s(p);
+    CHECK(!cplus_safe_ptr_is_live(p));
 
     if (failures == 0) {
         printf("bugclass_heap_overflow: ok\n");

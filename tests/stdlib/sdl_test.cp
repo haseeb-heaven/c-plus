@@ -70,5 +70,9 @@ int main(void) {
 
     renderer invalid = renderer(NULL, "software", &err);
     print("invalid-renderer", invalid.valid(), err.failed_now(), win.valid());
+
+    surface empty_surf = surface(NULL);
+    if (empty_surf.valid())
+        return 7;
     return 0;
 }

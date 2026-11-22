@@ -2,8 +2,8 @@
  *
  * C++-flavoured: `file f = file("path", "r");` opens, `f.read(...)` reads and
  * the destructor closes.  Ownership is explicit: a file either owns its FILE*
- * (drop closes it) or borrows one (drop leaves it alone), so wrapping stdout
- * is safe and a zero-initialised file closes nothing.
+ * (drop/close closes it) or borrows one (drop leaves it alone), so wrapping
+ * stdout is safe and a zero-initialised file closes nothing.
  */
 #ifndef CPLUS_STD_FILE_HP
 #define CPLUS_STD_FILE_HP
@@ -18,8 +18,8 @@ class file {
     int owns;
 
     file(const char *path, const char *mode) {
-        this->stream = path != NULL ? fopen(path, mode) : NULL;
-        this->owns = 1;
+        this->stream = (path != NULL && mode != NULL) ? fopen(path, mode) : NULL;
+        this->owns = this->stream != NULL ? 1 : 0;
     }
 
     int is_open(void) {
@@ -126,6 +126,26 @@ class file {
         return STDLIB_OK;
     }
 
+    /* Explicit checked close; safe against double-close and borrowed handles. */
+    int close(error *err) {
+        int rc = 0;
+        error_reset(err);
+        if (this->stream == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE, CPLUS_EXIT_IO,
+                           "file::close: handle already closed");
+            return STDLIB_FAIL;
+        }
+        if (this->owns)
+            rc = fclose(this->stream);
+        this->stream = NULL;
+        this->owns = 0;
+        if (rc != 0) {
+            error_fail(err, CPLUS_EXIT_IO, "file::close: fclose failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
     void drop(void) {
         if (this->stream != NULL && this->owns)
             fclose(this->stream);
@@ -140,6 +160,20 @@ static inline file file_borrow(FILE *handle) {
     borrowed.stream = handle;
     borrowed.owns = 0;
     return borrowed;
+}
+
+/* Secure anonymous temporary file (unlinked on close/drop by tmpfile). */
+static inline file file_temp(error *err) {
+    file temp = file(NULL, NULL);
+    error_reset(err);
+    temp.stream = tmpfile();
+    if (temp.stream == NULL) {
+        error_fail(err, CPLUS_EXIT_IO, "file_temp: tmpfile failed");
+        temp.owns = 0;
+    } else {
+        temp.owns = 1;
+    }
+    return temp;
 }
 
 #endif

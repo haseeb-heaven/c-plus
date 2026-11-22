@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -87,56 +88,53 @@ static void s_strnlen(void){
 }
 static void s_malloc(void){
     void *p=NULL;
-    assert(malloc_s(NULL,1)==CPLUS_SAFE_EINVAL);
-    assert(malloc_s(&p,0)==CPLUS_SAFE_OK && p!=NULL); free_s(&p);
-    assert(malloc_s(&p,1)==CPLUS_SAFE_OK); free_s(&p);
-    assert(malloc_s(&p,1024)==CPLUS_SAFE_OK); memset(p,0xAB,1024); free_s(&p);
-    for(int i=0;i<50;i++){ void *t=NULL; assert(malloc_s(&t,16+i)==CPLUS_SAFE_OK); free_s(&t); }
-    assert(malloc_s(&p,sizeof(void*))==CPLUS_SAFE_OK); free_s(&p);
-    assert(malloc_s(&p,4096)==CPLUS_SAFE_OK); free_s(&p);
-    p=NULL; assert(malloc_s(&p,8)==CPLUS_SAFE_OK); ((char*)p)[0]=1; free_s(&p);
-    assert(malloc_s(&p,1)==CPLUS_SAFE_OK); free_s(&p);
-    assert(malloc_s(&p,64)==CPLUS_SAFE_OK); free_s(&p);
+    errno=0; assert(malloc_s((size_t)-1)==NULL && errno==EINVAL);
+    p=malloc_s(0); assert(p!=NULL); free_s(p);
+    p=malloc_s(1); assert(p!=NULL); free_s(p);
+    p=malloc_s(1024); assert(p!=NULL); memset(p,0xAB,1024); free_s(p);
+    for(int i=0;i<50;i++){ void *t=malloc_s(16+(size_t)i); assert(t!=NULL); free_s(t); }
+    p=malloc_s(sizeof(void*)); assert(p!=NULL); free_s(p);
+    p=malloc_s(4096); assert(p!=NULL); free_s(p);
+    p=malloc_s(8); assert(p!=NULL); ((char*)p)[0]=1; free_s(p);
+    p=malloc_s(1); assert(p!=NULL); free_s(p);
+    p=malloc_s(64); assert(p!=NULL); free_s(p);
 }
 static void s_calloc(void){
     void *p=NULL;
-    assert(calloc_s(NULL,1,1)==CPLUS_SAFE_EINVAL);
-    assert(calloc_s(&p,0,1)==CPLUS_SAFE_OK && p!=NULL); free_s(&p);
-    assert(calloc_s(&p,1,0)==CPLUS_SAFE_OK && p!=NULL); free_s(&p);
-    assert(calloc_s(&p,(size_t)-1,2)==CPLUS_SAFE_EOVERFLOW);
-    assert(calloc_s(&p,10,10)==CPLUS_SAFE_OK); for(int i=0;i<100;i++) assert(((unsigned char*)p)[i]==0); free_s(&p);
-    for(int i=0;i<30;i++){ void *t=NULL; assert(calloc_s(&t,4,4)==CPLUS_SAFE_OK); free_s(&t); }
-    assert(calloc_s(&p,1,1)==CPLUS_SAFE_OK); free_s(&p);
-    assert(calloc_s(&p,16,16)==CPLUS_SAFE_OK); free_s(&p);
-    assert(calloc_s(&p,2,8)==CPLUS_SAFE_OK); free_s(&p);
-    assert(calloc_s(&p,100,1)==CPLUS_SAFE_OK); free_s(&p);
+    p=calloc_s(0,1); assert(p!=NULL); free_s(p);
+    p=calloc_s(1,0); assert(p!=NULL); free_s(p);
+    errno=0; assert(calloc_s((size_t)-1,2)==NULL && errno==EOVERFLOW);
+    p=calloc_s(10,10); assert(p!=NULL); for(int i=0;i<100;i++) assert(((unsigned char*)p)[i]==0); free_s(p);
+    for(int i=0;i<30;i++){ void *t=calloc_s(4,4); assert(t!=NULL); free_s(t); }
+    p=calloc_s(1,1); assert(p!=NULL); free_s(p);
+    p=calloc_s(16,16); assert(p!=NULL); free_s(p);
+    p=calloc_s(2,8); assert(p!=NULL); free_s(p);
+    p=calloc_s(100,1); assert(p!=NULL); free_s(p);
 }
 static void s_realloc(void){
-    void *p=NULL;
-    assert(realloc_s(NULL,8)==CPLUS_SAFE_EINVAL);
-    assert(malloc_s(&p,8)==CPLUS_SAFE_OK);
-    assert(realloc_s(&p,0)==CPLUS_SAFE_OK && p!=NULL);
-    assert(realloc_s(&p,64)==CPLUS_SAFE_OK);
-    void *const old=p; assert(realloc_s(&p,(size_t)-1)==CPLUS_SAFE_ENOMEM); assert(p==old);
-    free_s(&p);
-    p=NULL; assert(realloc_s(&p,16)==CPLUS_SAFE_OK || 1); /* impl-defined when inout points to NULL? our API requires *inout */ free_s(&p);
-    assert(malloc_s(&p,4)==CPLUS_SAFE_OK); memcpy(p,"abc",4); assert(realloc_s(&p,32)==CPLUS_SAFE_OK); assert(memcmp(p,"abc",4)==0); free_s(&p);
-    for(int i=0;i<20;i++){ void *t=NULL; malloc_s(&t,8); assert(realloc_s(&t,16+i)==CPLUS_SAFE_OK); free_s(&t);} 
-    assert(malloc_s(&p,8)==CPLUS_SAFE_OK); assert(realloc_s(&p,8)==CPLUS_SAFE_OK); free_s(&p);
-    assert(malloc_s(&p,1)==CPLUS_SAFE_OK); assert(realloc_s(&p,1)==CPLUS_SAFE_OK); free_s(&p);
+    void *p=malloc_s(8);
+    assert(p!=NULL);
+    p=realloc_s(p,0); assert(p!=NULL);
+    p=realloc_s(p,64); assert(p!=NULL);
+    errno=0; assert(realloc_s(p,(size_t)-1)==NULL && errno==EINVAL); assert(cplus_safe_ptr_is_live(p));
+    free_s(p);
+    p=realloc_s(NULL,16); assert(p!=NULL); free_s(p);
+    p=malloc_s(4); assert(p!=NULL); memcpy(p,"abc",4); p=realloc_s(p,32); assert(p!=NULL && memcmp(p,"abc",4)==0); free_s(p);
+    for(int i=0;i<20;i++){ void *t=malloc_s(8); t=realloc_s(t,16+(size_t)i); assert(t!=NULL); free_s(t);} 
+    p=malloc_s(8); assert(p!=NULL); p=realloc_s(p,8); assert(p!=NULL); free_s(p);
+    p=malloc_s(1); assert(p!=NULL); p=realloc_s(p,1); assert(p!=NULL); free_s(p);
 }
 static void s_free(void){
     void *p=NULL;
     free_s(NULL);
-    free_s(&p);
-    assert(malloc_s(&p,8)==CPLUS_SAFE_OK); free_s(&p); assert(p==NULL);
-    free_s(&p);
-    for(int i=0;i<50;i++){ void *t=NULL; malloc_s(&t,8); free_s(&t); assert(t==NULL);} 
-    assert(malloc_s(&p,1)==CPLUS_SAFE_OK); free_s(&p);
-    assert(malloc_s(&p,1024)==CPLUS_SAFE_OK); free_s(&p);
-    assert(malloc_s(&p,16)==CPLUS_SAFE_OK); free_s(&p);
-    void *q=NULL; free_s(&q);
-    assert(malloc_s(&p,32)==CPLUS_SAFE_OK); free_s(&p); assert(p==NULL);
+    p=malloc_s(8); assert(p!=NULL); assert(free_checked_s(p)==CPLUS_SAFE_OK);
+    assert(free_checked_s(p)==CPLUS_SAFE_EINVAL);
+    for(int i=0;i<50;i++){ void *t=malloc_s(8); assert(t!=NULL); free_s(t); assert(!cplus_safe_ptr_is_live(t)); }
+    p=malloc_s(1); assert(p!=NULL); free_s(p);
+    p=malloc_s(1024); assert(p!=NULL); free_s(p);
+    p=malloc_s(16); assert(p!=NULL); free_s(p);
+    void *q=NULL; free_s(q);
+    p=malloc_s(32); assert(p!=NULL); free_s(p);
 }
 int main(void){
     RUN(s_strcpy); RUN(s_strncpy); RUN(s_strcat); RUN(s_strncat); RUN(s_strcmp_s); RUN(s_strnlen);

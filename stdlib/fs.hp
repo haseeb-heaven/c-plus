@@ -93,4 +93,27 @@ static inline int fs_mkdir(const char *path, error *err) {
     return STDLIB_OK;
 }
 
+/* Create a unique temporary directory from a mutable template ending in
+ * "XXXXXX" (e.g. "/tmp/cplus_dir_XXXXXX"). */
+static inline int fs_mkdtemp(char *tmpl, size_t size, error *err) {
+    size_t len;
+    error_reset(err);
+    if (tmpl == NULL || size < 7) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_mkdtemp: invalid template buffer");
+        return STDLIB_FAIL;
+    }
+    len = strnlen(tmpl, size);
+    if (len >= size || len < 6 || strcmp(tmpl + len - 6, "XXXXXX") != 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_mkdtemp: template must end with XXXXXX");
+        return STDLIB_FAIL;
+    }
+    if (mkdtemp(tmpl) == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO, strerror(errno));
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
 #endif

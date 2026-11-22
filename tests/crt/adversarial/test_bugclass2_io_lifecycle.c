@@ -37,21 +37,17 @@ int main(void) {
     char buf[16];
 
     /* --- NULL argument contract: never dereferenced --- */
-    CHECK(cplus_fopen_s(NULL, path, "wb") == CPLUS_SAFE_EINVAL);
-    CHECK(cplus_fopen_s(&f, NULL, "wb") == CPLUS_SAFE_EINVAL);
-    CHECK(cplus_fopen_s(&f, path, NULL) == CPLUS_SAFE_EINVAL);
-    CHECK(f == NULL);
+    CHECK(cplus_fopen_s(NULL, "wb") == NULL);
+    CHECK(cplus_fopen_s(path, NULL) == NULL);
 
-    /* --- failed open: handle stays NULL, error is reported --- */
-    CHECK(cplus_fopen_s(&f, "/no/such/cplus/h2/lifecycle", "rb") != CPLUS_SAFE_OK);
-    CHECK(f == NULL);
+    /* --- failed open: returns NULL --- */
+    CHECK(cplus_fopen_s("/no/such/cplus/h2/lifecycle", "rb") == NULL);
 
-    /* --- fclose of a NULL out-param or a NULL handle is a defined error --- */
-    CHECK(cplus_fclose_s(NULL) == CPLUS_SAFE_EINVAL);
-    CHECK(cplus_fclose_s(&f) == CPLUS_SAFE_EINVAL);   /* f == NULL */
+    /* --- fclose of NULL is a defined error --- */
+    CHECK(cplus_fclose_s(NULL) == EOF);
 
     /* --- open a scratch stream for the round-trip and clamping checks --- */
-    CHECK(cplus_fopen_s(&f, path, "wb+") == CPLUS_SAFE_OK);
+    f = cplus_fopen_s(path, "wb+");
     CHECK(f != NULL);
 
     /* --- read/write with NULL buf, NULL stream, size 0, count 0 -> 0, no I/O - */
@@ -93,10 +89,9 @@ int main(void) {
     rewind(f);
     CHECK(cplus_fread_s(buf, 1, 4, 2, f) == 0);
 
-    /* --- close exactly once: handle cleared, double close defined --- */
-    CHECK(cplus_fclose_s(&f) == CPLUS_SAFE_OK);
-    CHECK(f == NULL);
-    CHECK(cplus_fclose_s(&f) == CPLUS_SAFE_EINVAL);   /* double close caught */
+    /* --- close exactly once: double close caught safely --- */
+    CHECK(cplus_fclose_s(f) == 0);
+    CHECK(cplus_fclose_s(f) == EOF);   /* double close caught */
 
     remove(path);
 

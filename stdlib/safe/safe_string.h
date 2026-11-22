@@ -2,6 +2,7 @@
 #define CPLUS_SAFE_STRING_H
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -45,6 +46,65 @@ errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *ind
 rsize_t cplus_strnlen_s(const char *str, rsize_t smax);
 char *cplus_strtok_s(char *dest, rsize_t *dmax, const char *delim, char **ptr);
 errno_t cplus_strerror_s(char *dest, rsize_t dmax, int errnum);
+
+/* Standard-C-signature auto-bounds-checked wrappers */
+char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax);
+char *cplus_strncpy_s_auto(char *dest, const char *src, size_t n, size_t known_dmax);
+char *cplus_strcat_s_auto(char *dest, const char *src, size_t known_dmax);
+char *cplus_strncat_s_auto(char *dest, const char *src, size_t n, size_t known_dmax);
+
+#ifndef CPLUS_SAFE_OBJ_SIZE
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 0)
+#else
+#define CPLUS_SAFE_OBJ_SIZE(p) ((size_t)-1)
+#endif
+#define CPLUS_SAFE_CAT2(a, b) a##b
+#define CPLUS_SAFE_CAT(a, b) CPLUS_SAFE_CAT2(a, b)
+#define CPLUS_SAFE_NARG_(_1, _2, _3, _4, _5, N, ...) N
+#define CPLUS_SAFE_NARG(...) CPLUS_SAFE_NARG_(__VA_ARGS__, 5, 4, 3, 2, 1, 0)
+#endif
+
+#ifndef CPLUS_SAFE_NO_UNPREFIXED_MACROS
+#define CPLUS_SAFE_STRCPY_2(dest, src) \
+    cplus_strcpy_s_auto((dest), (src), CPLUS_SAFE_OBJ_SIZE(dest))
+#define CPLUS_SAFE_STRCPY_3(dest, dmax, src) \
+    cplus_strcpy_s((dest), (dmax), (src))
+#undef strcpy_s
+#define strcpy_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_STRCPY_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#define CPLUS_SAFE_STRNCPY_3(dest, src, n) \
+    cplus_strncpy_s_auto((dest), (src), (n), CPLUS_SAFE_OBJ_SIZE(dest))
+#define CPLUS_SAFE_STRNCPY_4(dest, dmax, src, slen) \
+    cplus_strncpy_s((dest), (dmax), (src), (slen))
+#undef strncpy_s
+#define strncpy_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_STRNCPY_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#define CPLUS_SAFE_STRCAT_2(dest, src) \
+    cplus_strcat_s_auto((dest), (src), CPLUS_SAFE_OBJ_SIZE(dest))
+#define CPLUS_SAFE_STRCAT_3(dest, dmax, src) \
+    cplus_strcat_s((dest), (dmax), (src))
+#undef strcat_s
+#define strcat_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_STRCAT_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#define CPLUS_SAFE_STRNCAT_3(dest, src, n) \
+    cplus_strncat_s_auto((dest), (src), (n), CPLUS_SAFE_OBJ_SIZE(dest))
+#define CPLUS_SAFE_STRNCAT_4(dest, dmax, src, slen) \
+    cplus_strncat_s((dest), (dmax), (src), (slen))
+#undef strncat_s
+#define strncat_s(...) \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_STRNCAT_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#undef strnlen_s
+#define strnlen_s cplus_strnlen_s
+#undef strerror_s
+#define strerror_s cplus_strerror_s
+#undef strtok_s
+#define strtok_s cplus_strtok_s
+#endif
 #if defined(__cplusplus)
 }
 #endif

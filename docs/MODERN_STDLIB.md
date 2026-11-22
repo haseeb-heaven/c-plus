@@ -13,14 +13,7 @@ RAII constructs.  No exceptions, no `longjmp`, no mandatory GC, no new syntax.
 
 ### One library, three areas
 
-The deliverable is a single optional modern C+ library: **core** (`string`,
-`string_view`, `vector`, `slice`, `intmap`, `strmap`, `error`, `file`, `fs`, `time`, `log`,
-`mutex`/`guard`, `listener`/`connection`), **adapters** (JSON, HTTP, async,
-GUI/window/graphics/input, audio, image, video) and **the tooling around them**
-(tests, coverage gate, benchmarks).  There is deliberately **no separate
-"Safe CRT" product**: improving raw `malloc`/`strcpy` safety is the compiler's
-job (Agent 1, #19/#16), and platform `strcpy_s` stays a platform API.  See the
-scope note in PR #17.
+The deliverable spans the modern C+ `.hp` library (`stdlib/*.hp`: core containers/strings/sync/files/FS/error/telemetry plus JSON/HTTP/async/GUI/audio/image/video adapters), the optional SafeCRT slice (`stdlib/safe/`, `libcplus_safecrt.a`), and the hardened `libc/` slice (`libcplus_hardened.a`). Compiler-owned static analysis (lifetime, provenance, unknown-capacity raw pointers) remains Agent 1's domain.
 
 ## 1. Surface: C++-flavoured, C underneath
 

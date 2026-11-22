@@ -12,6 +12,6 @@ int main(void){
     t = cplus_strtok_s(NULL, &dmax, ",", &p);
     assert(t && strcmp(t,"c")==0);
     t = cplus_strtok_s(NULL, &dmax, ",", &p);
-    assert(t==NULL || strcmp(t,"c")==0);
+    assert(t == NULL);  /* no duplicate final token */
     return 0;
 }

@@ -7,7 +7,6 @@ int cplus_sscanf(const char*,const char*,...); int cplus_vsscanf(const char*,con
 int cplus_vfprintf(FILE*,const char*,va_list); int cplus_vprintf(const char*,va_list); int cplus_vfscanf(FILE*,const char*,va_list);
 FILE *cplus_fopen(const char*,const char*); int cplus_fclose(FILE*); int cplus_remove(const char*);
 static int do_vs(char*b,const char*f,...){va_list ap;va_start(ap,f);int r=cplus_vsprintf(b,f,ap);va_end(ap);return r;}
-static int do_vss(const char*s,const char*f,...){va_list ap;va_start(ap,f);int v=0;int r=cplus_vsscanf(s,f,ap);va_end(ap);return r;}
 static int do_vf(FILE*fp,const char*f,...){va_list ap;va_start(ap,f);int r=cplus_vfprintf(fp,f,ap);va_end(ap);return r;}
 int main(void){
     for(int i=0;i<10;i++){

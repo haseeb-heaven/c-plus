@@ -68,8 +68,14 @@ Generated from local source/test scan. "10 scenarios" means covered by 10+ scena
 | `cplus_vsnprintf_s` | yes | yes | yes | checked/defined errors | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
 | `cplus_vsprintf_s` | yes | no | yes | checked/defined errors | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
 | `free_s` | yes | yes | yes | checked/defined errors | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
-| `malloc_s` | yes | yes | yes | checked/defined errors | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
-| `realloc_s` | yes | yes | yes | checked/defined errors | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `free_checked_s` | yes | yes | yes | checked/defined errors + double/invalid-free refusal | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `aligned_alloc_s` | yes | no | yes | alignment + size bounds checked | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `malloc_s` | yes | yes | yes | checked/defined errors + metadata table | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `realloc_s` | yes | yes | yes | checked/preserves owner + metadata table | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `cplus_strtok_s` | yes | yes | yes | bounded token state (`strtok_s.c` fixed) | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `cplus_safe_alloc_get_meta` / `query_length` / `transfer_ownership` | yes | yes | yes | thread-safe metadata + generation + ownership | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `cplus_alloc_get_meta` / `query_length` / `transfer_ownership` / `cplus_free_checked` | yes | yes | yes | thread-safe libc metadata + double/invalid-free | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
+| `cplus_runtime_guard` / `cplus_runtime_push_cleanup` | yes | no | yes | LIFO cleanup unwind + failstop mode | NOT PROVEN (requires Agent 1 compiler contracts/enforcement) |
 
 ## Gaps
 - Compile-time/Rust-like safety is NOT proven by libc alone; Agent 1 compiler must enforce contracts/lifetimes/provenance.

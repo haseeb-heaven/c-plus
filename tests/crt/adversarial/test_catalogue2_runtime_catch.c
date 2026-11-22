@@ -8,6 +8,7 @@
  * (section "Catalogue 2") and are intentionally not claimed here.
  */
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,33 +24,20 @@
 
 /* bug105: caller-side size product overflow -> checked calloc_s rejects. */
 static void catch_calloc_overflow(void) {
-    void *p = NULL;
-    assert(calloc_s(&p, (size_t)-1, 4) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
-    assert(calloc_s(&p, SIZE_MAX / 4 + 1, 4) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
-    assert(calloc_s(&p, 2, SIZE_MAX / 2 + 1) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
-    /* representable product is not overflow: it reports OOM instead */
-    assert(calloc_s(&p, SIZE_MAX, 1) == CPLUS_SAFE_ENOMEM);
-    assert(p == NULL);
+    errno = 0; assert(calloc_s((size_t)-1, 4) == NULL && errno == EOVERFLOW);
+    errno = 0; assert(calloc_s(SIZE_MAX / 4 + 1, 4) == NULL && errno == EOVERFLOW);
+    errno = 0; assert(calloc_s(2, SIZE_MAX / 2 + 1) == NULL && errno == EOVERFLOW);
+    errno = 0; assert(calloc_s(RSIZE_MAX_MEM, 1) == NULL && errno == ENOMEM);
 }
 
-/* bug107: a failing/missing allocation must leave a defined handle, never stale. */
+/* bug107: failing allocation returns NULL, zero -> 1 byte defined. */
 static void catch_uninit_out_param(void) {
-    void *p = (void *)0xdeadbeef;
-    assert(malloc_s(&p, (size_t)-1) == CPLUS_SAFE_ENOMEM);
-    assert(p == NULL);
-    p = (void *)0xdeadbeef;
-    assert(calloc_s(&p, (size_t)-1, 8) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
-    assert(malloc_s(NULL, 8) == CPLUS_SAFE_EINVAL);
-    assert(calloc_s(NULL, 1, 1) == CPLUS_SAFE_EINVAL);
-    assert(malloc_s(&p, 0) == CPLUS_SAFE_OK);       /* zero -> 1 byte, defined */
+    errno = 0; assert(malloc_s((size_t)-1) == NULL && errno == EINVAL);
+    errno = 0; assert(calloc_s((size_t)-1, 8) == NULL && errno == EOVERFLOW);
+    void *p = malloc_s(0);
     assert(p != NULL);
-    free_s(&p);
-    assert(p == NULL);
-    free_s(NULL);                                   /* no crash */
+    free_s(p);
+    free_s(NULL);
 }
 
 /* bug143: sprintf into a too-small buffer -> bounded variant, no overflow. */
@@ -111,24 +99,22 @@ static void catch_zero_len_null(void) {
 
 /* bug199: realloc(ptr, 0) must have a defined outcome via the checked API. */
 static void catch_realloc_zero(void) {
-    void *p = NULL;
-    assert(malloc_s(&p, 32) == CPLUS_SAFE_OK);
-    assert(realloc_s(&p, 0) == CPLUS_SAFE_OK);
-    assert(p != NULL);                              /* defined, still owned */
-    free_s(&p);
-    assert(p == NULL);
+    void *p = malloc_s(32);
+    assert(p != NULL);
+    p = realloc_s(p, 0);
+    assert(p != NULL);
+    free_s(p);
 }
 
 /* bug032: realloc failure must not lose the original pointer (no leak/UAF). */
 static void catch_realloc_failure_preserves(void) {
-    void *p = NULL;
-    assert(malloc_s(&p, 32) == CPLUS_SAFE_OK);
+    void *p = malloc_s(32);
+    assert(p != NULL);
     memset(p, 0xAB, 32);
-    void *const old = p;
-    assert(realloc_s(&p, (size_t)-1) == CPLUS_SAFE_ENOMEM);
-    assert(p == old);
-    assert(((unsigned char *)p)[0] == 0xAB);
-    free_s(&p);
+    errno = 0;
+    assert(realloc_s(p, (size_t)-1) == NULL && errno == EINVAL);
+    assert(cplus_safe_ptr_is_live(p) && ((unsigned char *)p)[0] == 0xAB);
+    free_s(p);
 }
 
 /* no checked memory op may ever write past the caller-declared bound. */

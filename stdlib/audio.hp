@@ -12,6 +12,7 @@
 #ifndef CPLUS_STD_AUDIO_HP
 #define CPLUS_STD_AUDIO_HP
 
+#include <errno.h>
 #include <stdlib.h>
 #include <time.h>
 #include "cplus/cplus.h"
@@ -315,6 +316,8 @@ class audio_decoder {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_decoder::read: invalid argument");
             return 0;
         }
+        if (frame_count == 0)
+            return 0;
         if (ma_decoder_read_pcm_frames(&this->decoder, frames, frame_count,
                                        &read) != MA_SUCCESS) {
             error_fail(err, CPLUS_EXIT_IO, "audio_decoder::read failed");
@@ -351,9 +354,11 @@ static inline audio_decoder decoder_from_memory(const void *data, size_t size,
 /* Sleep without pulling in implementation-private miniaudio helpers. */
 static inline void audio_sleep_ms(unsigned ms) {
     struct timespec req;
+    struct timespec rem;
     req.tv_sec = (time_t)(ms / 1000u);
     req.tv_nsec = (long)((ms % 1000u) * 1000000u);
-    nanosleep(&req, NULL);
+    while (nanosleep(&req, &rem) == -1 && errno == EINTR)
+        req = rem;
 }
 
 #endif

@@ -20,8 +20,8 @@
 
 static void checked_version_catches(void) {
     /* capacity = 1 byte, tracked by the caller/contract */
-    void *ptr = NULL;
-    assert(malloc_s(&ptr, 1) == CPLUS_SAFE_OK);
+    void *ptr = malloc_s(1);
+    assert(ptr != NULL);
     int src[10];
     for (int i = 0; i < 10; ++i) src[i] = i + 10;
     /* writing 10 ints (40 bytes) into a 1-byte destination -> rejected */
@@ -31,8 +31,7 @@ static void checked_version_catches(void) {
     int v = 10;
     assert(cplus_memcpy_s(ptr, 1, &v, 1) == 0);
     assert(*(int *)(void *)&v == 10 || 1);
-    free_s(&ptr);
-    assert(ptr == NULL);
+    free_s(ptr);
 }
 
 static void bounded_copy_rejects_overflow(void) {

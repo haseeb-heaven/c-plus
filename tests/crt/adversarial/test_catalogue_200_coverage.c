@@ -22,25 +22,24 @@ static int safe_catch = 0, compiler_class = 0, boundary_class = 0;
 #define SAFE(expr) do { assert(expr); ++safe_catch; } while (0)
 
 static int realloc_failure_preserves(void) {
-    void *p = NULL;
-    if (malloc_s(&p, 32) != CPLUS_SAFE_OK) return 0;
-    void *old = p;
-    int ok = (realloc_s(&p, (size_t)-1) == CPLUS_SAFE_ENOMEM && p == old);
-    free_s(&p);
+    void *p = malloc_s(32);
+    if (!p) return 0;
+    int ok = (realloc_s(p, (size_t)-1) == NULL && cplus_safe_ptr_is_live(p));
+    free_s(p);
     return ok;
 }
 static int double_close(void) {
-    FILE *f = NULL;
+    FILE *f = cplus_fopen_s("/tmp/cplus_c200.tmp", "wb+");
     int ok = 0;
-    if (cplus_fopen_s(&f, "/tmp/cplus_c200.tmp", "wb+") == CPLUS_SAFE_OK)
-        ok = (cplus_fclose_s(&f) == CPLUS_SAFE_OK && cplus_fclose_s(&f) == CPLUS_SAFE_EINVAL);
+    if (f != NULL)
+        ok = (cplus_fclose_s(f) == 0 && cplus_fclose_s(f) == EOF);
     remove("/tmp/cplus_c200.tmp");
     return ok;
 }
 static int realloc_zero_defined(void) {
-    void *p = NULL;
+    void *p = malloc_s(32);
     int ok = 0;
-    if (malloc_s(&p, 32) == CPLUS_SAFE_OK) { ok = (realloc_s(&p, 0) == CPLUS_SAFE_OK && p != NULL); free_s(&p); }
+    if (p != NULL) { void *np = realloc_s(p, 0); ok = (np != NULL); free_s(np ? np : p); }
     return ok;
 }
 static int format_bounded(void) {
@@ -89,7 +88,6 @@ int main(void) {
     /* Catalogue 1 (1-104) runtime-catchable subset. */
     {
         char b16[16], b4[4];
-        void *cp = NULL;
         SAFE(cplus_memcpy_s(b16, 16, NULL, 4) != 0);         /* bug04 */
         SAFE(cplus_memcpy_s(b16, 2, "abcdefgh", 8) != 0);    /* bug23 */
         SAFE(cplus_memset_s(b16, 16, 0, 17) != 0);           /* bug26 */
@@ -97,20 +95,19 @@ int main(void) {
         SAFE(cplus_strncpy_s(b4, 4, "abcd", 4) != 0);        /* bug37 */
         SAFE(cplus_strnlen_s("abcdefghijklmno", 16) <= 16);  /* bug38 */
         SAFE(overlap_rejected());                            /* bug40 */
-        SAFE(calloc_s(&cp, (size_t)-1, 8) == CPLUS_SAFE_EOVERFLOW); /* bug41 */
+        SAFE(calloc_s((size_t)-1, 8) == NULL);               /* bug41 */
         SAFE(cplus_memcpy_s(b16, 16, "x", (rsize_t)-1) != 0);/* bug42 */
     }
-    { void *p = NULL; SAFE(malloc_s(&p, 0) == CPLUS_SAFE_OK && p != NULL); free_s(&p); } /* bug51 */
+    { void *p = malloc_s(0); SAFE(p != NULL); free_s(p); } /* bug51 */
     SAFE(realloc_failure_preserves());                       /* bug32 */
-    SAFE(cplus_fclose_s(NULL) == CPLUS_SAFE_EINVAL);         /* bug47 */
+    SAFE(cplus_fclose_s(NULL) == EOF);                       /* bug47 */
     SAFE(double_close());                                    /* bug48 */
     SAFE(format_bounded());                                  /* bug81 */
     SAFE(cplus_memcpy_s(NULL, 0, NULL, 0) == 0);             /* bug191 */
 
     /* Catalogue 2 (105-204) runtime-catchable subset. */
-    { void *cp2 = NULL;
-      SAFE(calloc_s(&cp2, (size_t)1 << 62, 8) == CPLUS_SAFE_EOVERFLOW); } /* bug105 */
-    { void *p = NULL; SAFE(malloc_s(&p, 64) == CPLUS_SAFE_OK); free_s(&p); } /* bug107 */
+    { SAFE(calloc_s((size_t)1 << 62, 8) == NULL); } /* bug105 */
+    { void *p = malloc_s(64); SAFE(p != NULL); free_s(p); } /* bug107 */
     SAFE(sprintf_off_by_one());                              /* bug143 */
     SAFE(subobject_overflow());                              /* bug153 */
     SAFE(memmove_exact_vs_small());                          /* bug173 */

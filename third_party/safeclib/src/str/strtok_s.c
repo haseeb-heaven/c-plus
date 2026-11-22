@@ -194,6 +194,12 @@ EXPORT char *_strtok_s_chk(char *restrict dest, rsize_t *restrict dmaxp,
         return (NULL);
     }
     if (unlikely(*dmaxp == 0)) {
+        /* C+ local fix: a continuation call (dest == NULL) whose context
+         * already points at the terminating NUL means the previous call
+         * consumed the last token and dmax; that is "no more tokens", not a
+         * zero-length constraint violation. */
+        if (dest == NULL && ptr != NULL && *ptr != NULL && **ptr == '\0')
+            return (NULL);
         invoke_safe_str_constraint_handler("strtok_s: *dmaxp is 0", dest,
                                            ESZEROL);
         errno = ESZEROL;
@@ -304,6 +310,7 @@ EXPORT char *_strtok_s_chk(char *restrict dest, rsize_t *restrict dmaxp,
      */
     if (ptoken == NULL) {
         *dmaxp = dlen;
+        *ptr = dest; /* C+ local fix: keep the context at the terminating NUL */
         return (ptoken);
     }
 
@@ -358,6 +365,10 @@ EXPORT char *_strtok_s_chk(char *restrict dest, rsize_t *restrict dmaxp,
     }
 
     *dmaxp = dlen;
+    /* C+ local fix: upstream left *ptr at the previous delimiter, so the next
+     * continuation call returned the LAST token a second time. Park the
+     * context on the terminating NUL so the next call yields NULL. */
+    *ptr = dest;
     return (ptoken);
 }
 

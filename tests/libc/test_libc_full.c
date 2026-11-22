@@ -34,7 +34,7 @@ int main(void){
     void *z = cplus_calloc(4,8); assert(z); for(int i=0;i<32;i++) assert(((unsigned char*)z)[i]==0); cplus_free(z);
     char a[8]="abc"; char b[8]; cplus_memcpy(b,a,4); assert(cplus_memcmp(a,b,4)==0);
     cplus_memmove(b+1,b,3); assert(b[1]=='a');
-    assert(cplus_memchr("abc",'b',3)==(void*)("abc"+1));
+    assert(cplus_memchr("abc",'b',3)==(void*)&"abc"[1]);
     assert(cplus_strlen("abc")==3); assert(cplus_strnlen("abc",2)==2);
     char s[16]; cplus_strcpy(s,"a"); cplus_strcat(s,"b"); cplus_strncat(s,"cde",1); assert(cplus_strcmp(s,"abc")==0);
     cplus_strncpy(s,"xy",8); assert(cplus_strncmp(s,"xy",2)==0);

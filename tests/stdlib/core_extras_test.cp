@@ -56,7 +56,9 @@ int main(void) {
     unsigned long long after = time_monotonic_ms();
     print("clock", time_now_ms() > 0, time_now_ns() > 0, after >= before,
           after - before >= 10, time_monotonic_ns() > 0);
-    print("monotonic-order", time_monotonic_ns() >= time_monotonic_ns());
+    unsigned long long mono_t1 = time_monotonic_ns();
+    unsigned long long mono_t2 = time_monotonic_ns();
+    print("monotonic-order", mono_t2 >= mono_t1);
 
     char stamp[32];
     unsigned long long fixed = 1700000000ULL * 1000000000ULL;

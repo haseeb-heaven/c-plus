@@ -247,42 +247,29 @@ if matches "coverage"; then
   fi
 fi
 
-# --- documented gap: class-bearing .hp included from two TUs ---------------
-# The fix is a compiler change owned by Agent 1: see
-# docs/patches/agent1-hp-class-linkage.patch.  Until it lands, including a
-# class-bearing header from two TUs must fail loudly with duplicate symbols;
-# if this ever passes, the patch has been integrated and these two sections
-# should be turned back into positive tests.
+# --- multi-TU tests (function-bearing and class-bearing .hp across TUs) ------
 
 if matches "multi_tu"; then
   if "$CPLUS" build "$ROOT/tests/stdlib/multi_tu/main.cp" \
       "$ROOT/tests/stdlib/multi_tu/part_a.cp" \
       "$ROOT/tests/stdlib/multi_tu/part_b.cp" \
-      -o "$OUT/multi_tu" >"$OUT/multi_tu.build.log" 2>&1; then
-    fail "multi_tu_gap" "expected duplicate symbols; update docs and turn this into a positive test"
+      -o "$OUT/multi_tu" >"$OUT/multi_tu.build.log" 2>&1 && \
+      printf '7\none\ntwo\nthree\n' | "$OUT/multi_tu" >"$OUT/multi_tu.out" 2>&1; then
+    pass "multi_tu"
   else
-    if grep -q "duplicate symbol" "$OUT/multi_tu.build.log"; then
-      pass "multi_tu_gap (expected: duplicate symbols until Agent 1 lands the patch)"
-    else
-      fail "multi_tu_gap" "failed for an unexpected reason; see build/stdlib-tests/multi_tu.build.log"
-    fi
+    fail "multi_tu" "build or run failed; see build/stdlib-tests/multi_tu.build.log"
   fi
 fi
-
-# --- the same class-bearing header from two TUs (string.hp) ---------------
 
 if matches "class_linkage"; then
   if "$CPLUS" build "$ROOT/tests/stdlib/known_gaps/class_linkage/main.cp" \
       "$ROOT/tests/stdlib/known_gaps/class_linkage/part_a.cp" \
       "$ROOT/tests/stdlib/known_gaps/class_linkage/part_b.cp" \
-      -o "$OUT/class_linkage" >"$OUT/class_linkage.log" 2>&1; then
-    fail "class_linkage_gap" "expected duplicate symbols; update docs if the patch landed"
+      -o "$OUT/class_linkage" >"$OUT/class_linkage.log" 2>&1 && \
+      "$OUT/class_linkage" >"$OUT/class_linkage.out" 2>&1; then
+    pass "class_linkage"
   else
-    if grep -q "duplicate symbol" "$OUT/class_linkage.log"; then
-      pass "class_linkage_gap (expected: duplicate symbols until Agent 1 lands the patch)"
-    else
-      fail "class_linkage_gap" "failed for an unexpected reason; see build/stdlib-tests/class_linkage.log"
-    fi
+    fail "class_linkage" "build or run failed; see build/stdlib-tests/class_linkage.log"
   fi
 fi
 

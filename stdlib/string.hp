@@ -3,12 +3,78 @@
  * A thin, RAII-safe wrapper over libc string/memory functions; there is no
  * second string engine here.  `string` owns its buffer and frees it in
  * drop(); `string_view` is a borrowed window and never frees anything.
+ *
+ * Storage comes from the checked allocator in error.hp.  Every operation that
+ * can fail is failure-atomic: on -1 the string is exactly as it was.  A string
+ * whose constructor could not allocate is *invalid* (valid() == 0): it behaves
+ * as an empty string for reads and re-initialises on the next successful
+ * append/reserve/copy_from, but valid() lets callers tell "empty" from
+ * "failed".
+ *
+ * NULL handling: a NULL `const char *` argument is an invalid operation, not
+ * an empty string.  Constructors treat it as "" for convenience (documented);
+ * append(NULL) fails with -1, equals(NULL) is 0, compare(NULL) is 1.
  */
 #ifndef CPLUS_STD_STRING_HP
 #define CPLUS_STD_STRING_HP
 
+#include <stdint.h>
 #include <string.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+/* Strict UTF-8 (RFC 3629) validation of exactly `len` bytes: rejects overlong
+ * forms, UTF-16 surrogates, code points above U+10FFFF, stray continuation
+ * bytes and truncated sequences.  NUL bytes are valid code points (U+0000).
+ * Returns 1 when valid, 0 otherwise (and for data == NULL with len > 0). */
+static inline int stdlib_utf8_validate(const char *data, size_t len) {
+    const unsigned char *s = (const unsigned char *)data;
+    size_t i = 0;
+    if (len == 0)
+        return 1;
+    if (s == NULL)
+        return 0;
+    while (i < len) {
+        unsigned char c = s[i];
+        size_t need;
+        unsigned char lo = 0x80;
+        unsigned char hi = 0xBF;
+        if (c < 0x80) {
+            i++;
+            continue;
+        }
+        if (c >= 0xC2 && c <= 0xDF) {
+            need = 1;
+        } else if (c >= 0xE0 && c <= 0xEF) {
+            need = 2;
+            if (c == 0xE0)
+                lo = 0xA0; /* no overlong 3-byte forms */
+            if (c == 0xED)
+                hi = 0x9F; /* no surrogates */
+        } else if (c >= 0xF0 && c <= 0xF4) {
+            need = 3;
+            if (c == 0xF0)
+                lo = 0x90; /* no overlong 4-byte forms */
+            if (c == 0xF4)
+                hi = 0x8F; /* nothing above U+10FFFF */
+        } else {
+            return 0; /* 0x80..0xC1 and 0xF5..0xFF can never start a sequence */
+        }
+        if (len - i - 1 < need)
+            return 0; /* truncated */
+        if (s[i + 1] < lo || s[i + 1] > hi)
+            return 0;
+        {
+            size_t k;
+            for (k = 2; k <= need; k++) {
+                if (s[i + k] < 0x80 || s[i + k] > 0xBF)
+                    return 0;
+            }
+        }
+        i += need + 1;
+    }
+    return 1;
+}
 
 /* Borrowed view of a character range, valid while its owner lives. */
 class string_view {
@@ -29,12 +95,21 @@ class string_view {
     }
 
     int equals(const char *other) {
-        size_t n = strlen(other);
+        size_t n;
+        if (other == NULL)
+            return 0;
+        if (this->count > 0 && this->chars == NULL)
+            return 0;
+        n = strlen(other);
         if (n != this->count)
             return 0;
         if (n == 0)
             return 1;
         return memcmp(this->chars, other, n) == 0;
+    }
+
+    int is_valid_utf8(void) {
+        return stdlib_utf8_validate(this->chars, this->count);
     }
 };
 
@@ -45,12 +120,19 @@ class string {
 
     string(const char *text) {
         size_t n = text == NULL ? 0 : strlen(text);
-        this->chars = (char *)cplus_alloc(n + 1);
-        if (n > 0)
-            memcpy(this->chars, text, n);
-        this->chars[n] = '\0';
-        this->count = n;
-        this->space = n + 1;
+        this->chars = NULL;
+        this->count = 0;
+        this->space = 0;
+        if (n < STDLIB_ALLOC_LIMIT) {
+            this->chars = (char *)stdlib_alloc(n + 1);
+            if (this->chars != NULL) {
+                if (n > 0)
+                    memcpy(this->chars, text, n);
+                this->chars[n] = '\0';
+                this->count = n;
+                this->space = n + 1;
+            }
+        }
     }
 
     size_t size(void) {
@@ -61,8 +143,13 @@ class string {
         return this->space;
     }
 
+    /* 1 when the string owns a buffer (false after drop() or a failed ctor). */
+    int valid(void) {
+        return this->chars != NULL;
+    }
+
     char at(size_t index) {
-        if (index >= this->count)
+        if (this->chars == NULL || index >= this->count)
             return '\0';
         return this->chars[index];
     }
@@ -73,7 +160,13 @@ class string {
     }
 
     int equals(const char *other) {
-        size_t other_count = strlen(other);
+        size_t other_count;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::equals: null argument");
+            return 0;
+        }
+        other_count = strlen(other);
         if (this->chars == NULL)
             return other_count == 0;
         if (other_count != this->count)
@@ -83,10 +176,17 @@ class string {
         return memcmp(this->chars, other, this->count) == 0;
     }
 
+    /* -1 / 0 / 1.  compare(NULL) is an invalid operation and returns 1
+     * ("never equal"). */
     int compare(const char *other) {
         int r;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::compare: null argument");
+            return 1;
+        }
         if (this->chars == NULL)
-            return (other == NULL || other[0] == '\0') ? 0 : -1;
+            return other[0] == '\0' ? 0 : -1;
         r = strcmp(this->chars, other);
         if (r < 0)
             return -1;
@@ -105,44 +205,68 @@ class string {
         return (long)(hit - this->chars);
     }
 
-    /* Ensure room for `want` bytes including the terminator. */
+    /* Ensure room for `want` bytes including the terminator.  Failure-atomic. */
     int reserve(size_t want) {
         char *fresh;
         if (want <= this->space)
             return 0;
-        fresh = (char *)cplus_alloc(want);
+        if (want > STDLIB_ALLOC_LIMIT) {
+            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                        "string::reserve: capacity too large");
+            return -1;
+        }
+        fresh = (char *)stdlib_alloc(want);
+        if (fresh == NULL)
+            return -1;
         if (this->chars != NULL)
             memcpy(fresh, this->chars, this->count + 1);
         else
             fresh[0] = '\0';
         if (this->chars != NULL)
-            cplus_release(this->chars);
+            stdlib_release(this->chars);
         this->chars = fresh;
         this->space = want;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
         return 0;
     }
 
+    /* Append a NUL-terminated string.  0 on success (including an empty
+     * argument), -1 for NULL, overflow or allocation failure - in which case
+     * the string is unchanged.  Appending a string (or a suffix of it) to
+     * itself is supported. */
     int append(const char *text) {
-        size_t extra = text == NULL ? 0 : strlen(text);
+        size_t extra;
         size_t need;
         size_t want;
         size_t offset = 0;
         int aliases = 0;
+        if (text == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::append: null argument");
+            return -1;
+        }
+        extra = strlen(text);
         if (extra == 0)
             return 0;
-        if (this->count > SIZE_MAX - extra - 1)
+        if (extra > STDLIB_ALLOC_LIMIT - 1 ||
+            this->count > STDLIB_ALLOC_LIMIT - 1 - extra) {
+            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                        "string::append: result too large");
             return -1;
+        }
         /* Self-append or an overlapping source: remember where the source sits
-         * so reallocation cannot invalidate it, and copy with memmove below. */
-        if (this->chars != NULL && text >= this->chars &&
-            text <= this->chars + this->count) {
+         * so reallocation cannot invalidate it, and copy with memmove below.
+         * The test compares integer addresses: relational comparison of
+         * pointers into unrelated objects is undefined behaviour. */
+        if (this->chars != NULL && (uintptr_t)text >= (uintptr_t)this->chars &&
+            (uintptr_t)text <= (uintptr_t)this->chars + this->count) {
             aliases = 1;
-            offset = (size_t)(text - this->chars);
+            offset = (size_t)((uintptr_t)text - (uintptr_t)this->chars);
         }
         need = this->count + extra + 1;
         if (need > this->space) {
             want = need;
-            if (this->space > 0 && this->space <= SIZE_MAX / 2) {
+            if (this->space > 0 && this->space <= STDLIB_ALLOC_LIMIT / 2) {
                 want = this->space * 2;
                 if (want < need)
                     want = need;
@@ -165,7 +289,40 @@ class string {
         this->count = 0;
     }
 
-    /* Copy up to `n` characters from `start` into `out`. */
+    /* Replace the contents with a copy of `other`.  Failure-atomic. */
+    int copy_from(string *other) {
+        char *fresh;
+        size_t n;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::copy_from: null source");
+            return -1;
+        }
+        if (other == this)
+            return 0;
+        n = other->count;
+        if (n >= STDLIB_ALLOC_LIMIT)
+            return -1;
+        fresh = (char *)stdlib_alloc(n + 1);
+        if (fresh == NULL)
+            return -1;
+        if (n > 0 && other->chars != NULL)
+            memcpy(fresh, other->chars, n);
+        fresh[n] = '\0';
+        if (this->chars != NULL)
+            stdlib_release(this->chars);
+        this->chars = fresh;
+        this->count = n;
+        this->space = n + 1;
+        return 0;
+    }
+
+    /* 1 when the contents are well-formed UTF-8 (an empty string is). */
+    int is_valid_utf8(void) {
+        return stdlib_utf8_validate(this->chars, this->count);
+    }
+
+    /* Copy up to `n` characters from `start` into `out` (always terminated). */
     int substr(size_t start, size_t n, char *out, size_t out_size) {
         size_t available;
         if (out == NULL || out_size == 0)
@@ -227,7 +384,7 @@ class string {
 
     void drop(void) {
         if (this->chars != NULL) {
-            cplus_release(this->chars);
+            stdlib_release(this->chars);
             this->chars = NULL;
             this->count = 0;
             this->space = 0;

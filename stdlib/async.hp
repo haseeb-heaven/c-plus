@@ -8,6 +8,7 @@
 #define CPLUS_STD_ASYNC_HP
 
 #include <fcntl.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <uv.h>
 #include "cplus/cplus.h"
@@ -78,8 +79,8 @@ class loop {
 };
 
 /* uv_close() is asynchronous: the handle memory must outlive the close. */
-static inline void timer_release_handle(uv_handle_t *handle) {
-    free(handle);
+static inline void stdlib_timer_release_handle(uv_handle_t *handle) {
+    stdlib_release(handle);
 }
 
 class timer {
@@ -94,15 +95,18 @@ class timer {
         this->owner_loop = NULL;
         this->initialized = 0;
         if (owner_loop == NULL) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer: invalid loop");
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "timer: invalid loop");
         } else {
-            this->handle = (uv_timer_t *)malloc(sizeof(uv_timer_t));
+            this->handle = (uv_timer_t *)stdlib_alloc(sizeof(uv_timer_t));
             if (this->handle == NULL) {
-                error_fail(err, CPLUS_EXIT_RESOURCE, "timer: out of memory");
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "timer: out of memory");
             } else if (uv_timer_init(owner_loop, this->handle) != 0) {
-                free(this->handle);
+                stdlib_release(this->handle);
                 this->handle = NULL;
-                error_fail(err, CPLUS_EXIT_RESOURCE, "timer: uv_timer_init failed");
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "timer: uv_timer_init failed");
             } else {
                 this->owner_loop = owner_loop;
                 this->initialized = 1;
@@ -158,7 +162,7 @@ class timer {
         if (this->handle != NULL) {
             uv_timer_stop(this->handle);
             this->handle->data = NULL;
-            uv_close((uv_handle_t *)this->handle, timer_release_handle);
+            uv_close((uv_handle_t *)this->handle, stdlib_timer_release_handle);
             this->handle = NULL;
             if (this->owner_loop != NULL) {
                 int guard = 0;
@@ -183,7 +187,13 @@ static inline long long read_file(loop *owner, const char *path, char *buf,
     error_reset(err);
     if (owner == NULL || !owner->valid() || path == NULL || buf == NULL ||
         size == 0) {
-        error_fail(err, CPLUS_EXIT_UNSUPPORTED, "read_file: invalid argument");
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_file: invalid argument");
+        return -1;
+    }
+    if (size > (size_t)UINT_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "read_file: buffer size exceeds UINT_MAX");
         return -1;
     }
     fd = uv_fs_open(&owner->native_loop, &req, path, O_RDONLY, 0, NULL);

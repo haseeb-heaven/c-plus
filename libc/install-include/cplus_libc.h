@@ -15,13 +15,54 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <signal.h>
+#include <wctype.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
+/* Hardened allocation with live metadata tracking ------------------------- */
 void *cplus_malloc(size_t);
 void *cplus_calloc(size_t,size_t);
 void *cplus_realloc(void*,size_t);
 void  cplus_free(void*);
+int   cplus_free_checked(void **inout);
+
+/* Allocation metadata and safe length-query API (thread-safe). */
+typedef struct cplus_alloc_meta {
+    size_t byte_size;
+    size_t elem_size;
+    size_t elem_count;
+    unsigned long long generation;
+    int is_live;
+} cplus_alloc_meta;
+
+int    cplus_alloc_get_meta(const void *ptr, cplus_alloc_meta *out);
+int    cplus_alloc_is_live(const void *ptr);
+size_t cplus_alloc_size(const void *ptr);
+size_t cplus_alloc_elem_size(const void *ptr);
+size_t cplus_alloc_length(const void *ptr);
+int    cplus_alloc_query_length(const void *ptr, size_t elem_size, size_t *out_count);
+int    cplus_alloc_check_generation(const void *ptr, unsigned long long generation);
+int    cplus_transfer_ownership(void **dst, void **src);
+size_t cplus_alloc_live_count(void);
+size_t cplus_alloc_live_bytes(void);
+unsigned long cplus_alloc_double_free_count(void);
+unsigned long cplus_alloc_invalid_free_count(void);
+void   cplus_alloc_fail_after(long count);
+void   cplus_alloc_fail_reset(void);
+#define cplus_alloc_len(ptr) \
+    ((ptr) != NULL ? (cplus_alloc_size(ptr) / sizeof(*(ptr))) : (size_t)0)
+
+#ifdef CPLUS_MALLOC_TRACKING
+#undef malloc
+#undef calloc
+#undef realloc
+#undef free
+#define malloc(sz)      cplus_malloc(sz)
+#define calloc(n, sz)   cplus_calloc((n), (sz))
+#define realloc(p, sz)  cplus_realloc((p), (sz))
+#define free(p)         cplus_free(p)
+#endif
 void *cplus_memcpy(void*restrict,const void*restrict,size_t);
 void *cplus_memmove(void*,const void*,size_t);
 void *cplus_memset(void*,int,size_t);
@@ -45,6 +86,7 @@ int cplus_strncasecmp(const char*,const char*,size_t);
 char *cplus_strdup(const char*);
 char *cplus_strerror(int); char *cplus_strtok(char*,const char*); char *cplus_strndup(const char*,size_t);
 void *cplus_memccpy(void*,const void*,int,size_t); char *cplus_stpcpy(char*,const char*); char *cplus_stpncpy(char*,const char*,size_t); char *cplus_strtok_r(char*,const char*,char**); char *cplus_strsep(char**,const char*); void *cplus_memmem(const void*,size_t,const void*,size_t);
+size_t cplus_strspn(const char*,const char*); size_t cplus_strcspn(const char*,const char*); char *cplus_strpbrk(const char*,const char*);
 void cplus_swab(const void*,void*,ssize_t);
 /* BSD string extras (platform-backed) */
 size_t cplus_strlcpy(char*,const char*,size_t); size_t cplus_strlcat(char*,const char*,size_t); char *cplus_strnstr(const char*,const char*,size_t);
@@ -59,6 +101,7 @@ void cplus_qsort(void*,size_t,size_t,int(*)(const void*,const void*)); void *cpl
 /* POSIX/BSD stdlib extras (platform-backed) */
 int cplus_mkstemp(char*); char *cplus_mkdtemp(char*); char *cplus_realpath(const char*,char*); void cplus_qsort_r(void*,size_t,size_t,void*,int(*)(void*,const void*,const void*));
 int cplus_rand(void); void cplus_srand(unsigned int); int cplus_atexit(void(*)(void)); char *cplus_getenv(const char*); int cplus_system(const char*);
+void cplus_abort(void); void cplus_exit(int);
 FILE *cplus_fopen(const char*,const char*); int cplus_fclose(FILE*);
 size_t cplus_fread(void*,size_t,size_t,FILE*); size_t cplus_fwrite(const void*,size_t,size_t,FILE*);
 int cplus_snprintf(char*,size_t,const char*,...); int cplus_vsnprintf(char*,size_t,const char*,va_list);
@@ -73,6 +116,7 @@ char *cplus_fgets(char*,int,FILE*); int cplus_fputs(const char*,FILE*);
 int cplus_getc(FILE*); int cplus_putc(int,FILE*);
 int cplus_feof(FILE*); int cplus_ferror(FILE*); void cplus_clearerr(FILE*);
 int cplus_putchar(int); int cplus_getchar(void); int cplus_puts(const char*); void cplus_perror(const char*);
+int cplus_strerror_r(int,char*,size_t);
 int *__cplus_errno_location(void); void cplus_libc_log_set_enabled(int);
 /* wide char (platform-backed) */
 size_t cplus_wcslen(const wchar_t*); wchar_t *cplus_wcscpy(wchar_t*,const wchar_t*); wchar_t *cplus_wcsncpy(wchar_t*,const wchar_t*,size_t);
@@ -95,6 +139,10 @@ size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
 int cplus_clock_gettime(clockid_t,struct timespec*); int cplus_nanosleep(const struct timespec*,struct timespec*); int cplus_timespec_get(struct timespec*,int);
 char *cplus_setlocale(int,const char*); struct lconv; struct lconv *cplus_localeconv(void);
 void (*cplus_signal(int, void(*)(int)))(int); int cplus_raise(int);
+/* POSIX signal-set / signal-control extras (platform-backed) */
+int cplus_sigemptyset(sigset_t*); int cplus_sigfillset(sigset_t*); int cplus_sigaddset(sigset_t*,int); int cplus_sigdelset(sigset_t*,int); int cplus_sigismember(const sigset_t*,int);
+int cplus_sigaction(int,const struct sigaction*,struct sigaction*); int cplus_sigprocmask(int,const sigset_t*,sigset_t*); int cplus_sigsuspend(const sigset_t*);
+int cplus_kill(pid_t,int); int cplus_sigwait(const sigset_t*,int*);
 /* stdio position/stream extras (platform-backed) */
 int cplus_setvbuf(FILE*,char*,int,size_t); void cplus_setbuf(FILE*,char*);
 int cplus_fgetpos(FILE*,fpos_t*); int cplus_fsetpos(FILE*,const fpos_t*);
@@ -109,6 +157,22 @@ int cplus_feclearexcept(int); int cplus_fetestexcept(int); int cplus_fegetround(
 /* complex (platform-backed; host <complex.h> has no cadd/cmul, so those are omitted) */
 double cplus_cabs(double complex); double cplus_carg(double complex); double cplus_creal(double complex); double cplus_cimag(double complex);
 double complex cplus_conj(double complex); double complex cplus_cexp(double complex); double complex cplus_csqrt(double complex);
+/* wctype (platform-backed C17 <wctype.h>) */
+int cplus_iswalpha(wint_t); int cplus_iswdigit(wint_t); int cplus_iswspace(wint_t); int cplus_iswalnum(wint_t);
+int cplus_iswupper(wint_t); int cplus_iswlower(wint_t); int cplus_iswxdigit(wint_t); int cplus_iswprint(wint_t);
+int cplus_iswgraph(wint_t); int cplus_iswpunct(wint_t); int cplus_iswcntrl(wint_t); int cplus_iswblank(wint_t);
+wint_t cplus_towupper(wint_t); wint_t cplus_towlower(wint_t);
+wctype_t cplus_wctype(const char*); int cplus_iswctype(wint_t, wctype_t);
+/* reentrant time, stream char/rewind, inttypes & multibyte stdlib helpers */
+struct tm *cplus_gmtime_r(const time_t*, struct tm*); struct tm *cplus_localtime_r(const time_t*, struct tm*);
+char *cplus_asctime_r(const struct tm*, char*); char *cplus_ctime_r(const time_t*, char*);
+void cplus_rewind(FILE*); int cplus_fgetc(FILE*); int cplus_fputc(int, FILE*);
+intmax_t cplus_strtoimax(const char *restrict, char **restrict, int);
+uintmax_t cplus_strtoumax(const char *restrict, char **restrict, int);
+int cplus_mblen(const char*, size_t); int cplus_mbtowc(wchar_t *restrict, const char *restrict, size_t);
+int cplus_wctomb(char*, wchar_t);
+size_t cplus_mbstowcs(wchar_t *restrict, const char *restrict, size_t);
+size_t cplus_wcstombs(char *restrict, const wchar_t *restrict, size_t);
 #ifdef __cplusplus
 }
 #endif

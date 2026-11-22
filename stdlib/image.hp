@@ -11,6 +11,7 @@
 #ifndef CPLUS_STD_IMAGE_HP
 #define CPLUS_STD_IMAGE_HP
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cplus/cplus.h"
@@ -35,6 +36,11 @@ class image {
             this->channels_in_use = 0;
             if (path == NULL)
                 break;
+            if (desired_channels < 0 || desired_channels > 4) {
+                error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                               "image: desired_channels must be 0..4");
+                break;
+            }
             this->pixels = stbi_load(path, &this->cols, &this->rows,
                                      &this->channels_in_use, desired_channels);
             if (this->pixels == NULL) {
@@ -51,7 +57,8 @@ class image {
     }
 
     int valid(void) {
-        return this->pixels != NULL && this->cols > 0 && this->rows > 0;
+        return this->pixels != NULL && this->cols > 0 && this->rows > 0 &&
+               this->channels_in_use > 0;
     }
 
     int width(void) {
@@ -89,6 +96,11 @@ class image {
         }
         if (!this->valid()) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "image::write_png: empty image");
+            return STDLIB_FAIL;
+        }
+        if (this->cols > INT_MAX / this->channels_in_use) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "image::write_png: stride overflow");
             return STDLIB_FAIL;
         }
         if (stbi_write_png(path, this->cols, this->rows, this->channels_in_use,
@@ -165,6 +177,11 @@ static inline image image_from_memory(const unsigned char *data, int size,
                                       int desired_channels, error *err) {
     image out = image(NULL, 0, err);
     error_reset(err);
+    if (desired_channels < 0 || desired_channels > 4) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "image_from_memory: desired_channels must be 0..4");
+        return out;
+    }
     if (data == NULL || size <= 0) {
         error_fail(err, CPLUS_EXIT_IO, "image_from_memory: empty buffer");
         return out;

@@ -35,9 +35,9 @@ int main(void) {
     assert(cplus_safe_stats_get("no_such_api", &st) == 0);
 
     /* alloc family counted */
-    void *p = NULL;
-    assert(malloc_s(&p, 32) == CPLUS_SAFE_OK);
-    free_s(&p);
+    void *p = malloc_s(32);
+    assert(p != NULL);
+    free_s(p);
     assert(cplus_safe_stats_get("malloc_s", &st) == 1 && st.calls == 1 && st.ok == 1);
     assert(cplus_safe_stats_get("free_s", &st) == 1 && st.calls == 1);
 

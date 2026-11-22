@@ -42,12 +42,18 @@ class connection {
         ssize_t n;
         error_reset(err);
         if (!this->is_valid() || buf == NULL || capacity == 0) {
-            error_fail(err, CPLUS_EXIT_IO, "connection::read: invalid argument");
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                           "connection::read: invalid argument");
             return STDLIB_FAIL;
         }
-        n = read(this->fd, buf, capacity);
+        if (capacity > (size_t)INT_MAX)
+            capacity = (size_t)INT_MAX;
+        do {
+            n = read(this->fd, buf, capacity);
+        } while (n < 0 && errno == EINTR);
         if (n < 0) {
-            error_fail(err, CPLUS_EXIT_IO, "connection::read failed");
+            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                           "connection::read failed");
             return STDLIB_FAIL;
         }
         if (n == 0)
@@ -59,7 +65,8 @@ class connection {
         size_t sent = 0;
         error_reset(err);
         if (!this->is_valid() || data == NULL) {
-            error_fail(err, CPLUS_EXIT_IO, "connection::write: invalid argument");
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                           "connection::write: invalid argument");
             return STDLIB_FAIL;
         }
         /* A short write is not a failure: keep sending until every byte is out
@@ -69,11 +76,13 @@ class connection {
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
-                error_fail(err, CPLUS_EXIT_IO, "connection::write failed");
+                error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                               "connection::write failed");
                 return STDLIB_FAIL;
             }
             if (n == 0) {
-                error_fail(err, CPLUS_EXIT_IO, "connection::write made no progress");
+                error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                               "connection::write made no progress");
                 return STDLIB_FAIL;
             }
             sent += (size_t)n;
@@ -99,7 +108,7 @@ class listener {
         struct sockaddr_in addr;
         this->fd = -1;
         this->owns = 0;
-        if (port >= 0) {
+        if (port >= 0 && port <= 65535) {
             this->fd = socket(AF_INET, SOCK_STREAM, 0);
             if (this->fd >= 0) {
                 setsockopt(this->fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
@@ -139,9 +148,13 @@ class listener {
     }
 
     connection accept(void) {
-        connection accepted = connection(this->is_valid()
-                                             ? accept(this->fd, NULL, NULL)
-                                             : -1);
+        int client_fd = -1;
+        if (this->is_valid()) {
+            do {
+                client_fd = accept(this->fd, NULL, NULL);
+            } while (client_fd < 0 && errno == EINTR);
+        }
+        connection accepted = connection(client_fd);
         return accepted;
     }
 

@@ -36,24 +36,23 @@ int main(void) {
     void *p = NULL;
 
     /* calloc_s: deterministic zero-initialised bytes -> defined reads */
-    CHECK(calloc_s(&p, 32, 1) == CPLUS_SAFE_OK);
+    p = calloc_s(32, 1);
     CHECK(p != NULL);
     CHECK(all_zero((unsigned char *)p, 32));
-    free_s(&p);
-    CHECK(p == NULL);
+    free_s(p);
 
-    CHECK(calloc_s(&p, 4, sizeof(int)) == CPLUS_SAFE_OK);
-    CHECK(all_zero((unsigned char *)p, 4 * sizeof(int)));
-    free_s(&p);
+    p = calloc_s(4, sizeof(int));
+    CHECK(p != NULL && all_zero((unsigned char *)p, 4 * sizeof(int)));
+    free_s(p);
 
     /* calloc_s(0,0) is defined (1 zero byte), not an uninitialised pointer */
-    CHECK(calloc_s(&p, 0, 0) == CPLUS_SAFE_OK);
+    p = calloc_s(0, 0);
     CHECK(p != NULL);
     CHECK(((unsigned char *)p)[0] == 0);
-    free_s(&p);
+    free_s(p);
 
     /* cplus_memzero_s turns fresh malloc memory into a defined zero buffer */
-    CHECK(malloc_s(&p, 64) == CPLUS_SAFE_OK);
+    p = malloc_s(64);
     CHECK(p != NULL);
     memset(p, 0xEE, 64); /* dirty it first */
     CHECK(cplus_memzero_s(p, 64) == 0);
@@ -67,7 +66,7 @@ int main(void) {
     /* a nonzero deterministic fill is also well defined and observable */
     CHECK(cplus_memset_s(p, 64, 0xAB, 64) == 0);
     for (int i = 0; i < 64; ++i) CHECK(((unsigned char *)p)[i] == 0xAB);
-    free_s(&p);
+    free_s(p);
 
     /* degenerate zero-length/zero-pointer calls are defined errors, not UB */
     unsigned char z[4];

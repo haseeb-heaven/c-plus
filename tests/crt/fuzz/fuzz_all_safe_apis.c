@@ -34,15 +34,15 @@ int main(void){
         int ind=0; (void)cplus_strcmp_s(sd,32,ss,&ind);
         (void)cplus_strnlen_s(ss,rnd()%33);
 
-        void *p=NULL; size_t sz=rnd()%4096; if(malloc_s(&p,sz)==CPLUS_SAFE_OK){ ((char*)p)[0]=1; size_t nz=rnd()%8192; (void)realloc_s(&p,nz); free_s(&p);} 
-        void *c=NULL; if(calloc_s(&c,rnd()%64,rnd()%64)==CPLUS_SAFE_OK) free_s(&c);
+        size_t sz=rnd()%4096; void *p=malloc_s(sz); if(p){ ((char*)p)[0]=1; size_t nz=rnd()%8192; void *np=realloc_s(p,nz); if(np) p=np; free_s(p);} 
+        void *c=calloc_s(rnd()%64,rnd()%64); if(c) free_s(c);
 
         char pth[64]; snprintf(pth,64,"/tmp/cplus_fuzz_%d.tmp",i%16);
-        FILE*f=NULL; if(cplus_fopen_s(&f,pth,(i%2)?"wb+":"wb")==CPLUS_SAFE_OK){
+        FILE*f=cplus_fopen_s(pth,(i%2)?"wb+":"wb"); if(f){
             char buf[32]="data"; (void)cplus_fwrite_s(buf,32,1,rnd()%5,f);
             rewind(f); char rb[32]; (void)cplus_fread_s(rb,32,1,rnd()%5,f);
             (void)cplus_fprintf_s(f,"%d",i);
-            cplus_fclose_s(&f);
+            cplus_fclose_s(f);
             remove(pth);
         }
         char fb[32]; (void)cplus_snprintf_s(fb,rnd()%33,"%s %d",ss,i);

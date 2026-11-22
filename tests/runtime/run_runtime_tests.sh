@@ -23,5 +23,14 @@ set -e
 if [ "$rc" -eq 70 ]; then pass=$((pass+1)); echo "ok unguarded_controlled_exit (70, no signal)"; else fail=$((fail+1)); echo "FAIL unguarded_controlled_exit (exit $rc)"; fi
 if grep -q "out of bounds\|runtime error" /tmp/rt2.err /tmp/rt2.out; then pass=$((pass+1)); echo "ok unguarded_reports_diagnostic"; else fail=$((fail+1)); echo "FAIL unguarded_reports_diagnostic"; fi
 
+# 3) Cleanup stack + nested guard LIFO unwind (via UBSan recover).
+if sh scripts/build_safe_recover.sh tests/runtime/test_runtime_cleanup.c "$OUT/test_runtime_cleanup" >/tmp/rt3.log 2>&1 \
+   && "$OUT/test_runtime_cleanup" >/tmp/rt3.out 2>&1 \
+   && grep -q "runtime_cleanup: ok" /tmp/rt3.out; then
+  pass=$((pass+1)); echo "ok runtime_cleanup"
+else
+  fail=$((fail+1)); echo "FAIL runtime_cleanup"; tail -20 /tmp/rt3.log /tmp/rt3.out 2>/dev/null || true
+fi
+
 echo "runtime tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -54,10 +54,16 @@ class window {
 
     window(const char *title, int width, int height, unsigned flags, error *err) {
         error_reset(err);
-        this->handle = SDL_CreateWindow(title, width, height,
-                                        (SDL_WindowFlags)flags);
-        if (this->handle == NULL)
-            error_fail(err, CPLUS_EXIT_RESOURCE, SDL_GetError());
+        this->handle = NULL;
+        if (width <= 0 || height <= 0) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "window: width and height must be positive");
+        } else {
+            this->handle = SDL_CreateWindow(title, width, height,
+                                            (SDL_WindowFlags)flags);
+            if (this->handle == NULL)
+                error_fail(err, CPLUS_EXIT_RESOURCE, SDL_GetError());
+        }
     }
 
     int valid(void) {

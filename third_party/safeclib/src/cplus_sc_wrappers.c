@@ -20,6 +20,8 @@ rsize_t cplus_sc_strnlen_s(const char *str, rsize_t smax){ return cplus_sc__strn
 errno_t cplus_sc_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *indicator){ return cplus_sc__strcmp_s_chk(dest,dmax,src,indicator,BOS_UNKNOWN,BOS_UNKNOWN); }
 extern errno_t cplus_sc__strerror_s_chk(char *dest, rsize_t dmax, errno_t errnum, size_t destbos);
 errno_t cplus_sc_strerror_s(char *dest, rsize_t dmax, int errnum){ return cplus_sc__strerror_s_chk(dest,dmax,(errno_t)errnum,BOS_UNKNOWN); }
+extern char *cplus_sc__strtok_s_chk(char *restrict dest, rsize_t *restrict dmaxp, const char *restrict delim, char **restrict ptr, const size_t destbos);
+char *cplus_sc_strtok_s(char *restrict dest, rsize_t *restrict dmaxp, const char *restrict delim, char **restrict ptr){ return cplus_sc__strtok_s_chk(dest,dmaxp,delim,ptr,BOS_UNKNOWN); }
 typedef void (*cplus_sc_constraint_handler_t)(const char *restrict msg, void *restrict ptr, errno_t error);
 extern constraint_handler_t cplus_sc_set_mem_constraint_handler_s(constraint_handler_t handler);
 extern constraint_handler_t cplus_sc_set_str_constraint_handler_s(constraint_handler_t handler);

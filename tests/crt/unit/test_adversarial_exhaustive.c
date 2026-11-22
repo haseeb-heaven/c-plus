@@ -57,33 +57,35 @@ static void test_str(void){
 }
 
 static void test_alloc(void){
-    void *p=NULL;
-    assert(malloc_s(NULL,1)==CPLUS_SAFE_EINVAL);
-    assert(malloc_s(&p,0)==CPLUS_SAFE_OK && p!=NULL); free_s(&p);
-    assert(malloc_s(&p,32)==CPLUS_SAFE_OK); memset(p,7,32);
-    void *const old=p;
-    assert(realloc_s(&p,(size_t)-1)==CPLUS_SAFE_ENOMEM);
-    assert(p==old);
-    assert(realloc_s(&p,64)==CPLUS_SAFE_OK);
-    free_s(&p); assert(p==NULL); free_s(&p); free_s(NULL);
-    void *q=NULL; assert(calloc_s(&q,(size_t)-1,2)==CPLUS_SAFE_EOVERFLOW);
-    assert(calloc_s(NULL,1,1)==CPLUS_SAFE_EINVAL);
-    assert(calloc_s(&q,4,4)==CPLUS_SAFE_OK); for(int i=0;i<16;i++) assert(((unsigned char*)q)[i]==0); free_s(&q);
+    errno = 0;
+    assert(malloc_s((size_t)-1)==NULL && errno==EINVAL);
+    void *p=malloc_s(0); assert(p!=NULL); free_s(p);
+    p=malloc_s(32); assert(p!=NULL); memset(p,7,32);
+    errno = 0;
+    assert(realloc_s(p,(size_t)-1)==NULL && errno==EINVAL);
+    assert(cplus_safe_ptr_is_live(p));
+    p=realloc_s(p,64); assert(p!=NULL);
+    assert(free_checked_s(p)==CPLUS_SAFE_OK);
+    assert(free_checked_s(p)==CPLUS_SAFE_EINVAL);
+    free_s(NULL);
+    errno = 0;
+    assert(calloc_s((size_t)-1,2)==NULL && errno==EOVERFLOW);
+    void *q=calloc_s(4,4); assert(q!=NULL); for(int i=0;i<16;i++) assert(((unsigned char*)q)[i]==0); free_s(q);
 }
 
 static void test_io(void){
     FILE *f=NULL;
-    assert(cplus_fopen_s(NULL,"/tmp/cplus_exhaust.tmp","wb")==CPLUS_SAFE_EINVAL);
-    assert(cplus_fopen_s(&f,NULL,"wb")==CPLUS_SAFE_EINVAL);
-    assert(cplus_fopen_s(&f,"/no/such/path/cplus","rb")!=CPLUS_SAFE_OK && f==NULL);
-    assert(cplus_fopen_s(&f,"/tmp/cplus_exhaust.tmp","wb+")==CPLUS_SAFE_OK);
+    errno=0; assert(cplus_fopen_s(NULL,"wb")==NULL && errno==EINVAL);
+    errno=0; assert(cplus_fopen_s("/tmp/cplus_exhaust.tmp",NULL)==NULL && errno==EINVAL);
+    assert(cplus_fopen_s("/no/such/path/cplus","rb")==NULL);
+    f=cplus_fopen_s("/tmp/cplus_exhaust.tmp","wb+"); assert(f!=NULL);
     assert(cplus_fwrite_s("abc",3,1,3,f)==3);
     assert(cplus_fwrite_s(NULL,3,1,3,f)==0);
     rewind(f);
     char b[8]={0}; assert(cplus_fread_s(b,8,1,3,f)==3); assert(memcmp(b,"abc",3)==0);
     assert(cplus_fread_s(NULL,8,1,3,f)==0);
-    assert(cplus_fclose_s(&f)==CPLUS_SAFE_OK);
-    assert(cplus_fclose_s(&f)==CPLUS_SAFE_EINVAL);
+    assert(cplus_fclose_s(f)==0);
+    assert(cplus_fclose_s(f)==EOF);
     remove("/tmp/cplus_exhaust.tmp");
 }
 

@@ -56,13 +56,13 @@ int main(void){
 
         void *p=cplus_malloc(R()%512); if(p){ p=cplus_realloc(p,R()%1024); } cplus_free(p);
         void *c=cplus_calloc(R()%16+1,R()%16+1); cplus_free(c);
-        void *sp=NULL; if(malloc_s(&sp,R()%512)==CPLUS_SAFE_OK){ (void)realloc_s(&sp,R()%512); free_s(&sp);} 
-        void *sc=NULL; if(calloc_s(&sc,R()%16+1,R()%16+1)==CPLUS_SAFE_OK) free_s(&sc);
+        void *sp=malloc_s(R()%512); if(sp){ void *np=realloc_s(sp,R()%512); if(np) sp=np; free_s(sp);} 
+        void *sc=calloc_s(R()%16+1,R()%16+1); if(sc) free_s(sc);
 
         char path[64], path2[64]; snprintf(path,64,"/tmp/cplus_fx_%d.tmp",i%16); snprintf(path2,64,"/tmp/cplus_fx_%d.ren",i%16);
         FILE*f=cplus_fopen(path,"wb+");
         if(f){ cplus_fwrite("abc",1,3,f); cplus_fflush(f); cplus_fseek(f,0,0); char rb[8]={0}; cplus_fread(rb,1,3,f); cplus_fgets(rb,8,f); cplus_putc('x',f); cplus_fseek(f,0,0); cplus_getc(f); cplus_clearerr(f); (void)cplus_feof(f); (void)cplus_ferror(f); cplus_fclose(f); cplus_rename(path,path2); cplus_remove(path2); }
-        FILE*sf=NULL; if(cplus_fopen_s(&sf,path,"wb+")==CPLUS_SAFE_OK){ cplus_fwrite_s("abc",3,1,3,sf); cplus_fseek(sf,0,0); char rb[8]={0}; cplus_fread_s(rb,8,1,3,sf); cplus_fprintf_s(sf,"%d",i); cplus_fseek(sf,0,0); int v=0; cplus_fscanf_s(sf,"%d",&v); cplus_fclose_s(&sf); cplus_remove(path); }
+        FILE*sf=cplus_fopen_s(path,"wb+"); if(sf){ cplus_fwrite_s("abc",3,1,3,sf); cplus_fseek(sf,0,0); char rb[8]={0}; cplus_fread_s(rb,8,1,3,sf); cplus_fprintf_s(sf,"%d",i); cplus_fseek(sf,0,0); int v=0; cplus_fscanf_s(sf,"%d",&v); cplus_fclose_s(sf); cplus_remove(path); }
 
         char fb[64]; cplus_snprintf(fb,sizeof(fb),"%d",i); vsn_wrap(fb,sizeof(fb),"%d",i); cplus_sprintf_s(fb,sizeof(fb),"%d",i); vsn_s_wrap(fb,sizeof(fb),"%d",i); vs_s_wrap(fb,sizeof(fb),"%d",i);
         cplus_printf("%s",""); cplus_printf_s("%s","");

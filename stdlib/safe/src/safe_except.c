@@ -7,7 +7,7 @@
 #if defined(_MSC_VER)
 #  define CPLUS_TLS __declspec(thread)
 #else
-#  define CPLUS_TLS _Thread_local
+#  define CPLUS_TLS __thread
 #endif
 
 static CPLUS_TLS struct e4c_context cplus_context;

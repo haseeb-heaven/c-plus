@@ -59,14 +59,10 @@ int main(void) {
     /* NULL string is a defined result (length 0), never a dereference */
     CHECK(cplus_strnlen_s(NULL, sizeof d) == 0);
 
-    /* --- stdio lifecycle: NULL FILE** / FILE* / name / mode --- */
-    FILE *f = NULL;
-    CHECK(cplus_fopen_s(NULL, "x", "r") == CPLUS_SAFE_EINVAL);
-    CHECK(cplus_fopen_s(&f, NULL, "r") == CPLUS_SAFE_EINVAL);
-    CHECK(cplus_fopen_s(&f, "x", NULL) == CPLUS_SAFE_EINVAL);
-    CHECK(f == NULL);
-    CHECK(cplus_fclose_s(NULL) == CPLUS_SAFE_EINVAL);
-    CHECK(cplus_fclose_s(&f) == CPLUS_SAFE_EINVAL); /* f == NULL */
+    /* --- stdio lifecycle: NULL args / NULL stream --- */
+    errno = 0; CHECK(cplus_fopen_s(NULL, "r") == NULL && errno == EINVAL);
+    errno = 0; CHECK(cplus_fopen_s("x", NULL) == NULL && errno == EINVAL);
+    errno = 0; CHECK(cplus_fclose_s(NULL) == EOF && errno == EINVAL);
 
     /* fread_s/fwrite_s with NULL buffer/stream -> defined 0, no deref */
     CHECK(cplus_fread_s(NULL, 4, 1, 1, NULL) == 0);

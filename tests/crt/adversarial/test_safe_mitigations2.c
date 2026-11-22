@@ -21,21 +21,19 @@
 
 /* bug105: caller-side multiplication overflow -> checked calloc_s rejects. */
 static void catch_calloc_overflow(void) {
-    void *p = NULL;
-    assert(calloc_s(&p, (size_t)65536 * 65536, sizeof(int)) == CPLUS_SAFE_OK || p == NULL);
-    free_s(&p);
-    void *q = NULL;
-    assert(calloc_s(&q, (size_t)-1, 4) == CPLUS_SAFE_EOVERFLOW);
-    assert(q == NULL);
+    void *p = calloc_s(64, sizeof(int));
+    assert(p != NULL);
+    free_s(p);
+    errno = 0;
+    assert(calloc_s((size_t)-1, 4) == NULL && errno == EOVERFLOW);
 }
 
-/* bug107: checked alloc sets the output handle; free_s(NULL) is a safe no-op. */
+/* bug107: checked alloc returns NULL or owned pointer; free_s(NULL) is a no-op. */
 static void catch_uninit_out_param(void) {
-    void *p = NULL;                 /* defined initial state */
-    assert(malloc_s(&p, 64) == CPLUS_SAFE_OK);
-    free_s(&p);
-    assert(p == NULL);
-    free_s(NULL);                   /* no crash */
+    void *p = malloc_s(64);
+    assert(p != NULL);
+    free_s(p);
+    free_s(NULL);
 }
 
 /* bug143: sprintf into too-small buffer -> bounded variant returns error. */
@@ -85,12 +83,11 @@ static void catch_zero_len_null(void) {
 
 /* bug199: realloc(ptr, 0) must have a defined outcome via checked API. */
 static void catch_realloc_zero_defined(void) {
-    void *p = NULL;
-    assert(malloc_s(&p, 32) == CPLUS_SAFE_OK);
-    assert(realloc_s(&p, 0) == CPLUS_SAFE_OK);
-    assert(p != NULL);                /* defined, non-dereferenceable-mandated */
-    free_s(&p);
-    assert(p == NULL);
+    void *p = malloc_s(32);
+    assert(p != NULL);
+    p = realloc_s(p, 0);
+    assert(p != NULL);
+    free_s(p);
 }
 
 /* bug174-style variadic sentinel misuse is a caller contract; checked

@@ -643,7 +643,7 @@ struct e4c_context {
     void (*uncaught_handler)(const struct e4c_exception *exception);
 
     /** The function to execute in the event of program termination. */
-    void (*termination_handler)();
+    void (*termination_handler)(void);
 
     /** The function to execute whenever a new exception is thrown */
     void (*initialize_exception)(struct e4c_exception *exception);

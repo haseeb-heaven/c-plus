@@ -19,6 +19,8 @@
 #define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
 #define NK_INCLUDE_COMMAND_USERDATA
 
+#include <limits.h>
+#include <math.h>
 #include <SDL3/SDL.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
@@ -137,7 +139,7 @@ class gui {
     }
 
     int slider(int *value, int minimum, int maximum) {
-        if (!this->valid() || value == NULL)
+        if (!this->valid() || value == NULL || minimum > maximum)
             return 0;
         return nk_slider_int(this->context, minimum, value, maximum, 1);
     }
@@ -149,9 +151,13 @@ class gui {
         if (!this->valid() || this->context->current == NULL)
             return 0;
         bounds = nk_widget_bounds(this->context);
-        /* Reject NaN/inf so the int conversion below is always defined. */
-        if (!(bounds.x == bounds.x) || !(bounds.y == bounds.y) ||
-            !(bounds.w == bounds.w) || !(bounds.h == bounds.h))
+        /* Reject NaN/inf and values outside int range so int casts are defined. */
+        if (!isfinite(bounds.x) || !isfinite(bounds.y) ||
+            !isfinite(bounds.w) || !isfinite(bounds.h) ||
+            bounds.x < (float)INT_MIN || bounds.x > 2147483520.0f ||
+            bounds.y < (float)INT_MIN || bounds.y > 2147483520.0f ||
+            bounds.w < (float)INT_MIN || bounds.w > 2147483520.0f ||
+            bounds.h < (float)INT_MIN || bounds.h > 2147483520.0f)
             return 0;
         if (x != NULL)
             *x = (int)bounds.x;

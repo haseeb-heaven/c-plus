@@ -56,46 +56,43 @@ static void catch_unterminated_read(void) {
     assert(cplus_memcmp_s(buf, sizeof buf, "hello", 5, &diff) == 0);
 }
 
-/* bug51: malloc(0) has a defined, non-dereferenceable contract via checked alloc. */
+/* bug51: malloc(0) has a defined contract via checked alloc. */
 static void catch_zero_alloc(void) {
-    void *p = NULL;
-    assert(malloc_s(&p, 0) == CPLUS_SAFE_OK);
-    assert(p != NULL);
-    free_s(&p);
-    assert(p == NULL);
+    void *p = malloc_s(0);
+    assert(p != NULL && cplus_safe_ptr_is_live(p));
+    free_s(p);
+    assert(!cplus_safe_ptr_is_live(p));
 }
 
 /* bug32: realloc failure must not lose the original pointer. */
 static void catch_realloc_failure_preserves(void) {
-    void *p = NULL;
-    assert(malloc_s(&p, 32) == CPLUS_SAFE_OK);
+    void *p = malloc_s(32);
+    assert(p != NULL);
     memset(p, 0xAB, 32);
-    void *const old = p;
-    assert(realloc_s(&p, (size_t)-1) == CPLUS_SAFE_ENOMEM);
-    assert(p == old);                    /* no leak, no dangling */
-    free_s(&p);
+    errno = 0;
+    assert(realloc_s(p, (size_t)-1) == NULL && errno == EINVAL);
+    assert(cplus_safe_ptr_is_live(p));
+    free_s(p);
 }
 
-/* bug19/bug98: checked free nulls the owner handle (no silent re-release). */
+/* bug19/bug98: checked free rejects double-free safely without heap corruption. */
 static void catch_double_free_handle(void) {
-    void *p = NULL;
-    assert(malloc_s(&p, 16) == CPLUS_SAFE_OK);
-    free_s(&p);
-    assert(p == NULL);
-    free_s(&p);      /* idempotent: null handle => no-op, returns EINVAL */
+    void *p = malloc_s(16);
+    assert(p != NULL);
+    assert(free_checked_s(p) == CPLUS_SAFE_OK);
+    assert(free_checked_s(p) == CPLUS_SAFE_EINVAL);
     free_s(NULL);
 }
 
 /* bug47/bug48: NULL / double FILE* close -> defined error, no UB. */
 static void catch_stdio_lifecycle(void) {
-    FILE *f = NULL;
-    assert(cplus_fopen_s(&f, "/no/such/path/cplus_adv", "r") != CPLUS_SAFE_OK);
+    FILE *f = cplus_fopen_s("/no/such/path/cplus_adv", "r");
     assert(f == NULL);
-    assert(cplus_fopen_s(&f, "/tmp/cplus_adv_mig.tmp", "wb+") == CPLUS_SAFE_OK);
-    assert(cplus_fclose_s(&f) == CPLUS_SAFE_OK);
-    assert(f == NULL);
-    assert(cplus_fclose_s(&f) == CPLUS_SAFE_EINVAL); /* bug48 double close */
-    assert(cplus_fclose_s(NULL) == CPLUS_SAFE_EINVAL); /* bug47 */
+    f = cplus_fopen_s("/tmp/cplus_adv_mig.tmp", "wb+");
+    assert(f != NULL);
+    assert(cplus_fclose_s(f) == 0);
+    assert(cplus_fclose_s(f) == EOF); /* bug48 double close */
+    assert(cplus_fclose_s(NULL) == EOF); /* bug47 */
     remove("/tmp/cplus_adv_mig.tmp");
 }
 
@@ -119,9 +116,8 @@ static void catch_overlap(void) {
 
 /* bug41/bug42: overflow / huge sizes rejected with a defined error. */
 static void catch_size_overflow(void) {
-    void *p = NULL;
-    assert(calloc_s(&p, (size_t)-1, 2) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
+    errno = 0;
+    assert(calloc_s((size_t)-1, 2) == NULL && errno == EOVERFLOW);
     char d[4];
     assert(cplus_memcpy_s(d, sizeof d, "x", (rsize_t)-1) != 0);
 }

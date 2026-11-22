@@ -1,12 +1,6 @@
-/* Unit: checked-allocation basics and out-handle discipline.
- *
- * Catalogue mapping:
- *   bug02 - unchecked malloc(): malloc_s/calloc_s return a status instead of a
- *           bare pointer; every failure path leaves a defined (NULL) handle.
- *   bug33 - uninitialised heap read: calloc_s hand-back is fully zeroed.
- *   bug51 - malloc(0): the checked API maps zero to a real 1-byte object.
- */
+/* Unit: checked-allocation basics with standard C signatures. */
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,62 +13,41 @@ int main(void) {
     cplus_safe_log_set_level(CPLUS_SAFE_LOG_OFF);
     cplus_safe_set_constraint_mode(CPLUS_SAFE_CONSTRAINT_IGNORE);
 
-    /* ---- out-handle is overwritten (never left stale) on success ---- */
-    void *p = (void *)0x1;                    /* poison */
-    assert(malloc_s(&p, 16) == CPLUS_SAFE_OK);
-    assert(p != NULL);
-    memset(p, 0x5A, 16);                      /* full declared range is usable */
+    void *p = malloc_s(16);
+    assert(p != NULL && cplus_safe_ptr_is_live(p));
+    memset(p, 0x5A, 16);
     assert(((unsigned char *)p)[0] == 0x5A);
     assert(((unsigned char *)p)[15] == 0x5A);
-    free_s(&p);
-    assert(p == NULL);                        /* free_s clears the handle */
-    free_s(&p);                               /* idempotent */
-    assert(p == NULL);
-    free_s(NULL);                             /* no crash */
+    assert(free_checked_s(p) == CPLUS_SAFE_OK);
+    assert(!cplus_safe_ptr_is_live(p));
+    assert(free_checked_s(p) == CPLUS_SAFE_EINVAL); /* double free refused */
+    free_s(NULL);
 
-    /* ---- NULL out-handle is rejected, never dereferenced (bug02) ---- */
-    assert(malloc_s(NULL, 16) == CPLUS_SAFE_EINVAL);
+    /* malloc(0) -> defined 1-byte live object */
+    void *z = malloc_s(0);
+    assert(z != NULL && cplus_safe_ptr_size(z) == 1);
+    free_s(z);
 
-    /* ---- malloc(0) is defined and non-NULL (bug51) ---- */
-    void *z = NULL;
-    assert(malloc_s(&z, 0) == CPLUS_SAFE_OK);
-    assert(z != NULL);
-    free_s(&z);
-    assert(z == NULL);
+    /* huge malloc fails cleanly with NULL + errno */
+    errno = 0;
+    assert(malloc_s((size_t)-1) == NULL && errno == EINVAL);
 
-    /* ---- failing malloc clears a poisoned handle to NULL (bug02) ---- */
-    void *fail = (void *)0x1;
-    assert(malloc_s(&fail, (size_t)-1) == CPLUS_SAFE_ENOMEM);
-    assert(fail == NULL);
+    /* calloc zero-initialises */
+    void *c = calloc_s(8, 4);
+    assert(c != NULL && cplus_safe_ptr_size(c) == 32);
+    for (int i = 0; i < 32; ++i) assert(((unsigned char *)c)[i] == 0);
+    free_s(c);
 
-    /* ---- calloc zero-initialises: no uninitialised heap read (bug33) ---- */
-    void *c = NULL;
-    assert(calloc_s(&c, 8, 4) == CPLUS_SAFE_OK);
-    assert(c != NULL);
-    {
-        int all_zero = 1;
-        for (int i = 0; i < 32; ++i)
-            if (((unsigned char *)c)[i] != 0) { all_zero = 0; break; }
-        assert(all_zero);
-    }
-    free_s(&c);
-    assert(c == NULL);
-
-    /* ---- zero-dimension calloc normalises to a real 1-byte object (bug51) ---- */
-    void *c0 = NULL;
-    assert(calloc_s(&c0, 0, 0) == CPLUS_SAFE_OK);
+    /* zero-dimension calloc normalises to 1 zeroed byte */
+    void *c0 = calloc_s(0, 0);
     assert(c0 != NULL);
-    free_s(&c0);
-    assert(calloc_s(&c0, 4, 0) == CPLUS_SAFE_OK);
+    free_s(c0);
+    c0 = calloc_s(4, 0);
     assert(c0 != NULL);
-    free_s(&c0);
-    assert(calloc_s(&c0, 0, 4) == CPLUS_SAFE_OK);
+    free_s(c0);
+    c0 = calloc_s(0, 4);
     assert(c0 != NULL);
-    free_s(&c0);
-    assert(c0 == NULL);
-
-    /* ---- NULL out-handle rejected by calloc too ---- */
-    assert(calloc_s(NULL, 1, 1) == CPLUS_SAFE_EINVAL);
+    free_s(c0);
 
     puts("test_allocfmt_alloc_basics: ok");
     return 0;

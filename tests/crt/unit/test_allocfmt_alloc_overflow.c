@@ -1,13 +1,6 @@
-/* Unit: allocation overflow, failure-preservation and zero-size realloc.
- *
- * Catalogue mapping:
- *   bug41/bug105 - count*size overflow must be detected before the allocator.
- *   bug32        - failed realloc must preserve the caller's pointer AND bytes.
- *   bug179       - growth from a zero-capacity object must be defined.
- *   bug199       - realloc(ptr, 0) must have a defined, non-NULL outcome.
- *   bug02        - every failing path leaves a defined (NULL) handle.
- */
+/* Unit: allocation overflow, failure-preservation and zero-size realloc. */
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,77 +13,57 @@ int main(void) {
     cplus_safe_log_set_level(CPLUS_SAFE_LOG_OFF);
     cplus_safe_set_constraint_mode(CPLUS_SAFE_CONSTRAINT_IGNORE);
 
-    /* ---- product overflow is EOVERFLOW, handle cleared (bug41/105) ---- */
-    void *p = (void *)0xdeadbeef;
-    assert(calloc_s(&p, (size_t)-1, 2) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
-    assert(calloc_s(&p, SIZE_MAX / 2 + 1, 2) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
-    assert(calloc_s(&p, 2, SIZE_MAX / 2 + 1) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
-    assert(calloc_s(&p, SIZE_MAX, 3) == CPLUS_SAFE_EOVERFLOW);
-    assert(p == NULL);
+    errno = 0; assert(calloc_s((size_t)-1, 2) == NULL && errno == EOVERFLOW);
+    errno = 0; assert(calloc_s(SIZE_MAX / 2 + 1, 2) == NULL && errno == EOVERFLOW);
+    errno = 0; assert(calloc_s(2, SIZE_MAX / 2 + 1) == NULL && errno == EOVERFLOW);
+    errno = 0; assert(calloc_s(SIZE_MAX, 3) == NULL && errno == EOVERFLOW);
+    errno = 0; assert(calloc_s(RSIZE_MAX_MEM, 1) == NULL && errno == ENOMEM);
 
-    /* ---- representable-but-huge is OOM, not overflow ---- */
-    assert(calloc_s(&p, SIZE_MAX, 1) == CPLUS_SAFE_ENOMEM);
-    assert(p == NULL);
-
-    /* ---- failed realloc preserves pointer and contents (bug32) ---- */
-    void *r = NULL;
-    assert(malloc_s(&r, 64) == CPLUS_SAFE_OK);
+    /* failed realloc preserves caller pointer and contents */
+    void *r = malloc_s(64);
+    assert(r != NULL);
     memset(r, 0xC3, 64);
-    void *old = r;
-    assert(realloc_s(&r, (size_t)-1) == CPLUS_SAFE_ENOMEM);
-    assert(r == old);                          /* no leak, no dangling */
+    errno = 0;
+    assert(realloc_s(r, (size_t)-1) == NULL && errno == EINVAL);
+    assert(cplus_safe_ptr_is_live(r));
     assert(((unsigned char *)r)[0] == 0xC3);
     assert(((unsigned char *)r)[63] == 0xC3);
-    free_s(&r);
-    assert(r == NULL);
+    free_s(r);
 
-    /* ---- realloc(ptr, 0) is defined and keeps a non-NULL owner (bug199) ---- */
-    void *q = NULL;
-    assert(malloc_s(&q, 32) == CPLUS_SAFE_OK);
-    assert(realloc_s(&q, 0) == CPLUS_SAFE_OK);
+    /* realloc(ptr, 0) stays defined and non-NULL */
+    void *q = malloc_s(32);
     assert(q != NULL);
-    assert(realloc_s(&q, 0) == CPLUS_SAFE_OK);  /* idempotent */
+    q = realloc_s(q, 0);
+    assert(q != NULL && cplus_safe_ptr_size(q) == 1);
+    q = realloc_s(q, 0);
     assert(q != NULL);
-    free_s(&q);
-    assert(q == NULL);
+    free_s(q);
 
-    /* ---- realloc(NULL, n) allocates; realloc(NULL, 0) stays defined ---- */
-    void *a = NULL;
-    assert(realloc_s(&a, 16) == CPLUS_SAFE_OK);
+    /* realloc(NULL, n) allocates; realloc(NULL, 0) stays defined */
+    void *a = realloc_s(NULL, 16);
     assert(a != NULL);
-    free_s(&a);
-    a = NULL;
-    assert(realloc_s(&a, 0) == CPLUS_SAFE_OK);  /* non-NULL 1-byte object */
+    free_s(a);
+    a = realloc_s(NULL, 0);
     assert(a != NULL);
-    free_s(&a);
-    assert(a == NULL);
+    free_s(a);
 
-    /* ---- growth from a zero-capacity object preserves payload (bug179) ---- */
-    void *zk = NULL;
-    assert(malloc_s(&zk, 0) == CPLUS_SAFE_OK);  /* 1-byte, defined (bug51) */
+    /* growth from zero-capacity object preserves payload */
+    void *zk = malloc_s(0);
     assert(zk != NULL);
     ((unsigned char *)zk)[0] = 0x7E;
-    assert(realloc_s(&zk, 256) == CPLUS_SAFE_OK);
-    assert(zk != NULL);
-    assert(((unsigned char *)zk)[0] == 0x7E);
-    free_s(&zk);
-    assert(zk == NULL);
+    zk = realloc_s(zk, 256);
+    assert(zk != NULL && ((unsigned char *)zk)[0] == 0x7E);
+    free_s(zk);
 
-    /* ---- growing realloc keeps bytes; NULL handle rejected ---- */
-    void *g = NULL;
-    assert(malloc_s(&g, 8) == CPLUS_SAFE_OK);
+    /* growing realloc keeps bytes */
+    void *g = malloc_s(8);
+    assert(g != NULL);
     memcpy(g, "wxyz", 5);
-    assert(realloc_s(&g, 128) == CPLUS_SAFE_OK);
+    g = realloc_s(g, 128);
+    assert(g != NULL && memcmp(g, "wxyz", 5) == 0);
+    g = realloc_s(g, 128);
     assert(g != NULL);
-    assert(memcmp(g, "wxyz", 5) == 0);
-    assert(realloc_s(&g, 128) == CPLUS_SAFE_OK); /* no-op size still defined */
-    assert(g != NULL);
-    free_s(&g);
-    assert(g == NULL);
-    assert(realloc_s(NULL, 8) == CPLUS_SAFE_EINVAL);
+    free_s(g);
 
     puts("test_allocfmt_alloc_overflow: ok");
     return 0;

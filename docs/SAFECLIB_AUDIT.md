@@ -27,8 +27,8 @@
 
 ## Adapter consistency (current maintenance pass)
 - Safeclib-backed mem/str adapters: return safeclib `errno_t`; log TRACE on entry and ERROR on non-zero constraint/error results. `strtok_s` logs WARN on null result; `strnlen_s` is a size query and logs TRACE only.
-- Alloc adapters: validate out/inout args, return `CPLUS_SAFE_*` codes, log ERROR on invalid/overflow/OOM, DEBUG on success.
-- IO adapters: validate args/stream pointers, return `CPLUS_SAFE_*`/errno as implemented, log WARN/ERROR on failures, DEBUG on success, TRACE on hot read/write paths.
+- Alloc adapters: standard C signatures (`malloc_s`, `calloc_s`, `realloc_s`, `free_s`, `aligned_alloc_s`) plus `free_checked_s` returning `CPLUS_SAFE_OK`/`CPLUS_SAFE_EINVAL`, setting `errno` on failure (`EINVAL`/`ENOMEM`/`EOVERFLOW`), tracking live metadata (`byte_size`, `elem_size`, `generation`), and logging ERROR on invalid/overflow/OOM/double-or-invalid-free.
+- IO adapters: standard C `cplus_fopen_s(name, mode)` -> `FILE *` and `cplus_fclose_s(stream)` -> `0`/`EOF` with thread-safe live/closed stream double-close refusal; `cplus_fread_s`/`cplus_fwrite_s` retain Annex K `bmax` clamping.
 - Format adapters: platform-backed bounded `vsnprintf` family; null format/invalid dest+dmax return -1, set `errno=EINVAL`, and log ERROR. printf/fprintf/snprintf-family format/runtime failures return -1, set `errno` (preserving the underlying libc value), and log ERROR; scanf-family negative returns log WARN (EOF/error) and leave `errno` as set by libc. Bounded variants follow the C99 `snprintf` truncation contract (bounded, NUL-terminated, returns would-be length); `sprintf_s/vsprintf_s` are aliases of that bounded behavior, not Annex K.
 - Logging remains metadata-only, OFF by default, and avoids dumping user buffers/secrets.
 
