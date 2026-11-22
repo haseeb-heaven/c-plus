@@ -99,7 +99,7 @@ void File_drop(File *f) {
 int main(void) {
     File log = {fopen("log.txt", "w")};
     if (!log.handle) return 1;
-    fputs("Hello C+\n", log.handle);
+    fputs("Hello C+\\n", log.handle);
     return 0; // destructor inserted on supported scope exit
 }
 ```
@@ -182,3 +182,7 @@ See [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md), [ARCHITECTURE]
 ## Contributing and license
 
 Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). License: [LICENSE](LICENSE).
+
+## AI Usage Disclaimer
+
+C+ was implemented with AI tools, including OpenAI Codex and Google Gemini. Heaven created and directed the language design, vision, syntax, feature requirements, and technical decisions. Heaven also manually tested the project and guided development. AI-generated code was reviewed and tested; AI assistance does not replace human authorship or responsibility.
