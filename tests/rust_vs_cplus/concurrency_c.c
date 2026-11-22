@@ -280,7 +280,6 @@ static void *g_shared;
 static void *g_slots[NW + 1];
 static pthread_mutex_t g_mu = PTHREAD_MUTEX_INITIALIZER;
 static int g_ids[NW];
-static _Thread_local int g_tls_counter;
 
 /* ------------------------------------------------------------------ */
 /* Reusable workers                                                    */
@@ -402,9 +401,11 @@ static int w_log_toggle(int tid, void *ctx) {
 
 static int w_local_counter(int tid, void *ctx) {
     (void)tid; (void)ctx;
-    g_tls_counter = 0;
-    for (int i = 0; i < 1000; ++i) ++g_tls_counter;
-    return g_tls_counter == 1000;
+    /* A per-thread stack variable is inherently thread-local: no shared
+     * state and no mutex needed. (Avoids C11 _Thread_local under -std=c99.) */
+    int local_counter = 0;
+    for (int i = 0; i < 1000; ++i) ++local_counter;
+    return local_counter == 1000;
 }
 
 static int w_inject_alloc(int tid, void *ctx) {
@@ -493,6 +494,16 @@ static int w_two_barriers(int tid, void *ctx) {
     bar_t *bars = (bar_t *)ctx;
     bar_wait(&bars[0]);
     bar_wait(&bars[1]);
+    return 1;
+}
+
+/* Wait twice on the SAME barrier (two phases of one reusable barrier).
+ * Must not be confused with w_two_barriers, which needs a bar_t[2]. */
+static int w_bar_twice(int tid, void *ctx) {
+    (void)tid;
+    bar_t *b = (bar_t *)ctx;
+    bar_wait(b);
+    bar_wait(b);
     return 1;
 }
 
@@ -1216,7 +1227,7 @@ static outcome_t case_070(void) {
 /* Case 071: two-phase reusable barrier across four threads. */
 static outcome_t case_071(void) {
     bar_t b; bar_init(&b, NW);
-    int fails = pool_run(NW, w_two_barriers, &b);
+    int fails = pool_run(NW, w_bar_twice, &b);
     bar_destroy(&b);
     return fails == 0 ? OUT_ACCEPTED : OUT_REFUSED;
 }
@@ -1244,7 +1255,7 @@ static outcome_t case_073(void) {
 static outcome_t case_074(void) {
     bar_t b; bar_init(&b, NW);
     int fails = 0;
-    for (int g = 0; g < 3; ++g) fails += pool_run(NW, w_two_barriers, &b);
+    for (int g = 0; g < 3; ++g) fails += pool_run(NW, w_bar_twice, &b);
     bar_destroy(&b);
     return fails == 0 ? OUT_ACCEPTED : OUT_REFUSED;
 }
@@ -1542,8 +1553,10 @@ static const case_fn CASES[CASE_COUNT] = {
     case_091, case_092, case_093, case_094, case_095, case_096, case_097, case_098, case_099, case_100,
 };
 
-_Static_assert(sizeof(CASES) / sizeof(CASES[0]) == CASE_COUNT,
-               "concurrency_c.c must contain exactly 100 cases");
+/* C99-compatible compile-time assertion of exactly 100 cases. */
+typedef char cplus_concurrency_assert_case_count[
+    (sizeof(CASES) / sizeof(CASES[0]) == CASE_COUNT) ? 1 : -1
+];
 
 int main(int argc, char **argv) {
     if (argc != 2) {

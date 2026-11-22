@@ -9424,24 +9424,24 @@
           "api": "char16_t",
           "kind": "type",
           "c_version": "C11",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_BUNDLED",
+          "source_file": "libc/install-include/cplus_uchar.h",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Host probe: /usr/bin/clang -std=c11 -include uchar.h FAILS (\"uchar.h file not found\") on Apple Clang 16 / macOS arm64. No cplus wrapper type shipped."
+          "test_file": "tests/libc/test_uchar.c",
+          "limitation": "Type/typedef provided by the self-contained header."
         },
         {
           "header": "uchar.h",
           "api": "char32_t",
           "kind": "type",
           "c_version": "C11",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_BUNDLED",
+          "source_file": "libc/install-include/cplus_uchar.h",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "Host probe: /usr/bin/clang -std=c11 -include uchar.h FAILS (\"uchar.h file not found\") on Apple Clang 16 / macOS arm64. No cplus wrapper type shipped."
+          "test_file": "tests/libc/test_uchar.c",
+          "limitation": "Type/typedef provided by the self-contained header."
         },
         {
           "header": "uchar.h",
@@ -9496,12 +9496,12 @@
           "api": "char8_t",
           "kind": "type",
           "c_version": "C23",
-          "classification": "MISSING",
-          "source_file": "",
+          "classification": "IMPLEMENTED_BUNDLED",
+          "source_file": "libc/install-include/cplus_uchar.h",
           "public_declaration": "",
           "host_backend": "",
-          "test_file": "",
-          "limitation": "C23 addition; host header absent and no wrapper shipped."
+          "test_file": "tests/libc/test_uchar.c",
+          "limitation": "Type/typedef provided by the self-contained header."
         },
         {
           "header": "uchar.h",
@@ -11667,9 +11667,9 @@
       "HOST/COMPILER-PROVIDED": 359,
       "PLATFORM_BACKED": 476,
       "IMPLEMENTED_UPSTREAM": 7,
-      "MISSING": 31,
+      "MISSING": 28,
       "UNSUPPORTED": 49,
-      "IMPLEMENTED_BUNDLED": 26
+      "IMPLEMENTED_BUNDLED": 29
     },
     "by_c_version": {
       "C11": 125,
