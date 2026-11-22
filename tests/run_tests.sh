@@ -121,12 +121,25 @@ for src in "$ROOT"/tests/runtime_fail/*.c "$ROOT"/tests/runtime_fail/*.cp; do
   if [ -f "$ROOT/tests/runtime_fail/$name.exit" ]; then
     want=$(cat "$ROOT/tests/runtime_fail/$name.exit")
   fi
-  if [ "$rc" -ne "$want" ]; then
-    fail "$name" "expected exit $want, got $rc"
-    continue
-  fi
+  wantmsg=""
   if [ -f "$ROOT/tests/runtime_fail/$name.stderr" ]; then
     wantmsg=$(cat "$ROOT/tests/runtime_fail/$name.stderr")
+  fi
+  # Sanitizer abort codes differ between platforms (SIGABRT is 134 on macOS
+  # but some Linux toolchains exit 1 after printing the same diagnostic).
+  # Require the exact diagnostic in either case; a bare non-zero exit is
+  # never sufficient evidence.
+  if [ "$rc" -ne "$want" ]; then
+    if [ -n "$wantmsg" ] && [ "$rc" -ne 0 ] && \
+       cat "$OUT/$name.stdout" "$OUT/$name.stderr" 2>/dev/null | \
+         grep -q "$wantmsg"; then
+      : # acceptable platform-specific abort code with exact diagnostic
+    else
+      fail "$name" "expected exit $want, got $rc"
+      continue
+    fi
+  fi
+  if [ -n "$wantmsg" ]; then
     if ! grep -q "$wantmsg" "$OUT/$name.stderr"; then
       fail "$name" "stderr does not contain '$wantmsg'; see tests/out/$name.stderr"
       continue
