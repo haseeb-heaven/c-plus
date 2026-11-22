@@ -39,3 +39,19 @@ Document any edits in git history; initial copy preserves upstream content.
 
 - libc/src/math/math2.c: atan2/asin/acos/atan/sinh/cosh/tanh/log2/cbrt/hypot/round/trunc/fmin/fmax/copysign/ldexp/frexp/modf (system libm).
 - libc/src/stdlib/stdlib_extra3.c: strtoll/strtoull/strtod/atof (system libc).
+
+## UTF-16/UTF-32 conversions (2026-11-22)
+
+- Copied verbatim from musl at pinned commit 7813e9119eb5fe681b6750b8a033a0490bca0941:
+  `src/multibyte/mbrtoc16.c`, `src/multibyte/c16rtomb.c`,
+  `src/multibyte/mbrtoc32.c`, `src/multibyte/c32rtomb.c`.
+- Integrated into `libc/src/uchar/uchar.c` with ONLY: symbol renames to
+  `cplus_*`, internal calls redirected to the existing cplus_mbrtowc /
+  cplus_wcrtomb wrappers, the host `<uchar.h>` include replaced by
+  `install-include/cplus_uchar.h`, one parenthesised precedence expression,
+  and one opt-in cplus_libc_log entry call per function. No algorithm changed.
+- The host (Apple clang 16) has neither <uchar.h> nor the conversion symbols;
+  these upstream bodies are the backend. Tests: tests/libc/test_uchar.c.
+- C23 UTF-8 variants mbrtoc8/c8rtomb are NOT integrated: musl at this commit
+  has no such source and the host exports no such symbol.
+

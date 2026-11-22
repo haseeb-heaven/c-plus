@@ -51,6 +51,8 @@ jobs:
         run: sh tests/methods/run_hundred.sh
       - name: C+/Rust safety conformance (12 gates)
         run: sh tests/conformance/run_conformance.sh
+      - name: Rust-vs-C+ runtime outcomes (100 cases x 6 families)
+        run: sh tests/rust_vs_cplus/run_compare.sh
       - name: Libc install smoke
         run: sh tests/libc/install_smoke.sh
       - name: C/C++ header compatibility matrix
