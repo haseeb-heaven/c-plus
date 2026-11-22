@@ -341,7 +341,10 @@ def gen_safe_guarded(i, rng):
             "if(@@K@@>0){free(q);q=0;p=0;}"
             "return (p&&q)?*p:0;", N=n, V=v, K=k)
         body = STD + mkmain(False, inner)
-    return name, marked(name, body), "accept"
+    # setjmp/longjmp and goto across a live allocation are outside the
+    # declared safe subset; STRICT is allowed to fail closed on them.
+    expected = "strict" if shape in (4, 5) else "accept"
+    return name, marked(name, body), expected
 
 
 BUILDERS = (

@@ -766,8 +766,35 @@ public:
         releasedVars_.erase(entry.first);
   }
 
+  /// Canonical key for a struct field / array-element lvalue, used for
+  /// exact field-sensitive release tracking (e.g. `s.p`, `a[0].p`).
+  std::string lvalueKey(const Expr *expr) const {
+    if (!expr)
+      return std::string();
+    const Expr *e = expr->IgnoreParenCasts();
+    if (const auto *me = dyn_cast<MemberExpr>(e)) {
+      std::string base = lvalueKey(me->getBase());
+      if (base.empty())
+        return std::string();
+      return base + (me->isArrow() ? "->" : ".") + me->getMemberDecl()->getNameAsString();
+    }
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e)) {
+      std::string base = lvalueKey(ase->getBase());
+      Expr::EvalResult r;
+      if (base.empty() || !ase->getIdx()->EvaluateAsInt(r, ctx_))
+        return std::string();
+      return base + "[" + std::to_string(r.Val.getInt().getSExtValue()) + "]";
+    }
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        return vd->getNameAsString();
+    return std::string();
+  }
+
   bool isReleased(const Expr *expr) const {
-    return releasedVars_.count(varNameOf(expr)) != 0;
+    std::string key = lvalueKey(expr);
+    return releasedVars_.count(varNameOf(expr)) != 0 ||
+           (!key.empty() && releasedFields_.count(key) != 0);
   }
 
   bool isMaybeReleased(const Expr *expr, SourceLocation at = {}) const {
@@ -1126,6 +1153,7 @@ public:
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
+      releasedFields_.clear();
       aliasGroups_.clear();
       borrowOwner_.clear();
       writeBorrows_.clear();
@@ -1600,7 +1628,9 @@ public:
       const Expr *sub = op->getSubExpr();
       if (isReleased(sub))
         reportUaf(op->getBeginLoc(), varNameOf(sub),
-                  "dereference of released pointer '" + varNameOf(sub) + "'");
+                  "dereference of released pointer '" +
+                      (varNameOf(sub).empty() ? lvalueKey(sub) : varNameOf(sub)) +
+                      "'");
       else if (isMaybeReleased(sub, op->getBeginLoc()) && conditionalDepth_ == 0)
         warnAt(op->getBeginLoc(),
                "possible use-after-free: '" + varNameOf(sub) +
@@ -2011,8 +2041,14 @@ public:
 
       bool isAllocatorFree = (baseName == "free" ||
                               baseName == "cplus_release");
-      if (isAllocatorFree && call->getNumArgs() >= 1)
+      if (isAllocatorFree && call->getNumArgs() >= 1) {
         checkInvalidFree(call->getBeginLoc(), call->getArg(0), baseName);
+        // Exact field lvalue: record its release even when the argument is
+        // not a plain variable reference (free(s.p), free(a[0].p)).
+        std::string fkey = lvalueKey(call->getArg(0));
+        if (!fkey.empty() && conditionalDepth_ == 0)
+          releasedFields_.insert(fkey);
+      }
       bool invalidates = isAllocatorFree ||
                          destructors_.count(name) != 0;
       if (invalidates && ptrVar) {
@@ -2034,6 +2070,9 @@ public:
           report(call->getBeginLoc(),
                  "double free of '" + pname + "' on some branch path");
         else if (conditionalDepth_ == 0) {
+          std::string fkey = lvalueKey(call->getArg(0));
+          if (!fkey.empty())
+            releasedFields_.insert(fkey);
           releaseLocs_[pname] = call->getBeginLoc();
           markReleased(pname);
         }
@@ -2377,6 +2416,7 @@ public:
   std::set<std::string> nonVolatileGlobals_;
   std::set<std::string> nullVars_;
   std::set<std::string> releasedVars_;
+  std::set<std::string> releasedFields_;
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
