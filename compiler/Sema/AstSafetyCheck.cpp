@@ -175,6 +175,12 @@ public:
   void setMaybeReleasedVars(const std::set<std::string> &s) {
     maybeReleasedVars_ = s;
   }
+  const std::map<std::string, unsigned> &maybeReleaseLines() const {
+    return maybeReleaseLines_;
+  }
+  void setMaybeReleaseLines(const std::map<std::string, unsigned> &m) {
+    maybeReleaseLines_ = m;
+  }
   const std::map<std::string, std::map<unsigned, long long>> &
   callParamExtents() const {
     return callParamExtents_;
@@ -309,6 +315,13 @@ public:
     long long bytes = -1;
     if (!evalByteCount(arg, bytes))
       return;
+    // calloc(count, size) allocates count * size bytes, not just count.
+    if (callee == "calloc" && call->getNumArgs() >= 2) {
+      long long elem = 1;
+      if (evalByteCount(call->getArg(1)->IgnoreParenImpCasts(), elem) &&
+          elem > 0 && bytes <= LLONG_MAX / elem)
+        bytes *= elem;
+    }
     HeapAllocState st;
     st.bytes = bytes;
     st.zeroInit = (callee == "calloc");
@@ -378,7 +391,8 @@ public:
     }
     std::string name = varNameOf(idx);
     auto it = constLocals_.find(name);
-    if (name.empty() || it == constLocals_.end() || assignedVars_.count(name))
+    if (name.empty() || it == constLocals_.end() || assignedVars_.count(name) ||
+        guardedFromConst_.count(name))
       return false;
     out = it->second.getSExtValue();
     return true;
@@ -818,9 +832,41 @@ public:
         call->getDirectCallee()->getNameAsString() != "realloc" ||
         call->getNumArgs() < 1)
       return false;
-    owner = varNameOf(call->getArg(0));
+    // `realloc(*pp, n)` with `*pp = t` in the success branch is the standard
+    // out-parameter idiom and is fully handled.
+    bool throughOutParam = false;
+    if (const auto *uo = dyn_cast<UnaryOperator>(
+            call->getArg(0)->IgnoreParenImpCasts()))
+      if (uo->getOpcode() == UO_Deref) {
+        owner = varNameOf(uo->getSubExpr());
+        throughOutParam = true;
+      }
+    if (!throughOutParam)
+      owner = varNameOf(call->getArg(0));
     if (out)
       *out = call;
+    if (throughOutParam) {
+      if (negated && containsReturn(s->getThen()))
+        return !owner.empty();
+      std::string rhs = tmp;
+      bool assigned = false;
+      std::function<void(const Stmt *)> scan = [&](const Stmt *node) {
+        if (!node || assigned)
+          return;
+        if (const auto *bo = dyn_cast<BinaryOperator>(node))
+          if (bo->isAssignmentOp() && varNameOf(bo->getRHS()) == rhs) {
+            if (const auto *lu = dyn_cast<UnaryOperator>(
+                    bo->getLHS()->IgnoreParenImpCasts()))
+              if (lu->getOpcode() == UO_Deref &&
+                  varNameOf(lu->getSubExpr()) == owner)
+                assigned = true;
+          }
+        for (const Stmt *c : node->children())
+          scan(c);
+      };
+      scan(s->getThen());
+      return !owner.empty() && assigned;
+    }
     if (negated && containsReturn(s->getThen()))
       return !owner.empty(); // failure branch exits: ownership is explicit
     return !owner.empty() && containsAssignFrom(s->getThen(), owner, tmp);
@@ -843,8 +889,13 @@ public:
       return;
     ReleaseCollector collector;
     collector.TraverseStmt(body);
-    maybeReleasedVars_.insert(collector.released.begin(),
-                              collector.released.end());
+    unsigned pos = body->getBeginLoc().getRawEncoding();
+    for (const auto &name : collector.released) {
+      maybeReleasedVars_.insert(name);
+      auto it = maybeReleaseLines_.find(name);
+      if (it == maybeReleaseLines_.end() || (pos && pos < it->second))
+        maybeReleaseLines_[name] = pos;
+    }
   }
 
   bool TraverseIfStmt(IfStmt *s) {
@@ -893,13 +944,29 @@ public:
     // null state for that branch so a valid guarded dereference is not a
     // false positive. With an else branch the null path remains checked.
     std::set<std::string> savedNulls = nullVars_;
+    bool keepErase = false;
     if (report_ && !s->getElse()) {
       std::string condVar = varNameOf(s->getCond());
+      if (const auto *uo = dyn_cast_or_null<UnaryOperator>(
+              s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
+        if (uo->getOpcode() == UO_LNot) {
+          condVar = varNameOf(uo->getSubExpr());
+          // `if (!p) return;` proves p non-null after the statement.
+          keepErase = containsReturn(s->getThen());
+        }
+      if (const auto *bo = dyn_cast_or_null<BinaryOperator>(
+              s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
+        if (bo->isEqualityOp() && containsReturn(s->getThen())) {
+          std::string n = varNameOf(bo->getLHS());
+          if (!n.empty())
+            guardedFromConst_.insert(n);
+        }
       if (!condVar.empty())
         nullVars_.erase(condVar);
     }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
-    nullVars_ = savedNulls;
+    if (!keepErase)
+      nullVars_ = savedNulls;
     --conditionalDepth_;
     return r;
   }
@@ -1248,6 +1315,8 @@ public:
       if (isNullConstant(op->getRHS())) {
         const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
         clearReleased(varNameOf(lhs));
+        // Releasing then resetting to null makes any may-release fact stale.
+        maybeReleasedVars_.erase(varNameOf(lhs));
       }
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
@@ -1597,7 +1666,12 @@ public:
           report(call->getBeginLoc(), "double free of '" + pname + "'");
         else if (isAllocatorFree && conditionalDepth_ == 0 &&
                  maybeReleasedVars_.count(pname) &&
-                 !releasedVars_.count(pname))
+                 !releasedVars_.count(pname) && [&] {
+                   auto lit = maybeReleaseLines_.find(pname);
+                   unsigned here = call->getBeginLoc().getRawEncoding();
+                   return lit != maybeReleaseLines_.end() && here &&
+                          lit->second && lit->second < here;
+                 }())
           report(call->getBeginLoc(),
                  "double free of '" + pname + "' on some branch path");
         else if (conditionalDepth_ == 0) {
@@ -1884,6 +1958,8 @@ private:
   std::set<std::string> functionsReturningFreed_;
   std::set<std::string> nullReturningFunctions_;
   std::set<std::string> maybeReleasedVars_;
+  std::map<std::string, unsigned> maybeReleaseLines_;
+  std::set<std::string> guardedFromConst_;
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, long long>> callParamExtents_;
@@ -1946,6 +2022,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setNullReturningFunctions(collect.nullReturningFunctions());
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
+  check.setMaybeReleaseLines(collect.maybeReleaseLines());
   check.setCallParamExtents(collect.callParamExtents());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
