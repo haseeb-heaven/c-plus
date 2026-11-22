@@ -9,6 +9,9 @@
 #include <wchar.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <fenv.h>
+#include <complex.h>
+#include <pthread.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -82,6 +85,20 @@ struct tm; struct tm *cplus_gmtime(const long*); struct tm *cplus_localtime(cons
 size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
 char *cplus_setlocale(int,const char*); struct lconv; struct lconv *cplus_localeconv(void);
 void (*cplus_signal(int, void(*)(int)))(int); int cplus_raise(int);
+/* stdio position/stream extras (platform-backed) */
+int cplus_setvbuf(FILE*,char*,int,size_t); void cplus_setbuf(FILE*,char*);
+int cplus_fgetpos(FILE*,fpos_t*); int cplus_fsetpos(FILE*,const fpos_t*);
+int cplus_ungetc(int,FILE*); int cplus_fileno(FILE*);
+FILE *cplus_fdopen(int,const char*); FILE *cplus_freopen(const char*,const char*,FILE*); FILE *cplus_tmpfile(void);
+/* threads (pthreads-backed: host toolchain lacks C11 <threads.h>) */
+int cplus_pthread_create(pthread_t*,const pthread_attr_t*,void*(*)(void*),void*); int cplus_pthread_join(pthread_t,void**);
+int cplus_pthread_mutex_init(pthread_mutex_t*,const pthread_mutexattr_t*); int cplus_pthread_mutex_lock(pthread_mutex_t*); int cplus_pthread_mutex_unlock(pthread_mutex_t*); int cplus_pthread_mutex_destroy(pthread_mutex_t*);
+int cplus_pthread_cond_init(pthread_cond_t*,const pthread_condattr_t*); int cplus_pthread_cond_signal(pthread_cond_t*); int cplus_pthread_cond_broadcast(pthread_cond_t*); int cplus_pthread_cond_wait(pthread_cond_t*,pthread_mutex_t*); int cplus_pthread_cond_destroy(pthread_cond_t*);
+/* fenv (platform-backed) */
+int cplus_feclearexcept(int); int cplus_fetestexcept(int); int cplus_fegetround(void); int cplus_fesetround(int); int cplus_fegetenv(fenv_t*); int cplus_fesetenv(const fenv_t*);
+/* complex (platform-backed; host <complex.h> has no cadd/cmul, so those are omitted) */
+double cplus_cabs(double complex); double cplus_carg(double complex); double cplus_creal(double complex); double cplus_cimag(double complex);
+double complex cplus_conj(double complex); double complex cplus_cexp(double complex); double complex cplus_csqrt(double complex);
 #ifdef __cplusplus
 }
 #endif

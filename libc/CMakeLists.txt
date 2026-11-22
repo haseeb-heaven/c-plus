@@ -25,6 +25,7 @@ add_library(cplus_hardened_libc STATIC
   src/string/strerror.c
   src/stdio/stdio.c
   src/stdio/stdio2.c
+  src/stdio/stdio3.c
   src/ctype/ctype.c
   src/wchar/wchar.c
   src/ctype/ctype2.c
@@ -35,6 +36,9 @@ add_library(cplus_hardened_libc STATIC
   src/time/time.c
   src/locale/locale.c
   src/signal/signal.c
+  src/fenv/fenv.c
+  src/complex/complex.c
+  src/thread/thread.c
 )
 target_include_directories(cplus_hardened_libc PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include

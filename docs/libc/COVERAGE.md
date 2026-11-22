@@ -9,11 +9,11 @@ Tracks what is actually shipped/verified on `agent/modern-stdlib` (PR #17). **No
 | CRT corpus | `sh tests/crt/run_crt_tests.sh` | 10 passed, 0 failed |
 | Safe CRT unit | `sh tests/crt/unit/run_unit_tests.sh` | 73 passed, 0 failed |
 | Safe CRT examples | `sh tests/crt/run_all_crt.sh` (examples stage) | 26 passed, 0 failed |
-| Adversarial mitigations | `tests/crt/adversarial/test_*.c` | 14 passed, 0 failed |
+| Adversarial mitigations | `tests/crt/adversarial/test_*.c` | 20 passed, 0 failed |
 | Fuzz smoke | `sh tests/crt/fuzz/run_fuzz_smoke.sh` | 4 passed, 0 failed |
 | Combined fuzz | `tests/crt/fuzz/fuzz_all_safe_apis.c`, `fuzz_all_exported.c` | 2000+1500 iterations, ok, no crash |
-| Libc tests | `sh tests/libc/run_libc_tests.sh` | 36 passed, 0 failed |
-| Libc fuzz | `sh tests/libc/run_fuzz.sh` | fuzz_libc: ok (5000 iters) |
+| Libc tests | `sh tests/libc/run_libc_tests.sh` | 41 passed, 0 failed |
+| Libc fuzz | `sh tests/libc/run_fuzz.sh` | 2 passed, 0 failed (2x5000 iters) |
 | Libc install smoke | `sh tests/libc/install_smoke.sh` | ok |
 | CTL containers | `sh tests/ctl/run_ctl_tests.sh` | 11 passed, 0 failed (vector, string, deque, list, set, map, unordered_set, stack, queue, priority_queue, forward_list) |
 | yyjson (upstream API) | `sh tests/json/run_json_tests.sh` | 1 passed, 0 failed |
