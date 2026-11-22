@@ -76,3 +76,23 @@ under UBSan.
 - Unknown capacity is never presented as verified capacity.
 - This is runtime diagnosis with tracked provenance for this allocator, not a
   proof of alias/lifetime safety for arbitrary C pointers.
+
+## Two independent safe ordinary-C layers
+
+Both shipped libraries now protect unchanged C calls; neither requires `_s`
+spelling and neither interposes host libc symbols.
+
+| Layer | Header | Link | Constraint reporting |
+|---|---|---|---|
+| Plain C+ libc | `libc/install-include/cplus_libc_safe.h` | `build/libc/libcplus_hardened.a` | `cplus_libc_log` + `errno = ERANGE` |
+| C+ SafeCRT | `stdlib/safe/safe_c.h` | plus `build/safe/libcplus_safecrt.a` | safeclib constraint handler (ESNOSPC 406) |
+
+Both use tracked capacity for `cplus_malloc` blocks, including interior
+pointers and the one-past-the-end address, plus `__builtin_object_size(p,1)`
+for stack/global objects. Both distinguish unknown capacity from verified
+capacity and offer a strict fail-closed mode
+(`cplus_libc_set_unknown_capacity_mode(1)` /
+`cplus_safe_set_unknown_capacity_mode(1)`).
+
+Evidence: `tests/libc/test_libc_safe_api.c` (plain libc only) and
+`tests/crt/unit/test_safe_c_api.c` (C+ SafeCRT), both clean under UBSan.

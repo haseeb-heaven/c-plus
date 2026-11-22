@@ -16,6 +16,7 @@ set(LIBC_SOURCES
   src/stdlib/assert_extra.c
   src/stdlib/musl_stdlib_extra.c
   src/string/memory.c
+  src/string/bounded.c
   src/string/string.c
   src/string/extra.c
   src/string/extra2.c

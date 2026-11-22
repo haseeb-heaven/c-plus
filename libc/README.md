@@ -33,3 +33,9 @@ function; none is counted as a bundled or upstream implementation.
 Remaining ISO C families and limitations are tracked in `docs/libc/COVERAGE.md`.
 No false completeness claim: a wrapper never makes a raw C pointer safe, and
 host delegation is not the same as a bundled implementation.
+
+- `install-include/cplus_libc_safe.h` makes unchanged `malloc`/`memset`/
+  `memcpy`/`strcpy`/`fread`/`printf` calls capacity-checked using only this
+  static library (no SafeCRT dependency), with an explicit strict mode for
+  unknown capacity. See `docs/libc/ORDINARY_C_SAFETY.md`.
+

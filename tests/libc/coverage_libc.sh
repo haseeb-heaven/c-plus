@@ -37,6 +37,7 @@ SRCS="
   libc/src/string/strndup.c
   libc/src/string/strerror.c
   libc/src/string/memory.c
+  libc/src/string/bounded.c
   libc/src/string/string.c
   libc/src/string/extra.c
   libc/src/stdio/stdio.c

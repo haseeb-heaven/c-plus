@@ -37,6 +37,19 @@ typedef struct cplus_alloc_meta {
 } cplus_alloc_meta;
 
 int    cplus_alloc_get_meta(const void *ptr, cplus_alloc_meta *out);
+size_t cplus_alloc_remaining_capacity(const void *ptr); /* (size_t)-1 = not tracked */
+
+/* Capacity-checked ordinary C operations (plain libc layer). `known` comes
+ * from CPLUS_LIBC_OBJ_SIZE(p); -1 means unknown. */
+void cplus_libc_set_unknown_capacity_mode(int strict);
+void *cplus_memset_bounded(void *d, int v, size_t n, size_t known);
+void *cplus_memcpy_bounded(void *d, const void *s, size_t n, size_t known);
+void *cplus_memmove_bounded(void *d, const void *s, size_t n, size_t known);
+int   cplus_memcmp_bounded(const void *a, const void *b, size_t n, size_t known_a, size_t known_b);
+char *cplus_strcpy_bounded(char *d, const char *s, size_t known);
+char *cplus_strncpy_bounded(char *d, const char *s, size_t n, size_t known);
+char *cplus_strcat_bounded(char *d, const char *s, size_t known);
+char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known);
 int    cplus_alloc_is_live(const void *ptr);
 size_t cplus_alloc_size(const void *ptr);
 size_t cplus_alloc_elem_size(const void *ptr);
