@@ -220,6 +220,14 @@ std::string findClangBinary() {
   std::string env = envOr("CPLUS_CLANG");
   if (!env.empty() && fileExists(env))
     return env;
+#ifdef __APPLE__
+  // Apple's system clang resolves the installed SDK (MacOSX.sdk) correctly.
+  // Homebrew's clang loads arm64-apple-darwin27.cfg, which selects a
+  // MacOSX27.sdk that is not installed on this host. Prefer the system
+  // compiler instead of relying on PATH order. CPLUS_CLANG above still wins.
+  if (fileExists("/usr/bin/clang"))
+    return "/usr/bin/clang";
+#endif
   if (auto found = llvm::sys::findProgramByName("clang")) {
     // Prefer the host system compiler: it is the one whose sanitizer runtime
     // and SDK configuration are known to match the host.
