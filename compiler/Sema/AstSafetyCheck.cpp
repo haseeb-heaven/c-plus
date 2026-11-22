@@ -1196,6 +1196,26 @@ public:
     return true;
   }
 
+  bool TraverseConditionalOperator(ConditionalOperator *op) {
+    if (!report_)
+      return RecursiveASTVisitor::TraverseConditionalOperator(op);
+    // `p ? *p : 0` tests p for non-null. Suppress the proven-null fact in the
+    // true arm, then restore it for the false arm and the following code.
+    std::string condVar = varNameOf(op->getCond());
+    std::string saved = nonNullBranch_;
+    bool removed = !condVar.empty() && nullVars_.erase(condVar) > 0;
+    if (removed)
+      nonNullBranch_ = condVar;
+    bool r = TraverseStmt(op->getCond());
+    r &= TraverseStmt(op->getTrueExpr());
+    nonNullBranch_.clear();
+    r &= TraverseStmt(op->getFalseExpr());
+    nonNullBranch_ = saved;
+    if (removed)
+      nullVars_.insert(condVar);
+    return r;
+  }
+
   bool VisitBinaryOperator(BinaryOperator *op) {
     if (!report_) {
       if (op->isAssignmentOp())
@@ -1340,13 +1360,20 @@ public:
         for (const auto &alias : lgroup)
           aliasGroups_[alias] = lgroup;
       }
-      if (const VarDecl *vd = nullVarOf(op->getLHS()))
-        nullVars_.erase(vd->getNameAsString());
+      const VarDecl *lhsVar = nullptr;
+      if (const auto *ref = dyn_cast<DeclRefExpr>(op->getLHS()))
+        lhsVar = dyn_cast<VarDecl>(ref->getDecl());
       if (isNullConstant(op->getRHS())) {
+        // `p = NULL` (including casts such as `(int *)NULL`) makes p provably
+        // null until it is reassigned or guarded.
+        if (lhsVar && lhsVar->getType()->isPointerType())
+          nullVars_.insert(lhsVar->getNameAsString());
         const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
         clearReleased(varNameOf(lhs));
         // Releasing then resetting to null makes any may-release fact stale.
         maybeReleasedVars_.erase(varNameOf(lhs));
+      } else if (lhsVar) {
+        nullVars_.erase(lhsVar->getNameAsString());
       }
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
@@ -1400,7 +1427,8 @@ public:
                    "' may have been released on a branch path");
       else if (movedVars_.count(varNameOf(sub)))
         report(op->getBeginLoc(), "use-after-move: dereference of moved resource");
-      else if (isNullConstant(sub) || nullVarOf(sub))
+      else if ((isNullConstant(sub) || nullVarOf(sub)) &&
+               varNameOf(sub) != nonNullBranch_)
         report(op->getBeginLoc(), "null pointer dereference");
       checkHeapDeref(op);
     }
@@ -1990,6 +2018,7 @@ private:
   std::set<std::string> maybeReleasedVars_;
   std::map<std::string, unsigned> maybeReleaseLines_;
   std::set<std::string> guardedFromConst_;
+  std::string nonNullBranch_;
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, long long>> callParamExtents_;
