@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace cplus {
 
@@ -28,6 +29,19 @@ struct FunctionEffect {
 
 /// Known libc effects. Unknown functions are NOT assumed safe.
 FunctionEffect libcEffect(llvm::StringRef name);
+
+/// A contract that could not be fully interpreted. STRICT safe mode must
+/// reject calls to functions with such contracts instead of assuming safety.
+struct ContractIssue {
+  std::string function; ///< empty for file-level issues
+  std::string message;
+};
+
+/// Issues found while loading/validating the machine-readable contracts.
+const std::vector<ContractIssue> &contractIssues();
+
+/// True when the contract file was found and parsed successfully.
+bool contractsLoaded();
 
 /// Report callback used by the CFG analyses.
 using CfgReportFn =

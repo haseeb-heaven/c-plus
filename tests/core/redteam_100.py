@@ -144,7 +144,7 @@ add("snprintf_ok", "#include <stdio.h>\nint main(void){char b[32];int n=snprintf
 add("atoi_null", "#include <stdlib.h>\nint main(void){char*p=0;return atoi(p);}", "accept")
 
 # --- contract edge cases (10) ---
-add("calloc_count_overflow", "#include <stdlib.h>\nint main(void){int*p=calloc((size_t)-1,sizeof(int));if(!p)return 1;free(p);return 0;}", "accept")
+add("calloc_count_overflow", "#include <stdlib.h>\nint main(void){int*p=calloc((size_t)-1,sizeof(int));if(!p)return 1;free(p);return 0;}", "reject")
 add("realloc_loss", "#include <stdlib.h>\nint main(void){int*p=malloc(8);p=realloc(p,16);free(p);return 0;}", "reject")
 add("realloc_safe_pattern", "#include <stdlib.h>\nint main(void){int*p=malloc(8);void*t=realloc(p,16);if(t)p=t;free(p);return 0;}", "accept")
 add("memcmp_null", "#include <string.h>\nint main(void){char a[4]={0};return memcmp(a,0,4);}", "reject")

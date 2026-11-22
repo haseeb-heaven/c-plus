@@ -261,6 +261,14 @@ for f in "$ROOT"/tests/safety/fmt25_*.c; do
   expect_strict_reject "$(basename "$f" .c)" "$f"
 done
 
+# Contract + diagnostic suite: each rule has a negative case with an exact
+# expected message and a valid counterpart that must compile.
+if python3 "$ROOT/tests/core/lib_contracts_suite.py" >"$OUT/lib_contracts.log" 2>&1; then
+  ok lib_contracts_suite
+else
+  bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
+fi
+
 echo
 echo "core safety: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

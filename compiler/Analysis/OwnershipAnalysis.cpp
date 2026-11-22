@@ -10,8 +10,10 @@
 #include <clang/Basic/SourceManager.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <set>
 #include <vector>
@@ -20,6 +22,46 @@ using namespace clang;
 
 namespace cplus {
 namespace {
+
+struct ContractState {
+  std::map<std::string, FunctionEffect> contracts;
+  std::vector<ContractIssue> issues;
+  bool attempted = false;
+  bool loaded = false;
+};
+
+ContractState &contractState() {
+  static ContractState state;
+  return state;
+}
+
+/// All v2 fields. Unknown fields are reported instead of silently ignored.
+bool isKnownContractField(llvm::StringRef f) {
+  static const std::set<llvm::StringRef> kFields = {
+      "params",           "nullableArgs",     "ownership",
+      "transfer",         "extent",           "effects",
+      "borrow",           "failure",          "diagnostics",
+      "dynamic",          "paramTypes",       "pointerBounds",
+      "allocationSize",   "ownershipTransfer", "borrowLifetime",
+      "readEffects",      "writeEffects",     "freeEffects",
+      "returnState",      "failureBehavior",  "threadAssumptions",
+      "optional",         "origin"};
+  return kFields.count(f) != 0;
+}
+
+/// Fields that must be present on every function contract. `optional` and
+/// `origin` are deliberately excluded: they are only present on some entries.
+bool isRequiredContractField(llvm::StringRef f) {
+  static const std::set<llvm::StringRef> kRequired = {
+      "params",           "nullableArgs",      "ownership",
+      "transfer",         "extent",            "effects",
+      "borrow",           "failure",           "diagnostics",
+      "dynamic",          "paramTypes",        "pointerBounds",
+      "allocationSize",   "ownershipTransfer", "borrowLifetime",
+      "readEffects",      "writeEffects",      "freeEffects",
+      "returnState",      "failureBehavior",   "threadAssumptions"};
+  return kRequired.count(f) != 0;
+}
 
 class LocalCollector : public RecursiveASTVisitor<LocalCollector> {
 public:
@@ -254,22 +296,29 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
 } // namespace cplus
 
 namespace cplus {
-static std::map<std::string, FunctionEffect> &loadedContracts() {
-  static std::map<std::string, FunctionEffect> contracts;
-  static bool attempted = false;
-  if (attempted)
-    return contracts;
-  attempted = true;
+static ContractState &loadedContracts() {
+  ContractState &st = contractState();
+  if (st.attempted)
+    return st;
+  st.attempted = true;
 
-  std::string path = "compiler/Analysis/libc_contracts.json";
+  // Env override first: needed for tests and for relocatable installs.
+  std::string path;
+  if (const char *env = std::getenv("CPLUS_CONTRACT_PATH"))
+    path = env;
 #ifdef CPLUS_CONTRACT_PATH
-  std::string installed = CPLUS_CONTRACT_PATH;
-#elif defined(CPLUS_SOURCE_DIR)
-  std::string installed = std::string(CPLUS_SOURCE_DIR) +
-                          "/compiler/Analysis/libc_contracts.json";
-  if (llvm::sys::fs::exists(installed))
-    path = installed;
+  if (path.empty())
+    path = CPLUS_CONTRACT_PATH;
 #endif
+  if (path.empty()) {
+    path = "compiler/Analysis/libc_contracts.json";
+#ifdef CPLUS_SOURCE_DIR
+    std::string sourcePath = std::string(CPLUS_SOURCE_DIR) +
+                             "/compiler/Analysis/libc_contracts.json";
+    if (llvm::sys::fs::exists(sourcePath))
+      path = sourcePath;
+#endif
+  }
   auto buf = llvm::MemoryBuffer::getFile(path);
   if (!buf) {
     std::string exe = llvm::sys::fs::getMainExecutable("c+", nullptr);
@@ -282,55 +331,158 @@ static std::map<std::string, FunctionEffect> &loadedContracts() {
     }
     buf = llvm::MemoryBuffer::getFile(path);
   }
-  if (!buf)
-    return contracts;
+  if (!buf) {
+    st.issues.push_back({"", "libc contract file not found: " + path});
+    return st;
+  }
   auto parsed = llvm::json::parse((*buf)->getBuffer());
   if (!parsed) {
     llvm::consumeError(parsed.takeError());
-    return contracts;
+    st.issues.push_back({"", "libc contract file is not valid JSON: " + path});
+    return st;
   }
   const llvm::json::Object *root = parsed->getAsObject();
-  if (!root)
-    return contracts;
+  if (!root) {
+    st.issues.push_back({"", "libc contract root is not an object"});
+    return st;
+  }
+  auto version = root->getInteger("version");
+  if (!version || *version != 2)
+    st.issues.push_back({"", "unsupported libc contract version (expected 2)"});
   const llvm::json::Object *functions = root->getObject("functions");
-  if (!functions)
-    return contracts;
+  if (!functions) {
+    st.issues.push_back({"", "libc contract has no 'functions' object"});
+    return st;
+  }
+  st.loaded = true;
+
   for (const auto &entry : *functions) {
+    const std::string fn = entry.first.str();
     const llvm::json::Object *spec = entry.second.getAsObject();
-    if (!spec)
+    if (!spec) {
+      st.issues.push_back({fn, "function contract is not an object"});
       continue;
+    }
+    for (const auto &key : *spec) {
+      if (!isKnownContractField(key.first))
+        st.issues.push_back({fn, "unsupported contract field '" +
+                                     key.first.str() + "'"});
+    }
+    for (const auto &req : {"params", "nullableArgs", "ownership", "transfer",
+                            "extent", "effects", "borrow", "failure",
+                            "diagnostics", "dynamic", "paramTypes",
+                            "pointerBounds", "allocationSize",
+                            "ownershipTransfer", "borrowLifetime",
+                            "readEffects", "writeEffects", "freeEffects",
+                            "returnState", "failureBehavior",
+                            "threadAssumptions"})
+      if (!isRequiredContractField(req))
+        continue;
+      else if (!spec->get(req))
+        st.issues.push_back({fn, std::string("missing contract field '") + req +
+                                     "'"});
+
+    // Every array-typed field must actually be an array.
+    for (const auto &arr : {"params", "nullableArgs", "effects", "borrow",
+                            "dynamic", "paramTypes", "readEffects",
+                            "writeEffects", "freeEffects",
+                            "threadAssumptions", "optional"})
+      if (const auto *v = spec->get(arr))
+        if (!v->getAsArray())
+          st.issues.push_back({fn, std::string("contract field '") + arr +
+                                       "' must be an array"});
+
     FunctionEffect e;
-    auto effectList = spec->getArray("effects");
-    if (effectList)
-      for (const auto &v : *effectList) {
+    // diagnostics category: honour the contract's own category.
+    if (auto diag = spec->getString("diagnostics")) {
+      if (diag->starts_with("CPLUS-SAFE-"))
+        e.category = diag->str();
+      else
+        st.issues.push_back({fn, "invalid diagnostics category"});
+    }
+    // nullableArgs: array of argument indices.
+    if (const auto *nullable = spec->getArray("nullableArgs")) {
+      for (const auto &v : *nullable) {
+        if (!v.getAsInteger())
+          st.issues.push_back({fn, "nullableArgs must contain integers"});
+        else
+          e.nullableArg = true;
+      }
+    }
+    // effects: only known verbs may be relied upon.
+    if (const auto *effects = spec->getArray("effects")) {
+      for (const auto &v : *effects) {
         auto s = v.getAsString();
-        if (!s) continue;
-        // Contract strings may carry an argument name ("writes dst",
-        // "reads src", "allocates FILE*"). Match the leading verb.
+        if (!s) {
+          st.issues.push_back({fn, "effects must contain strings"});
+          continue;
+        }
         llvm::StringRef verb = s->take_while([](char c) {
           return !std::isspace(static_cast<unsigned char>(c));
         });
-        if (verb == "allocates") { e.allocates = true; e.returnsOwned = true; }
-        else if (verb == "frees" || verb == "frees-on-success") e.frees = true;
-        else if (verb == "writes") e.writes = true;
-        else if (verb == "reads" || verb == "borrows") e.borrows = true;
-        auto diag = spec->getString("diagnostics");
-        if (diag && diag->starts_with("CPLUS-SAFE-"))
-          e.category = diag->str();
-        auto nullable = spec->getArray("nullableArgs");
-        if (nullable && !nullable->empty())
-          e.nullableArg = true;
+        if (verb == "allocates") {
+          e.allocates = true;
+          e.returnsOwned = true;
+        } else if (verb == "frees" || verb == "frees-on-success") {
+          e.frees = true;
+        } else if (verb == "writes") {
+          e.writes = true;
+        } else if (verb == "reads" || verb == "borrows") {
+          e.borrows = true;
+        } else if (verb == "zero-init" || verb == "checked" ||
+                   verb == "overlap-safe" || verb == "advances") {
+          // Descriptive v2 verbs with no ownership consequence: recognised
+          // and validated, so they are not treated as unsupported contracts.
+        } else {
+          // A verb we cannot interpret: the contract is not fully understood.
+          st.issues.push_back({fn, "unsupported effect '" + verb.str() + "'"});
+        }
       }
-    auto ownership = spec->getString("ownership");
-    if (ownership == "returns_owned") e.returnsOwned = true;
-    e.category = "CPLUS-SAFE-CRT";
-    contracts[entry.first.str()] = e;
+    }
+    if (auto ownership = spec->getString("ownership"))
+      if (*ownership == "returns_owned")
+        e.returnsOwned = true;
+    // Argument indices encoded in the contract, when present.
+    auto argIndex = [&](llvm::StringRef name) -> int {
+      const auto *params = spec->getArray("params");
+      if (!params)
+        return -1;
+      int idx = 0;
+      for (const auto &v : *params) {
+        if (auto p = v.getAsString())
+          if (p->contains(name))
+            return idx;
+        ++idx;
+      }
+      return -1;
+    };
+    if (auto ext = spec->getString("extent"))
+      e.sizeArg = argIndex(*ext);
+    if (auto alloc = spec->getString("allocationSize"))
+      if (e.sizeArg < 0)
+        e.sizeArg = argIndex(*alloc);
+    if (auto ptr = spec->getString("pointerBounds"))
+      e.destArg = argIndex(*ptr);
+    if (auto fail = spec->getString("failureBehavior"))
+      e.mayFail = !fail->empty();
+    e.checkedSize = e.sizeArg >= 0 && e.writes;
+    const auto *effectArray = spec->getArray("effects");
+    if (e.frees && effectArray)
+      for (const auto &eff : *effectArray) {
+        if (auto s = eff.getAsString()) {
+          llvm::StringRef rest = s->substr(s->find_first_of(' '));
+          rest = rest.trim();
+          if (!rest.empty() && rest.getAsInteger(10, e.freedArg))
+            e.freedArg = -1;
+        }
+      }
+    st.contracts[fn] = e;
   }
-  return contracts;
+  return st;
 }
 
 FunctionEffect libcEffect(llvm::StringRef name) {
-  auto &contracts = loadedContracts();
+  auto &contracts = loadedContracts().contracts;
   auto it = contracts.find(name.str());
   if (it != contracts.end())
     return it->second;
@@ -398,5 +550,12 @@ FunctionEffect libcEffect(llvm::StringRef name) {
     e.category = "CPLUS-SAFE-CRT";
   }
   return e;
+}
+const std::vector<ContractIssue> &contractIssues() {
+  return loadedContracts().issues;
+}
+
+bool contractsLoaded() {
+  return loadedContracts().loaded;
 }
 } // namespace cplus
