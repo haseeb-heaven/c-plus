@@ -1,26 +1,40 @@
-# C+
+<!-- C+ project README -->
+<h1 align="center">C+</h1>
 
 <p align="center">
-  <img src="docs/assets/c-plus-logo.svg" alt="C+ — The safest next version C++ never shipped" width="720">
+  <img src="docs/assets/c-plus-logo.svg" alt="C+ — The safest next version C++ never shipped" width="620">
 </p>
 
-<p align="center"><strong>The safest next version C++ never shipped.</strong></p>
+<p align="center">
+  <strong>The safest next version C++ never shipped.</strong><br>
+  An experimental C-compatible language focused on compiler-driven safety and native performance.
+</p>
 
-C+ is an experimental C-compatible language and toolchain. Its goal is to combine familiar C syntax and native performance with compiler-driven memory-safety analysis and a bundled hardened C library.
+<p align="center">
+  <a href="https://github.com/haseeb-heaven/c-plus/stargazers"><img src="https://img.shields.io/github/stars/haseeb-heaven/c-plus?style=for-the-badge&logo=github&color=gold" alt="GitHub stars"></a>
+  <a href="https://github.com/haseeb-heaven/c-plus/blob/develop/LICENSE"><img src="https://img.shields.io/github/license/haseeb-heaven/c-plus?style=for-the-badge&color=blue" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/language-C%2B%2B20-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++20">
+  <img src="https://img.shields.io/badge/status-experimental-orange?style=for-the-badge" alt="Experimental">
+</p>
 
-> **Status:** Experimental. The safety design is a goal, not a completed guarantee. Compatibility mode is not memory-safe by default. Strict safe mode must reject operations it cannot prove safe or enforce soundly.
+---
 
-## What C+ aims to provide
+## ✨ What is C+?
 
-- **Compiler:** infer ownership, lifetimes, aliases and bounds; diagnose unsafe operations; provide a fail-closed strict mode.
-- **C ergonomics:** keep familiar C syntax. No mandatory borrow annotations or Rust-style ownership syntax.
-- **Optional features:** RAII and struct-backed methods.
-- **Hardened library:** bundled C library implementations, public headers and selected checked `*_s` APIs.
-- **Native output:** use Clang/LLVM and preserve supported C ABI compatibility.
+C+ aims to retain familiar C syntax while adding compiler-driven memory-safety analysis, optional modern language features, and a bundled hardened C library.
 
-C+ does not currently guarantee Rust-equivalent safety for arbitrary C programs, zero runtime overhead, or complete ISO C library coverage. See [limitations](docs/LIMITATIONS.md).
+### Core goals
 
-## Quick start
+- 🛡️ **Safety analysis** — ownership, lifetime, alias and bounds analysis.
+- ⚙️ **Familiar syntax** — C-compatible programming without mandatory borrow annotations.
+- 🧩 **Modern features** — optional RAII and struct-backed methods.
+- 📚 **Hardened library** — bundled C library and selected checked APIs.
+- 🚀 **Native toolchain** — Clang/LLVM output and supported C ABI compatibility.
+
+> [!WARNING]
+> **Experimental software.** C+ does not yet guarantee memory safety for arbitrary programs or complete ISO C compatibility. Strict safe mode must reject operations it cannot prove safe or enforce soundly. See [known limitations](docs/LIMITATIONS.md).
+
+## 🚀 Quick start
 
 **Requirements:** CMake, a C++20 compiler, and LLVM/Clang development packages.
 
@@ -31,10 +45,10 @@ cmake --build build --target c+ -- -j4
 ./hello
 ```
 
-Useful commands:
+### CLI
 
-| Command | Purpose |
-| --- | --- |
+| Command | Action |
+|:--|:--|
 | `./build/c+ build file.c -o app` | Compile |
 | `./build/c+ run file.c -o app` | Build and run |
 | `./build/c+ check file.c` | Check source |
@@ -42,21 +56,22 @@ Useful commands:
 | `./build/c+ demos` | Run demos |
 | `./build/c+ bench` | Run benchmarks |
 
-## Project status
+## 📊 Development status
 
-| Area | Current direction |
-| --- | --- |
-| Compiler safety | In development; ownership and alias analysis are incomplete |
-| RAII and classes | Partial implementation; control-flow and integration gaps remain |
-| Standard library | Partial implementation; not a complete ISO C replacement |
-| Strict safe mode | Must fail closed where safety cannot be proven or soundly checked |
+| Component | Status |
+|:--|:--|
+| Compiler safety analysis | 🟡 In development |
+| RAII and methods | 🟡 Partial |
+| Standard library | 🟡 Partial; not a complete ISO C replacement |
+| Strict safe mode | 🚧 Fail-closed enforcement in progress |
 
-Work is tracked in:
-- [Compiler issue #21](https://github.com/haseeb-heaven/c-plus/issues/21) · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16)
-- [Hardened library issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17)
-- [Verification and release gate #23](https://github.com/haseeb-heaven/c-plus/issues/23)
+### Current work
 
-## Verify
+- [Compiler development · Issue #21](https://github.com/haseeb-heaven/c-plus/issues/21) · [PR #16](https://github.com/haseeb-heaven/c-plus/pull/16)
+- [Hardened library · Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22) · [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17)
+- [Verification and release gate · Issue #23](https://github.com/haseeb-heaven/c-plus/issues/23)
+
+## 🧪 Verify
 
 ```sh
 ./tests/run_tests.sh
@@ -64,12 +79,12 @@ Work is tracked in:
 ./benchmarks/run_bench.sh
 ```
 
-Passing tests do not prove general memory safety. Review [STATUS](docs/STATUS.md), [LIMITATIONS](docs/LIMITATIONS.md), [ARCHITECTURE](docs/ARCHITECTURE.md) and [ROADMAP](docs/ROADMAP.md) for implementation details and known gaps.
+Passing tests do not prove general memory safety. Review the [status](docs/STATUS.md), [limitations](docs/LIMITATIONS.md), [architecture](docs/ARCHITECTURE.md), and [roadmap](docs/ROADMAP.md).
 
-## AI usage
+## 🤖 AI-assisted development
 
-AI tools, including OpenAI Codex and Google Gemini, assisted with implementation. Heaven created the language design, syntax, vision and technical direction, made the design decisions, and manually tested the project. AI-generated contributions remain subject to review and verification.
+Codex and Gemini assisted with implementation. Heaven created the language design and vision, directed technical decisions, and manually tested the project. AI-assisted code remains subject to review and verification.
 
-## Contributing and license
+## 🤝 Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [LICENSE](LICENSE).
