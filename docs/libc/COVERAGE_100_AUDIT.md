@@ -10,11 +10,11 @@ This document exists to prevent a false "100% complete" claim. Counts come from
 | HOST/COMPILER-PROVIDED | 359 | Toolchain supplies the header/macro/type; not this library's implementation |
 | PLATFORM_BACKED | 476 | `cplus_*` wrapper delegating to a named host backend, declared, built, tested |
 | IMPLEMENTED_BUNDLED | 29 | Compiled in this repo (musl-derived or native C+), declared, built, tested |
-| IMPLEMENTED_UPSTREAM | 7 | Copied from pinned musl source with minimal renames and provenance |
+| IMPLEMENTED_UPSTREAM | 8 | Copied from pinned musl source with minimal renames and provenance |
 | UNSUPPORTED | 49 | Deliberately not shipped (type-generic C ABI, insecure APIs, platform-specific) with documented reasons |
-| **MISSING** | **28** | No implementation, no host symbol, and no locally available pinned upstream source |
+| **MISSING** | **27** | No implementation, no host symbol, and no locally available pinned upstream source |
 
-920 of 948 APIs are implemented/accounted for (97.05%). The remaining 28 are
+921 of 948 APIs are implemented/accounted for (97.05%). The remaining 27 are
 not hidden: 23 C23 math APIs (`nextup/nextdown`, `fadd/fsub/fmul/fdiv` families,
 3-arg `hypot`, `_Float16` variants), `memset_explicit`, `timespec_getres`,
 `mbrtoc8`, `c8rtomb`, and `FE_TIESAWAY`.
