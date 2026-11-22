@@ -280,6 +280,15 @@ static std::string sourceLineAt(const std::string &file, unsigned line) {
 
 void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
                       const std::string &inputName) {
+  const bool color = os.is_displayed();
+  auto paint = [&](llvm::raw_ostream::Colors c, bool bold = false) {
+    if (color)
+      os.changeColor(c, bold);
+  };
+  auto unpaint = [&]() {
+    if (color)
+      os.resetColor();
+  };
   for (const auto &d : diags.diags()) {
     const char *level = "error";
     switch (d.level) {
@@ -298,7 +307,9 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
     }
     const std::string &file = d.file.empty() ? inputName : d.file;
     if (!file.empty()) {
+      paint(llvm::raw_ostream::WHITE, true);
       os << file;
+      unpaint();
       if (d.line)
         os << ":" << d.line;
       if (d.column)
@@ -307,7 +318,33 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
     }
     DRIVER_LOG(CLOG_WARN, "diagnostic %s %s:%u: %s", level, file.c_str(),
                d.line, d.message.c_str());
-    os << level << ": " << d.message << "\n";
+    llvm::raw_ostream::Colors levelColor = llvm::raw_ostream::WHITE;
+    if (d.level == DiagLevel::Error || d.level == DiagLevel::Fatal)
+      levelColor = llvm::raw_ostream::RED;
+    else if (d.level == DiagLevel::Warning)
+      levelColor = llvm::raw_ostream::YELLOW;
+    else if (d.level == DiagLevel::Note)
+      levelColor = llvm::raw_ostream::CYAN;
+    paint(levelColor, true);
+    os << level;
+    unpaint();
+    os << ": ";
+    // Highlight the [CPLUS-...] category tag.
+    size_t tag = d.message.find("[CPLUS-");
+    if (tag != std::string::npos) {
+      size_t close = d.message.find(']', tag);
+      os << d.message.substr(0, tag);
+      paint(levelColor, true);
+      os << d.message.substr(tag, close == std::string::npos
+                                      ? std::string::npos
+                                      : close - tag + 1);
+      unpaint();
+      os << d.message.substr(close == std::string::npos
+                                 ? d.message.size() : close + 1);
+    } else {
+      os << d.message;
+    }
+    os << "\n";
     // Clang-style source snippet with a caret so the location is visible
     // without opening the file.
     if (d.line) {
@@ -318,6 +355,7 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
           os << "  ";
           for (unsigned k = 1; k < d.column; ++k)
             os << ' ';
+          paint(levelColor, true);
           os << "^";
           size_t start = d.column - 1;
           size_t end = start;
@@ -327,14 +365,22 @@ void printDiagnostics(const DiagnosticEngine &diags, llvm::raw_ostream &os,
             ++end;
           for (size_t k = start + 1; k < end; ++k)
             os << "~";
+          unpaint();
           os << "\n";
         }
       }
     }
-    if (!d.help.empty())
-      os << "help: " << d.help << "\n";
+    if (!d.help.empty()) {
+      paint(llvm::raw_ostream::GREEN);
+      os << "help: ";
+      unpaint();
+      os << d.help << "\n";
+    }
     for (const auto &n : d.notes) {
-      os << "note: " << n.message << "\n";
+      paint(llvm::raw_ostream::CYAN);
+      os << "note: ";
+      unpaint();
+      os << n.message << "\n";
     }
   }
 }
