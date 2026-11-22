@@ -702,11 +702,24 @@ private:
     if (rp == kNPos)
       return;
     auto args = splitArgs(lp + 1, rp);
-    for (size_t k = 0; k < args.size(); ++k) {
-      long value = 0;
-      if (constantFactor(args[k].first, args[k].second, &value) && value == 0)
-        errorAt(toks_[i], "zero-size allocation is implementation-defined; "
-                          "use cplus_alloc");
+    // realloc(ptr, size): only the second argument is a size; realloc(NULL,n)
+    // is a valid allocation, and realloc(p,0) is a separate documented case.
+    if (isIdent(i, "realloc")) {
+      // realloc(NULL, n) is a valid allocation; realloc(p, 0) is the
+      // implementation-defined zero-size case and stays rejected.
+      if (args.size() > 1) {
+        long value = 0;
+        if (constantFactor(args[1].first, args[1].second, &value) && value == 0)
+          errorAt(toks_[i], "zero-size allocation is implementation-defined; "
+                            "use cplus_alloc");
+      }
+    } else {
+      for (const auto &arg : args) {
+        long value = 0;
+        if (constantFactor(arg.first, arg.second, &value) && value == 0)
+          errorAt(toks_[i], "zero-size allocation is implementation-defined; "
+                            "use cplus_alloc");
+      }
     }
   }
 

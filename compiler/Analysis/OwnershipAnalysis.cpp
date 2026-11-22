@@ -25,12 +25,42 @@ class LocalCollector : public RecursiveASTVisitor<LocalCollector> {
 public:
   explicit LocalCollector(ASTContext &ctx) : ctx_(ctx) {}
 
-  bool VisitUnaryOperator(UnaryOperator *uo) {
-    if (uo->getOpcode() == UO_AddrOf) {
-      const Expr *sub = uo->getSubExpr()->IgnoreParenImpCasts();
-      if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
-        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+  // Only these functions are known to write through an output pointer. Taking
+  // an address for an arbitrary call (or storing it) does NOT initialize it.
+  static bool isOutputFunction(llvm::StringRef name) {
+    return name.contains("scanf") || name == "getline" ||
+           name == "pthread_mutex_init" || name == "pthread_cond_init" ||
+           name == "pthread_create" || name == "scan" ||
+           name == "cplus_scan_one" || name == "cplus_scan_value";
+  }
+
+  bool VisitCallExpr(CallExpr *call) {
+    const FunctionDecl *callee = call->getDirectCallee();
+    llvm::StringRef calleeName = callee ? callee->getName() : llvm::StringRef();
+    if (calleeName.empty())
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              call->getCallee()->IgnoreParenImpCasts()))
+        calleeName = ref->getDecl()->getName();
+    // An unresolved callee name (e.g. the C+ `scan` macro) may write through
+    // by-value arguments. Conservatively treat those arguments as outputs so
+    // valid macro-based I/O is not falsely diagnosed.
+    bool unknownMacroCall = calleeName.empty() || !callee ||
+                            calleeName.find("scan") != llvm::StringRef::npos;
+    if (!isOutputFunction(calleeName) && !unknownMacroCall)
+      return true;
+    bool byValueOutput = unknownMacroCall || calleeName == "cplus_scan_one" ||
+                         calleeName == "cplus_scan_value";
+    for (const Expr *arg : call->arguments()) {
+      const Expr *a = arg->IgnoreParenCasts();
+      const auto *uo = dyn_cast<UnaryOperator>(a);
+      if (uo && uo->getOpcode() == UO_AddrOf)
+        a = uo->getSubExpr()->IgnoreParenImpCasts();
+      else if (!byValueOutput)
+        continue;
+      if (const auto *ref = dyn_cast<DeclRefExpr>(a))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
           addrTaken_.insert(vd);
+        }
     }
     return true;
   }
@@ -71,6 +101,10 @@ public:
 
     if (const auto *bo = dyn_cast<BinaryOperator>(s)) {
       if (bo->isAssignmentOp()) {
+        // Compound assignments (+=, -=, ...) READ the previous value before
+        // writing, so the LHS must be checked for initialization first.
+        if (bo->isCompoundAssignmentOp())
+          walk(bo->getLHS());
         walk(bo->getRHS());
         markInitialized(bo->getLHS());
         return;
@@ -80,14 +114,15 @@ public:
       return;
     }
     if (const auto *uo = dyn_cast<UnaryOperator>(s)) {
-      if (uo->isIncrementOp() || uo->isDecrementOp() ||
-          uo->getOpcode() == UO_AddrOf) {
-        // Taking an address (scanf, pthread_create, ...) is treated as a
-        // potential output initialization; Clang's own warnings cover the
-        // remaining direct uninitialized reads.
+      if (uo->isIncrementOp() || uo->isDecrementOp()) {
+        // ++/-- both read and write; the read is checked by the caller's
+        // DeclRefExpr handling, then the value is initialized.
+        walk(uo->getSubExpr());
         markInitialized(uo->getSubExpr());
         return;
       }
+      if (uo->getOpcode() == UO_AddrOf)
+        return; // taking an address alone does not initialize
       walk(uo->getSubExpr());
       return;
     }
@@ -309,7 +344,9 @@ FunctionEffect libcEffect(llvm::StringRef name) {
   } else if (name == "realloc" || name == "realloc_s") {
     e.allocates = true;
     e.returnsOwned = true;
-    e.frees = true; // only on success; branch-sensitive handling is future work
+    // Success-only invalidation; the AST checker applies this state only on
+    // the verified non-NULL branch (see detectReallocSuccess / TraverseIfStmt).
+    e.frees = true;
     e.freedArg = 0;
     e.mayFail = true;
     e.category = "CPLUS-SAFE-REALLOC";

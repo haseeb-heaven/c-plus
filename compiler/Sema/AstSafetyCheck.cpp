@@ -282,6 +282,19 @@ public:
     std::string callee = call->getDirectCallee()->getNameAsString();
     if (callee != "malloc" && callee != "calloc" && callee != "realloc")
       return;
+    // realloc(NULL, n) is malloc(n): the extent comes from argument 1.
+    if (callee == "realloc" && call->getNumArgs() >= 2 &&
+        isNullConstant(call->getArg(0)->IgnoreParenCasts())) {
+      const Expr *sizeArg = call->getArg(1)->IgnoreParenImpCasts();
+      long long n = 0;
+      if (evalByteCount(sizeArg, n) && n > 0) {
+        HeapAllocState st;
+        st.bytes = n;
+        st.decl = vd;
+        heapAllocs_[vd->getNameAsString()] = st;
+      }
+      return;
+    }
     const Expr *arg = call->getArg(0)->IgnoreParenImpCasts();
 
     // An enormous constant allocator request definitely fails.  Treat its
@@ -1949,7 +1962,9 @@ public:
                        baseName + " (" + contract.category + ")");
             break;
           }
-      if (baseName == "realloc" &&
+      bool reallocFromNull = baseName == "realloc" && call->getNumArgs() >= 1 &&
+                             isNullConstant(call->getArg(0)->IgnoreParenCasts());
+      if (baseName == "realloc" && !reallocFromNull &&
           handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0) {
         // Do NOT mark the old pointer released: on failure realloc returns
         // NULL and the original block remains owned by the caller.  Alias
