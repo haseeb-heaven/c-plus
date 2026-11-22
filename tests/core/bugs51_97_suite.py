@@ -58,6 +58,13 @@ def scenarios(path):
     return header, cases
 
 
+if not SCRATCH.exists():
+    print("bugs51-97 suite: SKIPPED (external c-plus-stdlib/scratch corpus "
+          "not checked out)")
+    (OUT / "report.txt").write_text(
+        "SKIPPED: external c-plus-stdlib/scratch corpus not checked out\n")
+    sys.exit(0)
+
 results = []
 seen = set()
 for num in range(51, 98):

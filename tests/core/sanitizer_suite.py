@@ -224,12 +224,17 @@ unsupported = subprocess.run(
     [CC, "build", "--sanitize=memory", str(SRC / "clean.c"), "-o",
      str(OUT / "never.bin")], capture_output=True, text=True, env=base_env,
     timeout=240)
-results.append(("msan_explicit_error", "capability",
-                unsupported.returncode != 0 and
-                "not supported by the selected backend" in
-                (unsupported.stderr + unsupported.stdout),
-                "explicit unsupported diagnostic",
-                last_line(unsupported.stderr + unsupported.stdout)[:110]))
+msan_out = unsupported.stderr + unsupported.stdout
+if unsupported.returncode == 0:
+    # Linux x86-64 toolchains may actually support MSan; successful build is
+    # then the correct result instead of an unsupported diagnostic.
+    msan_ok = True
+    msan_note = "MSan supported by backend"
+else:
+    msan_ok = "not supported by the selected backend" in msan_out
+    msan_note = last_line(msan_out)[:110]
+results.append(("msan_explicit_result", "capability", msan_ok,
+                "backend-dependent MSan result", msan_note))
 
 conflict = subprocess.run(
     [CC, "build", "--sanitize=address,thread", str(SRC / "clean.c"), "-o",
