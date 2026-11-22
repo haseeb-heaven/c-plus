@@ -1,0 +1,1595 @@
+{
+  "schema_version": 1,
+  "source": "Agent 2 hardened libc",
+  "note": "Additive alignment file for Agent 1's compiler schema (issue #22 comment, agent/modern-stdlib branch). Agent 1 added compiler/Analysis/libc_contracts.json (29 ordinary + checked APIs) and asked Agent 2 to emit libc/contracts with the keys params, ownership, transfer, extent, effects, failure, diagnostics and dynamic. This file mirrors those names/signatures for the ordinary C spellings implemented by the bundled cplus_* symbols; it does not replace the existing v1/v2 contract files. Names and parameter order match the standard C headers so Agent 1 can map format argument indices. 'dynamic' records checks this library actually performs at runtime (bounded recent-free caches, tracked remaining capacity, __builtin_object_size, unknown-capacity mode); it is NOT a claim of compile-time enforcement. Diagnostic strings are the CPLUS-SAFE-* categories requested by Agent 1. Agent 1's compiler file is not present on this branch, so this schema must be re-validated when PR #16 merges.",
+  "apis": [
+    {
+      "name": "malloc",
+      "params": [
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "size bytes (0 maps to one backing byte)"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "size bytes of writable storage",
+      "effects": [
+        "allocates",
+        "records live metadata (byte_size, elem_size, generation)"
+      ],
+      "failure": {
+        "result_code": "NULL (errno=ENOMEM)",
+        "conditions": [
+          "host malloc returns NULL",
+          "allocation-failure injection via cplus_alloc_fail_after",
+          "metadata-table reservation fails (host block is freed first)"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "host allocator result checked for NULL before metadata insert (cplus_malloc, libc/src/stdlib/alloc.c)",
+          "cplus_alloc_fail_after / cplus_alloc_fail_reset injection path",
+          "meta_reserve_one failure releases the host block and returns NULL with errno=ENOMEM"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "size==0 is mapped to one backing byte, not a zero-byte allocation."
+        ]
+      }
+    },
+    {
+      "name": "calloc",
+      "params": [
+        {
+          "name": "nmemb",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "number of elements"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "bytes per element"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "nmemb*size bytes (overflow-checked), zero-initialised",
+      "effects": [
+        "allocates",
+        "zero-init",
+        "records elem_size for length queries"
+      ],
+      "failure": {
+        "result_code": "NULL (errno=ENOMEM)",
+        "conditions": [
+          "nmemb*size overflows SIZE_MAX",
+          "host calloc returns NULL",
+          "injected failure",
+          "metadata-table reservation fails"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "nmemb != 0 && size > SIZE_MAX/nmemb is refused before multiplication (cplus_calloc, libc/src/stdlib/alloc.c)",
+          "host allocation result and metadata reservation checked; failure frees the block and sets errno=ENOMEM",
+          "zero arguments map to one backing byte with elem_size=1"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Overflow is reported as ENOMEM, not EOVERFLOW; the safe-layer calloc_s reports EOVERFLOW."
+        ]
+      }
+    },
+    {
+      "name": "realloc",
+      "params": [
+        {
+          "name": "ptr",
+          "type": "void*",
+          "nullable": true,
+          "extent": "block from malloc/calloc/realloc, or NULL"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "new size in bytes"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "success-only old alias invalid",
+      "extent": "size bytes; old payload preserved up to min(old,new)",
+      "effects": [
+        "allocates",
+        "frees-on-success",
+        "preserves old block on failure"
+      ],
+      "failure": {
+        "result_code": "NULL (errno=EINVAL or ENOMEM)",
+        "conditions": [
+          "ptr is stale/unowned: EINVAL, old block untouched",
+          "host realloc fails or injected failure: ENOMEM, old block untouched",
+          "ptr==NULL delegates to malloc"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-REALLOC] realloc warnings",
+        "[CPLUS-SAFE-LIFETIME] use-after-free"
+      ],
+      "dynamic": {
+        "checks": [
+          "meta_find_addr lookup refuses stale/unowned pointers with EINVAL without calling host realloc (cplus_realloc, libc/src/stdlib/alloc.c)",
+          "host realloc result checked; failure leaves the original pointer, metadata and payload intact",
+          "ABA generation guard: only the slot with the original generation may be updated after the lock is released",
+          "injected failure via cplus_alloc_fail_after; stale aliases observable via cplus_alloc_check_generation / cplus_alloc_is_live"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Double/invalid-free classification uses a bounded 1024-entry recent-free cache (open-addressed in alloc.c, direct-mapped in safe_alloc.c); collisions or address recycling can misclassify it.",
+          "The ABA guard protects metadata updates only, not the unlocked host realloc call; cross-allocator use is undefined behaviour.",
+          "Generation-based alias invalidation is not pointer-provenance invalidation."
+        ]
+      }
+    },
+    {
+      "name": "free",
+      "params": [
+        {
+          "name": "ptr",
+          "type": "void*",
+          "nullable": true,
+          "extent": "block from malloc/calloc/realloc, or NULL"
+        }
+      ],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": "n/a",
+      "effects": [
+        "frees",
+        "invalidates live metadata",
+        "null pointer is a no-op"
+      ],
+      "failure": {
+        "result_code": "void (no return status)",
+        "conditions": [
+          "NULL is accepted as a no-op",
+          "double free or invalid pointer: refused, errno=EINVAL, host free not called (visible via cplus_free_checked)"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-FREE] double free of <var>",
+        "[CPLUS-SAFE-LIFETIME] use-after-free"
+      ],
+      "dynamic": {
+        "checks": [
+          "cplus_free delegates to cplus_free_checked: meta_find must locate a live slot before host free is called (libc/src/stdlib/alloc.c)",
+          "recent_contains distinguishes recent double frees from invalid frees and increments the matching counter",
+          "stale aliases are observable via cplus_alloc_is_live / cplus_alloc_check_generation"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Double/invalid-free classification uses a bounded 1024-entry recent-free cache (open-addressed in alloc.c, direct-mapped in safe_alloc.c); collisions or address recycling can misclassify it.",
+          "cplus_free discards the EINVAL status; use cplus_free_checked(void**) to observe refusal, which also nulls the caller pointer.",
+          "Host free of a cplus_malloc pointer bypasses the table and can leave a stale live record."
+        ]
+      }
+    },
+    {
+      "name": "memcpy",
+      "params": [
+        {
+          "name": "dest",
+          "type": "void* restrict",
+          "nullable": false,
+          "extent": "n writable bytes"
+        },
+        {
+          "name": "src",
+          "type": "const void*",
+          "nullable": false,
+          "extent": "n readable bytes"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "n bytes"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n bytes at dest/src; caller must prove n <= destination capacity",
+      "effects": [
+        "writes dest",
+        "reads src",
+        "undefined for overlapping ranges"
+      ],
+      "failure": {
+        "result_code": "dest (errno=EINVAL on NULL; no status otherwise)",
+        "conditions": [
+          "NULL pointer with n != 0 sets errno=EINVAL and returns dest without copying",
+          "n == 0 is a successful no-op",
+          "capacity-checked wrapper refuses need > proven capacity with ERANGE"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-BOUNDS] copy of N bytes exceeds destination <var>"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard for n != 0 in cplus_memcpy (libc/src/string/memory.c)",
+          "cplus_memcpy_bounded calls check_capacity: min(cplus_alloc_remaining_capacity, __builtin_object_size(p,1)) (libc/src/string/bounded.c)",
+          "safe layer adds cplus_safe_reject_uaf (cplus_safe_ptr_was_freed) before copying and cplus_safe_report_overflow with ESNOSPC/ERANGE",
+          "unknown-capacity strict mode refuses with EINVAL; default mode warns and proceeds"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Overlapping ranges remain undefined for raw memcpy; use memmove."
+        ]
+      }
+    },
+    {
+      "name": "memmove",
+      "params": [
+        {
+          "name": "dest",
+          "type": "void*",
+          "nullable": false,
+          "extent": "n writable bytes"
+        },
+        {
+          "name": "src",
+          "type": "const void*",
+          "nullable": false,
+          "extent": "n readable bytes"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "n bytes"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n bytes at dest/src; caller must prove n <= destination capacity",
+      "effects": [
+        "writes dest",
+        "reads src",
+        "overlap-safe"
+      ],
+      "failure": {
+        "result_code": "dest (errno=EINVAL on NULL; no status otherwise)",
+        "conditions": [
+          "NULL pointer with n != 0 sets errno=EINVAL and returns dest without copying",
+          "n == 0 is a successful no-op",
+          "capacity-checked wrapper refuses need > proven capacity with ERANGE"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-BOUNDS] copy of N bytes exceeds destination <var>"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard for n != 0 in cplus_memmove (libc/src/string/memory.c)",
+          "cplus_memmove_bounded calls check_capacity: min(cplus_alloc_remaining_capacity, __builtin_object_size(p,1)) (libc/src/string/bounded.c)",
+          "safe layer adds cplus_safe_reject_uaf (cplus_safe_ptr_was_freed) before copying and cplus_safe_report_overflow with ESNOSPC/ERANGE",
+          "unknown-capacity strict mode refuses with EINVAL; default mode warns and proceeds"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "memmove handles overlap by copying backwards when dest > src."
+        ]
+      }
+    },
+    {
+      "name": "memset",
+      "params": [
+        {
+          "name": "s",
+          "type": "void*",
+          "nullable": false,
+          "extent": "n writable bytes"
+        },
+        {
+          "name": "c",
+          "type": "int",
+          "nullable": false,
+          "extent": "n/a"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "n bytes"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n bytes at dest/src; caller must prove n <= destination capacity",
+      "effects": [
+        "writes s"
+      ],
+      "failure": {
+        "result_code": "dest (errno=EINVAL on NULL; no status otherwise)",
+        "conditions": [
+          "NULL pointer with n != 0 sets errno=EINVAL and returns dest without copying",
+          "n == 0 is a successful no-op",
+          "capacity-checked wrapper refuses need > proven capacity with ERANGE"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-BOUNDS] copy of N bytes exceeds destination <var>"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard for n != 0 in cplus_memset (libc/src/string/memory.c)",
+          "cplus_memset_bounded calls check_capacity: min(cplus_alloc_remaining_capacity, __builtin_object_size(p,1)) (libc/src/string/bounded.c)",
+          "safe layer adds cplus_safe_reject_uaf (cplus_safe_ptr_was_freed) before copying and cplus_safe_report_overflow with ESNOSPC/ERANGE",
+          "unknown-capacity strict mode refuses with EINVAL; default mode warns and proceeds"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "No memory barrier or volatile semantics are provided by memset."
+        ]
+      }
+    },
+    {
+      "name": "memcmp",
+      "params": [
+        {
+          "name": "s1",
+          "type": "const void*",
+          "nullable": false,
+          "extent": "n readable bytes"
+        },
+        {
+          "name": "s2",
+          "type": "const void*",
+          "nullable": false,
+          "extent": "n readable bytes"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "n bytes"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n bytes at s1 and s2",
+      "effects": [
+        "reads",
+        "returns three-way byte comparison"
+      ],
+      "failure": {
+        "result_code": "int comparison (errno=EINVAL on NULL)",
+        "conditions": [
+          "n == 0 returns 0",
+          "NULL pointer sets errno=EINVAL and orders NULL before non-NULL"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-BOUNDS] copy of N bytes exceeds destination <var>"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard in cplus_memcmp (libc/src/string/memory.c)",
+          "cplus_memcmp_bounded checks both operands with check_capacity and refuses need > proven capacity with ERANGE (libc/src/string/bounded.c)",
+          "safe layer cplus_safe_reject_uaf plus cplus_memcmp_s_auto capacity checks on both operands"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds."
+        ]
+      }
+    },
+    {
+      "name": "strcpy",
+      "params": [
+        {
+          "name": "dest",
+          "type": "char* restrict",
+          "nullable": false,
+          "extent": "strlen(src)+1 writable bytes"
+        },
+        {
+          "name": "src",
+          "type": "const char* restrict",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(src)+1 <= dest capacity",
+      "effects": [
+        "writes dest",
+        "reads src",
+        "standard strcpy has no destination-size argument"
+      ],
+      "failure": {
+        "result_code": "dest (errno=EINVAL on NULL; no status otherwise)",
+        "conditions": [
+          "NULL dest or src sets errno=EINVAL and returns dest without copying",
+          "bounded wrapper refuses need > proven capacity with ERANGE"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-CRT] checked string copy needs N bytes but capacity is M"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard in cplus_strcpy (libc/src/string/string.c)",
+          "cplus_strcpy_bounded computes need = cplus_strlen(src)+1 and calls check_capacity (libc/src/string/bounded.c)",
+          "safe layer cplus_strcpy_s (stdlib/safe/src/safe_string.c) delegates to safeclib with dmax and rejects UAF"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "An unterminated src remains undefined behaviour: cplus_strcpy_bounded calls cplus_strlen(src) before the capacity check."
+        ]
+      }
+    },
+    {
+      "name": "strncpy",
+      "params": [
+        {
+          "name": "dest",
+          "type": "char* restrict",
+          "nullable": false,
+          "extent": "n writable bytes"
+        },
+        {
+          "name": "src",
+          "type": "const char* restrict",
+          "nullable": false,
+          "extent": "NUL-terminated or at least n readable bytes"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "n bytes"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dest capacity; pads with NUL up to n",
+      "effects": [
+        "writes dest",
+        "reads up to n bytes of src"
+      ],
+      "failure": {
+        "result_code": "dest (errno=EINVAL on NULL; no status otherwise)",
+        "conditions": [
+          "n == 0 is a successful no-op",
+          "NULL dest or src with n != 0 sets errno=EINVAL",
+          "bounded wrapper refuses n > proven capacity with ERANGE"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-CRT] checked string copy needs N bytes but capacity is M"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer and n==0 guards in cplus_strncpy (libc/src/string/string.c)",
+          "cplus_strncpy_bounded calls check_capacity with known dest size (libc/src/string/bounded.c)",
+          "safe layer cplus_strncpy_s / cplus_strncpy_s_auto enforce dmax and UAF refusal"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds."
+        ]
+      }
+    },
+    {
+      "name": "strcat",
+      "params": [
+        {
+          "name": "dest",
+          "type": "char* restrict",
+          "nullable": false,
+          "extent": "strlen(dest)+strlen(src)+1 writable bytes"
+        },
+        {
+          "name": "src",
+          "type": "const char* restrict",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(dest)+strlen(src)+1 <= dest capacity",
+      "effects": [
+        "reads dest",
+        "writes dest",
+        "reads src"
+      ],
+      "failure": {
+        "result_code": "dest (errno=EINVAL on NULL; no status otherwise)",
+        "conditions": [
+          "NULL dest or src sets errno=EINVAL",
+          "bounded wrapper refuses need > proven capacity with ERANGE"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-CRT] checked string copy needs N bytes but capacity is M"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard in cplus_strcat (libc/src/string/string.c)",
+          "cplus_strcat_bounded computes need = strlen(dest)+strlen(src)+1 and calls check_capacity (libc/src/string/bounded.c)",
+          "safe layer cplus_strcat_s enforces dmax and rejects UAF"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Both inputs must be NUL-terminated; a non-terminated dest makes the implicit strlen scan undefined behaviour."
+        ]
+      }
+    },
+    {
+      "name": "strncat",
+      "params": [
+        {
+          "name": "dest",
+          "type": "char* restrict",
+          "nullable": false,
+          "extent": "strlen(dest)+min(n,strlen(src))+1 writable bytes"
+        },
+        {
+          "name": "src",
+          "type": "const char* restrict",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "at most n source bytes appended"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(dest)+min(n,strlen(src))+1 <= dest capacity",
+      "effects": [
+        "reads dest",
+        "writes dest",
+        "reads src",
+        "always appends one terminating NUL"
+      ],
+      "failure": {
+        "result_code": "dest (errno=EINVAL on NULL; no status otherwise)",
+        "conditions": [
+          "NULL dest or src sets errno=EINVAL",
+          "bounded wrapper refuses need > proven capacity with ERANGE"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-CRT] checked string copy needs N bytes but capacity is M"
+      ],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard in cplus_strncat (libc/src/string/string.c)",
+          "cplus_strncat_bounded computes need from strlen(dest) and min(n, strlen(src)) and calls check_capacity (libc/src/string/bounded.c)",
+          "safe layer cplus_strncat_s enforces dmax and rejects UAF"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds."
+        ]
+      }
+    },
+    {
+      "name": "strlen",
+      "params": [
+        {
+          "name": "s",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "reads until the first NUL; no capacity argument",
+      "effects": [
+        "reads"
+      ],
+      "failure": {
+        "result_code": "size_t (0 for NULL)",
+        "conditions": [
+          "NULL returns 0 without dereferencing",
+          "non-terminated input remains undefined behaviour"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard returns 0 in cplus_strlen (libc/src/string/string.c)"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "No length or bounds check is possible from a bare pointer; callers must supply NUL-terminated input.",
+          "Returning 0 for NULL is a hardening convenience, not a contract that NULL is a valid string."
+        ]
+      }
+    },
+    {
+      "name": "strnlen",
+      "params": [
+        {
+          "name": "s",
+          "type": "const char*",
+          "nullable": true,
+          "extent": "up to n readable bytes"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "maximum bytes to examine"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "reads at most n bytes or until NUL",
+      "effects": [
+        "reads"
+      ],
+      "failure": {
+        "result_code": "size_t (0 for NULL)",
+        "conditions": [
+          "NULL returns 0",
+          "result is capped at n"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard returns 0 and the loop stops at min(n, first NUL) in cplus_strnlen (libc/src/string/extra.c)"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "The caller still must make the first n bytes readable."
+        ]
+      }
+    },
+    {
+      "name": "strcmp",
+      "params": [
+        {
+          "name": "s1",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        },
+        {
+          "name": "s2",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "reads both strings up to the first difference or NUL",
+      "effects": [
+        "reads",
+        "returns three-way lexical comparison"
+      ],
+      "failure": {
+        "result_code": "int (errno=EINVAL on NULL)",
+        "conditions": [
+          "NULL pointer sets errno=EINVAL and orders NULL before non-NULL",
+          "identical pointers compare equal"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-pointer guard in cplus_strcmp (libc/src/string/string.c)"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "No bounds or NUL-termination proof for a bare pointer."
+        ]
+      }
+    },
+    {
+      "name": "strncmp",
+      "params": [
+        {
+          "name": "s1",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "up to n readable bytes"
+        },
+        {
+          "name": "s2",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "up to n readable bytes"
+        },
+        {
+          "name": "n",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "maximum bytes to compare"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "compares at most n bytes, stopping at NUL",
+      "effects": [
+        "reads",
+        "returns three-way lexical comparison"
+      ],
+      "failure": {
+        "result_code": "int (errno=EINVAL on NULL)",
+        "conditions": [
+          "n == 0 returns 0",
+          "NULL pointer sets errno=EINVAL and orders NULL before non-NULL"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-pointer and n==0 guards in cplus_strncmp (libc/src/string/string.c)"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "The first n bytes of both operands must be readable."
+        ]
+      }
+    },
+    {
+      "name": "strchr",
+      "params": [
+        {
+          "name": "s",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        },
+        {
+          "name": "c",
+          "type": "int",
+          "nullable": false,
+          "extent": "n/a"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "reads until the first match or NUL",
+      "effects": [
+        "reads"
+      ],
+      "failure": {
+        "result_code": "const char* or NULL when not found",
+        "conditions": [
+          "returns a pointer to the terminating NUL when c == 0",
+          "no NULL-pointer guard in the plain implementation"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "no runtime safety check in plain cplus_strchr (libc/src/string/extra.c): only the opt-in entry trace is emitted",
+          "the checked layer offers cplus_safe_reject_uaf on the *_s entry points, not on this plain function"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Caller must pass a NUL-terminated, live pointer; NULL input is undefined behaviour in the plain layer."
+        ]
+      }
+    },
+    {
+      "name": "strstr",
+      "params": [
+        {
+          "name": "haystack",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        },
+        {
+          "name": "needle",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "reads haystack until match or NUL",
+      "effects": [
+        "reads"
+      ],
+      "failure": {
+        "result_code": "const char* or NULL when not found",
+        "conditions": [
+          "an empty needle returns haystack",
+          "no NULL-pointer guard in the plain implementation"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "no runtime safety check in plain cplus_strstr (libc/src/string/extra.c): only the opt-in entry trace is emitted",
+          "the checked layer offers cplus_safe_reject_uaf on the *_s entry points, not on this plain function"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Both inputs must be NUL-terminated and live; the plain implementation does not validate pointers."
+        ]
+      }
+    },
+    {
+      "name": "printf",
+      "params": [
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "format-dependent argument list"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n/a (stream output)",
+      "effects": [
+        "writes stdout",
+        "reads format and arguments"
+      ],
+      "failure": {
+        "result_code": "int negative on error (errno=EINVAL)",
+        "conditions": [
+          "NULL fmt sets errno=EINVAL and returns -1",
+          "native vprintf/format errors return a negative value"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-format guard in cplus_printf (libc/src/stdio/stdio.c)",
+          "CPLUS_LIBC_FMT_PRINTF(1,2) attribute enables Clang/GCC format-argument warnings",
+          "checked cplus_printf_s rejects UAF formats, non-literal formats and %n"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "The compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control; runtime checking is defence-in-depth only."
+        ]
+      }
+    },
+    {
+      "name": "fprintf",
+      "params": [
+        {
+          "name": "stream",
+          "type": "FILE*",
+          "nullable": false,
+          "extent": "open stream"
+        },
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "format-dependent argument list"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n/a (stream output)",
+      "effects": [
+        "writes stream",
+        "reads format and arguments"
+      ],
+      "failure": {
+        "result_code": "int negative on error (errno=EINVAL)",
+        "conditions": [
+          "NULL stream or fmt sets errno=EINVAL and returns -1",
+          "native vfprintf errors return a negative value"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-stream and null-format guards in cplus_fprintf (libc/src/stdio/stdio.c)",
+          "CPLUS_LIBC_FMT_PRINTF(2,3) attribute enables format-argument warnings",
+          "checked cplus_fprintf_s rejects UAF formats, non-literal formats and %n"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "The compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control; runtime checking is defence-in-depth only."
+        ]
+      }
+    },
+    {
+      "name": "snprintf",
+      "params": [
+        {
+          "name": "str",
+          "type": "char*",
+          "nullable": true,
+          "extent": "size writable bytes; NULL allowed iff size == 0"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "destination capacity in bytes"
+        },
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "format-dependent argument list"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size bytes; native vsnprintf truncation and NUL termination",
+      "effects": [
+        "writes up to size bytes of str",
+        "reads format and arguments"
+      ],
+      "failure": {
+        "result_code": "int (negative on error, errno=EINVAL)",
+        "conditions": [
+          "NULL fmt or (size > 0 && str == NULL) sets errno=EINVAL and returns -1",
+          "native vsnprintf truncation is reported by its return value, not as an error"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-format and dest/size guards in cplus_snprintf / cplus_vsnprintf (libc/src/stdio/stdio.c)",
+          "vsnprintf enforces the size bound and NUL termination",
+          "checked cplus_snprintf_s adds UAF, dmax-vs-capacity, literal-format and %n checks"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "The compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control; runtime checking is defence-in-depth only.",
+          "The plain snprintf does not verify that size matches the real destination capacity."
+        ]
+      }
+    },
+    {
+      "name": "sprintf",
+      "params": [
+        {
+          "name": "str",
+          "type": "char*",
+          "nullable": false,
+          "extent": "caller-proof writable buffer, no capacity argument"
+        },
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "format-dependent argument list"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "unbounded: caller must size str for the whole result plus NUL",
+      "effects": [
+        "writes str",
+        "reads format and arguments"
+      ],
+      "failure": {
+        "result_code": "int negative on error (errno=EINVAL)",
+        "conditions": [
+          "NULL str or fmt sets errno=EINVAL and returns -1",
+          "overflow of str remains undefined behaviour in the plain layer"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-pointer guards in cplus_sprintf / cplus_vsprintf (libc/src/stdio/stdio.c)",
+          "CPLUS_LIBC_FMT_PRINTF(2,3) attribute enables format-argument warnings",
+          "checked cplus_sprintf_s adds dmax, UAF, literal-format and %n checks"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "The compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control; runtime checking is defence-in-depth only.",
+          "sprintf has no destination-size argument; only the checked variant bounds the write."
+        ]
+      }
+    },
+    {
+      "name": "scanf",
+      "params": [
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "pointers to destinations"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "destinations sized by the format directives",
+      "effects": [
+        "reads stdin",
+        "writes caller-provided destinations"
+      ],
+      "failure": {
+        "result_code": "EOF or int count (errno=EINVAL)",
+        "conditions": [
+          "NULL fmt sets errno=EINVAL and returns EOF",
+          "end of input returns EOF",
+          "native vscanf errors are propagated"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-format guard in cplus_scanf (libc/src/stdio/stdio.c)",
+          "CPLUS_LIBC_FMT_SCANF(1,2) attribute enables format-argument warnings",
+          "checked cplus_scanf_s rejects UAF/non-literal formats, %n and unbounded %s/%[ via cplus_scanf_fmt_check"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "The compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control; runtime checking is defence-in-depth only.",
+          "Plain scanf cannot prove destination sizes; use the checked variant or bounded field widths."
+        ]
+      }
+    },
+    {
+      "name": "fscanf",
+      "params": [
+        {
+          "name": "stream",
+          "type": "FILE*",
+          "nullable": false,
+          "extent": "open input stream"
+        },
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "pointers to destinations"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "destinations sized by the format directives",
+      "effects": [
+        "reads stream",
+        "writes caller-provided destinations"
+      ],
+      "failure": {
+        "result_code": "EOF or int count (errno=EINVAL)",
+        "conditions": [
+          "NULL stream or fmt sets errno=EINVAL and returns EOF",
+          "end of input returns EOF"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-stream and null-format guards in cplus_fscanf (libc/src/stdio/stdio.c)",
+          "CPLUS_LIBC_FMT_SCANF(2,3) attribute enables format-argument warnings",
+          "checked cplus_fscanf_s adds UAF/literal-format/%n/bounded-width checks"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "The compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control; runtime checking is defence-in-depth only.",
+          "Plain fscanf cannot prove destination sizes."
+        ]
+      }
+    },
+    {
+      "name": "sscanf",
+      "params": [
+        {
+          "name": "str",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated input string"
+        },
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "pointers to destinations"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "destinations sized by the format directives",
+      "effects": [
+        "reads str",
+        "writes caller-provided destinations"
+      ],
+      "failure": {
+        "result_code": "EOF or int count (errno=EINVAL)",
+        "conditions": [
+          "NULL str or fmt sets errno=EINVAL and returns EOF",
+          "end of input returns EOF"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-pointer guards in cplus_sscanf / cplus_vsscanf (libc/src/stdio/stdio.c)",
+          "CPLUS_LIBC_FMT_SCANF(2,3) attribute enables format-argument warnings",
+          "checked cplus_sscanf_s adds UAF/literal-format/%n/bounded-width checks"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "The compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control; runtime checking is defence-in-depth only.",
+          "Plain sscanf cannot prove destination sizes."
+        ]
+      }
+    },
+    {
+      "name": "fopen",
+      "params": [
+        {
+          "name": "path",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated path"
+        },
+        {
+          "name": "mode",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated mode"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "n/a (opaque FILE*)",
+      "effects": [
+        "opens a stream",
+        "registers the FILE* in the bounded live-stream table"
+      ],
+      "failure": {
+        "result_code": "FILE* or NULL",
+        "conditions": [
+          "NULL path or mode sets errno=EINVAL and returns NULL",
+          "host fopen failure returns NULL with native errno"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null path/mode guard in cplus_fopen (libc/src/stdio/stdio.c)",
+          "cplus_stdio_register records the stream (bounded 256-entry live table)"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "File permissions, path validity and host errno are platform-dependent; this is a platform-backed wrapper, not a full FILE implementation.",
+          "The 256-entry live-stream table is diagnostic bookkeeping; registration can be skipped when full."
+        ]
+      }
+    },
+    {
+      "name": "fclose",
+      "params": [
+        {
+          "name": "stream",
+          "type": "FILE*",
+          "nullable": false,
+          "extent": "stream returned by fopen and not yet closed"
+        }
+      ],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": "n/a",
+      "effects": [
+        "closes the stream",
+        "invalidates the FILE*"
+      ],
+      "failure": {
+        "result_code": "EOF on error (errno=EINVAL/EBADF/host)",
+        "conditions": [
+          "NULL stream sets errno=EINVAL and returns EOF",
+          "already-closed stream tracked by cplus_stdio_mark_closed sets errno=EBADF and returns EOF without a second host fclose"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-stream guard and closed-stream lookup in cplus_fclose (libc/src/stdio/stdio.c)",
+          "double-close refusal uses a bounded 256-entry closed-stream ring"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "Double-close detection is heuristic: the closed-stream ring wraps after 256 closes.",
+          "Closing a stream obtained from the host allocator without registration bypasses the check."
+        ]
+      }
+    },
+    {
+      "name": "fread",
+      "params": [
+        {
+          "name": "ptr",
+          "type": "void*",
+          "nullable": true,
+          "extent": "size*nmemb writable bytes (may be NULL when product is 0)"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "bytes per item"
+        },
+        {
+          "name": "nmemb",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "number of items"
+        },
+        {
+          "name": "stream",
+          "type": "FILE*",
+          "nullable": false,
+          "extent": "open input stream"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size*nmemb writable bytes at ptr; overflow-checked",
+      "effects": [
+        "writes ptr",
+        "advances stream position"
+      ],
+      "failure": {
+        "result_code": "size_t items read (short count / 0)",
+        "conditions": [
+          "NULL stream, or NULL ptr with size*nmemb != 0, sets errno=EINVAL and returns 0",
+          "size > 0 && nmemb > SIZE_MAX/size sets errno=EOVERFLOW and returns 0",
+          "short read or EOF returns fewer than nmemb items"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-BOUNDS] copy of N bytes exceeds destination <var>"
+      ],
+      "dynamic": {
+        "checks": [
+          "null stream/buffer guards in cplus_fread (libc/src/stdio/stdio.c)",
+          "size*nmemb overflow check before the host fread call",
+          "host fread short-count / EOF return value is propagated unchanged"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "No destination-capacity proof is available: the caller must have allocated at least size*nmemb bytes; the BOUNDS category describes the potential violation, not a proven check.",
+          "Partial items are not returned by fread; the short count counts complete items only."
+        ]
+      }
+    },
+    {
+      "name": "fwrite",
+      "params": [
+        {
+          "name": "ptr",
+          "type": "const void*",
+          "nullable": true,
+          "extent": "size*nmemb readable bytes (may be NULL when product is 0)"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "bytes per item"
+        },
+        {
+          "name": "nmemb",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "number of items"
+        },
+        {
+          "name": "stream",
+          "type": "FILE*",
+          "nullable": false,
+          "extent": "open output stream"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size*nmemb readable bytes at ptr; overflow-checked",
+      "effects": [
+        "reads ptr",
+        "advances stream position"
+      ],
+      "failure": {
+        "result_code": "size_t items written (short count)",
+        "conditions": [
+          "NULL stream, or NULL ptr with size*nmemb != 0, sets errno=EINVAL and returns 0",
+          "size > 0 && nmemb > SIZE_MAX/size sets errno=EOVERFLOW and returns 0",
+          "host fwrite short write returns fewer than nmemb items"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null stream/buffer guards in cplus_fwrite (libc/src/stdio/stdio.c)",
+          "size*nmemb overflow check before the host fwrite call",
+          "host fwrite short-count return value is propagated unchanged"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "No source-capacity proof is available: the caller must supply at least size*nmemb readable bytes."
+        ]
+      }
+    },
+    {
+      "name": "memcpy_s",
+      "params": [
+        {
+          "name": "dest",
+          "type": "void*",
+          "nullable": false,
+          "extent": "dmax writable bytes"
+        },
+        {
+          "name": "dmax",
+          "type": "rsize_t",
+          "nullable": false,
+          "extent": "destination capacity in bytes"
+        },
+        {
+          "name": "src",
+          "type": "const void*",
+          "nullable": false,
+          "extent": "smax readable bytes"
+        },
+        {
+          "name": "smax",
+          "type": "rsize_t",
+          "nullable": false,
+          "extent": "source extent in bytes"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "smax <= dmax <= proven capacity of dest",
+      "effects": [
+        "checked CRT copy",
+        "writes dest",
+        "reads src"
+      ],
+      "failure": {
+        "result_code": "errno_t (0 on success, 400/ESNULLP/ESNOSPC on failure)",
+        "conditions": [
+          "NULL or freed dest/src: 400 with errno=EFAULT on UAF, EINVAL on NULL",
+          "n > dmax or dmax > RSIZE_MAX_MEM: ESNOSPC 406 / errno=ERANGE and runtime violation",
+          "unknown destination capacity: EINVAL in strict mode, warning and unchecked copy in default mode"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-BOUNDS] copy of N bytes exceeds destination <var>",
+        "[CPLUS-SAFE-LIFETIME] use-after-free"
+      ],
+      "dynamic": {
+        "checks": [
+          "cplus_safe_reject_uaf via cplus_safe_ptr_was_freed (stdlib/safe/src/safe_memory.c)",
+          "cplus_safe_check_capacity uses min(tracked remaining capacity, CPLUS_SAFE_OBJ_SIZE) and the configurable unknown-capacity mode",
+          "cplus_safe_report_overflow emits ESNOSPC 406 / errno=ERANGE and calls cplus_runtime_violation (default trap exits 70)",
+          "delegates to safeclib cplus_sc_memcpy_s for ESNULLP/ESNOSPC constraint handling"
+        ],
+        "limitations": [
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Double/invalid-free classification uses a bounded 1024-entry recent-free cache (open-addressed in alloc.c, direct-mapped in safe_alloc.c); collisions or address recycling can misclassify it.",
+          "The _s suffix describes a checked interface, not a proof of caller capacity for untracked pointers."
+        ]
+      }
+    },
+    {
+      "name": "strcpy_s",
+      "params": [
+        {
+          "name": "dest",
+          "type": "char*",
+          "nullable": false,
+          "extent": "dmax writable bytes"
+        },
+        {
+          "name": "dmax",
+          "type": "rsize_t",
+          "nullable": false,
+          "extent": "destination capacity in bytes"
+        },
+        {
+          "name": "src",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated readable string"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(src)+1 <= dmax <= proven capacity of dest",
+      "effects": [
+        "checked CRT string copy",
+        "writes dest",
+        "reads src"
+      ],
+      "failure": {
+        "result_code": "errno_t (0 on success, 400/ESNULLP/ESNOSPC on failure)",
+        "conditions": [
+          "NULL or freed dest/src: 400 (errno=EFAULT on UAF)",
+          "source needs more than dmax bytes: ESNOSPC / errno=ERANGE",
+          "dmax == 0, dmax > RSIZE_MAX, or unterminated src: safeclib constraint error"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-CRT] checked string copy needs N bytes but capacity is M",
+        "[CPLUS-SAFE-LIFETIME] use-after-free"
+      ],
+      "dynamic": {
+        "checks": [
+          "cplus_safe_reject_uaf via cplus_safe_ptr_was_freed (stdlib/safe/src/safe_string.c)",
+          "safeclib cplus_sc_strcpy_s enforces dest/src null, dmax bounds and termination",
+          "cplus_strcpy_s_auto additionally consults CPLUS_SAFE_OBJ_SIZE and tracked capacity before delegating"
+        ],
+        "limitations": [
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Only sizes proven by cplus_alloc_remaining_capacity (live cplus*/safe* blocks, including interior pointers) or by __builtin_object_size(p,1) for stack/global objects are refused when too small.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Double/invalid-free classification uses a bounded 1024-entry recent-free cache (open-addressed in alloc.c, direct-mapped in safe_alloc.c); collisions or address recycling can misclassify it.",
+          "Unterminated source detection depends on safeclib scanning dmax bytes; capacity of untracked pointers is not proven."
+        ]
+      }
+    },
+    {
+      "name": "snprintf_s",
+      "params": [
+        {
+          "name": "dest",
+          "type": "char*",
+          "nullable": true,
+          "extent": "dmax writable bytes; NULL allowed iff dmax == 0"
+        },
+        {
+          "name": "dmax",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "destination capacity in bytes"
+        },
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated literal format string"
+        },
+        {
+          "name": "...",
+          "type": "...",
+          "nullable": false,
+          "extent": "format-dependent argument list"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "dmax <= tracked/object capacity of dest; never writes past dmax",
+      "effects": [
+        "checked CRT formatting",
+        "writes at most dmax bytes of dest",
+        "reads fmt and arguments"
+      ],
+      "failure": {
+        "result_code": "int (negative on error, or runtime violation with default exit 70)",
+        "conditions": [
+          "NULL fmt, or freed fmt/dest: errno=EINVAL or UAF violation",
+          "non-literal fmt: CWE-134 violation via cplus_fmt_has_percent_n / fmt_is_literal check",
+          "%n specifier: runtime violation",
+          "dmax > proven capacity or freed dest: runtime violation"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-CRT] checked string copy needs N bytes but capacity is M",
+        "[CPLUS-SAFE-LIFETIME] use-after-free"
+      ],
+      "dynamic": {
+        "checks": [
+          "fmt_check_dest_bounds compares dmax against cplus_safe_ptr_size and known_dmax (stdlib/safe/src/safe_format.c)",
+          "cplus_safe_ptr_was_freed on fmt and dest; cplus_fmt_has_percent_n rejects %n",
+          "cplus_snprintf_s_checked rejects non-literal formats via the fmt_is_literal argument supplied by the macro",
+          "delegates to vsnprintf for the bounded write and NUL termination"
+        ],
+        "limitations": [
+          "Unknown capacity is never reported as verified capacity: default mode performs the operation with a warning (raw-C compatible); cplus_libc_set_unknown_capacity_mode(1) / cplus_safe_set_unknown_capacity_mode(1) refuse it with EINVAL.",
+          "Format-string validity beyond null/freedom, literal-format, %n and (for scanf) field-width checks is not proven; printf/scanf argument types are a caller obligation in the plain layer.",
+          "Metadata checks are heuristic (live table, generation counters and a bounded recent-free cache); they do not prove pointer provenance, arbitrary-alias safety, or compile-time bounds.",
+          "Double/invalid-free classification uses a bounded 1024-entry recent-free cache (open-addressed in alloc.c, direct-mapped in safe_alloc.c); collisions or address recycling can misclassify it.",
+          "Format-specifier/argument type agreement is not proven by the runtime checks.",
+          "The plain snprintf entry point has no dmax-vs-capacity or literal-format check; only the _s/checked macro path does."
+        ]
+      }
+    }
+  ]
+}
