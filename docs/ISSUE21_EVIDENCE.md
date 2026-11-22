@@ -51,20 +51,14 @@ bug detection 80/107 DEFAULT (74.8%) and 97/107 STRICT (90.7%).
    **explicitly unsupported** rather than claimed safe — rejecting them would
    reject ordinary C, contrary to the product direction. No Rust-equivalence
    claim.
-5. **CI:** all local suites and clean CTest pass on macOS arm64. Remote CI:
-   GitGuardian passes; SonarCloud fails on PR #16; the only configured GitHub
-   Actions workflow is `libc-crt` (Agent 2) and it is failing on their branch.
-   A compiler workflow has now been added on the PR head branch:
-   `.github/workflows/compiler.yml` (macOS arm64 and Linux x86-64 build +
-   CTest + core suite). First Linux runs exposed two real portability bugs:
-   a C++ atomics header gap in `clog.h` (fixed) and missing static LLVM link
-   dependencies in the runner (protobuf/gRPC/absl added). A later Linux run
-   built successfully and reached CTest; three UBSan fixtures differed only in
-   abort code (1 vs 134), so the harness now requires the exact diagnostic
-   instead of one platform's signal number. macOS jobs were cancelled by the
-   runner before any step executed — environment limitation, not a compile
-   failure. CI green is **still not claimed**; SonarCloud remains the blocking
-   remote check.
+5. **CI:** `.github/workflows/compiler.yml` now runs on PR #16.
+   **Linux x86-64 job: PASS** (build, CTest, core safety suite) at commit
+   `b18cfbc`. The macOS arm64 job is cancelled by the runner with zero steps
+   executed (no macOS capacity available for this repository), so macOS CI
+   green is **not claimed** — local macOS arm64 verification is green instead.
+   SonarCloud Quality Gate still fails (27% duplication on new code,
+   reliability/security E) and GitGuardian passes. PR overall remains
+   UNSTABLE because of SonarCloud and the cancelled macOS job.
 6. **Docs:** `docs/SAFE_SUBSET.md` updated for C+ inserted bounds checks,
    configurable sanitizers, the new setjmp/goto policy and the fail-closed
    status; `docs/RUST_COMPARISON.md` records the paired C+/Rust evidence.
