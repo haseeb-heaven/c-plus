@@ -1,5 +1,6 @@
 #include "../../log/log.h"
 #include <ctype.h>
+#include <stdio.h> /* EOF */
 
 int cplus_isalpha(int c){ cplus_libc_log("isalpha","enter"); return isalpha((unsigned char)c) != 0; }
 int cplus_isdigit(int c){ cplus_libc_log("isdigit","enter"); return isdigit((unsigned char)c) != 0; }
@@ -12,5 +13,5 @@ int cplus_isprint(int c){ cplus_libc_log("isprint","enter"); return isprint((uns
 int cplus_isgraph(int c){ cplus_libc_log("isgraph","enter"); return isgraph((unsigned char)c) != 0; }
 int cplus_ispunct(int c){ cplus_libc_log("ispunct","enter"); return ispunct((unsigned char)c) != 0; }
 int cplus_iscntrl(int c){ cplus_libc_log("iscntrl","enter"); return iscntrl((unsigned char)c) != 0; }
-int cplus_toupper(int c){ cplus_libc_log("toupper","enter"); return toupper((unsigned char)c); }
-int cplus_tolower(int c){ cplus_libc_log("tolower","enter"); return tolower((unsigned char)c); }
+int cplus_toupper(int c){ cplus_libc_log("toupper","enter"); if (c == EOF) return EOF; return toupper((unsigned char)c); }
+int cplus_tolower(int c){ cplus_libc_log("tolower","enter"); if (c == EOF) return EOF; return tolower((unsigned char)c); }

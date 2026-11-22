@@ -121,3 +121,10 @@ wrapper never makes an arbitrary raw pointer safe.
 makes unchanged `malloc`/`memset`/`memcpy`/`strcpy`/`fread`/`printf` calls use
 tracked capacity and compiler format attributes. Regression:
 `tests/crt/unit/test_safe_c_api.c` (included in `run_unit_tests.sh`).
+
+## Per-method scenarios
+
+[`SCENARIO_RESULTS.md`](SCENARIO_RESULTS.md) records 384 distinct runtime
+scenarios and ~81,000 generated cases across both libraries, with per-method
+case counts, differential/fuzz evidence and the defects the scenarios found.
+

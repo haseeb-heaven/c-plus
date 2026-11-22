@@ -72,3 +72,10 @@ catches and which remain runtime-only or unimplemented — no false
 
 See [`ORDINARY_C_SAFETY.md`](ORDINARY_C_SAFETY.md) for activation, guarantees
 and limits.
+
+## Per-method runtime scenarios (both libraries)
+
+See [`SCENARIO_RESULTS.md`](SCENARIO_RESULTS.md) for 384 distinct runtime
+scenarios across 14 API families plus 12 high-volume 1000+ case generators,
+all passing under UBSan with zero FINDINGs after the fixes listed above.
+

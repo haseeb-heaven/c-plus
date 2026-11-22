@@ -378,33 +378,38 @@ void cplus_free(void *ptr) {
     (void)cplus_free_checked(&tmp);
 }
 
-/* Remaining bytes from ptr to the end of its containing live cplus block.
- * Returns (size_t)-1 when ptr is not inside any tracked block; 0 at the
- * one-past-the-end address (a KNOWN zero capacity). */
+/* Remaining writable bytes from ptr to the end of its containing live
+ * block. Returns (size_t)-1 when ptr is in no tracked block; 0 at a genuine
+ * one-past-the-end address. An address that is both the end of one block and
+ * the base of an adjacent live block is treated as LIVE with that block's
+ * full capacity (exact base matches take precedence). */
 size_t cplus_alloc_remaining_capacity(const void *ptr) {
-    size_t k, mask;
+    size_t k;
     uintptr_t p = (uintptr_t)ptr;
     if (!ptr) return (size_t)-1;
     pthread_mutex_lock(&g_meta_lock);
-    if (g_cap != 0) {
-        mask = g_cap - 1u;
-        for (k = 0; k < g_cap; ++k) {
-            void *base = g_tab[k].ptr;
-            uintptr_t b;
-            if (base == NULL || base == META_TOMB) continue;
-            b = (uintptr_t)base;
-            if (p >= b && p <= b + g_tab[k].byte_size) {
-                size_t cap = (size_t)(b + g_tab[k].byte_size - p);
-                pthread_mutex_unlock(&g_meta_lock);
-                return cap;
-            }
-            (void)mask;
+    for (k = 0; k < g_cap; ++k) {
+        void *base = g_tab[k].ptr;
+        if (base != NULL && base != META_TOMB && (uintptr_t)base == p) {
+            size_t cap = g_tab[k].byte_size;
+            pthread_mutex_unlock(&g_meta_lock);
+            return cap;
+        }
+    }
+    for (k = 0; k < g_cap; ++k) {
+        void *base = g_tab[k].ptr;
+        uintptr_t b;
+        if (base == NULL || base == META_TOMB) continue;
+        b = (uintptr_t)base;
+        if (p > b && p <= b + g_tab[k].byte_size) {
+            size_t cap = (size_t)(b + g_tab[k].byte_size - p);
+            pthread_mutex_unlock(&g_meta_lock);
+            return cap;
         }
     }
     pthread_mutex_unlock(&g_meta_lock);
     return (size_t)-1;
 }
-
 int cplus_alloc_get_meta(const void *ptr, cplus_alloc_meta *out) {
     meta_slot *s;
     if (out != NULL) {

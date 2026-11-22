@@ -23,9 +23,10 @@ void cplus_libc_set_unknown_capacity_mode(int strict) {
 
 static size_t resolve_capacity(const void *p, size_t known) {
     size_t tracked = cplus_alloc_remaining_capacity(p);
-    if (tracked != (size_t)-1) return tracked;
-    if (known != (size_t)-1) return known;
-    return (size_t)-1;
+    size_t cap = (size_t)-1;
+    if (tracked != (size_t)-1) cap = tracked;
+    if (known != (size_t)-1 && (cap == (size_t)-1 || known < cap)) cap = known;
+    return cap;
 }
 
 /* Returns 1 when the call must be refused, 0 otherwise. */

@@ -243,6 +243,7 @@ void *realloc_s(void *ptr, size_t size) {
     size_t req = size == 0 ? 1u : size;
     size_t old_size = 0, old_elem = 1u;
     uintptr_t old_addr;
+    unsigned long long old_gen = 0;
     if (size > RSIZE_MAX_MEM) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "realloc_s", "size exceeds RSIZE_MAX_MEM; owner preserved");
         cplus_safe_stat_record("realloc_s", 0);
@@ -265,6 +266,7 @@ void *realloc_s(void *ptr, size_t size) {
         }
         old_size = s->size;
         old_elem = s->elem_size ? s->elem_size : 1u;
+        old_gen = s->generation;
     }
     if (inject_fail_locked()) {
         pthread_mutex_unlock(&g_lock);
@@ -291,7 +293,10 @@ void *realloc_s(void *ptr, size_t size) {
     pthread_mutex_lock(&g_lock);
     {
         slot *s = tab_find_addr(old_addr);
-        if (s) {
+        /* ABA guard: host realloc() ran without the lock. Only a slot with
+         * the ORIGINAL generation belongs to this realloc; never remove a
+         * newer block that another thread allocated at the recycled address. */
+        if (s && s->generation == old_gen && old_gen != 0) {
             if ((uintptr_t)p == old_addr) {
                 g_live_bytes -= old_size;
                 g_live_bytes += req;
@@ -354,10 +359,11 @@ void free_s(void *ptr) {
     cplus_safe_stat_record("free_s", rc == CPLUS_SAFE_OK);
 }
 
-/* Remaining writable bytes from `ptr` to the end of its containing live
- * block. Works for INTERIOR pointers (base + offset), which is what ordinary
- * `memset(buffer + offset, ...)` / `memcpy` calls actually pass. Returns 0
- * when the pointer is not inside any tracked live block. */
+/* Remaining writable bytes from ptr to the end of its containing live
+ * block. Returns (size_t)-1 when ptr is in no tracked block; 0 at a genuine
+ * one-past-the-end address. An address that is both the end of one block and
+ * the base of an adjacent live block is treated as LIVE with that block's
+ * full capacity (exact base matches take precedence). */
 size_t cplus_safe_remaining_capacity(const void *ptr) {
     size_t k;
     uintptr_t p = (uintptr_t)ptr;
@@ -365,21 +371,26 @@ size_t cplus_safe_remaining_capacity(const void *ptr) {
     pthread_mutex_lock(&g_lock);
     for (k = 0; k < g_cap; ++k) {
         void *base = g_tab[k].ptr;
+        if (base != NULL && base != TOMB && (uintptr_t)base == p) {
+            size_t cap = g_tab[k].size;
+            pthread_mutex_unlock(&g_lock);
+            return cap;
+        }
+    }
+    for (k = 0; k < g_cap; ++k) {
+        void *base = g_tab[k].ptr;
         uintptr_t b;
         if (base == NULL || base == TOMB) continue;
         b = (uintptr_t)base;
-        /* Include the one-past-the-end address: its remaining capacity is
-         * exactly 0, which is KNOWN and must reject any non-empty write. */
-        if (p >= b && p <= b + g_tab[k].size) {
+        if (p > b && p <= b + g_tab[k].size) {
             size_t cap = (size_t)(b + g_tab[k].size - p);
             pthread_mutex_unlock(&g_lock);
             return cap;
         }
     }
     pthread_mutex_unlock(&g_lock);
-    return (size_t)-1; /* pointer not inside any tracked block */
+    return (size_t)-1;
 }
-
 int cplus_safe_alloc_get_meta(const void *ptr, cplus_safe_alloc_meta *out) {
     slot *s;
     if (out) {

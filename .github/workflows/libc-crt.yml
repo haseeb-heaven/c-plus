@@ -43,6 +43,8 @@ jobs:
         run: sh tests/libc/run_attack_tests.sh
       - name: Bug-class corpora (thousands of cases)
         run: sh tests/libc/run_corpus_tests.sh
+      - name: Per-method scenario suites (1000+ each, 10-30 runtime scenarios)
+        run: sh tests/scenarios/run_scenarios.sh
       - name: Libc install smoke
         run: sh tests/libc/install_smoke.sh
       - name: Fuzz smoke (UBSan)

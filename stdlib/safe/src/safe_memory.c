@@ -89,12 +89,20 @@ void cplus_safe_set_unknown_capacity_mode(int strict) {
     g_unknown_capacity_strict = strict ? 1 : 0;
 }
 
+int cplus_safe_unknown_capacity_strict(void) { return g_unknown_capacity_strict; }
+
 static int cplus_safe_capacity(const void *ptr, size_t known_dmax,
                                size_t *out) {
     size_t tracked = cplus_safe_remaining_capacity(ptr);
-    if (tracked != (size_t)-1) { *out = tracked; return 1; }
-    if (known_dmax != (size_t)-1) { *out = known_dmax; return 1; }
-    return 0;
+    size_t cap = (size_t)-1;
+    if (tracked != (size_t)-1) cap = tracked;
+    /* A sub-object's compile-time size can be tighter than the enclosing
+     * allocation. Use the minimum of both known bounds, never the looser. */
+    if (known_dmax != (size_t)-1 && (cap == (size_t)-1 || known_dmax < cap))
+        cap = known_dmax;
+    if (cap == (size_t)-1) return 0;
+    *out = cap;
+    return 1;
 }
 
 /* Returns 1 when the operation must be refused, 0 when dmax is usable. */

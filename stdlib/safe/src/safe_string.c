@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200112L
 #define CPLUS_SAFE_NO_UNPREFIXED_MACROS
 #include "../safe_string.h"
+#include "../safe_memory.h" /* unknown-capacity policy */
 #include "../safe_alloc.h"
 #include "../safe_log.h"
 #include "../safe_runtime.h"
@@ -112,13 +113,20 @@ errno_t cplus_strerror_s(char *dest, rsize_t dmax, int errnum) {
     return r;
 }
 
-static size_t cplus_safe_resolve_str_dmax(const char *dest, size_t fallback, size_t known_dmax) {
-    size_t tracked = cplus_safe_ptr_size(dest);
-    if (tracked > 0)
-        return tracked;
-    if (known_dmax != (size_t)-1)
-        return known_dmax;
-    return fallback;
+/* Resolve destination capacity using the REMAINING bytes of a tracked live
+ * block (interior pointers included), then __builtin_object_size, then the
+ * caller's fallback. Unknown capacity is refused in strict mode. */
+static int cplus_safe_resolve_str_dmax(const char *dest, size_t fallback,
+                                       size_t known_dmax, size_t *out) {
+    size_t tracked = cplus_safe_remaining_capacity(dest);
+    size_t cap = (size_t)-1;
+    if (tracked != (size_t)-1) cap = tracked;
+    if (known_dmax != (size_t)-1 && (cap == (size_t)-1 || known_dmax < cap))
+        cap = known_dmax;
+    if (cap != (size_t)-1) { *out = cap; return 1; }
+    if (cplus_safe_unknown_capacity_strict()) return 0;
+    *out = fallback; /* no safety claim is made for unknown capacity */
+    return 1;
 }
 
 char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax) {
@@ -133,7 +141,13 @@ char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax) {
         return NULL;
     }
     len = strlen(src);
-    dmax = cplus_safe_resolve_str_dmax(dest, (len < RSIZE_MAX_STR) ? (len + 1u) : RSIZE_MAX_STR, known_dmax);
+    if (!cplus_safe_resolve_str_dmax(dest, (len < RSIZE_MAX_STR) ? (len + 1u) : RSIZE_MAX_STR, known_dmax, &dmax)) {
+
+        errno = EINVAL;
+
+        return NULL;
+
+    }
     r = cplus_strcpy_s(dest, dmax, src);
     if (r != 0) {
         errno = (r == 406 || len + 1u > dmax) ? ERANGE : EINVAL;
@@ -157,7 +171,13 @@ char *cplus_strncpy_s_auto(char *dest, const char *src, size_t n, size_t known_d
         cplus_safe_stat_record("strncpy_s", 1);
         return dest;
     }
-    dmax = cplus_safe_resolve_str_dmax(dest, (n < RSIZE_MAX_STR) ? (n + 1u) : RSIZE_MAX_STR, known_dmax);
+    if (!cplus_safe_resolve_str_dmax(dest, (n < RSIZE_MAX_STR) ? (n + 1u) : RSIZE_MAX_STR, known_dmax, &dmax)) {
+
+        errno = EINVAL;
+
+        return NULL;
+
+    }
     r = cplus_strncpy_s(dest, dmax, src, n);
     if (r != 0) {
         errno = (r == 406 || n >= dmax) ? ERANGE : EINVAL;
@@ -184,7 +204,13 @@ char *cplus_strcat_s_auto(char *dest, const char *src, size_t known_dmax) {
         cplus_safe_stat_record("strcat_s", 0);
         return NULL;
     }
-    dmax = cplus_safe_resolve_str_dmax(dest, dlen + slen + 1u, known_dmax);
+    if (!cplus_safe_resolve_str_dmax(dest, dlen + slen + 1u, known_dmax, &dmax)) {
+
+        errno = EINVAL;
+
+        return NULL;
+
+    }
     r = cplus_strcat_s(dest, dmax, src);
     if (r != 0) {
         errno = (r == 406 || dlen + slen + 1u > dmax) ? ERANGE : EINVAL;
@@ -214,7 +240,13 @@ char *cplus_strncat_s_auto(char *dest, const char *src, size_t n, size_t known_d
         cplus_safe_stat_record("strncat_s", 0);
         return NULL;
     }
-    dmax = cplus_safe_resolve_str_dmax(dest, dlen + n + 1u, known_dmax);
+    if (!cplus_safe_resolve_str_dmax(dest, dlen + n + 1u, known_dmax, &dmax)) {
+
+        errno = EINVAL;
+
+        return NULL;
+
+    }
     r = cplus_strncat_s(dest, dmax, src, n);
     if (r != 0) {
         errno = (r == 406 || dlen + n + 1u > dmax) ? ERANGE : EINVAL;

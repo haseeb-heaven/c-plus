@@ -56,6 +56,7 @@ int   cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known
  * warning; 1 (strict) = refuse operations whose destination capacity cannot be
  * proven from tracked metadata or __builtin_object_size. */
 void cplus_safe_set_unknown_capacity_mode(int strict);
+int  cplus_safe_unknown_capacity_strict(void);
 
 #ifndef CPLUS_SAFE_OBJ_SIZE
 #if defined(__GNUC__) || defined(__clang__)
