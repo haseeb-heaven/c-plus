@@ -31,3 +31,124 @@ Ratios vs plain C: safe 29.85x / 3.90x; legacy 1.05x / 1.02x; Rust 1.18x /
   benchmark PATH; pass its path via `CPLUS_GOOSE`.
 - This benchmark measures two synthetic integer workloads only. It is not a
   general performance claim about any language.
+
+---
+
+# Modern stdlib workload: fair safe-vs-legacy (measured 2026-11-23)
+
+This extends the workload set with one allocation-heavy workload written against
+the **modern stdlib layer** (`stdlib/string.hp` and `stdlib/vector.hp`). Source:
+`benchmarks/safety_compare/modern.cp` (C+), `modern.rs` (Rust), `modern.goose`
+(Goose). It was measured with **standalone commands** rather than
+`run_bench.sh`: that script is outside this workload's file ownership and still
+loops over only `loop`/`nested`, and it has no plain-C source for this workload
+anyway (the workload is defined in terms of the C+ stdlib types).
+
+## Workload definition
+
+`modern.cp` does the same work in all C+ variants:
+
+- `vector v`: `N = 2,000,000` × `push_back(i)` (growth through the checked
+  `stdlib_alloc`), then `N` × `at(i)` reads summed into `vsum`.
+- `string s`: constructed as `"a"`, then `M = 200,000` × `append("bbbbbbbbbb")`
+  with `size()` accumulated into `ssize_sum`.
+- prints `vsum + ssize_sum` = **`2200000200000`** for every variant.
+
+Rust uses `Vec<i32>::push` + indexing and `String::push_str` + `len()`. Goose
+uses its owned dynamic arrays `i32[>..]` (`push`, indexed read) and `u8[>..]`
+(byte buffer; `push`/`append`/`len`) as the closest syntax-permitted analogue of
+the C+ owned containers. All four binaries printed the identical checksum, so
+the comparison is semantics-correct.
+
+## Exact commands (from the repo root)
+
+The restricted `PATH` mirrors `run_bench.sh`: it pins the C+ backend to
+`/usr/bin/clang` (Apple clang 16) so the two C+ variants are identical apart
+from the safety mode. `$CPLUS_GOOSE` was `/Users/haseeb-mir/.local/bin/goose`.
+
+```sh
+mkdir -p build/bench_safety
+PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
+  build/c+ build --release \
+  benchmarks/safety_compare/modern.cp -o build/bench_safety/cplus_safe_modern
+PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
+  build/c+ build --release --legacy-c \
+  benchmarks/safety_compare/modern.cp -o build/bench_safety/cplus_legacy_modern
+rustc -O benchmarks/safety_compare/modern.rs -o build/bench_safety/rust_modern
+"$CPLUS_GOOSE" build benchmarks/safety_compare/modern.goose \
+  -o build/bench_safety/goose_modern
+```
+
+Timing: one warmup run per binary, then **7 interleaved timed runs** per binary
+(round-robin across variants so they share CPU-frequency windows); median of
+the 7 reported. This is the same warmup discipline as `benchmarks/timeit.py`,
+with interleaving added to limit drift on this shared host.
+
+```sh
+python3 - <<'PY'
+import subprocess,time,statistics
+out='build/bench_safety'
+variants=['cplus_safe','cplus_legacy','rust','goose']
+bins={v:f'{out}/{v}_modern' for v in variants}
+for v in variants: subprocess.run([bins[v]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
+samples={v:[] for v in variants}
+for rnd in range(7):
+    for v in variants:
+        t=time.perf_counter(); subprocess.run([bins[v]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
+        samples[v].append(time.perf_counter()-t)
+for v in variants:
+    s=samples[v]; print(f'{v:14s} {statistics.median(s):8.4f}s  min={min(s):.4f} max={max(s):.4f}')
+PY
+```
+
+## Environment
+
+- Host: macOS arm64, Darwin 27.2.0, Apple M3 Pro (`arm64`, T8112).
+- C+ driver `C+ 0.1.0` (Backend: host Clang/LLVM); both C+ variants at `-O2`
+  (`--release`). Safe = `Mode::Safe` (`-fsanitize=undefined,bounds,null,alignment`,
+  `-fno-sanitize-recover=all`, `-fno-omit-frame-pointer`); legacy = `Mode::LegacyC`
+  (`-std=gnu89`, `-DCPLUS_LEGACY_C=1`, no sanitizers).
+- Backend C compiler for both C+ variants and for Goose: Apple clang 16.0.0
+  (`clang-1600.0.26.6`, `/usr/bin/clang` / `/usr/bin/cc`).
+- rustc 1.100.0 (`0ef1bc386 2026-11-09`, LLVM 23.1.5), `-O`.
+- Goose `v2026.4-57-g9412b80f` (runtime `41e336e5d1ee`), default `-O2`.
+- All builds succeeded with **no warnings**.
+
+## Measured medians
+
+| Variant | median (7 interleaved runs) | min | max | checksum |
+|---|---:|---:|---:|---:|
+| C+ safe (`--release`, UBSan) | 0.0140s | 0.0134s | 0.0188s | 2200000200000 |
+| C+ legacy (`--release --legacy-c`) | 0.0061s | 0.0052s | 0.0077s | 2200000200000 |
+| Rust (`-O`) | 0.0060s | 0.0048s | 0.0105s | 2200000200000 |
+| Goose (`-O2`) | 0.0044s | 0.0041s | 0.0090s | 2200000200000 |
+
+Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, Goose 0.72×.
+
+## Honest interpretation
+
+- **The fair comparison is C+ safe vs C+ legacy**: identical source, identical
+  `-O2`, identical stdlib layer; the only difference is the safe-mode UBSan
+  instrumentation. On this workload that overhead is ~2.3× (median), and the
+  instrumentation is applied to the lowered `string.hp`/`vector.hp` code too,
+  not just to `main`.
+- **Optimisation effects**: unlike the earlier integer loops, this workload is
+  allocation-heavy (repeated growth via `stdlib_alloc`), so the loops are not
+  folded into a closed form. The measured time reflects real container work.
+  Rust `Vec`/`String` and Goose dynamic arrays are *different standard-library
+  implementations*; their numbers are cross-checks, not an apples-to-apples
+  measure of the C+ stdlib layer. They are **not** evidence that any one
+  language is "faster" than another.
+- **Variance is material on this host**: across three non-interleaved passes the
+  safe/legacy median ratio ranged ~1.8×–3.1× (legacy 0.0055–0.0095s, safe
+  0.0150–0.0172s). The interleaved median above is the most controlled
+  estimate; treat the ratios as indicative, not precise.
+- Goose is a real installed compiler here but sits outside the restricted
+  benchmark `PATH`, so its absolute path was passed directly (equivalent to
+  `CPLUS_GOOSE` in `run_bench.sh`). It is syntax-permitted for this workload via
+  dynamic arrays; no equivalent was skipped.
+- Fil-C is still **not measured** (no `filc` toolchain installed); no result is
+  fabricated for it.
+- This is one synthetic workload on one machine. It is not a general
+  performance or safety claim about any language or about the C+ stdlib layer.
+

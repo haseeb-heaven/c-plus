@@ -15,6 +15,7 @@ for t in tests/crt/unit/test_*.c; do
   EXTRA_INC=""; EXTRA_LIB=""
   case "$t" in
     *safe_c_api*) EXTRA_INC="-I. -Ilibc -Ilibc/install-include"; EXTRA_LIB="build/libc/libcplus_hardened.a" ;;
+    *audit_high*) EXTRA_INC="-I. -Ilibc -Ilibc/install-include"; EXTRA_LIB="build/libc/libcplus_hardened.a" ;;
   esac
   if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 $INC $EXTRA_INC "$t" "$LIB" $EXTRA_LIB -lm -pthread -o "$b" >/tmp/crt_unit.log 2>&1 && "$b" >/tmp/crt_unit.out 2>&1; then
     pass=$((pass+1))

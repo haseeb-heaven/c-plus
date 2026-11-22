@@ -1,0 +1,47 @@
+{
+  "header": "stdlib/json.hp",
+  "commands": {
+    "check": "c+ check --strict -Ithird_party/yyjson <file>",
+    "build": "c+ build --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson <file> -o <out>"
+  },
+  "build_flags_reason": "stdlib/json.hp includes \"yyjson.h\" from third_party/yyjson; the compile_time runner passes no -I/-L flags, so without them every case fails with a clang 'yyjson.h file not found' fatal error (no [CPLUS- diagnostic) and is classified PARTIAL. Point CPLUS_BIN at a wrapper that injects -Ithird_party/yyjson -Lbuild/ext -lyyjson, or add per-manifest flags to the runner.",
+  "compiler_gap": "Including stdlib/json.hp (which includes third_party/yyjson/yyjson.h) suppresses the AST safety pass entirely: a plain null dereference or malloc/free use-after-free in the same translation unit is accepted with no [CPLUS- diagnostic. Only the lexer/RAII passes still fire, and their errors are untagged. Therefore no json case can be a counted REJECT under the '[CPLUS- only' rule.",
+  "cases": [
+    {
+      "file": "json_valid.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control: parse an owned json, read scalar/string/array views, serialise with json_free(), build with json_builder and json_free() its buffer; RAII releases both owners. check rc=0, build rc=0, no [CPLUS- diagnostic; built binary exits 0."
+    },
+    {
+      "file": "json_valid_ref.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control for borrowing: nested views (root -> member -> at(0)) and a borrowed string are all consumed while the owning json is alive. check rc=0, build rc=0, no [CPLUS- diagnostic. Valid counterpart of json_dangling_ref.cp."
+    },
+    {
+      "file": "json_access_after_destroy.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: doc.drop() then doc.root(). Explicit drop() on a class handle is not modelled as invalidation; the call lowers to json_root(&doc) and the AST lifetime pass is inactive with yyjson.h in the TU. check rc=0, build rc=0, no [CPLUS- diagnostic. Dropped handle is inert at run time (document == NULL); cover the post-drop contract in a runtime suite."
+    },
+    {
+      "file": "json_builder_after_destroy.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: builder.drop() then builder.add_int(). Same untagged class-handle drop gap as json_access_after_destroy.cp. check rc=0, build rc=0, no [CPLUS- diagnostic. The dropped builder returns STDLIB_FAIL at run time; assert that in a runtime test."
+    },
+    {
+      "file": "json_dangling_ref.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: a json_view returned from the function that owns its json dangles at scope exit. json_view has no drop() so it is not an owned resource, and C+ borrow checking only covers raw `T *p = &owner` escapes. check rc=0, build rc=0, no [CPLUS- diagnostic. Needs a runtime/behavioral test or a compiler enhancement."
+    },
+    {
+      "file": "json_invalid_transfer.cp",
+      "expect": "RUNTIME",
+      "observed": "PARTIAL",
+      "note": "GAP IN TAGGING (rule is actually enforced): `json b = a;` is rejected by the RAII pass with `error: resource 'b' cannot be copied from 'a'` (check rc=1, build rc=1) and help `transfer ownership with cplus_move(a)`, but the diagnostic has no [CPLUS- tag, so the suite does not count it as a REJECT. cplus_move() followed by use of the moved-from owner or of a borrow likewise yields only untagged RAII errors. Verify moved-from state in a runtime test."
+    }
+  ]
+}
