@@ -300,6 +300,13 @@ else
   bad p0_correctness_suite "$(head -1 "$OUT/p0_correctness.log")"
 fi
 
+# End-to-end: compiler + runtime + contracts + sanitizer + multi-TU linkage.
+if python3 "$ROOT/tests/core/integration_suite.py" >"$OUT/integration.log" 2>&1; then
+  ok integration_suite
+else
+  bad integration_suite "$(head -3 "$OUT/integration.log")"
+fi
+
 # Paired C+/Rust scenarios: C+ expectations asserted, Rust results recorded.
 if python3 "$ROOT/tests/core/rust_compare_suite.py" >"$OUT/rust_compare.log" 2>&1; then
   ok rust_compare_suite
