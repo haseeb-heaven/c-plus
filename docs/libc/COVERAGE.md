@@ -14,10 +14,12 @@ Tracks what is actually shipped/verified on `agent/modern-stdlib` (PR #17). **No
 | Fuzz smoke | `sh tests/crt/fuzz/run_fuzz_smoke.sh` | 11 passed, 0 failed |
 | Safe CRT line coverage | `sh tests/crt/coverage_safecrt.sh` | 85 passed, 0 failed (**92.38%** total lines; every file >= **87.44%**) |
 | Combined fuzz | `tests/crt/fuzz/fuzz_all_safe_apis.c`, `fuzz_all_exported.c` | 2000+1500 iterations, ok, no crash |
-| Libc tests | `sh tests/libc/run_libc_tests.sh` | 50 passed, 0 failed |
-| Libc line coverage | `sh tests/libc/coverage_libc.sh` | 50 passed, 0 failed (**91.06%** total lines; **43** source files, **97.84%** functions) |
+| Libc tests | `sh tests/libc/run_libc_tests.sh` | 62 passed, 0 failed (50 baseline + 12 new gap-closing suites) |
+| Libc line coverage | `sh tests/libc/coverage_libc.sh` | 62 passed, 0 failed (**91.80%** total lines; **97.90%** functions) |
 | Libc fuzz | `sh tests/libc/run_fuzz.sh` | 2 passed, 0 failed |
 | Libc install & contract smoke | `sh tests/libc/install_smoke.sh` | ok (static + shared lib + CMake config + `validate_contracts.py` + SDK link) |
+| C17 gap-closing matrix | `docs/libc/API_TEST_MATRIX.md`, `libc/contracts/c17_contracts.json` | 202 APIs mapped to source + test + host backend + contract + limitation; JSON validated |
+| Logging / telemetry evidence | `tests/libc/test_logging_telemetry.c` | default-off, enabled/disabled, failure paths, no sensitive data, concurrent calls, no logging allocations |
 | CTL containers | `sh tests/ctl/run_ctl_tests.sh` | 11 passed, 0 failed |
 | Exceptions (exceptions4c) | `sh tests/exceptions/run_except_tests.sh` | 2 passed, 0 failed |
 | Runtime recover & cleanup | `sh tests/runtime/run_runtime_tests.sh` | 4 passed, 0 failed |
@@ -54,7 +56,7 @@ Note: See `tests/crt/`, `tests/libc/`, `tests/stdlib/`, and `tests/safety/SCENAR
 
 See [ISO_C_AUDIT.md](ISO_C_AUDIT.md) for the complete ISO C99/C11 header-by-header Implemented / Partial / Missing API table and prioritized roadmap.
 
-- Full ISO C: complete FILE buffering, wide char, locale, full math, time, signal, threads/atomics, fenv, complex, full format/scanf parity.
+- Full ISO C: this branch closes the enumerated `UNSUPPORTED` gaps in `<fenv.h>`, `<time.h>`, `<wchar.h>`, `<wctype.h>`, `<complex.h>`, math `*f`/`*l`, `<stdlib.h>` exits and `<inttypes.h>` wide conversions (all PLATFORM_BACKED). Remaining: Annex K `bsearch_s`/`qsort_s`, `asctime_s`/`ctime_s`, `strerrorlen_s`, `tmpnam`/`gets_s`, standalone `<stdatomic.h>`/`<tgmath.h>` ABI symbols, and a complete userspace `FILE` buffering engine (intentionally delegated to the host CRT).
 - Real libFuzzer/ASan/UBSan CI on Linux runners (workflow added; remote result unverified here).
 - Cross-platform ABI/SDK matrix and Agent 1 contract enforcement interop.
 - Raw C UB/provenance/unknown-capacity cannot be made safe by libc alone.
@@ -67,3 +69,35 @@ See [ISO_C_AUDIT.md](ISO_C_AUDIT.md) for the complete ISO C99/C11 header-by-head
 — implemented in `libc/src/string/musl_extra.c` and `libc/src/stdlib/musl_stdlib_extra.c`,
 provenance in `libc/upstream/musl/PROVENANCE.md`, tests in
 `tests/libc/test_musl_extra.c` and `tests/libc/test_musl_stdlib_extra.c`.
+
+## Sanitizer evidence (this host)
+
+- **UBSan**: all 12 new gap-closing test suites pass with
+  `-fsanitize=undefined -fno-sanitize-recover=all` on Apple Clang 16 / arm64.
+- **ASan**: NOT VERIFIED on this host. Apple Clang 16 aborts at process start
+  with `AddressSanitizer: CHECK failed: sanitizer_malloc_mac.inc:189`
+  (`asan_init_is_running`) for every instrumented binary. This is a toolchain
+  defect, not a test failure; Linux CI in `.github/workflows/libc-crt.yml`
+  runs ASan+UBSan and must be consulted for that platform.
+- **TSan**: NOT VERIFIED on this host. Apple Clang 16 requires
+  `DYLD_INSERT_LIBRARIES=.../libclang_rt.tsan_osx_dynamic.dylib` and reports
+  "Interceptors are not working" without it. Linux CI runs TSan separately.
+- **libFuzzer**: not linkable on this host (`libclang_rt.fuzzer_osx.a` absent);
+  the project's deterministic fuzz harnesses do pass (see table above).
+
+Sanitizer/fuzz passing is evidence of tested behaviour only, never proof of
+memory safety or of raw-pointer validity.
+
+## Gap-closing slice provenance
+
+The 202 new APIs are **PLATFORM_BACKED** — namespaced `cplus_*` wrappers that
+call a named host C runtime function. They are deliberately not counted as
+bundled or upstream implementations. Their source/test/contract mapping is
+machine-readable in `libc/contracts/c17_contracts.json` and tabulated in
+[`API_TEST_MATRIX.md`](API_TEST_MATRIX.md). The host backends were probed on
+Apple Clang 16 / macOS arm64; platforms lacking a given symbol must gate it out
+rather than receive a from-scratch replacement.
+
+Raw C pointer validity, NUL-termination, destination capacity and format-string
+correctness remain caller responsibilities. A `_s` suffix or a namespaced
+wrapper never makes an arbitrary raw pointer safe.

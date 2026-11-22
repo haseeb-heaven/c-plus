@@ -81,3 +81,13 @@ Generated from local source/test scan. "10 scenarios" means covered by 10+ scena
 - Compile-time/Rust-like safety is NOT proven by libc alone; Agent 1 compiler must enforce contracts/lifetimes/provenance.
 - Raw C UB (alias UAF, double free, OOB, overlapping memcpy, invalid provenance, races, unknown-capacity pointers) remains unsafe boundary.
 - Full ISO C/glibc surface not implemented.
+
+## Gap-closing slice (202 PLATFORM_BACKED APIs)
+
+The per-function evidence table above covers the original CRT/libc slice. The
+202 additional ISO C17 gap-closing APIs added on this branch have their own
+API-to-source-to-test matrix in [`API_TEST_MATRIX.md`](API_TEST_MATRIX.md) and a
+machine-readable contract set in `libc/contracts/c17_contracts.json`. All 202
+are `PLATFORM_BACKED` host delegations; none claims a bundled implementation or
+compile-time memory-safety proof. Logging behaviour (including failure paths
+and concurrent calls) is verified by `tests/libc/test_logging_telemetry.c`.

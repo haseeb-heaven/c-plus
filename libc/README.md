@@ -20,5 +20,16 @@ separately and are not claimed to be Microsoft/Apple CRT APIs.
 ## Status
 
 Implemented first: allocation, memory, string, errno basics, minimal stdio/file
-contracts and tests. Remaining ISO C families are tracked in `docs/libc/COVERAGE.md`.
-No false completeness claim.
+contracts and tests. This branch also closes the enumerated ISO C17 gaps with
+202 additional PLATFORM_BACKED `cplus_*` wrappers covering `<fenv.h>`, `<time.h>`,
+`<wchar.h>`, `<wctype.h>`, `<complex.h>`, math `*f`/`*l`, `<stdlib.h>` exits and
+`<inttypes.h>` wide conversions. Every one delegates to a named host C runtime
+function; none is counted as a bundled or upstream implementation.
+
+- `docs/libc/ISO_C_AUDIT.md` — honest header-by-header classification.
+- `docs/libc/API_TEST_MATRIX.md` — API → source → test → host backend → contract mapping.
+- `libc/contracts/c17_contracts.json` — machine-readable companion to the matrix.
+
+Remaining ISO C families and limitations are tracked in `docs/libc/COVERAGE.md`.
+No false completeness claim: a wrapper never makes a raw C pointer safe, and
+host delegation is not the same as a bundled implementation.
