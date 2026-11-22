@@ -47,6 +47,10 @@ jobs:
         run: sh tests/scenarios/run_scenarios.sh
       - name: Libc install smoke
         run: sh tests/libc/install_smoke.sh
+      - name: C/C++ header compatibility matrix
+        run: sh tests/compat/run_compat.sh
+      - name: External SDK consumer (clean prefix, find_package)
+        run: sh tests/sdk/run_sdk_consumer.sh
       - name: Fuzz smoke (UBSan)
         run: sh tests/crt/fuzz/run_fuzz_smoke.sh
       - name: CTL container tests
