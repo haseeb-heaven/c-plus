@@ -1204,18 +1204,35 @@ public:
     }
     // An unsigned value compared with zero via < is always false: the check
     // can never protect anything, so it is a provable logic bug.
-    // Subtracting pointers into different allocations is undefined behaviour.
-    if (op->getOpcode() == BO_Sub && op->getType()->isIntegerType() &&
-        op->getLHS()->getType()->isPointerType()) {
-      std::string lhs = varNameOf(op->getLHS());
-      std::string rhs = varNameOf(op->getRHS());
-      auto li = heapAllocs_.find(lhs), ri = heapAllocs_.find(rhs);
-      if (!lhs.empty() && !rhs.empty() && lhs != rhs &&
-          li != heapAllocs_.end() && ri != heapAllocs_.end() &&
-          li->second.decl != ri->second.decl)
+    // Subtracting or relationally comparing pointers into different objects
+    // (heap allocations or distinct arrays) is undefined behaviour.
+    auto objectDeclOf = [](const Expr *e) -> const VarDecl * {
+      if (const auto *ref = dyn_cast_or_null<DeclRefExpr>(
+              e ? e->IgnoreParenImpCasts() : nullptr))
+        return dyn_cast<VarDecl>(ref->getDecl());
+      return nullptr;
+    };
+    const VarDecl *ld = objectDeclOf(op->getLHS());
+    const VarDecl *rd = objectDeclOf(op->getRHS());
+    bool relational = op->isRelationalOp() && op->getLHS()->getType()->isPointerType();
+    bool subtract = op->getOpcode() == BO_Sub &&
+                    op->getType()->isIntegerType() &&
+                    op->getLHS()->getType()->isPointerType();
+    if ((relational || subtract) && ld && rd && ld != rd) {
+      auto isObject = [&](const VarDecl *vd) {
+        if (!vd)
+          return false;
+        if (ctx_.getAsConstantArrayType(vd->getType()))
+          return true;
+        auto it = heapAllocs_.find(vd->getNameAsString());
+        return it != heapAllocs_.end() && it->second.decl == vd;
+      };
+      if (isObject(ld) && isObject(rd))
         report(op->getBeginLoc(),
-               "pointer subtraction between distinct allocations '" + lhs +
-                   "' and '" + rhs + "' is undefined");
+               std::string(relational ? "relational comparison" :
+                                        "pointer subtraction") +
+                   " of pointers to distinct objects '" + ld->getNameAsString() +
+                   "' and '" + rd->getNameAsString() + "' is undefined");
     }
     if ((op->getOpcode() == BO_LT && isNullConstant(op->getRHS()) &&
          !op->getLHS()->getType().isNull() &&
