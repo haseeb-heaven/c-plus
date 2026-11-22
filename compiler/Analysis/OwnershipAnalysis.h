@@ -23,7 +23,7 @@ struct FunctionEffect {
   int freedArg = -1;           ///< argument index freed, when known
   int destArg = -1;            ///< destination buffer argument, when known
   int sizeArg = -1;            ///< destination capacity argument, when known
-  const char *category = "CPLUS-SAFE-FFI"; ///< diagnostic category
+  std::string category = "CPLUS-SAFE-FFI"; ///< diagnostic category
 };
 
 /// Known libc effects. Unknown functions are NOT assumed safe.

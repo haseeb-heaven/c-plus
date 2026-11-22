@@ -709,12 +709,20 @@ public:
 
     if (const auto *bo = dyn_cast<BinaryOperator>(e)) {
       if (bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) {
+        long long offset = 0;
         Expr::EvalResult r;
-        if (bo->getRHS()->EvaluateAsInt(r, ctx_) && r.Val.isInt() &&
-            r.Val.getInt() != 0) {
+        if (bo->getRHS()->EvaluateAsInt(r, ctx_) && r.Val.isInt())
+          offset = r.Val.getInt().getSExtValue();
+        else {
+          std::string n = varNameOf(bo->getRHS());
+          auto it = constLocals_.find(n);
+          if (!n.empty() && it != constLocals_.end() &&
+              !assignedVars_.count(n))
+            offset = it->second.getSExtValue();
+        }
+        if (offset != 0)
           report(loc, "invalid free of interior pointer '" +
                           varNameOf(bo->getLHS()) + "' via " + api);
-        }
       }
     }
   }
@@ -1929,6 +1937,18 @@ public:
           markReleased(pname);
         }
       }
+      // Contract-driven check: a function whose JSON contract declares a
+      // nullable pointer argument must not receive a provably-null value.
+      FunctionEffect contract = libcEffect(baseName);
+      if (contract.nullableArg && !contract.frees)
+        for (unsigned i = 0; i < call->getNumArgs(); ++i)
+          if (isNullConstant(call->getArg(i)->IgnoreParenCasts()) ||
+              nullVarOf(call->getArg(i))) {
+            report(call->getBeginLoc(),
+                   "null pointer argument " + std::to_string(i) + " passed to " +
+                       baseName + " (" + contract.category + ")");
+            break;
+          }
       if (baseName == "realloc" &&
           handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0) {
         // Do NOT mark the old pointer released: on failure realloc returns

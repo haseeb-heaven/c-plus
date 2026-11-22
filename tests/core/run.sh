@@ -40,6 +40,15 @@ expect_reject() {
   fi
 }
 
+expect_strict_reject() {
+  name=$1; src=$2
+  if "$CPLUS" check --strict "$src" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
+    bad "$name" "unsafe program accepted in STRICT"
+  else
+    ok "$name"
+  fi
+}
+
 expect_trap() {
   name=$1; src=$2; code=$3
   if ! "$CPLUS" build "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
@@ -59,6 +68,7 @@ build_run len_runtime_metadata "$ROOT/tests/core/positive/len_runtime_metadata.c
 build_run len_malloc_constant "$ROOT/tests/core/positive/len_malloc_constant.c"
 build_run null_assignment_guard "$ROOT/tests/core/positive/null_assignment_guard.cp"
 build_run alloc_failure_guard "$ROOT/tests/core/positive/alloc_failure_guard.c"
+build_run libccontract_null_path "$ROOT/tests/core/positive/libccontract_null_path.c"
 build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
 build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"
 build_run bounds_var_index_ok "$ROOT/tests/core/positive/bounds_var_index_ok.c"
@@ -167,6 +177,8 @@ expect_reject len_untracked_pointer "$ROOT/tests/safety/len_untracked_pointer.cp
 expect_reject len_expired_pointer "$ROOT/tests/safety/len_expired_pointer.cp"
 expect_reject null_assignment_deref "$ROOT/tests/safety/null_assignment_deref.cp"
 expect_reject heap_extent_libc_overflow "$ROOT/tests/safety/heap_extent_libc_overflow.c"
+expect_reject libccontract_free_interior_offset "$ROOT/tests/safety/libccontract_free_interior_offset.c"
+expect_strict_reject libccontract_genuine_leak "$ROOT/tests/safety/libccontract_genuine_leak.c"
 expect_reject realloc_failure "$ROOT/tests/safety/realloc_failure.c"
 expect_reject realloc_success_alias_uaf "$ROOT/tests/safety/realloc_success_alias_uaf.c"
 expect_reject memcpy_overflow "$ROOT/tests/safety/memcpy_overflow.c"

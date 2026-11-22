@@ -270,11 +270,21 @@ static std::map<std::string, FunctionEffect> &loadedContracts() {
       for (const auto &v : *effectList) {
         auto s = v.getAsString();
         if (!s) continue;
-        if (*s == "allocates") e.allocates = true;
-        else if (*s == "frees") e.frees = true;
-        else if (*s == "frees-on-success") e.frees = true;
-        else if (*s == "writes") e.writes = true;
-        else if (*s == "reads") e.borrows = true;
+        // Contract strings may carry an argument name ("writes dst",
+        // "reads src", "allocates FILE*"). Match the leading verb.
+        llvm::StringRef verb = s->take_while([](char c) {
+          return !std::isspace(static_cast<unsigned char>(c));
+        });
+        if (verb == "allocates") { e.allocates = true; e.returnsOwned = true; }
+        else if (verb == "frees" || verb == "frees-on-success") e.frees = true;
+        else if (verb == "writes") e.writes = true;
+        else if (verb == "reads" || verb == "borrows") e.borrows = true;
+        auto diag = spec->getString("diagnostics");
+        if (diag && diag->starts_with("CPLUS-SAFE-"))
+          e.category = diag->str();
+        auto nullable = spec->getArray("nullableArgs");
+        if (nullable && !nullable->empty())
+          e.nullableArg = true;
       }
     auto ownership = spec->getString("ownership");
     if (ownership == "returns_owned") e.returnsOwned = true;
