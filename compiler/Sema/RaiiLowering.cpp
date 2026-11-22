@@ -1125,8 +1125,14 @@ private:
         size_t p = prevSig(j);
         if (p == kNPos || p <= openIdx)
           break;
-        if (isPunct(p, ";") || isIdent(p, "return") || isIdent(p, "else"))
+        if (isIdent(p, "return") || isIdent(p, "else"))
           break;
+        // Skip over earlier statements in the guarded block (e.g. an fprintf
+        // before the return) and the block's opening brace.
+        if (isPunct(p, ";") || isPunct(p, "{")) {
+          j = p;
+          continue;
+        }
         if (isIdent(p, "if")) {
           size_t lp = nextSig(p);
           if (!isPunct(lp, "("))

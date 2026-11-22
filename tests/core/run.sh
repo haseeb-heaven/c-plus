@@ -57,6 +57,7 @@ build_run method_array_element "$ROOT/tests/core/positive/method_array_element.c
 build_run len_static_and_managed "$ROOT/tests/core/positive/len_static_and_managed.cp"
 build_run len_runtime_metadata "$ROOT/tests/core/positive/len_runtime_metadata.cp"
 build_run null_assignment_guard "$ROOT/tests/core/positive/null_assignment_guard.cp"
+build_run alloc_failure_guard "$ROOT/tests/core/positive/alloc_failure_guard.c"
 build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
 build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"
 build_run bounds_var_index_ok "$ROOT/tests/core/positive/bounds_var_index_ok.c"
