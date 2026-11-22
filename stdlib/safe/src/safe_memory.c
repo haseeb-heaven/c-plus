@@ -140,20 +140,16 @@ void *cplus_memcpy_s_auto(void *dest, const void *src, size_t n, size_t known_dm
     errno_t r;
     if (cplus_safe_reject_uaf(dest, "memcpy_s") || cplus_safe_reject_uaf(src, "memcpy_s"))
         return NULL;
-    if (n == 0) {
-        if (!dest) {
-            errno = EINVAL;
-            cplus_safe_stat_record("memcpy_s", 0);
-            return NULL;
-        }
-        cplus_safe_stat_record("memcpy_s", 1);
-        return dest;
-    }
+    /* NULL is refused even at n == 0, consistently in both safety layers. */
     if (!dest || !src) {
         errno = EINVAL;
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memcpy_s", "null pointer");
         cplus_safe_stat_record("memcpy_s", 0);
         return NULL;
+    }
+    if (n == 0) {
+        cplus_safe_stat_record("memcpy_s", 1);
+        return dest;
     }
     if (cplus_safe_check_capacity("mem*_s_auto", dest, n, known_dmax, &dmax)) return NULL;
     if (n > dmax || n > RSIZE_MAX_MEM) {
@@ -173,20 +169,16 @@ void *cplus_memmove_s_auto(void *dest, const void *src, size_t n, size_t known_d
     errno_t r;
     if (cplus_safe_reject_uaf(dest, "memmove_s") || cplus_safe_reject_uaf(src, "memmove_s"))
         return NULL;
-    if (n == 0) {
-        if (!dest) {
-            errno = EINVAL;
-            cplus_safe_stat_record("memmove_s", 0);
-            return NULL;
-        }
-        cplus_safe_stat_record("memmove_s", 1);
-        return dest;
-    }
+    /* NULL is refused even at n == 0, consistently in both safety layers. */
     if (!dest || !src) {
         errno = EINVAL;
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memmove_s", "null pointer");
         cplus_safe_stat_record("memmove_s", 0);
         return NULL;
+    }
+    if (n == 0) {
+        cplus_safe_stat_record("memmove_s", 1);
+        return dest;
     }
     if (cplus_safe_check_capacity("mem*_s_auto", dest, n, known_dmax, &dmax)) return NULL;
     if (n > dmax || n > RSIZE_MAX_MEM) {
