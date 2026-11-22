@@ -243,7 +243,10 @@ def gen_neg_zero(i, rng):
         body = STD + tpl(
             "int main(void){int*p=calloc(0,sizeof(int));if(!p)return 2;"
             "p[0]=@@V@@;free(p);return 0;}", V=v)
-    return f"neg_zero_{i}", body
+    # Shapes 0, 1 and 3 pass a negative size but guard/handle the result
+    # safely; they are valid C, not memory bugs.
+    expected = "accept" if shape in (0, 1) else "reject"
+    return f"neg_zero_{i}", body, expected
 
 
 def gen_trailing(i, rng):
@@ -400,7 +403,11 @@ def generate_case(i):
     for (family, count, _bname, expect), builder in zip(FAMILIES, BUILDERS):
         if i < start + count:
             rng = random.Random(f"{SEED}:{i}")
-            name, body = builder(i, rng)
+            result = builder(i, rng)
+            if len(result) == 3:
+                name, body, expect = result
+            else:
+                name, body = result
             return name, marked(name, body), expect, family
         start += count
     raise IndexError(i)
