@@ -29,19 +29,19 @@ C+ applies checks at more than one stage. The compiler rejects violations it can
 
 ```mermaid
 flowchart TD
-    A["C+ source"] --> B["C+ lexer and rewriter"]
-    B --> C["C+ static analysis"]
-    C --> D{"Provable violation?"}
-    D -- Yes --> E["Compile-time diagnostic"]
-    D -- No --> F["RAII / ownership lowering"]
-    F --> G["Generated C + C+ runtime"]
-    G --> H["Clang checks and UBSan instrumentation"]
-    H --> I["LLVM optimization and native code generation"]
-    I --> J["Executable"]
-    J --> K{"Runtime violation detected?"}
-    K -- Yes --> L["Diagnostic + fail-fast exit"]
-    K -- No --> M["Continue execution"]
-    N["C+ standard and safer libraries"] -. "checked API boundaries" .-> G
+    A[C+ source] --> B[C+ lexer and rewriter]
+    B --> C[C+ static analysis]
+    C --> D{Provable violation?}
+    D -->|Yes| E[Compile-time diagnostic]
+    D -->|No| F[RAII and ownership lowering]
+    F --> G[Generated C and C+ runtime]
+    G --> H[Clang checks and UBSan]
+    H --> I[LLVM optimization and code generation]
+    I --> J[Native executable]
+    J --> K{Runtime violation?}
+    K -->|Yes| L[Diagnostic and fail-fast exit]
+    K -->|No| M[Continue execution]
+    N[C+ standard and safer libraries] -.->|Checked API boundaries| G
 ```
 
 ### 1. Compile-time safety — C+ analysis + Clang
