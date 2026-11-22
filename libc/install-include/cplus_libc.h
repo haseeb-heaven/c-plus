@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 #include <inttypes.h>
+#include <sys/types.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -38,12 +39,14 @@ int cplus_strncasecmp(const char*,const char*,size_t);
 char *cplus_strdup(const char*);
 char *cplus_strerror(int); char *cplus_strtok(char*,const char*); char *cplus_strndup(const char*,size_t);
 void *cplus_memccpy(void*,const void*,int,size_t); char *cplus_stpcpy(char*,const char*); char *cplus_stpncpy(char*,const char*,size_t); char *cplus_strtok_r(char*,const char*,char**); char *cplus_strsep(char**,const char*); void *cplus_memmem(const void*,size_t,const void*,size_t);
+void cplus_swab(const void*,void*,ssize_t);
 div_t cplus_div(int,int); ldiv_t cplus_ldiv(long,long); lldiv_t cplus_lldiv(long long,long long); long long cplus_llabs(long long); long long cplus_atoll(const char*);
 long long cplus_strtoll(const char*,char**,int); unsigned long long cplus_strtoull(const char*,char**,int); double cplus_strtod(const char*,char**); double cplus_atof(const char*); float cplus_strtof(const char*,char**); long double cplus_strtold(const char*,char**);
 int cplus_setenv(const char*,const char*,int); int cplus_unsetenv(const char*); int cplus_putenv(char*); int cplus_rand_r(unsigned int*); intmax_t cplus_imaxabs(intmax_t); imaxdiv_t cplus_imaxdiv(intmax_t,intmax_t);
 int cplus_strverscmp(const char*,const char*); char *cplus_strcasestr(const char*,const char*); char *cplus_strchrnul(const char*,int);
 int cplus_isalpha(int); int cplus_isdigit(int); int cplus_isspace(int); int cplus_isalnum(int); int cplus_isupper(int); int cplus_islower(int); int cplus_isxdigit(int); int cplus_isprint(int); int cplus_isgraph(int); int cplus_ispunct(int); int cplus_iscntrl(int); int cplus_isblank(int); int cplus_isascii(int); int cplus_toascii(int); int cplus_toupper(int); int cplus_tolower(int);
 int cplus_abs(int); long cplus_labs(long); int cplus_atoi(const char*); long cplus_atol(const char*); long cplus_strtol(const char*,char**,int); unsigned long cplus_strtoul(const char*,char**,int);
+char *cplus_ecvt(double,int,int*,int*); char *cplus_fcvt(double,int,int*,int*); char *cplus_gcvt(double,int,char*); double cplus_drand48(void); double cplus_erand48(unsigned short[3]); unsigned short *cplus_seed48(unsigned short[3]); long cplus_lrand48(void);
 void cplus_qsort(void*,size_t,size_t,int(*)(const void*,const void*)); void *cplus_bsearch(const void*,const void*,size_t,size_t,int(*)(const void*,const void*));
 int cplus_rand(void); void cplus_srand(unsigned int); int cplus_atexit(void(*)(void)); char *cplus_getenv(const char*); int cplus_system(const char*);
 FILE *cplus_fopen(const char*,const char*); int cplus_fclose(FILE*);
@@ -73,6 +76,7 @@ double cplus_atan2(double,double); double cplus_asin(double); double cplus_acos(
 double cplus_sinh(double); double cplus_cosh(double); double cplus_tanh(double); double cplus_log2(double); double cplus_cbrt(double);
 double cplus_hypot(double,double); double cplus_round(double); double cplus_trunc(double); double cplus_fmin(double,double); double cplus_fmax(double,double);
 double cplus_copysign(double,double); double cplus_ldexp(double,int); double cplus_frexp(double,int*); double cplus_modf(double,double*);
+double cplus_nan(const char*); double cplus_nextafter(double,double); double cplus_fdim(double,double); double cplus_remainder(double,double); double cplus_log1p(double); double cplus_expm1(double); double cplus_asinh(double); double cplus_acosh(double); double cplus_atanh(double); double cplus_erf(double); double cplus_erfc(double); double cplus_tgamma(double); double cplus_lgamma(double);
 long cplus_time(long*); double cplus_difftime(long,long); long cplus_clock(void);
 struct tm; struct tm *cplus_gmtime(const long*); struct tm *cplus_localtime(const long*); long cplus_mktime(struct tm*);
 size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
