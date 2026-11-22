@@ -89,6 +89,16 @@ typedef size_t rsize_t;
 TYPES
 fi
 
+# Dependency-closed timingsafe comparison sources. They are compiled without
+# the SC_DEFS -D prefixing because safeclib's BOS_OVR2 macros reference the
+# same token; stdlib/safe/src/safeclib_ext_wrappers.c exports cplus_sc_* names.
+for f in "$SC"/src/extmem/timingsafe_bcmp.c "$SC"/src/extmem/timingsafe_memcmp.c; do
+  base=$(basename "$f" .c)
+  "$CC" -O2 -std=c99 -Wno-unused-parameter \
+    -Dinvoke_safe_mem_constraint_handler=cplus_sc_invoke_safe_mem_constraint_handler \
+    -I"$SC/include" -I"$OUT" -I"$SC/src" -c "$f" -o "$OUT/up_$base.o"
+done
+
 for f in \
   "$SC"/src/abort_handler_s.c \
   "$SC"/src/ignore_handler_s.c \
@@ -122,5 +132,5 @@ for f in "$ROOT"/stdlib/safe/src/*.c; do
   "$CC" $CFLAGS_W -I$SC/include -c "$f" -o "$OUT/w_$base.o"
 done
 
-ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/w_*.o "$OUT"/e4c_*.o
+ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/up_*.o "$OUT"/w_*.o "$OUT"/e4c_*.o
 echo "$OUT/libcplus_safecrt.a"

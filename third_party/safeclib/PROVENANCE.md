@@ -16,4 +16,17 @@
   dereference before the bound, reading one byte past a fully populated
   unterminated source at `smax`. Triggered by an adversarial guard-page test
   (`tests/libc/test_memory_attack.c`); fix verified by UBSan and canaries.
+## Local integration: timingsafe comparisons (2026-11-22)
+
+- Integrated `src/extmem/timingsafe_bcmp.c` and `src/extmem/timingsafe_memcmp.c`
+  verbatim (no source edits). They are compiled by `scripts/build_safecrt.sh`
+  with only `-Dinvoke_safe_mem_constraint_handler=cplus_sc_invoke_safe_mem_constraint_handler`
+  so the already-linked C+ constraint handler is used.
+- Exported as `cplus_sc_timingsafe_bcmp` / `cplus_sc_timingsafe_memcmp` through
+  `stdlib/safe/src/safeclib_ext_wrappers.c` and declared in
+  `stdlib/safe/safe_ext_mem.h`. The upstream `_timingsafe_*_chk` symbols are
+  deliberately not prefixed with -D: safeclib's BOS_OVR2 attribute macros
+  reference the same token and break when it is redefined.
+- Tests: `tests/crt/unit/test_timingsafe_s.c`.
+- License/MIT and upstream commit unchanged (see top of this file).
 

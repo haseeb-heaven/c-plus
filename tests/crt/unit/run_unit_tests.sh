@@ -5,7 +5,7 @@ cd "$ROOT"
 sh scripts/build_safecrt.sh >/dev/null
 sh tests/libc/build_libc.sh >/dev/null
 CC=${CPLUS_CLANG:-clang}
-INC="-Istdlib/safe -Ithird_party/safeclib/include -Ithird_party/intel-safestringlib/include"
+INC="-I$ROOT -Istdlib/safe -Ithird_party/safeclib/include -Ithird_party/intel-safestringlib/include"
 LIB=build/safe/libcplus_safecrt.a
 OUT=build/safe/unit
 mkdir -p "$OUT"
