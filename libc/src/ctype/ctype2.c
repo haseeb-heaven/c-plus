@@ -1,5 +1,6 @@
 #include "../../log/log.h"
 #include <ctype.h>
+#include <stdio.h> /* EOF */
 
 /* ISO C requires c to be EOF or representable as unsigned char; cast before
  * the table lookup so negative signed char values cannot index out of range. */
