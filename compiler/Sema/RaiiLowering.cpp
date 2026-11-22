@@ -1388,6 +1388,19 @@ private:
           for (auto &kv : live) {
             if (kv.second.escaped || longjmpReported.count(kv.first))
               continue;
+            // The setjmp resume path may free the allocation after longjmp;
+            // a forward scan for free(p) in the remaining body avoids a
+            // false positive on that idiom.
+            bool freedLater = false;
+            for (size_t k = i + 1; k < closeIdx && !freedLater; ++k)
+              if (isIdent(k, "free") || isIdent(k, "fclose")) {
+                size_t lp = nextSig(k);
+                size_t arg = isPunct(lp, "(") ? nextSig(lp) : kNPos;
+                if (arg < closeIdx && toks_[arg].text == kv.first)
+                  freedLater = true;
+              }
+            if (freedLater)
+              continue;
             longjmpReported.insert(kv.first);
             errorAt("longjmp bypasses cleanup of live allocation '" +
                         kv.first + "'",

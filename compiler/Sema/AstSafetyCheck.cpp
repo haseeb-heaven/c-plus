@@ -1156,10 +1156,31 @@ public:
   bool VisitCastExpr(CastExpr *cast) {
     if (!report_)
       return true;
-    const Expr *sub = cast->getSubExpr()->IgnoreParenImpCasts();
+    const Expr *sub = cast->getSubExpr()->IgnoreParenCasts();
+    // Record integers derived from a real pointer: `(uintptr_t)p` and tagged
+    // forms. Casting such an integer back to a pointer preserves provenance.
+    // (the variable-level case is recorded in VisitVarDecl)
     if (!sub || !cast->getType()->isPointerType() ||
         !sub->getType()->isIntegerType() || isNullConstant(sub))
       return true;
+    if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (provenanceInts_.count(vd->getNameAsString()))
+          return true; // verified round-trip
+    // A mask/tag operation on a provenance-tracked integer (u & ~1) restores
+    // the original pointer and is a valid round-trip.
+    if (const auto *bo = dyn_cast<BinaryOperator>(sub))
+      if (bo->isBitwiseOp()) {
+        auto mentionsProvenance = [&](const Expr *e) -> bool {
+          if (const auto *r = dyn_cast<DeclRefExpr>(e->IgnoreParenCasts()))
+            if (const auto *v = dyn_cast<VarDecl>(r->getDecl()))
+              return provenanceInts_.count(v->getNameAsString()) != 0;
+          return false;
+        };
+        if (mentionsProvenance(bo->getLHS()) ||
+            mentionsProvenance(bo->getRHS()))
+          return true;
+      }
     // A pointer forged from an arbitrary integer has no provenance that the
     // checker can verify. Reject in STRICT, warn in DEFAULT.
     warnAt(cast->getBeginLoc(),
@@ -1216,6 +1237,28 @@ public:
         nonVolatileGlobals_.insert(vd->getNameAsString());
     }
     recordHeapAllocation(vd);
+    if (report_ && vd->getInit()) {
+      const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      std::function<bool(const Expr *)> derivedFromPointer = [&](const Expr *e) -> bool {
+        if (!e)
+          return false;
+        if (const auto *cast = dyn_cast<CastExpr>(e))
+          return cast->getType()->isIntegerType() &&
+                 cast->getSubExpr()->IgnoreParenImpCasts()->getType()
+                     ->isPointerType();
+        // `((uintptr_t)&x | 1)` and `x & ~mask` preserve provenance.
+        if (const auto *bo = dyn_cast<BinaryOperator>(e))
+          if (bo->isBitwiseOp())
+            return derivedFromPointer(bo->getLHS()) ||
+                   derivedFromPointer(bo->getRHS());
+        if (const auto *ref = dyn_cast<DeclRefExpr>(e))
+          if (const auto *ivd = dyn_cast<VarDecl>(ref->getDecl()))
+            return provenanceInts_.count(ivd->getNameAsString()) != 0;
+        return false;
+      };
+      if (derivedFromPointer(init))
+        provenanceInts_.insert(vd->getNameAsString());
+    }
     if (!report_) {
       // Record local integer constants for constant-propagated bounds checks.
       if (vd->hasLocalStorage() && vd->getType()->isIntegerType() &&
@@ -2319,6 +2362,7 @@ private:
   std::map<std::string, unsigned> maybeReleaseLines_;
   std::set<std::string> guardedFromConst_;
   std::string nonNullBranch_;
+  std::set<std::string> provenanceInts_;
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, long long>> callParamExtents_;
