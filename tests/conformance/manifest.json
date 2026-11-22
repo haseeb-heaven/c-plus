@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": 1,
+      "gate": "static array bounds",
+      "c_file": "case_01.c",
+      "rust_file": "case_01.rs",
+      "expected_c": "runtime_reject",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "C+ static checker",
+      "mechanism_rust": "bounds check",
+      "note": "c+ check rejects this constant OOB statically, but this runner uses plain clang and only sees a raw SIGSEGV; UBSan would also report it if enabled."
+    },
+    {
+      "id": 2,
+      "gate": "dynamic array bounds",
+      "c_file": "case_02.c",
+      "rust_file": "case_02.rs",
+      "expected_c": "not_proven",
+      "expected_rust": "runtime_reject",
+      "mechanism_c": "UBSan",
+      "mechanism_rust": "bounds check",
+      "note": "The volatile OOB read is silent under plain clang; only UBSan reports it, and no checked API covers a raw stack subscript."
+    },
+    {
+      "id": 3,
+      "gate": "allocation failure safety",
+      "c_file": "case_03.c",
+      "rust_file": "case_03.rs",
+      "expected_c": "accepted",
+      "expected_rust": "accepted",
+      "mechanism_c": "checked API",
+      "mechanism_rust": "checked API (Result)",
+      "note": "Both refuse the oversized request by design; this is genuine safe handling, not a proof about arbitrary raw allocations."
+    },
+    {
+      "id": 4,
+      "gate": "use-after-free",
+      "c_file": "case_04.c",
+      "rust_file": "case_04.rs",
+      "expected_c": "runtime_reject",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "checked API",
+      "mechanism_rust": "borrow checker",
+      "note": "C detects only allocator-tracked stale aliases via the recent-free cache; an alias whose address was re-issued is not provably distinguishable, and Rust rejects at compile time."
+    },
+    {
+      "id": 5,
+      "gate": "double free",
+      "c_file": "case_05.c",
+      "rust_file": "case_05.rs",
+      "expected_c": "runtime_reject",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "checked API",
+      "mechanism_rust": "borrow checker",
+      "note": "free_checked_s catches a second release through a bounded recent-free cache; raw free(p) twice stays UB and is not UBSan-detectable."
+    },
+    {
+      "id": 6,
+      "gate": "ownership/lifetime",
+      "c_file": "case_06.c",
+      "rust_file": "case_06.rs",
+      "expected_c": "not_proven",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "none",
+      "mechanism_rust": "borrow checker",
+      "note": "Escaped stack addresses are a documented C+ compiler gap; the stale read prints a value and exits 0, so nothing proves safety here."
+    },
+    {
+      "id": 7,
+      "gate": "null/dangling pointer",
+      "c_file": "case_07.c",
+      "rust_file": "case_07.rs",
+      "expected_c": "runtime_reject",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "checked API",
+      "mechanism_rust": "borrow checker",
+      "note": "The guarded C API rejects NULL with EINVAL, but unguarded raw NULL dereference remains UB; Rust rejects the type mismatch instead."
+    },
+    {
+      "id": 8,
+      "gate": "data race",
+      "c_file": "case_08.c",
+      "rust_file": "case_08.rs",
+      "expected_c": "not_proven",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "none",
+      "mechanism_rust": "borrow checker",
+      "note": "The unsynchronised C increment silently loses updates; only ThreadSanitizer would detect it, and C+ metadata locking does not cover caller state."
+    },
+    {
+      "id": 9,
+      "gate": "integer overflow",
+      "c_file": "case_09.c",
+      "rust_file": "case_09.rs",
+      "expected_c": "runtime_reject",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "checked API",
+      "mechanism_rust": "compile-time overflow lint",
+      "note": "size_t wrapping is defined so UBSan does not flag it; C detects the resulting allocation-count mismatch via metadata, while rustc rejects the constant overflow."
+    },
+    {
+      "id": 10,
+      "gate": "uninitialized memory",
+      "c_file": "case_10.c",
+      "rust_file": "case_10.rs",
+      "expected_c": "not_proven",
+      "expected_rust": "compile_reject",
+      "mechanism_c": "none",
+      "mechanism_rust": "borrow checker",
+      "note": "The uninitialized struct field reads an indeterminate value and exits 0; neither C+, -Wuninitialized nor UBSan diagnoses this shape."
+    },
+    {
+      "id": 11,
+      "gate": "indirect-call validation",
+      "c_file": "case_11.c",
+      "rust_file": "case_11.rs",
+      "expected_c": "runtime_reject",
+      "expected_rust": "runtime_reject",
+      "mechanism_c": "checked API",
+      "mechanism_rust": "language-level bounds/panic / unsafe boundary",
+      "note": "C validates the index only because the heap table has tracked length metadata; a raw stack table with a wrong length cannot be validated, and Rust panics on the runtime index. [updated to measured rustc 1.100.0 behaviour: this case is rejected at compile time]"
+    },
+    {
+      "id": 12,
+      "gate": "FFI/unsafe boundary",
+      "c_file": "case_12.c",
+      "rust_file": "case_12.rs",
+      "expected_c": "runtime_reject",
+      "expected_rust": "runtime_reject",
+      "mechanism_c": "none",
+      "mechanism_rust": "language-level bounds/panic / unsafe boundary",
+      "note": "Neither language enforces the external contract: C crashes on the NULL argument, and Rust's unsafe marker only shifts responsibility to the caller before its null check aborts. [updated to measured rustc 1.100.0 behaviour: this case is rejected at compile time]"
+    }
+  ]
+}

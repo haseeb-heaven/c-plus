@@ -112,7 +112,7 @@ run_variant() {
       # Do not hide failures behind a zero exit code: require a perfect
       # "<N>/<N> checks ok" summary when the suite prints one.
       summary=$(summary_line "$group" "$run_log")
-      counts=$(printf '%s' "$summary" | sed -n 's/.*\([0-9][0-9]*\)\/\([0-9][0-9]*\) checks ok.*/\1 \2/p')
+      counts=$(printf '%s' "$summary" | sed -n 's/.*[^0-9]\([0-9][0-9]*\)\/\([0-9][0-9]*\) checks ok.*/\1 \2/p')
       if [ -n "$counts" ]; then
         got=${counts%% *}; want=${counts##* }
         if [ "$got" != "$want" ]; then
