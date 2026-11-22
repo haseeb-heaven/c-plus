@@ -1099,6 +1099,28 @@ private:
         expr.replace(at, 6, var);
       dynamicLengths_.push_back({i, var, expr, exprFrom, exprTo});
     }
+    // Propagate length metadata to simple aliases: `int *q = p;` where p is
+    // already a tracked managed allocation. No arithmetic is inferred.
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Identifier || !ts.isPunct(ts.nextSig(i), "="))
+        continue;
+      size_t rhs = ts.nextSig(ts.nextSig(i));
+      if (rhs >= ts.size() || ts[rhs].kind != TokKind::Identifier)
+        continue;
+      const std::string alias = ts[i].text, src = ts[rhs].text;
+      if (src == alias || dynamicPointers_.count(alias) ||
+          !dynamicPointers_.count(src))
+        continue;
+      dynamicPointers_.insert(alias);
+      for (const auto &entry : dynamicLengths_)
+        if (entry.name == src) {
+          std::string e = entry.expr;
+          size_t at = e.find(src);
+          if (at != std::string::npos)
+            e.replace(at, src.size(), alias);
+          dynamicLengths_.push_back({i, alias, e, entry.exprFrom, entry.exprTo});
+        }
+    }
     // Record explicit releases so a `.len` query after release can be made
     // to trap instead of returning the folded constant.
     for (size_t i = 0; i < ts.size(); ++i) {
