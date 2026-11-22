@@ -28,6 +28,11 @@ run scenario-suites       sh tests/scenarios/run_scenarios.sh
 run method-suites         sh tests/methods/run_methods.sh
 run hundred-suites        sh tests/methods/run_hundred.sh
 run family-suites         sh tests/family_gaps/run_family_tests.sh
+run deep-stdlib           sh tests/stdlib/run_deep_tests.sh
+run compile-time-safety   sh tests/stdlib/compile_time/run_compile_time.sh
+run libc-fuzz             sh tests/libc/run_fuzz_libc.sh
+run alloc-fault-matrix   sh tests/libc/run_alloc_fault_matrix.sh
+run abi-layouts           sh tests/abi/run_abi_layouts.sh
 run integration           sh tests/integration/run_integration.sh
 run rust-vs-cplus         sh tests/rust_vs_cplus/run_compare.sh
 run cplus-rust-gates      sh tests/conformance/run_conformance.sh
