@@ -68,6 +68,10 @@ SRCS="
   libc/src/wctype/wctype_extra.c
   libc/src/complex/complex_extra.c
   libc/src/complex/complex_inverse.c
+  libc/src/wchar/wchar_gaps.c
+  libc/src/uchar/uchar.c
+  libc/src/c23_small_gaps.c
+  libc/src/math/math_c23.c
   libc/src/math/math_gaps.c
   libc/src/math/math_float.c
   libc/src/math/math_ldouble.c

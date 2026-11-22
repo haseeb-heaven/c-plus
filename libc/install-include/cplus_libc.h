@@ -195,6 +195,22 @@ int cplus_wctomb(char*, wchar_t);
 size_t cplus_mbstowcs(wchar_t *restrict, const char *restrict, size_t);
 size_t cplus_wcstombs(char *restrict, const wchar_t *restrict, size_t);
 
+/* Additional gap-closing APIs defined in this library */
+int cplus_wcscoll(const wchar_t *ws1, const wchar_t *ws2);
+size_t cplus_wcsxfrm(wchar_t *ws1, const wchar_t *ws2, size_t n);
+wchar_t *cplus_wcschr(const wchar_t *ws, wchar_t wc);
+wchar_t *cplus_wcsrchr(const wchar_t *ws, wchar_t wc);
+wchar_t *cplus_wcspbrk(const wchar_t *ws1, const wchar_t *ws2);
+size_t cplus_wcsspn(const wchar_t *ws1, const wchar_t *ws2);
+size_t cplus_wcscspn(const wchar_t *ws1, const wchar_t *ws2);
+wchar_t *cplus_wmemchr(const wchar_t *s, wchar_t c, size_t n);
+wchar_t *cplus_fgetws(wchar_t *ws, int n, FILE *stream);
+int cplus_fputws(const wchar_t *ws, FILE *stream);
+int cplus_mbsinit(const mbstate_t *ps);
+double cplus_roundeven(double x);
+float cplus_roundevenf(float x);
+long double cplus_roundevenl(long double x);
+
 /* ---- Extended ISO C17 surface -------------------------------------------
  * All functions below are PLATFORM_BACKED: namespaced cplus_* wrappers
  * that delegate to the installed host C runtime. They are NOT bundled

@@ -62,6 +62,10 @@ set(LIBC_SOURCES
   src/wctype/wctype_extra.c
   src/complex/complex_extra.c
   src/complex/complex_inverse.c
+  src/wchar/wchar_gaps.c
+  src/uchar/uchar.c
+  src/c23_small_gaps.c
+  src/math/math_c23.c
   src/math/math_gaps.c
   src/math/math_float.c
   src/math/math_ldouble.c
