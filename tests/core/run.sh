@@ -269,6 +269,13 @@ else
   bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
 fi
 
+# Paired C+/Rust scenarios: C+ expectations asserted, Rust results recorded.
+if python3 "$ROOT/tests/core/rust_compare_suite.py" >"$OUT/rust_compare.log" 2>&1; then
+  ok rust_compare_suite
+else
+  bad rust_compare_suite "$(head -1 "$OUT/rust_compare.log")"
+fi
+
 # Function-pointer arrays: compile-time error for constant indices, C+
 # runtime check for user-controlled indices, no check needed for safe loops.
 if python3 "$ROOT/tests/core/fnptr_bounds_suite.py" >"$OUT/fnptr_bounds.log" 2>&1; then
