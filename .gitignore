@@ -29,6 +29,7 @@ cplus_rewritten.c
 # scratch is a working area, but the ISO/C bug catalogs are deliverable fixtures.
 scratch/*
 !scratch/bugs*.cp
+!scratch/demo.c
 
 benchmarks/out/
 

@@ -354,6 +354,32 @@ void free_s(void *ptr) {
     cplus_safe_stat_record("free_s", rc == CPLUS_SAFE_OK);
 }
 
+/* Remaining writable bytes from `ptr` to the end of its containing live
+ * block. Works for INTERIOR pointers (base + offset), which is what ordinary
+ * `memset(buffer + offset, ...)` / `memcpy` calls actually pass. Returns 0
+ * when the pointer is not inside any tracked live block. */
+size_t cplus_safe_remaining_capacity(const void *ptr) {
+    size_t k;
+    uintptr_t p = (uintptr_t)ptr;
+    if (!ptr) return (size_t)-1;
+    pthread_mutex_lock(&g_lock);
+    for (k = 0; k < g_cap; ++k) {
+        void *base = g_tab[k].ptr;
+        uintptr_t b;
+        if (base == NULL || base == TOMB) continue;
+        b = (uintptr_t)base;
+        /* Include the one-past-the-end address: its remaining capacity is
+         * exactly 0, which is KNOWN and must reject any non-empty write. */
+        if (p >= b && p <= b + g_tab[k].size) {
+            size_t cap = (size_t)(b + g_tab[k].size - p);
+            pthread_mutex_unlock(&g_lock);
+            return cap;
+        }
+    }
+    pthread_mutex_unlock(&g_lock);
+    return (size_t)-1; /* pointer not inside any tracked block */
+}
+
 int cplus_safe_alloc_get_meta(const void *ptr, cplus_safe_alloc_meta *out) {
     slot *s;
     if (out) {

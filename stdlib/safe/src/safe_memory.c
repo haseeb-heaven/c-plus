@@ -80,13 +80,37 @@ errno_t cplus_memzero_s(void *dest, rsize_t dmax) {
     return r;
 }
 
-static size_t cplus_safe_resolve_dmax(const void *ptr, size_t n, size_t known_dmax) {
-    size_t tracked = cplus_safe_ptr_size(ptr);
-    if (tracked > 0)
-        return tracked;
-    if (known_dmax != (size_t)-1)
-        return known_dmax;
-    return n;
+/* Unknown capacity is NOT verified capacity. Default mode keeps raw-C
+ * compatibility (the operation proceeds with a warning); strict mode refuses.
+ * The caller can select the mode explicitly. */
+static int g_unknown_capacity_strict = 0;
+
+void cplus_safe_set_unknown_capacity_mode(int strict) {
+    g_unknown_capacity_strict = strict ? 1 : 0;
+}
+
+static int cplus_safe_capacity(const void *ptr, size_t known_dmax,
+                               size_t *out) {
+    size_t tracked = cplus_safe_remaining_capacity(ptr);
+    if (tracked != (size_t)-1) { *out = tracked; return 1; }
+    if (known_dmax != (size_t)-1) { *out = known_dmax; return 1; }
+    return 0;
+}
+
+/* Returns 1 when the operation must be refused, 0 when dmax is usable. */
+static int cplus_safe_check_capacity(const char *api, const void *ptr, size_t n,
+                                     size_t known_dmax, size_t *dmax_out) {
+    if (cplus_safe_capacity(ptr, known_dmax, dmax_out)) return 0;
+    if (g_unknown_capacity_strict) {
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "unknown destination capacity");
+        cplus_safe_stat_record(api, 0);
+        errno = EINVAL;
+        return 1;
+    }
+    cplus_safe_log(CPLUS_SAFE_LOG_WARN, api,
+                   "unknown destination capacity - unchecked");
+    *dmax_out = n; /* no safety claim is made in this case */
+    return 0;
 }
 
 static void cplus_safe_report_overflow(const char *api, size_t requested, size_t dmax) {
@@ -94,9 +118,12 @@ static void cplus_safe_report_overflow(const char *api, size_t requested, size_t
     errno = ERANGE;
     cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "destination buffer overflow prevented");
     cplus_safe_stat_record(api, 0);
+    /* ESNOSPC (406) is the safeclib constraint code for "not enough space";
+     * report it explicitly so callers can map the diagnostic to the checked
+     * API's error convention as well as to errno = ERANGE. */
     snprintf(msg, sizeof(msg),
-             "buffer overflow refused (requested %zu > capacity %zu)",
-             requested, dmax);
+             "buffer overflow refused (requested %zu > capacity %zu, "
+             "ESNOSPC 406)", requested, dmax);
     cplus_runtime_violation(api, msg);
 }
 
@@ -120,7 +147,7 @@ void *cplus_memcpy_s_auto(void *dest, const void *src, size_t n, size_t known_dm
         cplus_safe_stat_record("memcpy_s", 0);
         return NULL;
     }
-    dmax = cplus_safe_resolve_dmax(dest, n, known_dmax);
+    if (cplus_safe_check_capacity("mem*_s_auto", dest, n, known_dmax, &dmax)) return NULL;
     if (n > dmax || n > RSIZE_MAX_MEM) {
         cplus_safe_report_overflow("memcpy_s", n, dmax);
         return NULL;
@@ -153,7 +180,7 @@ void *cplus_memmove_s_auto(void *dest, const void *src, size_t n, size_t known_d
         cplus_safe_stat_record("memmove_s", 0);
         return NULL;
     }
-    dmax = cplus_safe_resolve_dmax(dest, n, known_dmax);
+    if (cplus_safe_check_capacity("mem*_s_auto", dest, n, known_dmax, &dmax)) return NULL;
     if (n > dmax || n > RSIZE_MAX_MEM) {
         cplus_safe_report_overflow("memmove_s", n, dmax);
         return NULL;
@@ -181,7 +208,7 @@ void *cplus_memset_s_auto(void *dest, int value, size_t n, size_t known_dmax) {
         cplus_safe_stat_record("memset_s", 1);
         return dest;
     }
-    dmax = cplus_safe_resolve_dmax(dest, n, known_dmax);
+    if (cplus_safe_check_capacity("mem*_s_auto", dest, n, known_dmax, &dmax)) return NULL;
     if (n > dmax || n > RSIZE_MAX_MEM) {
         cplus_safe_report_overflow("memset_s", n, dmax);
         return NULL;
@@ -210,8 +237,8 @@ int cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s
         cplus_safe_stat_record("memcmp_s", 0);
         return (s1 == s2) ? 0 : (s1 ? 1 : -1);
     }
-    d1 = cplus_safe_resolve_dmax(s1, n, known_s1);
-    d2 = cplus_safe_resolve_dmax(s2, n, known_s2);
+    if (cplus_safe_check_capacity("memcmp_s", s1, n, known_s1, &d1)) return -1;
+    if (cplus_safe_check_capacity("memcmp_s", s2, n, known_s2, &d2)) return -1;
     if (n > d1 || n > d2 || n > RSIZE_MAX_MEM) {
         cplus_safe_report_overflow("memcmp_s", n, (n > d1) ? d1 : d2);
         return -1;
