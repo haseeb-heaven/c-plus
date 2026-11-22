@@ -1822,6 +1822,51 @@ public:
       name = callee->getNameAsString();
     }
 
+    // Format-string safety (CWE-134): the format argument must be a string
+    // literal. This applies to all printf/scanf families including C+'s _s
+    // extensions, because an _s suffix does not sanitise the format itself.
+    if (report_) {
+      static const std::set<std::string> kPrintfLike = {
+          "printf", "fprintf", "sprintf", "snprintf", "vprintf", "vfprintf",
+          "vsprintf", "vsnprintf", "printf_s", "fprintf_s", "sprintf_s",
+          "snprintf_s", "cplus_printf_s", "cplus_fprintf_s",
+          "cplus_snprintf_s", "cplus_sprintf_s"};
+      static const std::set<std::string> kScanfLike = {
+          "scanf", "fscanf", "sscanf", "scanf_s", "fscanf_s", "sscanf_s"};
+      bool isPrintf = kPrintfLike.count(name) != 0;
+      bool isScanf = kScanfLike.count(name) != 0;
+      if (isPrintf || isScanf) {
+        unsigned fmtIdx = 0;
+        // fprintf(stream, fmt, ...), sprintf(dst, fmt, ...),
+        // snprintf(dst, size, fmt, ...) place the format after the stream or
+        // destination (and capacity).
+        if (name == "fprintf" || name == "fprintf_s" ||
+            name == "cplus_fprintf_s" || name == "sprintf" ||
+            name == "sprintf_s" || name == "cplus_sprintf_s")
+          fmtIdx = 1;
+        else if (name == "snprintf" || name == "snprintf_s" ||
+                 name == "cplus_snprintf_s")
+          fmtIdx = 2;
+        // scanf(fmt, ...), fscanf(stream, fmt, ...), sscanf(src, fmt, ...):
+        // scanf has format at 0; fscanf/sscanf have it at 1.
+        if (name == "fscanf" || name == "fscanf_s" || name == "sscanf" ||
+            name == "sscanf_s")
+          fmtIdx = 1;
+        if (call->getNumArgs() > fmtIdx) {
+          const Expr *fmt = call->getArg(fmtIdx)->IgnoreParenCasts();
+          if (!isa<StringLiteral>(fmt)) {
+            std::string msg = "format string in " + name +
+                              " is not a string literal (CWE-134; attacker-"
+                              "controlled format)";
+            if (strict_)
+              report(call->getBeginLoc(), msg);
+            else
+              warnAt(call->getBeginLoc(), msg);
+          }
+        }
+      }
+    }
+
     if (!report_ && callee) {
       // Record allocation extents passed as arguments so the callee can
       // bounds-check its parameter accesses.
