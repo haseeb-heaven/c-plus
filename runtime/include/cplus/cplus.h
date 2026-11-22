@@ -153,6 +153,11 @@ size_t cplus_alloc_bytes(const void *ptr);
 /* Abort unless `ptr` is a live C+ allocation.  This is an explicit check for
  * dangling managed pointers; ordinary dereferences are not instrumented. */
 void cplus_check_live(const void *ptr);
+
+/* Inserted by the C+ compiler for dynamic indices into fixed-size arrays.
+ * Returns the index when it is in range; otherwise prints a diagnostic and
+ * aborts before the out-of-bounds access happens. */
+size_t __cplus_bounds_check(size_t index, size_t length, const char *name);
 size_t cplus_alloc_count(const void *ptr, size_t elem_size);
 
 /* Checked array index.  Returns `index` when it is in range and terminates

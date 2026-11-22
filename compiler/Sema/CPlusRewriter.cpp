@@ -1625,4 +1625,88 @@ void clearExternalClasses() {
   externalResources().clear();
 }
 
+std::string instrumentDynamicArrayBounds(
+    const std::string &source,
+    const std::map<std::string, size_t> &arrayLengths) {
+  if (arrayLengths.empty())
+    return source;
+  std::vector<Token> toks = lexCPlus(source);
+  auto significant = [&](size_t i) -> bool {
+    return toks[i].kind != TokKind::Whitespace &&
+           toks[i].kind != TokKind::Comment;
+  };
+  auto nextSig = [&](size_t i) -> size_t {
+    while (i < toks.size() && !significant(i))
+      ++i;
+    return i < toks.size() ? i : kNPos;
+  };
+  struct Insertion {
+    size_t offset;
+    std::string text;
+  };
+  std::vector<Insertion> insertions;
+  for (size_t i = 0; i < toks.size(); ++i) {
+    if (toks[i].kind != TokKind::Identifier)
+      continue;
+    auto ai = arrayLengths.find(toks[i].text);
+    if (ai == arrayLengths.end())
+      continue;
+    size_t open = nextSig(i + 1);
+    if (open == kNPos || toks[open].text != "[")
+      continue;
+    int depth = 0;
+    size_t close = kNPos;
+    for (size_t k = open; k < toks.size(); ++k) {
+      if (toks[k].kind == TokKind::Punct) {
+        if (toks[k].text == "[") ++depth;
+        else if (toks[k].text == "]") {
+          if (--depth == 0) { close = k; break; }
+        }
+      }
+    }
+    if (close == kNPos)
+      continue;
+    size_t first = nextSig(open + 1);
+    if (first >= close)
+      continue; // empty subscript: declaration, not an access
+    // Constant indices are diagnosed statically; no runtime check needed.
+    size_t last = close;
+    do { --last; } while (last > first && !significant(last));
+    size_t sigCount = 0;
+    bool onlyNumber = true;
+    for (size_t k = first; k <= last; ++k) {
+      if (!significant(k)) continue;
+      ++sigCount;
+      if (toks[k].kind != TokKind::Number) onlyNumber = false;
+    }
+    if (sigCount == 1 && onlyNumber)
+      continue;
+    size_t idxBegin = toks[first].offset;
+    std::string indexText =
+        source.substr(idxBegin, toks[last].offset + toks[last].text.size() -
+                                     idxBegin);
+    (void)indexText;
+    insertions.push_back({idxBegin,
+                          "__cplus_bounds_check((size_t)("});
+    insertions.push_back({toks[close].offset,
+                          "), " + std::to_string(ai->second) + ", \"" +
+                              toks[i].text + "\")"});
+  }
+  if (insertions.empty())
+    return source;
+  std::string out = source;
+  std::stable_sort(insertions.begin(), insertions.end(),
+                   [](const Insertion &a, const Insertion &b) {
+                     return a.offset > b.offset;
+                   });
+  for (const auto &ins : insertions)
+    out.insert(ins.offset, ins.text);
+  // Put the helper declaration before the first #line directive so the
+  // original source line numbers are preserved.
+  out = "#include <stddef.h>\n"
+        "extern size_t __cplus_bounds_check(size_t, size_t, const char *);\n" +
+        out;
+  return out;
+}
+
 } // namespace cplus

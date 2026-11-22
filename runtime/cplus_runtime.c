@@ -15,6 +15,17 @@
 #include "cplus/cplus.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+
+size_t __cplus_bounds_check(size_t index, size_t length, const char *name) {
+  if (index < length)
+    return index;
+  fprintf(stderr,
+          "C+ error: index %zu is outside the bounds of '%s' (length %zu)\n",
+          index, name ? name : "array", length);
+  abort();
+}
 
 int cplus_runtime_log_level = 99; /* enabled by generated program constructor */
 
@@ -35,6 +46,7 @@ static void cplus_log_impl(int level, const char *file, int line,
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdlib.h>
 #include <string.h>
 

@@ -6,6 +6,9 @@ not a claim of complete memory safety.
 | SAFE rule | test(s) | type |
 | --- | --- | --- |
 | ordinary C / libc compatibility | cases/c_abi, cases/hello, core/libc_valid, core/libc_matrix/valid_malloc | positive |
+| fixed-array bounds (constant index) | compile_fail/constant_oob, loop_oob, fnptr_bounds/const_oob_5556, const_oob_3 | negative |
+| fixed-array bounds (dynamic index) | fnptr_bounds/dynamic_oob, runtime_fail/bounds, core/fnptr_bounds_suite | negative (C+ runtime check) |
+| fixed-array bounds (safe loop) | fnptr_bounds/safe_indices, core/positive/bounds_var_index_ok | positive |
 | resource copy/assignment rejected | compile_fail/resource_copy, resource_assign | negative |
 | move + moved-from rejection | cases/resource_move, compile_fail/use_after_move, core/move_chain_ok, safety/moved_from_warning | positive/negative |
 | borrow escape / conflict | compile_fail/borrow_escape, safety/borrow_after_move, safety/borrow_invalid_destructor, safety/borrow_conflict, core/borrow_field_ok | positive/negative |

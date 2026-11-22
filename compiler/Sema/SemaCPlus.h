@@ -62,6 +62,12 @@ struct RewrittenSource {
 /// Rewrite C+ specific syntax into equivalent C syntax annotated for the
 /// later passes.  The rewrite is purely lexical/syntactic and preserves line
 /// numbering so diagnostics stay accurate.
+/// Insert C+ runtime bounds checks around dynamic indices into fixed-size
+/// arrays. Constant indices are left to the static bounds checker.
+std::string instrumentDynamicArrayBounds(
+    const std::string &source,
+    const std::map<std::string, size_t> &arrayLengths);
+
 RewrittenSource rewriteCPlusSyntax(const std::string &source,
                                    DiagnosticEngine &diags,
                                    const std::string &filename);

@@ -3037,10 +3037,30 @@ public:
     }
     unsigned long long extent = arrayType->getSize().getZExtValue();
     unsigned long long value = static_cast<unsigned long long>(signedIndex);
-    if (value >= extent)
-      report(subscript->getBeginLoc(),
-             "array index " + std::to_string(value) +
-                 " exceeds length " + std::to_string(extent));
+    if (value >= extent) {
+      std::string name = varNameOf(subscript->getBase());
+      if (name.empty())
+        name = lvalueKey(subscript->getBase());
+      Diag d;
+      d.level = DiagLevel::Error;
+      d.message = "[CPLUS-SAFE-BOUNDS] constant array index " +
+                  std::to_string(value) + " is outside the bounds of '" + name +
+                  "'";
+      d.file = filename_;
+      PresumedLoc ploc =
+          ctx_.getSourceManager().getPresumedLoc(subscript->getBeginLoc());
+      if (ploc.isValid()) {
+        d.line = ploc.getLine();
+        d.column = ploc.getColumn();
+        std::string f = ploc.getFilename();
+        if (f == filename_ + ".c") f = filename_;
+        if (!f.empty()) d.file = f;
+      }
+      d.help = "array contains " + std::to_string(extent) +
+               " elements; valid indices are 0.." +
+               std::to_string(extent - 1);
+      diags_.report(std::move(d));
+    }
     return true;
   }
 

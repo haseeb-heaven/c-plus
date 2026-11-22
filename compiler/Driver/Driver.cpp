@@ -399,8 +399,11 @@ std::string lowerUnit(const std::string &text, const std::string &name,
                       RewrittenSource *outRewritten = nullptr,
                       bool headerMode = false, bool strict = false) {
   RewrittenSource rewritten = rewriteCPlusSource(text, diags, name, headerMode);
-  if (mode == Mode::Safe)
+  if (mode == Mode::Safe) {
     checkStaticBounds(text, rewritten.arrayLengths, diags, name);
+    // Dynamic indices into fixed-size arrays get a C+ runtime check before
+    // the access. Constant indices were either diagnosed above or left alone.
+  }
   LoweredSource lowered =
       lowerRaii(rewritten.text, rewritten.resourceTypes, diags, name, mode,
                 strict);
@@ -860,8 +863,9 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     DRIVER_LOG(CLOG_DEBUG, "lowering %s", input.c_str());
     bool ok = false;
+    RewrittenSource rewritten;
     std::string loweredText = lowerUnit(source, input, diags, opts.mode, &ok,
-                                        nullptr, false, opts.strict);
+                                        &rewritten, false, opts.strict);
     DRIVER_LOG(CLOG_DEBUG, "lowered %s (%zu bytes)", input.c_str(),
                loweredText.size());
     if (opts.mode == Mode::Safe)
@@ -871,6 +875,12 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       return 1;
     if (opts.warningsAsErrors && diags.warningCount() > 0)
       return 1;
+    if (opts.mode == Mode::Safe && opts.command != "check") {
+      // Runtime checks are inserted only after all static analysis, so an
+      // instrumented index expression cannot mask a provable bounds error.
+      loweredText = instrumentDynamicArrayBounds(loweredText,
+                                                 rewritten.arrayLengths);
+    }
 
     if (fileIndex == 0 && !opts.emitC.empty()) {
       if (!writeFile(opts.emitC, loweredText, &err)) {

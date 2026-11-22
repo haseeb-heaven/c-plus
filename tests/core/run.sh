@@ -269,6 +269,14 @@ else
   bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
 fi
 
+# Function-pointer arrays: compile-time error for constant indices, C+
+# runtime check for user-controlled indices, no check needed for safe loops.
+if python3 "$ROOT/tests/core/fnptr_bounds_suite.py" >"$OUT/fnptr_bounds.log" 2>&1; then
+  ok fnptr_bounds_suite
+else
+  bad fnptr_bounds_suite "$(head -1 "$OUT/fnptr_bounds.log")"
+fi
+
 # 15 runtime-crash scenarios: each must be rejected statically or produce the
 # expected sanitizer-specific report (a bare signal is never sufficient).
 if python3 "$ROOT/tests/core/runtime_crashes_suite.py" >"$OUT/runtime_crashes.log" 2>&1; then

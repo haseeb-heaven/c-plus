@@ -306,6 +306,21 @@ private:
     diags_.report(std::move(d));
   }
 
+  void reportConstantIndex(const Token &at, long index,
+                           const std::string &name, size_t extent) {
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = tagged("constant array index " + std::to_string(index) +
+                       " is outside the bounds of '" + name + "'");
+    d.file = filename_;
+    d.line = at.line;
+    d.column = at.column;
+    d.help = "array contains " + std::to_string(extent) +
+             " elements; valid indices are 0.." +
+             std::to_string(extent - 1);
+    diags_.report(std::move(d));
+  }
+
   void collectLocalArrays() {
     static const char *const kTypes[] = {
         "int", "char", "short", "long", "float", "double", "void",
@@ -474,7 +489,8 @@ private:
         return;
       Interval v = evalIndex(cursor + 1, close, var, vlo, vhi);
       if (v.known && (v.lo < 0 || v.hi >= static_cast<long>((*dims)[d])))
-        report(toks_[cursor], v.hi, toks_[nameIdx].text, (*dims)[d]);
+        reportConstantIndex(toks_[cursor], v.hi, toks_[nameIdx].text,
+                            (*dims)[d]);
       cursor = nextSig(close);
     }
   }
