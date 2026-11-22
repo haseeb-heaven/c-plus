@@ -10,6 +10,7 @@
 #include <clang/Basic/SourceManager.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <deque>
 #include <iterator>
@@ -61,6 +62,107 @@ bool isRequiredContractField(llvm::StringRef f) {
       "readEffects",      "writeEffects",      "freeEffects",
       "returnState",      "failureBehavior",   "threadAssumptions"};
   return kRequired.count(f) != 0;
+}
+
+/// Strip whitespace so that a declaration like "FILE *stream" and an effect
+/// target like "FILE*" can be compared directly.
+static std::string compactDecl(llvm::StringRef s) {
+  std::string out;
+  for (char c : s)
+    if (!std::isspace(static_cast<unsigned char>(c)))
+      out.push_back(c);
+  return out;
+}
+
+/// True when `pos` starts a declaration word (not in the middle of an
+/// identifier). Prevents e.g. "s" from matching the "s" in "size_t".
+static bool atWordStart(const std::string &s, size_t pos) {
+  if (pos == 0)
+    return true;
+  const char c = s[pos - 1];
+  return !std::isalnum(static_cast<unsigned char>(c)) && c != '_';
+}
+
+/// Index of the parameter whose declaration matches `token` (a parameter name
+/// such as "dst" or a type such as "FILE*"). Returns -1 when no parameter
+/// matches -- notably for the checked `_s` entries, whose `params` are prose
+/// placeholders rather than real signatures, so no index is representable.
+static int paramIndexFor(const llvm::json::Array &params,
+                         llvm::StringRef token) {
+  if (token.empty())
+    return -1;
+  const std::string want = compactDecl(token);
+  int idx = 0;
+  for (const auto &v : params) {
+    auto decl = v.getAsString();
+    if (decl) {
+      const std::string have = compactDecl(*decl);
+      const size_t pos = have.find(want);
+      if (pos != std::string::npos && atWordStart(have, pos)) {
+        const size_t end = pos + want.size();
+        // A type token ending in '*' may be followed directly by the variable
+        // name ("FILE*" -> "FILE*stream").
+        const bool rightOk = end == have.size() || want.back() == '*' ||
+                             (!std::isalnum(
+                                  static_cast<unsigned char>(have[end])) &&
+                              have[end] != '_');
+        if (rightOk)
+          return idx;
+      }
+    }
+    ++idx;
+  }
+  return -1;
+}
+
+/// Index of the first parameter declared as a pointer. Prose placeholders
+/// contain no '*', so this returns -1 for those contracts.
+static int firstPointerParam(const llvm::json::Array &params) {
+  int idx = 0;
+  for (const auto &v : params) {
+    auto decl = v.getAsString();
+    if (decl && decl->contains('*'))
+      return idx;
+    ++idx;
+  }
+  return -1;
+}
+
+/// Split an effect string such as "frees FILE*" or "writes dst" into its verb
+/// and an optional target token naming a parameter.
+struct EffectExpr {
+  llvm::StringRef verb;
+  llvm::StringRef target;
+};
+
+static EffectExpr parseEffectExpr(llvm::StringRef s) {
+  const size_t sp = s.find_first_of(" \t");
+  return {s.take_front(sp), s.substr(sp).trim()};
+}
+
+static void addIndex(std::vector<int> &indices, int idx) {
+  if (idx < 0)
+    return;
+  if (std::find(indices.begin(), indices.end(), idx) == indices.end())
+    indices.push_back(idx);
+}
+
+/// Argument index denoted by `ownershipTransfer` (with `transfer`/`ownership`
+/// as fallbacks) where the description refers to an argument rather than the
+/// return value. Returns -1 when no index is representable.
+static int ownershipTransferArg(const llvm::json::Object &spec,
+                                const llvm::json::Array &params) {
+  auto transfer = spec.getString("ownershipTransfer");
+  auto altTransfer = spec.getString("transfer");
+  auto ownership = spec.getString("ownership");
+  bool viaArg = false;
+  if (transfer)
+    viaArg = *transfer == "arg" || transfer->contains("old alias");
+  if (!viaArg && altTransfer)
+    viaArg = *altTransfer == "arg";
+  if (!viaArg && ownership)
+    viaArg = *ownership == "consumes";
+  return viaArg ? firstPointerParam(params) : -1;
 }
 
 class LocalCollector : public RecursiveASTVisitor<LocalCollector> {
@@ -430,13 +532,16 @@ static ContractState &loadedContracts() {
       else
         st.issues.push_back({fn, "invalid diagnostics category"});
     }
-    // nullableArgs: array of argument indices.
+    // nullableArgs: array of argument indices. Keep the legacy boolean and
+    // additionally record the exact indices for precise consumers.
     if (const auto *nullable = spec->getArray("nullableArgs")) {
       for (const auto &v : *nullable) {
-        if (!v.getAsInteger())
-          st.issues.push_back({fn, "nullableArgs must contain integers"});
-        else
+        if (auto index = v.getAsInteger()) {
           e.nullableArg = true;
+          e.nullableArgIndices.push_back(static_cast<int>(*index));
+        } else {
+          st.issues.push_back({fn, "nullableArgs must contain integers"});
+        }
       }
     }
     // effects: only known verbs may be relied upon.
@@ -506,6 +611,53 @@ static ContractState &loadedContracts() {
             e.freedArg = -1;
         }
       }
+
+    // --- Precise v2 argument-index metadata -------------------------------
+    // `ownershipTransfer`, `freeEffects` and `writeEffects` were recognised
+    // but previously unused. Parse them into explicit argument indices where
+    // the contract supplies a real signature in `params`. Placeholder `_s`
+    // signatures and return-value-only transfers stay empty. No new
+    // diagnostics are produced by this metadata extraction.
+    const llvm::json::Array *params = spec->getArray("params");
+    auto indexFor = [params](llvm::StringRef token) {
+      return params ? paramIndexFor(*params, token) : -1;
+    };
+    auto firstPtr = [params]() {
+      return params ? firstPointerParam(*params) : -1;
+    };
+    const int transferIdx =
+        params ? ownershipTransferArg(*spec, *params) : -1;
+    addIndex(e.ownershipTransferArgs, transferIdx);
+
+    if (const auto *freeEffects = spec->getArray("freeEffects")) {
+      for (const auto &v : *freeEffects) {
+        auto s = v.getAsString();
+        if (!s)
+          continue;
+        EffectExpr ex = parseEffectExpr(*s);
+        if (!ex.verb.starts_with("frees"))
+          continue;
+        int idx = ex.target.empty() ? -1 : indexFor(ex.target);
+        if (idx < 0)
+          idx = transferIdx; // the transferred argument is the freed one
+        addIndex(e.freeArgs, idx);
+      }
+    }
+
+    if (const auto *writeEffects = spec->getArray("writeEffects")) {
+      for (const auto &v : *writeEffects) {
+        auto s = v.getAsString();
+        if (!s)
+          continue;
+        EffectExpr ex = parseEffectExpr(*s);
+        if (ex.verb != "write" && !ex.verb.starts_with("writes"))
+          continue;
+        int idx = ex.target.empty() ? -1 : indexFor(ex.target);
+        if (idx < 0)
+          idx = firstPtr(); // default: the destination pointer argument
+        addIndex(e.writeArgs, idx);
+      }
+    }
     st.contracts[fn] = e;
   }
   return st;

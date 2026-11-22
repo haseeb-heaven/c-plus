@@ -269,6 +269,18 @@ else
   bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
 fi
 
+# Deterministic P0 fuzz + new unique scenario corpora (216 cases total).
+if python3 "$ROOT/tests/metrics/p0fuzz_suite.py" >"$OUT/p0fuzz.log" 2>&1; then
+  ok p0fuzz_suite
+else
+  bad p0fuzz_suite "$(head -1 "$OUT/p0fuzz.log")"
+fi
+if python3 "$ROOT/tests/metrics/p0new_run.py" >"$OUT/p0new.log" 2>&1; then
+  ok p0new_suite
+else
+  bad p0new_suite "$(head -1 "$OUT/p0new.log")"
+fi
+
 # Isolated P0 correctness regressions for issue #21 (out-params, aliases,
 # realloc paths, goto/longjmp cleanup policy).
 if python3 "$ROOT/tests/core/p0_correctness_suite.py" >"$OUT/p0_correctness.log" 2>&1; then

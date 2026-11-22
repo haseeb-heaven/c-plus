@@ -179,7 +179,7 @@ is AST/CFG analysis plus Clang UBSan instrumentation.
 
 ### Unsupported guarantees (explicit)
 
-- No complete use-after-free detection (ASan/TSan broken on this host).
+- No complete use-after-free detection (Apple clang 16 ASan/TSan broken; opt-in with a working backend on this host).
 - No Rust-style provenance for arbitrary casts/pointer arithmetic.
 - No whole-program cross-TU ABI/ownership verification.
 - `goto`/`longjmp` bypass deterministic cleanup.

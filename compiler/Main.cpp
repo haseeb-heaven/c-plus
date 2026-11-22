@@ -77,6 +77,7 @@ void printUsage(raw_ostream &os) {
   os << "  --sanitize=LIST  comma-separated: none|address|undefined|memory|thread|\n";
   os << "                   leak|cfi|integer (Safe mode defaults to undefined)\n";
   os << "  --no-sanitize    plain unsanitized build (alias: --sanitize=none)\n";
+  os << "  --print-sanitizers  print sanitizer names and backend, no build\n";
   os << "  -o <file>        output path\n";
   os << "  --emit-c <file>  write the lowered C source for inspection\n";
   os << "  --keep-temp      keep the generated C file\n";
@@ -131,6 +132,11 @@ int main(int argc, char **argv) {
     }
     if (a == "--version" || a == "-V") {
       printVersion(outs());
+      return 0;
+    }
+    if (a == "--print-sanitizers" || a == "--list-sanitizers") {
+      // Diagnostic-only: no input file, capability probe or build is needed.
+      printSanitizerInfo(outs());
       return 0;
     }
     if (a == "--help" || a == "-h") {

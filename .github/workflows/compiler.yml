@@ -1,0 +1,51 @@
+name: compiler
+
+on:
+  push:
+    branches: [develop, agent/core-safety]
+  pull_request:
+    branches: [develop]
+
+jobs:
+  macos-arm64-cplus:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install llvm cmake ninja rust
+      - name: Configure
+        run: |
+          PREFIX="$(brew --prefix llvm)"
+          cmake -S . -B build -G Ninja \
+            -DLLVM_DIR="$PREFIX/lib/cmake/llvm" \
+            -DClang_DIR="$PREFIX/lib/cmake/clang" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Build
+        run: cmake --build build --target c+ --parallel
+      - name: CTest (repo tests + demos)
+        run: ctest --test-dir build --output-on-failure
+      - name: Core safety suite
+        run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh
+
+  linux-x86-64-cplus:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm-dev libclang-dev cmake \
+                                  ninja-build python3 rustc
+      - name: Configure
+        run: |
+          LLVM_VER="$(llvm-config --version | cut -d. -f1)"
+          cmake -S . -B build -G Ninja \
+            -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+            -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Build
+        run: cmake --build build --target c+ --parallel
+      - name: CTest (repo tests + demos)
+        run: ctest --test-dir build --output-on-failure
+      - name: Core safety suite
+        run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh

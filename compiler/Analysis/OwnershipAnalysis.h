@@ -24,6 +24,23 @@ struct FunctionEffect {
   int freedArg = -1;           ///< argument index freed, when known
   int destArg = -1;            ///< destination buffer argument, when known
   int sizeArg = -1;            ///< destination capacity argument, when known
+
+  // --- Precise v2 argument-index metadata ---------------------------------
+  // Additive: these carry the exact indices encoded in the v2 contract's
+  // structured fields. The scalar fields above are deliberately left
+  // untouched so existing diagnostics are unchanged; new consumers should
+  // prefer these precise lists.
+  /// Exact indices from the `nullableArgs` array (arguments accepting NULL).
+  std::vector<int> nullableArgIndices;
+  /// Argument indices denoted by `ownershipTransfer` when it refers to an
+  /// argument (e.g. "arg", or the old pointer invalidated on success).
+  /// A return-value transfer ("return") yields no index.
+  std::vector<int> ownershipTransferArgs;
+  /// Argument indices freed/consumed, derived from `freeEffects`.
+  std::vector<int> freeArgs;
+  /// Argument indices written through, derived from `writeEffects`.
+  std::vector<int> writeArgs;
+
   std::string category = "CPLUS-SAFE-FFI"; ///< diagnostic category
 };
 

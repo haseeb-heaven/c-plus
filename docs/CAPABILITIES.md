@@ -1,10 +1,13 @@
 # Native capability probe
 
-- compiler: Apple clang version 16.0.0 (clang-1600.0.26.6)
+- default compiler: Apple clang version 16.0.0 (clang-1600.0.26.6); Homebrew
+  clang 23 with an explicit `-isysroot` is also exercised in the matrix below
 - Apple bounds safety (-fbounds-safety): unsupported by this compiler
 - __builtin_object_size: supported
-- ASan runtime: broken/unavailable on this host
-- TSan runtime: broken/unavailable on this host
+- ASan runtime: broken/unavailable with the default Apple clang 16 backend;
+  works with Homebrew clang 23 + `-isysroot` (see matrix below)
+- TSan runtime: broken/unavailable with the default Apple clang 16 backend;
+  detects races with Homebrew clang 23 + `-isysroot` (see matrix below)
 - strcpy_s (native CRT): unavailable (do not emulate silently)
 
 ## Complete sanitizer matrix
@@ -48,6 +51,13 @@ in-process AST checker deliberately strips sanitizer flags (it only keeps
 | LSan | unsupported by compiler | detects leak | suite |
 | CFI | unsupported by compiler | detects invalid indirect call with LTO flags | suite (`--legacy-c`) |
 | Integer | detects unsigned overflow | same | suite |
+
+Dynamic indices into fixed-size arrays (including arrays of function pointers)
+are checked by C+ itself, not by a sanitizer: safe-mode builds insert
+`__cplus_bounds_check` after static analysis, which prints a controlled
+diagnostic and aborts before the access. This is independent of `--sanitize`;
+`c+ check` produces no executable and `--legacy-c` inserts no checks. Evidence:
+`tests/core/fnptr_bounds_suite.py`.
 
 Platforms not available here (Linux x86-64, Linux arm64, macOS x86-64) are
 **not claimed as tested**. The capability probe runs on the selected backend

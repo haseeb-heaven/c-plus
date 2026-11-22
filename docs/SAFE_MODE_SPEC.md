@@ -57,14 +57,14 @@ declared safe subset.
 | provenance / arbitrary casts | PARTIAL -> IMPROVED | allocation/object/alias/string/array origins tracked; integer-forged pointers rejected in STRICT and warned in DEFAULT; casts from int still not proven safe |
 | buffer bounds (constant, constant-propagated local index, simple loops, multidim, heap extents including interprocedural argument extents, memcpy/memset/strcpy/strncpy/strcat/snprintf) | IMPLEMENTED | constant_oob, loop_oob, multidim_bounds, bounds_var_index, memset_overflow, strcat_overflow, strncpy_overflow, snprintf_overflow |
 | libc nullability (null source pointers) | IMPLEMENTED | memcpy_null_source, mass_fuzz memcpy_null_src_* |
-| dynamic bounds checks | PARTIAL | UBSan + FORTIFY; not a complete spatial guarantee |
+| dynamic bounds checks | PARTIAL | C+ inserted __cplus_bounds_check for fixed arrays plus opt-in sanitizers; not a complete spatial guarantee |
 | struct/field ownership | PARTIAL | field borrow conflict; field move not complete |
 | container ownership | UNSUPPORTED | Agent 2 library layer owns this; compiler contract only |
 | function-effect summaries | PARTIAL | libcEffect JSON + simple user `frees(arg)` |
 | cross-TU contracts | PARTIAL | JSON installed; no cross-TU ownership ABI check |
 | thread ownership / race prevention | PARTIAL -> IMPROVED | stack-borrow warning, unsynchronised global write rejection, shared global mutated by multiple pthread_create entries detected (DEFAULT warning / STRICT error); no full race proof |
 | deterministic RAII | IMPLEMENTED (supported exits) | raii_basic, nested_raii, raii_early_return, loop_cleanup |
-| goto/longjmp cleanup | UNSUPPORTED (warning) | classic_bug34; explicit unsafe boundary planned |
+| goto/longjmp cleanup | PARTIAL | STRICT rejects jumps bypassing cleanup of a live allocation (classic_bug34); plain jumps warn |
 | hardened libc contract recognition | IMPLEMENTED (v2 schema) | libc_contracts.json, libc_matrix |
 
 ## Safe-mode diagnostics

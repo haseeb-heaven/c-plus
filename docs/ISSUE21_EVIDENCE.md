@@ -17,7 +17,7 @@ python3 tests/core/fnptr_bounds_suite.py            # 4/4
 python3 tests/core/rust_compare_suite.py            # 20/20 (C+ 15/20, Rust 15/20)
 python3 tests/core/runtime_crashes_suite.py         # 15/15
 python3 tests/core/sanitizer_suite.py               # 33/33
-python3 tests/core/lib_contracts_suite.py           # 46/46
+python3 tests/core/lib_contracts_suite.py           # 58/58
 python3 tests/core/bugs51_97_suite.py               # 207/207 (188 scenarios, 28 documented gaps)
 python3 tests/core/redteam_100.py                   # 110 scenarios, 0 mismatches
 CLANG_BIN=/usr/bin/clang python3 tests/metrics/measure.py
@@ -54,11 +54,30 @@ bug detection 80/107 DEFAULT (74.8%) and 97/107 STRICT (90.7%).
 5. **CI:** all local suites and clean CTest pass on macOS arm64. Remote CI:
    GitGuardian passes; SonarCloud fails on PR #16; the only configured GitHub
    Actions workflow is `libc-crt` (Agent 2) and it is failing on their branch.
-   **No macOS/Linux compiler CI workflow exists yet** — this is an open gap,
-   not a green result.
+   A compiler workflow has now been added on the PR head branch:
+   `.github/workflows/compiler.yml` (macOS arm64 and Linux x86-64 build +
+   CTest + core suite). It has not yet run in GitHub Actions, so CI green is
+   **not claimed**; SonarCloud remains the blocking remote check.
 6. **Docs:** `docs/SAFE_SUBSET.md` updated for C+ inserted bounds checks,
    configurable sanitizers, the new setjmp/goto policy and the fail-closed
    status; `docs/RUST_COMPARISON.md` records the paired C+/Rust evidence.
+
+## 10-agent parallel round (integrated)
+
+Ten parallel agents with disjoint file ownership produced: precise per-argument
+contract metadata (nullableArgs/ownershipTransfer/freeEffects/writeEffects),
+static bounds rules for tracked array pointers and multi-dimensional constant
+indices, CLI sanitizer hardening plus `--print-sanitizers`, 12 additional
+contract-loader tests (58/58), a 176-case deterministic P0 fuzz suite
+(176/176), a 40-case new unique corpus (40/40), docs consistency fixes, and a
+research/ranking of remaining gaps. All agent changes were rebuilt and
+re-verified together.
+
+Final aggregate: 109 repo, 159 core, 11/11 P0 correctness, 4/4 fnptr, 20/20
+Rust paired, 15/15 runtime-crash, 33/33 sanitizer, 58/58 contract, 207/207
+bugs51-97, 110/110 red-team, CTest 2/2, 0 false positives.
+`python3 tests/metrics/coverage_audit.py` reports 11/11 diagnostic families
+with test evidence (heuristic mapping) and all suites PASS.
 
 Remaining known gaps are listed in `docs/LIMITATIONS.md` and the 28 documented
 gaps in `tests/out/core/bugs51_97/report.txt`. PR remains open; no auto-merge.

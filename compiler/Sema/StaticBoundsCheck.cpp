@@ -29,6 +29,20 @@ struct ArrayShape {
   std::vector<size_t> dims;
 };
 
+/// A pointer whose value is a provable constant offset (in elements) from a
+/// fixed array.  This is what lets the checker see `p[-1]` in
+/// `int *p = a; p[-1];` or a one-past dereference in
+/// `int *p = a + 4; (void)*p;` without doing any type analysis.  Facts are
+/// invalidated by any second assignment or ++/--/+=/-=, so a stale offset is
+/// never used to reject valid code.
+struct TrackedArrayPointer {
+  std::string array;         // name of the underlying fixed array
+  std::vector<size_t> dims;  // shape of that array
+  long offset = 0;           // constant element offset from the array base
+  size_t pos = 0;            // token position of the tracked assignment
+  bool rowPointer = false;   // `int (*r)[W] = a`: subscripts select rows
+};
+
 class Checker {
 public:
   Checker(const std::string &source,
@@ -60,6 +74,7 @@ public:
     collectRawAllocationPointers();
     collectSizeConstants();
     collectNegativeNames();
+    collectArrayPointers(); // constant-offset aliases of fixed arrays
     collectTypePunnedPointers();
     checkMemcpyOverlap();
     // Targeted compile-time rejections for user-provided bug patterns.
@@ -83,6 +98,8 @@ public:
         checkTypePun(i);
         checkTypePunnedDeref(i); // bug 45
         checkPointerArithmetic(i);
+        checkTrackedArrayPointer(i); // constant index / one-past / multi-dim
+        checkDirectOnePastDeref(i);  // *(array + N) at the array extent
         checkUnrelatedPointerCompare(i);
         checkEmptyInfiniteLoop(i);
         checkNanCompare(i);
@@ -312,6 +329,41 @@ private:
     d.level = DiagLevel::Error;
     d.message = tagged("constant array index " + std::to_string(index) +
                        " is outside the bounds of '" + name + "'");
+    d.file = filename_;
+    d.line = at.line;
+    d.column = at.column;
+    d.help = "array contains " + std::to_string(extent) +
+             " elements; valid indices are 0.." +
+             std::to_string(extent - 1);
+    diags_.report(std::move(d));
+  }
+
+  /// Report a negative constant index that reaches a fixed array through a
+  /// tracked pointer alias.
+  void reportNegativeAliasIndex(const Token &at, long index,
+                                const std::string &array,
+                                const std::string &ptr) {
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = tagged("negative array index " + std::to_string(index) +
+                       " on '" + array + "' via pointer '" + ptr + "'");
+    d.file = filename_;
+    d.line = at.line;
+    d.column = at.column;
+    d.help = "array '" + array + "' has valid indices starting at 0";
+    diags_.report(std::move(d));
+  }
+
+  /// Report a constant index past the extent of an array reached through a
+  /// tracked pointer alias (the one-past-pointer rule).
+  void reportAliasOutOfBounds(const Token &at, long index,
+                              const std::string &array, size_t extent,
+                              const std::string &ptr) {
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = tagged("out-of-bounds access: index " + std::to_string(index) +
+                       " reaches past array '" + array + "' via pointer '" +
+                       ptr + "'");
     d.file = filename_;
     d.line = at.line;
     d.column = at.column;
@@ -904,6 +956,339 @@ private:
       d.help = "wrap the macro body to keep if/else binding correct";
       diags_.report(std::move(d));
     }
+  }
+
+  //--- Constant index / one-past / multi-dimensional array rules ------------//
+
+  /// Evaluate a subscript expression only when it is a provable compile-time
+  /// integer.  Accepts a signed literal (`-1`, `+2`, `0x10`) or a plain name
+  /// already known to hold a negative value from the conservative bug-42
+  /// facts.  Anything else returns false so no diagnostic is produced.
+  bool constantIndexAt(size_t from, size_t to, long *out) const {
+    while (from < to && trivia(from))
+      ++from;
+    while (to > from && trivia(to - 1))
+      --to;
+    if (from >= to)
+      return false;
+    bool negative = false;
+    if (isPunct(from, "-")) {
+      negative = true;
+      ++from;
+      while (from < to && trivia(from))
+        ++from;
+    } else if (isPunct(from, "+")) {
+      ++from;
+      while (from < to && trivia(from))
+        ++from;
+    }
+    if (from >= to)
+      return false;
+    long value = 0;
+    if (number(toks_[from], &value)) {
+      ++from;
+      while (from < to && trivia(from))
+        ++from;
+      if (from != to)
+        return false;
+      *out = negative ? -value : value;
+      return true;
+    }
+    // A name proved negative elsewhere is enough to establish the sign; use
+    // -1 as a conservative representative (the rule only needs "< 0").
+    if (!negative && from + 1 == to &&
+        toks_[from].kind == TokKind::Identifier) {
+      const std::set<std::string> *neg = negativeFactsAt(from);
+      if (neg && neg->count(toks_[from].text) &&
+          !guardedNegative(from, toks_[from].text)) {
+        *out = -1;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Name declared by an `int (*r)[W]` LHS of an assignment.  The token just
+  /// before `=` is `]`, so the simple identifier case does not find it.
+  size_t rowPointerLhs(size_t eq) const {
+    size_t closeBracket = prevSig(eq);
+    if (closeBracket == kNPos || !isPunct(closeBracket, "]"))
+      return kNPos;
+    int depth = 0;
+    size_t lb = closeBracket;
+    for (;;) {
+      if (isPunct(lb, "]")) ++depth;
+      else if (isPunct(lb, "[") && --depth == 0) break;
+      if (lb == 0) return kNPos;
+      --lb;
+    }
+    size_t rp = prevSig(lb);
+    if (rp == kNPos || !isPunct(rp, ")"))
+      return kNPos;
+    depth = 0;
+    size_t lp = rp;
+    for (;;) {
+      if (isPunct(lp, ")")) ++depth;
+      else if (isPunct(lp, "(") && --depth == 0) break;
+      if (lp == 0) return kNPos;
+      --lp;
+    }
+    size_t star = nextSig(lp);
+    if (!isPunct(star, "*"))
+      return kNPos;
+    size_t name = nextSig(star);
+    if (name < rp && toks_[name].kind == TokKind::Identifier)
+      return name;
+    return kNPos;
+  }
+
+  /// Parse an initialiser `a`, `a + N`, `a - N`, `&a[N]`, or another tracked
+  /// pointer (optionally offset) into a constant-offset alias of `a`.
+  bool parseArrayPointerInit(size_t rhs, TrackedArrayPointer *out) const {
+    if (rhs >= toks_.size())
+      return false;
+    if (isPunct(rhs, "&")) {
+      size_t id = nextSig(rhs);
+      size_t lb = nextSig(id);
+      if (id >= toks_.size() || toks_[id].kind != TokKind::Identifier ||
+          !isPunct(lb, "["))
+        return false;
+      const std::vector<size_t> *dims = nullptr;
+      if (!findShape(toks_[id].text, rhs, &dims) || dims->empty())
+        return false;
+      size_t rb = match(lb, "[", "]");
+      long idx = 0;
+      if (rb == kNPos || !constantIndexAt(lb + 1, rb, &idx))
+        return false;
+      out->array = toks_[id].text;
+      out->dims = *dims;
+      out->offset = idx;
+      return true;
+    }
+    if (toks_[rhs].kind != TokKind::Identifier)
+      return false;
+    const std::string &name = toks_[rhs].text;
+    size_t after = nextSig(rhs);
+    if (isPunct(after, "+") || isPunct(after, "-")) {
+      size_t num = nextSig(after);
+      long amount = 0;
+      if (num >= toks_.size() || !number(toks_[num], &amount))
+        return false;
+      // The whole expression must be just `name +/- NUMBER`; a cast, call or
+      // further arithmetic makes the offset unprovable, so do not track it.
+      for (size_t k = nextSig(num); k < toks_.size(); ++k) {
+        if (isPunct(k, ";") || isPunct(k, ","))
+          break;
+        if (!trivia(k))
+          return false;
+      }
+      out->offset = isPunct(after, "+") ? amount : -amount;
+    }
+    // A direct array name, or an already tracked pointer alias.
+    const std::vector<size_t> *dims = nullptr;
+    long inherited = 0;
+    if (findShape(name, rhs, &dims)) {
+      inherited = 0;
+    } else {
+      auto it = arrayPtrs_.find(name);
+      if (it == arrayPtrs_.end())
+        return false;
+      dims = &it->second.dims;
+      inherited = it->second.offset;
+      out->array = it->second.array;
+      out->rowPointer = it->second.rowPointer;
+    }
+    if (dims->empty())
+      return false;
+    out->dims = *dims;
+    if (out->array.empty())
+      out->array = name;
+    out->offset += inherited;
+    return true;
+  }
+
+  /// Rule: only a single, fully constant assignment makes a pointer a
+  /// constant-offset alias of a fixed array.  A second write (or an increment)
+  /// invalidates the fact, so the offset can never be stale at a use site.
+  void collectArrayPointers() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "="))
+        continue;
+      size_t lhs = prevSig(i);
+      bool rowPointer = false;
+      if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier) {
+        lhs = rowPointerLhs(i);
+        rowPointer = lhs != kNPos;
+      }
+      if (lhs == kNPos)
+        continue;
+      const std::string var = toks_[lhs].text;
+      TrackedArrayPointer tp;
+      if (!parseArrayPointerInit(nextSig(i), &tp)) {
+        arrayPtrInvalid_.insert(var);
+        arrayPtrs_.erase(var);
+        continue;
+      }
+      if (arrayPtrInvalid_.count(var) || arrayPtrs_.count(var)) {
+        arrayPtrInvalid_.insert(var);
+        arrayPtrs_.erase(var);
+        continue;
+      }
+      tp.pos = i;
+      tp.rowPointer = rowPointer;
+      arrayPtrs_[var] = tp;
+    }
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      const std::string &var = toks_[i].text;
+      if (!arrayPtrs_.count(var))
+        continue;
+      size_t n = nextSig(i);
+      if (isPunct(n, "++") || isPunct(n, "--") || isPunct(n, "+=") ||
+          isPunct(n, "-=")) {
+        arrayPtrInvalid_.insert(var);
+        arrayPtrs_.erase(var);
+      }
+    }
+  }
+
+  /// True when `from` sits inside `sizeof(...)`, whose operand is unevaluated.
+  bool inUnevaluatedContext(size_t from) const {
+    int paren = 0;
+    for (size_t k = from; k > 0;) {
+      --k;
+      if (isPunct(k, ")")) {
+        ++paren;
+      } else if (isPunct(k, "(")) {
+        if (paren == 0)
+          return isIdent(prevSig(k), "sizeof");
+        --paren;
+      } else if (isPunct(k, ";") || isPunct(k, "{") || isPunct(k, "}")) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /// Rules (negative index, one-past pointer, multi-dimensional bounds):
+  /// check a dereference or a subscript chain through a tracked alias.  Every
+  /// index and every extent used here is a compile-time constant, so valid
+  /// code (unknown indices, one-past pointer formation, `p[-1]` back from a
+  /// one-past pointer, reassigned pointers) is never rejected.
+  void checkTrackedArrayPointer(size_t i) {
+    auto it = arrayPtrs_.find(toks_[i].text);
+    if (it == arrayPtrs_.end() || i < it->second.pos)
+      return;
+    if (inUnevaluatedContext(i))
+      return;
+    const TrackedArrayPointer &tp = it->second;
+    if (tp.dims.empty())
+      return;
+
+    size_t lb = nextSig(i);
+    if (isPunct(lb, "[")) {
+      if (tp.rowPointer) {
+        // Pointer-to-row: the k-th subscript is checked against dims[k].
+        size_t cursor = lb;
+        for (size_t d = 0; d < tp.dims.size(); ++d) {
+          if (!isPunct(cursor, "[")) break;
+          size_t rb = match(cursor, "[", "]");
+          if (rb == kNPos) break;
+          long idx = 0;
+          if (constantIndexAt(cursor + 1, rb, &idx)) {
+            if (idx < 0)
+              reportNegativeAliasIndex(toks_[cursor], idx, tp.array,
+                                       toks_[i].text);
+            else if (static_cast<size_t>(idx) >= tp.dims[d])
+              reportAliasOutOfBounds(toks_[cursor], idx, tp.array, tp.dims[d],
+                                     toks_[i].text);
+          }
+          cursor = nextSig(rb);
+        }
+      } else {
+        // Element pointer: its absolute index is offset + subscript, checked
+        // against the total number of elements in the flattened array.
+        size_t rb = match(lb, "[", "]");
+        if (rb == kNPos)
+          return;
+        long idx = 0;
+        if (!constantIndexAt(lb + 1, rb, &idx))
+          return;
+        // `&p[0]` only forms a pointer; do not treat it as an access.
+        if (isPunct(prevSig(i), "&"))
+          return;
+        long absolute = tp.offset + idx;
+        long long total = 1;
+        for (size_t dim : tp.dims)
+          total *= static_cast<long long>(dim);
+        if (absolute < 0)
+          reportNegativeAliasIndex(toks_[lb], absolute, tp.array,
+                                   toks_[i].text);
+        else if (absolute >= total)
+          reportAliasOutOfBounds(toks_[lb], absolute, tp.array,
+                                 static_cast<size_t>(total), toks_[i].text);
+      }
+      return;
+    }
+
+    // Unary dereference `*p`: report only when the tracked offset itself is
+    // outside the array (one-past or before the start).  Skip `T *p` decls and
+    // `&*p`, which only forms the original pointer.
+    if (!isPunct(prevSig(i), "*"))
+      return;
+    if (isPunct(prevSig(prevSig(i)), "&"))
+      return;
+    size_t before = prevSig(prevSig(i));
+    if (before != kNPos &&
+        ((toks_[before].kind == TokKind::Identifier &&
+          isTypeWord(toks_[before].text)) ||
+         isPunct(before, ",") || isPunct(before, "*")))
+      return;
+    long absolute = tp.rowPointer ? 0 : tp.offset;
+    size_t extent = tp.dims[0];
+    if (absolute < 0)
+      reportNegativeAliasIndex(toks_[i], absolute, tp.array, toks_[i].text);
+    else if (static_cast<size_t>(absolute) >= extent)
+      reportAliasOutOfBounds(toks_[i], absolute, tp.array, extent,
+                             toks_[i].text);
+  }
+
+  /// One-past rule for the direct spelling `*(array + N)`: forming `array + N`
+  /// is fine, but dereferencing it when N equals the constant extent is not.
+  void checkDirectOnePastDeref(size_t i) {
+    if (!isPunct(i, "*") || inUnevaluatedContext(i))
+      return;
+    if (isPunct(prevSig(i), "&")) // `&*(a + N)` only forms a pointer
+      return;
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return;
+    size_t rp = match(lp, "(", ")");
+    if (rp == kNPos)
+      return;
+    size_t name = nextSig(lp);
+    if (name >= rp || toks_[name].kind != TokKind::Identifier)
+      return;
+    size_t op = nextSig(name);
+    if (!isPunct(op, "+"))
+      return;
+    size_t num = nextSig(op);
+    if (num >= rp)
+      return;
+    long amount = 0;
+    if (!number(toks_[num], &amount))
+      return;
+    for (size_t k = nextSig(num); k < rp; ++k)
+      if (!trivia(k))
+        return;
+    size_t extent = 0;
+    if (!findExtent(toks_[name].text, i, &extent) || extent == 0)
+      return;
+    if (amount == static_cast<long>(extent))
+      reportAliasOutOfBounds(toks_[i], amount, toks_[name].text, extent,
+                             toks_[name].text + std::string(" + ") +
+                                 std::to_string(amount));
   }
 
   void checkPointerArithmetic(size_t i) {
@@ -2513,6 +2898,8 @@ private:
       unsignedConsts_;                   // bug 41 (value keyed by source pos)
   std::map<std::string, std::set<std::string>> negFacts_; // bug 42
   std::set<std::string> typePunned_;     // bug 45
+  std::map<std::string, TrackedArrayPointer> arrayPtrs_; // constant array aliases
+  std::set<std::string> arrayPtrInvalid_;
   DiagnosticEngine &diags_;
   std::string filename_;
 };

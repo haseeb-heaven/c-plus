@@ -544,6 +544,13 @@ static Sanitizer effectiveSanitizer(const DriverOptions &opts) {
   return opts.sanitizer;
 }
 
+/// `check` is static analysis only: it never links an executable, probes a
+/// backend capability, or instruments the C+ runtime. All three decisions
+/// share this predicate so the command cannot accidentally opt into one path.
+static bool isCheckCommand(const DriverOptions &opts) {
+  return opts.command == "check";
+}
+
 /// Return a human-readable conflict when two sanitizers cannot coexist.
 static std::string sanitizerConflict(Sanitizer s) {
   if (wants(s, Sanitizer::Address) && wants(s, Sanitizer::Thread))
@@ -562,9 +569,28 @@ static std::string sanitizerConflict(Sanitizer s) {
   return std::string();
 }
 
+/// Every selectable sanitizer bit and its user-facing name. Shared by the
+/// capability probe, diagnostics and `--print-sanitizers` so the three cannot
+/// drift apart.
+struct SanitizerEntry {
+  Sanitizer bit;
+  const char *name;
+};
+
+static const SanitizerEntry kSanitizerEntries[] = {
+    {Sanitizer::Address, "address"},   {Sanitizer::Undefined, "undefined"},
+    {Sanitizer::Memory, "memory"},     {Sanitizer::Thread, "thread"},
+    {Sanitizer::Leak, "leak"},         {Sanitizer::Cfi, "cfi"},
+    {Sanitizer::Integer, "integer"},
+};
+
 /// Flags for one sanitizer bit. CFI needs LTO and non-trapping mode so a
 /// violation produces a diagnostic instead of a silent SIGTRAP.
 static void addSanitizerFlags(std::vector<std::string> &args, Sanitizer san) {
+  // An explicit "none" (--sanitize=none / --no-sanitize) must never emit any
+  // -fsanitize/-fno-sanitize flag, not even the common debug-info options.
+  if (san == Sanitizer::None)
+    return;
   if (wants(san, Sanitizer::Address))
     args.push_back("-fsanitize=address");
   if (wants(san, Sanitizer::Undefined))
@@ -587,24 +613,22 @@ static void addSanitizerFlags(std::vector<std::string> &args, Sanitizer san) {
     args.push_back("-fsanitize=unsigned-integer-overflow,"
                    "implicit-integer-truncation,"
                    "implicit-integer-arithmetic-value-change");
-  if (san != Sanitizer::None) {
-    args.push_back("-fno-sanitize-recover=all");
-    args.push_back("-fno-omit-frame-pointer");
-    args.push_back("-g"); // debug info for actionable stack traces
-  }
+  args.push_back("-fno-sanitize-recover=all");
+  args.push_back("-fno-omit-frame-pointer");
+  args.push_back("-g"); // debug info for actionable stack traces
 }
 
-static const char *sanitizerBitName(Sanitizer bit) {
-  switch (bit) {
-  case Sanitizer::Address: return "address";
-  case Sanitizer::Undefined: return "undefined";
-  case Sanitizer::Memory: return "memory";
-  case Sanitizer::Thread: return "thread";
-  case Sanitizer::Leak: return "leak";
-  case Sanitizer::Cfi: return "cfi";
-  case Sanitizer::Integer: return "integer";
-  default: return "none";
-  }
+void printSanitizerInfo(llvm::raw_ostream &os) {
+  os << "supported sanitizers: none";
+  for (const auto &entry : kSanitizerEntries)
+    os << ", " << entry.name;
+  os << "\n";
+  os << "disable with: --sanitize=none or --no-sanitize\n";
+  os << "Safe-mode default: undefined (Legacy-C default: none)\n";
+  // Resolving the backend only performs filesystem/PATH lookups. It never
+  // probes a sanitizer or starts a compilation. CPLUS_CLANG and the macOS
+  // /usr/bin/clang preference are applied by findClangBinary().
+  os << "backend: " << findClangBinary() << "\n";
 }
 
 /// Probe source and expected diagnostic for a sanitizer bit.
@@ -741,9 +765,10 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   }
   // Runtime sanitizers. Flags are part of `base`, which is used for both
   // per-file compilation and the final link, so the sanitizer runtime is
-  // linked into the executable as well.
-  Sanitizer san = effectiveSanitizer(opts);
-  addSanitizerFlags(args, san);
+  // linked into the executable as well. A `check` run only type-checks, so it
+  // does not need (and must not appear to probe) any sanitizer flags.
+  if (!isCheckCommand(opts))
+    addSanitizerFlags(args, effectiveSanitizer(opts));
   if (opts.warningsAsErrors)
     args.push_back("-Werror");
   if (opts.verbose)
@@ -773,26 +798,27 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   }
 
   const std::string clang = findClangBinary();
-  // Validate the sanitizer selection before doing any work. Never silently
-  // ignore an option or let an unsupported combination fail later at link.
+  // Validate the sanitizer selection before doing any work. Conflicts are
+  // configuration errors, so they are diagnosed for every command, including
+  // `check`. Never silently ignore an option or let an unsupported combination
+  // fail later at link.
   Sanitizer san = effectiveSanitizer(opts);
-  if (!sanitizerConflict(san).empty()) {
-    errs << "error: unsupported sanitizer combination: "
-         << sanitizerConflict(san) << "\n";
+  const std::string conflict = sanitizerConflict(san);
+  if (!conflict.empty()) {
+    errs << "error: unsupported sanitizer combination: " << conflict << "\n";
     return 1;
   }
-  if (opts.sanitizerExplicit && opts.command != "check") {
-    static const Sanitizer kBits[] = {
-        Sanitizer::Address, Sanitizer::Undefined, Sanitizer::Memory,
-        Sanitizer::Thread,  Sanitizer::Leak,      Sanitizer::Cfi,
-        Sanitizer::Integer};
-    for (Sanitizer bit : kBits) {
-      if (!wants(san, bit))
+  // Capability probing compiles and runs a defect program. `check` must stay
+  // a pure static-analysis command, so explicitly selected sanitizers are
+  // accepted there without launching any probe.
+  if (opts.sanitizerExplicit && !isCheckCommand(opts)) {
+    for (const auto &entry : kSanitizerEntries) {
+      if (!wants(san, entry.bit))
         continue;
-      if (!sanitizerSupported(bit, clang, opts.extraArgs)) {
-        errs << "error: sanitizer '" << sanitizerBitName(bit)
-             << "' is not supported by the selected backend ("
-             << clang << "); detected by a compile-and-run probe\n";
+      if (!sanitizerSupported(entry.bit, clang, opts.extraArgs)) {
+        errs << "error: sanitizer '" << entry.name
+             << "' is not supported by the selected backend (" << clang
+             << "); detected by a compile-and-run probe\n";
         return 1;
       }
     }
@@ -809,7 +835,9 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   std::vector<std::string> base = backendArgs(opts);
   std::vector<std::string> objects;
   bool instrumentedRuntime = false;
-  if (san != Sanitizer::None && opts.command != "check") {
+  // Recompiling the C+ runtime with sanitizer flags is part of building an
+  // instrumented executable. `check` never produces an executable, so skip it.
+  if (san != Sanitizer::None && !isCheckCommand(opts)) {
     std::string runtimeSrc = runtimeSourcePath();
     if (runtimeSrc.empty()) {
       errs << "warning: C+ runtime source not found; runtime library will "

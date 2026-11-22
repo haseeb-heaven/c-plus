@@ -3,6 +3,8 @@
 This is the **exact** subset for which safe mode makes claims. Everything else
 is unsupported, legacy (`--legacy-c`), or requires an explicit unsafe boundary.
 This is **not** yet Rust-level safety; it is a specified, tested subset.
+Current as of the `agent/core-safety` branch with `origin/develop` merged;
+see `docs/ISSUE21_EVIDENCE.md` for the base/version evidence.
 
 ## Accepted in SAFE mode
 - ordinary C scalars, arrays, structs, unions, function calls and libc/POSIX
@@ -12,10 +14,11 @@ This is **not** yet Rust-level safety; it is a specified, tested subset.
 - borrows of locals (`&x`, `&s.field`) provided no conflicting mutable borrow
   exists and the borrow does not escape;
 - deterministic RAII on scope exit, return, break, continue and nested scopes;
-- compile-time bounds for constant indices and simple counted loops; C+
-  inserted `__cplus_bounds_check` for dynamic indices into fixed-size arrays;
-  configurable ASan/UBSan/TSan/LSan/CFI/integer sanitizers as additional
-  evidence, never as the sole safety proof.
+- compile-time bounds for constant indices and simple counted loops (including
+  function-pointer arrays); C+ inserted `__cplus_bounds_check` for dynamic
+  indices into fixed-size arrays; configurable
+  ASan/UBSan/TSan/LSan/CFI/integer sanitizers as additional evidence, never as
+  the sole safety proof.
 
 ## Compile-time rejected
 - copy/assignment of an owning handle;
@@ -57,7 +60,10 @@ ownership remain outside the subset. Rejecting them would reject ordinary C,
 which the product direction forbids. There is no general `unsafe` boundary
 marker in C+ today; the documented trusted interfaces are the JSON contracts,
 `cplus_check_live`, and explicit bounds (`--sanitize` / dynamic bounds checks).
-No Rust-equivalence or blanket memory-safety claim is made.
+No Rust-equivalence or blanket memory-safety claim is made. The paired
+compile-time comparison (`docs/RUST_COMPARISON.md`,
+`tests/core/rust_compare_suite.py`) measures only the overlapping subset: C+
+15/20 and Rust 15/20 rejections; it is not parity.
 
 ## Upstream research (pinned; licences checked; no source copied)
 | project | pinned revision | license | use |

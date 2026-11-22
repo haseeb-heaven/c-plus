@@ -90,6 +90,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 /// Resolve the host C compiler used as the C+ backend.
 std::string findClangBinary();
 
+/// Print a short, build-free diagnostic listing every sanitizer name accepted
+/// by `--sanitize=`, the disable aliases, the Safe-mode default and the backend
+/// resolved by findClangBinary(). Used by `--print-sanitizers`.
+void printSanitizerInfo(llvm::raw_ostream &os);
+
 /// Resolve the directory containing the C+ runtime headers.
 std::string findCPlusIncludeDir();
 

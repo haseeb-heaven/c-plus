@@ -53,10 +53,10 @@ No runtime failure is allowed to continue execution with corrupted state.
 
 - **Raw `malloc`/`free` is unsafe.** C+ managed allocations detect
   double/invalid release, but a raw dangling pointer dereference is not
-  checked. ASan is broken on this host.
+  checked. Apple clang 16 ASan is broken; opt-in ASan works with Homebrew clang 23.
 - **Missing null terminators are not detected.** String buffer sizing is the
   programmer's responsibility.
-- **Use-after-free is not detected.** ASan is broken on this host; enabling it
+- **Use-after-free is not detected.** Apple clang 16 ASan is broken; opt-in ASan works with Homebrew clang 23; enabling it
   would abort inside its own runtime. A stale pointer whose address was reused
   may be misattributed.
 - **Arbitrary pointer arithmetic** (`p + i`, casts, raw `malloc` pointers) is

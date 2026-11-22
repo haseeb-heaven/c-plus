@@ -35,6 +35,9 @@ not a claim of complete memory safety.
 | interprocedural heap extent / unsigned check | safety/interproc_heap_extent (1-byte malloc passed to callee writing 10 ints rejected; size_t < 0 rejected) | negative |
 | fuzz / checker robustness | core/fuzz_checker.sh (120 inputs), core/adversarial_fuzz.py (144 unsafe + 80 positive), core/mass_fuzz_all.sh (3 seeds x 5,240 = 15,720 generated programs; 15,720 DEFAULT checks + 15,720 STRICT checks + ~4,427 differential clang syntax checks + ~576 debug/release build-and-run executions; 0 failures), core/cross_tu_fuzz.py (1,200 two-file programs; 4,800 per-TU checks, 1,200 C+ links/runs, 1,200 differential clang builds; 0 failures) | fuzz |
 | DEFAULT / STRICT modes | core/strict_mode.sh (16 cases: proven errors rejected in both, unverified ops warned in DEFAULT and rejected in STRICT, safe realloc accepted in STRICT, UAF source-location chain) | positive/negative |
+| goto/longjmp cleanup (STRICT) | core/p0_correctness_suite.py (goto_bypasses_cleanup and setjmp_live_cleanup_violation rejected; setjmp_resume_path_safe accepted), safety/classic_bug34_longjmp | negative/positive |
+| sanitizer capability matrix | core/sanitizer_suite.py (33/33; ASan/UBSan/TSan/LSan/CFI/integer with backend capability probing) | runtime diagnostics |
+| paired C+/Rust compile-time comparison | core/rust_compare_suite.py (20 pairs; C+ 15/20, Rust 15/20 rejections) | evidence (overlapping subset only) |
 | logging categories | tests/logging_test.sh | positive |
 
 Runtime line coverage target: >=80%. Latest measured: **320/395 lines (81%)**

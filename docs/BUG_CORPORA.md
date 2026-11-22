@@ -46,7 +46,7 @@ relational comparison of unrelated pointers, and `restrict` overlap are legal
 C constructs that are only bugs in context.
 
 The compiler rejects the soundly provable subset, accepts valid C with
-**0 false positives** on the 83-program safe corpus, and documents the rest as
+**0 false positives** on the 90-program safe corpus, and documents the rest as
 gaps rather than claiming false guarantees. Leak and possible-null FILE*
 findings are warnings (not errors) because the linear plain-C scan cannot
 prove them on every path.
