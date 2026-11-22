@@ -104,6 +104,24 @@ NEGATIVE = {
         HEAD + 'int main(void){char d[8];int n=snprintf(d,100,"abcdefghijk");'
                '(void)n;return 0;}\n',
         "format write of 100 bytes exceeds destination 'd'"),
+    "packet_size_overflow": (
+        '#include <stdint.h>\n' + HEAD +
+        'struct P{uint32_t count; uint32_t element_size;};\n'
+        'int main(void){struct P p={.count=UINT32_MAX,.element_size=16};\n'
+        ' size_t b=p.count*p.element_size; unsigned char*q=malloc(b);\n'
+        ' if(!q)return 1; for(uint32_t i=0;i<p.count;i++)\n'
+        '  memset(q+(size_t)i*p.element_size,0x41,p.element_size);\n'
+        ' free(q); return 0;}\n',
+        "integer overflow in multiplication assigned to 'b'; the 32-bit result wraps before it is widened"),
+    "packet_write_exceeds": (
+        '#include <stdint.h>\n' + HEAD +
+        'struct P{uint32_t count; uint32_t element_size;};\n'
+        'int main(void){struct P p={.count=UINT32_MAX,.element_size=16};\n'
+        ' size_t b=p.count*p.element_size; unsigned char*q=malloc(b);\n'
+        ' if(!q)return 1; for(uint32_t i=0;i<p.count;i++)\n'
+        '  memset(q+(size_t)i*p.element_size,0x41,p.element_size);\n'
+        ' free(q); return 0;}\n',
+        "write of 68719476720 bytes exceeds allocated object 'q' of 4294967280 bytes"),
 }
 
 # name, source, exact expected diagnostic substring
@@ -123,6 +141,20 @@ POSITIVE = {
     "checked_capacity_ok": '#include "cplus/cplus.h"\n' + HEAD +
         'int main(void){char d[8];int n=cplus_strcpy(d,sizeof d,"abc");'
         '(void)n;return 0;}\n',
+    "packet_size_ok": '#include <stdint.h>\n' + HEAD +
+        'struct P{uint32_t count; uint32_t element_size;};\n'
+        'int main(void){struct P p={.count=4,.element_size=16};\n'
+        ' size_t b=(size_t)p.count*p.element_size; unsigned char*q=malloc(b);\n'
+        ' if(!q)return 1; for(uint32_t i=0;i<p.count;i++)\n'
+        '  memset(q+(size_t)i*p.element_size,0x41,p.element_size);\n'
+        ' free(q); return 0;}\n',
+    "packet_size_dynamic": '#include <stdint.h>\n' + HEAD +
+        'struct P{uint32_t count; uint32_t element_size;};\n'
+        'int main(void){struct P p; scanf("%u %u",&p.count,&p.element_size);\n'
+        ' size_t b=(size_t)p.count*p.element_size; unsigned char*q=malloc(b);\n'
+        ' if(!q)return 1; for(uint32_t i=0;i<p.count;i++)\n'
+        '  memset(q+(size_t)i*p.element_size,0x41,p.element_size);\n'
+        ' free(q); return 0;}\n',
 }
 
 CONTRACT_FILES = {
@@ -189,6 +221,26 @@ for name, p, want_reject, needle in [
         r.returncode == 0 and "error:" not in diag)
     results.append((name, "cross_tu", ok, needle or "accepted",
                     diag.strip().splitlines()[:1]))
+
+# A proven violation must not produce an executable.
+proven_src = (OUT / "case.c").read_text()
+build_out = OUT / "packet_must_not_exist"
+if build_out.exists():
+    build_out.unlink()
+b = subprocess.run([CC, "build", str(OUT / "case.c"), "-o", str(build_out)],
+                   capture_output=True, text=True, env=ENV, timeout=120)
+ok = b.returncode != 0 and not build_out.exists()
+results.append(("packet_no_executable", "build", ok, "build refused",
+                [f"rc={b.returncode}"]))
+# note: case.c currently holds the last generated case; regenerate proven one
+(OUT / "case.c").write_text(NEGATIVE["packet_size_overflow"][0])
+if build_out.exists():
+    build_out.unlink()
+b = subprocess.run([CC, "build", str(OUT / "case.c"), "-o", str(build_out)],
+                   capture_output=True, text=True, env=ENV, timeout=120)
+ok = b.returncode != 0 and not build_out.exists()
+results[-1] = ("packet_no_executable", "build", ok, "build refused",
+               [f"rc={b.returncode}"])
 
 passed = sum(1 for _, _, ok, _, _ in results if ok)
 lines = [f"lib contracts suite: {passed}/{len(results)} passed"]

@@ -308,6 +308,85 @@ public:
     const VarDecl *decl = nullptr;
   };
 
+  /// Key used by constLocals_ for a scalar local or a struct field constant.
+  std::string constKey(const Expr *e) const {
+    if (!e)
+      return std::string();
+    const Expr *x = e->IgnoreParenCasts();
+    if (const auto *me = dyn_cast<MemberExpr>(x)) {
+      const Expr *base = me->getBase()->IgnoreParenCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(base))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          return vd->getNameAsString() + "." +
+                 me->getMemberDecl()->getNameAsString();
+      return std::string();
+    }
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        return vd->getNameAsString();
+    return std::string();
+  }
+
+  /// Look up a compile-time integer value, including struct-field constants.
+  bool knownConst(const Expr *e, llvm::APSInt &out) const {
+    if (!e)
+      return false;
+    Expr::EvalResult r;
+    if (e->IgnoreParenCasts()->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+      out = r.Val.getInt();
+      return true;
+    }
+    std::string key = constKey(e);
+    if (key.empty())
+      return false;
+    auto it = constLocals_.find(key);
+    if (it == constLocals_.end())
+      return false;
+    // A reassigned local is no longer constant.
+    std::string base = key.substr(0, key.find('.'));
+    if (assignedVars_.count(base))
+      return false;
+    out = it->second;
+    return true;
+  }
+
+  /// Constant-fold integer arithmetic using tracked local/field constants.
+  /// Clang will not fold expressions over a non-const local struct, so we do
+  /// it ourselves at the source integer width.
+  bool evalConstArithmetic(const Expr *e, llvm::APSInt &out) const {
+    llvm::APSInt leaf;
+    if (knownConst(e, leaf)) {
+      // A wrapped unsigned value may be folded by Clang into a signed
+      // negative APSInt; work with its unsigned bit pattern instead.
+      if (leaf.isNegative())
+        leaf = llvm::APSInt(
+            llvm::APInt(leaf.getBitWidth(), leaf.getZExtValue()), true);
+      out = leaf;
+      return true;
+    }
+    const auto *bo = dyn_cast<BinaryOperator>(e->IgnoreParenCasts());
+    if (!bo)
+      return false;
+    llvm::APSInt a, b;
+    if (!evalConstArithmetic(bo->getLHS(), a) ||
+        !evalConstArithmetic(bo->getRHS(), b))
+      return false;
+    unsigned w = ctx_.getIntWidth(bo->getType());
+    if (w == 0 || w > 64)
+      return false;
+    unsigned long long av = a.getZExtValue(), bv = b.getZExtValue(), r = 0;
+    switch (bo->getOpcode()) {
+    case BO_Mul: r = av * bv; break;
+    case BO_Add: r = av + bv; break;
+    case BO_Sub: r = av - bv; break;
+    default: return false;
+    }
+    if (w < 64)
+      r &= ((1ULL << w) - 1);
+    out = llvm::APSInt(llvm::APInt(w, r), true);
+    return true;
+  }
+
   /// Evaluate an allocation-size argument to a concrete byte count.  Only
   /// literal integer expressions and never-reassigned local constants are
   /// accepted; everything else is left unknown.
@@ -325,14 +404,13 @@ public:
       out = (long long)z;
       return true;
     }
-    std::string name = varNameOf(arg);
-    auto it = constLocals_.find(name);
-    if (name.empty() || it == constLocals_.end() || assignedVars_.count(name))
+    llvm::APSInt v;
+    if (!evalConstArithmetic(arg, v) || v.isNegative())
       return false;
-    llvm::APSInt v = it->second;
-    if (v.isNegative())
+    unsigned long long z = v.getZExtValue();
+    if (z > (1ULL << 40))
       return false;
-    out = (long long)v.getZExtValue();
+    out = (long long)z;
     return true;
   }
 
@@ -393,8 +471,9 @@ public:
     }
 
     long long bytes = -1;
-    if (!evalByteCount(arg, bytes))
-      return;
+    if (!evalByteCount(arg, bytes)) {
+        return;
+    }
     // calloc(count, size) allocates count * size bytes, not just count.
     if (callee == "calloc" && call->getNumArgs() >= 2) {
       long long elem = 1;
@@ -507,16 +586,13 @@ public:
     if (!lref || lref->getDecl() != ivd)
       return false;
     long long bound = 0;
-    Expr::EvalResult br;
-    if (bo->getRHS()->EvaluateAsInt(br, ctx_) && br.Val.isInt()) {
-      bound = br.Val.getInt().getSExtValue();
-    } else {
-      std::string bn = varNameOf(bo->getRHS()->IgnoreParenCasts());
-      auto it = constLocals_.find(bn);
-      if (bn.empty() || it == constLocals_.end() || assignedVars_.count(bn))
-        return false;
-      bound = it->second.getSExtValue();
-    }
+    llvm::APSInt bv;
+    if (!knownConst(bo->getRHS(), bv))
+      return false;
+    bound = bv.isNegative() ? bv.getSExtValue()
+                            : (long long)bv.getZExtValue();
+    if (bound < 0)
+      return false;
     const Expr *inc = s->getInc();
     if (!inc)
       return false;
@@ -1439,10 +1515,71 @@ public:
       if (vd->hasLocalStorage() && vd->getType()->isIntegerType() &&
           vd->getInit() && !vd->getType().isVolatileQualified()) {
         Expr::EvalResult r;
-        if (vd->getInit()->EvaluateAsInt(r, ctx_) && r.Val.isInt())
-          constLocals_[vd->getNameAsString()] = r.Val.getInt();
+        llvm::APSInt folded;
+        if (vd->getInit()->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+          llvm::APSInt cv = r.Val.getInt();
+          if (cv.isNegative())
+            cv = llvm::APSInt(
+                llvm::APInt(cv.getBitWidth(), cv.getZExtValue()), true);
+          constLocals_[vd->getNameAsString()] = cv;
+        } else if (evalConstArithmetic(vd->getInit(), folded)) {
+          constLocals_[vd->getNameAsString()] = folded;
+        } else {
+        }
+      }
+      // Record constant-valued struct fields from an aggregate initializer,
+      // including designated ones: `struct P p = {.count = N, .size = 16};`
+      // makes `p.count` / `p.size` compile-time constants.
+      if (vd->hasLocalStorage() && vd->getInit() &&
+          !vd->getType().isVolatileQualified()) {
+        const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+        if (const auto *il = dyn_cast<InitListExpr>(init)) {
+          if (const auto *rd = vd->getType()->getAsRecordDecl()) {
+            unsigned idx = 0;
+            for (const FieldDecl *fd : rd->fields()) {
+              if (idx >= il->getNumInits())
+                break;
+              if (!fd->getType()->isIntegerType()) { ++idx; continue; }
+              if (const Expr *e = il->getInit(idx)) {
+                Expr::EvalResult r;
+                if (e->EvaluateAsInt(r, ctx_) && r.Val.isInt())
+                  constLocals_[vd->getNameAsString() + "." +
+                               fd->getNameAsString()] = r.Val.getInt();
+              }
+              ++idx;
+            }
+          }
+        }
       }
       return true;
+    }
+    // A provably overflowing constant arithmetic expression used to compute
+    // a size: the wrapped value silently under-allocates.
+    if (vd->hasLocalStorage() && vd->getType()->isIntegerType() &&
+        vd->getInit()) {
+      const Expr *initE = vd->getInit()->IgnoreParenCasts();
+      if (const auto *bo = dyn_cast<BinaryOperator>(initE)) {
+        llvm::APSInt av, bv;
+        if ((bo->getOpcode() == BO_Mul || bo->getOpcode() == BO_Add) &&
+            knownConst(bo->getLHS(), av) && knownConst(bo->getRHS(), bv) &&
+            !av.isNegative() && !bv.isNegative()) {
+          unsigned w = ctx_.getIntWidth(bo->getType());
+          unsigned long long max =
+              w >= 64 ? (unsigned long long)-1 : ((1ULL << w) - 1);
+          unsigned long long a = av.getZExtValue(), b = bv.getZExtValue();
+          bool over = (bo->getOpcode() == BO_Mul)
+                          ? (a != 0 && b > max / a)
+                          : (a > max - b);
+          if (over)
+            report(vd->getBeginLoc(),
+                   "integer overflow in " +
+                       std::string(bo->getOpcode() == BO_Mul ? "multiplication"
+                                                              : "addition") +
+                       " assigned to '" + vd->getNameAsString() +
+                       "'; the " + std::to_string(w) +
+                       "-bit result wraps before it is widened");
+        }
+      }
     }
     // `int *end = arr + 4;` yields a pointer that is one past the array's
     // last element; dereferencing it is undefined even though forming it is ok.
@@ -1886,18 +2023,11 @@ public:
       return;
     const Expr *dst = call->getArg(dstIdx)->IgnoreParenImpCasts();
     const Expr *n = call->getArg(sizeIdx)->IgnoreParenImpCasts();
-    Expr::EvalResult amount;
-    long long bytes = 0;
-    if (n->EvaluateAsInt(amount, ctx_) && amount.Val.isInt()) {
-      bytes = amount.Val.getInt().getSExtValue();
-    } else {
-      // Constant-propagate an unmodified local `int n = <literal>;`.
-      std::string name = varNameOf(n);
-      auto it = constLocals_.find(name);
-      if (name.empty() || it == constLocals_.end() || assignedVars_.count(name))
-        return;
-      bytes = it->second.getSExtValue();
-    }
+    llvm::APSInt amount;
+    if (!knownConst(n, amount))
+      return;
+    long long bytes = amount.isNegative() ? amount.getSExtValue()
+                                          : (long long)amount.getZExtValue();
     if (bytes <= 0)
       return;
     const auto *ref = dyn_cast<DeclRefExpr>(dst);
@@ -2388,26 +2518,23 @@ public:
             [&](const Expr *e, unsigned long long &out, bool &overflow) -> bool {
           if (!e) return false;
           const Expr *x = e->IgnoreParenCasts();
-          Expr::EvalResult r;
-          if (x->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
-            out = apToU64(r.Val.getInt());
+          llvm::APSInt leaf;
+          if (knownConst(x, leaf)) {
+            out = apToU64(leaf);
             return true;
           }
-          if (const auto *ref = dyn_cast<DeclRefExpr>(x))
-            if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
-              auto it = constLocals_.find(vd->getNameAsString());
-              if (it != constLocals_.end() && !assignedVars_.count(vd->getNameAsString())) {
-                out = apToU64(it->second);
-                return true;
-              }
-            }
           if (const auto *bo = dyn_cast<BinaryOperator>(x)) {
             unsigned long long a = 0, b = 0;
             if (!evalU64(bo->getLHS(), a, overflow) ||
                 !evalU64(bo->getRHS(), b, overflow))
               return false;
+            // Respect the *source* integer width: `uint32_t * uint32_t`
+            // wraps at 32 bits before the result is widened to size_t.
+            unsigned w = ctx_.getIntWidth(bo->getType());
+            unsigned long long max =
+                w >= 64 ? (unsigned long long)-1 : ((1ULL << w) - 1);
             if (bo->getOpcode() == BO_Mul) {
-              if (a != 0 && b > (unsigned long long)-1 / a) {
+              if (a != 0 && b > max / a) {
                 overflow = true;
                 return true;
               }
@@ -2415,7 +2542,7 @@ public:
               return true;
             }
             if (bo->getOpcode() == BO_Add) {
-              if (a > (unsigned long long)-1 - b) {
+              if (a > max - b) {
                 overflow = true;
                 return true;
               }
@@ -2558,6 +2685,49 @@ public:
                             " or cplus_sprintf_s";
           if (strict_) report(call->getBeginLoc(), msg);
           else warnAt(call->getBeginLoc(), msg);
+        }
+      }
+      // A bounded write through `buffer + i * stride` inside a loop: compare
+      // the worst-case end of the written range with the tracked allocation.
+      if ((baseName == "memset" || baseName == "memcpy" ||
+           baseName == "memmove") && call->getNumArgs() >= 3) {
+        const Expr *dst = call->getArg(0)->IgnoreParenCasts();
+        llvm::APSInt wsvg;
+        if (knownConst(call->getArg(2), wsvg) && !wsvg.isNegative()) {
+          const auto *add = dyn_cast<BinaryOperator>(dst);
+          if (add && add->getOpcode() == BO_Add) {
+            const Expr *baseE = add->getLHS()->IgnoreParenCasts();
+            const Expr *offE = add->getRHS()->IgnoreParenCasts();
+            if (const auto *bref = dyn_cast<DeclRefExpr>(baseE))
+              if (const auto *vd = dyn_cast<VarDecl>(bref->getDecl()))
+                if (const HeapAllocState *hs = heapStateOf(baseE)) {
+                  if (hs->bytes > 0) {
+                    const auto *mul = dyn_cast<BinaryOperator>(offE);
+                    if (mul && mul->getOpcode() == BO_Mul) {
+                      const auto *ivr = dyn_cast<DeclRefExpr>(
+                          mul->getLHS()->IgnoreParenCasts());
+                      llvm::APSInt strideV;
+                      if (ivr && knownConst(mul->getRHS(), strideV) &&
+                          !strideV.isNegative()) {
+                        auto it = loopIndexOverride_.find(
+                            dyn_cast<VarDecl>(ivr->getDecl()));
+                        if (it != loopIndexOverride_.end() && it->second > 0) {
+                          unsigned long long maxEnd =
+                              (unsigned long long)it->second *
+                                  strideV.getZExtValue() +
+                              wsvg.getZExtValue();
+                          if (maxEnd > (unsigned long long)hs->bytes)
+                            report(call->getBeginLoc(),
+                                   "write of " + std::to_string(maxEnd) +
+                                       " bytes exceeds allocated object '" +
+                                       vd->getNameAsString() + "' of " +
+                                       std::to_string(hs->bytes) + " bytes");
+                        }
+                      }
+                    }
+                  }
+                }
+          }
         }
       }
       // calloc(count, size) must not wrap size_t.
