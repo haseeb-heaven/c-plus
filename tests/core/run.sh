@@ -67,6 +67,7 @@ build_run len_static_and_managed "$ROOT/tests/core/positive/len_static_and_manag
 build_run len_runtime_metadata "$ROOT/tests/core/positive/len_runtime_metadata.cp"
 build_run len_malloc_constant "$ROOT/tests/core/positive/len_malloc_constant.c"
 build_run realloc_null_seed "$ROOT/tests/core/positive/realloc_null_seed.c"
+build_run goto_no_resources "$ROOT/tests/core/positive/goto_no_resources.c"
 build_run null_assignment_guard "$ROOT/tests/core/positive/null_assignment_guard.cp"
 build_run alloc_failure_guard "$ROOT/tests/core/positive/alloc_failure_guard.c"
 build_run libccontract_null_path "$ROOT/tests/core/positive/libccontract_null_path.c"

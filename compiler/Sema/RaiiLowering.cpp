@@ -521,8 +521,14 @@ private:
       return;
     }
     if (t.text == "goto") {
-      warningAt("'goto' bypasses C+ cleanup; destructors may not run", t,
+      // STRICT fails closed only when a managed/resource owner is live at the
+      // jump; a plain goto with no cleanup obligations is safe.
+      if (strict_ && !owned_.empty())
+        errorAt("'goto' bypasses C+ cleanup; destructors may not run", t,
                 "use structured control flow or an explicit cleanup call");
+      else
+        warningAt("'goto' bypasses C+ cleanup; destructors may not run", t,
+                  "use structured control flow or an explicit cleanup call");
       atStmtStart_ = false;
       return;
     }
