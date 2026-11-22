@@ -339,6 +339,29 @@ public:
   bool evalIndexValue(const Expr *idx, long long &out) const {
     if (!idx)
       return false;
+    // `idx + K` (or `K + idx`): resolve the induction variable then add the
+    // constant offset, so `arr[idx + 1]` in a counted loop is checked.
+    if (const auto *bo = dyn_cast<BinaryOperator>(idx->IgnoreParenImpCasts())) {
+      if (bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) {
+        long long base = 0, off = 0;
+        const Expr *varExpr = nullptr;
+        Expr::EvalResult r;
+        if (bo->getRHS()->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+          off = r.Val.getInt().getSExtValue();
+          if (bo->getOpcode() == BO_Sub)
+            off = -off;
+          varExpr = bo->getLHS();
+        } else if (bo->getLHS()->EvaluateAsInt(r, ctx_) && r.Val.isInt() &&
+                   bo->getOpcode() == BO_Add) {
+          off = r.Val.getInt().getSExtValue();
+          varExpr = bo->getRHS();
+        }
+        if (varExpr && evalIndexValue(varExpr, base)) {
+          out = base + off;
+          return true;
+        }
+      }
+    }
     if (const auto *ref = dyn_cast<DeclRefExpr>(idx->IgnoreParenImpCasts())) {
       if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
         auto ov = loopIndexOverride_.find(vd);
@@ -394,7 +417,7 @@ public:
     if (bo->getRHS()->EvaluateAsInt(br, ctx_) && br.Val.isInt()) {
       bound = br.Val.getInt().getSExtValue();
     } else {
-      std::string bn = varNameOf(bo->getRHS());
+      std::string bn = varNameOf(bo->getRHS()->IgnoreParenCasts());
       auto it = constLocals_.find(bn);
       if (bn.empty() || it == constLocals_.end() || assignedVars_.count(bn))
         return false;
@@ -1706,29 +1729,16 @@ public:
     const auto *arrayType = ctx_.getAsConstantArrayType(baseType);
     if (!arrayType)
       return true;
-    Expr::EvalResult result;
-    llvm::APSInt index;
-    if (subscript->getIdx()->EvaluateAsInt(result, ctx_) &&
-        result.Val.isInt()) {
-      index = result.Val.getInt();
-    } else {
-      // Constant-propagate a local `int i = <literal>;` that is never
-      // reassigned.  This is still a compile-time proof, not a guess.
-      std::string name = varNameOf(subscript->getIdx());
-      auto it = constLocals_.find(name);
-      if (name.empty() || it == constLocals_.end() ||
-          assignedVars_.count(name))
-        return true;
-      index = it->second;
-    }
-    if (index.isNegative()) {
+    long long signedIndex = 0;
+    if (!evalIndexValue(subscript->getIdx(), signedIndex))
+      return true;
+    if (signedIndex < 0) {
       report(subscript->getBeginLoc(),
-             "array index " + std::to_string(index.getSExtValue()) +
-                 " is negative");
+             "array index " + std::to_string(signedIndex) + " is negative");
       return true;
     }
     unsigned long long extent = arrayType->getSize().getZExtValue();
-    unsigned long long value = index.getZExtValue();
+    unsigned long long value = static_cast<unsigned long long>(signedIndex);
     if (value >= extent)
       report(subscript->getBeginLoc(),
              "array index " + std::to_string(value) +
