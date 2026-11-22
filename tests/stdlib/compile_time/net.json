@@ -111,9 +111,12 @@
   "summary": {
     "total_cases": 5,
     "accept": 2,
-    "reject": 1,
+    "reject_expected": 1,
+    "reject_tagged": 0,
+    "partial_untagged_reject": 1,
     "runtime": 2,
     "tagged_cplus_diagnostics_observed": 0,
+    "classification_note": "net_use_after_transfer.cp is genuinely rejected by C+ (exit 1 both commands) but its diagnostic is untagged. Under the suite rule that only [CPLUS- diagnostics count as enforcement it is PARTIAL, not a tagged REJECT. This summary intentionally does not report reject:1 without the untagged qualifier.",
     "gap_ids": ["GAP-NET-01", "GAP-NET-02", "GAP-NET-03"]
   }
 }

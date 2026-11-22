@@ -6,6 +6,19 @@ report for Agent 1 (compiler owner). It does not modify `compiler/**`, `runtime/
 the manifests, and it does **not** re-run the compiler: every observation below is the
 result recorded in the manifests at the time they were written.
 
+> **Addendum (post-catalog change).** `json.json` was added after this catalog was
+> generated. Current on-disk totals are **8 manifests / 52 cases**, not 7 / 46:
+> expected REJECT 9, ACCEPT 19, RUNTIME 24; observed (normalized) tagged REJECT 5,
+> untagged PARTIAL 7, ACCEPT/compiles-clean 40. The six added JSON cases are
+> `json_valid` (ACCEPT), `json_valid_ref` (ACCEPT), `json_access_after_destroy`,
+> `json_builder_after_destroy`, `json_dangling_ref` (all RUNTIME, observed ACCEPT),
+> and `json_invalid_transfer` (RUNTIME, observed untagged PARTIAL). The JSON family
+> contributes **zero tagged REJECTs** and one extra tagged-diagnostic-tagging gap,
+> and its report that including `stdlib/json.hp`/`yyjson.h` suppresses the AST safety
+> pass is recorded in `json.json`. All per-family totals and the grand totals in the
+> tables below are the original 46-case snapshot; use the addendum numbers for current
+> status. No gap is counted as a pass in either snapshot.
+
 **Reading rule — do not misread this document:** an `ACCEPT` in the *Observed* column
 means "the compiler accepted the file," i.e. the safety property is **not** proven at
 compile time. No gap case in this catalog passes compile-time enforcement. `RUNTIME`
@@ -15,7 +28,8 @@ programs are memory-safe beyond what the manifests state.
 
 ## 1. Manifest inventory and verification
 
-All 7 manifests were confirmed to exist and to parse as JSON. Case counts were
+All 7 manifests present at generation time were confirmed to exist and to parse
+as JSON (an 8th, `json.json`, was added later — see addendum above). Case counts were
 computed from the parsed `cases` arrays (not from the manifests' own `summary`
 fields, which in two places disagree with their per-case notes — see §2).
 
