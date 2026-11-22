@@ -749,8 +749,16 @@ public:
     return releasedVars_.count(varNameOf(expr)) != 0;
   }
 
-  bool isMaybeReleased(const Expr *expr) const {
-    return maybeReleasedVars_.count(varNameOf(expr)) != 0;
+  bool isMaybeReleased(const Expr *expr, SourceLocation at = {}) const {
+    std::string name = varNameOf(expr);
+    if (!maybeReleasedVars_.count(name))
+      return false;
+    if (!at.isValid())
+      return true;
+    auto it = maybeReleaseLines_.find(name);
+    unsigned pos = at.getRawEncoding();
+    return it != maybeReleaseLines_.end() && it->second && pos &&
+           it->second < pos;
   }
 
   // Do not propagate release state across branches: a free in one branch is
@@ -912,6 +920,7 @@ public:
       if (detectReallocSuccess(s, owner, tmp, &rc) && rc)
         handledReallocs_.insert(rc->getBeginLoc().getRawEncoding());
     }
+    std::string keepEraseVar;
     bool negatedGuard = false;
     if (s->getCond())
       if (const auto *uo = dyn_cast<UnaryOperator>(
@@ -948,6 +957,7 @@ public:
         if (scan(s->getThen()), assigns) {
           nullVars_.erase(n);
           keepErase = true;
+          keepEraseVar = n;
         }
       }
     }
@@ -1008,6 +1018,7 @@ public:
             // `if (p == 0) return;` proves p is non-null afterwards.
             condVar = n;
             keepErase = true;
+            keepEraseVar = n;
           }
         }
       if (!condVar.empty())
@@ -1024,11 +1035,20 @@ public:
       if (!condVar.empty()) {
         nullVars_.erase(condVar);
         keepErase = true;
+        keepEraseVar = condVar;
       }
     }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
-    if (!keepErase)
+    if (keepErase) {
+      // The branch we kept may itself assign `p = NULL` (RAII lowering does
+      // this on failure paths). The continuing path is still non-null.
+      for (const auto &kv : savedNulls)
+        nullVars_.erase(kv);
+      if (!keepEraseVar.empty())
+        nullVars_.erase(keepEraseVar);
+    } else {
       nullVars_ = savedNulls;
+    }
     --conditionalDepth_;
     return r;
   }
@@ -1517,7 +1537,7 @@ public:
       if (isReleased(sub))
         reportUaf(op->getBeginLoc(), varNameOf(sub),
                   "dereference of released pointer '" + varNameOf(sub) + "'");
-      else if (isMaybeReleased(sub) && conditionalDepth_ == 0)
+      else if (isMaybeReleased(sub, op->getBeginLoc()) && conditionalDepth_ == 0)
         warnAt(op->getBeginLoc(),
                "possible use-after-free: '" + varNameOf(sub) +
                    "' may have been released on a branch path");
