@@ -11,6 +11,7 @@ add_library(cplus_safecrt STATIC
   src/safe_stats.c
   src/safe_memory.c
   src/safe_platform.c
+  src/safe_runtime.c
   src/safe_string.c
 )
 target_include_directories(cplus_safecrt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/safeclib/include)

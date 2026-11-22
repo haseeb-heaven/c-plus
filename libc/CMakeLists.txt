@@ -11,6 +11,7 @@ add_library(cplus_hardened_libc STATIC
   src/stdlib/stdlib_extra3.c
   src/stdlib/stdlib_extra4.c
   src/stdlib/stdlib_extra5.c
+  src/stdlib/stdlib_extra6.c
   src/stdlib/musl_stdlib_extra.c
   src/string/memory.c
   src/string/string.c
@@ -19,6 +20,7 @@ add_library(cplus_hardened_libc STATIC
   src/string/extra3.c
   src/string/string_extra4.c
   src/string/string_extra5.c
+  src/string/string_extra6.c
   src/string/strtok.c
   src/string/musl_extra.c
   src/string/strndup.c
@@ -33,7 +35,9 @@ add_library(cplus_hardened_libc STATIC
   src/math/math.c
   src/math/math2.c
   src/math/math3.c
+  src/math/math4.c
   src/time/time.c
+  src/time/time_extra.c
   src/locale/locale.c
   src/signal/signal.c
   src/fenv/fenv.c

@@ -12,6 +12,9 @@
 #include <fenv.h>
 #include <complex.h>
 #include <pthread.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -43,6 +46,8 @@ char *cplus_strdup(const char*);
 char *cplus_strerror(int); char *cplus_strtok(char*,const char*); char *cplus_strndup(const char*,size_t);
 void *cplus_memccpy(void*,const void*,int,size_t); char *cplus_stpcpy(char*,const char*); char *cplus_stpncpy(char*,const char*,size_t); char *cplus_strtok_r(char*,const char*,char**); char *cplus_strsep(char**,const char*); void *cplus_memmem(const void*,size_t,const void*,size_t);
 void cplus_swab(const void*,void*,ssize_t);
+/* BSD string extras (platform-backed) */
+size_t cplus_strlcpy(char*,const char*,size_t); size_t cplus_strlcat(char*,const char*,size_t); char *cplus_strnstr(const char*,const char*,size_t);
 div_t cplus_div(int,int); ldiv_t cplus_ldiv(long,long); lldiv_t cplus_lldiv(long long,long long); long long cplus_llabs(long long); long long cplus_atoll(const char*);
 long long cplus_strtoll(const char*,char**,int); unsigned long long cplus_strtoull(const char*,char**,int); double cplus_strtod(const char*,char**); double cplus_atof(const char*); float cplus_strtof(const char*,char**); long double cplus_strtold(const char*,char**);
 int cplus_setenv(const char*,const char*,int); int cplus_unsetenv(const char*); int cplus_putenv(char*); int cplus_rand_r(unsigned int*); intmax_t cplus_imaxabs(intmax_t); imaxdiv_t cplus_imaxdiv(intmax_t,intmax_t);
@@ -51,6 +56,8 @@ int cplus_isalpha(int); int cplus_isdigit(int); int cplus_isspace(int); int cplu
 int cplus_abs(int); long cplus_labs(long); int cplus_atoi(const char*); long cplus_atol(const char*); long cplus_strtol(const char*,char**,int); unsigned long cplus_strtoul(const char*,char**,int);
 char *cplus_ecvt(double,int,int*,int*); char *cplus_fcvt(double,int,int*,int*); char *cplus_gcvt(double,int,char*); double cplus_drand48(void); double cplus_erand48(unsigned short[3]); unsigned short *cplus_seed48(unsigned short[3]); long cplus_lrand48(void);
 void cplus_qsort(void*,size_t,size_t,int(*)(const void*,const void*)); void *cplus_bsearch(const void*,const void*,size_t,size_t,int(*)(const void*,const void*));
+/* POSIX/BSD stdlib extras (platform-backed) */
+int cplus_mkstemp(char*); char *cplus_mkdtemp(char*); char *cplus_realpath(const char*,char*); void cplus_qsort_r(void*,size_t,size_t,void*,int(*)(void*,const void*,const void*));
 int cplus_rand(void); void cplus_srand(unsigned int); int cplus_atexit(void(*)(void)); char *cplus_getenv(const char*); int cplus_system(const char*);
 FILE *cplus_fopen(const char*,const char*); int cplus_fclose(FILE*);
 size_t cplus_fread(void*,size_t,size_t,FILE*); size_t cplus_fwrite(const void*,size_t,size_t,FILE*);
@@ -80,9 +87,12 @@ double cplus_sinh(double); double cplus_cosh(double); double cplus_tanh(double);
 double cplus_hypot(double,double); double cplus_round(double); double cplus_trunc(double); double cplus_fmin(double,double); double cplus_fmax(double,double);
 double cplus_copysign(double,double); double cplus_ldexp(double,int); double cplus_frexp(double,int*); double cplus_modf(double,double*);
 double cplus_nan(const char*); double cplus_nextafter(double,double); double cplus_fdim(double,double); double cplus_remainder(double,double); double cplus_log1p(double); double cplus_expm1(double); double cplus_asinh(double); double cplus_acosh(double); double cplus_atanh(double); double cplus_erf(double); double cplus_erfc(double); double cplus_tgamma(double); double cplus_lgamma(double);
+double cplus_fma(double,double,double); double cplus_remquo(double,double,int*); double cplus_logb(double); int cplus_ilogb(double); float cplus_nanf(const char*); double cplus_exp2(double); double cplus_nearbyint(double); long cplus_lrint(double); long long cplus_llrint(double); double cplus_scalbn(double,int);
 long cplus_time(long*); double cplus_difftime(long,long); long cplus_clock(void);
 struct tm; struct tm *cplus_gmtime(const long*); struct tm *cplus_localtime(const long*); long cplus_mktime(struct tm*);
 size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
+/* POSIX/C11 time extras (platform-backed) */
+int cplus_clock_gettime(clockid_t,struct timespec*); int cplus_nanosleep(const struct timespec*,struct timespec*); int cplus_timespec_get(struct timespec*,int);
 char *cplus_setlocale(int,const char*); struct lconv; struct lconv *cplus_localeconv(void);
 void (*cplus_signal(int, void(*)(int)))(int); int cplus_raise(int);
 /* stdio position/stream extras (platform-backed) */

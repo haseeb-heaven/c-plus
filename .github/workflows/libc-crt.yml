@@ -31,6 +31,8 @@ jobs:
         run: sh tests/json/run_json_tests.sh
       - name: exception tests
         run: sh tests/exceptions/run_except_tests.sh
+      - name: runtime recover tests
+        run: sh tests/runtime/run_runtime_tests.sh
       - name: Libc fuzz
         run: sh tests/libc/run_fuzz.sh
       - name: Combined fuzz harness
