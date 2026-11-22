@@ -131,6 +131,64 @@ for name, mode, expected, legacy in CASES:
                     next((l for l in diag.splitlines() if expected in l),
                          f"exit {r.returncode}")[:120]))
 
+# The scratch/demo.c runtime path reproduced self-containedly: ASan must name
+# the defect and the intercepted __asan_memset operation.
+r, build_out = build_run(SRC / "runtime_dependent_heap_overflow.c", "address",
+                         "runtime_dependent_heap_overflow")
+if r is None:
+    results.append(("runtime_dependent_heap_overflow", "negative", False,
+                    "heap-buffer-overflow via __asan_memset",
+                    "build failed: " + build_out.strip().splitlines()[-1][:100]))
+else:
+    diag = r.stderr + r.stdout
+    ok = (r.returncode != 0 and
+          "ERROR: AddressSanitizer: heap-buffer-overflow" in diag and
+          "__asan_memset" in diag)
+    results.append(("runtime_dependent_heap_overflow", "negative", ok,
+                    "heap-buffer-overflow via __asan_memset",
+                    next((l for l in diag.splitlines()
+                          if "ERROR: AddressSanitizer" in l), "")[:120]))
+
+# Combined ASan+UBSan config must still detect defects from both runtimes.
+r, _ = build_run(SRC / "runtime_dependent_heap_overflow.c", "address,undefined",
+                 "combined_asan_defect")
+if r is None:
+    results.append(("combined_asan_defect", "negative", False,
+                    "ASan report in combined build", "build failed"))
+else:
+    diag = r.stderr + r.stdout
+    results.append(("combined_asan_defect", "negative",
+                    r.returncode != 0 and
+                    "ERROR: AddressSanitizer: heap-buffer-overflow" in diag,
+                    "ASan report in combined build",
+                    next((l for l in diag.splitlines()
+                          if "ERROR: AddressSanitizer" in l), "")[:120]))
+r, _ = build_run(SRC / "ubsan_overflow.c", "address,undefined",
+                 "combined_ubsan_defect")
+if r is None:
+    results.append(("combined_ubsan_defect", "negative", False,
+                    "UBSan report in combined build", "build failed"))
+else:
+    diag = r.stderr + r.stdout
+    results.append(("combined_ubsan_defect", "negative",
+                    r.returncode != 0 and
+                    "runtime error: signed integer overflow" in diag,
+                    "UBSan report in combined build",
+                    next((l for l in diag.splitlines()
+                          if "runtime error:" in l), "")[:120]))
+
+# Sanitizer flags must not weaken the C+ static checker.
+static = subprocess.run(
+    [CC, "check", "--strict", "--sanitize=address",
+     str(SRC / "static_reject.c")], capture_output=True, text=True,
+    env=base_env, timeout=120)
+static_diag = static.stderr + static.stdout
+results.append(("static_check_preserved", "static",
+                static.returncode != 0 and
+                "[CPLUS-BOUNDS]" in static_diag,
+                "CPLUS-BOUNDS error from check",
+                static_diag.strip().splitlines()[-1][:110]))
+
 # Safe program under each configuration must exit cleanly with no diagnostic.
 for mode in ["none", "address", "undefined", "address,undefined",
              "leak", "cfi", "integer"]:

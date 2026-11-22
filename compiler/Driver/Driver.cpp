@@ -770,7 +770,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
          << sanitizerConflict(san) << "\n";
     return 1;
   }
-  if (opts.sanitizerExplicit) {
+  if (opts.sanitizerExplicit && opts.command != "check") {
     static const Sanitizer kBits[] = {
         Sanitizer::Address, Sanitizer::Undefined, Sanitizer::Memory,
         Sanitizer::Thread,  Sanitizer::Leak,      Sanitizer::Cfi,
@@ -798,7 +798,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   std::vector<std::string> base = backendArgs(opts);
   std::vector<std::string> objects;
   bool instrumentedRuntime = false;
-  if (san != Sanitizer::None) {
+  if (san != Sanitizer::None && opts.command != "check") {
     std::string runtimeSrc = runtimeSourcePath();
     if (runtimeSrc.empty()) {
       errs << "warning: C+ runtime source not found; runtime library will "
