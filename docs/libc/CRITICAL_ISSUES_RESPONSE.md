@@ -299,3 +299,29 @@ is asserted, and no production security or reliability finding is claimed fixed.
 6. **SonarCloud:** obtain a token, triage the returned issues, re-run the remote
    gate after push, and record the measured duplication/security/reliability
    values — this is the only thing that closes issue 6.
+## Per-family gap table (computed from iso_c_inventory.json)
+
+| Family | APIs | Bundled/upstream | Platform-backed | Toolchain-provided | Missing | Unsupported |
+|---|---:|---:|---:|---:|---:|---:|
+| stdlib.h | 49 | 4 | 34 | 9 | 0 | 2 |
+| string.h | 28 | 23 | 5 | 0 | 0 | 0 |
+| stdio.h | 75 | 0 | 44 | 18 | 0 | 13 |
+| ctype.h | 14 | 0 | 14 | 0 | 0 | 0 |
+| errno.h | 4 | 0 | 1 | 3 | 0 | 0 |
+| time.h | 17 | 0 | 10 | 6 | 1 | 0 |
+| math.h | 223 | 3 | 174 | 23 | 23 | 0 |
+| wchar.h | 59 | 0 | 54 | 5 | 0 | 0 |
+| wctype.h | 21 | 0 | 18 | 3 | 0 | 0 |
+| locale.h | 9 | 0 | 2 | 7 | 0 | 0 |
+| complex.h | 69 | 0 | 66 | 3 | 0 | 0 |
+| fenv.h | 25 | 0 | 11 | 13 | 1 | 0 |
+| signal.h | 12 | 0 | 2 | 10 | 0 | 0 |
+| threads.h | 41 | 0 | 41 | 0 | 0 | 0 |
+| stdatomic.h | 49 | 0 | 0 | 15 | 0 | 34 |
+
+The reviewer's 🔴/🟡 labels are broadly consistent with this table. The largest real gaps are
+`stdatomic.h` (34 type-generic APIs cannot be single C ABI functions), `math.h` (23 C23 APIs with no
+dependency-closed upstream source), and `stdio.h` (13 deliberately unsupported Annex K/insecure APIs).
+Everything else is platform-backed by a named host backend or provided by the toolchain — which is
+real coverage, but is explicitly NOT a bundled implementation. See `docs/libc/ORDINARY_C_SAFETY.md`.
+
