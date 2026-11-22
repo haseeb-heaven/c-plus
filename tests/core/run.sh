@@ -269,6 +269,14 @@ else
   bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
 fi
 
+# 15 runtime-crash scenarios: each must be rejected statically or produce the
+# expected sanitizer-specific report (a bare signal is never sufficient).
+if python3 "$ROOT/tests/core/runtime_crashes_suite.py" >"$OUT/runtime_crashes.log" 2>&1; then
+  ok runtime_crashes_suite
+else
+  bad runtime_crashes_suite "$(head -1 "$OUT/runtime_crashes.log")"
+fi
+
 # Configurable sanitizers: ASan, UBSan, combined and none. Each negative case
 # must print the exact sanitizer diagnostic, not merely exit non-zero.
 if python3 "$ROOT/tests/core/sanitizer_suite.py" >"$OUT/sanitizer.log" 2>&1; then
