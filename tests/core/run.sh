@@ -269,6 +269,14 @@ else
   bad lib_contracts_suite "$(head -1 "$OUT/lib_contracts.log")"
 fi
 
+# Isolated P0 correctness regressions for issue #21 (out-params, aliases,
+# realloc paths, goto/longjmp cleanup policy).
+if python3 "$ROOT/tests/core/p0_correctness_suite.py" >"$OUT/p0_correctness.log" 2>&1; then
+  ok p0_correctness_suite
+else
+  bad p0_correctness_suite "$(head -1 "$OUT/p0_correctness.log")"
+fi
+
 # Paired C+/Rust scenarios: C+ expectations asserted, Rust results recorded.
 if python3 "$ROOT/tests/core/rust_compare_suite.py" >"$OUT/rust_compare.log" 2>&1; then
   ok rust_compare_suite

@@ -12,8 +12,10 @@ This is **not** yet Rust-level safety; it is a specified, tested subset.
 - borrows of locals (`&x`, `&s.field`) provided no conflicting mutable borrow
   exists and the borrow does not escape;
 - deterministic RAII on scope exit, return, break, continue and nested scopes;
-- compile-time bounds for constant indices and simple counted loops; dynamic
-  bounds/null/alignment checks via UBSan where compile-time proof is absent.
+- compile-time bounds for constant indices and simple counted loops; C+
+  inserted `__cplus_bounds_check` for dynamic indices into fixed-size arrays;
+  configurable ASan/UBSan/TSan/LSan/CFI/integer sanitizers as additional
+  evidence, never as the sole safety proof.
 
 ## Compile-time rejected
 - copy/assignment of an owning handle;
@@ -23,14 +25,18 @@ This is **not** yet Rust-level safety; it is a specified, tested subset.
 - constant/pointer-arithmetic out-of-bounds on known arrays;
 - null dereference from a provably null initializer;
 - provably oversized `memcpy`/`memmove` byte count and literal `strcpy`;
-- `goto`/`longjmp` warnings in safe mode; full rejection is pending;
+- STRICT rejects `goto`/`longjmp` that bypasses cleanup of a live allocation;
+  plain `goto`/`longjmp` with no cleanup obligation only warns;
 - safe-subset restrictions: raw `realloc(p,n)`, zero-size raw allocation.
 
 ## Dynamically enforced
 - managed double/invalid release (exit 104/105);
 - explicit `cplus_check_live` for stale managed aliases;
 - opt-in quarantine (`CPLUS_QUARANTINE=1`) delays reuse in a bounded ring;
-- UBSan bounds/null/alignment/undefined with abort-on-first-failure.
+- `__cplus_bounds_check` prints a controlled C+ diagnostic and aborts before
+  the access (see `tests/core/fnptr_bounds_suite.py`);
+- optional sanitizers with exact-diagnostic assertions
+  (`tests/core/sanitizer_suite.py`).
 
 ## Unknown / unsafe (must not be claimed safe)
 - arbitrary raw pointer provenance, casts and pointer arithmetic escapes;
@@ -38,8 +44,20 @@ This is **not** yet Rust-level safety; it is a specified, tested subset.
 - cross-TU ownership ABI mismatches;
 - fields/containers with untracked element lifetimes;
 - general data races and shared mutable thread state;
-- `setjmp`/`longjmp`/`exit` cleanup bypass;
+- `exit()` cleanup bypass and `setjmp` paths where no live resource can be
+  identified; STRICT does reject live-resource `longjmp` violations;
 - any libc call without a known effect summary or explicit bound.
+
+## Fail-closed status (issue #21 task 4)
+
+STRICT rejects proven violations and every unsupported contract field, but
+**does not reject every unverifiable pointer operation**: pointers with unknown
+bounds/lifetime, field/container element lifetimes, general races and cross-TU
+ownership remain outside the subset. Rejecting them would reject ordinary C,
+which the product direction forbids. There is no general `unsafe` boundary
+marker in C+ today; the documented trusted interfaces are the JSON contracts,
+`cplus_check_live`, and explicit bounds (`--sanitize` / dynamic bounds checks).
+No Rust-equivalence or blanket memory-safety claim is made.
 
 ## Upstream research (pinned; licences checked; no source copied)
 | project | pinned revision | license | use |

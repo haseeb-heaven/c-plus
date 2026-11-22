@@ -1105,6 +1105,12 @@ private:
     std::set<std::string> expired;                 // pointers to dead locals
     std::set<std::string> danglingReported;
     std::set<std::string> longjmpReported;
+    std::set<std::string> gotoReported;
+    // A `free(p)` after `longjmp` is only a resume path when this function
+    // also calls setjmp; otherwise it is unreachable after the jump.
+    bool hasSetjmp = false;
+    for (size_t k = openIdx; k <= closeIdx; ++k)
+      if (isIdent(k, "setjmp")) { hasSetjmp = true; break; }
 
     auto lookupLocal = [&](const std::string &n) -> LocalVar * {
       for (int s = static_cast<int>(scopes.size()) - 1; s >= 0; --s) {
@@ -1394,6 +1400,37 @@ private:
                      "free/close the resource on every return path, or use a "
                      "C+ managed allocation");
         }
+      } else if (isIdent(i, "goto")) {
+        // A forward jump to a label past a free() of a live allocation skips
+        // cleanup. STRICT must reject that path (a plain goto is still fine).
+        if (strict_) {
+          size_t target = nextSig(i);
+          if (target < closeIdx && toks_[target].kind == TokKind::Identifier) {
+            size_t label = kNPos;
+            for (size_t k = i + 1; k < closeIdx; ++k)
+              if (toks_[k].kind == TokKind::Identifier &&
+                  toks_[k].text == toks_[target].text &&
+                  isPunct(nextSig(k), ":")) { label = k; break; }
+            if (label != kNPos)
+              for (auto &kv : live) {
+                if (kv.second.escaped || gotoReported.count(kv.first))
+                  continue;
+                for (size_t k = i + 1; k < label; ++k)
+                  if ((isIdent(k, "free") || isIdent(k, "fclose"))) {
+                    size_t lp = nextSig(k);
+                    size_t arg = isPunct(lp, "(") ? nextSig(lp) : kNPos;
+                    if (arg < label && toks_[arg].text == kv.first) {
+                      gotoReported.insert(kv.first);
+                      plainError("'goto' bypasses cleanup of live allocation '" +
+                                     kv.first + "'",
+                                 t, "free the resource before the jump or use "
+                                    "structured control flow");
+                      break;
+                    }
+                  }
+              }
+          }
+        }
       } else if (isIdent(i, "longjmp")) {
         // The generic longjmp warning is already produced by the bounds
         // checker; STRICT mode escalates it when a live allocation exists.
@@ -1405,7 +1442,7 @@ private:
             // a forward scan for free(p) in the remaining body avoids a
             // false positive on that idiom.
             bool freedLater = false;
-            for (size_t k = i + 1; k < closeIdx && !freedLater; ++k)
+            for (size_t k = i + 1; hasSetjmp && k < closeIdx && !freedLater; ++k)
               if (isIdent(k, "free") || isIdent(k, "fclose")) {
                 size_t lp = nextSig(k);
                 size_t arg = isPunct(lp, "(") ? nextSig(lp) : kNPos;

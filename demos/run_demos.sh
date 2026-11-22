@@ -90,7 +90,7 @@ else
   rc=$(cat "$OUT/B_bounds.exit")
   if [ "$rc" -eq 0 ]; then
     fail B_bounds "out-of-bounds read did not abort"
-  elif ! grep -q "out of bounds" "$OUT/B_bounds.stderr"; then
+  elif ! grep -q "outside the bounds" "$OUT/B_bounds.stderr"; then
     fail B_bounds "no bounds diagnostic; see demos/out/B_bounds.stderr"
   fi
   pass B_bounds

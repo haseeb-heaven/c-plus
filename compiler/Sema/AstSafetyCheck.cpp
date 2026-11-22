@@ -741,17 +741,18 @@ public:
     if (!lhs)
       return;
     const Expr *e = lhs->IgnoreParenImpCasts();
-    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e)) {
-      std::string name = varNameOf(ase->getBase());
-      if (!name.empty() && stringPtrs_.count(name))
-        report(loc, "write to string literal '" + name + "'");
-    } else if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
-      if (uo->getOpcode() == UO_Deref) {
-        std::string name = varNameOf(uo->getSubExpr());
-        if (!name.empty() && stringPtrs_.count(name))
-          report(loc, "write to string literal '" + name + "'");
-      }
-    }
+    const Expr *ptrExpr = nullptr;
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e))
+      ptrExpr = ase->getBase();
+    else if (const auto *uo = dyn_cast<UnaryOperator>(e))
+      if (uo->getOpcode() == UO_Deref)
+        ptrExpr = uo->getSubExpr();
+    if (!ptrExpr)
+      return;
+    const auto *ref = dyn_cast<DeclRefExpr>(ptrExpr->IgnoreParenCasts());
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (vd && stringPtrs_.count(vd))
+      report(loc, "write to string literal '" + vd->getNameAsString() + "'");
   }
 
   /// `malloc(strlen(src))` followed by strcpy/strcat overflows by the NUL.
@@ -850,7 +851,9 @@ public:
           }
         }
       }
-      if (stringPtrs_.count(name)) {
+      const auto *sref = dyn_cast<DeclRefExpr>(e->IgnoreParenCasts());
+      const auto *svd = sref ? dyn_cast<VarDecl>(sref->getDecl()) : nullptr;
+      if (svd && stringPtrs_.count(svd)) {
         report(loc, "invalid free of string-literal pointer '" + name +
                         "' via " + api);
         return;
@@ -1213,9 +1216,22 @@ public:
         if (negatedGuard) {
           // The then-branch is the FAILURE path (e.g. `if(!t){free(p);
           // return 1;}`). Ownership stays with the original allocation.
+          std::string savedRebindNeg = reallocRebindOwner_;
+          if (!owner.empty() && !tmp.empty()) {
+            reallocRebindOwner_ = owner;
+            reallocRebindTemp_ = tmp;
+          }
           r &= TraverseStmt(s->getThen());
           if (s->getElse())
             r &= TraverseStmt(s->getElse());
+          // If that failure arm exits the function, the only continuing path
+          // is realloc SUCCESS: old aliases are invalid from here on.
+          bool failureExitsNeg = !s->getElse() &&
+                                 containsReturn(s->getThen());
+          if (failureExitsNeg)
+            markReleased(owner); // keep rebind info for following code
+          else
+            reallocRebindOwner_ = savedRebindNeg;
           --conditionalDepth_;
           return r;
         }
@@ -1226,11 +1242,20 @@ public:
           reallocRebindOwner_ = owner;
           reallocRebindTemp_ = tmp;
         }
-        // Inside the success branch the old pointer and its aliases are
-        // invalid; outside it they remain valid (failure path).
-        markReleased(owner);
-        r &= TraverseStmt(s->getThen());
-        clearReleased(owner);
+        // `if (!t) return;` exits on failure, so the only continuing path is
+        // realloc success: the old pointer and its aliases stay invalid after
+        // the statement. Otherwise they are only invalid inside the branch.
+        bool failureExits = negatedGuard && !s->getElse() &&
+                            containsReturn(s->getThen());
+        if (failureExits) {
+          r &= TraverseStmt(s->getThen());
+          clearReleased(owner);
+          markReleased(owner); // persist for code after the if
+        } else {
+          markReleased(owner);
+          r &= TraverseStmt(s->getThen());
+          clearReleased(owner);
+        }
         reallocRebindOwner_ = savedRebind;
         if (s->getElse())
           r &= TraverseStmt(s->getElse());
@@ -1364,6 +1389,7 @@ public:
     std::set<std::string> previousNulls = nullVars_;
     currentFunction_ = fd->getNameAsString();
     currentFnDecl_ = fd;
+    stringPtrs_.clear(); // names are function-scoped, not TU-scoped
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
@@ -1377,6 +1403,7 @@ public:
       heapInterior_.clear();
       onePastEnd_.clear();
       strlenSized_.clear();
+
       auto pit = callParamExtents_.find(currentFunction_);
       if (pit != callParamExtents_.end())
         for (const auto *pv : fd->parameters()) {
@@ -1609,8 +1636,9 @@ public:
             allocLocs_[vd->getNameAsString()] = vd->getBeginLoc();
         }
       }
-      if (isa<StringLiteral>(init->IgnoreParenCasts()))
-        stringPtrs_.insert(vd->getNameAsString());
+      if (isa<StringLiteral>(init->IgnoreParenCasts())) {
+        stringPtrs_.insert(vd);
+      }
       if (const auto *call = dyn_cast<CallExpr>(init)) {
         if (call->getDirectCallee() &&
             functionsReturningFreed_.count(
@@ -3198,7 +3226,7 @@ private:
   std::map<std::string, SourceLocation> allocLocs_;
   std::map<std::string, SourceLocation> aliasLocs_;
   std::map<std::string, SourceLocation> releaseLocs_;
-  std::set<std::string> stringPtrs_;
+  std::set<const VarDecl *> stringPtrs_;
   std::map<std::string, HeapAllocState> heapAllocs_;
   std::set<const VarDecl *> heapWritten_;
   std::set<const VarDecl *> heapInterior_;
