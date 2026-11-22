@@ -482,8 +482,9 @@ public:
     QualType elem = pt->getPointeeType();
     unsigned long long elemSize = 0;
     if ((elem->isIntegerType() || elem->isCharType() ||
-         elem->isFloatingType() || elem->isEnumeralType()) &&
-        !elem->isDependentType())
+         elem->isFloatingType() || elem->isEnumeralType() ||
+         elem->isRecordType()) &&
+        !elem->isDependentType() && !elem->isIncompleteType())
       elemSize = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
     if (elemSize == 0)
       return;
