@@ -918,11 +918,21 @@ public:
         negatedGuard = uo->getOpcode() == UO_LNot;
     // `if (!p) p = &x;` — the assignment in the then arm makes p non-null
     bool keepErase = false;
-    // on both paths after the statement.
-    if (report_ && negatedGuard && s->getThen()) {
-      std::string n = varNameOf(
-          cast<UnaryOperator>(s->getCond()->IgnoreParenImpCasts())
-              ->getSubExpr());
+    // on both paths after the statement. Also handles `if (p == NULL) p = &x;`.
+    if (report_ && s->getThen()) {
+      std::string n;
+      if (negatedGuard)
+        n = varNameOf(
+            cast<UnaryOperator>(s->getCond()->IgnoreParenImpCasts())
+                ->getSubExpr());
+      if (n.empty())
+        if (const auto *bo = dyn_cast_or_null<BinaryOperator>(
+                s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
+          if (bo->isEqualityOp()) {
+            n = varNameOf(bo->getLHS());
+            if (n.empty() && isNullConstant(bo->getLHS()))
+              n = varNameOf(bo->getRHS());
+          }
       if (!n.empty()) {
         bool assigns = false;
         std::function<void(const Stmt *)> scan = [&](const Stmt *node) {
@@ -1377,6 +1387,8 @@ public:
             heapAllocs_.erase(hit);
           if (isOnePastEndExpr(op->getRHS()))
             onePastEnd_.insert(vd);
+          else
+            onePastEnd_.erase(vd); // e.g. `p = a + n; p--;` becomes in-bounds
         }
       }
     }
@@ -1473,6 +1485,9 @@ public:
           // it later is invalid.
           if (heapStateOf(ref))
             heapInterior_.insert(vd);
+          // Decrementing a one-past pointer brings it back in bounds.
+          if (op->isDecrementOp())
+            onePastEnd_.erase(vd);
         }
       }
       // `*p++` / `(*p)++` writes the pointed-to memory.

@@ -1399,6 +1399,21 @@ private:
                      "the stream was already closed");
       } else if (isIdent(i, "if")) {
         noteFopenNullChecks(i);
+      } else if (toks_[i].kind == TokKind::Identifier &&
+                 isPunct(nextSig(i), "(") && live.count(t.text) == 0 &&
+                 !kFileUseFuncs.count(t.text)) {
+        // Passing a live pointer to any other function may transfer
+        // ownership (e.g. a helper that frees it). Conservatively treat it
+        // as escaped so the leak analyzer does not report a false positive.
+        size_t lp = nextSig(i);
+        size_t rp = matchingParen(lp);
+        if (rp != kNPos)
+          for (size_t k = nextSig(lp); k < rp; ++k)
+            if (toks_[k].kind == TokKind::Identifier) {
+              auto it = live.find(toks_[k].text);
+              if (it != live.end())
+                it->second.escaped = true;
+            }
       }
 
       if (expired.count(t.text)) {
