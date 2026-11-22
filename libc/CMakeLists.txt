@@ -47,6 +47,17 @@ set(LIBC_SOURCES
   src/fenv/fenv.c
   src/complex/complex.c
   src/thread/thread.c
+  src/fenv/fenv_extra.c
+  src/time/time_ascii.c
+  src/wchar/wchar_numeric.c
+  src/wchar/wchar_multibyte.c
+  src/wchar/wchar_format.c
+  src/wctype/wctype_extra.c
+  src/complex/complex_extra.c
+  src/math/math_float.c
+  src/math/math_ldouble.c
+  src/stdlib/stdlib_c17.c
+  src/stdlib/inttypes_wide.c
 )
 
 add_library(cplus_hardened_libc STATIC ${LIBC_SOURCES})

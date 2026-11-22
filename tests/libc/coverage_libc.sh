@@ -59,6 +59,17 @@ SRCS="
   libc/src/fenv/fenv.c
   libc/src/complex/complex.c
   libc/src/thread/thread.c
+  libc/src/fenv/fenv_extra.c
+  libc/src/time/time_ascii.c
+  libc/src/wchar/wchar_numeric.c
+  libc/src/wchar/wchar_multibyte.c
+  libc/src/wchar/wchar_format.c
+  libc/src/wctype/wctype_extra.c
+  libc/src/complex/complex_extra.c
+  libc/src/math/math_float.c
+  libc/src/math/math_ldouble.c
+  libc/src/stdlib/stdlib_c17.c
+  libc/src/stdlib/inttypes_wide.c
 "
 OBJS=""
 FIRST_OBJ=""

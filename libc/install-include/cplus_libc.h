@@ -180,6 +180,230 @@ int cplus_mblen(const char*, size_t); int cplus_mbtowc(wchar_t *restrict, const 
 int cplus_wctomb(char*, wchar_t);
 size_t cplus_mbstowcs(wchar_t *restrict, const char *restrict, size_t);
 size_t cplus_wcstombs(char *restrict, const wchar_t *restrict, size_t);
+
+/* ---- Extended ISO C17 surface -------------------------------------------
+ * All functions below are PLATFORM_BACKED: namespaced cplus_* wrappers
+ * that delegate to the installed host C runtime. They are NOT bundled
+ * upstream implementations. Exact host backend, contract, test mapping
+ * and safety limitation for each symbol: docs/libc/API_TEST_MATRIX.md.
+ * Raw pointer validity / NUL-termination / format-string correctness remain
+ * the caller's responsibility; these wrappers never make raw C pointers safe.
+ * Apple Clang does not implement format(wprintf/wscanf,...) checking, so wide
+ * format strings are caller-responsibility contracts, not statically checked.
+ * ----------------------------------------------------------------------- */
+/* fenv (ISO C17 extras) */
+int cplus_feraiseexcept(int excepts);
+int cplus_fegetexceptflag(fexcept_t *flagp, int excepts);
+int cplus_fesetexceptflag(const fexcept_t *flagp, int excepts);
+int cplus_feholdexcept(fenv_t *envp);
+int cplus_feupdateenv(const fenv_t *envp);
+/* time (ISO C17 ASCII conversions) */
+char *cplus_asctime(const struct tm *tm);
+char *cplus_ctime(const time_t *timep);
+/* wchar (ISO C17 numeric/restartable conversions) */
+long cplus_wcstol(const wchar_t *nptr, wchar_t **endptr, int base);
+long long cplus_wcstoll(const wchar_t *nptr, wchar_t **endptr, int base);
+unsigned long cplus_wcstoul(const wchar_t *nptr, wchar_t **endptr, int base);
+unsigned long long cplus_wcstoull(const wchar_t *nptr, wchar_t **endptr, int base);
+double cplus_wcstod(const wchar_t *nptr, wchar_t **endptr);
+float cplus_wcstof(const wchar_t *nptr, wchar_t **endptr);
+long double cplus_wcstold(const wchar_t *nptr, wchar_t **endptr);
+wchar_t *cplus_wcstok(wchar_t *s, const wchar_t *delim, wchar_t **saveptr);
+size_t cplus_wcsftime(wchar_t *wcs, size_t maxsize, const wchar_t *format, const struct tm *tm);
+/* wchar (ISO C17 multibyte + wide stream character I/O) */
+size_t cplus_mbrtowc(wchar_t *pwc, const char *s, size_t n, mbstate_t *ps);
+size_t cplus_wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
+size_t cplus_mbsrtowcs(wchar_t *dst, const char **src, size_t len, mbstate_t *ps);
+size_t cplus_wcsrtombs(char *dst, const wchar_t **src, size_t len, mbstate_t *ps);
+wint_t cplus_fputwc(wint_t wc, FILE *stream);
+wint_t cplus_fgetwc(FILE *stream);
+wint_t cplus_putwc(wint_t wc, FILE *stream);
+wint_t cplus_getwc(FILE *stream);
+wint_t cplus_putwchar(wint_t wc);
+wint_t cplus_getwchar(void);
+wint_t cplus_ungetwc(wint_t wc, FILE *stream);
+/* wchar (ISO C17 wide formatted I/O) */
+int cplus_wprintf(const wchar_t *fmt, ...);
+int cplus_vwprintf(const wchar_t *fmt, va_list ap);
+int cplus_fwprintf(FILE *stream, const wchar_t *fmt, ...);
+int cplus_vfwprintf(FILE *stream, const wchar_t *fmt, va_list ap);
+int cplus_swprintf(wchar_t *s, size_t n, const wchar_t *fmt, ...);
+int cplus_vswprintf(wchar_t *s, size_t n, const wchar_t *fmt, va_list ap);
+int cplus_wscanf(const wchar_t *fmt, ...);
+int cplus_vwscanf(const wchar_t *fmt, va_list ap);
+int cplus_fwscanf(FILE *stream, const wchar_t *fmt, ...);
+int cplus_vfwscanf(FILE *stream, const wchar_t *fmt, va_list ap);
+int cplus_swscanf(const wchar_t *str, const wchar_t *fmt, ...);
+int cplus_vswscanf(const wchar_t *str, const wchar_t *fmt, va_list ap);
+/* wctype (ISO C17 extensible mappings) */
+wctrans_t cplus_wctrans(const char *property);
+wint_t cplus_towctrans(wint_t wc, wctrans_t desc);
+/* complex (ISO C17 full family) */
+double complex cplus_csin(double complex z);
+double complex cplus_ccos(double complex z);
+double complex cplus_ctan(double complex z);
+double complex cplus_csinh(double complex z);
+double complex cplus_ccosh(double complex z);
+double complex cplus_ctanh(double complex z);
+double complex cplus_clog(double complex z);
+double complex cplus_cpow(double complex x, double complex y);
+double complex cplus_cproj(double complex z);
+float cplus_cabsf(float complex z);
+float cplus_cargf(float complex z);
+float cplus_crealf(float complex z);
+float cplus_cimagf(float complex z);
+float complex cplus_conjf(float complex z);
+float complex cplus_cexpf(float complex z);
+float complex cplus_csqrtf(float complex z);
+float complex cplus_csinf(float complex z);
+float complex cplus_ccosf(float complex z);
+float complex cplus_ctanf(float complex z);
+float complex cplus_csinhf(float complex z);
+float complex cplus_ccoshf(float complex z);
+float complex cplus_ctanhf(float complex z);
+float complex cplus_clogf(float complex z);
+float complex cplus_cpowf(float complex x, float complex y);
+float complex cplus_cprojf(float complex z);
+long double cplus_cabsl(long double complex z);
+long double cplus_cargl(long double complex z);
+long double cplus_creall(long double complex z);
+long double cplus_cimagl(long double complex z);
+long double complex cplus_conjl(long double complex z);
+long double complex cplus_cexpl(long double complex z);
+long double complex cplus_csqrtl(long double complex z);
+long double complex cplus_csinl(long double complex z);
+long double complex cplus_ccosl(long double complex z);
+long double complex cplus_ctanl(long double complex z);
+long double complex cplus_csinhl(long double complex z);
+long double complex cplus_ccoshl(long double complex z);
+long double complex cplus_ctanhl(long double complex z);
+long double complex cplus_clogl(long double complex z);
+long double complex cplus_cpowl(long double complex x, long double complex y);
+long double complex cplus_cprojl(long double complex z);
+/* math (ISO C17 float family) */
+float cplus_sinf(float x);
+float cplus_cosf(float x);
+float cplus_tanf(float x);
+float cplus_asinf(float x);
+float cplus_acosf(float x);
+float cplus_atanf(float x);
+float cplus_atan2f(float y,float x);
+float cplus_sinhf(float x);
+float cplus_coshf(float x);
+float cplus_tanhf(float x);
+float cplus_asinhf(float x);
+float cplus_acoshf(float x);
+float cplus_atanhf(float x);
+float cplus_expf(float x);
+float cplus_exp2f(float x);
+float cplus_expm1f(float x);
+float cplus_logf(float x);
+float cplus_log2f(float x);
+float cplus_log10f(float x);
+float cplus_log1pf(float x);
+float cplus_powf(float x,float y);
+float cplus_sqrtf(float x);
+float cplus_cbrtf(float x);
+float cplus_hypotf(float x,float y);
+float cplus_floorf(float x);
+float cplus_ceilf(float x);
+float cplus_truncf(float x);
+float cplus_roundf(float x);
+float cplus_nearbyintf(float x);
+float cplus_rintf(float x);
+long cplus_lrintf(float x);
+long long cplus_llrintf(float x);
+float cplus_lroundf(float x);
+float cplus_llroundf(float x);
+float cplus_fabsf(float x);
+float cplus_fmodf(float x,float y);
+float cplus_remainderf(float x,float y);
+float cplus_fdimf(float x,float y);
+float cplus_fminf(float x,float y);
+float cplus_fmaxf(float x,float y);
+float cplus_fmaf(float x,float y,float z);
+float cplus_copysignf(float x,float y);
+float cplus_ldexpf(float x,int e);
+float cplus_scalbnf(float x,int n);
+float cplus_scalblnf(float x,long n);
+int cplus_ilogbf(float x);
+float cplus_logbf(float x);
+float cplus_erff(float x);
+float cplus_erfcf(float x);
+float cplus_tgammaf(float x);
+float cplus_lgammaf(float x);
+float cplus_nextafterf(float x,float y);
+float cplus_nexttowardf(float x,long double y);
+float cplus_nanf(const char *tagp);
+float cplus_frexpf(float x,int *e);
+float cplus_modff(float x,float *ip);
+float cplus_remquof(float x,float y,int *quo);
+/* math (ISO C17 long-double family) */
+long double cplus_sinl(long double x);
+long double cplus_cosl(long double x);
+long double cplus_tanl(long double x);
+long double cplus_asinl(long double x);
+long double cplus_acosl(long double x);
+long double cplus_atanl(long double x);
+long double cplus_atan2l(long double x, long double y);
+long double cplus_sinhl(long double x);
+long double cplus_coshl(long double x);
+long double cplus_tanhl(long double x);
+long double cplus_asinhl(long double x);
+long double cplus_acoshl(long double x);
+long double cplus_atanhl(long double x);
+long double cplus_expl(long double x);
+long double cplus_exp2l(long double x);
+long double cplus_expm1l(long double x);
+long double cplus_logl(long double x);
+long double cplus_log2l(long double x);
+long double cplus_log10l(long double x);
+long double cplus_log1pl(long double x);
+long double cplus_powl(long double x, long double y);
+long double cplus_sqrtl(long double x);
+long double cplus_cbrtl(long double x);
+long double cplus_hypotl(long double x, long double y);
+long double cplus_floorl(long double x);
+long double cplus_ceill(long double x);
+long double cplus_truncl(long double x);
+long double cplus_roundl(long double x);
+long double cplus_nearbyintl(long double x);
+long double cplus_rintl(long double x);
+long cplus_lrintl(long double x);
+long long cplus_llrintl(long double x);
+long cplus_lroundl(long double x);
+long long cplus_llroundl(long double x);
+long double cplus_erfl(long double x);
+long double cplus_erfcl(long double x);
+long double cplus_tgammal(long double x);
+long double cplus_lgammal(long double x);
+long double cplus_fabsl(long double x);
+long double cplus_fmodl(long double x, long double y);
+long double cplus_remainderl(long double x, long double y);
+long double cplus_remquol(long double x, long double y, int *quo);
+long double cplus_fdiml(long double x, long double y);
+long double cplus_fminl(long double x, long double y);
+long double cplus_fmaxl(long double x, long double y);
+long double cplus_fmal(long double x, long double y, long double z);
+long double cplus_copysignl(long double x, long double y);
+long double cplus_ldexpl(long double x, int n);
+long double cplus_frexpl(long double x, int *exp);
+long double cplus_modfl(long double x, long double *iptr);
+long double cplus_scalbnl(long double x, int n);
+long double cplus_scalblnl(long double x, long n);
+int cplus_ilogbl(long double x);
+long double cplus_logbl(long double x);
+long double cplus_nextafterl(long double x, long double y);
+long double cplus_nexttowardl(long double x, long double y);
+long double cplus_nanl(const char *tagp);
+/* stdlib (ISO C11 allocation/termination) */
+void *cplus_aligned_alloc(size_t alignment, size_t size);
+void cplus_quick_exit(int status);
+int cplus_at_quick_exit(void (*func)(void));
+void cplus__Exit(int status);
+/* inttypes (ISO C17 wide intmax conversions) */
+intmax_t cplus_wcstoimax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
+uintmax_t cplus_wcstoumax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
 #ifdef __cplusplus
 }
 #endif

@@ -2,79 +2,1930 @@
   "version": 1,
   "library": "cplus-hardened-libc",
   "mappings": [
-    {"standard": "malloc", "bundled_symbol": "cplus_malloc", "safe_symbol": "malloc_s", "header": "stdlib.h", "classification": "IMPLEMENTED"},
-    {"standard": "calloc", "bundled_symbol": "cplus_calloc", "safe_symbol": "calloc_s", "header": "stdlib.h", "classification": "IMPLEMENTED"},
-    {"standard": "realloc", "bundled_symbol": "cplus_realloc", "safe_symbol": "realloc_s", "header": "stdlib.h", "classification": "IMPLEMENTED"},
-    {"standard": "free", "bundled_symbol": "cplus_free", "safe_symbol": "free_s", "header": "stdlib.h", "classification": "IMPLEMENTED"},
-    {"standard": "aligned_alloc", "bundled_symbol": null, "safe_symbol": "aligned_alloc_s", "header": "stdlib.h", "classification": "IMPLEMENTED"},
-    {"standard": "abort", "bundled_symbol": "cplus_abort", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "exit", "bundled_symbol": "cplus_exit", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "atexit", "bundled_symbol": "cplus_atexit", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtol", "bundled_symbol": "cplus_strtol", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtoul", "bundled_symbol": "cplus_strtoul", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtoll", "bundled_symbol": "cplus_strtoll", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtoull", "bundled_symbol": "cplus_strtoull", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtod", "bundled_symbol": "cplus_strtod", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtof", "bundled_symbol": "cplus_strtof", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtold", "bundled_symbol": "cplus_strtold", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "qsort", "bundled_symbol": "cplus_qsort", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "bsearch", "bundled_symbol": "cplus_bsearch", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "mblen", "bundled_symbol": "cplus_mblen", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "mbtowc", "bundled_symbol": "cplus_mbtowc", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "wctomb", "bundled_symbol": "cplus_wctomb", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "mbstowcs", "bundled_symbol": "cplus_mbstowcs", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "wcstombs", "bundled_symbol": "cplus_wcstombs", "safe_symbol": null, "header": "stdlib.h", "classification": "HOST-DELEGATED"},
-    {"standard": "memcpy", "bundled_symbol": "cplus_memcpy", "safe_symbol": "memcpy_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "memmove", "bundled_symbol": "cplus_memmove", "safe_symbol": "memmove_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "memset", "bundled_symbol": "cplus_memset", "safe_symbol": "memset_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "memcmp", "bundled_symbol": "cplus_memcmp", "safe_symbol": "memcmp_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "memchr", "bundled_symbol": "cplus_memchr", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strlen", "bundled_symbol": "cplus_strlen", "safe_symbol": "strnlen_s", "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strnlen", "bundled_symbol": "cplus_strnlen", "safe_symbol": "strnlen_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strcpy", "bundled_symbol": "cplus_strcpy", "safe_symbol": "strcpy_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strncpy", "bundled_symbol": "cplus_strncpy", "safe_symbol": "strncpy_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strcat", "bundled_symbol": "cplus_strcat", "safe_symbol": "strcat_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strncat", "bundled_symbol": "cplus_strncat", "safe_symbol": "strncat_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strcmp", "bundled_symbol": "cplus_strcmp", "safe_symbol": "cplus_strcmp_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strncmp", "bundled_symbol": "cplus_strncmp", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strchr", "bundled_symbol": "cplus_strchr", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strrchr", "bundled_symbol": "cplus_strrchr", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strstr", "bundled_symbol": "cplus_strstr", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strspn", "bundled_symbol": "cplus_strspn", "safe_symbol": null, "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strcspn", "bundled_symbol": "cplus_strcspn", "safe_symbol": null, "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strpbrk", "bundled_symbol": "cplus_strpbrk", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strtok", "bundled_symbol": "cplus_strtok", "safe_symbol": "strtok_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strerror", "bundled_symbol": "cplus_strerror", "safe_symbol": "strerror_s", "header": "string.h", "classification": "VENDORED"},
-    {"standard": "strdup", "bundled_symbol": "cplus_strdup", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "strndup", "bundled_symbol": "cplus_strndup", "safe_symbol": null, "header": "string.h", "classification": "IMPLEMENTED"},
-    {"standard": "fopen", "bundled_symbol": "cplus_fopen", "safe_symbol": "fopen_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "fclose", "bundled_symbol": "cplus_fclose", "safe_symbol": "fclose_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "fread", "bundled_symbol": "cplus_fread", "safe_symbol": "fread_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "fwrite", "bundled_symbol": "cplus_fwrite", "safe_symbol": "fwrite_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "snprintf", "bundled_symbol": "cplus_snprintf", "safe_symbol": "cplus_snprintf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "vsnprintf", "bundled_symbol": "cplus_vsnprintf", "safe_symbol": "cplus_vsnprintf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "printf", "bundled_symbol": "cplus_printf", "safe_symbol": "cplus_printf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "fprintf", "bundled_symbol": "cplus_fprintf", "safe_symbol": "cplus_fprintf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "scanf", "bundled_symbol": "cplus_scanf", "safe_symbol": "cplus_scanf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "fscanf", "bundled_symbol": "cplus_fscanf", "safe_symbol": "cplus_fscanf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "sscanf", "bundled_symbol": "cplus_sscanf", "safe_symbol": "cplus_sscanf_s", "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "rewind", "bundled_symbol": "cplus_rewind", "safe_symbol": null, "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "fgetc", "bundled_symbol": "cplus_fgetc", "safe_symbol": null, "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "fputc", "bundled_symbol": "cplus_fputc", "safe_symbol": null, "header": "stdio.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtoimax", "bundled_symbol": "cplus_strtoimax", "safe_symbol": null, "header": "inttypes.h", "classification": "HOST-DELEGATED"},
-    {"standard": "strtoumax", "bundled_symbol": "cplus_strtoumax", "safe_symbol": null, "header": "inttypes.h", "classification": "HOST-DELEGATED"},
-    {"standard": "imaxabs", "bundled_symbol": "cplus_imaxabs", "safe_symbol": null, "header": "inttypes.h", "classification": "HOST-DELEGATED"},
-    {"standard": "imaxdiv", "bundled_symbol": "cplus_imaxdiv", "safe_symbol": null, "header": "inttypes.h", "classification": "HOST-DELEGATED"},
-    {"standard": "gmtime_r", "bundled_symbol": "cplus_gmtime_r", "safe_symbol": null, "header": "time.h", "classification": "HOST-DELEGATED"},
-    {"standard": "localtime_r", "bundled_symbol": "cplus_localtime_r", "safe_symbol": null, "header": "time.h", "classification": "HOST-DELEGATED"},
-    {"standard": "asctime_r", "bundled_symbol": "cplus_asctime_r", "safe_symbol": null, "header": "time.h", "classification": "HOST-DELEGATED"},
-    {"standard": "ctime_r", "bundled_symbol": "cplus_ctime_r", "safe_symbol": null, "header": "time.h", "classification": "HOST-DELEGATED"},
-    {"standard": "iswalpha", "bundled_symbol": "cplus_iswalpha", "safe_symbol": null, "header": "wctype.h", "classification": "HOST-DELEGATED"},
-    {"standard": "iswdigit", "bundled_symbol": "cplus_iswdigit", "safe_symbol": null, "header": "wctype.h", "classification": "HOST-DELEGATED"},
-    {"standard": "iswspace", "bundled_symbol": "cplus_iswspace", "safe_symbol": null, "header": "wctype.h", "classification": "HOST-DELEGATED"},
-    {"standard": "towupper", "bundled_symbol": "cplus_towupper", "safe_symbol": null, "header": "wctype.h", "classification": "HOST-DELEGATED"},
-    {"standard": "towlower", "bundled_symbol": "cplus_towlower", "safe_symbol": null, "header": "wctype.h", "classification": "HOST-DELEGATED"},
-    {"standard": "wctype", "bundled_symbol": "cplus_wctype", "safe_symbol": null, "header": "wctype.h", "classification": "HOST-DELEGATED"},
-    {"standard": "iswctype", "bundled_symbol": "cplus_iswctype", "safe_symbol": null, "header": "wctype.h", "classification": "HOST-DELEGATED"}
+    {
+      "standard": "cabsf",
+      "bundled_symbol": "cplus_cabsf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cabsl",
+      "bundled_symbol": "cplus_cabsl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cargf",
+      "bundled_symbol": "cplus_cargf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cargl",
+      "bundled_symbol": "cplus_cargl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ccos",
+      "bundled_symbol": "cplus_ccos",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ccosf",
+      "bundled_symbol": "cplus_ccosf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ccosh",
+      "bundled_symbol": "cplus_ccosh",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ccoshf",
+      "bundled_symbol": "cplus_ccoshf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ccoshl",
+      "bundled_symbol": "cplus_ccoshl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ccosl",
+      "bundled_symbol": "cplus_ccosl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cexpf",
+      "bundled_symbol": "cplus_cexpf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cexpl",
+      "bundled_symbol": "cplus_cexpl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cimagf",
+      "bundled_symbol": "cplus_cimagf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cimagl",
+      "bundled_symbol": "cplus_cimagl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "clog",
+      "bundled_symbol": "cplus_clog",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "clogf",
+      "bundled_symbol": "cplus_clogf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "clogl",
+      "bundled_symbol": "cplus_clogl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "conjf",
+      "bundled_symbol": "cplus_conjf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "conjl",
+      "bundled_symbol": "cplus_conjl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cpow",
+      "bundled_symbol": "cplus_cpow",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cpowf",
+      "bundled_symbol": "cplus_cpowf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cpowl",
+      "bundled_symbol": "cplus_cpowl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cproj",
+      "bundled_symbol": "cplus_cproj",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cprojf",
+      "bundled_symbol": "cplus_cprojf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cprojl",
+      "bundled_symbol": "cplus_cprojl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "crealf",
+      "bundled_symbol": "cplus_crealf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "creall",
+      "bundled_symbol": "cplus_creall",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csin",
+      "bundled_symbol": "cplus_csin",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csinf",
+      "bundled_symbol": "cplus_csinf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csinh",
+      "bundled_symbol": "cplus_csinh",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csinhf",
+      "bundled_symbol": "cplus_csinhf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csinhl",
+      "bundled_symbol": "cplus_csinhl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csinl",
+      "bundled_symbol": "cplus_csinl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csqrtf",
+      "bundled_symbol": "cplus_csqrtf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "csqrtl",
+      "bundled_symbol": "cplus_csqrtl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctan",
+      "bundled_symbol": "cplus_ctan",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctanf",
+      "bundled_symbol": "cplus_ctanf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctanh",
+      "bundled_symbol": "cplus_ctanh",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctanhf",
+      "bundled_symbol": "cplus_ctanhf",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctanhl",
+      "bundled_symbol": "cplus_ctanhl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctanl",
+      "bundled_symbol": "cplus_ctanl",
+      "safe_symbol": null,
+      "header": "complex.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fegetexceptflag",
+      "bundled_symbol": "cplus_fegetexceptflag",
+      "safe_symbol": null,
+      "header": "fenv.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "feholdexcept",
+      "bundled_symbol": "cplus_feholdexcept",
+      "safe_symbol": null,
+      "header": "fenv.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "feraiseexcept",
+      "bundled_symbol": "cplus_feraiseexcept",
+      "safe_symbol": null,
+      "header": "fenv.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fesetexceptflag",
+      "bundled_symbol": "cplus_fesetexceptflag",
+      "safe_symbol": null,
+      "header": "fenv.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "feupdateenv",
+      "bundled_symbol": "cplus_feupdateenv",
+      "safe_symbol": null,
+      "header": "fenv.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "imaxabs",
+      "bundled_symbol": "cplus_imaxabs",
+      "safe_symbol": null,
+      "header": "inttypes.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "imaxdiv",
+      "bundled_symbol": "cplus_imaxdiv",
+      "safe_symbol": null,
+      "header": "inttypes.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtoimax",
+      "bundled_symbol": "cplus_strtoimax",
+      "safe_symbol": null,
+      "header": "inttypes.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtoumax",
+      "bundled_symbol": "cplus_strtoumax",
+      "safe_symbol": null,
+      "header": "inttypes.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstoimax",
+      "bundled_symbol": "cplus_wcstoimax",
+      "safe_symbol": null,
+      "header": "inttypes.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstoumax",
+      "bundled_symbol": "cplus_wcstoumax",
+      "safe_symbol": null,
+      "header": "inttypes.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "acosf",
+      "bundled_symbol": "cplus_acosf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "acoshf",
+      "bundled_symbol": "cplus_acoshf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "acoshl",
+      "bundled_symbol": "cplus_acoshl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "acosl",
+      "bundled_symbol": "cplus_acosl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "asinf",
+      "bundled_symbol": "cplus_asinf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "asinhf",
+      "bundled_symbol": "cplus_asinhf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "asinhl",
+      "bundled_symbol": "cplus_asinhl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "asinl",
+      "bundled_symbol": "cplus_asinl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "atan2f",
+      "bundled_symbol": "cplus_atan2f",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "atan2l",
+      "bundled_symbol": "cplus_atan2l",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "atanf",
+      "bundled_symbol": "cplus_atanf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "atanhf",
+      "bundled_symbol": "cplus_atanhf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "atanhl",
+      "bundled_symbol": "cplus_atanhl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "atanl",
+      "bundled_symbol": "cplus_atanl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cbrtf",
+      "bundled_symbol": "cplus_cbrtf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cbrtl",
+      "bundled_symbol": "cplus_cbrtl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ceilf",
+      "bundled_symbol": "cplus_ceilf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ceill",
+      "bundled_symbol": "cplus_ceill",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "copysignf",
+      "bundled_symbol": "cplus_copysignf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "copysignl",
+      "bundled_symbol": "cplus_copysignl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cosf",
+      "bundled_symbol": "cplus_cosf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "coshf",
+      "bundled_symbol": "cplus_coshf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "coshl",
+      "bundled_symbol": "cplus_coshl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "cosl",
+      "bundled_symbol": "cplus_cosl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "erfcf",
+      "bundled_symbol": "cplus_erfcf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "erfcl",
+      "bundled_symbol": "cplus_erfcl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "erff",
+      "bundled_symbol": "cplus_erff",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "erfl",
+      "bundled_symbol": "cplus_erfl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "exp2f",
+      "bundled_symbol": "cplus_exp2f",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "exp2l",
+      "bundled_symbol": "cplus_exp2l",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "expf",
+      "bundled_symbol": "cplus_expf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "expl",
+      "bundled_symbol": "cplus_expl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "expm1f",
+      "bundled_symbol": "cplus_expm1f",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "expm1l",
+      "bundled_symbol": "cplus_expm1l",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fabsf",
+      "bundled_symbol": "cplus_fabsf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fabsl",
+      "bundled_symbol": "cplus_fabsl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fdimf",
+      "bundled_symbol": "cplus_fdimf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fdiml",
+      "bundled_symbol": "cplus_fdiml",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "floorf",
+      "bundled_symbol": "cplus_floorf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "floorl",
+      "bundled_symbol": "cplus_floorl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fmaf",
+      "bundled_symbol": "cplus_fmaf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fmal",
+      "bundled_symbol": "cplus_fmal",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fmaxf",
+      "bundled_symbol": "cplus_fmaxf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fmaxl",
+      "bundled_symbol": "cplus_fmaxl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fminf",
+      "bundled_symbol": "cplus_fminf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fminl",
+      "bundled_symbol": "cplus_fminl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fmodf",
+      "bundled_symbol": "cplus_fmodf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fmodl",
+      "bundled_symbol": "cplus_fmodl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "frexpf",
+      "bundled_symbol": "cplus_frexpf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "frexpl",
+      "bundled_symbol": "cplus_frexpl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "hypotf",
+      "bundled_symbol": "cplus_hypotf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "hypotl",
+      "bundled_symbol": "cplus_hypotl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ilogbf",
+      "bundled_symbol": "cplus_ilogbf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ilogbl",
+      "bundled_symbol": "cplus_ilogbl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ldexpf",
+      "bundled_symbol": "cplus_ldexpf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ldexpl",
+      "bundled_symbol": "cplus_ldexpl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "lgammaf",
+      "bundled_symbol": "cplus_lgammaf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "lgammal",
+      "bundled_symbol": "cplus_lgammal",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "llrintf",
+      "bundled_symbol": "cplus_llrintf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "llrintl",
+      "bundled_symbol": "cplus_llrintl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "llroundf",
+      "bundled_symbol": "cplus_llroundf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "llroundl",
+      "bundled_symbol": "cplus_llroundl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "log10f",
+      "bundled_symbol": "cplus_log10f",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "log10l",
+      "bundled_symbol": "cplus_log10l",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "log1pf",
+      "bundled_symbol": "cplus_log1pf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "log1pl",
+      "bundled_symbol": "cplus_log1pl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "log2f",
+      "bundled_symbol": "cplus_log2f",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "log2l",
+      "bundled_symbol": "cplus_log2l",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "logbf",
+      "bundled_symbol": "cplus_logbf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "logbl",
+      "bundled_symbol": "cplus_logbl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "logf",
+      "bundled_symbol": "cplus_logf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "logl",
+      "bundled_symbol": "cplus_logl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "lrintf",
+      "bundled_symbol": "cplus_lrintf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "lrintl",
+      "bundled_symbol": "cplus_lrintl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "lroundf",
+      "bundled_symbol": "cplus_lroundf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "lroundl",
+      "bundled_symbol": "cplus_lroundl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "modff",
+      "bundled_symbol": "cplus_modff",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "modfl",
+      "bundled_symbol": "cplus_modfl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nanf",
+      "bundled_symbol": "cplus_nanf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nanl",
+      "bundled_symbol": "cplus_nanl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nearbyintf",
+      "bundled_symbol": "cplus_nearbyintf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nearbyintl",
+      "bundled_symbol": "cplus_nearbyintl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nextafterf",
+      "bundled_symbol": "cplus_nextafterf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nextafterl",
+      "bundled_symbol": "cplus_nextafterl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nexttowardf",
+      "bundled_symbol": "cplus_nexttowardf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "nexttowardl",
+      "bundled_symbol": "cplus_nexttowardl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "powf",
+      "bundled_symbol": "cplus_powf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "powl",
+      "bundled_symbol": "cplus_powl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "remainderf",
+      "bundled_symbol": "cplus_remainderf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "remainderl",
+      "bundled_symbol": "cplus_remainderl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "remquof",
+      "bundled_symbol": "cplus_remquof",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "remquol",
+      "bundled_symbol": "cplus_remquol",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "rintf",
+      "bundled_symbol": "cplus_rintf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "rintl",
+      "bundled_symbol": "cplus_rintl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "roundf",
+      "bundled_symbol": "cplus_roundf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "roundl",
+      "bundled_symbol": "cplus_roundl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "scalblnf",
+      "bundled_symbol": "cplus_scalblnf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "scalblnl",
+      "bundled_symbol": "cplus_scalblnl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "scalbnf",
+      "bundled_symbol": "cplus_scalbnf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "scalbnl",
+      "bundled_symbol": "cplus_scalbnl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "sinf",
+      "bundled_symbol": "cplus_sinf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "sinhf",
+      "bundled_symbol": "cplus_sinhf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "sinhl",
+      "bundled_symbol": "cplus_sinhl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "sinl",
+      "bundled_symbol": "cplus_sinl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "sqrtf",
+      "bundled_symbol": "cplus_sqrtf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "sqrtl",
+      "bundled_symbol": "cplus_sqrtl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "tanf",
+      "bundled_symbol": "cplus_tanf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "tanhf",
+      "bundled_symbol": "cplus_tanhf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "tanhl",
+      "bundled_symbol": "cplus_tanhl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "tanl",
+      "bundled_symbol": "cplus_tanl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "tgammaf",
+      "bundled_symbol": "cplus_tgammaf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "tgammal",
+      "bundled_symbol": "cplus_tgammal",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "truncf",
+      "bundled_symbol": "cplus_truncf",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "truncl",
+      "bundled_symbol": "cplus_truncl",
+      "safe_symbol": null,
+      "header": "math.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fclose",
+      "bundled_symbol": "cplus_fclose",
+      "safe_symbol": "fclose_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fgetc",
+      "bundled_symbol": "cplus_fgetc",
+      "safe_symbol": null,
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fopen",
+      "bundled_symbol": "cplus_fopen",
+      "safe_symbol": "fopen_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fprintf",
+      "bundled_symbol": "cplus_fprintf",
+      "safe_symbol": "cplus_fprintf_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fputc",
+      "bundled_symbol": "cplus_fputc",
+      "safe_symbol": null,
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fread",
+      "bundled_symbol": "cplus_fread",
+      "safe_symbol": "fread_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fscanf",
+      "bundled_symbol": "cplus_fscanf",
+      "safe_symbol": "cplus_fscanf_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fwrite",
+      "bundled_symbol": "cplus_fwrite",
+      "safe_symbol": "fwrite_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "printf",
+      "bundled_symbol": "cplus_printf",
+      "safe_symbol": "cplus_printf_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "rewind",
+      "bundled_symbol": "cplus_rewind",
+      "safe_symbol": null,
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "scanf",
+      "bundled_symbol": "cplus_scanf",
+      "safe_symbol": "cplus_scanf_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "snprintf",
+      "bundled_symbol": "cplus_snprintf",
+      "safe_symbol": "cplus_snprintf_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "sscanf",
+      "bundled_symbol": "cplus_sscanf",
+      "safe_symbol": "cplus_sscanf_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "vsnprintf",
+      "bundled_symbol": "cplus_vsnprintf",
+      "safe_symbol": "cplus_vsnprintf_s",
+      "header": "stdio.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "_Exit",
+      "bundled_symbol": "cplus__Exit",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "abort",
+      "bundled_symbol": "cplus_abort",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "aligned_alloc",
+      "bundled_symbol": "cplus_aligned_alloc",
+      "safe_symbol": "aligned_alloc_s",
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "at_quick_exit",
+      "bundled_symbol": "cplus_at_quick_exit",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "atexit",
+      "bundled_symbol": "cplus_atexit",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "bsearch",
+      "bundled_symbol": "cplus_bsearch",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "calloc",
+      "bundled_symbol": "cplus_calloc",
+      "safe_symbol": "calloc_s",
+      "header": "stdlib.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "exit",
+      "bundled_symbol": "cplus_exit",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "free",
+      "bundled_symbol": "cplus_free",
+      "safe_symbol": "free_s",
+      "header": "stdlib.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "malloc",
+      "bundled_symbol": "cplus_malloc",
+      "safe_symbol": "malloc_s",
+      "header": "stdlib.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "mblen",
+      "bundled_symbol": "cplus_mblen",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "mbstowcs",
+      "bundled_symbol": "cplus_mbstowcs",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "mbtowc",
+      "bundled_symbol": "cplus_mbtowc",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "qsort",
+      "bundled_symbol": "cplus_qsort",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "quick_exit",
+      "bundled_symbol": "cplus_quick_exit",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "realloc",
+      "bundled_symbol": "cplus_realloc",
+      "safe_symbol": "realloc_s",
+      "header": "stdlib.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strtod",
+      "bundled_symbol": "cplus_strtod",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtof",
+      "bundled_symbol": "cplus_strtof",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtol",
+      "bundled_symbol": "cplus_strtol",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtold",
+      "bundled_symbol": "cplus_strtold",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtoll",
+      "bundled_symbol": "cplus_strtoll",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtoul",
+      "bundled_symbol": "cplus_strtoul",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "strtoull",
+      "bundled_symbol": "cplus_strtoull",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstombs",
+      "bundled_symbol": "cplus_wcstombs",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wctomb",
+      "bundled_symbol": "cplus_wctomb",
+      "safe_symbol": null,
+      "header": "stdlib.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "memchr",
+      "bundled_symbol": "cplus_memchr",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "memcmp",
+      "bundled_symbol": "cplus_memcmp",
+      "safe_symbol": "memcmp_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "memcpy",
+      "bundled_symbol": "cplus_memcpy",
+      "safe_symbol": "memcpy_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "memmove",
+      "bundled_symbol": "cplus_memmove",
+      "safe_symbol": "memmove_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "memset",
+      "bundled_symbol": "cplus_memset",
+      "safe_symbol": "memset_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strcat",
+      "bundled_symbol": "cplus_strcat",
+      "safe_symbol": "strcat_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strchr",
+      "bundled_symbol": "cplus_strchr",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strcmp",
+      "bundled_symbol": "cplus_strcmp",
+      "safe_symbol": "cplus_strcmp_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strcpy",
+      "bundled_symbol": "cplus_strcpy",
+      "safe_symbol": "strcpy_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strcspn",
+      "bundled_symbol": "cplus_strcspn",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strdup",
+      "bundled_symbol": "cplus_strdup",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strerror",
+      "bundled_symbol": "cplus_strerror",
+      "safe_symbol": "strerror_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strlen",
+      "bundled_symbol": "cplus_strlen",
+      "safe_symbol": "strnlen_s",
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strncat",
+      "bundled_symbol": "cplus_strncat",
+      "safe_symbol": "strncat_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strncmp",
+      "bundled_symbol": "cplus_strncmp",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strncpy",
+      "bundled_symbol": "cplus_strncpy",
+      "safe_symbol": "strncpy_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strndup",
+      "bundled_symbol": "cplus_strndup",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strnlen",
+      "bundled_symbol": "cplus_strnlen",
+      "safe_symbol": "strnlen_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strpbrk",
+      "bundled_symbol": "cplus_strpbrk",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strrchr",
+      "bundled_symbol": "cplus_strrchr",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strspn",
+      "bundled_symbol": "cplus_strspn",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "strstr",
+      "bundled_symbol": "cplus_strstr",
+      "safe_symbol": null,
+      "header": "string.h",
+      "classification": "IMPLEMENTED"
+    },
+    {
+      "standard": "strtok",
+      "bundled_symbol": "cplus_strtok",
+      "safe_symbol": "strtok_s",
+      "header": "string.h",
+      "classification": "VENDORED"
+    },
+    {
+      "standard": "asctime",
+      "bundled_symbol": "cplus_asctime",
+      "safe_symbol": null,
+      "header": "time.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "asctime_r",
+      "bundled_symbol": "cplus_asctime_r",
+      "safe_symbol": null,
+      "header": "time.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctime",
+      "bundled_symbol": "cplus_ctime",
+      "safe_symbol": null,
+      "header": "time.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ctime_r",
+      "bundled_symbol": "cplus_ctime_r",
+      "safe_symbol": null,
+      "header": "time.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "gmtime_r",
+      "bundled_symbol": "cplus_gmtime_r",
+      "safe_symbol": null,
+      "header": "time.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "localtime_r",
+      "bundled_symbol": "cplus_localtime_r",
+      "safe_symbol": null,
+      "header": "time.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fgetwc",
+      "bundled_symbol": "cplus_fgetwc",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fputwc",
+      "bundled_symbol": "cplus_fputwc",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fwprintf",
+      "bundled_symbol": "cplus_fwprintf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "fwscanf",
+      "bundled_symbol": "cplus_fwscanf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "getwc",
+      "bundled_symbol": "cplus_getwc",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "getwchar",
+      "bundled_symbol": "cplus_getwchar",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "mbrtowc",
+      "bundled_symbol": "cplus_mbrtowc",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "mbsrtowcs",
+      "bundled_symbol": "cplus_mbsrtowcs",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "putwc",
+      "bundled_symbol": "cplus_putwc",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "putwchar",
+      "bundled_symbol": "cplus_putwchar",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "swprintf",
+      "bundled_symbol": "cplus_swprintf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "swscanf",
+      "bundled_symbol": "cplus_swscanf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "ungetwc",
+      "bundled_symbol": "cplus_ungetwc",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "vfwprintf",
+      "bundled_symbol": "cplus_vfwprintf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "vfwscanf",
+      "bundled_symbol": "cplus_vfwscanf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "vswprintf",
+      "bundled_symbol": "cplus_vswprintf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "vswscanf",
+      "bundled_symbol": "cplus_vswscanf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "vwprintf",
+      "bundled_symbol": "cplus_vwprintf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "vwscanf",
+      "bundled_symbol": "cplus_vwscanf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcrtomb",
+      "bundled_symbol": "cplus_wcrtomb",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcsftime",
+      "bundled_symbol": "cplus_wcsftime",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcsrtombs",
+      "bundled_symbol": "cplus_wcsrtombs",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstod",
+      "bundled_symbol": "cplus_wcstod",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstof",
+      "bundled_symbol": "cplus_wcstof",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstok",
+      "bundled_symbol": "cplus_wcstok",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstol",
+      "bundled_symbol": "cplus_wcstol",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstold",
+      "bundled_symbol": "cplus_wcstold",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstoll",
+      "bundled_symbol": "cplus_wcstoll",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstoul",
+      "bundled_symbol": "cplus_wcstoul",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wcstoull",
+      "bundled_symbol": "cplus_wcstoull",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wprintf",
+      "bundled_symbol": "cplus_wprintf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wscanf",
+      "bundled_symbol": "cplus_wscanf",
+      "safe_symbol": null,
+      "header": "wchar.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "iswalpha",
+      "bundled_symbol": "cplus_iswalpha",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "iswctype",
+      "bundled_symbol": "cplus_iswctype",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "iswdigit",
+      "bundled_symbol": "cplus_iswdigit",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "iswspace",
+      "bundled_symbol": "cplus_iswspace",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "towctrans",
+      "bundled_symbol": "cplus_towctrans",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "towlower",
+      "bundled_symbol": "cplus_towlower",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "towupper",
+      "bundled_symbol": "cplus_towupper",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wctrans",
+      "bundled_symbol": "cplus_wctrans",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    },
+    {
+      "standard": "wctype",
+      "bundled_symbol": "cplus_wctype",
+      "safe_symbol": null,
+      "header": "wctype.h",
+      "classification": "HOST-DELEGATED"
+    }
   ]
 }
