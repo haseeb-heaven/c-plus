@@ -1,6 +1,8 @@
 /* Standalone C99 test for the cplus_* wide formatted-I/O wrappers.
  * Local extern declarations keep this test independent of cplus_libc.h.
- * Only valid format strings are used; no %n, no untrusted input. */
+ * Tier-1 cases use only valid format strings (no %n, no untrusted input).
+ * Tier-2 cases deliberately pass %n formats to cplus_swprintf_checked with a
+ * valid sentinel int* to prove they are refused without a write (F01). */
 #include <assert.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -13,7 +15,9 @@ int cplus_vwprintf(const wchar_t *, va_list);
 int cplus_fwprintf(FILE *, const wchar_t *, ...);
 int cplus_vfwprintf(FILE *, const wchar_t *, va_list);
 int cplus_swprintf(wchar_t *, size_t, const wchar_t *, ...);
+int cplus_swprintf_checked(wchar_t *, size_t, const wchar_t *, ...);
 int cplus_vswprintf(wchar_t *, size_t, const wchar_t *, va_list);
+void cplus_libc_log_set_enabled(int);
 int cplus_wscanf(const wchar_t *, ...);
 int cplus_vwscanf(const wchar_t *, va_list);
 int cplus_fwscanf(FILE *, const wchar_t *, ...);
@@ -143,5 +147,63 @@ int main(void) {
     errno = 0; assert(call_vswscanf(NULL, L"%d", &si) == EOF);  assert(errno == EINVAL);
     errno = 0; assert(call_vswscanf(L"1", NULL) == EOF);        assert(errno == EINVAL);
 
+    /* 7. Backward compatibility: the standard (Tier-1) swprintf still passes
+     *    %n through to the host unchanged (the caller-trusted contract). */
+    {
+        wchar_t out[32];
+        int written = -1;
+        assert(cplus_swprintf(out, 32, L"ab%n", &written) == 2);
+        assert(written == 2);
+        assert(wcscmp(out, L"ab") == 0);
+    }
+
+    /* 8. Tier-2 checked sibling: every %n form is refused with -1/EINVAL
+     *    before the host is called, so neither the sentinel int nor the
+     *    destination buffer is touched. Checked with logging OFF and ON to
+     *    prove parity (the logger must not change return value or errno). */
+    {
+        const wchar_t *refusals[] = {
+            L"%n", L"%hn", L"%hhn", L"%ln", L"%lln", L"%jn", L"%zn",
+            L"%tn", L"%1$n", L"%2$hn", L"%*n", L"%*1$n", L"%05n",
+            L"prefix %d %n", L"%%%n"
+        };
+        size_t i;
+        for (i = 0; i < sizeof(refusals) / sizeof(refusals[0]); ++i) {
+            int logging;
+            for (logging = 0; logging <= 1; ++logging) {
+                wchar_t out[32];
+                int sentinel = 0x7E;
+                size_t k;
+                int rc;
+                for (k = 0; k < 32; ++k) out[k] = L'X';
+                cplus_libc_log_set_enabled(logging);
+                errno = 0;
+                rc = cplus_swprintf_checked(out, 32, refusals[i], &sentinel, 7, 9);
+                cplus_libc_log_set_enabled(0);
+                assert(rc == -1);
+                assert(errno == EINVAL);
+                assert(sentinel == 0x7E);   /* no %n write-back */
+                for (k = 0; k < 32; ++k) assert(out[k] == L'X'); /* no write at all */
+            }
+        }
+    }
+
+    /* 9. The checked tier still formats normally, and "%%n" is a literal
+     *    percent followed by 'n' -- not a %n conversion -- so it is allowed. */
+    {
+        wchar_t out[32];
+        errno = 0;
+        assert(cplus_swprintf_checked(out, 32, L"%d %ls", 42, L"ok") == 5);
+        assert(wcscmp(out, L"42 ok") == 0);
+        assert(errno == 0);
+        assert(cplus_swprintf_checked(out, 32, L"%%n") == 2);
+        assert(wcscmp(out, L"%n") == 0);
+    }
+
+    /* 10. Checked tier mirrors the standard tier's NULL guards. */
+    errno = 0; assert(cplus_swprintf_checked(NULL, 8, L"%d", 1) == -1); assert(errno == EINVAL);
+    errno = 0; assert(cplus_swprintf_checked(NULL, 8, NULL) == -1);       assert(errno == EINVAL);
+
+    cplus_libc_log_set_enabled(0); /* leave opt-in logging off for the harness */
     return 0;
 }

@@ -1,6 +1,14 @@
 #include <errno.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "../../log/log.h"
+
+/* Same bound as the SafeCRT layer (stdlib/safe/safe_memory.h): lengths above
+ * this are absurd for a single object and must never reach a copy/fill loop.
+ * Defined locally so the plain libc layer stays independent of SafeCRT. */
+#ifndef RSIZE_MAX_MEM
+#define RSIZE_MAX_MEM ((size_t)(SIZE_MAX >> 1))
+#endif
 
 size_t cplus_strlen(const char *s) {
     cplus_libc_log("strlen", "enter");
@@ -15,6 +23,11 @@ char *cplus_strncpy(char *restrict dest, const char *restrict src, size_t n) {
     cplus_libc_log("strncpy", "enter");
     if (n == 0) return dest;
     if (!dest || !src) { errno = EINVAL; return dest; }
+    /* Guard (#2, AUDIT_memory_string.md): the zero-fill loop below writes n
+     * bytes. An unvalidated SIZE_MAX n would therefore walk far past the
+     * destination. Reject lengths above RSIZE_MAX_MEM with EOVERFLOW instead
+     * of passing SIZE_MAX into the loops; valid n keeps identical semantics. */
+    if (n > RSIZE_MAX_MEM) { errno = EOVERFLOW; return dest; }
     size_t i = 0; for (; i < n && src[i]; ++i) dest[i] = src[i];
     for (; i < n; ++i) dest[i] = '\0';
     return dest;

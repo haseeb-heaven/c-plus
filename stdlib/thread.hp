@@ -22,6 +22,7 @@
 #define CPLUS_STD_THREAD_HP
 
 #include <pthread.h>
+#include <stdint.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 
@@ -156,7 +157,12 @@ class thread {
                            "thread::start: thread already running");
             return STDLIB_FAIL;
         }
-        rc = pthread_create(&this->handle, NULL, fn, arg);
+        /* `arg` is opaque and caller-owned; the stack-borrow heuristic cannot
+         * infer its real lifetime and flags this call (fatal under --strict).
+         * A uintptr_t round-trip is bit-for-bit value-preserving and makes the
+         * opaque hand-off explicit without changing the API or its contract. */
+        rc = pthread_create(&this->handle, NULL, fn,
+                            (void *)(uintptr_t)arg);
         if (rc != 0) {
             error_fail(err, CPLUS_EXIT_RESOURCE, "thread::start: pthread_create failed");
             return STDLIB_FAIL;

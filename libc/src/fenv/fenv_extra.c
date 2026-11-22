@@ -8,8 +8,8 @@
  * only cplus_* names (host symbols are neither interposed nor overridden).
  * Calls are logged per the C+ libc convention (opt-in, atomic-guarded).
  *
- * Hardening: a NULL out-param (fexcept_t * / fenv_t * that the host would write
- * through) is rejected with errno = EINVAL and a nonzero return. This affects
+ * Hardening (F5): a NULL fexcept_t* / fenv_t* that the host would read or write
+ * through is rejected with errno = EINVAL and a nonzero return. This affects
  * only inputs that are undefined behaviour for the ISO C function; valid-input
  * behaviour is passed through to the host unchanged. */
 #include "../../log/log.h"
@@ -34,6 +34,7 @@ int cplus_fegetexceptflag(fexcept_t *flagp, int excepts) {
 /* ISO C fesetexceptflag(): set the named exception flags from *flagp. */
 int cplus_fesetexceptflag(const fexcept_t *flagp, int excepts) {
     cplus_libc_log("fesetexceptflag", "enter");
+    if (!flagp) { errno = EINVAL; return -1; }
     return fesetexceptflag(flagp, excepts);
 }
 
@@ -49,5 +50,6 @@ int cplus_feholdexcept(fenv_t *envp) {
  * exceptions that were set at the time of the call. */
 int cplus_feupdateenv(const fenv_t *envp) {
     cplus_libc_log("feupdateenv", "enter");
+    if (!envp) { errno = EINVAL; return -1; }
     return feupdateenv(envp);
 }

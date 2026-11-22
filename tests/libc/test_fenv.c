@@ -1,4 +1,6 @@
 #include <assert.h>
+#include <errno.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <fenv.h>
 
@@ -8,8 +10,41 @@ int cplus_fegetround(void);
 int cplus_fesetround(int);
 int cplus_fegetenv(fenv_t*);
 int cplus_fesetenv(const fenv_t*);
+int cplus_fegetexceptflag(fexcept_t*,int);
+int cplus_fesetexceptflag(const fexcept_t*,int);
+int cplus_feholdexcept(fenv_t*);
+int cplus_feupdateenv(const fenv_t*);
+
+/* ---- F5: every pointer-taking fenv export must reject NULL with EINVAL ----
+ * One type-correct adapter per signature keeps the uniform table free of UB. */
+static int null_fegetenv(void){ return cplus_fegetenv(NULL); }
+static int null_fesetenv(void){ return cplus_fesetenv(NULL); }
+static int null_fegetexceptflag(void){ return cplus_fegetexceptflag(NULL, FE_ALL_EXCEPT); }
+static int null_fesetexceptflag(void){ return cplus_fesetexceptflag(NULL, FE_ALL_EXCEPT); }
+static int null_feholdexcept(void){ return cplus_feholdexcept(NULL); }
+static int null_feupdateenv(void){ return cplus_feupdateenv(NULL); }
+
+typedef int (*null_call_t)(void);
+static const struct { const char *name; null_call_t call; } null_cases[] = {
+    { "fegetenv",        null_fegetenv        },
+    { "fesetenv",        null_fesetenv        },
+    { "fegetexceptflag", null_fegetexceptflag },
+    { "fesetexceptflag", null_fesetexceptflag },
+    { "feholdexcept",    null_feholdexcept    },
+    { "feupdateenv",     null_feupdateenv     },
+};
+
+static void test_required_null_args(void){
+    for (size_t i = 0; i < sizeof null_cases / sizeof null_cases[0]; ++i) {
+        errno = 0;
+        int rc = null_cases[i].call();
+        assert(rc != 0);          /* defined failure, never a crash */
+        assert(errno == EINVAL);  /* uniform errno contract */
+    }
+}
 
 int main(void){
+    /* ---- original valid-input coverage (unchanged) ---- */
     /* clearing then testing yields a zero exception mask */
     assert(cplus_feclearexcept(FE_ALL_EXCEPT) == 0);
     assert(cplus_fetestexcept(FE_ALL_EXCEPT) == 0);
@@ -44,6 +79,9 @@ int main(void){
     assert(cplus_fetestexcept(FE_ALL_EXCEPT) == 0);
 
     assert(cplus_fesetround(saved) == 0);
+
+    /* ---- F5 regression additions ---- */
+    test_required_null_args();
     puts("fenv: ok");
     return 0;
 }

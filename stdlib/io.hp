@@ -94,19 +94,27 @@ static inline int read_line(char *buf, size_t size, error *err) {
     }
     {
         size_t n = strlen(buf);
-        /* No hidden truncation: a full buffer with no newline and no EOF means
-         * the line did not fit.  Drain the remainder so the stream stays
-         * aligned, then report it. */
-        if (n > 0 && n == size - 1 && buf[n - 1] != '\n' && buf[n - 1] != '\r' &&
-            !feof(stdin)) {
-            int c;
-            do {
-                c = fgetc(stdin);
-            } while (c != EOF && c != '\n');
-            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
-                           "read_line: line longer than the buffer");
-            buf[0] = '\0';
-            return STDLIB_FAIL;
+        /* fgets() stops at size-1 bytes without consuming the delimiter, so a
+         * full buffer alone does not mean the line was too long.  Peek at the
+         * next byte: a line ending (or EOF) means this line fitted exactly;
+         * any other byte means it was truncated.  The remainder is always
+         * drained so the stream stays aligned. */
+        if (n > 0 && n == size - 1 && buf[n - 1] != '\n' && !feof(stdin)) {
+            int c = fgetc(stdin);
+            if (c == '\r') {
+                /* CR is a line ending; mirror the size == 1 path. */
+                int next = fgetc(stdin);
+                if (next != '\n' && next != EOF)
+                    ungetc(next, stdin);
+            } else if (c != '\n' && c != EOF) {
+                /* First byte past the buffer: the line did not fit. */
+                while (c != EOF && c != '\n')
+                    c = fgetc(stdin);
+                error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                               "read_line: line longer than the buffer");
+                buf[0] = '\0';
+                return STDLIB_FAIL;
+            }
         }
         while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
             buf[--n] = '\0';

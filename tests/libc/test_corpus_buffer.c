@@ -39,6 +39,7 @@
  * first pattern generator (0x41 + 191 == 0x00 wrapped to an early NUL); the
  * generator now uses a guaranteed-nonzero positional pattern.
  */
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
@@ -275,12 +276,14 @@ static void cat_search(void) {
         EXPECT(r == (void *)(g.buf + cap), "memchr-onepast-ret", t.len, t.off, t.fill);
         ++g_cases;
 
-        /* memchr with SIZE_MAX n: stops at first match, no wild read. */
+        /* memchr with SIZE_MAX n: hardened wrappers now REJECT with EOVERFLOW
+         * rather than scan an unvalidated extent. */
         gbuf_init(&g, cap, t.fill);
         g.buf[0] = target;
+        errno = 0;
         r = cplus_memchr(g.buf, target, SIZE_MAX);
         CHECK_C(&g, cap, "memchr-huge", t.len, t.off, t.fill);
-        EXPECT(r == (void *)(g.buf + 0), "memchr-huge-ret", t.len, t.off, t.fill);
+        EXPECT(r == NULL && errno == EOVERFLOW, "memchr-huge-rejected", t.len, t.off, t.fill);
         ++g_cases;
 
         /* memrchr at the last valid byte and at position 0. */

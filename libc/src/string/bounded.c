@@ -13,7 +13,15 @@
 #include "../../log/log.h"
 #include "../../install-include/cplus_libc.h"
 #include <errno.h>
+#include <stdint.h>
 #include <string.h>
+
+/* Mirror of the SafeCRT RSIZE_MAX_MEM bound (safe_memory.h). Rejecting lengths
+ * above it is what keeps an unbounded n from ever being delegated to the raw
+ * cplus_strncpy zero-fill loop. */
+#ifndef RSIZE_MAX_MEM
+#define RSIZE_MAX_MEM ((size_t)(SIZE_MAX >> 1))
+#endif
 
 static int g_unknown_strict = 0;
 
@@ -92,7 +100,16 @@ char *cplus_strcpy_bounded(char *d, const char *s, size_t known) {
 char *cplus_strncpy_bounded(char *d, const char *s, size_t n, size_t known) {
     size_t cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    if (check_capacity("strncpy", d, n, known, &cap)) return NULL;
+    if (check_capacity("strncpy", d, n, known, &cap)) return NULL; /* ERANGE when known cap is too small */
+    /* Guard (#2, AUDIT_memory_string.md): unknown capacity in default mode
+     * leaves n unchecked above, so still reject absurd lengths before
+     * delegation - SIZE_MAX must never reach the raw zero-fill loop. Known
+     * capacity overflow was already refused (ERANGE) by check_capacity. */
+    if (n > RSIZE_MAX_MEM) { errno = EOVERFLOW; return NULL; }
+    /* Guard (#2): cap the effective length to the resolved destination
+     * capacity. check_capacity already refuses n>cap when capacity is known,
+     * so this is defence in depth that only constrains the delegated call. */
+    if (cap != 0 && cap != (size_t)-1 && n > cap) n = cap;
     return cplus_strncpy(d, s, n);
 }
 

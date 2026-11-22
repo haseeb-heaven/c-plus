@@ -4,9 +4,16 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "../../log/log.h"
+#include <errno.h>
 
 void *cplus_memchr(const void *s, int c, size_t n) {
     cplus_libc_log("memchr", "enter");
+    /* Audit F#3: no NULL dereference, no unbounded scan from a huge n. */
+    if (!s) { errno = EINVAL; return NULL; }
+#ifndef RSIZE_MAX_MEM
+#define RSIZE_MAX_MEM (SIZE_MAX >> 1)
+#endif
+    if (n > RSIZE_MAX_MEM) { errno = EOVERFLOW; return NULL; }
     const unsigned char *p = (const unsigned char *)s;
     unsigned char uc = (unsigned char)c;
     for (size_t i = 0; i < n; ++i) if (p[i] == uc) return (void *)(uintptr_t)(p + i);

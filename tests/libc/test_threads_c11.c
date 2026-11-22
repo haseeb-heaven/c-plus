@@ -178,6 +178,58 @@ static int detach_worker(void *arg)
     return 0;
 }
 
+/* --- (7b) detached start-context lifetime regression (audit F1) -----------
+ * A detached worker must NOT read its start context out of the creating
+ * thread's stack frame. Each worker is spawned from a short-lived frame that
+ * is immediately poisoned, then sleeps 50 ms before touching its argument.
+ * With a stack-resident context the worker would see a clobbered func/arg
+ * (wild call / crash under ASan); with the heap-allocated context every worker
+ * must finish with its payload intact. */
+#define DETACH_ITERS 64
+#define DETACH_MAGIC 0xC0FFEEu
+
+typedef struct { unsigned magic; int value; } DetachPayload;
+
+static cplus_mtx_t g_detach_mtx;
+static cplus_cnd_t g_detach_cnd;
+static int g_detach_done = 0;
+static int g_detach_bad = 0;
+static DetachPayload g_detach_payloads[DETACH_ITERS];
+
+static int delayed_detach_worker(void *arg)
+{
+    DetachPayload *p = (DetachPayload *)arg;
+    struct timespec nap;
+    nap.tv_sec = 0;
+    nap.tv_nsec = 50L * 1000L * 1000L; /* outlive the creating stack frame */
+    (void)cplus_thrd_sleep(&nap, NULL);
+    assert(cplus_mtx_lock(&g_detach_mtx) == CPLUS_THRD_SUCCESS);
+    if (p->magic != DETACH_MAGIC || p->value < 0 || p->value >= DETACH_ITERS)
+        ++g_detach_bad;
+    ++g_detach_done;
+    assert(cplus_cnd_broadcast(&g_detach_cnd) == CPLUS_THRD_SUCCESS);
+    assert(cplus_mtx_unlock(&g_detach_mtx) == CPLUS_THRD_SUCCESS);
+    return 0;
+}
+
+/* Spawn + detach from a frame that dies on return. */
+static void spawn_detach_one(int idx)
+{
+    cplus_thrd_t tdet;
+    assert(cplus_thrd_create(&tdet, delayed_detach_worker,
+                             &g_detach_payloads[idx]) == CPLUS_THRD_SUCCESS);
+    assert(cplus_thrd_detach(tdet) == CPLUS_THRD_SUCCESS);
+}
+
+/* Reuse/clobber the stack region the dead frame just occupied. */
+static void poison_stack(void)
+{
+    volatile unsigned char buf[1024];
+    size_t k;
+    for (k = 0; k < sizeof buf; ++k) buf[k] = 0xA5u;
+    (void)buf[sizeof buf - 1u]; /* keep the writes observable */
+}
+
 /* ---------------------------------------------- logging parity helper set */
 typedef struct {
     int mtx_init;
@@ -323,6 +375,30 @@ int main(void)
     /* ---- (7) detach ------------------------------------------------------ */
     assert(cplus_thrd_create(&tdet, detach_worker, NULL) == CPLUS_THRD_SUCCESS);
     assert(cplus_thrd_detach(tdet) == CPLUS_THRD_SUCCESS);
+
+    /* ---- (7b) detached start-context lifetime regression (audit F1) ----- */
+    assert(cplus_mtx_init(&g_detach_mtx, CPLUS_MTX_PLAIN) == CPLUS_THRD_SUCCESS);
+    assert(cplus_cnd_init(&g_detach_cnd) == CPLUS_THRD_SUCCESS);
+    for (i = 0; i < DETACH_ITERS; ++i) {
+        g_detach_payloads[i].magic = DETACH_MAGIC;
+        g_detach_payloads[i].value = i;
+        spawn_detach_one(i); /* creating frame dies here */
+        poison_stack();      /* clobber that stack region immediately */
+    }
+    assert(cplus_mtx_lock(&g_detach_mtx) == CPLUS_THRD_SUCCESS);
+    while (g_detach_done < DETACH_ITERS) {
+        struct timespec deadline;
+        int rc;
+        assert(clock_gettime(CLOCK_REALTIME, &deadline) == 0);
+        deadline.tv_sec += 5; /* bounded wait: workers nap only 50 ms */
+        rc = cplus_cnd_timedwait(&g_detach_cnd, &g_detach_mtx, &deadline);
+        assert(rc == CPLUS_THRD_SUCCESS); /* timeout => a worker never finished */
+    }
+    assert(g_detach_done == DETACH_ITERS);
+    assert(g_detach_bad == 0);
+    assert(cplus_mtx_unlock(&g_detach_mtx) == CPLUS_THRD_SUCCESS);
+    cplus_cnd_destroy(&g_detach_cnd);
+    cplus_mtx_destroy(&g_detach_mtx);
 
     /* ---- (8) canonical ISO C11 spellings compile and work --------------- */
     {

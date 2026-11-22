@@ -260,6 +260,11 @@ int cplus_vwprintf(const wchar_t *fmt, va_list ap);
 int cplus_fwprintf(FILE *stream, const wchar_t *fmt, ...);
 int cplus_vfwprintf(FILE *stream, const wchar_t *fmt, va_list ap);
 int cplus_swprintf(wchar_t *s, size_t n, const wchar_t *fmt, ...);
+/* Checked sibling: scans for a %n conversion (length/positional variants,
+ * respecting %%) and refuses with -1/EINVAL without writing to s. Not a full
+ * format validator. No compile-time wide-format checking is available here:
+ * Apple Clang ignores format(wprintf,...). See docs/libc/WIDE_FORMAT_CONTRACT.md. */
+int cplus_swprintf_checked(wchar_t *s, size_t n, const wchar_t *fmt, ...);
 int cplus_vswprintf(wchar_t *s, size_t n, const wchar_t *fmt, va_list ap);
 int cplus_wscanf(const wchar_t *fmt, ...);
 int cplus_vwscanf(const wchar_t *fmt, va_list ap);

@@ -6,12 +6,20 @@
  * Local adaptations (only): function names cplus_*; strtok_r internal strspn/
  * strcspn use the C+ cplus_ implementations; logging added per C+ convention.
  */
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <limits.h>
 #include <ctype.h>
 #include <string.h>
 #include "../../log/log.h"
+
+/* Same bound as the SafeCRT layer (stdlib/safe/safe_memory.h). The tail
+ * memset in cplus_stpncpy delegates n to the host, so an unvalidated SIZE_MAX
+ * must never reach it. */
+#ifndef RSIZE_MAX_MEM
+#define RSIZE_MAX_MEM ((size_t)(SIZE_MAX >> 1))
+#endif
 
 #define ALIGN (sizeof(size_t)-1)
 #define ONES ((size_t)-1/UCHAR_MAX)
@@ -80,6 +88,13 @@ char *cplus_stpcpy(char *restrict d, const char *restrict s)
 char *cplus_stpncpy(char *restrict d, const char *restrict s, size_t n)
 {
     cplus_libc_log("stpncpy", "enter");
+    /* Guard (#3, AUDIT_memory_string.md): both arguments are dereferenced by
+     * the copy loops below; refuse NULL with EINVAL before touching either. */
+    if (!d || !s) { errno = EINVAL; return NULL; }
+    /* Guard (#3): the tail `memset(d, 0, n)` passes n straight to the host.
+     * Reject lengths above RSIZE_MAX_MEM so SIZE_MAX never becomes that
+     * length; for any accepted n the musl copy/zero-fill semantics are intact. */
+    if (n > RSIZE_MAX_MEM) { errno = EOVERFLOW; return NULL; }
 #ifdef __GNUC__
     {
         typedef size_t __attribute__((__may_alias__)) word;

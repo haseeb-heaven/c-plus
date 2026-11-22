@@ -69,6 +69,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -116,14 +117,20 @@ static int status_from_errno(int rc)
 
 /* C11 start routines return int; pthread start routines return void*. Encode
  * the int in the void* return the same way musl's <threads.h> adapter does.
- * The start context is stored INSIDE the thrd_t handle (not on the creating
- * thread's stack): its lifetime is then tied to the joinable handle, so the
- * new thread can never read a clobbered stack frame. */
+ *
+ * The start context is heap-allocated in cplus_thrd_create and freed by the
+ * trampoline before it calls the user's start routine. It must NOT live in the
+ * caller's cplus_thrd_t: for a detached thread that handle is an ordinary
+ * stack object whose lifetime ends as soon as the creating frame returns, so
+ * the worker could otherwise read a clobbered stack frame (use-after-scope).
+ * Only the pthread_t is kept in the public handle. */
 typedef struct cplus_thrd_ctx_s {
     cplus_thrd_start_t func;
     void *arg;
 } cplus_thrd_ctx;
 
+/* Keep pthread_t at the same byte offset as before (two pointers) so the
+ * opaque cplus_thrd_t ABI and all of the helpers below are unchanged. */
 #define CPLUS_THRD_PT_OFFSET sizeof(cplus_thrd_ctx)
 typedef char cplus_c11_thrd_ctx_size_check[
     (sizeof(cplus_thrd_t) >= CPLUS_THRD_PT_OFFSET + sizeof(pthread_t)) ? 1 : -1];
@@ -135,7 +142,9 @@ static pthread_t *thr_pt(cplus_thrd_t *t)
 
 static void *cplus_thrd_trampoline(void *p)
 {
-    cplus_thrd_ctx ctx = *(cplus_thrd_ctx *)p;
+    cplus_thrd_ctx *ctxp = (cplus_thrd_ctx *)p;
+    cplus_thrd_ctx ctx = *ctxp; /* copy func/arg out before releasing the cell */
+    free(ctxp);                 /* worker owns the heap context from here on */
     return (void *)(intptr_t)ctx.func(ctx.arg);
 }
 
@@ -143,17 +152,20 @@ static void *cplus_thrd_trampoline(void *p)
 int cplus_thrd_create(cplus_thrd_t *thr, cplus_thrd_start_t func, void *arg)
 {
     pthread_t pt;
-    cplus_thrd_ctx ctx;
+    cplus_thrd_ctx *ctx;
     int rc;
     cplus_libc_log("thrd_create", "enter");
     if (thr == NULL || func == NULL) return CPLUS_THRD_ERROR;
     memset(thr, 0, sizeof *thr);
-    ctx.func = func;
-    ctx.arg = arg;
-    memcpy(thr, &ctx, sizeof ctx); /* publish context BEFORE the thread can run */
-    rc = cplus_pthread_create(&pt, NULL, cplus_thrd_trampoline, thr);
-    if (rc != 0) return status_from_errno(rc);
-    /* pthread_t lives in a separate slot; the worker only reads the context. */
+    ctx = (cplus_thrd_ctx *)malloc(sizeof *ctx);
+    if (ctx == NULL) return CPLUS_THRD_NOMEM;
+    ctx->func = func;
+    ctx->arg = arg;
+    rc = cplus_pthread_create(&pt, NULL, cplus_thrd_trampoline, ctx);
+    if (rc != 0) {
+        free(ctx); /* pthread_create failed: no worker will claim the context */
+        return status_from_errno(rc);
+    }
     memcpy(thr_pt(thr), &pt, sizeof pt);
     return CPLUS_THRD_SUCCESS;
 }
