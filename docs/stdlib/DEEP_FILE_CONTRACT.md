@@ -29,12 +29,16 @@ all failures are recoverable `STDLIB_FAIL` / `STDLIB_EOF` results with an
    an optional paired `\n`/`\r`) returns `STDLIB_OK` with `buf[0] == '\0'`; a
    line with content is drained and returns `STDLIB_FAIL` / `BOUNDS`; EOF
    returns `STDLIB_EOF`; a stream error returns `STDLIB_FAIL` / `IO`.
-2. **No hidden truncation.** If `fgets` fills `size - 1` bytes with no `\n`/`\r`
-   and the stream is not at EOF, the line does not fit. The remainder is
-   drained up to and including the next newline, `buf[0]` is set to `'\0'`, and
-   `STDLIB_FAIL` with `STDLIB_CATEGORY_BOUNDS` / `CPLUS_EXIT_BOUNDS` is
-   returned. The stream stays aligned to the following line. End-of-file with
-   an unterminated full line is treated the same way (drain reaches EOF).
+2. **No hidden truncation, but exact fits are accepted.** `fgets` stops at
+   `size - 1` bytes without consuming the delimiter and without necessarily
+   setting `feof()`. A full buffer alone therefore does not prove truncation.
+   After a full read with no in-buffer `\n`/`\r`, the next byte is peeked:
+   `\n`, `\r` (with a paired LF consumed) or `EOF` means the line fitted
+   exactly and `STDLIB_OK` is returned; any other byte means it did not fit.
+   In the latter case the remainder is drained up to and including the next
+   newline, `buf[0]` is set to `'\0'`, and `STDLIB_FAIL` with
+   `STDLIB_CATEGORY_BOUNDS` / `CPLUS_EXIT_BOUNDS` is returned. The stream stays
+   aligned to the following line. This mirrors `io.hp::read_line` exactly.
 3. **Oversized length is a bounds error.** `size > INT_MAX` cannot be cast to
    the `int` parameter of `fgets`; it now returns `STDLIB_FAIL` with
    `STDLIB_CATEGORY_BOUNDS` (previously it was lumped into the generic
