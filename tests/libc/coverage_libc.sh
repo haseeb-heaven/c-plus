@@ -67,6 +67,7 @@ SRCS="
   libc/src/wchar/wchar_format.c
   libc/src/wctype/wctype_extra.c
   libc/src/complex/complex_extra.c
+  libc/src/math/math_gaps.c
   libc/src/math/math_float.c
   libc/src/math/math_ldouble.c
   libc/src/stdlib/stdlib_c17.c

@@ -61,6 +61,7 @@ set(LIBC_SOURCES
   src/wchar/wchar_format.c
   src/wctype/wctype_extra.c
   src/complex/complex_extra.c
+  src/math/math_gaps.c
   src/math/math_float.c
   src/math/math_ldouble.c
   src/stdlib/stdlib_c17.c
