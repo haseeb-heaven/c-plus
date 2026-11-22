@@ -41,7 +41,11 @@ int main(void) {
 
     /* calloc overflow: C says if size overflows, behavior is impl-defined/NULL in many impls.
        Do not claim universal detection; record observed behavior. */
-    void *co = calloc((size_t)-1 / 4 + 2, 4);
+    /* Volatile operands keep the overflow decision at runtime: the C+ static
+     * FFI check rejects a folded constant, which is the desired compile-time
+     * behaviour, but this corpus case records the runtime result. */
+    volatile size_t huge_n = (size_t)-1 / 4 + 2;
+    void *co = calloc(huge_n, 4);
     if (co == NULL) {
         check(1, "calloc overflow returns NULL (detected)");
     } else {

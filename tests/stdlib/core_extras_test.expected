@@ -7,7 +7,7 @@ fs-dir 1 1
 fs-rename 1 1 1
 fs-remove 1 1
 fs-missing 1 1
-fs-mkdir 0 1
+fs-mkdir 1 1
 clock 1 1 1 1 1
 monotonic-order 1
 format 1 1

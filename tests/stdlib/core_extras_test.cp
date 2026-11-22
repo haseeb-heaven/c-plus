@@ -1,6 +1,7 @@
 /* Tests for the checked slice, filesystem helpers and clocks. */
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 #include "stdlib/vector.hp"
@@ -50,6 +51,7 @@ int main(void) {
     fs_remove(dir, &err);
     print("fs-mkdir", fs_mkdir(dir, &err) == STDLIB_OK, fs_is_dir(dir));
     fs_remove(dir, &err);
+    rmdir(dir); /* fs_remove is unlink only; keep this fixture idempotent */
 
     unsigned long long before = time_monotonic_ms();
     time_sleep_ms(20);
