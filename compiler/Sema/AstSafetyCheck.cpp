@@ -1690,19 +1690,82 @@ public:
     const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
     const Expr *src = call->getArg(1)->IgnoreParenImpCasts();
     const auto *dstRef = dyn_cast<DeclRefExpr>(dst);
+    if (!dstRef)
+      return;
     const auto *str = dyn_cast<StringLiteral>(src);
-    if (!dstRef || !str)
+    if (!str) {
+      // `const char *s = "literal"; strcpy(d, s);`
+      if (const auto *sref = dyn_cast<DeclRefExpr>(src))
+        if (const auto *svd = dyn_cast<VarDecl>(sref->getDecl()))
+          if (svd->getInit())
+            str = dyn_cast<StringLiteral>(svd->getInit()->IgnoreParenCasts());
+    }
+    if (!str)
       return;
     const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
-    const auto *at = vd ? ctx_.getAsConstantArrayType(vd->getType()) : nullptr;
-    if (!at)
+    if (!vd)
       return;
-    unsigned long long cap = at->getSize().getZExtValue();
+    unsigned long long cap = 0;
+    if (const auto *at = ctx_.getAsConstantArrayType(vd->getType()))
+      cap = at->getSize().getZExtValue();
+    else if (const HeapAllocState *hs = heapStateOf(dst))
+      cap = static_cast<unsigned long long>(hs->bytes);
+    if (!cap)
+      return;
     unsigned long long need = str->getLength() + 1;
     if (need > cap)
       report(call->getBeginLoc(), "string copy of " + std::to_string(need - 1) +
                                       " chars plus NUL exceeds destination '" +
                                       vd->getNameAsString() + "'");
+  }
+
+  /// strcat into a heap buffer: current content + src + NUL must fit.
+  void checkStringConcatHeap(const CallExpr *call) {
+    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
+    const auto *dstRef = dyn_cast<DeclRefExpr>(dst);
+    const auto *str = dyn_cast<StringLiteral>(call->getArg(1)->IgnoreParenCasts());
+    const HeapAllocState *hs = heapStateOf(dst);
+    if (!dstRef || !str || !hs)
+      return;
+    const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
+    if (!vd)
+      return;
+    unsigned long long used = heapWritten_.count(vd) ? 1 : 1; // d[0]=0 idiom
+    unsigned long long need = used + str->getLength();
+    if (need > static_cast<unsigned long long>(hs->bytes))
+      report(call->getBeginLoc(),
+             "string concatenation needs " + std::to_string(need) +
+                 " bytes but destination '" + vd->getNameAsString() +
+                 "' has capacity " + std::to_string(hs->bytes));
+  }
+
+  /// memcpy/memmove source must have at least the requested bytes.
+  void checkSourceExtent(const CallExpr *call, unsigned srcIdx,
+                         unsigned sizeIdx) {
+    if (call->getNumArgs() <= std::max(srcIdx, sizeIdx))
+      return;
+    long long bytes = 0;
+    const Expr *n = call->getArg(sizeIdx)->IgnoreParenImpCasts();
+    Expr::EvalResult r;
+    if (n->EvaluateAsInt(r, ctx_) && r.Val.isInt())
+      bytes = r.Val.getInt().getSExtValue();
+    else
+      return;
+    if (bytes <= 0)
+      return;
+    const Expr *src = call->getArg(srcIdx)->IgnoreParenImpCasts();
+    const auto *at = ctx_.getAsConstantArrayType(src->getType());
+    if (!at)
+      return;
+    QualType elem = at->getElementType();
+    unsigned long long elemSize = ctx_.getTypeSize(elem) / 8u;
+    if (elemSize == 0)
+      elemSize = 1;
+    unsigned long long cap = at->getSize().getZExtValue() * elemSize;
+    if (static_cast<unsigned long long>(bytes) > cap)
+      report(call->getBeginLoc(), "copy of " + std::to_string(bytes) +
+                                      " bytes exceeds source of length " +
+                                      std::to_string(cap));
   }
 
   bool VisitCallExpr(CallExpr *call) {
@@ -1858,6 +1921,7 @@ public:
       }
       if ((baseName == "memcpy" || baseName == "memmove") && call->getNumArgs() >= 3) {
         checkBoundedCopy(call);
+        checkSourceExtent(call, 1, 2);
         checkLibcNullSource(call, baseName);
       }
       if (baseName == "memset" && call->getNumArgs() >= 3) {
@@ -1876,6 +1940,7 @@ public:
       }
       if (baseName == "strcat" && call->getNumArgs() >= 2) {
         checkStringConcat(call);
+        checkStringConcatHeap(call);
         checkLibcNullSource(call, baseName);
       }
       if ((baseName == "snprintf" || baseName == "vsnprintf") &&
