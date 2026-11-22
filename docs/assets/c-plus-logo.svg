@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000" role="img" aria-labelledby="title desc">
+  <title id="title">C+ — The safest next version C++ never shipped</title>
+  <desc id="desc">A silver and gold shield containing a bold C+ emblem on a dark navy technical background, with the C+ slogan on a banner.</desc>
+  <defs>
+    <radialGradient id="bg"><stop stop-color="#14283b"/><stop offset="1" stop-color="#050b13"/></radialGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".42" stop-color="#b9c5d2"/><stop offset=".72" stop-color="#f8fbff"/><stop offset="1" stop-color="#718094"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff0b9"/><stop offset=".45" stop-color="#caa65b"/><stop offset="1" stop-color="#80602d"/></linearGradient>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#183d59"/><stop offset=".55" stop-color="#09233a"/><stop offset="1" stop-color="#061421"/></linearGradient>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.6" fill="#7c9ab0" opacity=".16"/></pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur in="SourceAlpha" stdDeviation="14"/><feOffset dy="12"/><feComponentTransfer><feFuncA type="linear" slope=".55"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <path id="topArc" d="M 230 300 Q 600 20 970 300"/>
+  </defs>
+  <rect width="1200" height="1000" rx="30" fill="url(#bg)"/>
+  <rect width="1200" height="1000" rx="30" fill="url(#dots)"/>
+  <g opacity=".5" stroke="#1abce0" fill="none" stroke-width="5">
+    <path d="M70 480h150l45-42h95M1130 480H980l-45-42h-95M80 550h120l35 30h100M1120 550h-120l-35 30H865"/>
+    <path d="M150 410v150m28-110v95m28-145v185M1022 400v160m28-110v95m28-145v185" stroke-dasharray="10 15"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="M600 155 955 285 925 610Q890 805 600 925 310 805 275 610L245 285Z" fill="#02070d" stroke="url(#gold)" stroke-width="13"/>
+    <path d="M600 145 950 275 920 600Q885 790 600 900 315 790 280 600L250 275Z" fill="url(#silver)" stroke="#e7edf4" stroke-width="12"/>
+    <path d="M600 190 906 303 881 594Q850 755 600 855 350 755 319 594L294 303Z" fill="url(#navy)" stroke="url(#gold)" stroke-width="12"/>
+    <path d="M600 210 600 832 375 730Q345 685 330 580L310 320Z" fill="#ffffff" opacity=".07"/>
+    <text font-family="Arial,Helvetica,sans-serif" font-size="74" font-weight="800" letter-spacing="4" fill="url(#gold)"><textPath href="#topArc" startOffset="50%" text-anchor="middle">THE SAFEST NEXT VERSION</textPath></text>
+    <path d="M440 425c-98 0-155 60-155 151s57 151 155 151c59 0 103-22 137-62l-55-55c-22 25-46 37-78 37-53 0-85-28-85-71s32-71 85-71c32 0 56 12 78 37l55-55c-34-40-78-62-137-62Z" fill="url(#silver)" stroke="url(#gold)" stroke-width="8"/>
+    <path d="M700 470h72v82h82v72h-82v82h-72v-82h-82v-72h82Z" fill="url(#gold)" stroke="#f8e7b3" stroke-width="7"/>
+    <path d="M165 735Q600 650 1035 735L985 855Q600 790 215 855Z" fill="url(#navy)" stroke="url(#gold)" stroke-width="10"/>
+    <path d="M165 735Q600 650 1035 735" fill="none" stroke="#f8e7b3" stroke-width="5"/>
+    <text x="600" y="805" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="67" font-weight="800" letter-spacing="2" fill="url(#gold)">C++ NEVER SHIPPED</text>
+  </g>
+  <text x="600" y="965" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="20" letter-spacing="5" fill="#9db2c5">C+ LANGUAGE PROJECT</text>
+</svg>
