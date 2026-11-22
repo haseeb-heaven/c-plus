@@ -87,11 +87,16 @@ a crashing test. No claim of complete memory safety is made.
 
 - **UBSan**: all 12 new gap-closing test suites pass with
   `-fsanitize=undefined -fno-sanitize-recover=all` on Apple Clang 16 / arm64.
-- **ASan**: NOT VERIFIED on this host. Apple Clang 16 aborts at process start
-  with `AddressSanitizer: CHECK failed: sanitizer_malloc_mac.inc:189`
-  (`asan_init_is_running`) for every instrumented binary. This is a toolchain
-  defect, not a test failure; Linux CI in `.github/workflows/libc-crt.yml`
-  runs ASan+UBSan and must be consulted for that platform.
+- **ASan**: VERIFIED with Homebrew clang 23 plus explicit
+  `-isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk` (see
+  `docs/libc/ASAN_AUDIT.md`). All 12 API-level allocator scenarios classify
+  correctly: OOB read/write and UAF read/write report
+  `heap-buffer-overflow` / `heap-use-after-free`; valid reuse, realloc-failure,
+  alignment and metadata cases are clean. Apple clang 16 on this host still
+  aborts at startup with `sanitizer_malloc_mac.inc:189`, so that compiler is
+  not usable for ASan here. The allocators delegate each block to its own host
+  malloc allocation, so no manual ASan poisoning is used. Linux CI remains the
+  authoritative cross-platform ASan path.
 - **TSan**: NOT VERIFIED on this host. Apple Clang 16 requires
   `DYLD_INSERT_LIBRARIES=.../libclang_rt.tsan_osx_dynamic.dylib` and reports
   "Interceptors are not working" without it. Linux CI runs TSan separately.

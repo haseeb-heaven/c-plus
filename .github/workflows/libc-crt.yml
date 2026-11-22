@@ -86,3 +86,18 @@ jobs:
           /tmp/fuzz_all_asan
           clang -O1 -g -pthread -fsanitize=thread -Istdlib/safe -Ilibc tests/safety/test_scenarios_threads.c build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a -o /tmp/test_threads_tsan
           /tmp/test_threads_tsan
+
+  # Dedicated ASan allocator integration job. It rebuilds both libraries with
+  # -fsanitize=address into build/asan, so ordinary release build outputs in
+  # build/safe and build/libc are unaffected. No ASAN_OPTIONS suppressions are
+  # used: ASan errors are intentionally allowed to fail the build.
+  asan-libc-crt:
+    runs-on: ubuntu-latest
+    env:
+      CPLUS_CLANG: clang
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: ASan allocator integration (Linux)
+        run: sh tests/crt/asan/run_asan.sh
