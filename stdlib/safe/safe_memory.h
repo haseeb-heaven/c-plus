@@ -52,6 +52,11 @@ void *cplus_memmove_s_auto(void *dest, const void *src, size_t n, size_t known_d
 void *cplus_memset_s_auto(void *dest, int value, size_t n, size_t known_dmax);
 int   cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s1, size_t known_s2);
 
+/* Unknown-capacity policy. 0 (default) = preserve raw-C behaviour but emit a
+ * warning; 1 (strict) = refuse operations whose destination capacity cannot be
+ * proven from tracked metadata or __builtin_object_size. */
+void cplus_safe_set_unknown_capacity_mode(int strict);
+
 #ifndef CPLUS_SAFE_OBJ_SIZE
 #if defined(__GNUC__) || defined(__clang__)
 #define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 1) /* mode 1: exact enclosing object; mode 0 leaks trailing struct bytes */
