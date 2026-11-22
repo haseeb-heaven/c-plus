@@ -29,6 +29,7 @@ not a claim of complete memory safety.
 | thread shared-state | safety/thread_volatile_race, core/strict_mode.sh thread_volatile_race, mass_fuzz thread_single_ok_* families | positive/negative |
 | pointer provenance | safety/pointer_from_int, core/strict_mode.sh pointer_from_int | positive/negative |
 | null-return summaries | safety/null_return_deref, core/positive/null_return_guard, redteam null_from_fn | positive/negative |
+| interprocedural heap extent / unsigned check | safety/interproc_heap_extent (1-byte malloc passed to callee writing 10 ints rejected; size_t < 0 rejected) | negative |
 | fuzz / checker robustness | core/fuzz_checker.sh (120 inputs), core/adversarial_fuzz.py (144 unsafe + 80 positive), core/mass_fuzz_all.sh (3 seeds x 5,240 = 15,720 generated programs; 15,720 DEFAULT checks + 15,720 STRICT checks + ~4,427 differential clang syntax checks + ~576 debug/release build-and-run executions; 0 failures), core/cross_tu_fuzz.py (1,200 two-file programs; 4,800 per-TU checks, 1,200 C+ links/runs, 1,200 differential clang builds; 0 failures) | fuzz |
 | DEFAULT / STRICT modes | core/strict_mode.sh (16 cases: proven errors rejected in both, unverified ops warned in DEFAULT and rejected in STRICT, safe realloc accepted in STRICT, UAF source-location chain) | positive/negative |
 | logging categories | tests/logging_test.sh | positive |

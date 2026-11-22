@@ -175,6 +175,14 @@ public:
   void setMaybeReleasedVars(const std::set<std::string> &s) {
     maybeReleasedVars_ = s;
   }
+  const std::map<std::string, std::map<unsigned, long long>> &
+  callParamExtents() const {
+    return callParamExtents_;
+  }
+  void setCallParamExtents(
+      const std::map<std::string, std::map<unsigned, long long>> &m) {
+    callParamExtents_ = m;
+  }
   const std::set<std::string> &allGlobals() const { return allGlobals_; }
   const std::map<std::string, int> &threadEntryCounts() const {
     return threadEntryCounts_;
@@ -934,6 +942,17 @@ public:
       heapInterior_.clear();
       onePastEnd_.clear();
       strlenSized_.clear();
+      auto pit = callParamExtents_.find(currentFunction_);
+      if (pit != callParamExtents_.end())
+        for (const auto *pv : fd->parameters()) {
+          auto eit = pit->second.find(pv->getFunctionScopeIndex());
+          if (eit == pit->second.end())
+            continue;
+          HeapAllocState st;
+          st.bytes = eit->second;
+          st.decl = pv;
+          heapAllocs_[pv->getNameAsString()] = st;
+        }
     }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
     currentFunction_ = previousFunction;
@@ -1093,6 +1112,16 @@ public:
         assignedVars_.insert(varNameOf(op->getLHS()));
       return true;
     }
+    // An unsigned value compared with zero via < is always false: the check
+    // can never protect anything, so it is a provable logic bug.
+    if ((op->getOpcode() == BO_LT && isNullConstant(op->getRHS()) &&
+         !op->getLHS()->getType().isNull() &&
+         op->getLHS()->getType()->isUnsignedIntegerType()) ||
+        (op->getOpcode() == BO_GT && isNullConstant(op->getLHS()) &&
+         !op->getRHS()->getType().isNull() &&
+         op->getRHS()->getType()->isUnsignedIntegerType()))
+      report(op->getBeginLoc(),
+             "comparison of unsigned value with 0 via '<' is always false");
     if (op->isAssignmentOp()) {
       std::string lhsName = varNameOf(op->getLHS());
       assignedVars_.insert(lhsName);
@@ -1432,6 +1461,17 @@ public:
       if (!callee)
         return true;
       name = callee->getNameAsString();
+    }
+
+    if (!report_ && callee) {
+      // Record allocation extents passed as arguments so the callee can
+      // bounds-check its parameter accesses.
+      for (unsigned i = 0; i < call->getNumArgs(); ++i) {
+        std::string an = varNameOf(call->getArg(i));
+        auto hit = heapAllocs_.find(an);
+        if (!an.empty() && hit != heapAllocs_.end())
+          callParamExtents_[name][i] = hit->second.bytes;
+      }
     }
 
     if (name == "signal" && call->getNumArgs() >= 2) {
@@ -1834,6 +1874,9 @@ private:
   std::set<std::string> functionsReturningFreed_;
   std::set<std::string> nullReturningFunctions_;
   std::set<std::string> maybeReleasedVars_;
+  // Interprocedural allocation extents: callee name -> param index -> bytes,
+  // gathered from call sites whose argument is a tracked allocation.
+  std::map<std::string, std::map<unsigned, long long>> callParamExtents_;
   std::set<std::string> allGlobals_;
   std::map<std::string, int> threadEntryCounts_;
   std::map<std::string, SourceLocation> threadEntryLocs_;
@@ -1893,6 +1936,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setNullReturningFunctions(collect.nullReturningFunctions());
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
+  check.setCallParamExtents(collect.callParamExtents());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // Thread-race heuristic: the same entry function passed to more than one
