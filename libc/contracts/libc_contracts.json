@@ -88,11 +88,30 @@
         "frees-on-success"
       ],
       "borrow": [],
-      "failure": "returns NULL; original valid",
+      "failure": "returns NULL with errno EINVAL for a stale/unowned pointer, or ENOMEM on host OOM / injected failure; original block stays valid",
       "diagnostics": "CPLUS-SAFE-REALLOC",
       "dynamic": [
-        "success-branch alias invalidation (planned)"
+        "success-branch metadata update guarded by the original generation (ABA check in cplus_realloc, libc/src/stdlib/alloc.c)",
+        "stale/unowned pointer returns NULL with errno EINVAL without freeing another block (meta_find_addr miss path in cplus_realloc)",
+        "stale aliases are observable through cplus_alloc_check_generation, cplus_alloc_is_live and cplus_alloc_get_meta; a successful realloc and cplus_transfer_ownership bump the generation",
+        "injected failure or host OOM returns NULL and preserves the original pointer, metadata and payload"
       ],
+      "limitations": [
+        "alias invalidation is heuristic, generation-based metadata invalidation, not a pointer-provenance or arbitrary-alias safety guarantee",
+        "double/invalid-free classification uses a bounded 1024-entry open-addressed recent-free cache; when it fills, first-slot overwrite can misclassify a real double free as an invalid free",
+        "passing a stale alias to host realloc after its address has been re-issued as a new live block is undefined behavior; the ABA guard protects metadata updates only, not the host realloc call",
+        "cross-allocator use (host pointer passed to cplus_realloc, or cplus_malloc pointer passed to host free) is undefined behavior; it is refused with EINVAL only when the metadata check detects it"
+      ],
+      "evidence": {
+        "source": [
+          "libc/src/stdlib/alloc.c"
+        ],
+        "tests": [
+          "tests/libc/test_alloc_metadata.c",
+          "tests/libc/test_alloc_attack.c",
+          "tests/safety/test_scenarios_c.c"
+        ]
+      },
       "paramTypes": [
         "void *ptr",
         "size_t size"
@@ -107,9 +126,9 @@
         "frees-on-success"
       ],
       "returnState": "returns_owned",
-      "failureBehavior": "returns NULL; original valid",
+      "failureBehavior": "returns NULL with errno EINVAL (stale/unowned pointer) or ENOMEM (OOM/injected failure); original block stays valid",
       "threadAssumptions": [
-        "not thread-safe unless externally synchronised"
+        "metadata table is mutex-protected; the host allocator call inside realloc is not serialized, so ABA generation checks protect bookkeeping only"
       ]
     },
     "free": {
@@ -129,8 +148,23 @@
       "failure": "none",
       "diagnostics": "CPLUS-SAFE-FREE",
       "dynamic": [
-        "managed double/invalid release"
+        "managed double/invalid release via cplus_free_checked and the bounded recent-free table",
+        "stale aliases are detected through cplus_alloc_is_live / cplus_alloc_check_generation after free; release is refused without calling host free"
       ],
+      "limitations": [
+        "double/invalid-free detection is heuristic: a bounded 1024-entry recent-free table cannot distinguish every recycled address, so classification is best-effort",
+        "freeing a cplus_malloc pointer with host free() bypasses the metadata table, after which cplus_alloc_is_live can report a false live result",
+        "cross-allocator free (host allocation passed to cplus_free, or cplus_malloc pointer passed to host free) is undefined behavior; it is refused with EINVAL only when the metadata check detects it"
+      ],
+      "evidence": {
+        "source": [
+          "libc/src/stdlib/alloc.c"
+        ],
+        "tests": [
+          "tests/libc/test_alloc_metadata.c",
+          "tests/libc/test_alloc_attack.c"
+        ]
+      },
       "paramTypes": [
         "void *ptr"
       ],
@@ -846,6 +880,10 @@
       "format_literal_required": true,
       "forbids_percent_n": true,
       "bounds_checked_dest": true,
+      "limitations": [
+        "these flags describe specific implemented checks (literal format, no %n, destination bounds); they are not a proof of general format-string validity or of format-specifier/argument type agreement",
+        "format-string validity beyond those checks is not proven"
+      ],
       "optional": true,
       "origin": "platform/checked CRT",
       "paramTypes": [
@@ -894,6 +932,10 @@
       "format_literal_required": true,
       "forbids_percent_n": true,
       "bounds_checked_dest": true,
+      "limitations": [
+        "these flags describe specific implemented checks (literal format, no %n, destination bounds); they are not a proof of general format-string validity or of format-specifier/argument type agreement",
+        "format-string validity beyond those checks is not proven"
+      ],
       "optional": true,
       "origin": "platform/checked CRT",
       "paramTypes": [
@@ -952,142 +994,229 @@
     },
     "malloc_s": {
       "params": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "size_t size"
       ],
       "nullableArgs": [],
       "ownership": "returns_owned",
       "transfer": "return",
-      "extent": "explicit capacity argument when required",
+      "extent": "size (size > RSIZE_MAX_MEM refused with EINVAL; 0 maps to 1 backing byte)",
       "effects": [
-        "checked CRT"
+        "allocates",
+        "tracks live metadata (byte_size, elem_size, generation)"
       ],
       "borrow": [],
-      "failure": "native/CRT status",
-      "diagnostics": "CPLUS-SAFE-CRT",
+      "failure": "returns NULL with errno EINVAL when size exceeds RSIZE_MAX_MEM, or ENOMEM on OOM, injected failure or bookkeeping OOM",
+      "diagnostics": "CPLUS-SAFE-ALLOC",
       "dynamic": [
-        "capacity and error checks"
+        "RSIZE_MAX_MEM overflow guard in malloc_s (stdlib/safe/src/safe_alloc.c)",
+        "generation assigned at insert and checkable via cplus_safe_ptr_check_generation / cplus_safe_alloc_get_meta",
+        "failure injection via cplus_safe_alloc_fail_after / cplus_safe_alloc_fail_reset"
+      ],
+      "limitations": [
+        "metadata checks are heuristic and do not establish pointer provenance or arbitrary-alias safety",
+        "cross-allocator free is undefined behavior; host free of a malloc_s pointer bypasses bookkeeping and can leave stale live metadata"
       ],
       "optional": true,
-      "origin": "C+ extension",
+      "origin": "C+ extension (standard C signature, stdlib/safe/src/safe_alloc.c)",
       "paramTypes": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "size_t size"
       ],
-      "pointerBounds": "explicit capacity argument",
-      "allocationSize": "explicit capacity argument when required",
+      "pointerBounds": "size (bounded by RSIZE_MAX_MEM)",
+      "allocationSize": "size (0 maps to 1 backing byte)",
       "ownershipTransfer": "return",
       "borrowLifetime": "n/a",
       "readEffects": [],
       "writeEffects": [],
       "freeEffects": [],
       "returnState": "returns_owned",
-      "failureBehavior": "native/CRT status",
+      "failureBehavior": "returns NULL with errno EINVAL (oversize) or ENOMEM (OOM/injected failure)",
+      "evidence": {
+        "source": [
+          "stdlib/safe/src/safe_alloc.c"
+        ],
+        "tests": [
+          "tests/crt/unit/test_malloc_s.c",
+          "tests/crt/unit/test_alloc_metadata_s.c"
+        ]
+      },
       "threadAssumptions": [
-        "not thread-safe unless externally synchronised"
+        "metadata table is mutex-protected; callers must not free the same pointer concurrently"
       ]
     },
     "calloc_s": {
       "params": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "size_t count",
+        "size_t size"
       ],
       "nullableArgs": [],
       "ownership": "returns_owned",
       "transfer": "return",
-      "extent": "explicit capacity argument when required",
+      "extent": "count*size (overflow-checked, bounded by RSIZE_MAX_MEM)",
       "effects": [
-        "checked CRT"
+        "allocates",
+        "zero-init",
+        "tracks elem_size for length queries"
       ],
       "borrow": [],
-      "failure": "native/CRT status",
-      "diagnostics": "CPLUS-SAFE-CRT",
+      "failure": "returns NULL with errno EOVERFLOW when count*size overflows or exceeds RSIZE_MAX_MEM, or ENOMEM on OOM / injected failure",
+      "diagnostics": "CPLUS-SAFE-ALLOC",
       "dynamic": [
-        "capacity and error checks"
+        "count*size overflow and RSIZE_MAX_MEM checks in calloc_s (stdlib/safe/src/safe_alloc.c)",
+        "elem_size recorded so cplus_safe_len / cplus_safe_query_length report element counts",
+        "generation assigned at insert and checkable via cplus_safe_ptr_check_generation"
+      ],
+      "limitations": [
+        "metadata checks are heuristic and do not establish pointer provenance or arbitrary-alias safety",
+        "cross-allocator free is undefined behavior; host free of a calloc_s pointer bypasses bookkeeping"
       ],
       "optional": true,
-      "origin": "C+ extension",
+      "origin": "C+ extension (standard C signature, stdlib/safe/src/safe_alloc.c)",
       "paramTypes": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "size_t count",
+        "size_t size"
       ],
-      "pointerBounds": "explicit capacity argument",
-      "allocationSize": "explicit capacity argument when required",
+      "pointerBounds": "count*size (overflow-checked, bounded by RSIZE_MAX_MEM)",
+      "allocationSize": "count*size (zero args map to 1 backing byte)",
       "ownershipTransfer": "return",
       "borrowLifetime": "n/a",
       "readEffects": [],
       "writeEffects": [],
       "freeEffects": [],
       "returnState": "returns_owned",
-      "failureBehavior": "native/CRT status",
+      "failureBehavior": "returns NULL with errno EOVERFLOW (overflow or oversize total) or ENOMEM (OOM/injected failure)",
+      "evidence": {
+        "source": [
+          "stdlib/safe/src/safe_alloc.c"
+        ],
+        "tests": [
+          "tests/crt/unit/test_calloc_s.c",
+          "tests/crt/unit/test_calloc_s_overflow_uninit.c",
+          "tests/crt/unit/test_alloc_metadata_s.c"
+        ]
+      },
       "threadAssumptions": [
-        "not thread-safe unless externally synchronised"
+        "metadata table is mutex-protected; callers must not free the same pointer concurrently"
       ]
     },
     "realloc_s": {
       "params": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "void *ptr",
+        "size_t size"
       ],
-      "nullableArgs": [],
+      "nullableArgs": [
+        0
+      ],
       "ownership": "returns_owned",
-      "transfer": "return",
-      "extent": "explicit capacity argument when required",
+      "transfer": "success-only old alias invalid",
+      "extent": "size (size > RSIZE_MAX_MEM refused with EINVAL; 0 maps to 1 backing byte)",
       "effects": [
-        "checked CRT"
+        "allocates",
+        "frees-on-success",
+        "generation bumped on success"
       ],
       "borrow": [],
-      "failure": "native/CRT status",
-      "diagnostics": "CPLUS-SAFE-CRT",
+      "failure": "returns NULL with errno EINVAL (size > RSIZE_MAX_MEM or stale/unowned pointer) or ENOMEM (host OOM / injected failure / bookkeeping OOM); original block preserved",
+      "diagnostics": "CPLUS-SAFE-REALLOC",
       "dynamic": [
-        "capacity and error checks"
+        "RSIZE_MAX_MEM overflow guard in realloc_s (stdlib/safe/src/safe_alloc.c:241)",
+        "ABA generation guard around host realloc: only the slot with the original generation is updated; a re-issued address is never stripped",
+        "stale/unowned pointer returns NULL with errno EINVAL without freeing another block (tab_find_addr miss path)",
+        "stale aliases detectable via cplus_safe_ptr_check_generation, cplus_safe_ptr_was_freed, free_checked_s and cplus_safe_alloc_get_meta",
+        "injected failure or host OOM returns NULL and preserves the original block and payload"
+      ],
+      "limitations": [
+        "alias invalidation is heuristic, generation-based metadata invalidation, not a pointer-provenance or arbitrary-alias safety guarantee",
+        "recent-free classification uses a bounded 1024-entry direct-mapped g_recent cache (stdlib/safe/src/safe_alloc.c); address reuse or bucket collision can cause heuristic misclassification of double vs invalid frees",
+        "passing a stale alias to host realloc after its address has been re-issued as a new live block is undefined behavior; the ABA guard protects metadata updates only, not the host realloc call",
+        "cross-allocator use (host pointer passed to realloc_s, or malloc_s pointer passed to host free) is undefined behavior; it is refused with EINVAL only when the metadata check detects it"
       ],
       "optional": true,
-      "origin": "C+ extension",
+      "origin": "C+ extension (standard C signature, stdlib/safe/src/safe_alloc.c)",
       "paramTypes": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "void *ptr",
+        "size_t size"
       ],
-      "pointerBounds": "explicit capacity argument",
-      "allocationSize": "explicit capacity argument when required",
-      "ownershipTransfer": "return",
+      "pointerBounds": "size (bounded by RSIZE_MAX_MEM)",
+      "allocationSize": "size (0 maps to 1 backing byte)",
+      "ownershipTransfer": "success-only old alias invalid",
       "borrowLifetime": "n/a",
       "readEffects": [],
       "writeEffects": [],
-      "freeEffects": [],
+      "freeEffects": [
+        "frees-on-success"
+      ],
       "returnState": "returns_owned",
-      "failureBehavior": "native/CRT status",
+      "failureBehavior": "returns NULL with errno EINVAL (oversize or stale/unowned ptr) or ENOMEM (OOM/injected failure); original block preserved",
+      "evidence": {
+        "source": [
+          "stdlib/safe/src/safe_alloc.c"
+        ],
+        "tests": [
+          "tests/crt/unit/test_realloc_s.c",
+          "tests/crt/unit/test_realloc_zero_and_failure.c",
+          "tests/crt/unit/test_alloc_metadata_s.c",
+          "tests/crt/adversarial/test_alloc50_realloc_failure_preserve.c",
+          "tests/scenarios/runtime_01_alloc.c",
+          "tests/scenarios/runtime_13_threads.c"
+        ]
+      },
       "threadAssumptions": [
-        "not thread-safe unless externally synchronised"
+        "metadata table is mutex-protected; the host realloc call runs with the lock released, so ABA generation checks protect bookkeeping only"
       ]
     },
     "free_s": {
       "params": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "void *ptr"
       ],
-      "nullableArgs": [],
-      "ownership": "borrow",
-      "transfer": null,
-      "extent": "explicit capacity argument when required",
+      "nullableArgs": [
+        0
+      ],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": null,
       "effects": [
-        "checked CRT"
+        "frees",
+        "removes live metadata"
       ],
       "borrow": [],
-      "failure": "native/CRT status",
-      "diagnostics": "CPLUS-SAFE-CRT",
+      "failure": "free_checked_s returns CPLUS_SAFE_EINVAL with errno EINVAL for a double/invalid free and does not call host free; free_s itself has no return status",
+      "diagnostics": "CPLUS-SAFE-FREE",
       "dynamic": [
-        "capacity and error checks"
+        "free_checked_s removes the live slot, records the address in the bounded g_recent cache and refuses double/invalid frees",
+        "stale aliases observable via cplus_safe_ptr_was_freed / cplus_safe_ptr_is_live / cplus_safe_ptr_check_generation"
+      ],
+      "limitations": [
+        "double/invalid-free detection is heuristic: a bounded 1024-entry direct-mapped recent-free cache cannot distinguish every recycled address or cache collision",
+        "cross-allocator free (host allocation passed to free_s, or malloc_s pointer passed to host free) is undefined behavior; it is refused with EINVAL only when the metadata check detects it"
       ],
       "optional": true,
-      "origin": "C+ extension",
+      "origin": "C+ extension (standard C signature, stdlib/safe/src/safe_alloc.c)",
       "paramTypes": [
-        "checked API -- exact signature from Agent 2 capability layer"
+        "void *ptr"
       ],
-      "pointerBounds": "explicit capacity argument",
-      "allocationSize": "explicit capacity argument when required",
-      "ownershipTransfer": null,
-      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "pointerBounds": null,
+      "allocationSize": null,
+      "ownershipTransfer": "arg",
+      "borrowLifetime": "n/a",
       "readEffects": [],
       "writeEffects": [],
-      "freeEffects": [],
-      "returnState": "borrow",
-      "failureBehavior": "native/CRT status",
+      "freeEffects": [
+        "frees"
+      ],
+      "returnState": "consumes",
+      "failureBehavior": "free_checked_s returns CPLUS_SAFE_EINVAL and sets errno EINVAL on a double/invalid free; otherwise CPLUS_SAFE_OK",
+      "evidence": {
+        "source": [
+          "stdlib/safe/src/safe_alloc.c"
+        ],
+        "tests": [
+          "tests/crt/unit/test_alloc_metadata_s.c",
+          "tests/safety/test_scenarios_c.c",
+          "tests/scenarios/runtime_01_alloc.c"
+        ]
+      },
       "threadAssumptions": [
-        "not thread-safe unless externally synchronised"
+        "metadata table is mutex-protected; callers must not free the same pointer concurrently"
       ]
     }
   }
