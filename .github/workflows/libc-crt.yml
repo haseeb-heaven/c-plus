@@ -69,6 +69,8 @@ jobs:
         run: sh tests/exceptions/run_except_tests.sh
       - name: Runtime recover & cleanup tests
         run: sh tests/runtime/run_runtime_tests.sh
+      - name: Modern stdlib compile-time safety suite
+        run: sh tests/stdlib/compile_time/run_compile_time.sh
       - name: Libc fuzz
         run: sh tests/libc/run_fuzz.sh
       - name: Combined fuzz harness
@@ -113,3 +115,25 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang
       - name: ASan allocator integration (Linux)
         run: sh tests/crt/asan/run_asan.sh
+
+  # Deep-stdlib, compile-time, family-gap and end-to-end integration suites.
+  # Self-contained Linux job: installs the same toolchain as the jobs above and
+  # sets CPLUS_CLANG=clang so the family runner uses the installed compiler.
+  # No ASAN_OPTIONS/suppressions are added and no coverage/threshold gates are
+  # relaxed; every runner keeps its own pass/fail criteria.
+  stdlib-deep-family-integration:
+    runs-on: ubuntu-latest
+    env:
+      CPLUS_CLANG: clang
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build
+      - name: Deep stdlib tests
+        run: sh tests/stdlib/run_deep_tests.sh
+      - name: Modern stdlib compile-time safety suite
+        run: sh tests/stdlib/compile_time/run_compile_time.sh
+      - name: Family-gap checked suites
+        run: sh tests/family_gaps/run_family_tests.sh
+      - name: End-to-end integration suite
+        run: sh tests/integration/run_integration.sh

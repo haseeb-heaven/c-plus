@@ -6,7 +6,7 @@ the repository's test/demo runs. "partial" is never counted as complete.
 
 | feature | implemented | tested | verified | known limitations |
 | --- | --- | --- | --- | --- |
-| Memory safety (supported subset) | yes | yes | yes | no UAF detection, no pointer-arithmetic checks, no ASan on this host |
+| Memory safety (supported subset) | yes | yes | yes | no UAF detection, no pointer-arithmetic checks; ASan verified only for 12 API-level allocator scenarios via Homebrew clang 23, not as a language guarantee (Apple clang 16 unusable here). See `docs/libc/COVERAGE.md`. |
 | Compile-time bad array index | yes | yes | yes | constant and simple counted loops only |
 | Compile-time null pointer dereference | yes | yes | yes | Clang AST constant-initializer tracking |
 | Runtime bounds/null/alignment checks | yes | yes | yes | UBSan-based; aborts on first violation |
@@ -50,12 +50,58 @@ the repository's test/demo runs. "partial" is never counted as complete.
 | Windows x86-64 target | no | — | — | roadmap |
 | Production backend/database/game-engine frameworks | no | — | — | target workloads, not claims |
 
-Commands that produced the "verified" column:
+## Coverage / test-count reconciliation (2026-11-23)
+
+Case counts below were re-derived from the on-disk sources and runners; the
+pass/fail figures are recorded results in the named documents, not re-executed
+by this reconciliation. Full accounting lives in `docs/libc/COVERAGE.md`.
+
+| Suite | Count | Recorded result |
+|---|---:|---|
+| C+ compiler tests (`tests/run_tests.sh`) | 150 | 149 pass, 1 pre-existing warning-only case |
+| libc tests (`tests/libc/run_libc_tests.sh`) | 83 | 83 pass, 0 fail |
+| CRT unit (`tests/crt/unit/run_unit_tests.sh`) | 79 | 79 pass, 0 fail |
+| Rust-vs-C+ paired runtime (6 families x 100) | 600 | 473 matched, 119 documented differences, 8 both-skip, 0 failures |
+| Per-family checked suites (10 sources x plain+UBSan) | 20 variants | runner reports pass/fail per variant |
+| Hundred-scenario per-method suites | 30 variants | 30/30 pass |
+| Compile-time suite (7 manifests) | 46 cases | 9 REJECT, 17 ACCEPT, 20 RUNTIME (RUNTIME = documented compiler gap, covered by runtime suites) |
+| Deep stdlib tests (15 sources x 3 modes) | 45 variants | runner reports pass/fail/skip per mode |
+| End-to-end integration suite | 8 checks | local driver+compiler+libc+SafeCRT run, macOS only |
+
+Honest limits — do not read the `verified` column as completeness or as a remote result:
+
+- **27 APIs MISSING** and **49 UNSUPPORTED** in `docs/libc/iso_c_inventory.json`
+  (948 APIs, 27 headers). No 100% ISO C claim.
+- **387 of 437 vendored safeclib public APIs NOT_INTEGRATED** (only 40 integrated,
+  10 adapter-only); 188 upstream `.c` files are uncompiled.
+- **ABI evidence limited**: `abi_test` is NO EVIDENCE for 644 of 646 declared
+  APIs; only `tests/cases/c_abi.c` and `tests/compat/` exist. Windows x86 ABI is
+  unverified locally.
+- **127 open wrapper-safety audit findings** (16 High, 68 Medium, 43 Low/Other)
+  in `docs/libc/WRAPPER_SAFETY_AUDIT.md`.
+- **Remote CI UNVERIFIED**: Linux `linux-crt` / `asan-libc-crt` jobs and any
+  GitHub Actions result must be observed after push; local clean-export builds
+  are not remote green results.
+- **SonarCloud UNVERIFIED**: no local token/credentials; the external 23.4%
+  duplication / security D / reliability E ratings were not re-scanned and no
+  gate pass is claimed (`docs/libc/SONAR_TRIAGE.md`).
+- Passing tests are evidence of observed behaviour only (TESTED != PROVEN), not
+  absence of UB, memory safety, or Rust equivalence. No live-game/injected-DLL
+  result is claimed from any of these runners.
+
+Commands that produced the "verified" column (results recorded, not re-run here;
+run from the repository root):
 
 ```sh
-cd /Users/haseeb-mir/Documents/Code/Cpp/c+_lang
-ctest --test-dir build --output-on-failure   # 2/2 suites
-./tests/run_tests.sh                         # 100 tests
-./demos/run_demos.sh                         # 16 demos
-./benchmarks/run_bench.sh                    # performance table
+ctest --test-dir build --output-on-failure           # 2/2 suites
+sh tests/run_tests.sh                                # 150 compiler tests (149 pass, 1 warning-only)
+sh tests/libc/run_libc_tests.sh                      # 83 libc tests
+sh tests/crt/unit/run_unit_tests.sh                  # 79 CRT unit tests
+sh tests/rust_vs_cplus/run_compare.sh                # 600 cases, 6 families
+sh tests/family_gaps/run_family_tests.sh             # 20 variants
+sh tests/methods/run_hundred.sh                      # 30 variants
+sh tests/stdlib/compile_time/run_compile_time.sh     # 7 manifests, 46 cases
+sh tests/stdlib/run_deep_tests.sh                    # 15 sources, 45 variants
+sh tests/integration/run_integration.sh              # 8 checks
+sh tests/run_all_evidence.sh                         # aggregate entry point
 ```
