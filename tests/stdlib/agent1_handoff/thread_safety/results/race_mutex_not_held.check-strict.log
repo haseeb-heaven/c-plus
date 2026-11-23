@@ -1,0 +1,3 @@
+COMMAND: ./build/c+ check --strict tests/stdlib/agent1_handoff/thread_safety/race_mutex_not_held.cp
+check: tests/stdlib/agent1_handoff/thread_safety/race_mutex_not_held.cp ok
+EXIT: 0

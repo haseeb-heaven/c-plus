@@ -1,0 +1,1 @@
+check: tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_store_local_address.cp ok

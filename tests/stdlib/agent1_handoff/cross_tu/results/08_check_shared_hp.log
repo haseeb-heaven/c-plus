@@ -1,0 +1,4 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check shared.hp
+check: shared.hp ok
+
+[exit code: 0]
