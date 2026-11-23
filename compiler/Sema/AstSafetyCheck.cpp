@@ -288,6 +288,12 @@ public:
   void setNullReturningFunctions(const std::set<std::string> &s) {
     nullReturningFunctions_ = s;
   }
+  const std::set<std::pair<std::string, unsigned>> &derefParams() const {
+    return derefParams_;
+  }
+  void setDerefParams(const std::set<std::pair<std::string, unsigned>> &s) {
+    derefParams_ = s;
+  }
   const std::set<std::string> &maybeReleasedVars() const {
     return maybeReleasedVars_;
   }
@@ -2105,6 +2111,107 @@ public:
   bool VisitFunctionDecl(FunctionDecl *fd) {
     if (report_ || !fd || !fd->getBody())
       return true;
+    // Interprocedural nullability: record pointer parameters that the callee
+    // dereferences.  A provably null argument at a call site is then unsafe.
+    struct DerefFinder : RecursiveASTVisitor<DerefFinder> {
+      const FunctionDecl *fn;
+      std::set<unsigned> &slots;
+      DerefFinder(const FunctionDecl *f, std::set<unsigned> &s)
+          : fn(f), slots(s) {}
+      unsigned slotOf(const Expr *e) const {
+        const auto *ref =
+            dyn_cast_or_null<DeclRefExpr>(e ? e->IgnoreParenCasts() : nullptr);
+        const auto *pv = ref ? dyn_cast<ParmVarDecl>(ref->getDecl()) : nullptr;
+        if (!pv || pv->getDeclContext() != static_cast<const DeclContext *>(fn))
+          return UINT_MAX;
+        for (unsigned i = 0; i < fn->getNumParams(); ++i)
+          if (fn->parameters()[i] == pv)
+            return i;
+        return UINT_MAX;
+      }
+      void note(const Expr *e) {
+        unsigned s = slotOf(e);
+        if (s != UINT_MAX)
+          slots.insert(s);
+      }
+      bool VisitUnaryOperator(UnaryOperator *uo) {
+        if (uo->getOpcode() == UO_Deref)
+          note(uo->getSubExpr());
+        return true;
+      }
+      bool VisitArraySubscriptExpr(ArraySubscriptExpr *a) {
+        note(a->getBase());
+        return true;
+      }
+      bool VisitMemberExpr(MemberExpr *m) {
+        if (m->isArrow())
+          note(m->getBase());
+        return true;
+      }
+    };
+    std::set<unsigned> derefSlots;
+    DerefFinder df(fd, derefSlots);
+    df.TraverseStmt(fd->getBody());
+    // A callee that rejects null on an early path tolerates a null argument;
+    // recording it as requiring non-null would be a false positive.
+    std::set<unsigned> nullTolerant;
+    struct NullGuardFinder : RecursiveASTVisitor<NullGuardFinder> {
+      const FunctionDecl *fn;
+      std::set<unsigned> &tolerant;
+      NullGuardFinder(const FunctionDecl *f, std::set<unsigned> &t)
+          : fn(f), tolerant(t) {}
+      unsigned slotOf(const Expr *e) const {
+        const auto *ref =
+            dyn_cast_or_null<DeclRefExpr>(e ? e->IgnoreParenCasts() : nullptr);
+        const auto *pv = ref ? dyn_cast<ParmVarDecl>(ref->getDecl()) : nullptr;
+        if (!pv || pv->getDeclContext() != static_cast<const DeclContext *>(fn))
+          return UINT_MAX;
+        for (unsigned i = 0; i < fn->getNumParams(); ++i)
+          if (fn->parameters()[i] == pv)
+            return i;
+        return UINT_MAX;
+      }
+      bool returnsIn(const Stmt *s) const {
+        if (!s)
+          return false;
+        if (isa<ReturnStmt>(s))
+          return true;
+        for (const Stmt *c : s->children())
+          if (returnsIn(c))
+            return true;
+        return false;
+      }
+      bool VisitIfStmt(IfStmt *ifs) {
+        const Expr *cond = ifs->getCond() ? ifs->getCond()->IgnoreParenCasts()
+                                          : nullptr;
+        if (const auto *uo = dyn_cast_or_null<UnaryOperator>(cond))
+          if (uo->getOpcode() == UO_LNot) {
+            unsigned s = slotOf(uo->getSubExpr());
+            if (s != UINT_MAX && returnsIn(ifs->getThen()))
+              tolerant.insert(s);
+          }
+        if (const auto *bo = dyn_cast_or_null<BinaryOperator>(cond)) {
+          if (bo->getOpcode() == BO_EQ || bo->getOpcode() == BO_NE) {
+            const Expr *other = nullptr;
+            const Expr *l = bo->getLHS()->IgnoreParenCasts();
+            const Expr *rh = bo->getRHS()->IgnoreParenCasts();
+            if (const auto *il = dyn_cast<IntegerLiteral>(l))
+              if (il->getValue().isZero()) other = bo->getRHS();
+            if (const auto *ir = dyn_cast<IntegerLiteral>(rh))
+              if (ir->getValue().isZero()) other = bo->getLHS();
+            if (other && returnsIn(ifs->getThen()))
+              if (unsigned s = slotOf(other); s != UINT_MAX)
+                tolerant.insert(s);
+          }
+        }
+        return true;
+      }
+    };
+    NullGuardFinder ng(fd, nullTolerant);
+    ng.TraverseStmt(fd->getBody());
+    for (unsigned slot : derefSlots)
+      if (!nullTolerant.count(slot))
+        derefParams_.insert({fd->getNameAsString(), slot});
     struct ReturnFinder : RecursiveASTVisitor<ReturnFinder> {
       const SafetyVisitor &owner;
       bool allNull = true;
@@ -3071,6 +3178,30 @@ public:
             warnAt(call->getBeginLoc(), msg);
           break;
         }
+      }
+    }
+    // Interprocedural nullability: a provably null argument crossing into a
+    // callee that dereferences that parameter is unsafe even though the
+    // dereference happens in the callee's body.
+    if (report_) {
+      for (unsigned i = 0; i < call->getNumArgs(); ++i) {
+        if (!derefParams_.count({name, i}))
+          continue;
+        const Expr *arg = call->getArg(i);
+        std::string an = castedVarName(arg);
+        bool isNull = isNullConstant(arg) || (!an.empty() && nullVars_.count(an));
+        llvm::APSInt cv;
+        if (!isNull && knownConst(arg, cv))
+          isNull = cv.isZero();
+        if (!isNull)
+          continue;
+        std::string msg = "null pointer argument " + std::to_string(i) +
+                          " passed to '" + name + "'";
+        if (strict_)
+          report(call->getBeginLoc(), msg);
+        else
+          warnAt(call->getBeginLoc(), msg);
+        break;
       }
     }
     if (!callee) {
@@ -4245,6 +4376,7 @@ private:
   std::set<std::string> assignedVars_;
   std::set<std::string> functionsReturningFreed_;
   std::set<std::string> nullReturningFunctions_;
+  std::set<std::pair<std::string, unsigned>> derefParams_;
   std::set<std::string> maybeReleasedVars_;
   std::map<std::string, unsigned> maybeReleaseLines_;
   std::set<std::string> guardedFromConst_;
@@ -4415,6 +4547,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setAssignedVars(collect.assignedVars());
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setNullReturningFunctions(collect.nullReturningFunctions());
+  check.setDerefParams(collect.derefParams());
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
   check.setMaybeReleaseLines(collect.maybeReleaseLines());
   check.setAddressTakenVars(collect.addressTakenVars());

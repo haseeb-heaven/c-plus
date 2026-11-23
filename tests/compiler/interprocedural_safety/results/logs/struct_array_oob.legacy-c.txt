@@ -1,0 +1,5 @@
+command: c+ check --legacy-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_array_oob.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok

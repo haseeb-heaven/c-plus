@@ -1,0 +1,7 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_return_deref.c
+returncode: 1
+timed_out: False
+
+<SRC>:2:42: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference
+  int main(void){ int *p=getnull(); return *p; }
+                                           ^

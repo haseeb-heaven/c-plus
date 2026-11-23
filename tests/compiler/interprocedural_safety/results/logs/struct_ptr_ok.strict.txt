@@ -1,0 +1,5 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_ptr_ok.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok

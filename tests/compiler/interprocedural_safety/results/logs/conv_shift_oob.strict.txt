@@ -1,0 +1,7 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:32: error: [CPLUS-FFI] shift count 64 is not less than the width 32 of the left operand
+  int main(void){ int x=1; int y=x<<64; return y; }
+                                 ^

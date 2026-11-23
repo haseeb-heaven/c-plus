@@ -1,0 +1,7 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes
+  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }
+                                      ^

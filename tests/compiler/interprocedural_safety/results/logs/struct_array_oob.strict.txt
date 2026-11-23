@@ -1,0 +1,8 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_array_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:2:30: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'b->a'
+  static void wr(struct B *b){ b->a[7]=1; }
+                               ^
+help: array contains 4 elements; valid indices are 0..3

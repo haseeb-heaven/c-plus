@@ -1,0 +1,101 @@
+C+ interprocedural-safety regression suite
+============================================================
+binary       : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+version      : C+ 0.1.0
+generated    : 2026-11-23T11:55:59
+modes        : --default, --strict, --legacy-c
+timeout      : 90s per subprocess
+
+SUMMARY
+------------------------------------------------------------
+cases                : 61
+cases passed         : 55
+cases failed         : 6
+mode checks          : 183
+mode checks passed   : 171
+mode checks failed   : 12
+runtime cases        : 24
+runtime passed       : 24
+runtime failed       : 0
+soundness-gap cases  : 6 (6 failing as designed)
+
+BY FAMILY
+------------------------------------------------------------
+  alias              cases= 4 passed= 3 failed= 1
+  array_decay        cases= 4 passed= 4 failed= 0
+  call_shape         cases=11 passed= 9 failed= 2
+  dataflow           cases= 6 passed= 4 failed= 2
+  effects            cases= 2 passed= 2 failed= 0
+  globals            cases= 4 passed= 4 failed= 0
+  nullability        cases= 6 passed= 6 failed= 0
+  ownership          cases= 3 passed= 3 failed= 0
+  param_bounds       cases= 4 passed= 4 failed= 0
+  reassignment       cases= 2 passed= 2 failed= 0
+  ret_ownership      cases= 6 passed= 6 failed= 0
+  static_arith       cases= 5 passed= 5 failed= 0
+  structs            cases= 4 passed= 3 failed= 1
+
+FAILURES (exact case names)
+------------------------------------------------------------
+  call_recursive_oob           mode=--default  family=call_shape
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  call_recursive_oob           mode=--strict   family=call_shape
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  call_mutual_oob              mode=--default  family=call_shape
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  call_mutual_oob              mode=--strict   family=call_shape
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  ptr2_oob                     mode=--default  family=alias
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  ptr2_oob                     mode=--strict   family=alias
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  struct_ptr_oob               mode=--default  family=structs
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  struct_ptr_oob               mode=--strict   family=structs
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  loop_while_oob               mode=--default  family=dataflow
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  loop_while_oob               mode=--strict   family=dataflow
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  dataflow_phi_oob             mode=--default  family=dataflow
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+  dataflow_phi_oob             mode=--strict   family=dataflow
+      - expected reject but got accept
+      - missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'
+      expected substring: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]
+      actual diagnostic : check: <SRC> ok
+
+Full records: results/summary.json

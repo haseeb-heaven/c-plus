@@ -1,0 +1,7 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/alias_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:35: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 exceeds stack array 'q' of 16 bytes
+  static void wr(int *p){ int *q=p; q[6]=1; }
+                                    ^

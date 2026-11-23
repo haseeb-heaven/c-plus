@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_pointer_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:2:25: error: [CPLUS-BOUNDS] out-of-bounds access: index 7 reaches past array 'garr' via pointer 'gp'
+  static void wr(void){ gp[7]=1; }
+                          ^
+help: array contains 4 elements; valid indices are 0..3

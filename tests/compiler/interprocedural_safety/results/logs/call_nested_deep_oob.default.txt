@@ -1,0 +1,7 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/call_nested_deep_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:24: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 exceeds stack array 'p' of 16 bytes
+  static void h(int *p){ p[6]=1; }
+                         ^

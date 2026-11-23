@@ -1,0 +1,8 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_local_uaf.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:40: error: address of stack memory associated with local variable 'x' returned [-Werror,-Wreturn-stack-address]
+    1 | static int *mk(void){ int x=7; return &x; }
+      |                                        ^
+1 error generated.
