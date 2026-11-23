@@ -1,0 +1,13 @@
+case: sa_malloc_size_wrap
+mode: strict
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_size_wrap.c
+rc: 1
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating
+      int *p = malloc(n * 4);
+               ^~~~~~
+

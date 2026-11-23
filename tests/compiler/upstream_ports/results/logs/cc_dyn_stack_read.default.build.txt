@@ -1,0 +1,10 @@
+case: cc_dyn_stack_read
+mode: default
+step: build
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_read.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_read.default
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

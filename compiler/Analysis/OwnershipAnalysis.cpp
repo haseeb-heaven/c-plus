@@ -4,6 +4,11 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Analysis/CFG.h>
+// Reuse Clang's upstream uninitialized-value dataflow analysis instead of a
+// C+-specific reimplementation.  Licensed Apache-2.0 WITH LLVM-exception;
+// see docs/compiler/upstream-reuse.md for the pinned source and notice.
+#include <clang/Analysis/Analyses/UninitializedValues.h>
+#include <clang/Analysis/AnalysisDeclContext.h>
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -377,57 +382,54 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
     if (tracked.count(vd))
       entryInit.insert(vd);
 
-  const size_t n = cfg->size();
-  std::vector<CFGBlock *> blocks(n, nullptr);
-  for (CFGBlock *b : *cfg)
-    if (b)
-      blocks[b->getBlockID()] = b;
-  std::vector<std::set<const VarDecl *>> in(n), out(n);
-  std::vector<bool> reached(n, false);
-  std::set<const Stmt *> reported;
+  // Upstream Clang dataflow replaces the previous hand-rolled worklist.
+  // The handler filters to variables C+ tracks and to definitely-uninitialized
+  // uses, preserving C+'s existing diagnostic wording and false-positive policy.
+  class UpstreamUninitHandler : public clang::UninitVariablesHandler {
+  public:
+    UpstreamUninitHandler(const std::set<const VarDecl *> &tracked,
+                          const CfgReportFn &report)
+        : tracked_(tracked), report_(report) {}
 
-  std::deque<size_t> work;
-  work.push_back(cfg->getEntry().getBlockID());
-  in[cfg->getEntry().getBlockID()] = entryInit;
-  reached[cfg->getEntry().getBlockID()] = true;
-
-  while (!work.empty()) {
-    size_t id = work.front();
-    work.pop_front();
-    CFGBlock *block = blocks[id];
-    if (!block)
-      continue;
-    std::set<const VarDecl *> cur = in[id];
-
-    for (const CFGElement &el : *block) {
-      std::optional<CFGStmt> stmt = el.getAs<CFGStmt>();
-      if (!stmt)
-        continue;
-      DefInitWalker walker(ctx, tracked, cur, report, reported);
-      walker.walk(stmt->getStmt());
-    }
-    out[id] = cur;
-
-    for (const CFGBlock *succ : block->succs()) {
-      if (!succ)
-        continue;
-      size_t sid = succ->getBlockID();
-      if (!reached[sid]) {
-        in[sid] = cur;
-        reached[sid] = true;
-        work.push_back(sid);
-      } else {
-        std::set<const VarDecl *> merged;
-        std::set_intersection(in[sid].begin(), in[sid].end(), cur.begin(),
-                              cur.end(),
-                              std::inserter(merged, merged.begin()));
-        if (merged != in[sid]) {
-          in[sid] = merged;
-          work.push_back(sid);
-        }
+    void handleUseOfUninitVariable(const VarDecl *vd,
+                                   const clang::UninitUse &use) override {
+      if (!vd || !tracked_.count(vd))
+        return;
+      const Expr *user = use.getUser();
+      if (!user)
+        return;
+      // Always / AfterDecl / AfterCall are definite on the analysed paths;
+      // Sometimes / Maybe match the old must-analysis's conservative policy.
+      switch (use.getKind()) {
+      case clang::UninitUse::Always:
+      case clang::UninitUse::AfterDecl:
+      case clang::UninitUse::AfterCall:
+        break;
+      case clang::UninitUse::Sometimes:
+      case clang::UninitUse::Maybe:
+        return;
       }
+      report_(user->getBeginLoc(),
+              "variable '" + vd->getNameAsString() +
+                  "' is uninitialized (read before it is initialized)");
     }
-  }
+    void handleSelfInit(const VarDecl *vd) override {
+      if (vd && tracked_.count(vd))
+        report_(vd->getLocation(),
+                "variable '" + vd->getNameAsString() +
+                    "' is uninitialized (read before it is initialized)");
+    }
+
+  private:
+    const std::set<const VarDecl *> &tracked_;
+    CfgReportFn report_;
+  };
+
+  clang::AnalysisDeclContext ac(nullptr, fd);
+  UpstreamUninitHandler handler(tracked, report);
+  clang::UninitVariablesAnalysisStats stats{};
+  clang::runUninitializedVariablesAnalysis(*fd, *cfg, ac, handler, stats);
+  (void)entryInit; // retained for the C+ collector; upstream seeds params itself
 }
 
 } // namespace cplus

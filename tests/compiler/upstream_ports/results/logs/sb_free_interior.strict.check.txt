@@ -1,0 +1,13 @@
+case: sb_free_interior
+mode: strict
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_free_interior.c
+rc: 1
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free
+      free(p + 1);
+      ^~~~
+

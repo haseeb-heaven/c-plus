@@ -1,0 +1,14 @@
+case: sa_divzero_constant
+mode: default
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_constant.c
+rc: 0
+timed_out: False
+--- stdout ---
+check: <SRC> ok
+
+--- stderr ---
+<SRC>:4:13: warning: [CPLUS-ARITH] division by zero
+      int x = 10 / z;
+              ^~
+

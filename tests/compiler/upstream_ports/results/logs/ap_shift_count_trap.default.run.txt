@@ -1,0 +1,11 @@
+case: ap_shift_count_trap
+mode: default
+step: run
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_shift_count_trap.default
+rc: 110
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+C+ runtime error: invalid shift: shift count 41 is outside [0, 32)
+

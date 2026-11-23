@@ -1,0 +1,10 @@
+case: sb_realloc_alias
+mode: default
+step: run
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_realloc_alias.default
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

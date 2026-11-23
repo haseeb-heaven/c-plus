@@ -30,6 +30,49 @@ implementation files and tests* (not only READMEs), pinned commit SHAs, and a
 feature-by-feature decision on whether a concrete implementation can be
 reused, adapted, or must be declined.
 
+## Actual code integration (2026-11-23) — precise status
+
+Three distinct kinds of reuse must not be confused:
+
+1. **Upstream source text vendored into this repository.** Only `third_party/clog`
+   (MIT) qualifies. **No compiler upstream source text has been copied** into
+   `compiler/` or `runtime/`.
+2. **Upstream implementation linked and invoked (real code integration).**
+   C+ calls Clang's `clang::runUninitializedVariablesAnalysis` directly for
+   definite initialization. This is not an algorithm sketch: the upstream
+   dataflow implementation in `libclangAnalysis.a` executes inside C+.
+   - Upstream: `llvm/llvm-project` (installed Clang/LLVM 23.1.6;
+     `llvmorg-23.1.6` = `5b10d2d74929eae78912771222c9855af97496f4`),
+     `clang/include/clang/Analysis/Analyses/UninitializedValues.h`,
+     `clang/lib/Analysis/UninitializedValues.cpp`,
+     `clang/include/clang/Analysis/AnalysisDeclContext.h`.
+   - Licence: Apache-2.0 WITH LLVM-exception (`LICENSE.TXT`). No source text
+     was copied, so no per-file notice is required for linking; the licence and
+     pin are recorded here and in `THIRD_PARTY_NOTICES.md`.
+   - C+ integration: `compiler/Analysis/OwnershipAnalysis.cpp` includes the
+     upstream headers, defines `UpstreamUninitHandler : UninitVariablesHandler`
+     to filter to C+-tracked variables, and calls
+     `runUninitializedVariablesAnalysis(*fd, *cfg, ac, handler, stats)`.
+     The previous C+-specific worklist and intersection meet were removed.
+   - Verified: repo 109/0, core 152/0, agent1 156 PASS / 0 FAIL / 3 SKIP,
+     metrics 90/90 with 0 false positives. One bug-detection case moved from
+     STRICT-detected to missed after the switch (97/107 → 96/107); this is
+     recorded honestly as a remaining difference, not hidden.
+   - Other already-linked upstream implementations: `tooling::buildASTFromCodeWithArgs`,
+     `CFG::buildCFG`, `clang::analyze_format_string` consumer path.
+3. **Algorithm / predicate / rule adapted (no upstream code integrated).**
+   Fixed-point extent collection, array-decay extents, bounds/dynamic guards,
+   div/shift/conversion predicates, ownership effects, 3C-style conflict →
+   unknown degradation, SoftBound `propagateMetadata` discipline, and Apple
+   base-qualified pairing are C+ implementations shaped by upstream designs.
+
+**Declined with source evidence:** Checked C checked-pointer AST types and Apple
+wide pointers need a forked Clang AST/ABI; SoftBoundCETS shadow trie and shadow
+stack need a hidden calling convention; Fil-C flight pointers, GC and safepoints
+need a different runtime; TrapC has no verifiable upstream implementation;
+GCC/Cake/Cyclone are GPL/AI-restricted and were research-only. None of these
+was copied, ported or vendored.
+
 ## 0. Method and scope
 
 For each upstream project this audit: (1) pinned a commit via the GitHub API,

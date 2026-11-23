@@ -1,0 +1,9 @@
+suite: compiler_upstream_ports
+compiler: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+flags: --default|--strict --sanitize=none
+cases: 20  passed: 20  failed: 0
+mode checks: 40  failure entries: 0
+per family: apple_bounds_traps=5, checkedc_dynamic_bounds=5, clang_sa_malloc_divzero=5, softboundcets_spatial_temporal=5
+per kind: clean=1, runtime_abort=4, runtime_trap=2, static_reject=9, warn_then_reject_strict=2, warn_then_trap=2
+
+ALL EXPECTATIONS MATCHED
