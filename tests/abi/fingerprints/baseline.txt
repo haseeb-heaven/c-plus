@@ -946,7 +946,7 @@ S	symbol build/libc/libcplus_hardened.a::_nextdownl	1
 S	symbol build/libc/libcplus_hardened.a::_nextup	1
 S	symbol build/libc/libcplus_hardened.a::_nextupf	1
 S	symbol build/libc/libcplus_hardened.a::_nextupl	1
-S	archive build/safe/libcplus_safecrt.a	count=292
+S	archive build/safe/libcplus_safecrt.a	count=299
 S	symbol build/safe/libcplus_safecrt.a::___ubsan_on_report	1
 S	symbol build/safe/libcplus_safecrt.a::__memccpy_s_uchk	1
 S	symbol build/safe/libcplus_safecrt.a::__memchr_s_uchk	1
@@ -982,13 +982,18 @@ S	symbol build/safe/libcplus_safecrt.a::_calloc_s	1
 S	symbol build/safe/libcplus_safecrt.a::_check_integer_format	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_except_init	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fclose_s	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_fgets_s	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_fgets_s_checked	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fopen_s	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fprintf_s	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fprintf_s_checked	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fread_s	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_fread_s_checked	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fscanf_s	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fscanf_s_checked	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fwrite_s	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_fwrite_s_checked	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_getenv_s	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_io_stream_is_closed	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_json_free	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_json_get_int	1
@@ -1032,6 +1037,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_get_constraint_mode	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_log	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_log_get_level	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_log_set_level	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_open_stream_count	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_platform_probe	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_ptr_check_generation	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_ptr_count	1
@@ -1047,6 +1053,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stat_record	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_dump	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_get	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_reset	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stream_was_closed	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_transfer_ownership	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_transfer_ownership_generation	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_unknown_capacity_strict	1
