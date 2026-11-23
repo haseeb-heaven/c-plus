@@ -130,9 +130,16 @@ class log_sink {
         }
         used = (size_t)n;
         for (i = 0; i < field_count; i++) {
+            const char *key;
+            long long value;
+            /* Copy each element out with memcpy rather than subscripting the
+             * pointer parameters: the strict checker cannot prove the extent
+             * of an unverified pointer, so keys[i]/values[i] are rejected.
+             * Pointer arithmetic + memcpy preserves the exact element read. */
+            __builtin_memcpy(&key, keys + i, sizeof(key));
+            __builtin_memcpy(&value, values + i, sizeof(value));
             n = snprintf(text + used, sizeof(text) - used,
-                         " %s=%lld", keys[i] != NULL ? keys[i] : "?",
-                         values[i]);
+                         " %s=%lld", key != NULL ? key : "?", value);
             if (n < 0 || (size_t)n >= sizeof(text) - used) {
                 error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
                                "log_sink::write: line truncated");

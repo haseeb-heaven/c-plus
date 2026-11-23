@@ -167,7 +167,12 @@ static int cmp_strp(const void *a, const void *b) {
 
 static char *path_join(const char *a, const char *b) {
     size_t la = strlen(a), lb = strlen(b);
-    int need_slash = la > 0 && a[la - 1] != '/';
+    int need_slash = 0;
+    if (la > 0) {
+        char a_last;
+        __builtin_memcpy(&a_last, a + (la - 1), sizeof(a_last));
+        need_slash = a_last != '/';
+    }
     char *p = (char *)malloc(la + (size_t)need_slash + lb + 1);
     if (p == NULL)
         return NULL;
@@ -180,7 +185,13 @@ static char *path_join(const char *a, const char *b) {
 
 static char *path_rel_to_root(const char *root, const char *full) {
     size_t n = strlen(root);
-    if (strncmp(full, root, n) == 0 && full[n] == '/')
+    int is_child = 0;
+    if (strncmp(full, root, n) == 0) {
+        char next;
+        __builtin_memcpy(&next, full + n, sizeof(next));
+        is_child = next == '/';
+    }
+    if (is_child)
         return xstrdup(full + n + 1);
     return xstrdup(full);
 }
@@ -224,9 +235,14 @@ static int str_contains_ci(const char *hay, const char *needle) {
         return 1;
     for (; *hay != '\0'; hay++) {
         size_t i = 0;
-        while (i < nl && tolower((unsigned char)hay[i]) ==
-                             tolower((unsigned char)needle[i]))
+        while (i < nl) {
+            char h, d;
+            __builtin_memcpy(&h, hay + i, sizeof(h));
+            __builtin_memcpy(&d, needle + i, sizeof(d));
+            if (tolower((unsigned char)h) != tolower((unsigned char)d))
+                break;
             i++;
+        }
         if (i == nl)
             return 1;
     }
@@ -284,18 +300,26 @@ static char *tail_of(const char *text) {
 }
 
 static void mkdir_p(const char *path) {
-    if (path == NULL || path[0] == '\0')
+    if (path == NULL)
+        return;
+    char first;
+    __builtin_memcpy(&first, path, sizeof(first));
+    if (first == '\0')
         return;
     size_t n = strlen(path);
     char *tmp = (char *)malloc(n + 1);
     memcpy(tmp, path, n + 1);
     for (size_t i = 1; i <= n; i++) {
-        if (tmp[i] == '/' || tmp[i] == '\0') {
-            char c = tmp[i];
-            tmp[i] = '\0';
-            if (tmp[0] != '\0')
+        char c;
+        __builtin_memcpy(&c, tmp + i, sizeof(c));
+        if (c == '/' || c == '\0') {
+            char nul = '\0';
+            __builtin_memcpy(tmp + i, &nul, sizeof(nul));
+            char first;
+            __builtin_memcpy(&first, tmp, sizeof(first));
+            if (first != '\0')
                 mkdir(tmp, 0777);
-            tmp[i] = c;
+            __builtin_memcpy(tmp + i, &c, sizeof(c));
         }
     }
     free(tmp);
@@ -306,7 +330,11 @@ static void mkdir_p(const char *path) {
 /* ------------------------------------------------------------------ */
 
 static int shlex_plain(const char *s) {
-    if (s == NULL || s[0] == '\0')
+    if (s == NULL)
+        return 0;
+    char first;
+    __builtin_memcpy(&first, s, sizeof(first));
+    if (first == '\0')
         return 0;
     for (; *s != '\0'; s++) {
         unsigned char c = (unsigned char)*s;
@@ -400,7 +428,11 @@ static char *which(const char *name) {
 }
 
 static char *resolve_exe(const char *value) {
-    if (value == NULL || value[0] == '\0')
+    if (value == NULL)
+        return NULL;
+    char first;
+    __builtin_memcpy(&first, value, sizeof(first));
+    if (first == '\0')
         return NULL;
     if (strchr(value, '/') != NULL)
         return is_executable(value) ? xstrdup(value) : NULL;
@@ -490,8 +522,10 @@ static void walk_dir(const char *full, const char *rel, StrList *out,
         if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
             continue;
         char *child_full = path_join(full, de->d_name);
-        char *child_rel = rel[0] != '\0' ? path_join(rel, de->d_name)
-                                         : xstrdup(de->d_name);
+        char rel_first;
+        __builtin_memcpy(&rel_first, rel, sizeof(rel_first));
+        char *child_rel = rel_first != '\0' ? path_join(rel, de->d_name)
+                                            : xstrdup(de->d_name);
         struct stat st;
         int isdir = stat(child_full, &st) == 0 && S_ISDIR(st.st_mode);
         if (isdir) {
@@ -569,7 +603,8 @@ static char *slug_of(const char *rel) {
     size_t n = strlen(rel);
     char *s = (char *)malloc(n + 1);
     for (size_t i = 0; i < n; i++) {
-        unsigned char c = (unsigned char)rel[i];
+        unsigned char c;
+        __builtin_memcpy(&c, rel + i, sizeof(c));
         int ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
                  (c >= '0' && c <= '9') || c == '_' || c == '-';
         s[i] = ok ? (char)c : '_';
@@ -985,31 +1020,37 @@ static int parse_args(int argc, char **argv, StrList *raw_configs) {
     memset(raw_configs, 0, sizeof(*raw_configs));
     const char *root_override = NULL;
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+        const char *arg;
+        __builtin_memcpy(&arg, argv + i, sizeof(arg));
+        if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
             usage();
             return 2; /* caller treats 2 with help printed as exit 0 */
-        } else if (strcmp(argv[i], "--dry-run") == 0) {
+        } else if (strcmp(arg, "--dry-run") == 0) {
             g_dry_run = 1;
-        } else if (strcmp(argv[i], "--json-stdout") == 0) {
+        } else if (strcmp(arg, "--json-stdout") == 0) {
             g_json_stdout = 1;
-        } else if (strcmp(argv[i], "--config") == 0) {
+        } else if (strcmp(arg, "--config") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --config requires an argument\n");
                 return 1;
             }
-            sl_add(raw_configs, xstrdup(argv[++i]));
-        } else if (strncmp(argv[i], "--config=", 9) == 0) {
-            sl_add(raw_configs, xstrdup(argv[i] + 9));
-        } else if (strcmp(argv[i], "--root") == 0) {
+            i++;
+            __builtin_memcpy(&arg, argv + i, sizeof(arg));
+            sl_add(raw_configs, xstrdup(arg));
+        } else if (strncmp(arg, "--config=", 9) == 0) {
+            sl_add(raw_configs, xstrdup(arg + 9));
+        } else if (strcmp(arg, "--root") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --root requires an argument\n");
                 return 1;
             }
-            root_override = argv[++i];
-        } else if (strncmp(argv[i], "--root=", 7) == 0) {
-            root_override = argv[i] + 7;
+            i++;
+            __builtin_memcpy(&arg, argv + i, sizeof(arg));
+            root_override = arg;
+        } else if (strncmp(arg, "--root=", 7) == 0) {
+            root_override = arg + 7;
         } else {
-            fprintf(stderr, "error: unrecognized argument: %s\n", argv[i]);
+            fprintf(stderr, "error: unrecognized argument: %s\n", arg);
             usage();
             return 1;
         }

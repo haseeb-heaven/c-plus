@@ -40,6 +40,33 @@ The two benign `clang: warning: ... 'linker' input unused` messages are the
 known C+ lowering artefact documented in `tests/native/README.md`; the final
 link succeeds.
 
+## Strict-build bounds regression (fixed)
+
+With the rebuilt strict compiler the executable aborted before printing its
+summary:
+
+```text
+C+ error: index 1053 is outside the bounds of 'buf' (length 1024)
+rc 134
+```
+
+Root cause (found by lowering the program with `--emit-c`): the C+ `--strict`
+bounds instrumentation keys indexed writes on the **variable name**, reusing
+the size of any local array with that name. `failf()` has a genuine 1024-byte
+`char buf[1024]`, so the two indexed writes in `read_text()` to its **output
+parameter**, which was also named `buf`, were checked against 1024 instead of
+the real `cap` argument. Both callers pass `TEXT_CAP` (2 MiB) buffers; the
+28,913-byte `libc/install-include/cplus_libc.h` crossed offset 1053 and tripped
+a false positive. No memory was actually overwritten: `read_text()` already
+guards every append with `if (used + n + 2 > cap)`.
+
+The fix is a name change only, in `tests/libc/validate_contracts.cp`: the output
+parameter of `read_text()` is now `dst` (with a comment recording why), so the
+compiler no longer borrows `failf()`'s 1024-byte bound. The `cap` guard, the
+2 MiB caller buffers, the `failf()` buffer, and every validation check are
+unchanged; lowering the fixed source emits no bogus `__cplus_bounds_check` on
+`dst`, and the failure path below still fails as expected.
+
 ## Verification (exact commands and results)
 
 Run from the repository root on branch `agent/modern-stdlib`:
@@ -85,6 +112,54 @@ $ (cd /tmp && /tmp/validate_contracts)
 contract validation FAILED: missing contract file: libc/contracts/contracts.json
 $ echo $?
 1
+```
+
+### Required regression commands (post-fix)
+
+Exact output of the two commands used to verify this fix, from the repository
+root:
+
+```sh
+$ sh tests/native/build_native_tools.sh
+root: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+driver: ./build/c+
+output: build/native-tools
+
+== validate_contracts ==
++ ./build/c+ build tests/libc/validate_contracts.cp --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson -o build/native-tools/validate_contracts
+  ok   validate_contracts
+== test_compiler_contract_alignment ==
++ ./build/c+ build tests/libc/test_compiler_contract_alignment.cp --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson -o build/native-tools/test_compiler_contract_alignment
+  ok   test_compiler_contract_alignment
+== test_contract_consumption ==
++ ./build/c+ build tests/libc/test_contract_consumption.cp --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson -o build/native-tools/test_contract_consumption -- build/libc/libcplus_hardened.a
+  ok   test_contract_consumption
+== test_contract_integrity ==
++ ./build/c+ build tests/libc/test_contract_integrity.cp --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson -o build/native-tools/test_contract_integrity -- build/libc/libcplus_hardened.a
+  ok   test_contract_integrity
+== coverage ==
++ ./build/c+ build tests/stdlib/coverage.cp --strict --sanitize=none -o build/native-tools/coverage
+  ok   coverage
+== run_adversarial ==
++ ./build/c+ build tests/stdlib/run_adversarial.cp --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson -o build/native-tools/run_adversarial -- build/libc/libcplus_hardened.a
+  ok   run_adversarial
+== run_all ==
++ ./build/c+ build tests/stdlib/agent2/run_all.cp --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson -o build/native-tools/run_all -- build/libc/libcplus_hardened.a
+  ok   run_all
+== fuzz100_run ==
++ ./build/c+ build tests/fuzz100/run.cp --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson -o build/native-tools/fuzz100_run -- build/libc/libcplus_hardened.a
+  ok   fuzz100_run
+
+native tools: 8 built, 0 failed, 0 missing
+$ echo $?
+0
+```
+
+```sh
+$ sh tests/libc/run_validate_contracts.sh
+contract validation: ok (5 files validated, 203 C17 APIs)
+$ echo $?
+0
 ```
 
 ## Equivalence notes

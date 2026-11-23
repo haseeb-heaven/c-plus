@@ -1,1 +1,1 @@
-array index 2 exceeds length 2
+constant array index 2 is outside the bounds of 'paths'

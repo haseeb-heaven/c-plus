@@ -151,6 +151,26 @@ static int is_regular(const char *path) {
     return S_ISREG(st.st_mode);
 }
 
+/* Strict C+ rejects a raw subscript on a pointer parameter (p[i]) when it
+ * cannot prove p's extent. An explicit one-byte __builtin_memcpy reads the
+ * identical byte value without that restriction. The offsets passed here are
+ * exactly the offsets used by the original subscripts, so the bytes read (and
+ * the order in which they are read) are unchanged -- including continuation
+ * byte reads on malformed UTF-8. */
+static unsigned char pp_byte(const char *p, size_t idx) {
+    unsigned char b;
+    __builtin_memcpy(&b, p + idx, 1);
+    return b;
+}
+
+/* Same idea for reading a char * element out of the argv array: copy one
+ * pointer-width slot out of the parameter instead of subscripting it. */
+static char *pp_ptr(char **p, size_t idx) {
+    char *v;
+    __builtin_memcpy(&v, p + idx, sizeof(v));
+    return v;
+}
+
 /* Read a whole file into buf using stdlib/file.hp (binary safe: ftell gives
  * the exact byte count of each fread). Returns byte count, or -1 on failure. */
 static long read_all(const char *path, char *buf, size_t cap) {
@@ -272,26 +292,27 @@ static const char *jesc(const char *s) {
     size_t o = 0;
     size_t i;
     g_esc[o++] = '"';
-    for (i = 0; s[i] != '\0' && o + 12 < CAP_LINE; i++) {
-        unsigned char c = (unsigned char)s[i];
+    for (i = 0; pp_byte(s, i) != '\0' && o + 12 < CAP_LINE; i++) {
+        unsigned char c = pp_byte(s, i);
         unsigned int cp = c;
         if (c >= 0x80) {
-            if ((c & 0xE0) == 0xC0 && (s[i + 1] & 0xC0) == 0x80) {
+            if ((c & 0xE0) == 0xC0 && (pp_byte(s, i + 1) & 0xC0) == 0x80) {
                 cp = ((unsigned int)(c & 0x1F) << 6) |
-                     (unsigned int)(s[i + 1] & 0x3F);
+                     (unsigned int)(pp_byte(s, i + 1) & 0x3F);
                 i += 1;
-            } else if ((c & 0xF0) == 0xE0 && (s[i + 1] & 0xC0) == 0x80 &&
-                       (s[i + 2] & 0xC0) == 0x80) {
+            } else if ((c & 0xF0) == 0xE0 && (pp_byte(s, i + 1) & 0xC0) == 0x80 &&
+                       (pp_byte(s, i + 2) & 0xC0) == 0x80) {
                 cp = ((unsigned int)(c & 0x0F) << 12) |
-                     ((unsigned int)(s[i + 1] & 0x3F) << 6) |
-                     (unsigned int)(s[i + 2] & 0x3F);
+                     ((unsigned int)(pp_byte(s, i + 1) & 0x3F) << 6) |
+                     (unsigned int)(pp_byte(s, i + 2) & 0x3F);
                 i += 2;
-            } else if ((c & 0xF8) == 0xF0 && (s[i + 1] & 0xC0) == 0x80 &&
-                       (s[i + 2] & 0xC0) == 0x80 && (s[i + 3] & 0xC0) == 0x80) {
+            } else if ((c & 0xF8) == 0xF0 && (pp_byte(s, i + 1) & 0xC0) == 0x80 &&
+                       (pp_byte(s, i + 2) & 0xC0) == 0x80 &&
+                       (pp_byte(s, i + 3) & 0xC0) == 0x80) {
                 cp = ((unsigned int)(c & 0x07) << 18) |
-                     ((unsigned int)(s[i + 1] & 0x3F) << 12) |
-                     ((unsigned int)(s[i + 2] & 0x3F) << 6) |
-                     (unsigned int)(s[i + 3] & 0x3F);
+                     ((unsigned int)(pp_byte(s, i + 1) & 0x3F) << 12) |
+                     ((unsigned int)(pp_byte(s, i + 2) & 0x3F) << 6) |
+                     (unsigned int)(pp_byte(s, i + 3) & 0x3F);
                 i += 3;
             } else {
                 cp = 0xFFFD;
@@ -382,7 +403,7 @@ static int name_matches(const char *name, const char *group) {
     size_t n = strlen(name);
     int cp = n >= 3 && strcmp(name + n - 3, ".cp") == 0;
     int cc = n >= 2 && strcmp(name + n - 2, ".c") == 0;
-    if (name[0] == '.')
+    if (pp_byte(name, 0) == '.')
         return 0;
     if (strcmp(group, "deep") == 0)
         return cp && strncmp(name, "deep_", 5) == 0;
@@ -470,7 +491,8 @@ static void make_build_command(const struct Item *it, const char *mode,
                                const char *source_text, const char *exe_abs,
                                char *cmd, size_t cap) {
     char buf[MAX_PATH];
-    cmd[0] = '\0';
+    char nul = '\0';
+    __builtin_memcpy(cmd, &nul, 1);
     if (strcmp(it->group, "fuzz-c") == 0) {
         sh_append(cmd, cap, "/usr/bin/clang");
         sh_append(cmd, cap, "-O1");
@@ -599,10 +621,10 @@ static void write_record_json(FILE *out, const struct Record *r) {
 }
 
 static void write_record_txt(FILE *out, const struct Record *r) {
-    char line[512];
-    snprintf(line, sizeof(line), "%-42.42s %-12.12s %-11.11s %.*s\n",
+    char txtline[512];
+    snprintf(txtline, sizeof(txtline), "%-42.42s %-12.12s %-11.11s %.*s\n",
              r->test, r->mode, r->classification, 70, r->reason);
-    cwrite(out, line, strlen(line));
+    cwrite(out, txtline, strlen(txtline));
 }
 
 static void finalise_record(FILE *json_results, FILE *txt, struct Record *r) {
@@ -615,12 +637,15 @@ static void finalise_record(FILE *json_results, FILE *txt, struct Record *r) {
 }
 
 /* Emit the current record and move to the next source/mode. Kept as a macro
- * so C+ never warns about goto bypassing scoped cleanup. */
+ * so C+ never warns about goto bypassing scoped cleanup. A plain compound
+ * block is required here: `continue` inside a `do { } while (0)` continues the
+ * do-while itself, so failure paths would fall through and emit a duplicate
+ * record. All call sites are standalone statements in the per-test loop. */
 #define FINALIZE_AND_CONTINUE()                                               \
-    do {                                                                      \
+    {                                                                         \
         finalise_record(resf, txtf, &rec);                                    \
         continue;                                                             \
-    } while (0)
+    }
 
 /* ------------------------------------------------------------------ setup */
 
@@ -641,7 +666,7 @@ static void set_timestamp(void) {
 
 static void get_head(const char *reports_dir) {
     char outp[MAX_PATH], errp[MAX_PATH], rcp[MAX_PATH];
-    char line[MAX_CMD];
+    char gitline[MAX_CMD];
     char shell[MAX_CMD];
     int rc = 0, to = 0;
     long n;
@@ -654,15 +679,15 @@ static void get_head(const char *reports_dir) {
              "printf '%%s' \"$?\" >\"%s\"",
              g_root, GIT_TIMEOUT, outp, errp, rcp);
     cplus_system(shell);
-    n = read_all(outp, line, sizeof(line));
+    n = read_all(outp, gitline, sizeof(gitline));
     if (n >= 0 && !to) {
         long e = n;
-        while (e > 0 && (line[e - 1] == '\n' || line[e - 1] == '\r' ||
-                         line[e - 1] == ' ' || line[e - 1] == '\t'))
+        while (e > 0 && (gitline[e - 1] == '\n' || gitline[e - 1] == '\r' ||
+                         gitline[e - 1] == ' ' || gitline[e - 1] == '\t'))
             e--;
-        line[e] = '\0';
+        gitline[e] = '\0';
         if (e > 0)
-            snprintf(g_head, sizeof(g_head), "%s", line);
+            snprintf(g_head, sizeof(g_head), "%s", gitline);
     }
     (void)rc;
 }
@@ -706,21 +731,22 @@ static void mode_repr(char *out, size_t cap) {
 static void parse_args(int argc, char **argv) {
     char resolved[MAX_PATH];
     int i = 2;
-    if (realpath(argv[1], resolved) != NULL)
+    if (realpath(pp_ptr(argv, 1), resolved) != NULL)
         snprintf(g_root, sizeof(g_root), "%s", resolved);
     else
-        snprintf(g_root, sizeof(g_root), "%s", argv[1]);
+        snprintf(g_root, sizeof(g_root), "%s", pp_ptr(argv, 1));
     snprintf(g_cplus, sizeof(g_cplus), "%s/build/c+", g_root);
     snprintf(g_modes[0], sizeof(g_modes[0]), "strict-none");
     snprintf(g_modes[1], sizeof(g_modes[0]), "default");
     g_mode_count = 2;
     while (i < argc) {
-        const char *a = argv[i];
+        const char *a = pp_ptr(argv, i);
         if (strcmp(a, "--suite") == 0 && i + 1 < argc) {
-            snprintf(g_suite, sizeof(g_suite), "%s", argv[i + 1]);
+            snprintf(g_suite, sizeof(g_suite), "%s", pp_ptr(argv, i + 1));
             i += 2;
         } else if (strcmp(a, "--mode") == 0 && i + 1 < argc) {
-            const char *p = argv[i + 1];
+            const char *mode_arg = pp_ptr(argv, i + 1);
+            const char *p = mode_arg;
             g_mode_count = 0;
             while (*p != '\0' && g_mode_count < MAX_MODES) {
                 const char *start;
@@ -734,7 +760,7 @@ static void parse_args(int argc, char **argv) {
                 while (len > 0 && (start[len - 1] == ' ' || start[len - 1] == '\t'))
                     len--;
                 if (len >= sizeof(g_modes[0])) {
-                    fprintf(stderr, "error: unknown mode in [%s]\n", argv[i + 1]);
+                    fprintf(stderr, "error: unknown mode in [%s]\n", mode_arg);
                     exit(2);
                 }
                 memcpy(g_modes[g_mode_count], start, len);
@@ -743,13 +769,13 @@ static void parse_args(int argc, char **argv) {
                 if (*p == ',')
                     p++;
             }
-            if (g_mode_count == 0 && argv[i + 1][0] == '\0') {
+            if (g_mode_count == 0 && pp_byte(mode_arg, 0) == '\0') {
                 g_modes[0][0] = '\0';
                 g_mode_count = 1;
             }
             i += 2;
         } else if (strcmp(a, "--only") == 0 && i + 1 < argc) {
-            snprintf(g_only, sizeof(g_only), "%s", argv[i + 1]);
+            snprintf(g_only, sizeof(g_only), "%s", pp_ptr(argv, i + 1));
             g_has_only = 1;
             i += 2;
         } else if (strcmp(a, "--fast") == 0) {

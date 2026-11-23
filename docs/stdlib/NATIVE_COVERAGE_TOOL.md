@@ -40,6 +40,10 @@ build/stdlib-tests/coverage_native            # rc 0 when all libraries >= 80%
 python3 tests/stdlib/coverage.py               # Python oracle, for comparison
 ```
 
+`tests/stdlib/coverage.py` is no longer present in the working tree (it was
+removed from the test paths but is still available as the oracle). Recover it
+with `git show HEAD:tests/stdlib/coverage.py` when a comparison run is needed.
+
 An optional first argument is a repository root to change into before
 discovery (the Python tool derives its root from `__file__`):
 
@@ -144,6 +148,88 @@ All commands were run from the repository root
    Result: rc `2`, stderr
    `coverage: no headers (0) or no test sources (0, 0 bytes)` — no green row
    and no success line. This closes the vacuous-pass failure mode.
+
+## Strict-compiler rebuild (current tree)
+
+The rebuilt strict compiler rejects subscripts on pointer parameters whose
+extent cannot be proven. A full re-scan of `coverage.cp` found **five**
+diagnostics (the initial report listed only the first two):
+
+```
+coverage.cp:90:27: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe
+coverage.cp:121:9: error: [CPLUS-FFI] pointer parameter 'list' has unverifiable extent; subscript cannot be proven safe
+coverage.cp:150:5: error: [CPLUS-FFI] pointer parameter 'buf' has unverifiable extent; subscript cannot be proven safe
+coverage.cp:429:27: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+coverage.cp:430:59: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+```
+
+All pointer-parameter subscripts were replaced with the verified
+`__builtin_memcpy` pattern already used in `stdlib/io.hp`, `stdlib/file.hp`,
+`stdlib/log.hp`, and `stdlib/collections.hp`:
+reads use `__builtin_memcpy(&local, ptr + index, sizeof(local))`, writes use
+`__builtin_memcpy(ptr + index, &local, sizeof(local))`. The sixth pointer-
+parameter subscript (`dst[n]` in `copy_span`, line 96) was converted
+proactively even though the checker did not diagnose it, so the file has no
+pointer-parameter subscripts left. Subscripts on locals, globals, and struct
+members are unchanged. No threshold, discovery check, or algorithm was
+altered.
+
+Verification commands (from the repository root):
+
+```sh
+./build/c+ build tests/stdlib/coverage.cp --strict --sanitize=none -o /tmp/cov_native
+/tmp/cov_native
+```
+
+Result: build rc `0` with **no remaining diagnostics** (empty stdout and
+stderr); run rc `0`, empty stderr. Exact stdout (25 lines):
+
+```
+library             covered    total percent
+------------------ -------- -------- -------
+async.hp                 14       14  100.0%
+audio.hp                 29       29  100.0%
+collections.hp           63       63  100.0%
+error.hp                  9        9  100.0%
+file.hp                  13       13  100.0%
+fs.hp                     8        8  100.0%
+graphics.hp              16       16  100.0%
+gui.hp                   18       18  100.0%
+http.hp                  19       19  100.0%
+image.hp                 10       10  100.0%
+input.hp                 10       10  100.0%
+io.hp                     6        6  100.0%
+json.hp                  30       30  100.0%
+log.hp                   14       14  100.0%
+net.hp                   15       15  100.0%
+string.hp                24       24  100.0%
+thread.hp                21       21  100.0%
+time.hp                   5        5  100.0%
+vector.hp                21       21  100.0%
+video.hp                 25       25  100.0%
+window.hp                11       11  100.0%
+
+all libraries >= 80% API coverage (worst 100.0%)
+```
+
+The Python oracle was recovered from `HEAD` and run from a temporary mirror of
+the repository layout (no working-tree files were added). Comparison results:
+
+- Current tree: native stdout **byte-identical** to the Python oracle
+  (`diff -u` rc `0`, `cmp` rc `0`); both rc `0`. No empty discovery: 21 headers,
+  all `.cp` sources discovered.
+- Explicit-root argument (`/tmp/cov_native <repo-root>`, which exercises the
+  repaired `argv` read): rc `0`, byte-identical to the oracle.
+- Failure path (sandbox with all 21 headers copied and three trivial `.cp`
+  files that call nothing): both native and Python rc `1`, stdout
+  **byte-identical**, including every `BELOW 80%:` row and the full
+  `not called by any test/example:` missing lists (e.g. `string.hp (0.0%)`,
+  `vector.hp (0.0%)`). The 80.0% gate is unchanged.
+- Empty discovery (run from an unrelated cwd with no `stdlib/` or
+  `tests/stdlib/`): rc `2`, no stdout and no success line; stderr ends with
+  `coverage: no headers (0) or no test sources (0, 0 bytes)`.
+
+**Remaining diagnostics: none.**
 
 ## Equivalence caveats
 

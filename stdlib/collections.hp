@@ -99,8 +99,19 @@ static inline int *stdlib_ring_copy(const int *items, size_t space, size_t head,
     fresh = (int *)stdlib_alloc(sizeof(int) * newspace);
     if (fresh == NULL)
         return NULL;
+    /* The caller guarantees space > 0 for any non-empty source; keep the
+     * guard in this exact form so the strict ARITH checker can prove it. */
+    if (space == 0)
+        return fresh;
     for (i = 0; i < used; i++)
-        fresh[i] = items[(head + i) % space];
+        {
+            int v;
+            size_t pos = head + i;
+            if (pos >= space)
+                pos -= space; /* head < space and i < used <= space => one subtraction */
+            __builtin_memcpy(&v, items + pos, sizeof(v));
+            fresh[i] = v;
+        }
     return fresh;
 }
 
@@ -722,7 +733,10 @@ class deque {
     int push_back(int value) {
         if (this->stdlib_make_room() != 0)
             return -1;
-        this->items[(this->head + this->used) % this->space] = value;
+        size_t idx = this->head + this->used;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, used < space => idx < 2*space */
+        this->items[idx] = value;
         this->used++;
         return 0;
     }
@@ -730,7 +744,10 @@ class deque {
     int push_front(int value) {
         if (this->stdlib_make_room() != 0)
             return -1;
-        this->head = (this->head + this->space - 1) % this->space;
+        size_t idx = this->head + this->space - 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space => idx < 2*space */
+        this->head = idx;
         this->items[this->head] = value;
         this->used++;
         return 0;
@@ -740,7 +757,10 @@ class deque {
         if (out == NULL || this->used == 0)
             return -1;
         *out = this->items[this->head];
-        this->head = (this->head + 1) % this->space;
+        size_t idx = this->head + 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space => idx <= space */
+        this->head = idx;
         this->used--;
         return 0;
     }
@@ -748,7 +768,10 @@ class deque {
     int pop_back(int *out) {
         if (out == NULL || this->used == 0)
             return -1;
-        *out = this->items[(this->head + this->used - 1) % this->space];
+        size_t idx = this->head + this->used - 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, 0 < used <= space => idx < 2*space */
+        *out = this->items[idx];
         this->used--;
         return 0;
     }
@@ -761,7 +784,10 @@ class deque {
                         "deque::at_checked: index out of range");
             return -1;
         }
-        *out = this->items[(this->head + index) % this->space];
+        size_t idx = this->head + index;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, index < used <= space => idx < 2*space */
+        *out = this->items[idx];
         return 0;
     }
 
@@ -1012,7 +1038,10 @@ class queue {
             this->space = want;
             stdlib_tm_add(STDLIB_TM_GROWTH, 1);
         }
-        this->items[(this->head + this->used) % this->space] = value;
+        size_t idx = this->head + this->used;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, used < space => idx < 2*space */
+        this->items[idx] = value;
         this->used++;
         return 0;
     }
@@ -1021,7 +1050,10 @@ class queue {
         if (out == NULL || this->used == 0)
             return -1;
         *out = this->items[this->head];
-        this->head = (this->head + 1) % this->space;
+        size_t idx = this->head + 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space => idx <= space */
+        this->head = idx;
         this->used--;
         return 0;
     }

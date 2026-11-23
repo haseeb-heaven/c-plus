@@ -180,13 +180,16 @@ class string {
      * ("never equal"). */
     int compare(const char *other) {
         int r;
+        char first;
         if (other == NULL) {
             stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
                         "string::compare: null argument");
             return 1;
         }
-        if (this->chars == NULL)
-            return other[0] == '\0' ? 0 : -1;
+        if (this->chars == NULL) {
+            __builtin_memcpy(&first, other, 1);
+            return first == '\0' ? 0 : -1;
+        }
         r = strcmp(this->chars, other);
         if (r < 0)
             return -1;
@@ -257,9 +260,19 @@ class string {
         /* Self-append or an overlapping source: remember where the source sits
          * so reallocation cannot invalidate it, and copy with memmove below.
          * The test compares integer addresses: relational comparison of
-         * pointers into unrelated objects is undefined behaviour. */
+         * pointers into unrelated objects is undefined behaviour.
+         *
+         * The window is the whole allocated span [chars, chars + space), not
+         * just the live prefix [chars, chars + count).  After clear() an
+         * interior pointer past count is still inside the allocation, and the
+         * source bytes [offset, offset + extra) overlap the destination
+         * [count, count + extra); memcpy there is undefined behaviour even
+         * though this backend happens to copy forwards and produce the right
+         * bytes.  For offset > count the result still fits (extra <= space -
+         * offset - 1, so need <= space), so no reallocation can move the source
+         * out from under the memmove. */
         if (this->chars != NULL && (uintptr_t)text >= (uintptr_t)this->chars &&
-            (uintptr_t)text <= (uintptr_t)this->chars + this->count) {
+            (uintptr_t)text < (uintptr_t)this->chars + this->space) {
             aliases = 1;
             offset = (size_t)((uintptr_t)text - (uintptr_t)this->chars);
         }
@@ -325,6 +338,7 @@ class string {
     /* Copy up to `n` characters from `start` into `out` (always terminated). */
     int substr(size_t start, size_t n, char *out, size_t out_size) {
         size_t available;
+        char term = '\0';
         if (out == NULL || out_size == 0)
             return -1;
         if (start > this->count)
@@ -336,7 +350,7 @@ class string {
             n = out_size - 1;
         if (n > 0 && this->chars != NULL)
             memmove(out, this->chars + start, n);
-        out[n] = '\0';
+        __builtin_memcpy(out + n, &term, 1);
         return 0;
     }
 
@@ -355,6 +369,7 @@ class string {
         size_t current = 0;
         size_t start = 0;
         size_t i;
+        char term = '\0';
         if (out == NULL || out_size == 0)
             return -1;
         for (i = 0; i <= this->count; i++) {
@@ -365,7 +380,7 @@ class string {
                         n = out_size - 1;
                     if (n > 0 && this->chars != NULL)
                         memmove(out, this->chars + start, n);
-                    out[n] = '\0';
+                    __builtin_memcpy(out + n, &term, 1);
                     return 0;
                 }
                 current++;

@@ -38,8 +38,8 @@ run rust-vs-cplus         sh tests/rust_vs_cplus/run_compare.sh
 run cplus-rust-gates      sh tests/conformance/run_conformance.sh
 run sdk-consumer          sh tests/sdk/run_sdk_consumer.sh
 run compat-matrix         sh tests/compat/run_compat.sh
-run contract-validator    python3 tests/libc/validate_contracts.py
-run contract-alignment    python3 tests/libc/test_compiler_contract_alignment.py
+run contract-validator    sh tests/libc/run_validate_contracts.sh
+run contract-alignment    build/native-tools/test_compiler_contract_alignment
 run coverage              sh tests/libc/coverage_libc.sh
 echo "evidence aggregate: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

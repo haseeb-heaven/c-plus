@@ -82,6 +82,9 @@ static char *g_warnings[MAX_WARNINGS];
 static int nwarnings;
 static char g_diag[2048];
 static int g_attacks;
+/* Only true once the isolated overlay really exists. Until then every command
+ * captures its output in a TMPDIR-derived bootstrap file, never under g_tmp. */
+static int g_overlay_ready;
 
 static char *dupstr(const char *s) {
     char *out = (char *)malloc(strlen(s) + 1);
@@ -209,7 +212,7 @@ static int append_text(const char *path, const char *text) {
 
 static int run_cmd(const char *cmd) {
     char wrapped[6144];
-    if (g_tmp[0] != '\0') {
+    if (g_overlay_ready) {
         snprintf(g_out, sizeof(g_out), "%s/.run.out", g_tmp);
         snprintf(g_err, sizeof(g_err), "%s/.run.err", g_tmp);
     } else {
@@ -223,9 +226,9 @@ static int run_cmd(const char *cmd) {
         snprintf(g_err, sizeof(g_err), "%s/cplus-integrity-boot-%ld.err", base,
                  (long)getpid());
     }
-    /* native_run_to() surrounds the command with shell braces. Provide the
-     * leading space and terminating semicolon that `{ list; }` requires. */
-    snprintf(wrapped, sizeof(wrapped), " %s ;", cmd);
+    /* native_run_to() supplies `{ ... ; }` around the command. Pass it through
+     * unchanged; adding another semicolon produces a shell syntax error. */
+    snprintf(wrapped, sizeof(wrapped), "%s", cmd);
     return native_run_to(wrapped, g_out, g_err);
 }
 
@@ -243,6 +246,7 @@ static void overlay_path(char *out, size_t cap, const char *name) {
 
 static void cleanup_overlay(void) {
     char cmd[4096];
+    g_overlay_ready = 0;
     if (g_tmp[0] == '\0')
         return;
     snprintf(cmd, sizeof(cmd), "rm -rf \"%s\"", g_tmp);
@@ -317,6 +321,10 @@ static int create_overlay(void) {
         relay_output();
         return -1;
     }
+    /* The overlay is now usable; subsequent commands may write inside it. */
+    unlink(g_out);
+    unlink(g_err);
+    g_overlay_ready = 1;
     return 0;
 }
 
@@ -671,9 +679,16 @@ static void scan_c_calls(const char *text, call_visitor visit, void *ctx) {
             q++;
         terminator = *q;
 
-        for (i = 0; i < (size_t)(name_start - text); i++) {
-            if (text[i] == ';' || text[i] == '{' || text[i] == '}')
+        /* Walk backwards from the call site to the nearest statement/brace
+         * boundary. Scanning from the start of the file for every call made
+         * the cross-check quadratic on large headers. */
+        i = (size_t)(name_start - text);
+        while (i > 0) {
+            i--;
+            if (text[i] == ';' || text[i] == '{' || text[i] == '}') {
                 prev = i;
+                break;
+            }
         }
         rlen = (size_t)(name_start - text) - prev - 1;
         if (rlen >= sizeof(ret))
@@ -1201,7 +1216,7 @@ static int inline_validate(void) {
                            "classification", k);
                 return inline_finish(docs, path, loaded, header, rc);
             }
-            for (c = 1; c <= 4; c++) {
+            for (c = 1; c <= 5; c++) {
                 const char *key = C17_KEYS[c];
                 if (!is_nonempty_string(yyjson_obj_get(fn, key))) {
                     rc = vfail("c17_contracts.json functions[%zu]: '%s' must "
@@ -1547,13 +1562,17 @@ static void add_sig(struct sig **arr, int *n, const char *name, const char *ret,
 static void visit_header(void *ctx, const char *name, const char *ret,
                          const char *params, char terminator) {
     (void)ctx;
-    add_sig(&g_header_sigs, &g_header_n, name, ret, params, terminator);
+    /* Python keeps only prototypes terminated by ';' from the header. */
+    if (terminator == ';')
+        add_sig(&g_header_sigs, &g_header_n, name, ret, params, terminator);
 }
 
 static void visit_source(void *ctx, const char *name, const char *ret,
                          const char *params, char terminator) {
     (void)ctx;
-    add_sig(&g_source_sigs, &g_source_n, name, ret, params, terminator);
+    /* Source calls end in ';'; only '{' denotes an exported definition. */
+    if (terminator == '{')
+        add_sig(&g_source_sigs, &g_source_n, name, ret, params, terminator);
 }
 
 static int find_sig(struct sig *arr, int n, const char *name) {

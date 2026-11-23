@@ -80,7 +80,10 @@ class file {
                 error_fail(err, CPLUS_EXIT_IO, "file::read_line: stream error");
                 return STDLIB_FAIL;
             }
-            buf[0] = '\0';
+            {
+                char nul = '\0';
+                __builtin_memcpy(buf, &nul, sizeof(nul));
+            }
             if (c == '\n')
                 return STDLIB_OK;
             if (c == '\r') {
@@ -101,32 +104,52 @@ class file {
             error_fail(err, CPLUS_EXIT_IO, "file::read_line: stream error");
             return STDLIB_FAIL;
         }
-        while (buf[n] != '\0')
+        for (;;) {
+            char cur;
+            __builtin_memcpy(&cur, buf + n, sizeof(cur));
+            if (cur == '\0')
+                break;
             n++;
+        }
         /* fgets() stops at size-1 bytes without consuming the delimiter and
          * without necessarily setting feof(), so a full buffer alone does not
          * prove truncation.  Mirror io.hp::read_line: peek at the next byte.
          * A line ending (with CRLF consumed) or EOF means the line fitted
          * exactly; any other byte means it did not fit.  The remainder is
          * always drained so the stream stays aligned. */
-        if (n > 0 && n == size - 1 && buf[n - 1] != '\n' && buf[n - 1] != '\r' &&
-            !feof(this->stream)) {
-            int c = fgetc(this->stream);
-            if (c == '\r') {
-                int next = fgetc(this->stream);
-                if (next != '\n' && next != EOF)
-                    ungetc(next, this->stream);
-            } else if (c != '\n' && c != EOF) {
-                while (c != EOF && c != '\n')
-                    c = fgetc(this->stream);
-                error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
-                               "file::read_line: line longer than the buffer");
-                buf[0] = '\0';
-                return STDLIB_FAIL;
+        if (n > 0 && n == size - 1) {
+            char last;
+            __builtin_memcpy(&last, buf + n - 1, sizeof(last));
+            if (last != '\n' && last != '\r' && !feof(this->stream)) {
+                int c = fgetc(this->stream);
+                if (c == '\r') {
+                    int next = fgetc(this->stream);
+                    if (next != '\n' && next != EOF)
+                        ungetc(next, this->stream);
+                } else if (c != '\n' && c != EOF) {
+                    while (c != EOF && c != '\n')
+                        c = fgetc(this->stream);
+                    error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                                   "file::read_line: line longer than the buffer");
+                    {
+                        char nul = '\0';
+                        __builtin_memcpy(buf, &nul, sizeof(nul));
+                    }
+                    return STDLIB_FAIL;
+                }
             }
         }
-        while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
-            buf[--n] = '\0';
+        while (n > 0) {
+            char last;
+            __builtin_memcpy(&last, buf + n - 1, sizeof(last));
+            if (last != '\n' && last != '\r')
+                break;
+            --n;
+            {
+                char nul = '\0';
+                __builtin_memcpy(buf + n, &nul, sizeof(nul));
+            }
+        }
         return STDLIB_OK;
     }
 

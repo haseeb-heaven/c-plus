@@ -41,12 +41,12 @@ for t in tests/libc/test_*_attack.c; do
   done
 done
 
-if [ -f tests/libc/test_contract_integrity.py ]; then
-  if python3 tests/libc/test_contract_integrity.py >"$OUT/contract_integrity.run.log" 2>&1; then
-    echo "ok   test_contract_integrity.py"
+if [ -f tests/libc/test_contract_integrity.cp ]; then
+  if build/native-tools/test_contract_integrity >"$OUT/contract_integrity.run.log" 2>&1; then
+    echo "ok   test_contract_integrity.cp"
     pass=$((pass + 1))
   else
-    echo "FAIL test_contract_integrity.py"
+    echo "FAIL test_contract_integrity.cp"
     tail -12 "$OUT/contract_integrity.run.log" || true
     fail=$((fail + 1))
   fi

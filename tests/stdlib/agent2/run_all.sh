@@ -43,6 +43,6 @@ while [ "$#" -gt 0 ]; do
 done
 
 mkdir -p "$RESULTS" || exit 1
-exec python3 "$ROOT/tests/stdlib/agent2/run_all.py" \
-  "$ROOT" "$RESULTS" "$CPLUS" "$BUILD_TIMEOUT" "$TIMEOUT" \
+sh "$ROOT/tests/native/build_native_tools.sh" >/dev/null
+exec "$ROOT/build/native-tools/run_all" "$ROOT" "$RESULTS" "$CPLUS" "$BUILD_TIMEOUT" "$TIMEOUT" \
   "$TEST" "$MODULE" "$CLEAN" "$KEEP"

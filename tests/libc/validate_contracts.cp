@@ -134,13 +134,24 @@ static int path_is_file(const char *path) {
     return 1;
 }
 
-/* Read a whole text file via stdlib/file.hp::read_line. */
-static int read_text(const char *path, char *buf, size_t cap, error *err) {
+/* Read a whole text file via stdlib/file.hp::read_line.
+ *
+ * The output parameter is deliberately called `dst`, not `buf`.  The C+
+ * --strict bounds instrumentation keys indexed writes on the *variable name*
+ * and reuses the size of any local array with that name: `failf()` below has a
+ * genuine `char buf[1024]`, so indexed writes to a parameter named `buf` were
+ * checked against 1024 instead of `cap`.  Both callers pass TEXT_CAP (2 MiB)
+ * buffers, so reading the 28 KiB header tripped a false
+ * "index 1053 is outside the bounds of 'buf' (length 1024)".  Nothing was
+ * actually overwritten: the `used + n + 2 > cap` guard below is the real bound
+ * and is unchanged.  Using a distinct name keeps that guard as the single
+ * source of truth and keeps the validator's checks intact. */
+static int read_text(const char *path, char *dst, size_t cap, error *err) {
     file f = file(path, "r");
     size_t used = 0;
     if (!f.is_open())
         return 0;
-    buf[0] = '\0';
+    dst[0] = '\0';
     for (;;) {
         char line[2048];
         size_t n;
@@ -156,10 +167,10 @@ static int read_text(const char *path, char *buf, size_t cap, error *err) {
             f.drop();
             return 0;
         }
-        memcpy(buf + used, line, n);
+        memcpy(dst + used, line, n);
         used += n;
-        buf[used++] = '\n';
-        buf[used] = '\0';
+        dst[used++] = '\n';
+        dst[used] = '\0';
     }
     f.drop();
     return 1;

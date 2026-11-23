@@ -159,7 +159,10 @@ static void split_parent(const char *abs, char *out, size_t cap) {
     if (n > 0) --n;
     if (n >= cap) n = cap - 1;
     memcpy(out, abs, n);
-    out[n] = '\0';
+    {
+        char nul = '\0';
+        __builtin_memcpy(out + n, &nul, sizeof(nul));
+    }
 }
 
 static void stem_of(const char *abs, char *out, size_t cap) {
@@ -302,7 +305,11 @@ static void discover_manifest(const char *cmd, const char *manifest,
     char cmdline[CMD_CAP];
     char text[SRC_CAP];
     char *line;
+    char st0 = '\0';
+    char sm0 = '\0';
     long n;
+    __builtin_memcpy(&st0, select_test, sizeof(st0));
+    __builtin_memcpy(&sm0, select_module, sizeof(sm0));
     cmdline[0] = '\0';
     sb_add(cmdline, sizeof(cmdline), cmd);
     sb_add(cmdline, sizeof(cmdline), " >");
@@ -331,9 +338,16 @@ static void discover_manifest(const char *cmd, const char *manifest,
                 stem_of(path, stem, sizeof(stem));
                 snprintf(name, sizeof(name), "%s", stem);
                 module_of(group, stem, module, sizeof(module));
-                if ((select_test[0] == '\0' || strcmp(select_test, name) == 0) &&
-                    (select_module[0] == '\0' || strcmp(select_module, module) == 0)) {
-                    struct result_t *r = &records[*count];
+                if ((st0 == '\0' || strcmp(select_test, name) == 0) &&
+                    (sm0 == '\0' || strcmp(select_module, module) == 0)) {
+                    struct result_t *r;
+                    /* Obtain the element address by byte offset rather than a
+                     * pointer subscript: the pointer parameter has no provable
+                     * extent under --strict.  (Copying a pointer value through
+                     * __builtin_memcpy is not usable here: the strict build
+                     * produces a null pointer, so arithmetic is required.) */
+                    r = (struct result_t *)((char *)records +
+                                            (size_t)(*count) * sizeof(struct result_t));
                     memset(r, 0, sizeof(*r));
                     snprintf(r->name, sizeof(r->name), "%s", name);
                     snprintf(r->group, sizeof(r->group), "%s", group);
@@ -358,6 +372,9 @@ int main(int argc, char **argv) {
     int run_timeout;
     const char *select_test;
     const char *select_module;
+    const char *arg_build;
+    const char *arg_run;
+    const char *arg_clean;
     int clean;
 
     char std_dir[PATH_CAP];
@@ -385,14 +402,17 @@ int main(int argc, char **argv) {
                 "RUN_TIMEOUT TEST MODULE CLEAN KEEP_LOGS\n");
         return 2;
     }
-    root = argv[1];
-    results = argv[2];
-    cplus = argv[3];
-    build_timeout = atoi(argv[4]);
-    run_timeout = atoi(argv[5]);
-    select_test = argv[6];
-    select_module = argv[7];
-    clean = strcmp(argv[8], "1") == 0;
+    __builtin_memcpy(&root, argv + 1, sizeof(root));
+    __builtin_memcpy(&results, argv + 2, sizeof(results));
+    __builtin_memcpy(&cplus, argv + 3, sizeof(cplus));
+    __builtin_memcpy(&arg_build, argv + 4, sizeof(arg_build));
+    __builtin_memcpy(&arg_run, argv + 5, sizeof(arg_run));
+    __builtin_memcpy(&select_test, argv + 6, sizeof(select_test));
+    __builtin_memcpy(&select_module, argv + 7, sizeof(select_module));
+    __builtin_memcpy(&arg_clean, argv + 8, sizeof(arg_clean));
+    build_timeout = atoi(arg_build);
+    run_timeout = atoi(arg_run);
+    clean = strcmp(arg_clean, "1") == 0;
     /* argv[9] KEEP_LOGS is accepted for CLI parity; logs are always kept. */
     if (build_timeout <= 0) build_timeout = 90;
     if (run_timeout <= 0) run_timeout = 30;

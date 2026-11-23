@@ -12,9 +12,10 @@
  * -----------------
  *   - Blocks returned by stdlib_alloc / stdlib_calloc (and containers built on
  *     them), because those are the blocks registered in the metadata table.
- *   - Generation tokens handed back by stdlib_mem_token(); a stale token is
- *     refused before the guarded operation touches memory.  Ownership
- *     transfers invalidate tokens by design (the underlying
+ *   - Generation tokens handed back by stdlib_mem_token(); a token captured
+ *     before a release/reallocation/ownership transfer is refused by a guarded
+ *     operation that receives it, before that operation touches memory.
+ *     Ownership transfers invalidate tokens by design (the underlying
  *     stdlib_transfer_ownership bumps the generation).
  *
  * What is NOT protected (documented, not a bug)
@@ -27,6 +28,30 @@
  *   - Interior pointers supplied WITHOUT their allocation base: metadata is
  *     keyed by the exact base address, so callers must pass (base, offset)
  *     rather than (base + offset) alone.
+ *
+ * UAF detection limits (IMPORTANT: not arbitrary use-after-free detection)
+ * ------------------------------------------------------------------------
+ *   - These helpers are NOT a lifetime/provenance proof.  Detection is only
+ *     possible when (a) the block was allocated through stdlib_alloc /
+ *     stdlib_calloc, (b) the caller captured a token with stdlib_mem_token()
+ *     BEFORE the free/realloc/transfer, and (c) the caller passes that token
+ *     to the guarded operation.  A token of 0 opts out of the generation
+ *     check entirely.
+ *   - Only the DESTINATION token is validated by stdlib_mem_copy / mem_move /
+ *     mem_set / mem_borrow (there is no source-token parameter).  A stale SOURCE
+ *     pointer whose old address has been recycled into a new live tracked
+ *     block of sufficient capacity passes range validation and is READ from
+ *     that new block; this is a logical aliasing error, not an out-of-bounds
+ *     access, and it is not detected by this API.
+ *   - A pointer that was freed and whose storage is no longer tracked is
+ *     refused as "not a tracked stdlib block" (STDLIB_CATEGORY_INVALID), not
+ *     reported as a use-after-free.  Only a MATCHING but now-stale token yields
+ *     STDLIB_CATEGORY_LIFECYCLE / CPLUS_EXIT_USE_AFTER_FREE.
+ *   - A host allocator may recycle a freed address into a new stdlib block at
+ *     the same base.  Without a previously captured stale token that new block
+ *     is indistinguishable from the original; a stale alias can therefore be
+ *     read/written/transferred/released through these helpers as if it were the
+ *     new block.  Callers must not retain aliases across a lifetime boundary.
  *
  * All guarded operations are fail-closed: on any validation problem they set
  * the supplied `error` object through error*() and return STDLIB_FAIL without
@@ -133,7 +158,9 @@ static inline int stdlib_mem_check_range(const void *ptr, size_t off, size_t n,
  * tracked, both ranges must fit, and dst_token (when non-zero) must still be
  * current.  Nothing is written unless every check passes.  n == 0 is a valid
  * no-op AFTER validation.  Overlapping ranges are the caller's responsibility
- * (use stdlib_mem_move for those). */
+ * (use stdlib_mem_move for those).  Only dst_token is checked: there is no
+ * source-token parameter, so a recycled source address is not detected (see
+ * "UAF detection limits" above). */
 static inline int stdlib_mem_copy(void *dst, size_t dst_off, const void *src,
                                   size_t src_off, size_t n,
                                   unsigned long long dst_token, error *err) {
