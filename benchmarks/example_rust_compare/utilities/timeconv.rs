@@ -11,9 +11,8 @@ fn civil_from_days(z0: i64) -> (i64, i64, i64) {
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
     let dd = doy - (153 * mp + 2) / 5 + 1;
-    let mut mm = mp + if mp < 10 { 3 } else { 0 };
-    if mm > 12 {
-        mm -= 12;
+    let mm = mp + if mp < 10 { 3 } else { -9 };
+    if mm <= 2 {
         yy += 1;
     }
     (yy, mm, dd)

@@ -1,0 +1,6 @@
+./stdlib/http.hp:106:30: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      }
+./stdlib/http.hp:230:9: warning: [CPLUS-FFI] pointer parameter 'buf' has unverifiable extent; subscript cannot be proven safe
+          buf[0] = '\0';
+          ^~~
+clang: warning: -lcurl: 'linker' input unused [-Wunused-command-line-argument]

@@ -1,0 +1,17 @@
+EM v_simple VALID alice example.com
+EM v_plus_tag VALID a.b+tag sub.example.co.uk
+EM v_subdomain VALID x y.io
+EM h_no_at REFUSED 108 invalid no-at
+EM h_double_at REFUSED 108 invalid multiple-at
+EM h_empty_local REFUSED 108 invalid empty-local
+EM h_empty_dom REFUSED 108 invalid empty-domain
+EM h_dotdot REFUSED 108 invalid consecutive-dot
+EM h_leading_dot REFUSED 108 invalid bad-local-edge
+EM h_no_dot REFUSED 108 invalid no-dot
+EM h_short_tld REFUSED 108 invalid short-tld
+EM h_bad_label REFUSED 108 invalid bad-label-edge
+EM h_long_local REFUSED 101 bounds local-too-long
+EM h_long_total REFUSED 101 bounds too-long
+EM argv VALID bob example.org
+EM argv REFUSED 108 invalid no-at
+EM_SUMMARY 16 4 12 0

@@ -1,0 +1,9 @@
+INI sections 2
+INI section 0 server
+INI section 1 db
+INI keys server 2
+INI key 0 host
+INI key 1 port
+INI value server host localhost
+INI error no-key
+INI error bad-command

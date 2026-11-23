@@ -206,7 +206,7 @@ impl Pretty {
     }
     fn put(&mut self, ch: u8) -> bool {
         if self.need_indent {
-            for _ in 0..self.depth {
+            for _ in 0..(self.depth * 2) {
                 if self.line.len() + 1 >= LINE_CAP {
                     return false;
                 }

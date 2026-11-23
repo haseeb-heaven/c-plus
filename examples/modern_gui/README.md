@@ -99,7 +99,7 @@ individual build commands may obtain SDL3 flags from `pkg-config sdl3`.
 | One-line purpose | Step a fixed-seed Breakout model with a bounded brick pool, render a real SDL3 playfield plus a Nuklear HUD, and echo the same score/bricks/paddle transcript. |
 | APIs | `stdlib/window.hp`, `stdlib/graphics.hp` (`renderer_set_color`, `renderer_clear`, `renderer_present`, `renderer_read` pixel probe), `stdlib/gui.hp` (`gui_label`, `window_begin`/`window_end`), `stdlib/vector.hp` (bounded bricks), `stdlib/string.hp` (checked token parsing), `stdlib/error.hp`. |
 | Safety refusals | `--probe-null` guards a null surface and null Nuklear context; bad grid dimensions (`4<=W<=32`, `1<=H<=8`, `W*H<=256`), oversized command token (>64 chars), too many ticks (>128), unknown command. Each is a clean exit 2 with a `REFUSED ... code ... category ...` line. |
-| Build | `./build/c+ build examples/modern_gui/games/breakout_ui/breakout_ui.cp --strict --sanitize=none -I. $(pkg-config --cflags --libs sdl3) -Ithird_party/nuklear build/ext/libnuklear.a -o examples/modern_gui/games/breakout_ui/bin/breakout_ui` |
+| Build | The group `run.sh` first builds the backend locally when absent: `/usr/bin/clang -c third_party/nuklear/nuklear_impl.c -o examples/modern_gui/games/breakout_ui/bin/nuklear.o -O2 -Ithird_party/nuklear $(pkg-config --cflags sdl3)` then `ar rcs examples/modern_gui/games/breakout_ui/bin/libnuklear.a examples/modern_gui/games/breakout_ui/bin/nuklear.o`; then `./build/c+ build examples/modern_gui/games/breakout_ui/breakout_ui.cp --strict --sanitize=none -I. $(pkg-config --cflags sdl3) $(pkg-config --libs sdl3) -Ithird_party/nuklear -Lexamples/modern_gui/games/breakout_ui/bin -lnuklear -o examples/modern_gui/games/breakout_ui/bin/breakout_ui` |
 
 ### Invaders HUD — `GFX_INVADERS` (`games/invaders_ui/run.sh`)
 
@@ -109,7 +109,7 @@ individual build commands may obtain SDL3 flags from `pkg-config sdl3`.
 | One-line purpose | Step a fixed-seed space-invaders model with a bounded bullet pool, sample two real SDL3 surface pixels, and reproduce the same fixed HUD lines in the transcript. |
 | APIs | `stdlib/window.hp` (`sdl_ctor`, `window_ctor`, `renderer_ctor`, `window_native`, `renderer_native`, `*_drop`), `stdlib/graphics.hp` (`renderer_set_color`, `renderer_clear`, `renderer_read`, `renderer_present`), `stdlib/gui.hp` (`gui_ctor`, `gui_label`, `gui_input_begin`/`gui_input_end`, `gui_render`, `gui_drop`), `stdlib/error.hp` (`error_ctor`, `error_fail`, `error_code`/`error_category`/`error_what`). |
 | Safety refusals | `--null-surface` and `--null-context` fault injection, oversized token, unknown command, invalid `--bullets` capacity (1..16); each is a clean exit 2 with a `REFUSED ... code ... category ...` line. |
-| Build | `./build/c+ build examples/modern_gui/games/invaders_ui/invaders_ui.cp $(pkg-config --cflags --libs sdl3) -I. -Ithird_party/nuklear -Lbuild/ext -lnuklear -o examples/modern_gui/games/invaders_ui/bin/invaders_ui` |
+| Build | `./build/c+ build examples/modern_gui/games/invaders_ui/invaders_ui.cp --sanitize=none $(pkg-config --cflags --libs sdl3) -I. -Ithird_party/nuklear -Lbuild/ext -lnuklear -o examples/modern_gui/games/invaders_ui/bin/invaders_ui` (the group builds a local `bin/libnuklear_local.a` and uses that `-L` path instead only if `build/ext/libnuklear.a` is absent) |
 
 ## Non-claims
 
