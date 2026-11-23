@@ -11,7 +11,7 @@ source was copied**; all entries are design/predicate references.
 | --- | --- | --- | --- |
 | Fil-C (`pizlonator/fil-c`) | `d3f9f822c276b446c8687ce70605b71aefc19beb` | LLVM Apache-2.0 WITH LLVM-exception; runtime BSD-style (`libpas/LICENSE.txt`) | Design reference only; fat pointers/GC/ABI declined |
 | TrapC | no verifiable source repository | none | Do not adapt; WG14 N3423 is a language paper, not an implementation |
-| Checked C (`checkedc/checkedc-clang`) | `a2843eae17d96cbfad2cf386dd60de0b849cfb6d` | Apache-2.0 WITH LLVM-exception (`clang/LICENSE.TXT`) | Predicates adapted; no fork |
+| Checked C (`checkedc/checkedc-clang`) | `a2843eae17d96cbfad2cf386dd60de0b849cfb6d` | Apache-2.0 WITH LLVM-exception (root `LICENSE.TXT`; LLVM-family repos have no separate `clang/LICENSE.TXT`) | Predicates adapted; no fork |
 | Apple Bounds Safety (`swiftlang/llvm-project`) | `ca74e48841e588074fba77543e4e0fc643edc52c` (docs), `f63645674df4…` (implementation) | Apache-2.0 WITH LLVM-exception | Rules adapted; wide pointers declined |
 | SoftBoundCETS (`santoshn/softboundcets-34`) | `9a9c09f04e16f2d1ef3a906fd138a7b89df44996` | BSD-3-Clause + per-file MIT-style headers | Metadata shape adapted; trie/shadow stack declined |
 | CHERI LLVM (`CTSRD-CHERI/llvm-project`) | `7e122876ee01a7a82585f7674c94f12fc1cc7689` | Apache-2.0 WITH LLVM-exception / MIT headers | Provenance concepts only; capability ABI declined |

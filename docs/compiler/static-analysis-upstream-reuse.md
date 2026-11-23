@@ -11,7 +11,7 @@ visitors. "Design-only" means C+ has no equivalent implementation today.
 
 | Project | Repository / pin | Licence | Disposition |
 | --- | --- | --- | --- |
-| Checked C compiler | `checkedc/checkedc-clang` @ `a2843eae17d96cbfad2cf386dd60de0b849cfb6d` | Apache-2.0 WITH LLVM-exception (`clang/LICENSE.TXT`) | Algorithm/design reference; no fork |
+| Checked C compiler | `checkedc/checkedc-clang` @ `a2843eae17d96cbfad2cf386dd60de0b849cfb6d` | Apache-2.0 WITH LLVM-exception (root `LICENSE.TXT`; no separate `clang/LICENSE.TXT` at this pin) | Algorithm/design reference; no fork |
 | Apple Bounds Safety | `swiftlang/llvm-project` @ `ca74e48841e588074fba77543e4e0fc643edc52c` (local pin; earlier audit also `f63645674df4…`) | Apache-2.0 WITH LLVM-exception (`LICENSE.TXT`) | Semantic rules adapted; no code copied |
 | Clang Static Analyzer | `llvm/llvm-project` @ `0c41652846ac0771141157712a31b6ff29e78a0c` | Apache-2.0 WITH LLVM-exception | Engine design studied; Clang APIs linked |
 | GCC analyzer | `gcc-mirror/gcc` @ `4cb25d3a3d609a2a291716bf99503a64789bde86` | GPL-3.0-or-later (`COPYING3`) | Research only; no source copied |
@@ -39,7 +39,10 @@ document were read at `ca74e488…` and should be re-verified if the project
 standardises on `f6364567…`. Method note: on blobless partial clones use
 `git ls-tree -r --name-only <pin>` for path existence — `git cat-file -e
 <pin>:<path>` can report a false MISS when a promisor fetch disconnects;
-re-issue a failed read rather than concluding the path is absent.
+re-issue a failed read rather than concluding the path is absent. The same
+limitation affected the local partial clone at `f6364567…`; upstream GitHub
+raw/API at that exact ref served real files, so the pin is verified upstream
+even when the local blobless clone cannot materialise it.
 
 ## Source evidence actually inspected
 

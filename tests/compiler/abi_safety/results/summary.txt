@@ -3,7 +3,7 @@ C+ native ABI regression suite
 binary       : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
 version      : C+ 0.1.0
 platform     : Darwin/arm64 (symbol prefix '_')
-generated    : 2026-11-23T12:32:27
+generated    : 2026-11-23T14:06:46
 modes        : --legacy-c, --default, --strict
 backend flags: --sanitize=none (no sanitizer instrumentation; ABI only)
 timeout      : 90s build/nm, 30s execution
