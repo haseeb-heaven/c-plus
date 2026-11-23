@@ -1642,6 +1642,19 @@ const std::vector<CheckedArithmeticSite> &checkedArithmeticSites() {
   return checkedArithmeticSiteRegistry();
 }
 
+std::vector<CheckedPointerSite> &checkedPointerSiteRegistry() {
+  static std::vector<CheckedPointerSite> sites;
+  return sites;
+}
+
+void setCheckedPointerSites(std::vector<CheckedPointerSite> sites) {
+  checkedPointerSiteRegistry() = std::move(sites);
+}
+
+const std::vector<CheckedPointerSite> &checkedPointerSites() {
+  return checkedPointerSiteRegistry();
+}
+
 namespace {
 
 /// One text edit applied to the lowered C. `priority` orders nested edits at
@@ -1661,6 +1674,11 @@ const char *checkedOpName(CheckedArithmeticSite::Op kind) {
   case CheckedArithmeticSite::Op::Add: return "add";
   case CheckedArithmeticSite::Op::Sub: return "sub";
   case CheckedArithmeticSite::Op::Mul: return "mul";
+  case CheckedArithmeticSite::Op::Div: return "div";
+  case CheckedArithmeticSite::Op::Rem: return "rem";
+  case CheckedArithmeticSite::Op::Shl: return "shl";
+  case CheckedArithmeticSite::Op::Shr: return "shr";
+  case CheckedArithmeticSite::Op::Narrow: return "narrow";
   }
   return "add";
 }
@@ -1676,6 +1694,7 @@ std::string instrumentDynamicArrayBounds(
 
   std::vector<SafetyInsertion> insertions;
   bool haveBounds = false;
+  bool havePtrFormation = false;
 
   if (!arrayLengths.empty()) {
     std::vector<Token> toks = lexCPlus(source);
@@ -1739,12 +1758,39 @@ std::string instrumentDynamicArrayBounds(
     const std::string fn =
         std::string("__cplus_inline_") + checkedOpName(site.kind) + "_i64";
     size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    if (site.kind == CheckedArithmeticSite::Op::Narrow) {
+      // ((DST)__cplus_inline_narrow_i64((SRC)(value), srcBits, srcSigned,
+      //                                 dstBits, dstSigned))
+      insertions.push_back({site.begin, span, 0,
+                            "((" + site.type + ")" + fn + "((uint64_t)(", 0});
+      insertions.push_back({site.end, span, 2,
+                            "), " + std::to_string(site.srcBits) + ", " +
+                                (site.srcIsSigned ? "1" : "0") + ", " +
+                                std::to_string(site.bits) + ", " +
+                                (site.isSigned ? "1" : "0") + "))", 0});
+      continue;
+    }
     // ((T)helper((int64_t)(lhs), (int64_t)(rhs), bits))
     insertions.push_back({site.begin, span, 0,
                           "((" + site.type + ")" + fn + "((int64_t)(", 0});
     insertions.push_back({site.op, span, 1, "), (int64_t)(", site.opLength});
     insertions.push_back({site.end, span, 2,
-                          "), " + std::to_string(site.bits) + "))", 0});
+                          "), " + std::to_string(site.bits) + ", " +
+                              (site.isSigned ? "1" : "0") + "))", 0});
+  }
+  const auto &ptrSites = checkedPointerSites();
+  for (const CheckedPointerSite &site : ptrSites) {
+    size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    if (!span)
+      continue;
+    std::string guard =
+        "(cplus_check_ptr_formation((const void *)(" + site.base + "), " +
+        "(size_t)(" + site.count + "), (int64_t)(" +
+        (site.negative ? "-" : "") + site.index + "), " +
+        "__FILE__, __LINE__, \"" + site.expr + "\"), (";
+    insertions.push_back({site.begin, span, 0, guard, 0});
+    insertions.push_back({site.end, span, 2, "))", 0});
+    havePtrFormation = true;
   }
   if (insertions.empty())
     return source;
@@ -1780,21 +1826,36 @@ std::string instrumentDynamicArrayBounds(
   // Emit the helper declarations before the first #line directive so the
   // original source line numbers are preserved.
   std::string prelude;
+  if (haveBounds || havePtrFormation)
+    prelude += "#include <stddef.h>\n";
   if (haveBounds)
-    prelude += "#include <stddef.h>\n"
-               "extern size_t __cplus_bounds_check(size_t, size_t, "
+    prelude += "extern size_t __cplus_bounds_check(size_t, size_t, "
                "const char *);\n";
+  if (havePtrFormation)
+    prelude += "#include <stdint.h>\n"
+               "extern void cplus_check_ptr_formation(const void *, size_t, "
+               "int64_t, const char *, int, const char *);\n";
   if (!arith.empty()) {
     // The runtime helpers produce the deterministic trap, but an ordinary
-    // cross-TU call on every arithmetic operation is far too expensive in hot
-    // loops.  When the backend has overflow builtins, emit inline wrappers:
-    // the overflow check folds into the surrounding code and only the trap
-    // path calls the runtime helper.  Falls back to the plain runtime call.
+    // cross-TU call on every operation is far too expensive in hot loops.
+    // Emit inline wrappers: the fast path folds into surrounding code and
+    // only the failure path calls the runtime helper.  Predicates follow
+    // Clang's EmitUndefinedBehaviorIntegerDivAndRemCheck / EmitShl and UBSan's
+    // handleDivremOverflowImpl (Apache-2.0 WITH LLVM-exception), expressed as
+    // plain C so no sanitizer runtime is required.
+    static const char *ops[] = {"add", "sub", "mul", "div",
+                                "rem", "shl", "shr", "narrow"};
+    prelude += "#include <stdint.h>\n";
+    for (const char *op : ops) {
+      if (std::strcmp(op, "narrow") == 0) {
+        prelude += "extern int64_t __cplus_checked_narrow_i64(uint64_t, "
+                   "unsigned, unsigned, unsigned, unsigned);\n";
+        continue;
+      }
+      prelude += std::string("extern int64_t __cplus_checked_") + op +
+                 "_i64(int64_t, int64_t, unsigned, unsigned);\n";
+    }
     prelude +=
-        "#include <stdint.h>\n"
-        "extern int64_t __cplus_checked_add_i64(int64_t, int64_t, unsigned);\n"
-        "extern int64_t __cplus_checked_sub_i64(int64_t, int64_t, unsigned);\n"
-        "extern int64_t __cplus_checked_mul_i64(int64_t, int64_t, unsigned);\n"
         "#if defined(__has_builtin)\n"
         "#  if __has_builtin(__builtin_add_overflow) && "
         "__has_builtin(__builtin_sub_overflow) && "
@@ -1803,57 +1864,103 @@ std::string instrumentDynamicArrayBounds(
         "#  endif\n"
         "#endif\n"
         "#ifdef CPLUS_HAVE_INLINE_ARITH\n"
-        "#define CPLUS_ARITH_INLINE __attribute__((unused)) static inline\n"
-        "CPLUS_ARITH_INLINE int64_t __cplus_inline_add_i64(int64_t a, "
-        "int64_t b, unsigned bits) {\n"
-        "  int64_t r; int32_t r32;\n"
-        "  if (bits == 32) {\n"
-        "    if (__builtin_add_overflow((int32_t)a, (int32_t)b, &r32))\n"
-        "      return __cplus_checked_add_i64(a, b, bits);\n"
-        "    return (int64_t)r32;\n"
+        "#define CPLUS_ARITH_INLINE __attribute__((unused)) static inline\n";
+
+    auto emitWrapper = [&](const char *op, const std::string &body) {
+      prelude += std::string("CPLUS_ARITH_INLINE int64_t __cplus_inline_") +
+                 op + "_i64(int64_t a, int64_t b, unsigned bits, "
+                      "unsigned sgn) {\n" +
+                 body + "}\n";
+    };
+    emitWrapper("add",
+                "  int64_t r; int32_t r32;\n"
+                "  if (bits == 32) {\n"
+                "    if (__builtin_add_overflow((int32_t)a, (int32_t)b, &r32))\n"
+                "      return __cplus_checked_add_i64(a, b, bits, sgn);\n"
+                "    return (int64_t)r32;\n"
+                "  }\n"
+                "  if (bits == 64 && sgn) {\n"
+                "    if (__builtin_add_overflow(a, b, &r))\n"
+                "      return __cplus_checked_add_i64(a, b, bits, sgn);\n"
+                "    return r;\n"
+                "  }\n"
+                "  return __cplus_checked_add_i64(a, b, bits, sgn);\n");
+    emitWrapper("sub",
+                "  int64_t r; int32_t r32;\n"
+                "  if (bits == 32) {\n"
+                "    if (__builtin_sub_overflow((int32_t)a, (int32_t)b, &r32))\n"
+                "      return __cplus_checked_sub_i64(a, b, bits, sgn);\n"
+                "    return (int64_t)r32;\n"
+                "  }\n"
+                "  if (bits == 64 && sgn) {\n"
+                "    if (__builtin_sub_overflow(a, b, &r))\n"
+                "      return __cplus_checked_sub_i64(a, b, bits, sgn);\n"
+                "    return r;\n"
+                "  }\n"
+                "  return __cplus_checked_sub_i64(a, b, bits, sgn);\n");
+    emitWrapper("mul",
+                "  int64_t r; int32_t r32;\n"
+                "  if (bits == 32) {\n"
+                "    if (__builtin_mul_overflow((int32_t)a, (int32_t)b, &r32))\n"
+                "      return __cplus_checked_mul_i64(a, b, bits, sgn);\n"
+                "    return (int64_t)r32;\n"
+                "  }\n"
+                "  if (bits == 64 && sgn) {\n"
+                "    if (__builtin_mul_overflow(a, b, &r))\n"
+                "      return __cplus_checked_mul_i64(a, b, bits, sgn);\n"
+                "    return r;\n"
+                "  }\n"
+                "  return __cplus_checked_mul_i64(a, b, bits, sgn);\n");
+    emitWrapper("div",
+                "  if (b == 0)\n"
+                "    return __cplus_checked_div_i64(a, b, bits, sgn);\n"
+                "  if (sgn && bits > 1 && bits <= 64 && b == -1 &&\n"
+                "      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
+                "    return __cplus_checked_div_i64(a, b, bits, sgn);\n"
+                "  return a / b;\n");
+    emitWrapper("rem",
+                "  if (b == 0)\n"
+                "    return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
+                "  if (sgn && bits > 1 && bits <= 64 && b == -1 &&\n"
+                "      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
+                "    return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
+                "  return a % b;\n");
+    emitWrapper("shl",
+                "  if (b < 0 || (unsigned long long)b >= bits)\n"
+                "    return __cplus_checked_shl_i64(a, b, bits, sgn);\n"
+                "  if (sgn) {\n"
+                "    uint64_t ua = (uint64_t)a; unsigned c = (unsigned)b;\n"
+                "    uint64_t limit = (~(uint64_t)0) >> (64 - bits);\n"
+                "    if (a < 0 || ((ua << c) & ~limit))\n"
+                "      return __cplus_checked_shl_i64(a, b, bits, sgn);\n"
+                "  }\n"
+                "  return (int64_t)((uint64_t)a << (uint64_t)b);\n");
+    emitWrapper("shr",
+                "  if (b < 0 || (unsigned long long)b >= bits)\n"
+                "    return __cplus_checked_shr_i64(a, b, bits, sgn);\n"
+                "  return (int64_t)(a >> (uint64_t)b);\n");
+    // Round-trip predicate from Clang's any-extend + compare, expressed in C.
+    prelude +=
+        "CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(\n"
+        "    uint64_t v, unsigned sb, unsigned ss, unsigned db, unsigned ds) {\n"
+        "  uint64_t sv = v;\n"
+        "  if (ss && sb > 0 && sb < 64 && ((v >> (sb - 1)) & 1u))\n"
+        "    sv = v | (~((uint64_t)0) << sb);\n"
+        "  if (db < 64) {\n"
+        "    uint64_t m = (((uint64_t)1) << db) - 1;\n"
+        "    uint64_t t = sv & m;\n"
+        "    if (ds && ((t >> (db - 1)) & 1u)) t |= ~m;\n"
+        "    if (t == sv) return (int64_t)t;\n"
+        "  } else if (sv == v) {\n"
+        "    return (int64_t)v;\n"
         "  }\n"
-        "  if (bits == 64) {\n"
-        "    if (__builtin_add_overflow(a, b, &r))\n"
-        "      return __cplus_checked_add_i64(a, b, bits);\n"
-        "    return r;\n"
-        "  }\n"
-        "  return __cplus_checked_add_i64(a, b, bits);\n"
-        "}\n"
-        "CPLUS_ARITH_INLINE int64_t __cplus_inline_sub_i64(int64_t a, "
-        "int64_t b, unsigned bits) {\n"
-        "  int64_t r; int32_t r32;\n"
-        "  if (bits == 32) {\n"
-        "    if (__builtin_sub_overflow((int32_t)a, (int32_t)b, &r32))\n"
-        "      return __cplus_checked_sub_i64(a, b, bits);\n"
-        "    return (int64_t)r32;\n"
-        "  }\n"
-        "  if (bits == 64) {\n"
-        "    if (__builtin_sub_overflow(a, b, &r))\n"
-        "      return __cplus_checked_sub_i64(a, b, bits);\n"
-        "    return r;\n"
-        "  }\n"
-        "  return __cplus_checked_sub_i64(a, b, bits);\n"
-        "}\n"
-        "CPLUS_ARITH_INLINE int64_t __cplus_inline_mul_i64(int64_t a, "
-        "int64_t b, unsigned bits) {\n"
-        "  int64_t r; int32_t r32;\n"
-        "  if (bits == 32) {\n"
-        "    if (__builtin_mul_overflow((int32_t)a, (int32_t)b, &r32))\n"
-        "      return __cplus_checked_mul_i64(a, b, bits);\n"
-        "    return (int64_t)r32;\n"
-        "  }\n"
-        "  if (bits == 64) {\n"
-        "    if (__builtin_mul_overflow(a, b, &r))\n"
-        "      return __cplus_checked_mul_i64(a, b, bits);\n"
-        "    return r;\n"
-        "  }\n"
-        "  return __cplus_checked_mul_i64(a, b, bits);\n"
-        "}\n"
-        "#else\n"
-        "#define __cplus_inline_add_i64 __cplus_checked_add_i64\n"
-        "#define __cplus_inline_sub_i64 __cplus_checked_sub_i64\n"
-        "#define __cplus_inline_mul_i64 __cplus_checked_mul_i64\n"
-        "#endif\n";
+        "  return __cplus_checked_narrow_i64(v, sb, ss, db, ds);\n"
+        "}\n";
+    prelude += "#else\n";
+    for (const char *op : ops)
+      prelude += std::string("#define __cplus_inline_") + op +
+                 "_i64 __cplus_checked_" + op + "_i64\n";
+    prelude += "#endif\n";
   }
   return prelude + out;
 }

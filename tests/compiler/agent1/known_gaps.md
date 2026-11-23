@@ -17,10 +17,16 @@ tests/known_gaps/README.md, and docs/RUST_COMPARISON.md.
   cplus_check_live, explicit --sanitize.
 
 ## Arithmetic gaps
-- Runtime-variable signed overflow is accepted (no native check inserted).
+- Runtime-variable signed add/sub/mul, division/remainder by zero, `INT_MIN/-1`,
+  invalid shift counts, value-changing narrowing conversions, and
+  out-of-bounds pointer formation now have **native** guards in generated C
+  (no UBSan dependency). Remaining blind spots: `__int128` widths, unsigned
+  widths >32 bits, macro-generated operations, and header-location operations.
 - Nested arithmetic helpers are not inferred beyond direct `return a OP b`.
 - `if (d != 0)` style guards are not yet recognized (bare `if(d)` is).
-- Division by runtime unknown is rejected in STRICT (fail-closed).
+- Division by runtime unknown is rejected in STRICT (fail-closed); DEFAULT
+  emits the native runtime guard.
+- Sign-change-only conversions (`(unsigned)-1`) are intentionally not checked.
 
 ## Integration findings (2026-11-23)
 

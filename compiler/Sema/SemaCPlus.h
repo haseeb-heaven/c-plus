@@ -73,15 +73,37 @@ std::string instrumentDynamicArrayBounds(
 /// constants and therefore needs a native checked-arithmetic call.  Offsets
 /// are byte offsets into the lowered C buffer that checkAstSafety analysed.
 struct CheckedArithmeticSite {
-  enum class Op : unsigned char { Add, Sub, Mul };
+  enum class Op : unsigned char {
+    Add, Sub, Mul, Div, Rem, Shl, Shr,
+    Narrow // integer conversion that may truncate or change sign
+  };
   size_t begin = 0;  ///< offset of the expression's first token
   size_t op = 0;     ///< offset of the operator token
   size_t end = 0;    ///< offset one past the expression's last token
   size_t opLength = 1;
   Op kind = Op::Add;
-  std::string type;  ///< canonical C spelling of the result type
-  unsigned bits = 0; ///< width of the result type (1..64)
+  std::string type;    ///< canonical C spelling of the result type
+  unsigned bits = 0;   ///< width of the result/left operand type (1..64)
+  bool isSigned = true;///< signedness of the source expression type
+  // Conversion-only fields.
+  unsigned srcBits = 0;       ///< source integer width (0 for arithmetic)
+  bool srcIsSigned = true;    ///< source signedness
+  std::string srcType;        ///< canonical source type spelling
 };
+
+/// A pointer + integer operation whose extent is provable at compile time.
+struct CheckedPointerSite {
+  size_t begin = 0;    ///< byte offset of the whole expression
+  size_t end = 0;      ///< one past the whole expression
+  std::string base;    ///< source spelling of the pointer operand
+  std::string index;   ///< source spelling of the integer operand
+  std::string count;   ///< provable element count of the base object
+  bool negative = false; ///< BO_Sub: index is subtracted
+  std::string expr;    ///< source spelling of the whole expression
+};
+
+void setCheckedPointerSites(std::vector<CheckedPointerSite> sites);
+const std::vector<CheckedPointerSite> &checkedPointerSites();
 
 /// Hand the sites found by checkAstSafety() to the source instrumenter.  The
 /// driver calls checkAstSafety() before instrumentDynamicArrayBounds() for

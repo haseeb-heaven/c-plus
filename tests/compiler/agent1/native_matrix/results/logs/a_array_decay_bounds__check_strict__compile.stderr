@@ -1,0 +1,3 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/a_array_decay_bounds.c:9:28: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds stack array 'p' of 16 bytes
+  int first(int *p) { return p[4]; }
+                             ^

@@ -95,6 +95,20 @@ void cplus_check_bounds(const void *base, size_t count, size_t index,
   cplus_print_fatal(CPLUS_EXIT_BOUNDS, "out-of-bounds access", file, line, buf);
 }
 
+void cplus_check_ptr_formation(const void *base, size_t count, int64_t index,
+                               const char *file, int line, const char *expr) {
+  (void)base;
+  (void)expr;
+  if (index >= 0 && (uintmax_t)index <= (uintmax_t)count)
+    return;
+  char buf[192];
+  snprintf(buf, sizeof(buf),
+           "pointer offset %lld is outside [0, %llu] elements",
+           (long long)index, (unsigned long long)count);
+  cplus_print_fatal(CPLUS_EXIT_BOUNDS, "out-of-bounds pointer formation", file,
+                    line, buf);
+}
+
 void cplus_check_nonnull(const void *ptr, const char *file, int line,
                          const char *expr) {
   if (ptr != NULL)
@@ -116,9 +130,10 @@ void cplus_check_nonnull(const void *ptr, const char *file, int line,
  * compiler cannot fold to a constant.
  * ------------------------------------------------------------------------- */
 static int64_t cplus_checked_result(__int128 r, unsigned bits,
+                                    unsigned isSigned,
                                     const char *operation) {
-  if (bits == 0 || bits > 64)
-    return (int64_t)r; /* no supported narrowing check; keep value semantics */
+  if (bits == 0 || bits > 64 || !isSigned)
+    return (int64_t)r; /* unsigned arithmetic is defined to wrap */
   __int128 lo = -((__int128)1 << (bits - 1));
   __int128 hi = ((__int128)1 << (bits - 1)) - 1;
   if (r < lo || r > hi) {
@@ -132,17 +147,119 @@ static int64_t cplus_checked_result(__int128 r, unsigned bits,
   return (int64_t)r;
 }
 
-int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits) {
-  return cplus_checked_result((__int128)a + (__int128)b, bits, "addition");
+static void cplus_arith_fatal(const char *kind, const char *msg) {
+  cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, kind, NULL, 0, msg);
 }
 
-int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits) {
-  return cplus_checked_result((__int128)a - (__int128)b, bits, "subtraction");
+int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_result((__int128)a + (__int128)b, bits, isSigned,
+                              "addition");
 }
 
-int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits) {
-  return cplus_checked_result((__int128)a * (__int128)b, bits,
+int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_result((__int128)a - (__int128)b, bits, isSigned,
+                              "subtraction");
+}
+
+int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_result((__int128)a * (__int128)b, bits, isSigned,
                               "multiplication");
+}
+
+/* Division and remainder: reject a zero divisor and the signed INT_MIN/-1
+ * overflow.  Predicates follow Clang's EmitUndefinedBehaviorIntegerDivAndRemCheck
+ * and UBSan's handleDivremOverflowImpl (Apache-2.0 WITH LLVM-exception),
+ * implemented here without any sanitizer dependency. */
+static int64_t cplus_checked_divrem(int64_t a, int64_t b, unsigned bits,
+                                    unsigned isSigned, int remainder) {
+  if (b == 0)
+    cplus_arith_fatal("division by zero",
+                      remainder ? "remainder by zero" : "division by zero");
+  if (isSigned && bits > 1 && bits <= 64 && b == -1 &&
+      a == (int64_t)(-((__int128)1 << (bits - 1))))
+    cplus_arith_fatal("signed integer overflow",
+                      remainder ? "remainder overflows the source type"
+                                : "division overflows the source type");
+  return remainder ? a % b : a / b;
+}
+
+int64_t __cplus_checked_div_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_divrem(a, b, bits, isSigned, 0);
+}
+
+int64_t __cplus_checked_rem_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_divrem(a, b, bits, isSigned, 1);
+}
+
+/* Shifts: enforce 0 <= count < width.  For signed left shift also reject a
+ * negative left operand and any non-zero bit shifted out of the value bits,
+ * matching Clang's EmitShl predicates. */
+static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
+                                   unsigned isSigned, int left) {
+  if (bits == 0 || bits > 64)
+    return left ? (int64_t)((uint64_t)a << (uint64_t)b)
+                : (int64_t)(a >> (uint64_t)b);
+  if (b < 0 || (unsigned long long)b >= bits) {
+    char buf[160];
+    snprintf(buf, sizeof(buf), "shift count %lld is outside [0, %u)",
+             (long long)b, bits);
+    cplus_arith_fatal("invalid shift", buf);
+  }
+  if (left && isSigned) {
+    if (a < 0)
+      cplus_arith_fatal("invalid shift",
+                        "left shift of a negative signed value");
+    uint64_t ua = (uint64_t)a;
+    unsigned count = (unsigned)b;
+    uint64_t limit = (~(uint64_t)0) >> (64 - bits);
+    if ((ua << count) & ~limit)
+      cplus_arith_fatal("invalid shift",
+                        "left shift loses bits above the source width");
+  }
+  return left ? (int64_t)((uint64_t)a << (uint64_t)b)
+              : (int64_t)(a >> (uint64_t)b);
+}
+
+int64_t __cplus_checked_shl_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_shift(a, b, bits, isSigned, 1);
+}
+
+int64_t __cplus_checked_shr_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_shift(a, b, bits, isSigned, 0);
+}
+
+/* Value-based narrowing check.  Predicates follow Clang's
+ * EmitIntegerTruncationCheckHelper (any-extend then compare) and GSL's
+ * narrow (round-trip equality), implemented here in plain C with no
+ * sanitizer runtime.  Only the value is checked; a narrow *type* is fine. */
+int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
+                                   unsigned db, unsigned ds) {
+  __int128 src = (__int128)value;
+  if (ss && sb > 0 && sb < 64 && ((value >> (sb - 1)) & 1u))
+    src = (__int128)(int64_t)(value | (~((uint64_t)0) << sb));
+  uint64_t mask = db >= 64 ? ~((uint64_t)0)
+                           : ((((uint64_t)1) << db) - 1);
+  uint64_t truncated = value & mask;
+  __int128 dst = (__int128)truncated;
+  if (ds && db > 0 && db < 64 && ((truncated >> (db - 1)) & 1u))
+    dst = (__int128)(int64_t)(truncated | (~((uint64_t)0) << db));
+  if (src != dst) {
+    char buf[192];
+    snprintf(buf, sizeof(buf),
+             "implicit conversion from a %u-bit %s value changed it to a "
+             "%u-bit %s value",
+             sb, ss ? "signed" : "unsigned", db, ds ? "signed" : "unsigned");
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "implicit integer conversion",
+                      NULL, 0, buf);
+  }
+  return (int64_t)dst;
 }
 
 void cplus_resource_check_borrow(const void *self, const char *file, int line,

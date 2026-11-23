@@ -82,7 +82,8 @@ typedef enum {
   CPLUS_EXIT_RESOURCE = 107,
   CPLUS_EXIT_UNSUPPORTED = 108,
   CPLUS_EXIT_IO = 109,
-  CPLUS_EXIT_ARITHMETIC = 110
+  CPLUS_EXIT_ARITHMETIC = 110,
+  CPLUS_EXIT_CONVERSION = 111
 } cplus_exit_code;
 
 void cplus_fatal(cplus_exit_code code, const char *kind, const char *file,
@@ -99,6 +100,11 @@ void cplus_check_bounds(const void *base, size_t count, size_t index,
 void cplus_check_nonnull(const void *ptr, const char *file, int line,
                          const char *expr);
 
+/* Pointer formation guard: index must be in [0, count] (count is the
+ * one-past-the-end element).  Dereference remains index < count. */
+void cplus_check_ptr_formation(const void *base, size_t count, int64_t index,
+                               const char *file, int line, const char *expr);
+
 /* -------------------------------------------------------------------------
  * Native checked signed arithmetic (not UBSan)
  *
@@ -108,9 +114,25 @@ void cplus_check_nonnull(const void *ptr, const char *file, int line,
  * before it can wrap even though the arguments arrive as int64_t. Unsigned
  * arithmetic is never instrumented: it is defined to wrap in C.
  * ------------------------------------------------------------------------- */
-int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits);
-int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits);
-int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits);
+int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_div_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_rem_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_shl_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_shr_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+
+/* Value-preserving integer conversion check.  The source value arrives as
+ * uint64_t bit pattern; sb/ss describe the source, db/ds the destination. */
+int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
+                                   unsigned db, unsigned ds);
 
 /* -------------------------------------------------------------------------
  * Managed memory (ordinary heap objects)

@@ -88,6 +88,43 @@ also has an AI-training-use addendum.
    on the new label has been observed. SonarCloud scope files are corrected but
    `.sonarcloud.properties` takes effect only from the default branch.
 
+## Second hardening pass (same day)
+
+Ten additional parallel agents studied actual upstream implementations of
+division/shift, conversion, pointer-arithmetic and interprocedural bounds
+propagation (Checked C, Apple Bounds Safety, LLVM/Clang, Clang SA, GCC, GSL,
+C2Rust, SoftBoundCETS, CHERI). Findings and pins are in
+`docs/compiler/upstream-reuse.md`.
+
+Further confirmed defects and fixes:
+
+1. **Array-decay diagnostic accuracy**: a stack array crossing a function
+   boundary was labelled "heap allocation 'p'". Extents now carry an origin
+   (`Heap`/`Stack`/`Global`/`Unknown`) and the message reads
+   `array index 4 exceeds stack array 'p' of 16 bytes`. Bounds were never lost:
+   the case is rejected in DEFAULT and STRICT with `--sanitize=none`; generated
+   C is unchanged ordinary C.
+2. **`--sanitize=integer` silently disabled native arithmetic guards**: the
+   substring test for `signed-integer-overflow` also matched
+   `unsigned-integer-overflow`. Whole tokens are now compared; verified
+   `--sanitize=integer` traps natively (110), `--sanitize=undefined` uses UBSan
+   (134), `--sanitize=none` traps natively (110).
+3. **Generated-C portability**: div/rem wrappers no longer inject `__int128`
+   into user-visible C (`INT32_MIN`/`INT64_MIN` from `<stdint.h>` instead).
+4. **Address-taken locals folded as constants**: `scanf("%d", &x)` left `x`
+   equal to its initializer, suppressing every native guard. Address-taken
+   locals are now excluded from constant folding.
+5. **Native guards extended** beyond `+ - *` to `/ % << >>`, value-changing
+   narrowing conversions (exit 111), and out-of-bounds pointer formation with
+   one-past formation allowed (exit 101). Predicates are adapted from Clang's
+   `EmitUndefinedBehaviorIntegerDivAndRemCheck`/`EmitShl`,
+   `EmitIntegerTruncationCheckHelper`, GSL `narrow`, and LLVM
+   `BoundsChecking.cpp`; no UBSan runtime is used.
+
+Verification after this pass: native matrix **24/24 PASS** (6 cases × 4
+configurations), repo 109/0, core 152/0, CTest 2/2, Agent 1 suite 156 PASS /
+0 FAIL / 3 SKIP, metrics 90/90 + 0 FP + 51/51 clang-clean.
+
 ## Final verdict
 
 PARTIALLY COMPLETE. The audit, all inventories, the native runner, upstream

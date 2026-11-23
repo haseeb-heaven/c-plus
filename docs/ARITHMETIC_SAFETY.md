@@ -393,6 +393,28 @@ completeness:
 - Commits: `7e44f81` (initial CPLUS-ARITH analysis) and `cbb6e3d` (volatile
   locals, inferred helper effects, demo.cp coverage).
 
+## Native runtime enforcement (sanitizer-independent)
+
+The compiler emits inline guards into generated C for signed `+ - * / % << >>`
+and for value-changing narrowing conversions. The fast path uses Clang's
+overflow builtins; only the failure path calls a C+ runtime helper, so UBSan is
+never required. Verified exit codes and messages:
+
+- `110` `CPLUS_EXIT_ARITHMETIC`: `C+ runtime error: division by zero: division by zero`,
+  `... signed integer overflow: division overflows the source type`,
+  `... invalid shift: shift count 32 is outside [0, 32)`,
+  `... invalid shift: left shift of a negative signed value`, and the existing
+  add/sub/mul `... does not fit in a %u-bit signed integer`.
+- `111` `CPLUS_EXIT_CONVERSION`: `C+ runtime error: implicit integer conversion:
+  implicit conversion from a %u-bit signed value changed it to a %u-bit signed value`.
+- `101` `CPLUS_EXIT_BOUNDS`: `C+ runtime error: out-of-bounds pointer formation
+  at file:line: pointer offset %lld is outside [0, %llu] elements`.
+
+The `integer` sanitizer no longer suppresses these guards (whole-token matching
+of `-fsanitize=` arguments); `undefined` still uses UBSan instead. The
+sanitizer-independent matrix is `tests/compiler/agent1/run_native_matrix.sh`
+(6 cases × 4 configurations, 24/24 PASS).
+
 ## Native test path (no Python)
 
 The active compiler-safety unit tests are now C+ programs under `tests/native/`, built by the C+ driver: `cplus_safety_tests.c` (36 exact-diagnostic paired cases) and `strict40_runner.c` (the authoritative 40-test STRICT suite). `tests/core/run.sh` no longer invokes any Python test harness.

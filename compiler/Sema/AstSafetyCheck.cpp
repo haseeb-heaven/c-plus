@@ -200,6 +200,29 @@ struct ArithEffect {
   unsigned width = 0;
 };
 
+/// Where an inferred extent came from.  Kept with the extent so a diagnostic
+/// can name the object correctly instead of calling every tracked extent a
+/// "heap allocation".
+enum class ExtentOrigin : unsigned char { Unknown, Heap, Stack, Global };
+
+static const char *extentLabel(ExtentOrigin o) {
+  switch (o) {
+  case ExtentOrigin::Heap:
+    return "heap allocation";
+  case ExtentOrigin::Stack:
+    return "stack array";
+  case ExtentOrigin::Global:
+    return "global array";
+  default:
+    return "object";
+  }
+}
+
+struct ParamExtent {
+  long long bytes = -1;
+  ExtentOrigin origin = ExtentOrigin::Unknown;
+};
+
 class SafetyVisitor : public RecursiveASTVisitor<SafetyVisitor> {
 public:
   SafetyVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string filename,
@@ -226,6 +249,9 @@ public:
   std::vector<CheckedArithmeticSite> takeArithmeticSites() {
     return std::move(arithmeticSites_);
   }
+  std::vector<CheckedPointerSite> takePointerSites() {
+    return std::move(pointerSites_);
+  }
   const std::map<std::string, std::set<std::string>> &fieldAliases() const {
     return fieldAliases_;
   }
@@ -242,6 +268,12 @@ public:
   const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
   void setConstLocals(const std::map<std::string, llvm::APSInt> &m) { constLocals_ = m; }
   const std::map<std::string, llvm::APSInt> &constLocals() const { return constLocals_; }
+  const std::set<std::string> &addressTakenVars() const {
+    return addressTakenVars_;
+  }
+  void setAddressTakenVars(const std::set<std::string> &s) {
+    addressTakenVars_ = s;
+  }
   void setAssignedVars(const std::set<std::string> &s) { assignedVars_ = s; }
   const std::set<std::string> &assignedVars() const { return assignedVars_; }
   const std::set<std::string> &functionsReturningFreed() const {
@@ -268,12 +300,18 @@ public:
   void setMaybeReleaseLines(const std::map<std::string, unsigned> &m) {
     maybeReleaseLines_ = m;
   }
-  const std::map<std::string, std::map<unsigned, long long>> &
+  const std::map<std::string, long long> &stackArrayExtents() const {
+    return stackArrayExtents_;
+  }
+  void setStackArrayExtents(const std::map<std::string, long long> &m) {
+    stackArrayExtents_ = m;
+  }
+  const std::map<std::string, std::map<unsigned, ParamExtent>> &
   callParamExtents() const {
     return callParamExtents_;
   }
   void setCallParamExtents(
-      const std::map<std::string, std::map<unsigned, long long>> &m) {
+      const std::map<std::string, std::map<unsigned, ParamExtent>> &m) {
     callParamExtents_ = m;
   }
   void setReturnedParams(const std::map<std::string, unsigned> &m) {
@@ -344,6 +382,7 @@ public:
     long long bytes = -1; // total byte extent; -1 means unknown
     bool zeroInit = false; // calloc-style zero initialisation
     const VarDecl *decl = nullptr;
+    ExtentOrigin origin = ExtentOrigin::Unknown;
   };
 
   /// Key used by constLocals_ for a scalar local or a struct field constant.
@@ -377,11 +416,14 @@ public:
     std::string key = constKey(e);
     if (key.empty())
       return false;
+    std::string baseName = key.substr(0, key.find('.'));
+    if (addressTakenVars_.count(baseName))
+      return false;
     auto it = constLocals_.find(key);
     if (it == constLocals_.end())
       return false;
     // A reassigned local is no longer constant.
-    std::string base = key.substr(0, key.find('.'));
+    std::string base = baseName;
     if (assignedVars_.count(base))
       return false;
     out = it->second;
@@ -501,10 +543,23 @@ public:
     case BO_Add: kind = CheckedArithmeticSite::Op::Add; break;
     case BO_Sub: kind = CheckedArithmeticSite::Op::Sub; break;
     case BO_Mul: kind = CheckedArithmeticSite::Op::Mul; break;
+    case BO_Div: kind = CheckedArithmeticSite::Op::Div; break;
+    case BO_Rem: kind = CheckedArithmeticSite::Op::Rem; break;
+    case BO_Shl: kind = CheckedArithmeticSite::Op::Shl; break;
+    case BO_Shr: kind = CheckedArithmeticSite::Op::Shr; break;
     default: return;
     }
     QualType ty = op->getType();
-    if (!ty->isSignedIntegerType() || ty->isDependentType())
+    // Signed overflow is only possible for add/sub/mul; div/rem/shift also
+    // need guards on unsigned operands (zero divisor, invalid shift count).
+    if (ty->isDependentType())
+      return;
+    if ((kind == CheckedArithmeticSite::Op::Add ||
+         kind == CheckedArithmeticSite::Op::Sub ||
+         kind == CheckedArithmeticSite::Op::Mul) &&
+        !ty->isSignedIntegerType())
+      return;
+    if (!ty->isIntegerType())
       return;
     // Pointer subtraction also has a signed integer (ptrdiff_t) result, but
     // its operands are pointers: rewriting it as integer subtraction of the
@@ -515,6 +570,10 @@ public:
     unsigned bits = ctx_.getIntWidth(ty);
     if (bits == 0 || bits > 64)
       return; // __int128 and wider: no int64_t helper, leave unchanged
+    // The helper ABI returns int64_t; values of wider unsigned types do not
+    // round-trip reliably through it.  Leave those operations unchanged.
+    if (!ty->isSignedIntegerType() && bits > 32)
+      return;
     llvm::APSInt unused;
     if (knownConst(op->getLHS(), unused) && knownConst(op->getRHS(), unused))
       return; // compile-time expression: the static check already covered it
@@ -550,8 +609,153 @@ public:
     site.opLength = opLen;
     site.end = end;
     site.bits = bits;
+    site.isSigned = ty->isSignedIntegerType();
     site.type = ty.getCanonicalType().getAsString(pp);
     arithmeticSites_.push_back(std::move(site));
+  }
+
+  /// Record explicit integer conversions that can truncate or change sign.
+  /// The guard is value-based (extend the result back and compare), mirroring
+  /// Clang's EmitIntegerTruncationCheckHelper and GSL's narrow (no sanitizer
+  /// runtime, no rejection of merely narrow *types*).
+  bool VisitCStyleCastExpr(CStyleCastExpr *cast) {
+    if (!recordArithmeticSites_ || !report_ || !cast)
+      return true;
+    QualType dst = cast->getType();
+    const Expr *value = cast->getSubExpr() ? cast->getSubExpr()->IgnoreParenImpCasts()
+                                           : nullptr;
+    if (!value)
+      return true;
+    QualType src = value->getType();
+    if (!dst->isIntegerType() || !src->isIntegerType() ||
+        dst->isBooleanType() || src->isBooleanType() ||
+        dst->isEnumeralType() || src->isEnumeralType())
+      return true;
+    unsigned db = ctx_.getIntWidth(dst), sb = ctx_.getIntWidth(src);
+    if (db == 0 || sb == 0 || db > 64 || sb > 64)
+      return true;
+    // Only true truncations are checked.  Same-width signedness changes
+    // (e.g. `unsigned u = (unsigned)-1`) are idiomatic C and are left alone.
+    if (db >= sb)
+      return true;
+    SourceLocation b = value->getBeginLoc(), e = value->getEndLoc();
+    if (b.isInvalid() || e.isInvalid() || b.isMacroID() || e.isMacroID() ||
+        isHeaderLocation(b))
+      return true;
+    SourceManager &sm = ctx_.getSourceManager();
+    FileID main = sm.getMainFileID();
+    if (sm.getFileID(b) != main || sm.getFileID(e) != main)
+      return true;
+    SourceLocation afterEnd =
+        Lexer::getLocForEndOfToken(e, 0, sm, ctx_.getLangOpts());
+    if (afterEnd.isInvalid() || sm.getFileOffset(b) >= sm.getFileOffset(afterEnd))
+      return true;
+    llvm::APSInt unused;
+    if (knownConst(value, unused))
+      return true; // compile-time value: no runtime guard needed
+    PrintingPolicy pp(ctx_.getLangOpts());
+    CheckedArithmeticSite site;
+    site.kind = CheckedArithmeticSite::Op::Narrow;
+    site.begin = sm.getFileOffset(b);
+    site.end = sm.getFileOffset(afterEnd);
+    site.bits = db;
+    site.isSigned = dst->isSignedIntegerType();
+    site.srcBits = sb;
+    site.srcIsSigned = src->isSignedIntegerType();
+    site.type = dst.getCanonicalType().getAsString(pp);
+    site.srcType = src.getCanonicalType().getAsString(pp);
+    arithmeticSites_.push_back(std::move(site));
+    return true;
+  }
+
+  /// Record pointer + integer arithmetic where the base object has a
+  /// provable element count.  Only side-effect-free operands are rewritten so
+  /// the guard never evaluates an expression twice.
+  void maybeRecordCheckedPointer(const BinaryOperator *op) {
+    if (!recordArithmeticSites_ || !report_ || !op) {
+      return;
+    }
+    const auto opc = op->getOpcode();
+    if (opc != BO_Add && opc != BO_Sub)
+      return;
+    Expr *lhs = op->getLHS(), *rhs = op->getRHS();
+    const Expr *ptrE = nullptr, *idxE = nullptr;
+    if (lhs->getType()->isPointerType() && rhs->getType()->isIntegerType()) {
+      ptrE = lhs;
+      idxE = rhs;
+    } else if (rhs->getType()->isPointerType() &&
+               lhs->getType()->isIntegerType()) {
+      ptrE = rhs;
+      idxE = lhs;
+      if (opc == BO_Sub)
+        return; // integer - pointer is not valid C
+    } else {
+      return;
+    }
+    auto simple = [](const Expr *e) {
+      e = e->IgnoreParenImpCasts();
+      return isa<DeclRefExpr>(e) || isa<IntegerLiteral>(e);
+    };
+    if (!simple(ptrE) || !simple(idxE))
+      return;
+    SourceLocation b = op->getBeginLoc(), e = op->getEndLoc();
+    if (b.isInvalid() || e.isInvalid() || b.isMacroID() || e.isMacroID() ||
+        isHeaderLocation(b))
+      return;
+    SourceManager &sm = ctx_.getSourceManager();
+    FileID main = sm.getMainFileID();
+    if (sm.getFileID(b) != main || sm.getFileID(e) != main)
+      return;
+    SourceLocation after = Lexer::getLocForEndOfToken(e, 0, sm, ctx_.getLangOpts());
+    if (after.isInvalid() || sm.getFileOffset(b) >= sm.getFileOffset(after))
+      return;
+    long long bytes = -1;
+    ExtentOrigin origin = ExtentOrigin::Unknown;
+    if (const HeapAllocState *hs = heapStateOf(ptrE)) {
+      bytes = hs->bytes;
+      origin = hs->origin;
+    } else {
+      const Expr *x = ptrE->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+          auto it = stackArrayExtents_.find(vd->getNameAsString());
+          if (it != stackArrayExtents_.end()) {
+            bytes = it->second;
+            origin = ExtentOrigin::Stack;
+          }
+        }
+    }
+    if (bytes <= 0 || origin == ExtentOrigin::Unknown)
+      return;
+    const auto *pt = ptrE->getType()->getAs<PointerType>();
+    if (!pt)
+      return;
+    unsigned es = ctx_.getTypeSize(pt->getPointeeType()) / 8u;
+    if (es == 0 || bytes % es != 0)
+      return;
+    long long count = bytes / es;
+    auto textOf = [&](const Expr *x) {
+      SourceLocation xb = x->getBeginLoc(), xe = x->getEndLoc();
+      SourceLocation xa = Lexer::getLocForEndOfToken(xe, 0, sm, ctx_.getLangOpts());
+      if (xb.isInvalid() || xa.isInvalid() || xb.isMacroID() || xe.isMacroID())
+        return std::string();
+      return Lexer::getSourceText(CharSourceRange::getCharRange(xb, xa), sm,
+                                  ctx_.getLangOpts())
+          .str();
+    };
+    CheckedPointerSite site;
+    site.begin = sm.getFileOffset(b);
+    site.end = sm.getFileOffset(after);
+    site.base = textOf(ptrE);
+    site.index = textOf(idxE);
+    site.expr = Lexer::getSourceText(CharSourceRange::getCharRange(b, after), sm,
+                                     ctx_.getLangOpts())
+                    .str();
+    site.count = std::to_string(count);
+    site.negative = (opc == BO_Sub);
+    if (site.base.empty() || site.index.empty() || site.expr.empty())
+      return;
+    pointerSites_.push_back(std::move(site));
   }
 
   /// A divisor is provably non-zero when it is a known constant, a variable
@@ -608,6 +812,7 @@ public:
         HeapAllocState st;
         st.bytes = n;
         st.decl = vd;
+        st.origin = ExtentOrigin::Heap;
         heapAllocs_[vd->getNameAsString()] = st;
       }
       return;
@@ -657,6 +862,7 @@ public:
     st.bytes = bytes;
     st.zeroInit = (callee == "calloc");
     st.decl = vd;
+    st.origin = ExtentOrigin::Heap;
     heapAllocs_[vd->getNameAsString()] = st;
   }
 
@@ -810,7 +1016,8 @@ public:
       return;
     std::string name = varNameOf(sub->getBase());
     if (idx < 0) {
-      report(loc, "negative array index on heap allocation '" + name + "'");
+      report(loc, std::string("negative array index on ") +
+                      extentLabel(st->origin) + " '" + name + "'");
       return;
     }
     if (st->bytes < 0)
@@ -829,8 +1036,8 @@ public:
       return;
     unsigned long long off = (unsigned long long)idx * elemSize;
     if (off >= (unsigned long long)st->bytes)
-      report(loc, "array index " + std::to_string(idx) +
-                      " exceeds heap allocation '" + name + "' of " +
+      report(loc, "array index " + std::to_string(idx) + " exceeds " +
+                      extentLabel(st->origin) + " '" + name + "' of " +
                       std::to_string(st->bytes) + " bytes");
   }
 
@@ -875,7 +1082,8 @@ public:
     if (st) {
       std::string name = varNameOf(sub);
       if (st->bytes == 0) {
-        report(loc, "dereference of zero-size heap allocation '" + name +
+        report(loc, std::string("dereference of zero-size ") +
+                        extentLabel(st->origin) + " '" + name +
                         "' (array index out of bounds)");
         return;
       }
@@ -904,7 +1112,8 @@ public:
                       (unsigned long long)byteOff >=
                           (unsigned long long)baseSt->bytes)
                     report(loc, "pointer offset " + std::to_string(off) +
-                                    " exceeds heap allocation '" +
+                                    " exceeds " +
+                                    extentLabel(baseSt->origin) + " '" +
                                     varNameOf(bo->getLHS()) + "'");
                 }
               }
@@ -1670,7 +1879,8 @@ public:
         if (eit == pit->second.end())
           continue;
         HeapAllocState st;
-        st.bytes = eit->second;
+        st.bytes = eit->second.bytes;
+        st.origin = eit->second.origin;
         st.decl = pv;
         heapAllocs_[pv->getNameAsString()] = st;
       }
@@ -2111,6 +2321,9 @@ public:
     // This is C+ analysis, not UBSan instrumentation.
     if (op->getType()->isIntegerType()) {
       const auto opc = op->getOpcode();
+      // Queue a native guard for every supported non-constant operation.
+      // Compile-time cases are rejected below and never reach codegen.
+      maybeRecordCheckedArithmetic(op);
       auto asLL = [&](const Expr *e, long long &out) -> bool {
         llvm::APSInt v;
         if (!knownConst(e, v))
@@ -2135,8 +2348,6 @@ public:
             else warnAt(op->getBeginLoc(), msg);
           }
         }
-        // Runtime operands cannot be folded: queue a native checked call.
-        maybeRecordCheckedArithmetic(op);
       }
       // Shift counts must be in [0, promoted-left-width). Volatile-backed
       // constants are tracked like other local constants by knownConst.
@@ -2314,6 +2525,8 @@ public:
       }
     }
     if (op->isAdditiveOp()) {
+      // Native guard for runtime-valued offsets into a provably sized object.
+      maybeRecordCheckedPointer(op);
       const Expr *lhs = op->getLHS();
       const Expr *rhs = op->getRHS();
       const VarDecl *arrayVar = nullptr;
@@ -2397,6 +2610,14 @@ public:
   }
 
   bool VisitUnaryOperator(UnaryOperator *op) {
+    // A local whose address is taken can be written by an output parameter
+    // (scanf, read, memcpy, ...), so it must never be folded as a constant.
+    if (op->getOpcode() == UO_AddrOf) {
+      const Expr *sub = op->getSubExpr()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          addressTakenVars_.insert(vd->getNameAsString());
+    }
     if (!report_)
       return true;
     if (op->isIncrementOp() || op->isDecrementOp()) {
@@ -2539,7 +2760,8 @@ public:
     if (const HeapAllocState *hs = heapStateOf(dst)) {
       if ((unsigned long long)bytes > (unsigned long long)hs->bytes)
         report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
-                                        " bytes exceeds heap allocation '" +
+                                        " bytes exceeds " +
+                                        extentLabel(hs->origin) + " '" +
                                         vd->getNameAsString() + "' of " +
                                         std::to_string(hs->bytes) + " bytes");
       return;
@@ -2827,11 +3049,18 @@ public:
       for (unsigned i = 0; i < call->getNumArgs(); ++i) {
         std::string an = varNameOf(call->getArg(i));
         auto hit = heapAllocs_.find(an);
-        if (!an.empty() && hit != heapAllocs_.end())
-          callParamExtents_[name][i] = hit->second.bytes;
+        if (!an.empty() && hit != heapAllocs_.end()) {
+          callParamExtents_[name][i].bytes = hit->second.bytes;
+          callParamExtents_[name][i].origin =
+              hit->second.origin == ExtentOrigin::Unknown
+                  ? ExtentOrigin::Heap
+                  : hit->second.origin;
+        }
         auto sit = stackArrayExtents_.find(an);
-        if (!an.empty() && sit != stackArrayExtents_.end())
-          callParamExtents_[name][i] = sit->second;
+        if (!an.empty() && sit != stackArrayExtents_.end()) {
+          callParamExtents_[name][i].bytes = sit->second;
+          callParamExtents_[name][i].origin = ExtentOrigin::Stack;
+        }
       }
       // Record the extent of a call that returns one of its pointer arguments
       // or a fixed global array, so chained calls retain bounds metadata.
@@ -3602,8 +3831,8 @@ public:
           if (prefix + (unsigned long long)idx * es >=
               (unsigned long long)hs->bytes)
             report(subscript->getBeginLoc(),
-                   "flexible array index " + std::to_string(idx) +
-                       " exceeds heap allocation of " +
+                   "flexible array index " + std::to_string(idx) + " exceeds " +
+                       extentLabel(hs->origin) + " of " +
                        std::to_string(hs->bytes) + " bytes (including "
                        "struct prefix)");
           return true;
@@ -3807,6 +4036,7 @@ private:
   bool strict_ = false;
   bool recordArithmeticSites_ = false;
   std::vector<CheckedArithmeticSite> arithmeticSites_;
+  std::vector<CheckedPointerSite> pointerSites_;
   std::set<unsigned> handledReallocs_;
   std::map<std::string, SourceLocation> allocLocs_;
   std::map<std::string, SourceLocation> aliasLocs_;
@@ -3826,6 +4056,7 @@ private:
   std::map<const VarDecl *, std::string> strlenSized_;
   std::map<const VarDecl *, long long> loopIndexOverride_;
   std::map<std::string, llvm::APSInt> constLocals_;
+  std::set<std::string> addressTakenVars_;
   std::set<std::string> assignedVars_;
   std::set<std::string> functionsReturningFreed_;
   std::set<std::string> nullReturningFunctions_;
@@ -3836,7 +4067,7 @@ private:
   std::set<std::string> provenanceInts_;
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
-  std::map<std::string, std::map<unsigned, long long>> callParamExtents_;
+  std::map<std::string, std::map<unsigned, ParamExtent>> callParamExtents_;
   /// Function name -> parameter index returned unchanged by `return p;`.
   std::map<std::string, unsigned> returnedParam_;
   /// Function name -> fixed extent returned from a static/global array.
@@ -3882,9 +4113,24 @@ bool backendSanitizesSignedOverflow(const std::vector<std::string> &args) {
   for (const auto &a : args) {
     if (a.rfind("-fsanitize=", 0) != 0)
       continue;
-    if (a.find("undefined") != std::string::npos ||
-        a.find("signed-integer-overflow") != std::string::npos)
-      return true;
+    // Compare whole comma-separated tokens.  A substring search for
+    // "signed-integer-overflow" also matches "unsigned-integer-overflow",
+    // which is part of the `integer` sanitizer and does NOT check signed
+    // overflow; that false positive used to suppress the native guard and
+    // leave signed overflow silently unenforced under --sanitize=integer.
+    std::string list = a.substr(strlen("-fsanitize="));
+    size_t start = 0;
+    while (start <= list.size()) {
+      size_t comma = list.find(',', start);
+      std::string token = list.substr(
+          start, comma == std::string::npos ? std::string::npos : comma - start);
+      if (token == "undefined" || token == "signed-integer-overflow" ||
+          token == "all")
+        return true;
+      if (comma == std::string::npos)
+        break;
+      start = comma + 1;
+    }
   }
   return false;
 }
@@ -3895,6 +4141,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
                     DiagnosticEngine &diags, bool strict) {
   // A prior TU must not leak its sites into this one.
   setCheckedArithmeticSites({});
+  setCheckedPointerSites({});
   bool needNativeArithmetic =
       !backendSanitizesSignedOverflow(backendArgs);
 
@@ -3981,6 +4228,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setNullReturningFunctions(collect.nullReturningFunctions());
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
   check.setMaybeReleaseLines(collect.maybeReleaseLines());
+  check.setAddressTakenVars(collect.addressTakenVars());
+  check.setStackArrayExtents(collect.stackArrayExtents());
   check.setCallParamExtents(collect.callParamExtents());
   check.setReturnedParams(collect.returnedParams());
   check.setReturnedFixedExtents(collect.returnedFixedExtents());
@@ -3988,6 +4237,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
   if (needNativeArithmetic)
     setCheckedArithmeticSites(check.takeArithmeticSites());
+    setCheckedPointerSites(check.takePointerSites());
 
   // Thread-race heuristic: the same entry function passed to more than one
   // pthread_create that writes a global has unsynchronised shared mutable
