@@ -198,6 +198,7 @@ expect_reject null_assignment_deref "$ROOT/tests/safety/null_assignment_deref.cp
 expect_reject heap_extent_libc_overflow "$ROOT/tests/safety/heap_extent_libc_overflow.c"
 expect_reject libccontract_free_interior_offset "$ROOT/tests/safety/libccontract_free_interior_offset.c"
 expect_strict_reject libccontract_genuine_leak "$ROOT/tests/safety/libccontract_genuine_leak.c"
+expect_strict_reject mutable_borrow_alias "$ROOT/tests/safety/mutable_borrow_alias.c"
 expect_reject realloc_failure "$ROOT/tests/safety/realloc_failure.c"
 expect_reject realloc_success_alias_uaf "$ROOT/tests/safety/realloc_success_alias_uaf.c"
 expect_reject memcpy_overflow "$ROOT/tests/safety/memcpy_overflow.c"

@@ -387,6 +387,12 @@ public:
   void setDerefParams(const std::set<std::pair<std::string, unsigned>> &s) {
     derefParams_ = s;
   }
+  const std::set<std::pair<std::string, unsigned>> &paramWriteSlots() const {
+    return paramWriteSlots_;
+  }
+  void setParamWriteSlots(const std::set<std::pair<std::string, unsigned>> &s) {
+    paramWriteSlots_ = s;
+  }
   const std::set<std::string> &maybeReleasedVars() const {
     return maybeReleasedVars_;
   }
@@ -3607,6 +3613,48 @@ public:
     std::set<unsigned> derefSlots;
     DerefFinder df(*this, derefSlots);
     df.TraverseStmt(fd->getBody());
+    // Rust-style exclusivity needs WRITE summaries, not just read/deref:
+    // `memcpy(p, p, n)` is legal even though both arguments are dereferenced.
+    struct WriteDerefFinder : RecursiveASTVisitor<WriteDerefFinder> {
+      const SafetyVisitor &owner;
+      std::set<unsigned> &slots;
+      WriteDerefFinder(const SafetyVisitor &o, std::set<unsigned> &s)
+          : owner(o), slots(s) {}
+      unsigned slotOf(const Expr *e) const {
+        int s = owner.paramIndexOf(e);
+        return s < 0 ? UINT_MAX : (unsigned)s;
+      }
+      void noteWrite(const Expr *e) {
+        unsigned s = slotOf(e);
+        if (s != UINT_MAX)
+          slots.insert(s);
+      }
+      bool VisitBinaryOperator(BinaryOperator *bo) {
+        if (!bo->isAssignmentOp())
+          return true;
+        const Expr *lhs = bo->getLHS()->IgnoreParenCasts();
+        if (const auto *uo = dyn_cast<UnaryOperator>(lhs)) {
+          if (uo->getOpcode() == UO_Deref)
+            noteWrite(uo->getSubExpr());
+        } else if (const auto *as = dyn_cast<ArraySubscriptExpr>(lhs)) {
+          noteWrite(as->getBase());
+        } else if (const auto *me = dyn_cast<MemberExpr>(lhs)) {
+          if (me->isArrow())
+            noteWrite(me->getBase());
+        }
+        return true;
+      }
+      bool VisitUnaryOperator(UnaryOperator *uo) {
+        if (uo->isIncrementDecrementOp())
+          noteWrite(uo->getSubExpr()->IgnoreParenCasts());
+        return true;
+      }
+    };
+    std::set<unsigned> writeSlots;
+    WriteDerefFinder wf(*this, writeSlots);
+    wf.TraverseStmt(fd->getBody());
+    for (unsigned slot : writeSlots)
+      paramWriteSlots_.insert({fd->getNameAsString(), slot});
     // A callee that rejects null on an early path tolerates a null argument;
     // recording it as requiring non-null would be a false positive.
     std::set<unsigned> nullTolerant;
@@ -5190,6 +5238,45 @@ public:
         }
       }
     }
+    // Rust-style exclusive mutable borrow: two `&x` arguments to a callee
+    // that WRITES through both parameter slots alias the same object.  In
+    // Rust this is rejected by the borrow checker; plain C permits it, but
+    // STRICT can diagnose the provable case without changing ABI.
+    if (report_) {
+      for (const auto &target : calleeNames(call, callee)) {
+        std::map<std::string, unsigned> borrowed;
+        bool reported = false;
+        for (unsigned i = 0; i < call->getNumArgs() && !reported; ++i) {
+          if (!paramWriteSlots_.count({target, i}))
+            continue;
+          const Expr *arg = call->getArg(i)->IgnoreParenImpCasts();
+          const auto *uo = dyn_cast<UnaryOperator>(arg);
+          if (!uo || uo->getOpcode() != UO_AddrOf)
+            continue;
+          const auto *ref = dyn_cast<DeclRefExpr>(
+              uo->getSubExpr()->IgnoreParenImpCasts());
+          if (!ref)
+            continue;
+          std::string owner = ref->getDecl()->getNameAsString();
+          auto prior = borrowed.find(owner);
+          if (prior != borrowed.end()) {
+            std::string msg = "exclusive mutable borrow violated: arguments " +
+                              std::to_string(prior->second) + " and " +
+                              std::to_string(i) + " both borrow '&" + owner +
+                              "' passed to '" + target + "'";
+            // STRICT rejects; DEFAULT only warns (Rust-like exclusivity is
+            // intentionally opt-in for ordinary C compatibility).
+            if (strict_)
+              report(call->getBeginLoc(), msg);
+            else
+              warnAt(call->getBeginLoc(), msg);
+            reported = true;
+          } else {
+            borrowed[owner] = i;
+          }
+        }
+      }
+    }
     // A callee that writes through a parameter must not receive a pointer
     // produced by casting away const from a real const object (UB store).
     if (report_) {
@@ -6653,6 +6740,9 @@ private:
   std::set<std::string> functionsReturningFreed_;
   std::set<std::string> nullReturningFunctions_;
   std::set<std::pair<std::string, unsigned>> derefParams_;
+  /// Parameter slots the callee WRITES through (not merely reads). Used for
+  /// Rust-style exclusive mutable borrow checks at call sites.
+  std::set<std::pair<std::string, unsigned>> paramWriteSlots_;
   std::set<std::string> maybeReleasedVars_;
   std::map<std::string, unsigned> maybeReleaseLines_;
   std::set<std::string> guardedFromConst_;
@@ -7002,6 +7092,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setNullReturningFunctions(collect.nullReturningFunctions());
   check.setDerefParams(collect.derefParams());
+  check.setParamWriteSlots(collect.paramWriteSlots());
   check.userFrees_ = collect.userFrees_;
   check.setGlobalPointsTo(collect.globalPointsTo());
   check.setUnionVars(collect.unionVars());

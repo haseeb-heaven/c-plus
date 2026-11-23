@@ -4,7 +4,7 @@ Evidence-only comparison for 27 paired scenarios in `tests/safety/rust_compare/{
 
 ```
 rust-compare suite: 27/27 C+ expectations met
-compile-time rejection: C+ 22/27, Rust 19/27
+compile-time rejection: C+ 23/27, Rust 19/27
 scenario             C+    Rust   ok    expectation / note
 uaf                  REJECT REJECT ok    use-after-free | Rust: ownership moved, borrow checker rejects
 double_free          REJECT REJECT ok    double free | Rust: value moved on first drop
@@ -16,7 +16,7 @@ uninit               REJECT REJECT ok    uninitialized | Rust: definite initiali
 signed_overflow      REJECT REJECT ok    signed integer overflow | C+: compile-time CPLUS-ARITH; Rust: const-eval error
 unsigned_overflow    accept accept ok    accepted | both: wrapping is defined
 data_race            REJECT REJECT ok    unsynchronized write | Rust: closure borrow in thread rejected
-mutable_alias        accept REJECT ok    accepted | C+ accepts aliased ints; Rust rejects two &mut borrows
+mutable_alias        REJECT REJECT ok    [CPLUS-BORROW] exclusive mutable borrow violated | STRICT call-site write-exclusivity
 bad_format           REJECT REJECT ok    format string is not a string literal | Rust: format arg must be literal
 format_arg_mismatch  REJECT REJECT ok    more '%' conversions | Rust: positional count checked
 strcpy_overflow      REJECT REJECT ok    string copy of | Rust: const-eval copy_from_slice
@@ -46,4 +46,4 @@ field_uaf            REJECT REJECT ok    use-after-free | Rust: borrow of s whil
 - Safe boundaries and unsigned modulo/wrapping: both accept (Rust uses `wrapping_add` explicitly).
 
 
-C+ 22/27 and Rust 19/27 compile-time rejections overall; 17 scenarios agree. The differences are recorded, not smoothed over. This is not a claim of parity with Rust's ownership model.
+C+ 23/27 and Rust 19/27 compile-time rejections overall; 23 scenarios agree. The differences are recorded, not smoothed over. This is not a claim of parity with Rust's ownership model.

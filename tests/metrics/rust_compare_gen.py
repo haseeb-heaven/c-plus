@@ -68,7 +68,7 @@ void f(int*a,int*b){*a=1;*b=2;}
 int main(void){int x=0;f(&x,&x);return x;}
 """, """fn f(a: &mut i32, b: &mut i32){ *a=1; *b=2; }
 fn main(){ let mut x=0; f(&mut x, &mut x); }
-""", ""),
+""", "exclusive mutable borrow violated"),
 ("bad_format", H + """
 int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}
 """, """fn main(){ let s = std::env::args().nth(1).unwrap(); println!(s); }
