@@ -1,0 +1,23 @@
+# CAPTURED TERMINAL TRANSCRIPT: unsafe_vs_safe_memcpy.txt
+# TITLE: Before/after memcpy: forked raw one-over corrupts a canary; cplus_memcpy_s refuses the same one-over with safeclib ESNOSPC=406
+# CAPTURED_AT_UTC: 2026-11-23T06:29:41Z
+# TOOLCHAIN: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin
+# CWD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+# NOTE: everything between BEGIN/END markers is verbatim stdout+stderr
+#       of a real binary executed under /usr/bin/timeout 30.
+# BUILD CMD: ./build/c+ build examples/expanded/safety/memcpy_s_demo.cp --strict --sanitize=none -I. -o "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/memcpy_s_demo" -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
+# RUN CMD: /usr/bin/timeout 30 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/memcpy_s_demo
+# --- BEGIN VERBATIM OUTPUT ---
+memcpy_s ordinary_one_over OK canary=0x2a corrupted=1 (unguarded subprocess)
+memcpy_s child_exit OK child_exit=9
+IGNORE CONSTRAINT HANDLER: (406) memcpy_s: slen exceeds max
+memcpy_s checked_one_over REFUSED rc=406 canary=0xa5 intact=1
+memcpy_s checked_exact_fit OK rc=0 canary=0xa5 buf7=8
+memcpy_s parent_canary OK canary=0xa5
+# --- END VERBATIM OUTPUT ---
+# EXIT_CODE=0
+# TOKEN_OK: memcpy_s ordinary_one_over OK canary=0x2a corrupted=1
+# TOKEN_OK: memcpy_s checked_one_over REFUSED rc=406
+# TOKEN_OK: IGNORE CONSTRAINT HANDLER: (406)
+# TOKEN_OK: memcpy_s parent_canary OK canary=0xa5
+# VERDICT: PASS -- every expected refusal token was found in real captured output
