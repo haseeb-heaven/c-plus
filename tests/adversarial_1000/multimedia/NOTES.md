@@ -71,15 +71,44 @@ The runner prints the 1000 `S ...` lines, a `DIGEST sha256 ...` line, and the
 authoritative final line last:
 
 ```
-ADV1000 multimedia 1000 <refused> sentinel_ok <failures>
+ADV1000 multimedia 1000 720 sentinel_ok 0
 ```
 
-`sentinel_ok` is a token (not a count) to match the aggregate runner's
+Here 720 is the refused count and 0 is the failure count. `sentinel_ok` is
+a token (not a count) to match the aggregate runner's
 `*_ok` integrity contract. The per-case `<sentinel_ok>` field is 0/1.
 
-## Results
+## Results (verified clean run, 2026-11-23)
 
-(Filled after the verified clean run — see below.)
+Exact final line (last stdout line; runner exit code 0):
+
+```
+ADV1000 multimedia 1000 720 sentinel_ok 0
+```
+
+- scenarios: 1000 canonical `S ...` lines (ids 0..999, all distinct)
+- refused: 720
+- sentinel_ok: all 1000 cases had intact guards (0 broken)
+- failures: 0
+- `results/scenarios.log`: exactly 1000 lines, no `FAIL` result
+- SHA-256 of `results/scenarios.log`:
+  `147032458a1c26e153f100309c05fc6a58670c6ad8bdffc13ebf32c18a2251f2`
+  (also saved in `results/scenarios.sha256` and printed as `DIGEST sha256 ...`)
+- `timeout 120` bound respected; `SDL_VIDEODRIVER=dummy`,
+  `SDL_AUDIODRIVER=dummy`, miniaudio null backend.
+- Reproduce with `sh tests/adversarial_1000/multimedia/run_all.sh`.
+
+### Per-header kind coverage (50 kinds, id % 50)
+
+| header | kinds | example cases |
+|---|---|---|
+| window | 0-5 | zero/negative/oversized dims, null-handle size, null title, double drop |
+| graphics | 6-11 | null surface, OOB/negative pixels, 8-bpp format, null renderer, double drop |
+| gui | 12-17 | null handles, null event/title/label, bad slider, extreme rect, double drop |
+| input | 18-23 | null events, OOB scancode, garbage event, null poll/mouse, null text |
+| image | 24-32 | null source, bad/zero dims, huge dims, truncated PNG, huge IHDR, bad channels, OOB pixel, null path, double drop |
+| audio | 33-41 | truncated WAV (memory/file), null path/buffer, null frames, zero read, null engine, null context, double drop |
+| video | 42-49 | null error buffer, null/OOB stream, null codec params, null decoder, null media, truncated MP4, null frame, double drop |
 
 ## Reconciliation and toolchain notes
 
@@ -95,6 +124,10 @@ ADV1000 multimedia 1000 <refused> sentinel_ok <failures>
   when `window_begin()` succeeded (a clipped begin ends itself). Calling
   `ui.render(0)` here would invoke an expensive full font-atlas upload, so it
   is avoided.
+- Resource teardown is intentionally omitted: backend teardown calls
+  (FFmpeg / miniaudio / SDL / Nuklear) are not stable after these adversarial
+  paths, and the process exits immediately, so the OS reclaims all resources.
+  No scenario result depends on teardown.
 - SDL's dummy driver accepts positive window dimensions up to `INT_MAX`
   without allocating a raster, so oversized window dimensions are reported as
   a **defined result** (valid handle, no corruption), not a refusal. The
