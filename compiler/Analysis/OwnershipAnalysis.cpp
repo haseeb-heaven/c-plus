@@ -175,7 +175,8 @@ public:
     return name.contains("scanf") || name == "getline" ||
            name == "pthread_mutex_init" || name == "pthread_cond_init" ||
            name == "pthread_create" || name == "scan" ||
-           name == "cplus_scan_one" || name == "cplus_scan_value";
+           name == "cplus_scan_one" || name == "cplus_scan_value" ||
+           name == "checked_add" || name == "cplus_checked_add";
   }
 
   bool VisitCallExpr(CallExpr *call) {
@@ -273,12 +274,16 @@ public:
     if (const auto *call = dyn_cast<CallExpr>(s)) {
       // Writing functions initialise their output buffer through `&var`.
       const FunctionDecl *fd = call->getDirectCallee();
-      if (fd && LocalCollector::isOutputFunction(fd->getName()) &&
-          call->getNumArgs() >= 1) {
-        const Expr *arg = call->getArg(0)->IgnoreParenCasts();
-        if (const auto *uo = dyn_cast<UnaryOperator>(arg))
-          if (uo->getOpcode() == UO_AddrOf)
-            markInitialized(uo->getSubExpr());
+      if (fd && LocalCollector::isOutputFunction(fd->getName())) {
+        // Output pointers may appear at any argument position (e.g.
+        // checked_add(a, b, &out)). Mark every address-of argument as
+        // initialized through the call's contract.
+        for (const Expr *argument : call->arguments()) {
+          const Expr *arg = argument->IgnoreParenCasts();
+          if (const auto *uo = dyn_cast<UnaryOperator>(arg))
+            if (uo->getOpcode() == UO_AddrOf)
+              markInitialized(uo->getSubExpr());
+        }
       }
       // Raw bounded-copy APIs also write through their first argument.
       std::string n = fd ? fd->getName().str() : std::string();

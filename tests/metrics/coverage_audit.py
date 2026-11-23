@@ -14,13 +14,8 @@ ROOT = pathlib.Path(__file__).parents[2]
 SUITES = [
     ("repo", "tests/run_tests.sh"),
     ("core safety", "tests/core/run.sh"),
-    ("p0 correctness", "tests/core/p0_correctness_suite.py"),
-    ("fnptr bounds", "tests/core/fnptr_bounds_suite.py"),
-    ("rust comparison", "tests/core/rust_compare_suite.py"),
-    ("runtime crashes", "tests/core/runtime_crashes_suite.py"),
-    ("sanitizers", "tests/core/sanitizer_suite.py"),
-    ("contracts", "tests/core/lib_contracts_suite.py"),
-    ("bugs51-97", "tests/core/bugs51_97_suite.py"),
+    ("native safety", "tests/native/cplus_safety_tests.c"),
+    ("strict40", "tests/native/strict40_runner.c"),
     ("red team", "tests/core/redteam_100.py"),
 ]
 

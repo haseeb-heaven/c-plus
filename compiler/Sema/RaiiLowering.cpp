@@ -1005,7 +1005,8 @@ private:
   /// file-scope declarations).
   void recordLocalDecl(size_t s, size_t e,
                        std::map<std::string, LocalVar> &scope,
-                       std::set<std::string> *out = nullptr) const {
+                       std::set<std::string> *out = nullptr,
+                       int scopeIndex = 0) const {
     if (s >= e)
       return;
     static const std::set<std::string> kNonDecl = {
@@ -1045,7 +1046,7 @@ private:
     if (out)
       out->insert(name);
     else
-      scope[name] = LocalVar{0, sawStar, isArray, isStatic};
+      scope[name] = LocalVar{scopeIndex, sawStar, isArray, isStatic};
   }
 
   void analyzePlainC() {
@@ -1098,6 +1099,7 @@ private:
     std::vector<std::map<std::string, LocalVar>> scopes(1);
     std::map<std::string, RawAlloc> live;          // live on the linear path
     std::set<std::string> closedFiles;             // fopen results already closed
+    std::map<std::string, size_t> closeTokenIdx;
     std::map<std::string, std::set<std::string>> fileAliases; // FILE* copies
     std::set<std::string> nullChecked;            // fopen vars with a null test
     // `p -> (inner local, scope index)` for `p = &innerLocal`.
@@ -1191,7 +1193,8 @@ private:
         size_t end = statementEnd(i);
         if (end == kNPos || end > closeIdx)
           end = closeIdx;
-        recordLocalDecl(i, end, scopes.back());
+        recordLocalDecl(i, end, scopes.back(), nullptr,
+                        static_cast<int>(scopes.size()) - 1);
       }
 
       if (isPunct(i, "{")) {
@@ -1323,7 +1326,18 @@ private:
           // return inside an if) is valid C; the linear scan cannot prove a
           // double close, so only use-after-close is diagnosed.
           if (isFclose && closedFiles.count(name)) {
-            // no diagnostic: path-sensitive proof unavailable
+            // Straight-line double close is provable. If control flow occurs
+            // between the closes, the paths may be mutually exclusive.
+            size_t first = closeTokenIdx.count(name) ? closeTokenIdx[name] : 0;
+            bool straightLine = true;
+            for (size_t k = first + 1; k < i && straightLine; ++k)
+              if (isIdent(k, "if") || isIdent(k, "else") ||
+                  isIdent(k, "return") || isIdent(k, "goto") ||
+                  isIdent(k, "while") || isIdent(k, "for"))
+                straightLine = false;
+            if (straightLine)
+              plainError("double close of FILE* '" + name + "'", t,
+                         "release the stream exactly once");
           } else if (it != live.end()) {
             if (isFclose) {
               // `fclose` on a plainly possibly-null fopen result is UB.  A
@@ -1334,6 +1348,7 @@ private:
                                "' from fopen",
                            t, "test the fopen result before closing it");
               closedFiles.insert(name);
+              closeTokenIdx[name] = i;
               auto ait = fileAliases.find(name);
               if (ait != fileAliases.end())
                 for (const auto &a : ait->second)

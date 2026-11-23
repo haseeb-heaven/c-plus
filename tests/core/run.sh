@@ -272,91 +272,26 @@ for f in "$ROOT"/tests/safety/fmt25_*.c; do
   expect_strict_reject "$(basename "$f" .c)" "$f"
 done
 
-# Contract + diagnostic suite: each rule has a negative case with an exact
-# expected message and a valid counterpart that must compile.
-if python3 "$ROOT/tests/core/lib_contracts_suite.py" >"$OUT/lib_contracts.log" 2>&1; then
-  ok lib_contracts_suite
+# All compiler safety unit tests are native C+ programs built by the C+
+# driver itself (no Python test harness). The harness embeds negative cases
+# with exact expected diagnostics and positive counterparts.
+if "$CPLUS" build --legacy-c "$ROOT/tests/native/cplus_safety_tests.c" \
+   -o "$OUT/native_safety_tests" >"$OUT/native_safety_build.log" 2>&1 && \
+   CPLUS_BIN="$CPLUS" "$OUT/native_safety_tests" >"$OUT/native_safety.log" 2>&1; then
+  ok native_safety_suite
 else
-  bad lib_contracts_suite "$(head -5 "$OUT/lib_contracts.log")"
+  bad native_safety_suite "$(head -3 "$OUT/native_safety.log")"
 fi
 
-# Deterministic P0 fuzz + new unique scenario corpora (216 cases total).
-if python3 "$ROOT/tests/metrics/p0fuzz_suite.py" >"$OUT/p0fuzz.log" 2>&1; then
-  ok p0fuzz_suite
+# The authoritative 40-test STRICT suite (check --strict and
+# --strict --sanitize=none) is driven by a native C+ runner.
+if "$CPLUS" build --legacy-c "$ROOT/tests/native/strict40_runner.c" \
+   -o "$OUT/strict40_runner" >"$OUT/strict40_build.log" 2>&1 && \
+   CPLUS_BIN="$CPLUS" "$OUT/strict40_runner" \
+     "$ROOT/scratch/cplus_safety_suite/tests" >"$OUT/strict40.log" 2>&1; then
+  ok strict40_suite
 else
-  bad p0fuzz_suite "$(head -5 "$OUT/p0fuzz.log")"
-fi
-if python3 "$ROOT/tests/metrics/p0new_run.py" >"$OUT/p0new.log" 2>&1; then
-  ok p0new_suite
-else
-  bad p0new_suite "$(head -1 "$OUT/p0new.log")"
-fi
-
-# Isolated P0 correctness regressions for issue #21 (out-params, aliases,
-# realloc paths, goto/longjmp cleanup policy).
-if python3 "$ROOT/tests/core/p0_correctness_suite.py" >"$OUT/p0_correctness.log" 2>&1; then
-  ok p0_correctness_suite
-else
-  bad p0_correctness_suite "$(head -1 "$OUT/p0_correctness.log")"
-fi
-
-# Compile-time arithmetic safety (signed overflow, divide by zero), no UBSan.
-if python3 "$ROOT/tests/core/arithmetic_safety_suite.py" >"$OUT/arithmetic.log" 2>&1; then
-  ok arithmetic_suite
-else
-  bad arithmetic_suite "$(head -3 "$OUT/arithmetic.log")"
-fi
-
-# Paired negative/positive regressions for closed pointer/bounds/lifetime gaps.
-if python3 "$ROOT/tests/core/gap_close_suite.py" >"$OUT/gap_close.log" 2>&1; then
-  ok gap_close_suite
-else
-  bad gap_close_suite "$(head -3 "$OUT/gap_close.log")"
-fi
-
-# End-to-end: compiler + runtime + contracts + sanitizer + multi-TU linkage.
-if python3 "$ROOT/tests/core/integration_suite.py" >"$OUT/integration.log" 2>&1; then
-  ok integration_suite
-else
-  bad integration_suite "$(head -3 "$OUT/integration.log")"
-fi
-
-# Paired C+/Rust scenarios: C+ expectations asserted, Rust results recorded.
-if python3 "$ROOT/tests/core/rust_compare_suite.py" >"$OUT/rust_compare.log" 2>&1; then
-  ok rust_compare_suite
-else
-  bad rust_compare_suite "$(head -1 "$OUT/rust_compare.log")"
-fi
-
-# Function-pointer arrays: compile-time error for constant indices, C+
-# runtime check for user-controlled indices, no check needed for safe loops.
-if python3 "$ROOT/tests/core/fnptr_bounds_suite.py" >"$OUT/fnptr_bounds.log" 2>&1; then
-  ok fnptr_bounds_suite
-else
-  bad fnptr_bounds_suite "$(head -1 "$OUT/fnptr_bounds.log")"
-fi
-
-# 15 runtime-crash scenarios: each must be rejected statically or produce the
-# expected sanitizer-specific report (a bare signal is never sufficient).
-if python3 "$ROOT/tests/core/runtime_crashes_suite.py" >"$OUT/runtime_crashes.log" 2>&1; then
-  ok runtime_crashes_suite
-else
-  bad runtime_crashes_suite "$(head -5 "$OUT/runtime_crashes.log")"
-fi
-
-# Configurable sanitizers: ASan, UBSan, combined and none. Each negative case
-# must print the exact sanitizer diagnostic, not merely exit non-zero.
-if python3 "$ROOT/tests/core/sanitizer_suite.py" >"$OUT/sanitizer.log" 2>&1; then
-  ok sanitizer_suite
-else
-  bad sanitizer_suite "$(head -5 "$OUT/sanitizer.log")"
-fi
-
-# bugs51..bugs97 corpus: 188 unique compile-time scenarios + 19 runtime cases.
-if python3 "$ROOT/tests/core/bugs51_97_suite.py" >"$OUT/bugs51_97.log" 2>&1; then
-  ok bugs51_97_suite
-else
-  bad bugs51_97_suite "$(head -5 "$OUT/bugs51_97.log")"
+  bad strict40_suite "$(tail -1 "$OUT/strict40.log")"
 fi
 
 echo

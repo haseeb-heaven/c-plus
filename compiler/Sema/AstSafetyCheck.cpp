@@ -427,6 +427,18 @@ public:
     return true;
   }
 
+  /// Header helpers are not part of the translated user source; do not emit
+  /// arithmetic diagnostics from included headers.
+  bool isHeaderLocation(SourceLocation loc) const {
+    if (loc.isInvalid())
+      return false;
+    PresumedLoc p = ctx_.getSourceManager().getPresumedLoc(loc);
+    if (!p.isValid())
+      return false;
+    std::string f = p.getFilename();
+    return !f.empty() && f != filename_ && f != filename_ + ".c";
+  }
+
   /// Signed arithmetic result check with a wider intermediate type so the
   /// overflow is seen before wrapping.
   bool arithmeticOverflow(const Expr *op, long long a, long long b,
@@ -1395,7 +1407,38 @@ public:
       }
     }
     const VarDecl *ifGuardVar = nullptr;
-    if (report_ && s->getCond())
+    // `if (x == 0) return;` or `if (x == 0 || y == 0) return;` proves the
+    // named variables non-zero for all subsequent statements.
+    if (report_ && !s->getElse() && containsReturn(s->getThen())) {
+      auto fromZeroEquality = [&](const Expr *e) -> const VarDecl * {
+        const auto *bo = dyn_cast_or_null<BinaryOperator>(
+            e ? e->IgnoreParenCasts() : nullptr);
+        if (!bo || !bo->isEqualityOp()) return nullptr;
+        if (!isNullConstant(bo->getRHS()->IgnoreParenCasts())) return nullptr;
+        const auto *ref = dyn_cast<DeclRefExpr>(
+            bo->getLHS()->IgnoreParenCasts());
+        const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+        return (vd && vd->getType()->isIntegerType()) ? vd : nullptr;
+      };
+      const Expr *cond = s->getCond();
+      if (const auto *lor = dyn_cast_or_null<BinaryOperator>(
+              cond ? cond->IgnoreParenCasts() : nullptr))
+        if (lor->getOpcode() == BO_LOr) {
+          if (const VarDecl *v = fromZeroEquality(lor->getLHS())) {
+            nonZeroVars_.insert(v);
+            ifGuardVar = ifGuardVar ? ifGuardVar : v;
+          }
+          if (const VarDecl *v = fromZeroEquality(lor->getRHS())) {
+            nonZeroVars_.insert(v);
+            ifGuardVar = ifGuardVar ? ifGuardVar : v;
+          }
+        }
+      if (const VarDecl *v = fromZeroEquality(cond)) {
+        nonZeroVars_.insert(v);
+        ifGuardVar = ifGuardVar ? ifGuardVar : v;
+      }
+    }
+    if (!ifGuardVar && report_ && s->getCond())
       if (const auto *ref = dyn_cast<DeclRefExpr>(
               s->getCond()->IgnoreParenCasts()))
         if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
@@ -1404,7 +1447,7 @@ public:
             nonZeroVars_.insert(vd);
           }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
-    if (ifGuardVar)
+    if (ifGuardVar && !containsReturn(s->getThen()))
       nonZeroVars_.erase(ifGuardVar);
     guardedSnprintf_ = savedGuarded;
     if (keepErase) {
@@ -1783,6 +1826,15 @@ public:
       if (isa<StringLiteral>(init->IgnoreParenCasts())) {
         stringPtrs_.insert(vd);
       }
+      if (const auto *uo = dyn_cast<UnaryOperator>(init->IgnoreParenCasts()))
+        if (uo->getOpcode() == UO_AddrOf)
+          if (const auto *oref = dyn_cast<DeclRefExpr>(
+                  uo->getSubExpr()->IgnoreParenCasts()))
+            if (const auto *ovd = dyn_cast<VarDecl>(oref->getDecl()))
+              if (ovd->hasLocalStorage() &&
+                  !ovd->getType()->isPointerType())
+                stackAliasOwner_[vd->getNameAsString()] =
+                    ovd->getNameAsString();
       if (const auto *cle = dyn_cast<CompoundLiteralExpr>(
               init->IgnoreParenCasts()))
         if (const auto *cat = ctx_.getAsConstantArrayType(cle->getType()))
@@ -1928,6 +1980,49 @@ public:
           }
         }
       }
+      // Shift counts must be in [0, promoted-left-width). Volatile-backed
+      // constants are tracked like other local constants by knownConst.
+      if ((opc == BO_Shl || opc == BO_Shr) &&
+          !isHeaderLocation(op->getBeginLoc())) {
+        long long count = 0;
+        if (asLL(op->getRHS(), count)) {
+          unsigned width = ctx_.getIntWidth(op->getLHS()->getType());
+          std::string msg;
+          if (count < 0)
+            msg = "negative shift count";
+          else if (width && (unsigned long long)count >= width)
+            msg = "shift count " + std::to_string(count) +
+                  " is not less than the width " + std::to_string(width) +
+                  " of the left operand";
+          if (!msg.empty()) {
+            if (strict_) report(op->getBeginLoc(), msg);
+            else warnAt(op->getBeginLoc(), msg);
+          }
+        } else if (strict_) {
+          report(op->getBeginLoc(),
+                 "shift count cannot be proven within the left operand's "
+                 "width");
+        } else {
+          warnAt(op->getBeginLoc(),
+                 "shift count cannot be proven within the left operand's "
+                 "width");
+        }
+      }
+      // Signed division overflow (INT_MIN / -1) is undefined even when the
+      // divisor is non-zero.
+      if ((opc == BO_Div || opc == BO_Rem) &&
+          op->getType()->isSignedIntegerType()) {
+        long long a = 0, b = 0;
+        if (asLL(op->getLHS(), a) && asLL(op->getRHS(), b)) {
+          unsigned w = ctx_.getIntWidth(op->getType());
+          if (w > 1 && w <= 63 && a == -(1LL << (w - 1)) && b == -1) {
+            std::string msg = std::string("signed integer overflow in ") +
+                              (opc == BO_Div ? "division" : "remainder");
+            if (strict_) report(op->getBeginLoc(), msg);
+            else warnAt(op->getBeginLoc(), msg);
+          }
+        }
+      }
       if (opc == BO_Div || opc == BO_Rem) {
         llvm::APSInt dv;
         bool known = knownConst(op->getRHS(), dv);
@@ -1944,6 +2039,30 @@ public:
           else warnAt(op->getBeginLoc(), msg);
         }
       }
+    }
+    // Exclusive mutable borrow: two distinct aliases of the same stack
+    // object must not both be used to mutate it.
+    if (op->isAssignmentOp()) {
+      const Expr *lhs = op->getLHS()->IgnoreParenCasts();
+      if (const auto *uo = dyn_cast<UnaryOperator>(lhs))
+        if (uo->getOpcode() == UO_Deref)
+          if (const auto *ref = dyn_cast<DeclRefExpr>(
+                  uo->getSubExpr()->IgnoreParenCasts())) {
+            std::string pname = ref->getDecl()->getNameAsString();
+            auto ait = stackAliasOwner_.find(pname);
+            if (ait != stackAliasOwner_.end()) {
+              auto prior = aliasWriter_.find(ait->second);
+              if (prior != aliasWriter_.end() && prior->second != pname) {
+                std::string msg =
+                    "exclusive mutable borrow violated: '" + pname +
+                    "' and '" + prior->second + "' alias '" + ait->second + "'";
+                if (strict_) report(op->getBeginLoc(), msg);
+                else warnAt(op->getBeginLoc(), msg);
+              } else {
+                aliasWriter_[ait->second] = pname;
+              }
+            }
+          }
     }
     // `p = reallocTemp` rebinds only the owner name; stale aliases stay dead.
     if (!reallocRebindOwner_.empty() && op->isAssignmentOp() &&
@@ -3501,6 +3620,8 @@ private:
   std::set<const VarDecl *> nonZeroVars_;
   std::map<const VarDecl *, long long> loopLowerBound_;
   std::set<std::string> overflowingConstVars_;
+  std::map<std::string, std::string> stackAliasOwner_;
+  std::map<std::string, std::string> aliasWriter_;
   std::map<std::string, ArithEffect> arithEffects_;
   std::map<std::string, HeapAllocState> heapAllocs_;
   std::set<const VarDecl *> heapWritten_;
