@@ -1,0 +1,200 @@
+{
+  "schema": 1,
+  "suite": "real_world_c_wave3",
+  "description": "Wave-3 permanent compatibility harness. Unmodified, permissively-licensed (MIT) single-file C programs from six pinned upstream repositories, built with the CURRENT c+ in every mode x standard cell and compared byte-for-byte on stdout and exit status with /usr/bin/clang. --emit-c source preservation is checked exactly in legacy-c mode and structurally in the safety modes. No || true, no suppression, hard timeouts, exact mismatch reporting.",
+  "notes": [
+    "TheAlgorithms/C is intentionally NOT used: its pinned LICENSE at e5dad3f is GPL-3.0, not permissive. Verified by fetching LICENSE at that pin.",
+    "The reference compiler is Apple clang 16.0.0 (/usr/bin/clang). It rejects -std=c23 and -std=gnu23; the newest C23-draft dialect it accepts is -std=c2x, which is therefore the C23 row of the matrix.",
+    "All 12 sources are standalone (libc only), deterministic (fixed input or built-in constants), and were confirmed to build with clang -std=c89/c99/c11/c17/c2x before pinning."
+  ],
+  "upstream": [
+    {
+      "name": "portfoliocourses/c-example-code",
+      "url": "https://github.com/portfoliocourses/c-example-code",
+      "pinned_commit": "51cfc156d1406a55fa1638569ee6885d9ac5782d",
+      "raw_base": "https://raw.githubusercontent.com/portfoliocourses/c-example-code/51cfc156d1406a55fa1638569ee6885d9ac5782d",
+      "license": "MIT (LICENSE at pin: 'MIT License Copyright (c) 2021 Portfolio Courses')"
+    },
+    {
+      "name": "gouravthakur39/beginners-C-program-examples",
+      "url": "https://github.com/gouravthakur39/beginners-C-program-examples",
+      "pinned_commit": "373d27c131e35bacdbf5c500f79fd234c6d4ec9b",
+      "raw_base": "https://raw.githubusercontent.com/gouravthakur39/beginners-C-program-examples/373d27c131e35bacdbf5c500f79fd234c6d4ec9b",
+      "license": "MIT (LICENSE at pin: 'MIT License Copyright (c) 2018 gourav thakur')"
+    },
+    {
+      "name": "abhaysinghr516/Algorithms",
+      "url": "https://github.com/abhaysinghr516/Algorithms",
+      "pinned_commit": "1c87ef39118dfd593239e3a1eadc31d4b94735d9",
+      "raw_base": "https://raw.githubusercontent.com/abhaysinghr516/Algorithms/1c87ef39118dfd593239e3a1eadc31d4b94735d9",
+      "license": "MIT (LICENSE at pin: 'MIT License Copyright (c) 2022 Abhay Singh Rathore')"
+    },
+    {
+      "name": "aniket-2003-das/C-Language-Programs",
+      "url": "https://github.com/aniket-2003-das/C-Language-Programs",
+      "pinned_commit": "2b6cdda6e371154f35319730232d28cfee272d44",
+      "raw_base": "https://raw.githubusercontent.com/aniket-2003-das/C-Language-Programs/2b6cdda6e371154f35319730232d28cfee272d44",
+      "license": "MIT (LICENSE at pin: 'MIT License Copyright (c) 2024 Aniket Das')"
+    },
+    {
+      "name": "awkwardpy/c-language-programs",
+      "url": "https://github.com/awkwardpy/c-language-programs",
+      "pinned_commit": "e7a979b7a82a4e3dbc4525bbaa4019be2066784a",
+      "raw_base": "https://raw.githubusercontent.com/awkwardpy/c-language-programs/e7a979b7a82a4e3dbc4525bbaa4019be2066784a",
+      "license": "MIT (License at pin: 'MIT License Copyright (c) Pankaj Rawat')"
+    },
+    {
+      "name": "DivyPrakashTiwari/c_Language_Programs",
+      "url": "https://github.com/DivyPrakashTiwari/c_Language_Programs",
+      "pinned_commit": "158dd2a89e0a69f7b51fe8537b9c168393b81f0e",
+      "raw_base": "https://raw.githubusercontent.com/DivyPrakashTiwari/c_Language_Programs/158dd2a89e0a69f7b51fe8537b9c168393b81f0e",
+      "license": "MIT (LICENSE at pin: 'MIT License Copyright (c) 2024 Divy Prakash Tiwari')"
+    }
+  ],
+  "download_timeout_sec": 30,
+  "build_timeout_sec": 60,
+  "run_timeout_sec": 20,
+  "workers": 6,
+  "reference_cc": "/usr/bin/clang",
+  "reference_flags": ["-O2"],
+  "modes": [
+    {"name": "legacy-c", "flag": "--legacy-c", "safety": false},
+    {"name": "default", "flag": "--default", "safety": true},
+    {"name": "strict", "flag": "--strict", "safety": true}
+  ],
+  "standards": ["c89", "c99", "c11", "c17", "c2x"],
+  "cases": [
+    {
+      "name": "pc_bubble",
+      "upstream": "portfoliocourses/c-example-code",
+      "path": "bubble_sort.c",
+      "url": "https://raw.githubusercontent.com/portfoliocourses/c-example-code/51cfc156d1406a55fa1638569ee6885d9ac5782d/bubble_sort.c",
+      "sha256": "f8024cdca3b6ab948ef64d85193e1b3ac224e82dbfc85cdb348dcd8a2cb85702",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "a[0] = 9\na[1] = 8\na[2] = 7\na[3] = 6\na[4] = 5\na[5] = 4\na[6] = 3\na[7] = 2\na[8] = 1\na[9] = 0\n"
+    },
+    {
+      "name": "pc_avg",
+      "upstream": "portfoliocourses/c-example-code",
+      "path": "array_average.c",
+      "url": "https://raw.githubusercontent.com/portfoliocourses/c-example-code/51cfc156d1406a55fa1638569ee6885d9ac5782d/array_average.c",
+      "sha256": "df975686914c51d3ad9ea77ac6f2c810941af6f2f48c6033241fb322c2ab6ab8",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "arr1 avg: 6.58\narr2 avg: 10.00\narr3 avg: 9.70\narr4 avg: 0.00\n"
+    },
+    {
+      "name": "g_fib",
+      "upstream": "gouravthakur39/beginners-C-program-examples",
+      "path": "FibonacciGeneration.c",
+      "url": "https://raw.githubusercontent.com/gouravthakur39/beginners-C-program-examples/373d27c131e35bacdbf5c500f79fd234c6d4ec9b/FibonacciGeneration.c",
+      "sha256": "0634653bac85f13f6b75655fa1f43062f9f54716283d1ec49447748f39804b6e",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "89"
+    },
+    {
+      "name": "g_bs",
+      "upstream": "gouravthakur39/beginners-C-program-examples",
+      "path": "BinarySearch.c",
+      "url": "https://raw.githubusercontent.com/gouravthakur39/beginners-C-program-examples/373d27c131e35bacdbf5c500f79fd234c6d4ec9b/BinarySearch.c",
+      "sha256": "0cd0153bac760f8447fb112d75b337bd756f97ccec82c848b4324a844afb8b2a",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "0\n1\n"
+    },
+    {
+      "name": "a_euclid",
+      "upstream": "abhaysinghr516/Algorithms",
+      "path": "Euclid's Algorithm/C/Eulic's-Algorithm.c",
+      "url": "https://raw.githubusercontent.com/abhaysinghr516/Algorithms/1c87ef39118dfd593239e3a1eadc31d4b94735d9/Euclid's%20Algorithm/C/Eulic's-Algorithm.c",
+      "sha256": "ef7297857db218487d60039f740bc3356df7bfd396c2c0d4dad08aeda1a8de81",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "GCD of 60 and 48 is 12\n"
+    },
+    {
+      "name": "a_binsearch",
+      "upstream": "abhaysinghr516/Algorithms",
+      "path": "Binary Search Algorithm/C/Binary-Search-Algorithm.c",
+      "url": "https://raw.githubusercontent.com/abhaysinghr516/Algorithms/1c87ef39118dfd593239e3a1eadc31d4b94735d9/Binary%20Search%20Algorithm/C/Binary-Search-Algorithm.c",
+      "sha256": "ef800b57822e5f3b66bd346cf916fb4a900e0c4d14d1889f36d80300ba3f67b9",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "Element found at index 3\n"
+    },
+    {
+      "name": "n_03",
+      "upstream": "aniket-2003-das/C-Language-Programs",
+      "path": "03_addition.c",
+      "url": "https://raw.githubusercontent.com/aniket-2003-das/C-Language-Programs/2b6cdda6e371154f35319730232d28cfee272d44/03_addition.c",
+      "sha256": "e7fce2012c843e62dfed03ec968e214f67ebee504b22409335eaa65dcb27d8a6",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "the sum of x and y is 11 \n"
+    },
+    {
+      "name": "n_07",
+      "upstream": "aniket-2003-das/C-Language-Programs",
+      "path": "07_pr03_ch1.c",
+      "url": "https://raw.githubusercontent.com/aniket-2003-das/C-Language-Programs/2b6cdda6e371154f35319730232d28cfee272d44/07_pr03_ch1.c",
+      "sha256": "1bce9b03b215b1fbd8b22102f6116dfbfb507533c83d666504798778355ae644",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "the value of farenheit tempreture is 98.599998"
+    },
+    {
+      "name": "ap_hello",
+      "upstream": "awkwardpy/c-language-programs",
+      "path": "HelloWorld.c",
+      "url": "https://raw.githubusercontent.com/awkwardpy/c-language-programs/e7a979b7a82a4e3dbc4525bbaa4019be2066784a/HelloWorld.c",
+      "sha256": "db7acf40ad310a90359266f4263afdfea389c9059f874fa27569f88d8c7bd965",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "Hello, World!\n"
+    },
+    {
+      "name": "ap_max",
+      "upstream": "awkwardpy/c-language-programs",
+      "path": "Largest_No_Among_3_No.c",
+      "url": "https://raw.githubusercontent.com/awkwardpy/c-language-programs/e7a979b7a82a4e3dbc4525bbaa4019be2066784a/Largest_No_Among_3_No.c",
+      "sha256": "d0ab797600f2e09e4e121e2f8d08580516ebe8adf58d9eb3b2bc772447aafad4",
+      "args": [],
+      "stdin": "5 9 3\n",
+      "expected_rc": 0,
+      "expected_stdout": "Enter three numbers: The largest number is: 9\n"
+    },
+    {
+      "name": "dp_d",
+      "upstream": "DivyPrakashTiwari/c_Language_Programs",
+      "path": "Arthematic_Oprations/distance_Calculation.c",
+      "url": "https://raw.githubusercontent.com/DivyPrakashTiwari/c_Language_Programs/158dd2a89e0a69f7b51fe8537b9c168393b81f0e/Arthematic_Oprations/distance_Calculation.c",
+      "sha256": "6b4a021f8c48ae10ee053ca05d838e5af5fce6d5870049adcf7b6be4731dd797",
+      "args": [],
+      "stdin": "1500\n",
+      "expected_rc": 0,
+      "expected_stdout": "Enter the distance covered in meters: The distance covered in kilometers: 1.500000\n"
+    },
+    {
+      "name": "dp_s",
+      "upstream": "DivyPrakashTiwari/c_Language_Programs",
+      "path": "Arthematic_Oprations/sum_Of_Series.c",
+      "url": "https://raw.githubusercontent.com/DivyPrakashTiwari/c_Language_Programs/158dd2a89e0a69f7b51fe8537b9c168393b81f0e/Arthematic_Oprations/sum_Of_Series.c",
+      "sha256": "92e6786b80a6543a1559c5282c2d6e0b3b11ccd1658bca6a023a2ab2369b75f7",
+      "args": [],
+      "stdin": "3\n",
+      "expected_rc": 0,
+      "expected_stdout": "enter the nth term\nthe sum of series 30.000000 "
+    }
+  ]
+}

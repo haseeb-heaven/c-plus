@@ -1710,12 +1710,18 @@ RewrittenSource rewriteCPlusSource(const std::string &source,
   std::vector<Token> toks = lexCPlus(source);
   Lowerer lowerer(toks, diags, filename, headerMode);
   RewrittenSource result = lowerer.run();
-  // Preserve the original source's final newline.  Token reconstruction drops
-  // trailing trivia; keeping the newline makes lowered plain C byte-identical
-  // to the input after the mandatory leading #line directive.
-  if (!source.empty() && source.back() == '\n' && !result.text.empty() &&
-      result.text.back() != '\n')
-    result.text += '\n';
+  // Preserve the original source's trailing newlines exactly.  Token
+  // reconstruction drops trailing trivia, so a naive single-newline restore
+  // collapsed multiple blank lines at EOF and broke byte identity (e.g. an
+  // input ending `}\n\n\n` came back as `}\n`).  Normalise ALL trailing
+  // newlines of the reconstructed text to the exact count in the source.
+  size_t trailingNewlines = 0;
+  while (trailingNewlines < source.size() &&
+         source[source.size() - 1 - trailingNewlines] == '\n')
+    ++trailingNewlines;
+  while (!result.text.empty() && result.text.back() == '\n')
+    result.text.pop_back();
+  result.text.append(trailingNewlines, '\n');
   return result;
 }
 
@@ -1828,6 +1834,72 @@ const char *checkedOpName(CheckedArithmeticSite::Op kind) {
   case CheckedArithmeticSite::Op::Neg: return "sub";
   }
   return "add";
+}
+
+/// Build a self-contained guarded expression for one conversion site.  Unlike
+/// the prefix/suffix insertions used for binary operators, this returns a
+/// complete C expression so nested conversion chains can be composed
+/// innermost-first without their argument lists colliding at a shared offset.
+static std::string wrapConversionText(const CheckedArithmeticSite &s,
+                                      const std::string &operand) {
+  const std::string dst = s.type.empty() ? std::string("int") : s.type;
+  const std::string bits = std::to_string(s.bits);
+  const std::string sgn = s.isSigned ? "1" : "0";
+  if (s.kind == CheckedArithmeticSite::Op::FloatToInt)
+    return "((" + dst + ")__cplus_inline_f2i_i64((double)(" + operand +
+           "), " + bits + ", " + sgn + "))";
+  const unsigned sb = s.srcBits ? s.srcBits : s.bits;
+  return "((" + dst + ")__cplus_inline_narrow_i64((uint64_t)(" + operand +
+         "), " + std::to_string(sb) + ", " +
+         (s.srcIsSigned ? "1" : "0") + ", " + bits + ", " + sgn + "))";
+}
+
+/// Nesting order for conversion chains.  Float->int happens first, then
+/// wider-to-narrower integer casts.  Smaller rank means "inner".
+static int conversionRank(const CheckedArithmeticSite &s) {
+  if (s.kind == CheckedArithmeticSite::Op::FloatToInt)
+    return 0;
+  return 1 + (s.srcBits >= 64 ? 0 : static_cast<int>(64 - s.srcBits));
+}
+
+/// Byte ranges of file-scope (static/global) initialisers.  C requires these
+/// to be constant expressions, so a runtime guard call must never be inserted
+/// into one: clang would reject the lowered C with "initializer element is not
+/// a compile-time constant".  The static checker validates the constants; the
+/// rewriter leaves them untouched.
+static std::vector<std::pair<size_t, size_t>>
+staticInitializerRanges(const std::string &source) {
+  const std::vector<Token> toks = lexCPlus(source);
+  std::vector<std::pair<size_t, size_t>> ranges;
+  int brace = 0;
+  for (size_t i = 0; i < toks.size(); ++i) {
+    if (toks[i].kind == TokKind::Punct && toks[i].text == "{") { ++brace; continue; }
+    if (toks[i].kind == TokKind::Punct && toks[i].text == "}") {
+      if (brace > 0) --brace;
+      continue;
+    }
+    if (brace != 0 || toks[i].kind != TokKind::Punct || toks[i].text != "=")
+      continue;
+    int par = 0, brk = 0, brc = 0;
+    size_t end = kNPos;
+    for (size_t k = i + 1; k < toks.size(); ++k) {
+      if (toks[k].kind != TokKind::Punct) continue;
+      const std::string &p = toks[k].text;
+      if (p == "(") ++par;
+      else if (p == ")") { if (par > 0) --par; }
+      else if (p == "[") ++brk;
+      else if (p == "]") { if (brk > 0) --brk; }
+      else if (p == "{") ++brc;
+      else if (p == "}") { if (brc > 0) --brc; }
+      else if ((p == ";" || p == ",") && par == 0 && brk == 0 && brc == 0) {
+        end = toks[k].offset;
+        break;
+      }
+    }
+    if (end != kNPos)
+      ranges.emplace_back(toks[i].offset + toks[i].text.size(), end);
+  }
+  return ranges;
 }
 
 /// Byte slice clamped to the source.  Producers may record degenerate
@@ -2128,6 +2200,89 @@ collectTokenArithmeticSites(const std::string &source) {
     }
   }
 
+  // Phase 1b: function signatures.  Record return types and parameter types so
+  // implicit narrowing in `return x;` and `f(x)` can be recovered lexically in
+  // DEFAULT mode (where the AST producer intentionally emits no native guards
+  // because the backend UBSan handles signed overflow but NOT integer
+  // truncation).  Only concrete definitions with a known type are modelled.
+  struct FnSig {
+    TokenType ret;
+    std::vector<TokenType> params;
+  };
+  std::map<std::string, FnSig> fnSigs;
+  std::vector<std::tuple<size_t, size_t, TokenType>> fnBodies; // [open, close]
+  for (size_t i = 0; i < toks.size(); ++i) {
+    size_t after = kNPos;
+    TokenType ret = parseTokenType(toks, i, toks.size(), after);
+    const bool voidRet = !ret.valid &&
+                         toks[i].kind == TokKind::Identifier &&
+                         toks[i].text == "void";
+    if (voidRet)
+      after = nextSigTok(toks, i);
+    if ((!ret.valid && !voidRet) || after == kNPos || after >= toks.size())
+      continue;
+    size_t n = after;
+    if (n < toks.size() && toks[n].kind == TokKind::Punct &&
+        toks[n].text == "*")
+      continue; // pointer return: no integer narrowing
+    if (toks[n].kind != TokKind::Identifier)
+      continue;
+    const std::string name = toks[n].text;
+    size_t lp = nextSigTok(toks, n);
+    if (lp == kNPos || toks[lp].kind != TokKind::Punct ||
+        toks[lp].text != "(")
+      continue;
+    int par = 0;
+    size_t rp = kNPos;
+    for (size_t k = lp; k < toks.size(); ++k) {
+      if (toks[k].kind != TokKind::Punct)
+        continue;
+      if (toks[k].text == "(") ++par;
+      else if (toks[k].text == ")" && --par == 0) { rp = k; break; }
+    }
+    if (rp == kNPos)
+      continue;
+    size_t body = nextSigTok(toks, rp);
+    if (body == kNPos || toks[body].kind != TokKind::Punct ||
+        toks[body].text != "{")
+      continue;
+    size_t close = kNPos;
+    int depth = 0;
+    for (size_t k = body; k < toks.size(); ++k) {
+      if (toks[k].kind != TokKind::Punct)
+        continue;
+      if (toks[k].text == "{") ++depth;
+      else if (toks[k].text == "}" && --depth == 0) { close = k; break; }
+    }
+    if (close == kNPos)
+      continue;
+    FnSig sig;
+    sig.ret = ret;
+    size_t p = nextSigTok(toks, lp + 1);
+    while (p != kNPos && p < rp) {
+      size_t pa = kNPos;
+      TokenType pt = parseTokenType(toks, p, rp, pa);
+      if (!pt.valid) {
+        sig.params.push_back(TokenType()); // keep argument indices aligned
+        p = nextSigTok(toks, p);
+        continue;
+      }
+      size_t q = pa;
+      while (q < rp && toks[q].kind == TokKind::Punct &&
+             toks[q].text == "*") ++q;
+      if (q < rp && toks[q].kind == TokKind::Identifier) {
+        sig.params.push_back(pt);
+        vars[toks[q].text] = pt; // parameter is a known-typed variable too
+      }
+      p = q;
+      while (p < rp && !(toks[p].kind == TokKind::Punct &&
+                         toks[p].text == ",")) ++p;
+      p = nextSigTok(toks, p);
+    }
+    fnSigs[name] = sig;
+    fnBodies.emplace_back(toks[body].offset, endOfToken(toks[close]), ret);
+  }
+
   // Phase 2: operator spellings.  Skip preprocessor lines -- macro bodies are
   // not rewritable at their expansion point.
   for (size_t i = 0; i < toks.size(); ++i) {
@@ -2146,15 +2301,122 @@ collectTokenArithmeticSites(const std::string &source) {
 
     const std::string op = tk.text;
 
+    // Helper: a bare identifier `value` converted to a known narrower type.
+    auto emitNarrowAt = [&](size_t value, const TokenType &dst) {
+      if (value == kNPos || toks[value].kind != TokKind::Identifier ||
+          !dst.valid || dst.isFloat)
+        return;
+      TokenType src = lookupVar(vars, toks[value].text);
+      if (!src.valid || src.isFloat || src.bits <= dst.bits)
+        return;
+      CheckedArithmeticSite s;
+      s.kind = CheckedArithmeticSite::Op::Narrow;
+      s.begin = toks[value].offset;
+      s.op = s.begin;
+      s.opLength = 0;
+      s.end = endOfToken(toks[value]);
+      s.bits = dst.bits;
+      s.isSigned = dst.isSigned;
+      s.type = dst.spelling;
+      s.srcBits = src.bits;
+      s.srcIsSigned = src.isSigned;
+      s.srcType = src.spelling;
+      sites.push_back(std::move(s));
+    };
+
+    // Implicit narrowing in a plain assignment `c = x;` where both sides are
+    // bare, typed identifiers.  Declarations (`TYPE c = x;`) are handled by
+    // Phase 1 and dedup by the full site tuple; conditions (`if (c = x)`)
+    // are skipped because the value is not followed by ';'/','.
+    if (tk.kind == TokKind::Punct && op == "=") {
+      size_t lhs = prevSigTok(toks, i);
+      size_t rhs = nextSigTok(toks, i);
+      size_t afterRhs = rhs == kNPos ? kNPos : nextSigTok(toks, rhs);
+      if (lhs != kNPos && rhs != kNPos && afterRhs != kNPos &&
+          toks[lhs].kind == TokKind::Identifier &&
+          toks[afterRhs].kind == TokKind::Punct &&
+          (toks[afterRhs].text == ";" || toks[afterRhs].text == ","))
+        emitNarrowAt(rhs, lookupVar(vars, toks[lhs].text));
+    }
+
+    // Implicit narrowing in `return x;` against the enclosing function's
+    // return type.
+    if (tk.kind == TokKind::Identifier && op == "return") {
+      size_t value = nextSigTok(toks, i);
+      for (const auto &b : fnBodies) {
+        if (tk.offset < std::get<0>(b) || tk.offset >= std::get<1>(b))
+          continue;
+        emitNarrowAt(value, std::get<2>(b));
+        break;
+      }
+    }
+
+    // Implicit narrowing of a bare identifier passed to a known parameter.
+    if (tk.kind == TokKind::Identifier) {
+      auto fit = fnSigs.find(op);
+      if (fit != fnSigs.end()) {
+        size_t lp = nextSigTok(toks, i);
+        if (lp != kNPos && toks[lp].kind == TokKind::Punct &&
+            toks[lp].text == "(") {
+          size_t rp = kNPos;
+          {
+            int pd = 0;
+            for (size_t q = lp; q < toks.size(); ++q) {
+              if (toks[q].kind != TokKind::Punct) continue;
+              if (toks[q].text == "(") ++pd;
+              else if (toks[q].text == ")" && --pd == 0) { rp = q; break; }
+            }
+          }
+          size_t after = rp == kNPos ? kNPos : nextSigTok(toks, rp);
+          // Function definition, not a call: its parameters were handled in
+          // Phase 1b and must not be re-treated as arguments.
+          bool definition = after != kNPos && toks[after].kind == TokKind::Punct &&
+                            toks[after].text == "{";
+          if (!definition && rp != kNPos) {
+            size_t arg = 0;
+            int depth = 0;
+            size_t t = lp + 1;
+            while (t < rp) {
+              if (isTriviaTok(toks[t])) { ++t; continue; }
+              if (toks[t].kind == TokKind::Punct && toks[t].text == ",") {
+                ++arg; ++t; continue; // empty / already-consumed argument
+              }
+              if (toks[t].kind == TokKind::Punct && toks[t].text == "(") { ++depth; ++t; continue; }
+              if (toks[t].kind == TokKind::Punct && toks[t].text == ")") {
+                if (depth == 0) break;
+                --depth; ++t; continue;
+              }
+              if (depth == 0) {
+                if (arg < fit->second.params.size())
+                  emitNarrowAt(t, fit->second.params[arg]);
+                ++arg;
+                // Skip the rest of this argument up to a depth-0 ',' or ')'.
+                while (t < rp &&
+                       !(toks[t].kind == TokKind::Punct && toks[t].text == ",") &&
+                       !(toks[t].kind == TokKind::Punct && toks[t].text == ")"))
+                  ++t;
+                continue;
+              }
+              ++t;
+            }
+          }
+        }
+      }
+    }
+
     // Allocation extent: malloc(count * size) can wrap before the allocator
-    // sees the request.  Wrap the multiplication in the checked size helper.
+    // sees the request.  Guard *every* depth-0 multiplication in the first
+    // argument, including nested chains (`n * size * 2`) and a multiplicative
+    // term inside a larger expression (`n * size + hdr`).  Each guard spans the
+    // whole left-associative prefix so an intermediate product that fits but
+    // whose extension overflows is still caught.
     if (tk.kind == TokKind::Identifier &&
         (op == "malloc" || op == "calloc" || op == "realloc")) {
       size_t lp = nextSigTok(toks, i);
       if (lp != kNPos && toks[lp].kind == TokKind::Punct &&
           toks[lp].text == "(") {
         int par = 0;
-        size_t star = kNPos, argStart = kNPos, argEnd = kNPos;
+        size_t argStart = kNPos, argEnd = kNPos;
         for (size_t k = lp + 1; k < toks.size(); ++k) {
           const Token &a = toks[k];
           if (isTriviaTok(a))
@@ -2170,24 +2432,76 @@ collectTokenArithmeticSites(const std::string &source) {
           if (a.kind == TokKind::Punct && a.text == ",") { argEnd = k; break; }
           if (argStart == kNPos)
             argStart = k;
-          if (a.kind == TokKind::Punct && a.text == "*")
-            star = k;
         }
-        const size_t last = (argEnd == kNPos) ? kNPos : prevSigTok(toks, argEnd);
-        // A `*` is a multiplication only when it separates two complete
-        // factors.  In `malloc(sizeof *p)` it is a unary dereference whose
-        // left "operand" is the `sizeof` keyword, so neither side is a valid
-        // factor and no size_mul guard may be emitted.
-        if (star != kNPos && argStart != kNPos && star > argStart &&
-            last != kNPos && last > star && prevSigTok(toks, star) > argStart &&
-            canEndFactor(toks[prevSigTok(toks, star)]) &&
-            canStartFactor(toks[nextSigTok(toks, star)])) {
+        // Significant tokens at nesting depth zero of the first argument.
+        // A parenthesised group is kept as a single factor (its '(' and ')'
+        // are recorded); tokens inside it are not separate operators here.
+        std::vector<size_t> d0;
+        if (argStart != kNPos && argEnd != kNPos && argEnd > argStart) {
+          int depth = 0;
+          for (size_t k = argStart; k < argEnd; ++k) {
+            if (isTriviaTok(toks[k]))
+              continue;
+            bool open = false, close = false;
+            if (toks[k].kind == TokKind::Punct) {
+              const std::string &p = toks[k].text;
+              open = p == "(" || p == "[" || p == "{";
+              close = p == ")" || p == "]" || p == "}";
+            }
+            if (close && depth > 0) --depth;
+            if (depth == 0) d0.push_back(k);
+            if (open) ++depth;
+          }
+        }
+        auto isLowPrec = [](const Token &t) {
+          if (t.kind != TokKind::Punct)
+            return false;
+          static const std::set<std::string> kBoundary = {
+              "+",  "-",  "<<", ">>", "<",  ">",  "<=", ">=",
+              "==", "!=", "&",  "^",  "|",  "&&", "||", "?", ":"};
+          return kBoundary.count(t.text) != 0;
+        };
+        auto isMulOp = [](const Token &t) {
+          return t.kind == TokKind::Punct &&
+                 (t.text == "*" || t.text == "/" || t.text == "%");
+        };
+        for (size_t d = 0; d < d0.size(); ++d) {
+          const size_t k = d0[d];
+          if (toks[k].kind != TokKind::Punct || toks[k].text != "*" ||
+              d == 0 || d + 1 >= d0.size())
+            continue;
+          // A `*` is binary multiplication only when it separates two complete
+          // factors.  In `malloc(sizeof *p)` it is a unary dereference.
+          if (!canEndFactor(toks[d0[d - 1]]) ||
+              !canStartFactor(toks[d0[d + 1]]))
+            continue;
+          // Left boundary: first token after the nearest low-precedence
+          // separator.  Multiplicative operators do NOT reset it, so the k-th
+          // `*` guard covers the whole left-associative prefix.
+          size_t beginIdx = d0[0];
+          for (size_t q = d; q > 0; --q)
+            if (isLowPrec(toks[d0[q - 1]])) { beginIdx = d0[q]; break; }
+          // Right boundary: last significant token before the next
+          // multiplicative or low-precedence operator at this level.
+          size_t endIdx = kNPos;
+          for (size_t q = d + 1; q < d0.size(); ++q)
+            if (isMulOp(toks[d0[q]]) || isLowPrec(toks[d0[q]])) {
+              endIdx = prevSigTok(toks, d0[q]);
+              break;
+            }
+          if (endIdx == kNPos) {
+            endIdx = argEnd;
+            while (endIdx > argStart && isTriviaTok(toks[endIdx - 1])) --endIdx;
+            if (endIdx > argStart) --endIdx;
+          }
+          if (endIdx == kNPos || endIdx <= k)
+            continue;
           CheckedArithmeticSite s;
           s.kind = CheckedArithmeticSite::Op::AllocExtent;
-          s.begin = toks[argStart].offset;
-          s.op = toks[star].offset;
-          s.opLength = 1;
-          s.end = endOfToken(toks[last]);
+          s.begin = toks[beginIdx].offset;
+          s.op = toks[k].offset;
+          s.opLength = toks[k].text.size();
+          s.end = endOfToken(toks[endIdx]);
           sites.push_back(std::move(s));
         }
       }
@@ -2314,10 +2628,9 @@ collectTokenArithmeticSites(const std::string &source) {
       if (val == kNPos || toks[val].kind != TokKind::Identifier)
         continue;
       TokenType src = lookupVar(vars, toks[val].text);
-      if (!src.valid || !src.isFloat)
+      if (!src.valid)
         continue;
       CheckedArithmeticSite s;
-      s.kind = CheckedArithmeticSite::Op::FloatToInt;
       s.begin = toks[val].offset;
       s.op = s.begin;
       s.opLength = 0;
@@ -2325,6 +2638,20 @@ collectTokenArithmeticSites(const std::string &source) {
       s.bits = dst.bits;
       s.isSigned = dst.isSigned;
       s.type = dst.spelling;
+      if (src.isFloat) {
+        s.kind = CheckedArithmeticSite::Op::FloatToInt;
+      } else {
+        // `(T)x` where x is a wider integer: a genuine truncating cast.  A
+        // nested cast such as `(char)(int)x` leaves the outer operand as '('
+        // and is therefore handled by the AST producer / composed chain; we
+        // only recover the unambiguous bare-identifier form here.
+        if (dst.isFloat || src.bits <= dst.bits)
+          continue;
+        s.kind = CheckedArithmeticSite::Op::Narrow;
+        s.srcBits = src.bits;
+        s.srcIsSigned = src.isSigned;
+        s.srcType = src.spelling;
+      }
       sites.push_back(std::move(s));
       continue;
     }
@@ -2390,6 +2717,8 @@ std::string instrumentDynamicArrayBounds(
         enumRanges.emplace_back(etoks[k].offset, endOfToken(etoks[close]));
     }
   }
+  const std::vector<std::pair<size_t, size_t>> staticRanges =
+      staticInitializerRanges(source);
 
   std::vector<SafetyInsertion> insertions;
   // Offsets already guarded by the token-level pass; a resolved AST site for
@@ -2487,14 +2816,97 @@ std::string instrumentDynamicArrayBounds(
     haveBounds = true;
   }
 
-  for (const CheckedArithmeticSite &site : arith) {
-    bool inEnum = false;
+  // A guard call is illegal wherever C requires a constant expression: enum
+  // bodies, file-scope/static initialisers, array sizes and case labels.  The
+  // static checker already validates those constants; skip the site here.
+  auto inConstantContext = [&](const CheckedArithmeticSite &s) {
     for (const auto &r : enumRanges)
-      if (site.begin >= r.first && site.end <= r.second) {
-        inEnum = true;
-        break;
+      if (s.begin >= r.first && s.end <= r.second) return true;
+    for (const auto &r : staticRanges)
+      if (s.begin >= r.first && s.begin < r.second) return true;
+    return false;
+  };
+
+  // --- nested conversion chains: compose innermost-first -------------------
+  // A cast chain such as `(char)(int)d` yields one conversion site per cast.
+  // Emitting them as independent prefix/suffix insertions makes their suffixes
+  // collide at the operand's end offset and swaps the argument lists (f2i gets
+  // narrow's 5 args, narrow gets f2i's 3), producing malformed C.  Compose the
+  // whole chain into one self-contained replacement, innermost guard first.
+  std::set<size_t> composedConversions;
+  {
+    std::vector<size_t> convIdx;
+    for (size_t i = 0; i < arith.size(); ++i) {
+      const CheckedArithmeticSite::Op k = arith[i].kind;
+      if (k == CheckedArithmeticSite::Op::Narrow ||
+          k == CheckedArithmeticSite::Op::FloatToInt)
+        convIdx.push_back(i);
+    }
+    for (size_t root = 0; root < convIdx.size(); ++root) {
+      const size_t ri = convIdx[root];
+      if (composedConversions.count(ri))
+        continue;
+      const CheckedArithmeticSite &R = arith[ri];
+      if (R.end <= R.begin)
+        continue;
+      if (inConstantContext(R))
+        continue; // integer constant expression: no runtime call is legal
+      // Gather the other conversion sites that guard the same operand.  We
+      // allow a shared `end` (nested casts on one value) as well as strictly
+      // contained spans (a cast wrapped around a larger expression).
+      std::vector<size_t> chain;
+      for (size_t j : convIdx) {
+        if (j == ri || composedConversions.count(j))
+          continue;
+        const CheckedArithmeticSite &C = arith[j];
+        if (C.end <= C.begin || C.begin < R.begin || C.end > R.end)
+          continue;
+        chain.push_back(j);
       }
-    if (inEnum)
+      if (chain.empty())
+        continue;
+      // Never drop an independent guard (bounds, allocation, pointer, other
+      // arithmetic) that lives inside the region we would replace wholesale.
+      bool hasForeign = false;
+      for (const SafetyInsertion &ins : insertions)
+        if (ins.offset >= R.begin && ins.offset < R.end) {
+          hasForeign = true;
+          break;
+        }
+      if (hasForeign)
+        continue; // keep the independent insertions; emit normally below
+      chain.push_back(ri);
+      std::sort(chain.begin(), chain.end(), [&](size_t a, size_t b) {
+        const int ra = conversionRank(arith[a]);
+        const int rb = conversionRank(arith[b]);
+        if (ra != rb)
+          return ra < rb;
+        return arith[a].begin > arith[b].begin;
+      });
+      const size_t first = chain.front();
+      // Drop any leading (TYPE) casts already present in the source: the
+      // wrappers we compose below re-emit the destination casts, and keeping
+      // the originals would check an already-truncated value.
+      const size_t opStart = skipLeadingCasts(source, arith[first].begin,
+                                              arith[first].end);
+      std::string text = sourceSlice(source, opStart, arith[first].end);
+      for (size_t j : chain) {
+        if (arith[j].kind == CheckedArithmeticSite::Op::FloatToInt)
+          haveFloatToInt = true;
+        text = wrapConversionText(arith[j], text);
+      }
+      insertions.push_back({R.begin, R.end - R.begin, 0, text,
+                            R.end - R.begin});
+      for (size_t j : chain)
+        composedConversions.insert(j);
+    }
+  }
+
+  for (size_t arithIdx = 0; arithIdx < arith.size(); ++arithIdx) {
+    const CheckedArithmeticSite &site = arith[arithIdx];
+    if (composedConversions.count(arithIdx))
+      continue; // emitted as a composed chain replacement above
+    if (inConstantContext(site))
       continue; // integer constant expression: no runtime guard is legal
     const size_t span = site.end > site.begin ? site.end - site.begin : 0;
     const std::string fn =
@@ -2864,7 +3276,16 @@ std::string instrumentDynamicArrayBounds(
     // plain C so no sanitizer runtime is required.
     static const char *ops[] = {"add", "sub", "mul", "div",
                                 "rem", "shl", "shr", "narrow"};
-    prelude += "#include <stdint.h>\n";
+    prelude += "#include <stdint.h>\n"
+               // `inline` is not a C89 keyword.  A plain `static` definition
+               // is accepted by every C standard and keeps internal linkage;
+               // the GNU unused attribute (where available) still silences
+               // unused-function diagnostics.  Semantics are unchanged.
+               "#if defined(__GNUC__) || defined(__clang__)\n"
+               "#  define CPLUS_STATIC_INLINE __attribute__((unused)) static\n"
+               "#else\n"
+               "#  define CPLUS_STATIC_INLINE static\n"
+               "#endif\n";
     for (const char *op : ops) {
       if (std::strcmp(op, "narrow") == 0) {
         prelude += "extern int64_t __cplus_checked_narrow_i64(uint64_t, "
@@ -2882,7 +3303,7 @@ std::string instrumentDynamicArrayBounds(
       prelude +=
           "extern int64_t __cplus_checked_f2i_i64(double, unsigned, "
           "unsigned);\n"
-          "static inline int64_t __cplus_inline_f2i_i64(double v, "
+          "CPLUS_STATIC_INLINE int64_t __cplus_inline_f2i_i64(double v, "
           "unsigned bits, unsigned sgn) {\n"
           "  double lo, hi;\n"
           "  if (v != v) return __cplus_checked_f2i_i64(v, bits, sgn);\n"
@@ -2912,7 +3333,7 @@ std::string instrumentDynamicArrayBounds(
     if (haveSizeMul)
       prelude += "#include <stddef.h>\n"
                  "extern size_t __cplus_checked_size_mul(size_t, size_t);\n"
-                 "static inline size_t __cplus_inline_size_mul(size_t a, "
+                 "CPLUS_STATIC_INLINE size_t __cplus_inline_size_mul(size_t a, "
                  "size_t b) {\n"
                  "  if (b != 0 && a > ((size_t)-1) / b)\n"
                  "    return __cplus_checked_size_mul(a, b);\n"
@@ -2927,7 +3348,7 @@ std::string instrumentDynamicArrayBounds(
         "#  endif\n"
         "#endif\n"
         "#ifdef CPLUS_HAVE_INLINE_ARITH\n"
-        "#define CPLUS_ARITH_INLINE __attribute__((unused)) static inline\n";
+        "#define CPLUS_ARITH_INLINE CPLUS_STATIC_INLINE\n";
 
     auto emitWrapper = [&](const char *op, const std::string &body) {
       prelude += std::string("CPLUS_ARITH_INLINE int64_t __cplus_inline_") +

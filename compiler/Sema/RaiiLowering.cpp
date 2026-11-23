@@ -53,6 +53,18 @@ struct Edit {
   unsigned seq = 0;
 };
 
+/// One `defer` statement.  The token range matters because a conditional
+/// defer body (`defer if (c) drop(&r);`) must not suppress the automatic drop:
+/// on the false branch the explicit drop never runs.
+struct DeferInfo {
+  size_t startTok = 0;
+  size_t endTok = 0; // statement semicolon
+  size_t startOffset = 0;
+  size_t endOffset = 0;
+  bool conditional = false;
+  std::string ownerName;
+};
+
 bool startsWith(const std::string &s, const char *prefix) {
   size_t n = std::char_traits<char>::length(prefix);
   return s.size() >= n && s.compare(0, n, prefix) == 0;
@@ -89,6 +101,7 @@ public:
     // them once keeps the token-level scan single-pass and cheap.
     globalNames_ = collectGlobals();
     collectControlFlowHelpers();
+    collectTerminationMacros();
     scan();
     applyEdits();
 
@@ -169,6 +182,171 @@ private:
     return out;
   }
 
+  /// `joinTokens` with a single insertion after token `at`.  Used to fold a
+  /// zeroing guard into a defer's re-emitted text (a normal source edit would
+  /// land inside the span that `defer` deletes from the output).
+  std::string joinTokensWithInsert(size_t from, size_t to, size_t at,
+                                   const std::string &ins) const {
+    std::string out;
+    for (size_t k = from; k < to; ++k) {
+      if (isTrivia(k))
+        continue;
+      if (!out.empty())
+        out += " ";
+      out += toks_[k].text;
+      if (k == at)
+        out += ins;
+    }
+    return out;
+  }
+
+  /// True when `name` denotes a call that never returns (a process terminator
+  /// or a non-local jump), either directly or via a helper defined in this
+  /// translation unit.  A helper declared in another TU is invisible here --
+  /// see the limitation documented on collectControlFlowHelpers().
+  bool isTerminationName(const std::string &name) const {
+    return name == "exit" || name == "_Exit" || name == "abort" ||
+           name == "longjmp" || terminationHelpers_.count(name) != 0 ||
+           longjmpHelpers_.count(name) != 0;
+  }
+
+  /// Find the variable assigned by the `=` at `eq`.  Handles both the plain
+  /// `fp = exit` case and the function-pointer declarator `void (*fp)(int) =
+  /// exit`; kNPos when the target is not a simple identifier.
+  size_t findAssignmentTarget(size_t eq) const {
+    size_t p = prevSig(eq);
+    if (p == kNPos)
+      return kNPos;
+    if (toks_[p].kind == TokKind::Identifier)
+      return p;
+    if (!isPunct(p, ")"))
+      return kNPos;
+    // Function-pointer declarator: `(*name)(...) = ...`.  The `)` immediately
+    // before `=` closes the parameter list; step back over it to the `(*name)`
+    // group and pull the identifier out of that group.
+    size_t paramsOpen = matchingParenBackward(p);
+    if (paramsOpen == kNPos)
+      return kNPos;
+    size_t groupClose = prevSig(paramsOpen);
+    if (groupClose == kNPos || !isPunct(groupClose, ")"))
+      return kNPos;
+    size_t groupOpen = matchingParenBackward(groupClose);
+    if (groupOpen == kNPos)
+      return kNPos;
+    for (size_t k = groupOpen + 1; k < groupClose; ++k)
+      if (isPunct(k, "*")) {
+        size_t nm = nextSig(k);
+        if (nm < groupClose && toks_[nm].kind == TokKind::Identifier)
+          return nm;
+      }
+    return kNPos;
+  }
+
+  /// Find the owner taken by address anywhere inside a destructor call.  Plain
+  /// `drop(&r)`, redundant parens `drop((&r))`, casts `drop((R*)&r)` and
+  /// `drop(*&r)` must all be recognised, otherwise the automatic drop still
+  /// runs after the explicit one and double-frees the handle.
+  size_t findDroppedOwner(size_t lp, size_t rp) const {
+    size_t found = kNPos;
+    for (size_t k = lp + 1; k < rp; ++k) {
+      if (!isPunct(k, "&"))
+        continue;
+      size_t nm = nextSig(k);
+      if (nm < rp && toks_[nm].kind == TokKind::Identifier &&
+          owned_.count(toks_[nm].text))
+        found = nm; // last match wins for multi-argument calls
+    }
+    return found;
+  }
+
+  /// Emit the idempotence guard that makes the scope-exit drop a no-op after an
+  /// explicit drop.  At statement level we wrap the call in a compound block
+  /// and add a real second statement; this avoids introducing a comma at the
+  /// top level of a macro argument (`WRAP(drop(&r))` would otherwise be parsed
+  /// as two macro arguments).  Inside any parenthesis (macro argument, `for`
+  /// header, expression) we instead parenthesise the comma expression so the
+  /// comma stays at nesting depth 1 and the surrounding grammar is untouched.
+  void emitExplicitDropGuard(size_t callTok, size_t rp,
+                             const std::string &name) {
+    const std::string zero =
+        ", (void)cplus_zero(&" + name + ", sizeof(" + name + "))";
+    if (parenDepth_ > 0) {
+      // Wrap the *whole call*: wrapping only the owner token would let the
+      // call's own `)` close the wrapper for cast/paren forms (`drop((R*)&r)`).
+      edits_.push_back(Edit{toks_[callTok].offset, 0, "(", seq_++});
+      edits_.push_back(
+          Edit{toks_[rp].offset + toks_[rp].text.size(), 0, zero + ")", seq_++});
+      return;
+    }
+    size_t semi = statementEnd(rp + 1);
+    bool callEndsStatement = semi != kNPos;
+    if (callEndsStatement)
+      for (size_t k = rp + 1; k < semi; ++k)
+        if (!isTrivia(k)) {
+          callEndsStatement = false;
+          break;
+        }
+    if (callEndsStatement) {
+      // Consume the statement's own semicolon: no stray `;` before `else`.
+      std::string call = joinTokens(callTok, rp + 1);
+      edits_.push_back(Edit{
+          toks_[callTok].offset,
+          toks_[semi].offset + toks_[semi].text.size() - toks_[callTok].offset,
+          "{ " + call + "; (void)cplus_zero(&" + name + ", sizeof(" + name +
+              ")); }",
+          seq_++});
+      return;
+    }
+    // Larger expression at statement level: keep the parenthesised form.
+    edits_.push_back(Edit{toks_[callTok].offset, 0, "(", seq_++});
+    edits_.push_back(
+        Edit{toks_[rp].offset + toks_[rp].text.size(), 0, zero + ")", seq_++});
+  }
+
+  /// True when the token range contains the declaration of a C+ owner.  A
+  /// forward `goto` that skips such a declaration reaches the label with an
+  /// uninitialised handle, so the scope-exit destructor would run on garbage.
+  bool jumpSkipsOwnerInit(size_t from, size_t to) const {
+    for (size_t k = from; k < to; ++k) {
+      if (toks_[k].kind == TokKind::Comment) {
+        if (startsWith(toks_[k].text, kOwnPrefix) ||
+            startsWith(toks_[k].text, kMemPrefix))
+          return true;
+        continue;
+      }
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      if (toks_[k].text == "defer")
+        return true;
+      if (!resourceTypes_.count(toks_[k].text))
+        continue;
+      size_t nm = nextSig(k);
+      if (nm < to && toks_[nm].kind == TokKind::Identifier) {
+        size_t after = nextSig(nm);
+        if (after >= to || !isPunct(after, "(")) // not `R f(...)` declaration
+          return true;
+      }
+    }
+    return false;
+  }
+
+  /// Resolve the label of a `goto` and report whether the skipped region
+  /// declares an owner.  The scan stops at a brace boundary so an unrelated
+  /// later block is never blamed.
+  bool gotoSkipsOwner(size_t i) const {
+    size_t lbl = nextSig(i);
+    if (lbl >= toks_.size() || toks_[lbl].kind != TokKind::Identifier)
+      return false;
+    for (size_t k = lbl + 1; k < toks_.size(); ++k) {
+      if (isPunct(k, "}"))
+        return false;
+      if (toks_[k].kind == TokKind::Identifier &&
+          toks_[k].text == toks_[lbl].text && isPunct(nextSig(k), ":"))
+        return jumpSkipsOwnerInit(lbl + 1, k);
+    }
+    return false;
+  }
+
   void handleDefer(size_t i) {
     size_t semi = statementEnd(i + 1);
     if (semi == kNPos || semi == i + 1) {
@@ -191,12 +369,27 @@ private:
     v.line = toks_[i].line;
     v.column = toks_[i].column;
     registerOwned(v);
+
+    // Detect a conditional cleanup body.  `defer if (c) drop(&r);` only drops
+    // on one branch; suppressing the automatic drop would leak on the other.
+    // Record the token span so the explicit-drop guard can be folded into the
+    // re-emitted defer text instead of an edit inside the deleted region.
+    bool conditional = false;
+    for (size_t k = i + 1; k < semi; ++k) {
+      if (toks_[k].kind == TokKind::Identifier) {
+        const std::string &s = toks_[k].text;
+        if (s == "if" || s == "while" || s == "for" || s == "switch")
+          conditional = true;
+      } else if (isPunct(k, "?") || isPunct(k, "&&") || isPunct(k, "||")) {
+        conditional = true;
+      }
+    }
+    defers_.push_back(DeferInfo{i + 1, semi, toks_[i].offset,
+                                toks_[semi].offset, conditional, v.name});
+
     edits_.push_back(Edit{toks_[i].offset,
                           toks_[semi].offset - toks_[i].offset,
                           std::string(), seq_++});
-    // Remember the removed span so an explicit drop *inside* a defer is not
-    // rewritten with a zeroing guard that would land in a deleted region.
-    deferRanges_.push_back({toks_[i].offset, toks_[semi].offset});
     atStmtStart_ = true;
   }
 
@@ -391,6 +584,13 @@ private:
       return;
     }
     if (t.text == ";") {
+      // A loop whose body is a single statement has no compound block for
+      // closeScope() to retire its frame (bodyPos stays -1).  The body's `;`
+      // is the end of the loop; header semicolons are excluded by parenDepth_.
+      // Leaving the frame alive made a later break/continue read a stale
+      // target and drop nothing.
+      if (parenDepth_ == 0 && !loops_.empty() && loops_.back().bodyPos < 0)
+        loops_.pop_back();
       atStmtStart_ = true;
       return;
     }
@@ -418,6 +618,7 @@ private:
         moved_.clear();
         movedOwners_.clear();
         explicitlyDropped_.clear();
+        doAwaitingWhile_ = false;
         // Parameters are out-param escape targets: storing a live owner into
         // one hands its lifetime to the caller.
         currentParams_.clear();
@@ -451,8 +652,14 @@ private:
     if (!drops.empty())
       insertBefore(t, drops);
 
-    if (loops_.size() > 0 &&
-        loops_.back().bodyPos == static_cast<int>(scopes_.size()) - 1)
+    int closedIndex = static_cast<int>(scopes_.size()) - 1;
+    if (!loops_.empty() && loops_.back().bodyPos == closedIndex)
+      loops_.pop_back();
+    // A loop whose body is a compound statement owned by a nested construct
+    // (e.g. `while (c) switch (x) { ... }`) never got a bodyPos of its own.
+    // Retire that frame here too so it cannot shadow a real enclosing loop.
+    if (!loops_.empty() && loops_.back().bodyPos < 0 &&
+        loops_.back().stackSizeAtKeyword == static_cast<size_t>(closedIndex))
       loops_.pop_back();
 
     // A name declared in this scope no longer suppresses cleanup for a
@@ -485,45 +692,59 @@ private:
         t.text.compare(t.text.size() - 5, 5, "_drop") == 0) {
       size_t lp = nextSig(i);
       if (isPunct(lp, "(")) {
-        size_t amp = nextSig(lp);
-        size_t target = nextSig(amp);
-        bool inDefer = false;
-        for (const auto &r : deferRanges_)
-          if (toks_[i].offset >= r.first && toks_[i].offset < r.second) {
-            inDefer = true;
-            break;
-          }
-        if (isPunct(amp, "&") && target < toks_.size() &&
-            toks_[target].kind == TokKind::Identifier &&
-            owned_.count(toks_[target].text)) {
-          const std::string &name = toks_[target].text;
-          if (!explicitlyDropped_.insert(name).second && strict_ &&
-              mode_ != Mode::LegacyC)
-            errorAt("resource '" + name + "' is explicitly dropped more than once",
-                    t, "release each owner exactly once; a second drop may "
-                       "free already-freed memory");
-          if (inDefer) {
-            // The defer text is re-emitted at scope exit.  Suppress the
-            // automatic drop so that text is not executed twice; no guard
-            // edit is needed because the defer span is removed from output.
-            deferDropped_.insert(name);
+        size_t rp = matchingParen(lp);
+        if (rp != kNPos && rp < toks_.size()) {
+          size_t ownerTok = findDroppedOwner(lp, rp);
+          DeferInfo *defer = nullptr;
+          for (auto &d : defers_)
+            if (toks_[i].offset >= d.startOffset &&
+                toks_[i].offset < d.endOffset) {
+              defer = &d;
+              break;
+            }
+          if (ownerTok != kNPos) {
+            const std::string &name = toks_[ownerTok].text;
+            if (!explicitlyDropped_.insert(name).second && strict_ &&
+                mode_ != Mode::LegacyC)
+              errorAt("resource '" + name +
+                          "' is explicitly dropped more than once",
+                      t, "release each owner exactly once; a second drop may "
+                         "free already-freed memory");
+            if (defer && !defer->conditional) {
+              // Unconditional defer: its text *is* the scope-exit cleanup, so
+              // suppress the automatic drop.  No source edit is needed (the
+              // defer span is deleted from the output).
+              deferDropped_.insert(name);
+            } else if (defer) {
+              // Conditional defer: the explicit drop runs on one branch only.
+              // Keep the automatic drop and fold a zeroing guard into the
+              // re-emitted defer text so the true branch cannot double-free.
+              const std::string guard =
+                  " , (void)cplus_zero(&" + name + ", sizeof(" + name + "))";
+              std::string text = joinTokensWithInsert(
+                  defer->startTok, defer->endTok, rp, guard);
+              for (auto &s : scopes_)
+                for (auto &sv : s.vars)
+                  if (sv.name == defer->ownerName)
+                    sv.deferText = text;
+              auto it = owned_.find(defer->ownerName);
+              if (it != owned_.end())
+                it->second.deferText = text;
+            } else {
+              // `cplus_zero` is a no-op on an already empty handle, so the
+              // automatic drop inserted at scope exit cannot double-free.
+              emitExplicitDropGuard(i, rp, name);
+            }
           } else {
-            // `cplus_zero` is a no-op on an already empty handle, so the
-            // automatic drop inserted at scope exit cannot double-free.
-            size_t rp = matchingParen(lp);
-            if (rp != kNPos && rp < toks_.size())
-              edits_.push_back(Edit{
-                  toks_[rp].offset + toks_[rp].text.size(), 0,
-                  ", (void)cplus_zero(&" + name + ", sizeof(" + name + "))",
-                  seq_++});
+            size_t amp = nextSig(lp);
+            if (strict_ && mode_ != Mode::LegacyC && amp < toks_.size() &&
+                toks_[amp].kind == TokKind::Identifier &&
+                borrows_.count(toks_[amp].text))
+              errorAt("explicit drop through alias '" + toks_[amp].text +
+                          "' is not supported",
+                      t, "call the destructor with the owner's address "
+                         "directly");
           }
-        } else if (strict_ && mode_ != Mode::LegacyC &&
-                   amp < toks_.size() &&
-                   toks_[amp].kind == TokKind::Identifier &&
-                   borrows_.count(toks_[amp].text)) {
-          errorAt("explicit drop through alias '" + toks_[amp].text +
-                      "' is not supported",
-                  t, "call the destructor with the owner's address directly");
         }
       }
     }
@@ -583,11 +804,18 @@ private:
       return;
     }
     if (t.text == "goto") {
-      // STRICT fails closed only when a managed/resource owner is live at the
-      // jump; a plain goto with no cleanup obligations is safe.
-      if (strict_ && !owned_.empty())
+      // STRICT fails closed when a managed/resource owner is live at the jump,
+      // and also when the jump skips an owner declaration: the label is then
+      // reached with an uninitialised handle that the scope-exit drop reads.
+      // A plain goto with no cleanup obligations is untouched.
+      if (strict_ && mode_ != Mode::LegacyC && !owned_.empty())
         errorAt("'goto' bypasses C+ cleanup; destructors may not run", t,
                 "use structured control flow or an explicit cleanup call");
+      else if (strict_ && mode_ != Mode::LegacyC && gotoSkipsOwner(i))
+        errorAt("'goto' jumps over the declaration of a C+ owner; cleanup may "
+                "run on an uninitialised handle",
+                t, "declare owners before the jump, or use structured control "
+                   "flow");
       else
         warningAt("'goto' bypasses C+ cleanup; destructors may not run", t,
                   "use structured control flow or an explicit cleanup call");
@@ -616,12 +844,40 @@ private:
       atStmtStart_ = false;
       return;
     }
+    // Indirect termination: a function pointer last assigned a terminator /
+    // longjmp helper, or a macro whose body is a terminator.  The direct-name
+    // checks above cannot see these spellings.  The alias set is updated in
+    // checkAssignment() as the token scan advances, so a later reassignment to
+    // a normal function removes the alias and avoids a false positive.
+    {
+      auto mit = terminationMacros_.find(t.text);
+      bool indirectCall = terminationAliases_.count(t.text) != 0 ||
+                          (mit != terminationMacros_.end() &&
+                           (!mit->second || isPunct(nextSig(i), "(")));
+      if (indirectCall && strict_ && mode_ != Mode::LegacyC &&
+          hasLiveOwners()) {
+        errorAt("call through '" + t.text +
+                    "' may bypass C+ cleanup; destructors may not run",
+                t, "release live owners before a non-returning call, or use "
+                   "structured control flow");
+        atStmtStart_ = false;
+        return;
+      }
+    }
     if (t.text == "for" || t.text == "while" || t.text == "do" ||
         t.text == "switch") {
-      LoopInfo l;
-      l.stackSizeAtKeyword = scopes_.size();
-      l.isSwitch = t.text == "switch";
-      loops_.push_back(l);
+      // The `while` in `do { ... } while (c);` closes the `do` frame; pushing a
+      // fresh frame for it left a stale LoopInfo that later breaks targeted.
+      if (t.text == "while" && doAwaitingWhile_) {
+        doAwaitingWhile_ = false;
+      } else {
+        LoopInfo l;
+        l.stackSizeAtKeyword = scopes_.size();
+        l.isSwitch = t.text == "switch";
+        loops_.push_back(l);
+        if (t.text == "do")
+          doAwaitingWhile_ = true;
+      }
       atStmtStart_ = false;
       return;
     }
@@ -784,6 +1040,24 @@ private:
   }
 
   void checkAssignment(size_t i) {
+    // Track function-pointer aliases of process terminators / longjmp helpers.
+    // A call through such an alias never returns, so any cleanup injected after
+    // it is dead code.  Reassignment to a non-terminator clears the alias, so
+    // this stays conservative without flagging ordinary function pointers.
+    {
+      size_t target = findAssignmentTarget(i);
+      if (target != kNPos && toks_[target].kind == TokKind::Identifier) {
+        size_t rhs = nextSig(i);
+        if (isPunct(rhs, "&"))
+          rhs = nextSig(rhs);
+        if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier &&
+            isTerminationName(toks_[rhs].text))
+          terminationAliases_.insert(toks_[target].text);
+        else
+          terminationAliases_.erase(toks_[target].text);
+      }
+    }
+
     size_t lhs = prevSig(i);
     if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
       return;
@@ -1165,6 +1439,12 @@ private:
   /// of live owners in their *callers*, which a purely local scan cannot see.
   /// The scan is deliberately token-level and conservative: a helper is only
   /// recorded when its definition is visible in this translation unit.
+  /// LIMITATION: a terminator helper defined in another TU is invisible here.
+  /// A call to such a helper is reported by the driver's per-TU (MULTITU)
+  /// disclosure, which is a warning; STRICT cannot prove it is `noreturn`
+  /// without whole-program information.  We deliberately do not treat every
+  /// unresolved call as terminating -- that would reject ordinary C+ programs
+  /// that call ordinary library functions while an owner is live.
   void collectControlFlowHelpers() {
     if (mode_ == Mode::LegacyC)
       return;
@@ -1201,6 +1481,45 @@ private:
           terminationHelpers_.insert(name);
       }
       i = end;
+    }
+  }
+
+  /// Preprocessor directives are skipped by scan(), so a macro such as
+  /// `#define DIE() exit(1)` would otherwise hide the terminator from the
+  /// owner-aware jump checks and leave an unreachable drop after the call.
+  /// Record macro names whose replacement list contains a terminator; the bool
+  /// marks a function-like macro (a bare object-like macro also counts as a
+  /// call site).  Only macros with a visible terminator are recorded, so
+  /// ordinary wrappers are untouched.
+  void collectTerminationMacros() {
+    if (mode_ == Mode::LegacyC)
+      return;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "#"))
+        continue;
+      size_t def = nextSig(i);
+      if (!isIdent(def, "define"))
+        continue;
+      size_t name = nextSig(def);
+      if (name >= toks_.size() || toks_[name].kind != TokKind::Identifier)
+        continue;
+      bool functionLike = isPunct(nextSig(name), "(");
+      bool terminates = false;
+      size_t newline = kNPos;
+      for (size_t k = name + 1; k < toks_.size(); ++k) {
+        if (toks_[k].kind == TokKind::Whitespace &&
+            toks_[k].text.find('\n') != std::string::npos) {
+          newline = k;
+          break;
+        }
+        if (toks_[k].kind == TokKind::Identifier &&
+            isTerminationName(toks_[k].text))
+          terminates = true;
+      }
+      if (terminates)
+        terminationMacros_[toks_[name].text] = functionLike;
+      if (newline != kNPos)
+        i = newline;
     }
   }
 
@@ -1783,7 +2102,12 @@ private:
   std::set<std::string> currentParams_;
   std::set<std::string> longjmpHelpers_;
   std::set<std::string> terminationHelpers_;
-  std::vector<std::pair<size_t, size_t>> deferRanges_;
+  /// Function-pointer variables whose last visible assignment was a
+  /// terminator/longjmp (or a helper that contains one).
+  std::set<std::string> terminationAliases_;
+  /// Macro name -> function-like?  Macros hiding a terminator in their body.
+  std::map<std::string, bool> terminationMacros_;
+  std::vector<DeferInfo> defers_;
   size_t skipMoveArg_ = kNPos;
 
   std::vector<Scope> scopes_;
@@ -1794,6 +2118,9 @@ private:
   bool inFunction_ = false;
   int functionDepth_ = 0;
   int parenDepth_ = 0;
+  /// The `while` token that closes a `do { ... } while (c);` belongs to that
+  /// `do`, not to a new loop frame.
+  bool doAwaitingWhile_ = false;
   bool atStmtStart_ = true;
   unsigned obligations_ = 0;
   unsigned deferCounter_ = 0;

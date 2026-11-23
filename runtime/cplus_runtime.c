@@ -56,6 +56,40 @@ static void cplus_log_impl(int level, const char *file, int line,
 #define CPLUS_POSIX 1
 #endif
 
+/* Usable size of a malloc block.  Used only to *clamp* a caller-supplied
+ * registration extent so that a registry size can never authorize a copy or a
+ * length query past the real allocation.  Returns 0 on platforms without a
+ * query or when the pointer is not a malloc block (portable fallback: keep the
+ * caller's value). */
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+static size_t cplus_malloc_capacity(const void *p) {
+  return p ? (size_t)malloc_size(p) : 0u;
+}
+#define CPLUS_HAVE_MALLOC_CAPACITY 1
+#elif defined(__linux__)
+#include <malloc.h>
+static size_t cplus_malloc_capacity(const void *p) {
+  return p ? (size_t)malloc_usable_size((void *)p) : 0u;
+}
+#define CPLUS_HAVE_MALLOC_CAPACITY 1
+#else
+static size_t cplus_malloc_capacity(const void *p) {
+  (void)p;
+  return 0u;
+}
+#define CPLUS_HAVE_MALLOC_CAPACITY 0
+#endif
+
+/* Never let a caller-supplied size exceed the block the allocator actually
+ * handed out.  A smaller declared size is kept verbatim. */
+static size_t cplus_clamp_registered_size(const void *p, size_t bytes) {
+  size_t usable = cplus_malloc_capacity(p);
+  if (usable != 0u && bytes > usable)
+    return usable;
+  return bytes;
+}
+
 /* -------------------------------------------------------------------------
  * Diagnostics
  * ------------------------------------------------------------------------- */
@@ -376,14 +410,53 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
  *   not being sound once the bounded ring wrapped.  Closing F2 requires an ABI
  *   change (a compiler-supplied provenance token or a fat pointer).  Ordinary
  *   dereferences are not instrumented by this runtime either.
+ *
+ * Synchronization / open limits (wave 3)
+ * ---------------------------------------
+ *   Every read/write of the live table, the retired ledger, the recent cache,
+ *   the quarantine ring and the generation/counter globals is serialized by
+ *   cplus_alloc_mutex, so concurrent operations on *different* pointers have
+ *   no data races.  Each public entry point takes the lock for exactly one
+ *   critical section; helpers named below are called only with it held.
+ *   Operating on the *same* pointer concurrently (e.g. releasing while a
+ *   realloc of that pointer is in flight) is a caller-level race, exactly as
+ *   it is for malloc/free; the side table cannot make that sequence atomic.
+ *
+ *   Interior pointers: the side table is keyed on base addresses only.  A free
+ *   or liveness query through base+k cannot match the live slot for base, so
+ *   it is a deterministic 105/type-confusion failure, not a silent success.
+ *   The recorded size is used for copy bounds and the length query, not as a
+ *   per-byte ownership map; proving interior ownership for every address
+ *   would need a different (ABI-changing) representation.
+ *
+ *   Caller-supplied sizes are clamped to the block's real usable size where
+ *   the platform exposes one (malloc_size / malloc_usable_size), so a false
+ *   size cannot authorize an overread.  On platforms without that query the
+ *   caller's value is kept (portable fallback).
+ *
+ *   Re-registration of a stale retired address is rejected deterministically
+ *   (105): accepting it would re-arm a genuine second free of an already
+ *   released block.  A retired address is stale when it is still in quarantine
+ *   or the platform allocator query reports no live block there; a proven
+ *   fresh malloc of the same address is accepted.  Fresh managed reuse is
+ *   unaffected because it goes through cplus_alloc / in-place realloc.
+ *
+ *   Retired-ledger cap (CPLUS_RETIRED_MAX, 1048576): once full, a one-time
+ *   stderr warning is printed, cplus_retired_wrapped becomes sticky and
+ *   cplus_retired_ledger_full() reports it.  New retirements then evict one
+ *   slot round-robin instead of being dropped, so the address retired *now*
+ *   stays detectable as 104.  The evicted address loses ledger coverage
+ *   (cplus_address_retired() honestly returns 0 for it): that is a bounded
+ *   resource limit, not a silent correctness claim.
  * ------------------------------------------------------------------------- */
 
 #define CPLUS_LIVE_INITIAL 64u
 #define CPLUS_RECENT_SLOTS 4096u
 #define CPLUS_RETIRED_INITIAL 256u
-/* Upper bound on retired ledger entries.  Beyond this we stop inserting new
- * addresses and set cplus_retired_wrapped; double-free detection for those
- * addresses then degrades to the bounded recent cache (documented above). */
+/* Upper bound on retired ledger entries.  Beyond this we evict round-robin
+ * (never drop a retirement), set cplus_retired_wrapped (sticky) and print a
+ * one-time warning; the evicted address loses ledger coverage.  The cap is a
+ * fixed 1,048,576 addresses (documented above). */
 #define CPLUS_RETIRED_MAX 1048576u
 #define CPLUS_TOMBSTONE ((void *)(uintptr_t)-1)
 
@@ -417,6 +490,9 @@ static size_t cplus_retired_cap = 0;
 static size_t cplus_retired_count = 0;
 static size_t cplus_retired_deleted = 0;
 static int cplus_retired_wrapped = 0;
+/* Once the ledger is full, new retirements evict this slot round-robin so
+ * double-free detection keeps working instead of silently degrading to 105. */
+static size_t cplus_retired_evict_cursor = 0;
 
 /* Opt-in temporal-safety experiment: keep released blocks out of malloc's
  * reuse pool for a bounded time so stale aliases are detected instead of
@@ -431,11 +507,71 @@ static int cplus_quarantine_enabled(void) {
   return env && env[0] != '0';
 }
 
+/* Called with the allocator lock held.  If a pointer is (re)registered, any
+ * stale quarantine entry for that address must go away: ring eviction would
+ * otherwise free a block that is live again.  O(ring slots), registration
+ * path only - never on the cplus_alloc/cplus_release hot path. */
+static void cplus_quarantine_drop(const void *p) {
+  for (size_t k = 0; k < CPLUS_QUARANTINE_SLOTS; ++k) {
+    if (cplus_quarantine[k] == p) {
+      cplus_quarantine[k] = NULL;
+      if (cplus_quarantine_count > 0u)
+        --cplus_quarantine_count;
+      return;
+    }
+  }
+}
+
+static int cplus_quarantine_contains(const void *p) {
+  for (size_t k = 0; k < CPLUS_QUARANTINE_SLOTS; ++k)
+    if (cplus_quarantine[k] == p)
+      return 1;
+  return 0;
+}
+
+static uint64_t cplus_retired_generation(const void *p); /* defined below */
+
+/* Called with the allocator lock held.  A retired address is a stale alias
+ * unless the allocator proves a *new* block currently lives there.  macOS
+ * malloc_size()/glibc malloc_usable_size() return 0 for a freed block and a
+ * positive size for a live one, which distinguishes S1/S9 (stale alias)
+ * from a legitimate fresh malloc that reuses an address.  A block still held
+ * in our quarantine has not been returned to malloc yet and is always stale.
+ * Without a platform query we reject conservatively. */
+static int cplus_retired_address_stale(const void *p) {
+  if (cplus_retired_generation(p) == 0u)
+    return 0;
+  if (cplus_quarantine_contains(p))
+    return 1;
+#if CPLUS_HAVE_MALLOC_CAPACITY
+  return cplus_malloc_capacity(p) == 0u;
+#else
+  return 1;
+#endif
+}
+
 #ifdef CPLUS_POSIX
 static pthread_mutex_t cplus_alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void cplus_alloc_lock(void) { pthread_mutex_lock(&cplus_alloc_mutex); }
 static void cplus_alloc_unlock(void) {
   pthread_mutex_unlock(&cplus_alloc_mutex);
+}
+
+/* fork() in a multi-threaded process inherits only the calling thread.  If
+ * that fork happens while another thread holds cplus_alloc_mutex, the child
+ * would inherit a locked mutex with no thread able to unlock it, and the
+ * first managed-memory call in the child would deadlock.  The standard
+ * prepare/parent/child handshake makes the snapshot consistent: prepare
+ * waits for the side-table lock, parent releases it, and the child
+ * reinitializes it (safe because the child has exactly one thread).  These
+ * are internal static hooks; no exported symbol or ABI changes. */
+static void cplus_atfork_prepare(void) { cplus_alloc_lock(); }
+static void cplus_atfork_parent(void) { cplus_alloc_unlock(); }
+static void cplus_atfork_child(void) {
+  pthread_mutex_init(&cplus_alloc_mutex, NULL);
+}
+__attribute__((constructor)) static void cplus_atfork_install(void) {
+  pthread_atfork(cplus_atfork_prepare, cplus_atfork_parent, cplus_atfork_child);
 }
 #else
 static void cplus_alloc_lock(void) {}
@@ -525,6 +661,12 @@ static uint64_t cplus_retired_generation(const void *p) {
 static void cplus_retired_grow(void) {
   size_t cap = cplus_retired_cap ? cplus_retired_cap * 2u
                                  : CPLUS_RETIRED_INITIAL;
+  /* Cap the *entry count* at CPLUS_RETIRED_MAX, but keep the hash table at
+   * twice that size.  A completely full open-addressed table makes every
+   * unsuccessful lookup O(cap); the 2x slack keeps lookups short and leaves
+   * room for eviction tombstones. */
+  if (cap > CPLUS_RETIRED_MAX * 2u)
+    cap = CPLUS_RETIRED_MAX * 2u;
   cplus_retired_slot *fresh =
       (cplus_retired_slot *)calloc(cap, sizeof(*fresh));
   if (!fresh) {
@@ -557,11 +699,52 @@ static void cplus_retired_insert(const void *p, uint64_t generation) {
     return;
   }
   if (cplus_retired_count + cplus_retired_deleted + 1u >= CPLUS_RETIRED_MAX) {
-    cplus_retired_wrapped = 1;
+    if (!cplus_retired_wrapped) {
+      cplus_retired_wrapped = 1;
+      fprintf(stderr,
+              "C+ runtime warning: retired-address ledger is full (%u "
+              "entries); further retirements evict entries round-robin\n",
+              (unsigned)CPLUS_RETIRED_MAX);
+      fflush(stderr);
+    }
+    /* Bounded ledger: evict one occupied slot round-robin rather than drop
+     * the retirement.  The victim becomes a tombstone (so other probe chains
+     * stay intact) and p is inserted on its own hash probe sequence, which
+     * keeps every entry findable.  The evicted address loses ledger coverage
+     * (cplus_address_retired() honestly reports 0 for it), but the address
+     * retired *now* remains detectable as a double free (104). */
+    /* Tombstones from many evictions would eventually fill the table again;
+     * rebuild it (dropping tombstones, resetting deleted) when they get high. */
+    if (cplus_retired_deleted > cplus_retired_cap / 4u)
+      cplus_retired_grow();
+    size_t mask = cplus_retired_cap - 1u;
+    size_t victim = cplus_retired_evict_cursor++ & mask;
+    for (size_t probe = 0; probe <= mask; ++probe) {
+      void *q = cplus_retired[victim].ptr;
+      if (q != NULL && q != CPLUS_TOMBSTONE && q != p)
+        break;
+      victim = (victim + 1) & mask;
+    }
+    void *vq = cplus_retired[victim].ptr;
+    if (vq != NULL && vq != CPLUS_TOMBSTONE) {
+      cplus_retired[victim].ptr = CPLUS_TOMBSTONE;
+      --cplus_retired_count;
+      ++cplus_retired_deleted;
+    }
+    size_t i = cplus_retired_index(p);
+    while (cplus_retired[i].ptr != NULL &&
+           cplus_retired[i].ptr != CPLUS_TOMBSTONE)
+      i = (i + 1) & mask;
+    if (cplus_retired[i].ptr == CPLUS_TOMBSTONE)
+      --cplus_retired_deleted;
+    cplus_retired[i].ptr = (void *)p;
+    cplus_retired[i].generation = generation;
+    ++cplus_retired_count;
     return;
   }
-  if ((cplus_retired_count + cplus_retired_deleted + 1u) * 4u >
-      cplus_retired_cap * 3u)
+  if (cplus_retired_cap < CPLUS_RETIRED_MAX * 2u &&
+      (cplus_retired_count + cplus_retired_deleted + 1u) * 4u >
+          cplus_retired_cap * 3u)
     cplus_retired_grow();
   size_t mask = cplus_retired_cap - 1u;
   size_t i = cplus_retired_index(p);
@@ -610,6 +793,16 @@ void *cplus_register_allocation(void *p, size_t bytes, const char *file,
     cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", file,
                       line, "pointer is already a live C+ allocation");
   }
+  /* S1/S9: a stale integer alias of an already-retired block would re-arm a
+   * real second free.  Reject a retired address unless the allocator proves
+   * a fresh block now lives at that address (legitimate malloc reuse). */
+  if (cplus_retired_address_stale(p)) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", file, line,
+                      "retired address cannot be re-registered");
+  }
+  bytes = cplus_clamp_registered_size(p, bytes);
+  cplus_quarantine_drop(p);
   uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
@@ -623,21 +816,39 @@ void *cplus_realloc_registered(void *oldp, void *newp, size_t bytes,
   if (!newp)
     return newp; /* realloc failed: the old block is still live */
   cplus_alloc_lock();
-  /* Note (F2): raw realloc() may return the same address, or an address that
-   * was retired earlier.  We cannot relocate it without changing the pointer
-   * the caller expects, so an old alias at a reused address remains
-   * indistinguishable from the new allocation - documented in the file header. */
-  if (oldp) {
-    cplus_live_slot *old = cplus_find_live(oldp);
-    if (old) {
-      uint64_t old_generation = old->generation;
-      old->ptr = CPLUS_TOMBSTONE;
-      --cplus_live_count;
-      ++cplus_live_deleted;
-      cplus_recent[cplus_recent_index(oldp)].ptr = oldp;
-      cplus_recent[cplus_recent_index(oldp)].generation = old_generation;
-      cplus_retired_insert(oldp, old_generation);
-    }
+  /* A transfer target that is already live as a different allocation must be
+   * rejected before touching the old slot.  Inserting a second live entry for
+   * the same address would leave a stale live entry after one of the two is
+   * released (a caller-supplied registration/size mismatch).  newp == oldp is
+   * the legitimate in-place realloc case and is allowed.  Note (F2): raw
+   * realloc() may also return a previously retired address; an old alias at a
+   * reused address remains indistinguishable from the new allocation - see
+   * the file header. */
+  cplus_live_slot *old = oldp ? cplus_find_live(oldp) : NULL;
+  cplus_live_slot *dest = cplus_find_live(newp);
+  if (dest && dest != old) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", file,
+                      line, "pointer is already a live C+ allocation");
+  }
+  /* A non-live transfer target that is a stale retired alias would re-arm a
+   * real double free.  The in-place case (newp == oldp, live) and a proven
+   * fresh malloc reuse are legitimate and are allowed. */
+  if (!dest && cplus_retired_address_stale(newp)) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", file, line,
+                      "retired address cannot be re-registered");
+  }
+  bytes = cplus_clamp_registered_size(newp, bytes);
+  cplus_quarantine_drop(newp);
+  if (old) {
+    uint64_t old_generation = old->generation;
+    old->ptr = CPLUS_TOMBSTONE;
+    --cplus_live_count;
+    ++cplus_live_deleted;
+    cplus_recent[cplus_recent_index(oldp)].ptr = oldp;
+    cplus_recent[cplus_recent_index(oldp)].generation = old_generation;
+    cplus_retired_insert(oldp, old_generation);
   }
   uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
@@ -674,8 +885,11 @@ void cplus_free_registered(void *p, const char *file, int line) {
   cplus_recent[cplus_recent_index(p)].ptr = p;
   cplus_recent[cplus_recent_index(p)].generation = generation;
   cplus_retired_insert(p, generation);
-  cplus_alloc_unlock();
+  /* Free while the side-table lock is still held.  Releasing it first lets a
+   * concurrent registration insert the same address into the live table
+   * before the free lands, leaving a stale live entry and a real double free. */
   free(p);
+  cplus_alloc_unlock();
 }
 
 void *cplus_alloc(size_t size) {
@@ -728,8 +942,15 @@ void *cplus_realloc(void *ptr, size_t size) {
   void *fresh = cplus_alloc(size);
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
-  if (slot)
-    memcpy(fresh, ptr, size < slot->size ? size : slot->size);
+  if (slot) {
+    size_t n = size < slot->size ? size : slot->size;
+    /* Belt-and-braces: even a wrongly registered or stale extent must never
+     * authorize a copy past the block malloc actually handed out. */
+    size_t usable = cplus_malloc_capacity(ptr);
+    if (usable != 0u && n > usable)
+      n = usable;
+    memcpy(fresh, ptr, n);
+  }
   cplus_alloc_unlock();
   cplus_release(ptr);
   return fresh;
@@ -774,14 +995,14 @@ void cplus_release(void *ptr) {
                             CPLUS_QUARANTINE_SLOTS;
     if (cplus_quarantine_count < CPLUS_QUARANTINE_SLOTS)
       ++cplus_quarantine_count;
-    cplus_alloc_unlock();
     if (oldest)
       free(oldest); /* bounded: at most CPLUS_QUARANTINE_SLOTS delayed frees */
+    cplus_alloc_unlock();
     return;
   }
-  cplus_alloc_unlock();
-
+  /* Keep the lock across free(): see cplus_free_registered above. */
   free(ptr);
+  cplus_alloc_unlock();
 }
 
 void cplus_check_live(const void *ptr) {
@@ -839,6 +1060,17 @@ int cplus_address_retired(const void *ptr) {
   int retired = cplus_retired_generation(ptr) != 0u;
   cplus_alloc_unlock();
   return retired;
+}
+
+/* Additive introspection for the bounded retired ledger.  Once this returns
+ * non-zero, the cap has been reached and further retirements evict an older
+ * entry round-robin; the evicted address is then no longer covered by the
+ * ledger. */
+int cplus_retired_ledger_full(void) {
+  cplus_alloc_lock();
+  int full = cplus_retired_wrapped;
+  cplus_alloc_unlock();
+  return full;
 }
 
 size_t cplus_alloc_count(const void *ptr, size_t elem_size) {

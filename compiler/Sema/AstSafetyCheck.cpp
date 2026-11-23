@@ -5,6 +5,8 @@
 #include "Sema/SemaCPlus.h"
 
 #include <llvm/ADT/StringRef.h>
+#include <llvm/Support/JSON.h>
+#include <llvm/Support/MemoryBuffer.h>
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
@@ -21,6 +23,7 @@
 #include <clang/Tooling/Tooling.h>
 
 #include <cstdlib>
+#include <cmath>
 #include <map>
 #include <set>
 #include <string>
@@ -329,6 +332,12 @@ public:
   const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
   void setConstLocals(const std::map<std::string, llvm::APSInt> &m) { constLocals_ = m; }
   const std::map<std::string, llvm::APSInt> &constLocals() const { return constLocals_; }
+  void setConstFloatLocals(const std::map<std::string, double> &m) {
+    constFloatLocals_ = m;
+  }
+  const std::map<std::string, double> &constFloatLocals() const {
+    return constFloatLocals_;
+  }
   const std::set<std::string> &addressTakenVars() const {
     return addressTakenVars_;
   }
@@ -868,6 +877,205 @@ public:
     return true;
   }
 
+  /// Compile-time value of a variable at a compound update (`x += 1`, `x++`).
+  /// The collection pass records the initializer constant in constLocals_; a
+  /// compound update reads that value *before* writing. Refuse when the
+  /// variable was also assigned a non-compound value (initializer would be
+  /// stale), when its address was taken, or when it is volatile.
+  bool knownConstAtUpdate(const Expr *e, llvm::APSInt &out) const {
+    if (!e)
+      return false;
+    std::string name = varNameOf(e);
+    if (name.empty() || addressTakenVars_.count(name) ||
+        nonConstantAssignedVars_.count(name))
+      return false;
+    const Expr *x = e->IgnoreParenCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (vd->getType().isVolatileQualified())
+          return false;
+    auto it = constLocals_.find(name);
+    if (it == constLocals_.end())
+      return false;
+    out = it->second;
+    return true;
+  }
+
+  /// Record why a local's initializer constant may no longer describe its
+  /// value. Plain assignments and compound updates with a runtime RHS make the
+  /// recorded value stale; a compound update with a constant RHS does not.
+  void noteAssignedValueSource(const BinaryOperator *op) {
+    if (!op || !op->isAssignmentOp())
+      return;
+    std::string lhs = varNameOf(op->getLHS());
+    if (lhs.empty())
+      return;
+    const auto opc = op->getOpcode();
+    bool compound = opc == BO_AddAssign || opc == BO_SubAssign ||
+                    opc == BO_MulAssign || opc == BO_DivAssign ||
+                    opc == BO_RemAssign || opc == BO_ShlAssign ||
+                    opc == BO_ShrAssign;
+    if (!compound) {
+      nonConstantAssignedVars_.insert(lhs);
+    } else {
+      llvm::APSInt unused;
+      if (!knownConst(op->getRHS(), unused))
+        nonConstantAssignedVars_.insert(lhs);
+    }
+  }
+
+  /// Convert a compile-time integer to a mathematical __int128 using the
+  /// expression's own width/signedness. Values wider than 64 bits are unknown.
+  bool intConstValue(const Expr *e, QualType ty, __int128 &out) const {
+    llvm::APSInt v;
+    if (!knownConst(e, v) || !fits64(v))
+      return false;
+    unsigned w = ctx_.getIntWidth(ty);
+    if (w == 0 || w > 64)
+      return false;
+    unsigned long long bits = v.getZExtValue();
+    if (w < 64)
+      bits &= ((1ULL << w) - 1);
+    if (ty->isSignedIntegerType() && (bits & (1ULL << (w - 1))))
+      out = (__int128)bits - ((__int128)1 << w);
+    else
+      out = (__int128)bits;
+    return true;
+  }
+
+  /// True when a mathematical integer is representable in `dst`.
+  static bool intFits(__int128 v, unsigned bits, bool isSigned) {
+    if (bits == 0 || bits > 64)
+      return true; // unknown width: do not guess
+    if (isSigned) {
+      __int128 lo = -((__int128)1 << (bits - 1));
+      __int128 hi = ((__int128)1 << (bits - 1)) - 1;
+      return v >= lo && v <= hi;
+    }
+    return v >= 0 && v < (((__int128)1) << bits);
+  }
+
+  /// Evaluate a compile-time floating value (literals and macro constants).
+  bool floatConstValue(const Expr *e, double &out) const {
+    if (!e)
+      return false;
+    llvm::APFloat f(0.0);
+    if (e->EvaluateAsFloat(f, ctx_)) {
+      out = f.convertToDouble();
+      return true;
+    }
+    Expr::EvalResult r;
+    if (e->EvaluateAsRValue(r, ctx_) && r.Val.isFloat()) {
+      out = r.Val.getFloat().convertToDouble();
+      return true;
+    }
+    std::string name = varNameOf(e);
+    if (!name.empty() && !addressTakenVars_.count(name) &&
+        !nonConstantAssignedVars_.count(name)) {
+      auto it = constFloatLocals_.find(name);
+      if (it != constFloatLocals_.end()) {
+        out = it->second;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// True when a compile-time floating value is outside `dst`'s range.
+  bool floatOutOfRange(const Expr *e, QualType dst) const {
+    double d = 0;
+    if (!floatConstValue(e, d))
+      return false;
+    if (d != d)
+      return true; // NaN is never a valid integer conversion
+    unsigned db = ctx_.getIntWidth(dst);
+    if (db == 0 || db > 64)
+      return false;
+    double lo = 0.0, hiExclusive = 0.0;
+    if (dst->isSignedIntegerType()) {
+      lo = -std::ldexp(1.0, (int)db - 1);
+      hiExclusive = std::ldexp(1.0, (int)db - 1);
+    } else {
+      hiExclusive = std::ldexp(1.0, (int)db);
+    }
+    return !(d >= lo && d < hiExclusive);
+  }
+
+  /// STRICT: reject a conversion whose source is a provably out-of-range
+  /// compile-time constant. Runtime-valued sources are left to the rewriter.
+  void checkProvableConversion(const Expr *value, QualType src, QualType dst,
+                               CheckedArithmeticSite::Op kind) {
+    if (!strict_ || !value || !dst->isIntegerType())
+      return;
+    unsigned db = ctx_.getIntWidth(dst);
+    if (db == 0 || db > 64 || dst->isBooleanType() || dst->isEnumeralType())
+      return;
+    if (isHeaderLocation(
+            ctx_.getSourceManager().getExpansionLoc(value->getBeginLoc())))
+      return;
+    bool unsafe = false;
+    if (kind == CheckedArithmeticSite::Op::FloatToInt) {
+      unsafe = floatOutOfRange(value, dst);
+    } else if (kind == CheckedArithmeticSite::Op::Narrow) {
+      unsigned sb = src->isIntegerType() ? ctx_.getIntWidth(src) : 0;
+      if (sb == 0 || sb > 64 || db >= sb || src->isBooleanType() ||
+          src->isEnumeralType())
+        return;
+      __int128 v = 0;
+      if (!intConstValue(value, src, v))
+        return;
+      unsafe = !intFits(v, db, dst->isSignedIntegerType());
+    }
+    if (unsafe)
+      report(value->getBeginLoc(),
+             std::string("provably unsafe constant conversion to '") +
+                 dst.getCanonicalType().getAsString(
+                     PrintingPolicy(ctx_.getLangOpts())) +
+                 "' in STRICT mode");
+  }
+
+  /// A conversion whose operand is itself an instrumented conversion produces
+  /// overlapping rewrite spans (wrong helper arity / compile failure). Such
+  /// chains cannot be proven safe by STRICT `check`.
+  bool isNestedConversion(const Expr *value) const {
+    if (!value)
+      return false;
+    const auto *ce = dyn_cast<ExplicitCastExpr>(value->IgnoreParenImpCasts());
+    if (!ce || !ce->getSubExpr())
+      return false;
+    QualType t = ce->getType(), st = ce->getSubExpr()->getType();
+    if (t->isIntegerType() && st->isFloatingType())
+      return true;
+    unsigned db = ctx_.getIntWidth(t), sb = ctx_.getIntWidth(st);
+    return t->isIntegerType() && st->isIntegerType() && db > 0 && sb > 0 &&
+           db < sb && !t->isBooleanType() && !st->isBooleanType() &&
+           !t->isEnumeralType() && !st->isEnumeralType();
+  }
+
+  /// STRICT fail-closed for conversion sites produced by a macro expansion:
+  /// the rewriter cannot safely instrument them. Constant-valued operands are
+  /// handled by checkProvableConversion instead and stay accepted when safe.
+  bool conversionInMacro(const Expr *conv, const Expr *value) const {
+    if (!strict_ || !conv)
+      return false;
+    SourceLocation b = conv->getBeginLoc(), e = conv->getEndLoc();
+    if (!b.isValid() || !b.isMacroID())
+      if (!e.isValid() || !e.isMacroID())
+        return false;
+    llvm::APSInt unused;
+    if (knownConst(value, unused))
+      return false;
+    SourceManager &sm = ctx_.getSourceManager();
+    // C+/runtime helper macros (`cplus_new_array`, `managed`/`owned`
+    // lowering, ...) are compiler-generated: their casts are not user
+    // conversions the rewriter must guard, so they must not fail closed.
+    llvm::StringRef macro = Lexer::getImmediateMacroName(b, sm, ctx_.getLangOpts());
+    if (macro.starts_with("cplus_") || macro.starts_with("__cplus_") ||
+        macro.starts_with("CPLUS_") || macro.starts_with("_cplus_"))
+      return false;
+    return sm.getFileID(sm.getExpansionLoc(b)) == sm.getMainFileID();
+  }
+
   /// Constant-fold integer arithmetic using tracked local/field constants.
   /// Clang will not fold expressions over a non-const local struct, so we do
   /// it ourselves at the source integer width.
@@ -1279,7 +1487,7 @@ public:
   /// Clang's EmitIntegerTruncationCheckHelper and GSL's narrow (no sanitizer
   /// runtime, no rejection of merely narrow *types*).
   bool VisitCStyleCastExpr(CStyleCastExpr *cast) {
-    if (!recordArithmeticSites_ || !report_ || !cast)
+    if (!cast)
       return true;
     QualType dst = cast->getType();
     const Expr *value = cast->getSubExpr() ? cast->getSubExpr()->IgnoreParenImpCasts()
@@ -1287,6 +1495,43 @@ public:
     if (!value)
       return true;
     QualType src = value->getType();
+    // Only integer-narrowing / float-to-integer casts are instrumented by the
+    // rewriter. Pointer casts inside C+/libc helper macros (e.g. the
+    // `(T *)cplus_alloc_array(...)` in `cplus_new_array`) are not conversion
+    // sites at all, so they must never trigger the macro fail-closed gate.
+    bool toFloatInt = dst->isIntegerType() && src->isFloatingType();
+    bool toNarrow = false;
+    unsigned dbx = 0, sbx = 0;
+    if (dst->isIntegerType() && src->isIntegerType() &&
+        !dst->isBooleanType() && !src->isBooleanType() &&
+        !dst->isEnumeralType() && !src->isEnumeralType()) {
+      dbx = ctx_.getIntWidth(dst);
+      sbx = ctx_.getIntWidth(src);
+      toNarrow = dbx > 0 && sbx > 0 && dbx <= 64 && sbx <= 64 && dbx < sbx;
+    }
+    if (report_ && strict_ && (toFloatInt || toNarrow)) {
+      // Fail closed where the rewriter cannot produce a correct guard.
+      if (conversionInMacro(cast, value)) {
+        report(cast->getBeginLoc(),
+               "conversion in a macro expansion cannot be instrumented; "
+               "STRICT cannot prove it safe");
+        return true;
+      }
+      if (isNestedConversion(value)) {
+        report(cast->getBeginLoc(),
+               "nested conversion chain cannot be instrumented; "
+               "STRICT cannot prove it safe");
+        return true;
+      }
+      // Reject provably out-of-range compile-time constants statically, so
+      // check and build agree instead of check certifying a trapping program.
+      checkProvableConversion(value, src, dst,
+                              toFloatInt
+                                  ? CheckedArithmeticSite::Op::FloatToInt
+                                  : CheckedArithmeticSite::Op::Narrow);
+    }
+    if (!recordArithmeticSites_ || !report_)
+      return true;
     if (dst->isIntegerType() && src->isFloatingType()) {
       recordConversionSite(cast, src, dst,
                            CheckedArithmeticSite::Op::FloatToInt);
@@ -1337,7 +1582,7 @@ public:
   /// returns can narrow or truncate just like explicit casts. Explicit casts
   /// are handled by VisitCStyleCastExpr, so skip casts nested in one.
   bool VisitImplicitCastExpr(ImplicitCastExpr *cast) {
-    if (!recordArithmeticSites_ || !report_ || !cast)
+    if (!cast)
       return true;
     for (const auto &parent : ctx_.getParents(*cast))
       if (parent.get<ExplicitCastExpr>())
@@ -1345,12 +1590,23 @@ public:
     const Expr *sub = cast->getSubExpr();
     if (!sub)
       return true;
-    if (cast->getCastKind() == CK_IntegralCast)
-      recordConversionSite(sub, sub->getType(), cast->getType(),
-                           CheckedArithmeticSite::Op::Narrow);
-    else if (cast->getCastKind() == CK_FloatingToIntegral)
-      recordConversionSite(sub, sub->getType(), cast->getType(),
-                           CheckedArithmeticSite::Op::FloatToInt);
+    CheckedArithmeticSite::Op kind = CheckedArithmeticSite::Op::Narrow;
+    bool isConversion = false;
+    if (cast->getCastKind() == CK_IntegralCast) {
+      kind = CheckedArithmeticSite::Op::Narrow;
+      isConversion = true;
+    } else if (cast->getCastKind() == CK_FloatingToIntegral) {
+      kind = CheckedArithmeticSite::Op::FloatToInt;
+      isConversion = true;
+    }
+    // Same static rejection as explicit casts: constant narrowing /
+    // float-to-int in initializers, assignments, arguments and returns.
+    if (isConversion && report_ && strict_)
+      checkProvableConversion(sub, sub->getType(), cast->getType(), kind);
+    if (!recordArithmeticSites_ || !report_)
+      return true;
+    if (isConversion)
+      recordConversionSite(sub, sub->getType(), cast->getType(), kind);
     return true;
   }
 
@@ -3129,6 +3385,17 @@ public:
   // valueless `return;`) is deliberately left untracked to limit false
   // positives.
   bool VisitFunctionDecl(FunctionDecl *fd) {
+    if (report_ && strict_ && fd && !isHeaderLocation(fd->getBeginLoc())) {
+      // Only symbols the instrumentation/runtime actually generates are
+      // reserved. In check mode the lowered text contains no generated helper
+      // prelude, so any such name here is user-supplied and can interpose a
+      // guard (e.g. a user __cplus_checked_add_i64 silently wrapping an add).
+      std::string fn = fd->getNameAsString();
+      if (isReservedHelperName(fn))
+        report(fd->getBeginLoc(),
+               "user declaration of reserved C+ runtime helper '" + fn +
+                   "' is not allowed in STRICT mode");
+    }
     if (report_ || !fd || !fd->getBody())
       return true;
     // Interprocedural nullability: record pointer parameters that the callee
@@ -3388,6 +3655,16 @@ public:
           constLocals_[vd->getNameAsString()] = folded;
         } else {
         }
+      }
+      // Local floating constants: `double d = 1e30;` is a compile-time source
+      // for a strict float-to-integer range check even though Clang will not
+      // fold a mutable local DeclRefExpr. Volatile/address-taken locals are
+      // excluded so runtime writes are never assumed away.
+      if (vd->hasLocalStorage() && vd->getType()->isFloatingType() &&
+          !vd->getType().isVolatileQualified() && vd->getInit()) {
+        double fv = 0;
+        if (floatConstValue(vd->getInit(), fv))
+          constFloatLocals_[vd->getNameAsString()] = fv;
       }
       // Fixed-size stack arrays have a known byte extent that can be passed
       // to callees through array-to-pointer decay.
@@ -3683,6 +3960,7 @@ public:
   }
 
   bool VisitBinaryOperator(BinaryOperator *op) {
+    noteAssignedValueSource(op);
     if (report_ && op->isAssignmentOp()) {
       // Kill guard-derived non-zero / lower-bound facts on a definite
       // assignment; a later division must not reuse a stale `if (d)` proof.
@@ -3790,7 +4068,26 @@ public:
            opc == BO_AddAssign || opc == BO_SubAssign ||
            opc == BO_MulAssign)) {
         long long a = 0, b = 0;
-        if (asLL(op->getLHS(), a) && asLL(op->getRHS(), b)) {
+        bool haveA = false;
+        // A compound assignment reads the LHS's *pre-update* value. The
+        // collection pass records that constant in constLocals_, but also
+        // marks the variable assigned; asLL() would reject it. Resolve the
+        // initializer constant directly for the compound case so a provably
+        // constant `x = INT_MAX; x += 1;` is rejected by STRICT check instead
+        // of only trapping in the guarded build.
+        if (opc == BO_AddAssign || opc == BO_SubAssign ||
+            opc == BO_MulAssign) {
+          llvm::APSInt v;
+          if (knownConstAtUpdate(op->getLHS(), v) && fits64(v)) {
+            a = op->getType()->isSignedIntegerType()
+                    ? v.getSExtValue()
+                    : (v.isNegative() ? v.getSExtValue() : v.getZExtValue());
+            haveA = true;
+          }
+        } else {
+          haveA = asLL(op->getLHS(), a);
+        }
+        if (haveA && asLL(op->getRHS(), b)) {
           bool overflow = false;
           if (arithmeticOverflow(op, a, b, overflow) && overflow) {
             std::string msg = "signed integer overflow in ";
@@ -4099,6 +4396,26 @@ public:
     }
     if (!report_)
       return true;
+    // A `++`/`--` on a local whose compile-time value sits at the signed
+    // boundary provably overflows; STRICT rejects it statically just like the
+    // equivalent constant compound assignment.
+    if (strict_ && (op->isIncrementOp() || op->isDecrementOp()) &&
+        op->getType()->isSignedIntegerType()) {
+      llvm::APSInt v;
+      if (knownConstAtUpdate(op->getSubExpr(), v) && fits64(v)) {
+        unsigned w = ctx_.getIntWidth(op->getType());
+        if (w > 1 && w <= 64) {
+          __int128 val = v.getSExtValue();
+          __int128 max = ((__int128)1 << (w - 1)) - 1;
+          __int128 min = -((__int128)1 << (w - 1));
+          if ((op->isIncrementOp() && val == max) ||
+              (op->isDecrementOp() && val == min))
+            report(op->getBeginLoc(),
+                   "signed integer overflow in increment/decrement of a "
+                   "provably constant value at the type boundary");
+        }
+      }
+    }
     if (recordArithmeticSites_) {
       if (op->isIncrementOp() || op->isDecrementOp())
         recordSimpleSite(op->getBeginLoc(), op->getOperatorLoc(),
@@ -6073,8 +6390,14 @@ private:
   std::map<const VarDecl *, std::string> strlenSized_;
   std::map<const VarDecl *, long long> loopIndexOverride_;
   std::map<std::string, llvm::APSInt> constLocals_;
+  // Local floating constants with a provable initializer, used for strict
+  // float-to-integer range checks on `double d = 1e30; f(d)` style sources.
+  std::map<std::string, double> constFloatLocals_;
   std::set<std::string> addressTakenVars_;
   std::set<std::string> assignedVars_;
+  // Locals whose initializer constant is no longer provable at a compound
+  // update because they were also assigned a plain/runtime value.
+  std::set<std::string> nonConstantAssignedVars_;
   std::set<std::string> functionsReturningFreed_;
   std::set<std::string> nullReturningFunctions_;
   std::set<std::pair<std::string, unsigned>> derefParams_;
@@ -6174,6 +6497,90 @@ bool backendSanitizesSignedOverflow(const std::vector<std::string> &args) {
   }
   return false;
 }
+
+/// Built-in libc functions whose effect summary is compiled in. A pure libc
+/// contract that merely borrows/reads a pointer stays accepted in STRICT even
+/// when the contract file is supplied through the environment.
+static bool isBuiltinLibcName(llvm::StringRef name) {
+  static const std::set<llvm::StringRef> kBuiltins = {
+      "malloc",    "calloc",    "malloc_s",  "calloc_s",   "realloc",
+      "realloc_s", "free",      "cplus_release", "free_s", "memcpy",
+      "memmove",   "memcpy_s",  "memmove_s", "memset",     "strcpy",
+      "strcpy_s",  "strncpy",   "strncpy_s", "strcat",     "strcat_s",
+      "strlen",    "strnlen_s", "strcmp",    "fopen",      "fopen_s",
+      "fclose",    "fread",     "fwrite",    "snprintf",   "sprintf_s",
+      "snprintf_s", "scanf_s"};
+  return kBuiltins.count(name) != 0;
+}
+
+/// Names whose environment-supplied v2 contract claims NO memory-safety
+/// consequence (no free, write or ownership-transfer effect) although the
+/// function takes a pointer. Such a contract cannot be trusted to suppress the
+/// STRICT unverified-extern gate: a lying "checked"/"borrows" claim would
+/// otherwise certify a program that uses freed memory. The compiled-in
+/// contract is trusted and deliberately not inspected here.
+static std::set<std::string> envNoConsequenceContractFns() {
+  std::set<std::string> out;
+  const char *env = std::getenv("CPLUS_CONTRACT_PATH");
+  if (!env || !*env)
+    return out;
+  auto buf = llvm::MemoryBuffer::getFile(env);
+  if (!buf)
+    return out; // unloadable explicit path is fail-closed elsewhere
+  auto parsed = llvm::json::parse((*buf)->getBuffer());
+  if (!parsed) {
+    llvm::consumeError(parsed.takeError());
+    return out;
+  }
+  const llvm::json::Object *root = parsed->getAsObject();
+  const llvm::json::Object *fns = root ? root->getObject("functions") : nullptr;
+  if (!fns)
+    return out;
+  auto claims = [](const llvm::json::Object &spec, llvm::StringRef key,
+                   llvm::StringRef verb) {
+    const auto *arr = spec.getArray(key);
+    if (!arr)
+      return false;
+    for (const auto &v : *arr) {
+      auto s = v.getAsString();
+      if (s && s->find(verb) != llvm::StringRef::npos)
+        return true;
+    }
+    return false;
+  };
+  for (const auto &entry : *fns) {
+    const auto *spec = entry.second.getAsObject();
+    if (!spec || isBuiltinLibcName(entry.first))
+      continue;
+    bool pointerParam = false;
+    if (const auto *params = spec->getArray("params"))
+      for (const auto &p : *params) {
+        auto s = p.getAsString();
+        if (s && (s->find('*') != llvm::StringRef::npos ||
+                  s->find('[') != llvm::StringRef::npos)) {
+          pointerParam = true;
+          break;
+        }
+      }
+    if (!pointerParam)
+      continue;
+    bool consequence = claims(*spec, "effects", "frees") ||
+                       claims(*spec, "effects", "writes") ||
+                       claims(*spec, "effects", "write") ||
+                       claims(*spec, "effects", "allocates") ||
+                       claims(*spec, "freeEffects", "frees") ||
+                       claims(*spec, "writeEffects", "write");
+    if (auto own = spec->getString("ownershipTransfer"))
+      if (!own->empty() && *own != "n/a" && *own != "none")
+        consequence = true;
+    if (auto own = spec->getString("transfer"))
+      if (!own->empty() && *own != "n/a" && *own != "none")
+        consequence = true;
+    if (!consequence)
+      out.insert(entry.first.str());
+  }
+  return out;
+}
 } // namespace
 
 void checkAstSafety(const std::string &loweredC, const std::string &filename,
@@ -6258,6 +6665,62 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   if (!ast || ast->getDiagnostics().hasErrorOccurred())
     return; // AST parse failed; do not guess from a broken AST.
 
+  // STRICT contract-honesty gate. A lying environment-supplied contract that
+  // claims no free/write/ownership effect for a pointer-taking function must
+  // not suppress the bodiless-extern hard error. Only source-local externs are
+  // rejected here; header-declared APIs whose definition lives in another
+  // input/sibling TU keep the driver's wave-2 multi-TU treatment.
+  if (strict) {
+    std::set<std::string> suspect = envNoConsequenceContractFns();
+    if (!suspect.empty()) {
+      ASTContext &c = ast->getASTContext();
+      struct ExternFinder : RecursiveASTVisitor<ExternFinder> {
+        ASTContext &ctx;
+        const std::string &file;
+        const std::set<std::string> &names;
+        DiagnosticEngine &diags;
+        bool emitted = false;
+        ExternFinder(ASTContext &c, const std::string &f,
+                     const std::set<std::string> &n, DiagnosticEngine &d)
+            : ctx(c), file(f), names(n), diags(d) {}
+        bool VisitFunctionDecl(FunctionDecl *fd) {
+          if (emitted || !fd || fd->doesThisDeclarationHaveABody())
+            return true;
+          std::string name = fd->getNameAsString();
+          if (!names.count(name))
+            return true;
+          bool ptr = fd->getReturnType()->isPointerType();
+          for (const ParmVarDecl *p : fd->parameters())
+            if (p->getType()->isPointerType())
+              ptr = true;
+          if (!ptr)
+            return true;
+          SourceManager &sm = ctx.getSourceManager();
+          PresumedLoc ploc = sm.getPresumedLoc(fd->getBeginLoc());
+          std::string diagFile = ploc.isValid() ? ploc.getFilename() : "";
+          if (diagFile != file && diagFile != file + ".c")
+            return true; // header-declared: multi-TU logic applies
+          Diag d;
+          d.level = DiagLevel::Error;
+          d.message = "[CPLUS-FFI] function '" + name +
+                      "' has an environment-supplied contract with no "
+                      "free/write/ownership-transfer effect for a "
+                      "pointer-taking function; STRICT check cannot verify "
+                      "its effects";
+          d.file = file;
+          if (ploc.isValid()) {
+            d.line = ploc.getLine();
+            d.column = ploc.getColumn();
+          }
+          diags.report(std::move(d));
+          emitted = true;
+          return true;
+        }
+      } finder(c, filename, suspect, diags);
+      finder.TraverseDecl(c.getTranslationUnitDecl());
+    }
+  }
+
   SafetyVisitor collect(ast->getASTContext(), diags, filename, false);
   // Iterate the collection pass to a fixpoint: parameter extents, free/deref
   // effects, returned aliases and global points-to facts must flow through
@@ -6277,6 +6740,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFormatFnAliases(collect.formatFnAliases());
   check.setHandledReallocs(collect.handledReallocs());
   check.setConstLocals(collect.constLocals());
+  check.setConstFloatLocals(collect.constFloatLocals());
   check.setAssignedVars(collect.assignedVars());
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setNullReturningFunctions(collect.nullReturningFunctions());

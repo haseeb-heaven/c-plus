@@ -5,40 +5,40 @@ rustc 1.100.0 (0ef1bc386 2026-11-09)
 runs=5 method=1 warmup; 5 timed; median real + RSS of that run
 
 program            config                    real_s    rss_bytes    stdout
-bounds_sum         cplus_safe_release         0.020      1687552 bounds_sum 1350000000
-bounds_sum         cplus_legacy_release       0.030      1687552 bounds_sum 1350000000
-bounds_sum         cplus_debug                0.580      1720320 bounds_sum 1350000000
+bounds_sum         cplus_safe_release         0.030      1703936 bounds_sum 1350000000
+bounds_sum         cplus_legacy_release       0.040      1687552 bounds_sum 1350000000
+bounds_sum         cplus_debug                0.640      1703936 bounds_sum 1350000000
 bounds_sum         rust_O                     0.010      1851392 bounds_sum 1350000000
-bounds_sum         rust_opt0                  0.480      1884160 bounds_sum 1350000000
+bounds_sum         rust_opt0                  0.510      1884160 bounds_sum 1350000000
 integer_compute    cplus_safe_release         0.110      1687552 integer 6299863613973285121
-integer_compute    cplus_legacy_release       0.110      1687552 integer 6299863613973285121
-integer_compute    cplus_debug                0.790      1703936 integer 6299863613973285121
-integer_compute    rust_O                     0.100      1851392 integer 6299863613973285121
-integer_compute    rust_opt0                  0.610      1867776 integer 6299863613973285121
-pointer_chase      cplus_safe_release         0.060     17678336 chase 24999975000000
+integer_compute    cplus_legacy_release       0.110      1671168 integer 6299863613973285121
+integer_compute    cplus_debug                0.830      1703936 integer 6299863613973285121
+integer_compute    rust_O                     0.110      1851392 integer 6299863613973285121
+integer_compute    rust_opt0                  0.640      1867776 integer 6299863613973285121
+pointer_chase      cplus_safe_release         0.060     17661952 chase 24999975000000
 pointer_chase      cplus_legacy_release       0.060     17678336 chase 24999975000000
-pointer_chase      cplus_debug                0.410     17694720 chase 24999975000000
-pointer_chase      rust_O                     0.030     17874944 chase 24999975000000
-pointer_chase      rust_opt0                  0.460     17907712 chase 24999975000000
-function_call      cplus_safe_release         0.140      1671168 call 2560
-function_call      cplus_legacy_release       0.150      1671168 call 2560
-function_call      cplus_debug                1.480      1687552 call 2560
-function_call      rust_O                     0.130      1867776 call 2560
-function_call      rust_opt0                  0.770      1851392 call 2560
-alloc_churn        cplus_safe_release         1.280      1785856 alloc_churn 9000021000000
-alloc_churn        cplus_legacy_release       1.250      1736704 alloc_churn 9000021000000
-alloc_churn        cplus_debug                1.320      1769472 alloc_churn 9000021000000
-alloc_churn        rust_O                     0.190      1900544 alloc_churn 9000021000000
-alloc_churn        rust_opt0                  0.380      1884160 alloc_churn 9000021000000
-raii_loop          cplus_safe_release         0.010      1687552 raii_loop 125000000 0
-raii_loop          cplus_legacy_release       0.000      1687552 raii_loop 125000000 0
-raii_loop          cplus_debug                0.460      1703936 raii_loop 125000000 0
-raii_loop          rust_O                     0.010      1835008 raii_loop 125000000 0
-raii_loop          rust_opt0                  0.230      1884160 raii_loop 125000000 0
-method_dispatch    cplus_safe_release         0.020      1687552 method_dispatch 75000000
-method_dispatch    cplus_legacy_release       0.000      1671168 method_dispatch 75000000
-method_dispatch    cplus_debug                0.470      1671168 method_dispatch 75000000
+pointer_chase      cplus_debug                0.430     17694720 chase 24999975000000
+pointer_chase      rust_O                     0.040     17874944 chase 24999975000000
+pointer_chase      rust_opt0                  0.440     17907712 chase 24999975000000
+function_call      cplus_safe_release         0.140      1687552 call 2560
+function_call      cplus_legacy_release       0.140      1671168 call 2560
+function_call      cplus_debug                1.610      1687552 call 2560
+function_call      rust_O                     0.150      1867776 call 2560
+function_call      rust_opt0                  0.790      1851392 call 2560
+alloc_churn        cplus_safe_release         1.400      1769472 alloc_churn 9000021000000
+alloc_churn        cplus_legacy_release       1.350      1753088 alloc_churn 9000021000000
+alloc_churn        cplus_debug                1.460      1802240 alloc_churn 9000021000000
+alloc_churn        rust_O                     0.200      1900544 alloc_churn 9000021000000
+alloc_churn        rust_opt0                  0.410      1867776 alloc_churn 9000021000000
+raii_loop          cplus_safe_release         0.020      1720320 raii_loop 125000000 0
+raii_loop          cplus_legacy_release       0.010      1703936 raii_loop 125000000 0
+raii_loop          cplus_debug                0.500      1703936 raii_loop 125000000 0
+raii_loop          rust_O                     0.010      1851392 raii_loop 125000000 0
+raii_loop          rust_opt0                  0.280      1884160 raii_loop 125000000 0
+method_dispatch    cplus_safe_release         0.020      1703936 method_dispatch 75000000
+method_dispatch    cplus_legacy_release       0.000      1687552 method_dispatch 75000000
+method_dispatch    cplus_debug                0.540      1687552 method_dispatch 75000000
 method_dispatch    rust_O                     0.000      1867776 method_dispatch 75000000
-method_dispatch    rust_opt0                  0.350      1867776 method_dispatch 75000000
+method_dispatch    rust_opt0                  0.390      1867776 method_dispatch 75000000
 
 failures: 0

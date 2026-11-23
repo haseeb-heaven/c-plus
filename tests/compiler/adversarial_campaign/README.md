@@ -90,3 +90,13 @@ regression in the full suite or alloc_churn performance (<1.5s).
 a malformed-C emission bug were fixed. Full verification and non-claims:
 `docs/compiler/adversarial-wave2.md`. Raw before/after:
 `bypass_results.BEFORE_WAVE2.json` -> `bypass_results.json`.
+
+## Wave 3 result (measured)
+
+Same parent harness: still 16/21 -> 3/21, no reopened cases. Wave 3 found and
+fixed: @response/--flag/-D helper-name gate evasions, CPLUS_RUNTIME_LIB
+substitution, interposable guard helpers, invalid nested-conversion C, macro
+conversion wrong values, lying contracts, a broken shipped contract validator,
+five RAII cleanup gaps, four no-ABI runtime gaps, a C89 injected-inline
+regression, and a trailing-newline source-fidelity bug. Full detail:
+`docs/compiler/adversarial-wave3.md` and `docs/compiler/real-world-wave3.md`.

@@ -1,5 +1,5 @@
 Wave 2 BLUE DEFENDER regression suite (wave-1 bypasses)
-Generated: 2026-11-23T12:51:30.089025+00:00
+Generated: 2026-11-23T14:21:19.246970+00:00
 Binary:    /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
 Mode:      c+ check --strict --sanitize=none
 Timeout:   60s (hard)

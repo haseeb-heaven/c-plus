@@ -42,7 +42,7 @@ in bytes; stdout identical across all five configurations of each program).
 | integer_compute | 0.110 s / 1,671,168 B | 0.110 s / 1,671,168 B | 0.160 s / — | 0.110 s / — | 0.580 s / — |
 | pointer_chase | 0.050 s / 17,645,568 B | 0.060 s / 17,678,336 B | 0.080 s / — | 0.040 s / 17,874,944 B | 0.420 s / — |
 | function_call | 0.140 s / — | 0.140 s / — | 1.420 s / — | 0.130 s / — | 0.760 s / — |
-| alloc_churn | 1.280 s / 1,785,856 B | 1.250 s / — | 1.320 s / — | 0.190 s / 1,900,544 B | 0.380 s / — |
+| alloc_churn | 1.400 s / 1,769,472 B | 1.350 s / — | 1.460 s / — | 0.190 s / 1,900,544 B | 0.380 s / — |
 | raii_loop | 0.010 s / — | 0.010 s / — | 0.050 s / — | 0.010 s / — | 0.250 s / — |
 | method_dispatch | ≤0.01 s / — | ≤0.01 s / — | 0.120 s / — | ≤0.01 s / — | 0.350 s / — |
 
@@ -53,7 +53,7 @@ supersede the earlier snapshot. During that campaign a prototype
 close the stale-free-after-reuse case without an ABI change, and the 31× cost
 was not justified. The current runtime performs one `malloc()` per managed
 allocation; `alloc_churn` is now 1.21 s versus a 0.98 s pre-campaign baseline
-(1.31× after wave 2), with identical stdout.
+(1.43× after wave 3), with identical stdout.
 
 Full RSS values for every row are in the machine-readable summary; the table
 above is intentionally abbreviated. Ratios from the second runner (best time,
@@ -68,7 +68,7 @@ Rust peak RSS was about 1.8 MiB and C+ about 1.6–1.7 MiB (C+/Rust ratio
   `integer_compute` 0.110 s vs Rust -O 0.110 s (**1.00×**),
   `function_call` 0.140 s vs 0.130 s (**1.08×**), `raii_loop` 0.010 s
   vs 0.010 s (**1.00×**). On `bounds_sum` C+ safe is ~3× slower than Rust -O
-  on this run; on `alloc_churn` ~6.7× slower (side-table bookkeeping).
+  on this run; on `alloc_churn` ~7.4× slower (side-table bookkeeping).
 - C+ safe release and legacy release are nearly identical on all programs
   (mostly 1.00×), so the native checks cost little in these loops; the large
   allocation difference is the runtime side table, not general safety checks.

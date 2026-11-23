@@ -192,11 +192,26 @@ std::vector<std::string> cplusIncludeArgs() {
   return args;
 }
 
-std::string runtimeLibArg() {
-  std::string lib = findCPlusRuntimeLib();
-  if (lib.empty())
-    return std::string();
-  return lib;
+/// Resolve the runtime library linked into the final binary. STRICT Safe mode
+/// ignores CPLUS_RUNTIME_LIB: a stub library with pass-through bounds checks
+/// would strip every trap while `check` still reported a clean result. Only the
+/// compiled-in and installed locations (shipped with the compiler) are trusted.
+/// DEFAULT/LEGACY keep the env override because they make no soundness claim.
+std::string runtimeLibArg(bool trustEnvOverride) {
+  if (trustEnvOverride)
+    return findCPlusRuntimeLib();
+#ifdef CPLUS_RUNTIME_LIB
+  if (fileExists(CPLUS_RUNTIME_LIB))
+    return CPLUS_RUNTIME_LIB;
+#endif
+  for (const char *relative :
+       {"build/libcplus_runtime.a", "lib/libcplus_runtime.a",
+        "libcplus_runtime.a"}) {
+    std::string found = findByLayout(relative);
+    if (!found.empty())
+      return found;
+  }
+  return std::string();
 }
 
 } // namespace
@@ -531,11 +546,15 @@ std::string preprocessModernHeaders(
     }
     result += line;
   }
-  // std::getline strips the final newline; restore it so the lowered C keeps
-  // the original source's trailing newline byte-for-byte.
-  if (!source.empty() && source.back() == '\n' && !result.empty() &&
-      result.back() != '\n')
-    result += '\n';
+  // std::getline strips trailing newlines.  Restore the exact count so the
+  // lowered C keeps blank lines at EOF byte-for-byte (a real C fixture ends
+  // with `}\n\n\n`; restoring only one newline lost two bytes).
+  size_t trailing = 0;
+  for (size_t i = source.size(); i > 0 && source[i - 1] == '\n'; --i)
+    ++trailing;
+  while (!result.empty() && result.back() == '\n')
+    result.pop_back();
+  result.append(trailing, '\n');
   return result;
 }
 
@@ -643,28 +662,34 @@ static void addSanitizerFlags(std::vector<std::string> &args, Sanitizer san) {
   args.push_back("-g"); // debug info for actionable stack traces
 }
 
+/// Clang accepts most single-dash options with a double-dash spelling too.
+/// Normalize one leading '-' before gate comparisons so spellings such as
+/// `--include=evil.h`, `--fno-sanitize-recover=all` or `--Wno-error=format`
+/// cannot evade a gate that matches only the single-dash form.
+static llvm::StringRef normalizeFlag(llvm::StringRef a) {
+  if (a.size() > 2 && a[0] == '-' && a[1] == '-' && a[2] != '-')
+    return a.drop_front();
+  return a;
+}
+
+static std::vector<llvm::StringRef> splitFlagList(llvm::StringRef list);
+static bool sanitizerNameIs(llvm::StringRef token, llvm::StringRef canonical);
+
 /// True when pass-through flags disable the backend's signed-overflow
 /// sanitizer. checkAstSafety() suppresses native arithmetic guards when the
 /// driver selected that sanitizer, so disabling it from `extraArgs` would
 /// leave signed overflow silently unenforced. Reject the contradictory
 /// configuration instead of letting the gate be bypassed.
 static bool extraArgsDisableSignedOverflow(const std::vector<std::string> &extra) {
-  for (const auto &a : extra) {
-    if (a.rfind("-fno-sanitize=", 0) != 0)
+  for (const auto &raw : extra) {
+    llvm::StringRef a = normalizeFlag(raw);
+    if (!a.starts_with("-fno-sanitize="))
       continue;
-    std::string list = a.substr(strlen("-fno-sanitize="));
-    size_t start = 0;
-    while (start <= list.size()) {
-      size_t comma = list.find(',', start);
-      std::string token = list.substr(
-          start, comma == std::string::npos ? std::string::npos : comma - start);
-      if (token == "undefined" || token == "signed-integer-overflow" ||
-          token == "all")
+    for (llvm::StringRef token :
+         splitFlagList(a.substr(strlen("-fno-sanitize="))))
+      if (sanitizerNameIs(token, "undefined") ||
+          sanitizerNameIs(token, "signed-integer-overflow"))
         return true;
-      if (comma == std::string::npos)
-        break;
-      start = comma + 1;
-    }
   }
   return false;
 }
@@ -679,9 +704,15 @@ static bool extraArgsDisableSignedOverflow(const std::vector<std::string> &extra
 /// does not use for its own decisions, and the regression suites pass it
 /// through legitimately.
 static bool extraArgsChangeParse(const std::vector<std::string> &extra) {
-  for (const auto &a : extra) {
-    if (a.rfind("-include", 0) == 0 || a.rfind("-imacros", 0) == 0 ||
-        a.rfind("-include-pch", 0) == 0 || a.rfind("-isystem", 0) == 0)
+  for (const auto &raw : extra) {
+    llvm::StringRef a = normalizeFlag(raw);
+    // Prefix (not exact) matching covers -include=evil.h, --includeevil.h,
+    // -imacros, -include-pch and the other header-search forms that change
+    // what the backend parses but are discarded from the safety AST.
+    if (a.starts_with("-include") || a.starts_with("-imacros") ||
+        a.starts_with("-isystem") || a.starts_with("-iquote") ||
+        a.starts_with("-idirafter") || a.starts_with("-iprefix") ||
+        a.starts_with("-iwithprefix"))
       return true;
     if (a == "-x" ||
         (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
@@ -691,21 +722,61 @@ static bool extraArgsChangeParse(const std::vector<std::string> &extra) {
   return false;
 }
 
-/// Whole comma-separated token membership for -f...= lists.
-static bool sanitizerListHas(llvm::StringRef list,
-                             llvm::ArrayRef<llvm::StringRef> tokens) {
+/// Split a -f...= / -W...= value into whole tokens. Clang accepts ',' and '+'
+/// as separators in several option lists, and a probe can combine names into a
+/// single token ("undefined+all"). Whole-token comparison is essential: a
+/// substring test for "signed-integer-overflow" would also match
+/// "unsigned-integer-overflow", which does NOT gate signed overflow.
+static std::vector<llvm::StringRef> splitFlagList(llvm::StringRef list) {
+  std::vector<llvm::StringRef> out;
   size_t start = 0;
   while (start <= list.size()) {
-    size_t comma = list.find(',', start);
+    size_t sep = list.find_first_of(",+ ", start);
     llvm::StringRef token = list.substr(
-        start, comma == llvm::StringRef::npos ? llvm::StringRef::npos
-                                              : comma - start);
-    if (llvm::is_contained(tokens, token))
-      return true;
-    if (comma == llvm::StringRef::npos)
+        start, sep == llvm::StringRef::npos ? llvm::StringRef::npos
+                                            : sep - start);
+    token = token.trim();
+    if (!token.empty())
+      out.push_back(token);
+    if (sep == llvm::StringRef::npos)
       break;
-    start = comma + 1;
+    start = sep + 1;
   }
+  return out;
+}
+
+/// True when `token` denotes the same sanitizer group as `canonical`. Alias
+/// spellings and the all-inclusive "all" are handled here so changing only the
+/// spelling of a flag cannot slip past a gate that compares one canonical name.
+static bool sanitizerNameIs(llvm::StringRef token, llvm::StringRef canonical) {
+  if (token == "all")
+    return true;
+  if (token == canonical)
+    return true;
+  if (canonical == "undefined")
+    return token == "ubsan" || token == "signed-integer-overflow";
+  if (canonical == "address")
+    return token == "asan";
+  if (canonical == "memory")
+    return token == "msan";
+  if (canonical == "thread")
+    return token == "tsan";
+  if (canonical == "leak")
+    return token == "lsan";
+  if (canonical == "integer")
+    return token == "unsigned" || token == "unsigned-integer-overflow" ||
+           token == "implicit-integer-truncation" ||
+           token == "implicit-integer-arithmetic-value-change";
+  return false;
+}
+
+/// Whole-token membership for -f...= lists (separator- and alias-aware).
+static bool sanitizerListHas(llvm::StringRef list,
+                             llvm::ArrayRef<llvm::StringRef> tokens) {
+  for (llvm::StringRef part : splitFlagList(list))
+    for (llvm::StringRef wanted : tokens)
+      if (sanitizerNameIs(part, wanted))
+        return true;
   return false;
 }
 
@@ -716,14 +787,16 @@ static bool sanitizerListHas(llvm::StringRef list,
 static bool extraArgsWeakenSanitizerAbort(const std::vector<std::string> &extra) {
   static const llvm::StringRef kAbort[] = {"all", "undefined",
                                            "signed-integer-overflow"};
-  for (const auto &a : extra) {
-    if (a.rfind("-fsanitize-recover=", 0) == 0)
-      if (sanitizerListHas(llvm::StringRef(a).substr(strlen("-fsanitize-recover=")),
-                           kAbort))
+  for (const auto &raw : extra) {
+    llvm::StringRef a = normalizeFlag(raw);
+    // The bare spellings mean "all" in Clang and must not be missed.
+    if (a == "-fsanitize-recover" || a == "-fno-sanitize-trap")
+      return true;
+    if (a.starts_with("-fsanitize-recover="))
+      if (sanitizerListHas(a.substr(strlen("-fsanitize-recover=")), kAbort))
         return true;
-    if (a.rfind("-fno-sanitize-trap=", 0) == 0)
-      if (sanitizerListHas(llvm::StringRef(a).substr(strlen("-fno-sanitize-trap=")),
-                           kAbort))
+    if (a.starts_with("-fno-sanitize-trap="))
+      if (sanitizerListHas(a.substr(strlen("-fno-sanitize-trap=")), kAbort))
         return true;
   }
   return false;
@@ -735,11 +808,12 @@ static bool extraArgsWeakenSanitizerAbort(const std::vector<std::string> &extra)
 static bool extraArgsDisablePointerSanitizers(
     const std::vector<std::string> &extra) {
   static const llvm::StringRef kPtr[] = {"bounds", "null", "alignment"};
-  for (const auto &a : extra)
-    if (a.rfind("-fno-sanitize=", 0) == 0)
-      if (sanitizerListHas(llvm::StringRef(a).substr(strlen("-fno-sanitize=")),
-                           kPtr))
+  for (const auto &raw : extra) {
+    llvm::StringRef a = normalizeFlag(raw);
+    if (a.starts_with("-fno-sanitize="))
+      if (sanitizerListHas(a.substr(strlen("-fno-sanitize=")), kPtr))
         return true;
+  }
   return false;
 }
 
@@ -753,17 +827,104 @@ static bool extraArgsWeakenSafetyWarnings(
       "sizeof-array-argument", "sizeof-pointer-div", "format-security",
       "unsequenced", "shift-count-overflow", "shift-negative-value",
       "varargs", "all"};
-  for (const auto &a : extra) {
-    llvm::StringRef token;
-    if (a == "-Wno-error")
+  for (const auto &raw : extra) {
+    llvm::StringRef a = normalizeFlag(raw);
+    if (a == "-Wno-error" || a == "-w")
       return true; // disables every -Werror= gate below
-    if (a.rfind("-Wno-error=", 0) == 0)
-      token = llvm::StringRef(a).substr(strlen("-Wno-error="));
-    else if (a.rfind("-Wno-", 0) == 0)
-      token = llvm::StringRef(a).substr(strlen("-Wno-"));
+    llvm::StringRef list;
+    if (a.starts_with("-Wno-error="))
+      list = a.substr(strlen("-Wno-error="));
+    else if (a.starts_with("-Wno-"))
+      list = a.substr(strlen("-Wno-"));
     else
       continue;
-    if (llvm::is_contained(kSafety, token))
+    for (llvm::StringRef token : splitFlagList(list)) {
+      if (token == "all")
+        return true;
+      // Group spellings are honoured by Clang too: `-Wno-error=format`
+      // downgrades -Werror=format-security, `shift` covers both shift gates.
+      for (llvm::StringRef gate : kSafety)
+        if (token == gate ||
+            (token.size() < gate.size() && gate.starts_with(token) &&
+             gate[token.size()] == '-'))
+          return true;
+    }
+  }
+  return false;
+}
+
+/// Conservative allow-list of pass-through tokens accepted in STRICT Safe mode.
+/// STRICT promises that the program analysed is the program compiled and that
+/// no gate can be downgraded. Pass-through arguments are an unbounded input
+/// surface (`--` is especially dangerous because it bypasses Main.cpp's flag
+/// classification), so instead of growing a deny-list we accept only this
+/// small, fixed set that the suites legitimately use. Everything else --
+/// -Xclang/-Xpreprocessor/@response, -include/-imacros/-isystem/-x spellings,
+/// -U/-f... sanitizer toggles, -Wno-* downgrades and bare inputs -- fails
+/// closed. Adding a flag here is an explicit, reviewable decision.
+/// Only -I/-D/-std= are forwarded to the in-memory safety ASTs; the other
+/// accepted flags either do not affect parsing or are link/codegen only, so
+/// check and build keep identical safety-AST inputs.
+static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) {
+  for (size_t i = 0; i < extra.size(); ++i) {
+    llvm::StringRef s = normalizeFlag(extra[i]);
+    // Clang expands @response files itself, after the driver's gates, so a
+    // token like `@rsp` can hide `-include evil.h` from every flag check.
+    // Never allow the @ spelling in STRICT.
+    if (extra[i].starts_with('@'))
+      return false;
+    // Two-token forms produced by Main.cpp (`-I dir`, `-D NAME`, ...) and by
+    // `-- -isysroot dir`. Consume the value so a path is not mistaken for a
+    // bare/injected token.
+    if (s == "-I" || s == "-D" || s == "-L" || s == "-l" || s == "-isysroot") {
+      if (++i >= extra.size())
+        return false; // dangling value: fail closed
+      continue;
+    }
+    if (s.starts_with("-I") || s.starts_with("-D") || s.starts_with("-L") ||
+        s.starts_with("-l") || s.starts_with("-std=") ||
+        s.starts_with("-isysroot") || s.starts_with("-O"))
+      continue;
+    // -U is deliberately excluded: it is parse-affecting but is NOT forwarded
+    // to the safety AST, so allowing it would break check/build parity.
+    if (s == "-g" || s == "-pthread" || s == "-pedantic" || s == "-ansi" ||
+        s == "-pipe" || s == "-fno-common")
+      continue;
+    if (s.starts_with("-W")) {
+      // -Wno-* (including -Wno-error groups) can downgrade STRICT's promoted
+      // warnings; additive forms (-Wall, -Wextra, -Werror=...) are fine.
+      if (s == "-Wno-error" || s.starts_with("-Wno-"))
+        return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/// The driver reserves the CPLUS* gate macros, and the runtime/instrumentation
+/// reserves an explicit set of helper entry points (isReservedHelperName). A
+/// pass-through -D/-U that redefines one can neutralise a check in the
+/// *compiled* program while the analysis still sees a well-formed AST, so
+/// STRICT refuses them. Ordinary project macros keep working.
+static bool redefinesReservedCPlusMacro(const std::vector<std::string> &extra) {
+  for (size_t i = 0; i < extra.size(); ++i) {
+    llvm::StringRef a = normalizeFlag(extra[i]);
+    llvm::StringRef def;
+    if (a == "-D" || a == "-U") {
+      if (i + 1 >= extra.size())
+        return true;
+      def = llvm::StringRef(extra[++i]);
+    } else if (a.starts_with("-D") || a.starts_with("-U")) {
+      def = a.substr(2);
+    } else {
+      continue;
+    }
+    llvm::StringRef name = def.take_while([](char c) {
+      return c != '=' && c != '(' && c != ' ';
+    });
+    if (name == "CPLUS" || name.starts_with("CPLUS_") ||
+        isReservedHelperName(name))
       return true;
   }
   return false;
@@ -987,6 +1148,20 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // these (no soundness claim), and --legacy-c --strict only gets its
   // documented no-effect disclosure so plain-C ABI/source stays untouched.
   const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
+  // Clang expands @response files itself, after the driver's flag gates. A
+  // token such as `@rsp` can therefore hide `-include guard.h` (which redefines
+  // a bounds-check helper to a no-op) from every other check. Reject the @
+  // spelling explicitly with a clear diagnostic before the general allow-list.
+  if (strictSafe) {
+    for (const auto &a : opts.extraArgs) {
+      if (a.starts_with('@')) {
+        errs << "error: @response files are not allowed in STRICT Safe mode: "
+                "clang expands them after the C+ safety gates; pass flags "
+                "directly instead\n";
+        return 1;
+      }
+    }
+  }
   if (strictSafe && extraArgsChangeParse(opts.extraArgs)) {
     errs << "error: pass-through flags change how the C+ safety AST parses "
             "the program but are not forwarded to it (-include, -imacros, "
@@ -1008,6 +1183,24 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   if (strictSafe && extraArgsWeakenSafetyWarnings(opts.extraArgs)) {
     errs << "error: pass-through flags downgrade a STRICT safety warning "
             "promoted to error (-Wno-error=<safety> / -Wno-<safety>)\n";
+    return 1;
+  }
+  if (strictSafe && redefinesReservedCPlusMacro(opts.extraArgs)) {
+    errs << "error: pass-through -D/-U redefines a reserved C+ gate macro "
+            "(CPLUS*) or a compiler/runtime instrumentation helper; STRICT "
+            "cannot verify a program whose safety helpers are replaced\n";
+    return 1;
+  }
+  // Catch-all: anything not on the conservative allow-list fails closed. This
+  // is what stops unseen spellings (-Xclang injection, @response files,
+  // -include variants, -- ordering tricks, stray bare inputs) rather than a
+  // never-complete deny-list.
+  if (strictSafe && !strictSafePassthroughAllowed(opts.extraArgs)) {
+    errs << "error: pass-through flag outside the STRICT Safe allow-list "
+            "(-I/-D/-std=/-isysroot/-O/-W/-L/-l/-g/-pthread/...); flags such "
+            "as -Xclang, @response, -include/-imacros/-isystem, -U, -x and "
+            "-Wno-* are rejected because they can change the analysed program "
+            "or downgrade a gate\n";
     return 1;
   }
   // Capability probing compiles and runs a defect program. `check` must stay
@@ -1040,7 +1233,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // must not probe a sanitizer), but checkAstSafety uses their presence to
   // decide whether native arithmetic guards are needed. Derive a dedicated
   // analysis base that always carries them, so a program accepted by `check`
-  // is analysed exactly as `build` will compile it.
+  // is analysed exactly as `build` will compile it. STRICT's pass-through
+  // allow-list reinforces this: the only parse-affecting tokens that survive
+  // (-I/-D/-std=) are appended to `astArgs` below for BOTH commands, while the
+  // backend compile uses the same `base` + `extraArgs` pair, so the safety AST
+  // and the compiled TU can never diverge on flags.
   std::vector<std::string> analysisBase = base;
   if (isCheckCommand(opts))
     addSanitizerFlags(analysisBase, effectiveSanitizer(opts));
@@ -1155,6 +1352,34 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
           strictDisclosureEmitted = true;
         }
       } else {
+        // Reserve the compiler/runtime helper namespace (an explicit symbol
+        // set, NOT a prefix rule: legitimate helpers like cplus_core_helper
+        // stay allowed). A user-written declaration or definition of a
+        // reserved symbol in the ORIGINAL source interposes the generated
+        // instrumentation at link time (e.g. defining __cplus_checked_add_i64
+        // turns the overflow trap into a silent wrap). Parse `source`, not
+        // `loweredText`: the lowered text has
+        // a generated prelude full of legitimate extern declarations for the
+        // very same helpers, which must not be reported as user code. This also
+        // runs for `build`/`run`, so the check happens before any link step.
+        // (--legacy-c is excluded above: no ABI/source change there.)
+        // Cheap textual pre-filter: both reserved prefixes contain "cplus_",
+        // so sources that never mention it cannot declare a helper and skip
+        // the extra in-memory parse entirely.
+        std::set<std::string> reserved;
+        if (source.find("cplus_") != std::string::npos)
+          reserved = findUserDeclaredHelperSymbols(source, astArgs, input);
+        for (const auto &fn : reserved) {
+          Diag d;
+          d.level = DiagLevel::Error;
+          d.message = "[CPLUS-FFI] symbol '" + fn +
+                      "' is reserved for the C+ compiler/runtime; a "
+                      "user declaration or definition can interpose the "
+                      "generated safety instrumentation at link time";
+          d.file = input;
+          diags.report(std::move(d));
+        }
+
         SafetyAstProbe probe = probeSafetyAst(loweredText, astArgs, input);
         // Fail closed (every TU): a failed parse means checkAstSafety silently
         // skipped every check. Reporting success in STRICT `check` would then
@@ -1370,7 +1595,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   for (const auto &obj : objects)
     linkArgs.push_back(obj);
   if (!instrumentedRuntime) {
-    std::string runtime = runtimeLibArg();
+    std::string runtime = runtimeLibArg(!strictSafe);
     if (!runtime.empty())
       linkArgs.push_back(runtime);
   }

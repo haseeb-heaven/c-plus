@@ -60,3 +60,10 @@ tests/compiler/real_world_c/bin/
 tests/compiler/real_world_c/cache/
 tests/compiler/c_standards/results/generated/*.bin
 tests/compiler/adversarial_campaign/results/*.bin
+
+# Wave 3 real-world harness generated artifacts
+tests/compiler/real_world_c/wave3/cache/
+tests/compiler/real_world_c/wave3/bin/
+tests/compiler/real_world_c/wave3/results/bin/
+tests/compiler/real_world_c/wave3/results/logs/
+tests/compiler/real_world_c/wave3/results/generated/

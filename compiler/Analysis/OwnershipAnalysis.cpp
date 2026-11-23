@@ -15,6 +15,7 @@
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Frontend/PCHContainerOperations.h>
 #include <clang/Tooling/Tooling.h>
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -40,11 +41,57 @@ struct ContractState {
   std::vector<ContractIssue> issues;
   bool attempted = false;
   bool loaded = false;
+  // The canonical absolute path the contracts were actually read from and the
+  // exact bytes parsed. Both are pinned on the first load so a symlink retarget
+  // or an in-place rewrite after analysis cannot silently swap the contract set
+  // that the STRICT gate relies on.
+  std::string resolvedPath;
+  std::string parsedBytes;
+  bool swapped = false;
 };
 
 ContractState &contractState() {
   static ContractState state;
   return state;
+}
+
+/// Resolve a contract path once to a canonical absolute path and verify it is
+/// a regular file. '..' components and symlinks are collapsed, so a relative
+/// CPLUS_CONTRACT_PATH or a symlink cannot name a different file after the
+/// analysis than the one that was validated. Directories, devices and broken
+/// symlinks fail closed instead of being parsed as contracts.
+static bool canonicalContractPath(const std::string &raw, std::string &out) {
+  if (raw.empty())
+    return false;
+  llvm::SmallString<256> abs{llvm::StringRef(raw)};
+  if (llvm::sys::fs::make_absolute(abs))
+    return false;
+  llvm::SmallString<256> real;
+  if (llvm::sys::fs::real_path(abs, real))
+    return false;
+  llvm::sys::fs::file_status st;
+  if (llvm::sys::fs::status(real, st))
+    return false;
+  if (!llvm::sys::fs::is_regular_file(st))
+    return false;
+  out = std::string(real.str());
+  return true;
+}
+
+/// Re-check the pinned contract file on every later query. A symlink retarget,
+/// a CWD change, or an in-place replacement after the contracts were parsed
+/// must fail closed rather than mixing two contract sets within one process.
+static bool contractUnchanged(const ContractState &st) {
+  if (st.resolvedPath.empty())
+    return false;
+  std::string stillCanonical;
+  if (!canonicalContractPath(st.resolvedPath, stillCanonical) ||
+      stillCanonical != st.resolvedPath)
+    return false;
+  auto buf = llvm::MemoryBuffer::getFile(st.resolvedPath);
+  if (!buf)
+    return false;
+  return llvm::StringRef((*buf)->getBuffer()) == llvm::StringRef(st.parsedBytes);
 }
 
 /// All v2 fields. Unknown fields are reported instead of silently ignored.
@@ -567,8 +614,19 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
 namespace cplus {
 static ContractState &loadedContracts() {
   ContractState &st = contractState();
-  if (st.attempted)
+  if (st.attempted) {
+    // Contracts are parsed exactly once. On every later query confirm the
+    // canonical file is still the one we analysed; a swap fails closed instead
+    // of silently mixing two contract sets within one process.
+    if (!st.swapped && !contractUnchanged(st)) {
+      st.swapped = true;
+      st.loaded = false;
+      st.issues.push_back(
+          {"", "libc contract file changed after analysis "
+               "(CPLUS_CONTRACT_PATH); refusing to mix contract sets"});
+    }
     return st;
+  }
   st.attempted = true;
 
   // Env override first: needed for tests and for relocatable installs.
@@ -599,28 +657,39 @@ static ContractState &loadedContracts() {
       path = sourcePath;
 #endif
   }
-  auto buf = llvm::MemoryBuffer::getFile(path);
-  // The installed-layout fallback is only for the implicit (compiled-in or
-  // default) path. Never mask a bad CPLUS_CONTRACT_PATH with it.
-  if (!buf && !explicitEnvPath) {
+  // Pin the raw path to a canonical absolute regular file BEFORE the single
+  // read. An explicit CPLUS_CONTRACT_PATH that cannot be canonicalised (bad
+  // relative path, symlink loop, directory, missing file) fails closed and is
+  // never masked by the default. Only the implicit path may use the installed
+  // layout fallback, which is canonicalised the same way.
+  std::string canonical;
+  bool resolved = canonicalContractPath(path, canonical);
+  if (!resolved && !explicitEnvPath) {
     std::string exe = llvm::sys::fs::getMainExecutable("c+", nullptr);
     if (!exe.empty()) {
       llvm::SmallString<256> dir(llvm::sys::path::parent_path(exe));
       llvm::sys::path::append(dir, "..", "share", "cplus",
                               "libc_contracts.json");
-      if (llvm::sys::fs::exists(dir))
-        path = std::string(dir.str());
+      if (canonicalContractPath(std::string(dir.str()), canonical))
+        resolved = true;
     }
-    buf = llvm::MemoryBuffer::getFile(path);
   }
-  if (!buf) {
-    st.issues.push_back({"", "libc contract file not found: " + path});
+  if (!resolved) {
+    st.issues.push_back({"", "libc contract path is not a canonical regular "
+                              "file: " + path});
     return st;
   }
+  auto buf = llvm::MemoryBuffer::getFile(canonical);
+  if (!buf) {
+    st.issues.push_back({"", "libc contract file not found: " + canonical});
+    return st;
+  }
+  st.resolvedPath = canonical;
+  st.parsedBytes.assign((*buf)->getBuffer().begin(), (*buf)->getBuffer().end());
   auto parsed = llvm::json::parse((*buf)->getBuffer());
   if (!parsed) {
     llvm::consumeError(parsed.takeError());
-    st.issues.push_back({"", "libc contract file is not valid JSON: " + path});
+    st.issues.push_back({"", "libc contract file is not valid JSON: " + canonical});
     return st;
   }
   const llvm::json::Object *root = parsed->getAsObject();
@@ -662,11 +731,13 @@ static ContractState &loadedContracts() {
         st.issues.push_back({fn, std::string("missing contract field '") + req +
                                      "'"});
 
-    // Every array-typed field must actually be an array.
+    // Every array-typed field must actually be an array. `optional` is a
+    // boolean flag in the shipped v2 contract file, not an array: listing it
+    // here made every contract set invalid and masked real diagnostics.
     for (const auto &arr : {"params", "nullableArgs", "effects", "borrow",
                             "dynamic", "paramTypes", "readEffects",
                             "writeEffects", "freeEffects",
-                            "threadAssumptions", "optional"})
+                            "threadAssumptions"})
       if (const auto *v = spec->get(arr))
         if (!v->getAsArray())
           st.issues.push_back({fn, std::string("contract field '") + arr +
@@ -933,9 +1004,10 @@ SafetyAstProbe probeSafetyAst(const std::string &source,
   // synthetic .c name forces C (not C++) language inference by the tooling
   // layer, and the resource dir mirrors the main safety AST build.
   // NOTE: pass-through flags that change the parse but are discarded here
-  // (-include/-imacros/-isystem/-x/-include-pch) are hard-rejected by the
-  // driver in STRICT, so this probe can never analyse a different program
-  // than the backend compiles under the safety gate.
+  // (-include/-imacros/-isystem/-iquote/-idirafter/-x/-include-pch, @response
+  // files, -Xclang injection, double-dash spellings) are hard-rejected by the
+  // driver's STRICT allow-list, so this probe can never analyse a different
+  // program than the backend compiles under the safety gate.
   std::vector<std::string> parseArgs = safetyParseArgs(args);
   const std::string astFile = fileName + ".cprobe.c";
 
@@ -1058,5 +1130,93 @@ std::set<std::string> definedFunctionNames(const std::string &source,
   } defs(sm, defined);
   defs.TraverseDecl(ctx.getTranslationUnitDecl());
   return defined;
+}
+
+/// True for symbols owned by C+ instrumentation / the runtime ABI. A user
+/// declaration or definition of one of these can interpose the generated guard
+/// at link time (e.g. defining __cplus_checked_add_i64 silently wraps overflow).
+/// This is deliberately an explicit list plus a few closed name families:
+/// rejecting every `cplus_*` name would outlaw legitimate project helpers such
+/// as `cplus_core_helper` (a multi-TU regression fixture).
+bool isReservedHelperName(llvm::StringRef name) {
+  // Emitted guard/arithmetic helpers and generated defer/drop helpers.
+  if (name.starts_with("__cplus_checked_") ||
+      name.starts_with("__cplus_inline_") ||
+      name.starts_with("__cplus_defer_") || name.starts_with("cplus_drop_"))
+    return true;
+  // Closed runtime families (allocation, checks, printing, threading, scope).
+  if (name.starts_with("cplus_alloc") || name.starts_with("cplus_check_") ||
+      name.starts_with("cplus_print_") || name.starts_with("cplus_mutex_") ||
+      name.starts_with("cplus_tls_") || name.starts_with("cplus_scope_") ||
+      name.starts_with("cplus_checked"))
+    return true;
+  // Remaining individual runtime ABI entry points (runtime/include/cplus/cplus.h
+  // and the rewriter's generated wrappers).
+  static const std::set<llvm::StringRef> kReserved = {
+      "__cplus_bounds_check",
+      "cplus_address_retired", "cplus_allocation_generation",
+      "cplus_arith_fatal", "cplus_cleanup", "cplus_cleanup_kind",
+      "cplus_fatal", "cplus_fatal_hook", "cplus_free_registered",
+      "cplus_log", "cplus_log_impl", "cplus_memcpy", "cplus_memmove",
+      "cplus_move", "cplus_new", "cplus_new_array",
+      "cplus_printf_s", "cplus_fprintf_s", "cplus_snprintf_s",
+      "cplus_sprintf_s", "cplus_realloc", "cplus_realloc_registered",
+      "cplus_register_allocation", "cplus_release",
+      "cplus_resource", "cplus_resource_check_borrow",
+      "cplus_retired_ledger_full", "cplus_rotl32", "cplus_rotr32",
+      "cplus_runtime", "cplus_runtime_log_level",
+      "cplus_runtime_logging_init", "cplus_scan_one", "cplus_scan_value",
+      "cplus_strcpy", "cplus_strnlen", "cplus_zero", "cplus_zalloc",
+  };
+  return kReserved.count(name) != 0;
+}
+
+std::set<std::string>
+findUserDeclaredHelperSymbols(const std::string &source,
+                              const std::vector<std::string> &args,
+                              const std::string &fileName) {
+  std::set<std::string> found;
+  // Parse the ORIGINAL source, not the lowered text. The rewriter prepends a
+  // generated prelude full of `extern int64_t __cplus_checked_*` declarations
+  // and `static inline __cplus_inline_*` definitions; those are legitimate and
+  // would otherwise be indistinguishable by source location in the lowered
+  // buffer. C+ sources may not parse cleanly as C; that is fine -- we only need
+  // the declarations/definitions Clang did recover, and a failed parse yields
+  // an empty set (no false positive) rather than an unsafe acceptance of a
+  // user definition in an otherwise plain-C source.
+  clang::IgnoringDiagConsumer ignore;
+  std::unique_ptr<clang::ASTUnit> ast =
+      clang::tooling::buildASTFromCodeWithArgs(
+          source, safetyParseArgs(args), fileName + ".chelpers.c",
+          "cplus-helper-probe", std::make_shared<clang::PCHContainerOperations>(),
+          clang::tooling::getClangStripDependencyFileAdjuster(), {}, &ignore);
+  if (!ast)
+    return found;
+  clang::ASTContext &ctx = ast->getASTContext();
+  clang::SourceManager &sm = ctx.getSourceManager();
+  struct HelperCollector : clang::RecursiveASTVisitor<HelperCollector> {
+    clang::SourceManager &sm;
+    std::set<std::string> &out;
+    HelperCollector(clang::SourceManager &s, std::set<std::string> &o)
+        : sm(s), out(o) {}
+    bool VisitFunctionDecl(clang::FunctionDecl *fd) {
+      if (fd->isImplicit() || !isReservedHelperName(fd->getName()))
+        return true;
+      clang::SourceLocation loc = fd->getLocation();
+      if (loc.isValid() && sm.isInMainFile(loc))
+        out.insert(fd->getNameAsString());
+      return true;
+    }
+    bool VisitVarDecl(clang::VarDecl *vd) {
+      if (vd->isImplicit() || !isReservedHelperName(vd->getName()))
+        return true;
+      clang::SourceLocation loc = vd->getLocation();
+      if (loc.isValid() && sm.isInMainFile(loc))
+        out.insert(vd->getNameAsString());
+      return true;
+    }
+  } collector(sm, found);
+  collector.TraverseDecl(ctx.getTranslationUnitDecl());
+  return found;
 }
 } // namespace cplus

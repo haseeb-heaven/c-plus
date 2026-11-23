@@ -221,11 +221,40 @@ void cplus_check_live(const void *ptr);
  * allocation's generation, or zero when the pointer is not live;
  * `cplus_epoch` returns the most recently issued generation; and
  * `cplus_address_retired` reports whether this address has been retired by the
- * runtime at some point.  Zero is never a valid generation.  A retired address
- * may legitimately be reused by a later allocation. */
+ * runtime at some point, and `cplus_retired_ledger_full` reports whether the
+ * bounded retired-address ledger has reached its 1,048,576-entry cap.  Zero is
+ * never a valid generation.  A retired address may legitimately be reused by a
+ * later allocation. */
 uint64_t cplus_allocation_generation(const void *ptr);
 uint64_t cplus_epoch(void);
 int cplus_address_retired(const void *ptr);
+int cplus_retired_ledger_full(void);
+
+/* Bounded side-table behavior (documented, deterministic):
+ *
+ *  - The live table is keyed on base addresses.  An interior pointer does not
+ *    match a live slot, so releasing or querying base+k is deterministically
+ *    rejected (105/type confusion) rather than silently accepted.  The stored
+ *    allocation size bounds copies and backs the length query; there is no
+ *    per-byte ownership map without an ABI change.
+ *  - The retired ledger holds at most 1,048,576 addresses.  When full, a
+ *    one-time stderr warning is emitted, cplus_retired_ledger_full() becomes
+ *    true, and later retirements evict one slot round-robin.  The address
+ *    retired now stays detectable as a double free (104); the evicted address
+ *    loses ledger coverage and cplus_address_retired() reports 0 for it.
+ *    This is a bounded-resource limit, not a silent correctness claim.
+ *  - Re-registering a *stale* retired address (freed, or still in quarantine)
+ *    is rejected (105/invalid free); accepting it would re-arm a genuine
+ *    second free.  A proven fresh malloc of the same address is accepted.
+ *    Caller-supplied registration sizes are clamped to the real usable block
+ *    size where the platform exposes one, so a false size cannot authorize a
+ *    copy past the allocation.
+ *  - The side table is internally serialized by a mutex, so concurrent calls
+ *    on different pointers have no data races; free() is executed while that
+ *    lock is held.  A single pointer must not be released/reallocated
+ *    concurrently with another operation on that same pointer: like
+ *    malloc/free, that is a caller-level race.
+ */
 
 /* OPEN LIMIT (F2): ordinary C pointers carry no generation token.  If an
  * address is freed and later reused by malloc/realloc for a new live
