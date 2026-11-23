@@ -2,6 +2,7 @@
  * installed system libc; logged per C+ convention. Covers the legacy
  * floating-point-to-string converters (ecvt/fcvt/gcvt) and the POSIX
  * drand48() pseudo-random family, both of which are ABI-tied to the host. */
+#define _XOPEN_SOURCE 700
 #define _DEFAULT_SOURCE
 #include "../../log/log.h"
 #include <stdlib.h>
