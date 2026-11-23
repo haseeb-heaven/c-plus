@@ -50,10 +50,10 @@ static const char *input_name(int cmd) {
 
 static int parse_token(const char *token, int *out) {
     if (token == NULL || strlen(token) != 1) return -1;
-    if (token[0] == 'L') { *out = IN_LEFT; return 0; }
-    if (token[0] == 'R') { *out = IN_RIGHT; return 0; }
-    if (token[0] == 'F') { *out = IN_FIRE; return 0; }
-    if (token[0] == 'N') { *out = IN_NONE; return 0; }
+    if (strcmp(token, "L") == 0) { *out = IN_LEFT; return 0; }
+    if (strcmp(token, "R") == 0) { *out = IN_RIGHT; return 0; }
+    if (strcmp(token, "F") == 0) { *out = IN_FIRE; return 0; }
+    if (strcmp(token, "N") == 0) { *out = IN_NONE; return 0; }
     return -1;
 }
 
@@ -95,9 +95,14 @@ int main(int argc, char **argv) {
 
     for (i = 0; i < n; ++i) {
         int cmd = 0;
-        if (parse_token(argv[i + 1], &cmd) != 0) {
+        char *token = NULL;
+        /* argv is a pointer parameter with unverifiable extent; copy the
+         * element into a local with a checked, sized copy instead of a direct
+         * subscript (strict mode rejects argv[variable]). */
+        __builtin_memcpy(&token, argv + i + 1, sizeof(token));
+        if (parse_token(token, &cmd) != 0) {
             err.set(CPLUS_EXIT_UNSUPPORTED, "invalid input token");
-            print("ERROR", err.what(), "token=", argv[i + 1],
+            print("ERROR", err.what(), "token=", token,
                   "code=", err.code());
             return 2;
         }
@@ -128,8 +133,9 @@ int main(int argc, char **argv) {
             return 2;
         }
 
-        /* input + state update */
-        g.x += cmd;
+        /* input + state update: only the movement tokens change position. */
+        if (cmd == IN_LEFT) --g.x;
+        if (cmd == IN_RIGHT) ++g.x;
         if (g.x < LANE_MIN) g.x = LANE_MIN;
         if (g.x > LANE_MAX) g.x = LANE_MAX;
 

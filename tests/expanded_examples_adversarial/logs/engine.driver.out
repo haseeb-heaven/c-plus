@@ -1,0 +1,10 @@
+ADV_EXPANDED engine_loop oversized_token REFUSED 2
+ADV_EXPANDED engine_loop empty_token REFUSED 2
+ADV_EXPANDED engine_loop invalid_command REFUSED 2
+ADV_EXPANDED engine_loop size_max_token REFUSED 2
+ADV_EXPANDED engine_loop whitespace_token REFUSED 2
+ADV_EXPANDED engine_loop null_like_no_args REFUSED 2
+ADV_EXPANDED ecs oversized_argv REFUSED 0
+ADV_EXPANDED ecs size_max_argv REFUSED 0
+ADV_EXPANDED ecs null_like_argv REFUSED 0
+ADV_EXPANDED_SUBTOTAL engine cases=9 refused=9 crashed=0 unexpected_ok=0 blocked=0

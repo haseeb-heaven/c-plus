@@ -306,7 +306,11 @@ const char *snake_core_dir_name(int dir) {
     return "R";
 }
 
-/* ---- standalone deterministic self-test --------------------------------- */
+/* ---- standalone deterministic self-test harness -------------------------
+ * Everything above is the I/O-free core. The main() below is only a test
+ * harness for building this file on its own; it is not part of the core API
+ * and is compiled out when snake_cli.cp embeds this file.
+ */
 #ifndef SNAKE_CORE_EMBEDDED
 int main(void) {
     SnakeCore c;

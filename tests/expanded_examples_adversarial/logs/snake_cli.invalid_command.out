@@ -1,0 +1,1 @@
+usage: snake_cli <growth|wall|self> [directions]

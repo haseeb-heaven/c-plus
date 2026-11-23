@@ -140,6 +140,11 @@ classify() {
             n = split(line, f, /[[:space:]]+/)
             fail = 0
             block = 0
+            # Positional contract used by the group runners:
+            #   TOKEN <total> <passed> <failed>
+            if (n >= 4 && f[2] ~ /^[0-9]+$/ && f[3] ~ /^[0-9]+$/ && f[4] ~ /^[0-9]+$/) {
+                if (f[4] + 0 > 0) fail = 1
+            }
             for (i = 1; i <= n; i++) {
                 t = f[i]
                 if (t == "FAIL" || t == "FAILED" || t == "MISMATCH" ||

@@ -1,0 +1,25 @@
+TQ row 1 OK
+TQ row 2 OK
+TQ row 3 OK
+TQ row 4 OK
+TQ row 2 REFUSED 108 invalid duplicate id
+TQ eq grp 10 2
+TQ row 1 10 100
+TQ row 2 10 200
+TQ range amt 200 400 3
+TQ row 2 10 200
+TQ row 3 20 300
+TQ row 4 20 400
+TQ count grp 10 2
+TQ sum grp 10 300
+TQ expect_count grp 10 OK
+TQ expect_sum grp 10 OK
+TQ row 5 OK
+TQ row 6 OK
+TQ range grp 30 30 2
+TQ row 5 30 2147483647
+TQ row 6 30 1
+TQ sum REFUSED 101 range sum overflow
+TQ expect_sum_refusal grp 30 OK
+TQ check 6 OK
+TQ_SUMMARY 17 15 2 0
