@@ -2,7 +2,7 @@
 // No unsafe, no FFI. In-memory task list with chained commands.
 // Build: rustc -O --edition 2021 todo.rs -o todo
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 
 const MAX_TASKS: usize = 64;
@@ -34,7 +34,7 @@ impl Todo {
         cprint!("TODO error", what);
     }
 
-    fn set_title(index: usize, text: &str) -> Option<String> {
+    fn set_title(_index: usize, text: &str) -> Option<String> {
         if text.len() + 1 > TITLE_CAP {
             return None;
         }

@@ -1,5 +1,6 @@
 ADV_EXPANDED kv_store oversized_key REFUSED 0
-ADV_EXPANDED kv_store size_max_value UNEXPECTED_OK 0
+ADV_EXPANDED kv_store size_max_key REFUSED 0
+ADV_EXPANDED kv_store oversized_value REFUSED 0
 ADV_EXPANDED kv_store empty_key REFUSED 0
 ADV_EXPANDED kv_store invalid_utf8_key REFUSED 0
 ADV_EXPANDED kv_store duplicate_key REFUSED 0
@@ -18,4 +19,4 @@ ADV_EXPANDED table_query out_of_range_index REFUSED 0
 ADV_EXPANDED table_query null_like_operand REFUSED 0
 ADV_EXPANDED table_query invalid_utf8_field REFUSED 0
 ADV_EXPANDED table_query post_hostile_integrity REFUSED 0
-ADV_EXPANDED_SUBTOTAL database cases=20 refused=19 crashed=0 unexpected_ok=1 blocked=0
+ADV_EXPANDED_SUBTOTAL database cases=21 refused=21 crashed=0 unexpected_ok=0 blocked=0

@@ -15,7 +15,10 @@ build_one table_query examples/expanded/database/table_query.cp || true
 # contract is the explicit "REFUSED" token (KV_SUMMARY / TQ_SUMMARY counters).
 if [ -x "$BIN/kv_store" ]; then
     run_case kv_store oversized_key REFUSE "$BIN/kv_store" insert "$BIG" v
-    run_case kv_store size_max_value REFUSE "$BIN/kv_store" insert k "$SIZEMAX"
+    # A 20-digit SIZE_MAX-looking token is a valid *value* (<=24 bytes) but
+    # exceeds the 16-byte key limit; the oversized value case uses 10KB.
+    run_case kv_store size_max_key REFUSE "$BIN/kv_store" insert "$SIZEMAX" v
+    run_case kv_store oversized_value REFUSE "$BIN/kv_store" insert k "$BIG"
     run_case kv_store empty_key REFUSE "$BIN/kv_store" insert "" v
     run_case kv_store invalid_utf8_key REFUSE "$BIN/kv_store" insert "$BADUTF" v
     run_case kv_store duplicate_key REFUSE "$BIN/kv_store" insert k v insert k w

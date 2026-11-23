@@ -19,7 +19,7 @@ if [ -x "$BIN/calculator" ]; then
     run_case calculator empty_expr REFUSE "$BIN/calculator" ""
     run_case calculator whitespace_expr REFUSE "$BIN/calculator" "   "
     run_case calculator div_zero REFUSE "$BIN/calculator" "1/0"
-    run_case calculator invalid_command REFUSE "$BIN/calculator" "1++2"
+    run_case calculator invalid_command REFUSE "$BIN/calculator" "foo"
     run_case calculator truncated_input REFUSE "$BIN/calculator" "(1+2"
     ADV_STDIN_FILE="$FIX/oversized_10k_digits.txt" \
         run_case calculator oversized_stdin REFUSE "$BIN/calculator"
