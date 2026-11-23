@@ -1,0 +1,337 @@
+/* C+ standard library: additive allocation diagnostics and failure scopes.
+ *
+ * This header is purely ADDITIVE.  It defines no new allocation model, changes
+ * no existing API, adds no fields to any existing struct, and introduces no
+ * fat pointers.  A pointer is still a pointer: every view below takes the
+ * EXACT allocation base returned by stdlib_alloc / stdlib_calloc (or the
+ * checked containers built on them) and reads the capacity/elem/generation
+ * already recorded in stdlib/error.hp's metadata table.  It also reuses
+ * stdlib_alloc / stdlib_calloc / stdlib_realloc / stdlib_release for lifetime
+ * and the stdlib_state counters for telemetry.  Nothing here allocates,
+ * formats, or transmits anything.
+ *
+ * READ-ONLY DIAGNOSTICS, NOT A SAFETY PROOF
+ * -----------------------------------------
+ * Every stdlib_alloc_view_* / stdlib_alloc_identity / stdlib_alloc_id_*
+ * function is a diagnostic hint.  An ADDRESS ALONE DOES NOT PROVE IDENTITY:
+ * a host allocator may recycle a freed address into a brand-new tracked block
+ * at the same base.  Identity is the pair (exact base address, current
+ * metadata generation); capture an stdlib_alloc_id before a lifetime boundary
+ * and compare it afterwards.  A stale alias at a recycled address passes a
+ * bare address comparison but fails a generation comparison.
+ *
+ * The metadata is keyed by the EXACT base address.  An interior pointer
+ * supplied as `base`/`ptr` (or a raw malloc/stack/static address) is NOT
+ * found: byte/elem/count views return 0, generation/liveness return 0, and
+ * identity/transfer validation fail.  Pass (base, offset), never (base+offset)
+ * alone.  A NULL pointer is always treated as untracked.  A pointer whose
+ * block was released, reallocated, or transferred is stale: its old slot is
+ * tombstoned or its generation was bumped, so the same views report 0 / fail.
+ *
+ * These helpers never dereference `ptr`; they only look it up in the metadata
+ * table, so querying a stale pointer is itself safe.  They do not protect
+ * memory writes: only operations issued through checked wrappers are guarded.
+ *
+ * ALLOCATION-FAILURE SCOPE
+ * ------------------------
+ * alloc_fail_scope is a C+ class with a `drop` destructor, so entering a scope
+ * arms stdlib_alloc_fail_at/after and leaving it automatically calls
+ * stdlib_alloc_fail_reset().  The explicit stdlib_alloc_fail_begin/end pair is
+ * provided for contexts that cannot use the class (e.g. plain C).  CAVEATS:
+ * the injection state in stdlib_state is a single global window -- scopes are
+ * NOT nestable, NOT re-entrant, and NOT thread-safe; an inner scope overwrites
+ * an outer one, and with the explicit pair `end` MUST be reached on every exit
+ * path.  Prefer the RAII class so reset is deterministic at scope exit.
+ *
+ * TELEMETRY
+ * ---------
+ * Counters are the atomic, in-process, off-by-default counters from
+ * stdlib/error.hp.  Snapshots are point-in-time diagnostics; a concurrent
+ * reset or a wrap makes a raw delta meaningless.  No counter proves safety.
+ */
+#ifndef CPLUS_STD_ALLOCATOR_HP
+#define CPLUS_STD_ALLOCATOR_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include "stdlib/error.hp"
+
+/* ---- captured allocation identity --------------------------------------- */
+
+/* A captured identity.  `base` is the exact allocation base; `generation` is
+ * the metadata generation at capture time.  byte_size/elem_size are recorded
+ * for diagnostics only and are NOT part of identity comparison (a resize that
+ * bumps generation is already rejected by the generation check).  A zeroed id
+ * (base == NULL, generation == 0) represents "no identity" and never matches
+ * or compares equal to another id. */
+typedef struct stdlib_alloc_id {
+    const void *base;
+    unsigned long long generation;
+    size_t byte_size;
+    size_t elem_size;
+} stdlib_alloc_id;
+
+/* All-zero template used to clear out-parameters without a pointer subscript. */
+static const stdlib_alloc_id stdlib_alloc_id_zero;
+
+/* Capture the current identity of a live tracked block into `out` (0 on
+ * success, -1 on failure).  NULL `out` -> -1, nothing written.  NULL `ptr`,
+ * an untracked/interior address, or a stale (freed/reallocated/transferred)
+ * pointer -> `out` is zeroed and -1 is returned.  The returned id is a
+ * (base, generation) snapshot: an address alone is NOT identity, so keep the
+ * generation and use stdlib_alloc_id_matches() after any lifetime boundary. */
+static inline int stdlib_alloc_identity(const void *ptr, stdlib_alloc_id *out) {
+    stdlib_meta_slot *s;
+    int found;
+    if (out == NULL)
+        return -1;
+    __builtin_memcpy(out, &stdlib_alloc_id_zero, sizeof(stdlib_alloc_id));
+    if (ptr == NULL)
+        return -1;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    found = s != NULL;
+    if (found) {
+        out->base = ptr;
+        out->generation = s->generation;
+        out->byte_size = s->byte_size;
+        out->elem_size = s->elem_size;
+    }
+    stdlib_meta_release_lock();
+    return found ? 0 : -1;
+}
+
+/* Compare two captured identities: 1 only if both are non-NULL, non-zero and
+ * share BOTH base and generation.  A NULL/zeroed id is never equal, even to
+ * another NULL/zeroed id.  Passing the same address with a new generation (a
+ * recycled block) returns 0: an address alone does not prove identity.  No
+ * metadata lookup is performed, so stale ids compare by their captured values. */
+static inline int stdlib_alloc_id_equal(const stdlib_alloc_id *a,
+                                        const stdlib_alloc_id *b) {
+    if (a == NULL || b == NULL)
+        return 0;
+    if (a->base == NULL || b->base == NULL)
+        return 0;
+    if (a->base != b->base)
+        return 0;
+    return a->generation == b->generation ? 1 : 0;
+}
+
+/* Re-check a captured identity against a current pointer: 1 only if `id` is a
+ * valid captured identity, `ptr` is its exact base, and the block is STILL
+ * tracked with the SAME generation.  0 for NULL id, NULL ptr, a zeroed id, an
+ * untracked/interior address, a freed block, or any reallocation/ownership
+ * transfer since capture (both bump the generation).  This is the
+ * reallocation-history-safe check: an address that was recycled into a new
+ * block fails because its generation changed. */
+static inline int stdlib_alloc_id_matches(const stdlib_alloc_id *id,
+                                          const void *ptr) {
+    unsigned long long gen;
+    if (id == NULL || ptr == NULL || id->base == NULL || id->generation == 0)
+        return 0;
+    if (id->base != ptr)
+        return 0;
+    gen = stdlib_alloc_generation(ptr);
+    return gen == id->generation ? 1 : 0;
+}
+
+/* ---- scalar diagnostic views (read-only) -------------------------------- */
+
+/* Byte capacity of a live tracked block (stdlib_alloc_size).  0 for NULL, an
+ * untracked/interior address, or a stale (freed/reallocated/transferred)
+ * pointer.  This is capacity, not a provenance or liveness proof: the same
+ * address at a new generation reports the new block's capacity. */
+static inline size_t stdlib_alloc_view_bytes(const void *ptr) {
+    return stdlib_alloc_size(ptr);
+}
+
+/* Recorded element size of a live tracked block.  1 for a plain stdlib_alloc
+ * block, the element_size argument of stdlib_calloc, and 0 for NULL, an
+ * untracked/interior address, or a stale pointer.  An address alone does not
+ * prove identity. */
+static inline size_t stdlib_alloc_view_elem_bytes(const void *ptr) {
+    return stdlib_alloc_elem_size(ptr);
+}
+
+/* Current metadata generation of a live tracked block (0 for NULL, untracked,
+ * interior, or stale).  Capture it before a lifetime boundary; a reallocation
+ * or ownership transfer bumps it even when the address is unchanged.  An
+ * address alone does not prove identity -- compare generations. */
+static inline unsigned long long stdlib_alloc_view_generation(const void *ptr) {
+    return stdlib_alloc_generation(ptr);
+}
+
+/* 1 if `ptr` is currently a tracked live block, 0 for NULL, untracked,
+ * interior, or stale (freed/reallocated/transferred) pointers.  Implemented
+ * as a non-zero generation, so it inherits the exact-base and address-only
+ * caveats of stdlib_alloc_view_generation(); it is not a lifetime proof. */
+static inline int stdlib_alloc_view_live(const void *ptr) {
+    return (ptr != NULL && stdlib_alloc_generation(ptr) != 0) ? 1 : 0;
+}
+
+/* Element count of a live tracked block (byte_size / element size via
+ * stdlib_alloc_query_length, which uses the division-free safe helper).  0 for
+ * NULL, untracked, interior, or stale pointers.  The count is a capacity
+ * view, not proof that any element is initialised or that the address still
+ * denotes the original allocation. */
+static inline size_t stdlib_alloc_view_count(const void *ptr) {
+    size_t n = 0;
+    if (ptr == NULL)
+        return 0;
+    (void)stdlib_alloc_query_length(ptr, 0, &n);
+    return n;
+}
+
+/* Remaining tracked capacity from `offset` to the end of the block keyed by
+ * the EXACT base `base`: capacity - offset when base is live and offset <=
+ * capacity, else 0.  Subtraction is used so offset+capacity cannot overflow.
+ * 0 for NULL/untracked/interior base, for offset > capacity, and for stale
+ * blocks.  This is a diagnostic hint only; an interior address passed as
+ * `base` is not found, and an address alone does not prove identity. */
+static inline size_t stdlib_alloc_view_remaining(const void *base,
+                                                 size_t offset) {
+    size_t cap;
+    if (base == NULL)
+        return 0;
+    cap = stdlib_alloc_size(base);
+    if (cap == 0 || offset > cap)
+        return 0;
+    return cap - offset;
+}
+
+/* Reallocation-history-safe check: 1 only if `ptr` is a currently tracked
+ * block whose generation still equals the captured `gen`.  0 for NULL ptr,
+ * gen == 0, untracked/interior addresses, freed blocks, and any successful
+ * stdlib_realloc or ownership transfer since the token was captured.  A bare
+ * address comparison is insufficient: a recycled address with a new
+ * generation returns 0. */
+static inline int stdlib_alloc_view_unchanged(const void *ptr,
+                                              unsigned long long gen) {
+    return stdlib_alloc_check_generation(ptr, gen);
+}
+
+/* Ownership-transfer VALIDATION only; this does NOT move anything.  1 only if
+ * dst/src are distinct non-NULL handles, *dst is NULL, *src is a live tracked
+ * block.  0 (without reporting) for NULL/equal handles, a non-empty *dst, a
+ * NULL *src, an untracked/interior source, or a stale (freed/reallocated/
+ * previously transferred) source.  Use stdlib_transfer_ownership() or
+ * stdlib_mem_transfer() to actually move the block.  Passing validation is
+ * not an identity proof: an address reused at a new generation also validates. */
+static inline int stdlib_alloc_view_transfer_ok(void **dst, void **src) {
+    if (dst == NULL || src == NULL || dst == src)
+        return 0;
+    if (*dst != NULL || *src == NULL)
+        return 0;
+    return stdlib_alloc_view_live(*src) ? 1 : 0;
+}
+
+/* ---- telemetry snapshot helpers ----------------------------------------- */
+
+/* All-zero template for clearing a stats snapshot without pointer subscripts. */
+static const stdlib_telemetry_stats stdlib_alloc_tm_zero;
+
+/* Copy the current atomic counters into `out`.  A NULL `out` is a documented
+ * no-op (stdlib_telemetry_snapshot does nothing).  The snapshot is a
+ * point-in-time diagnostic; it is not proof of any safety property. */
+static inline void stdlib_alloc_tm_snapshot(stdlib_telemetry_stats *out) {
+    stdlib_telemetry_snapshot(out);
+}
+
+/* Field-wise (after - before) raw unsigned difference.  NULL `out` -> no-op;
+ * NULL `before` or `after` -> `out` is zeroed.  If a telemetry reset or a wrap
+ * happened between the two snapshots the difference is meaningless; callers
+ * must bracket a stable window.  These counters are diagnostics, not proofs. */
+static inline void stdlib_alloc_tm_delta(const stdlib_telemetry_stats *before,
+                                         const stdlib_telemetry_stats *after,
+                                         stdlib_telemetry_stats *out) {
+    if (out == NULL)
+        return;
+    __builtin_memcpy(out, &stdlib_alloc_tm_zero,
+                     sizeof(stdlib_telemetry_stats));
+    if (before == NULL || after == NULL)
+        return;
+    out->alloc_count = after->alloc_count - before->alloc_count;
+    out->free_count = after->free_count - before->free_count;
+    out->bytes_allocated = after->bytes_allocated - before->bytes_allocated;
+    out->alloc_failures = after->alloc_failures - before->alloc_failures;
+    out->invalid_ops = after->invalid_ops - before->invalid_ops;
+    out->bounds_violations = after->bounds_violations - before->bounds_violations;
+    out->ownership_violations = after->ownership_violations -
+                                before->ownership_violations;
+    out->lifecycle_failures = after->lifecycle_failures -
+                              before->lifecycle_failures;
+    out->container_growths = after->container_growths -
+                             before->container_growths;
+    out->api_failures = after->api_failures - before->api_failures;
+}
+
+/* Read one telemetry counter by STDLIB_TM_* index; 0 for an out-of-range
+ * index.  A counter is a diagnostic signal, not proof of identity or safety. */
+static inline unsigned long long stdlib_alloc_tm_counter(int index) {
+    if (index < 0 || index >= STDLIB_TM_COUNT)
+        return 0;
+    return __atomic_load_n(&stdlib_state.counters[index], __ATOMIC_RELAXED);
+}
+
+/* ---- allocation-failure scope ------------------------------------------- */
+
+#define ALLOC_FAIL_SCOPE_NONE 0
+#define ALLOC_FAIL_SCOPE_AT 1
+#define ALLOC_FAIL_SCOPE_AFTER 2
+
+/* Explicit injection window: ALLOC_FAIL_SCOPE_AT arms fail_at(count),
+ * ALLOC_FAIL_SCOPE_AFTER arms fail_after(count), anything else resets.
+ * CAVEATS: single global, non-nestable, non-re-entrant, not thread-safe;
+ * pair every begin with an end on all exit paths (prefer alloc_fail_scope). */
+static inline void stdlib_alloc_fail_begin(int mode, long count) {
+    if (mode == ALLOC_FAIL_SCOPE_AT)
+        stdlib_alloc_fail_at(count);
+    else if (mode == ALLOC_FAIL_SCOPE_AFTER)
+        stdlib_alloc_fail_after(count);
+    else
+        stdlib_alloc_fail_reset();
+}
+
+/* End an explicit injection window (stdlib_alloc_fail_reset).  Idempotent;
+ * see the non-nestable / not-thread-safe caveats above. */
+static inline void stdlib_alloc_fail_end(void) {
+    stdlib_alloc_fail_reset();
+}
+
+/* RAII failure-injection scope.  Construct with a mode and count; the `drop`
+ * destructor calls stdlib_alloc_fail_reset() at scope exit, so injection can
+ * never leak past the scope.  A zeroed handle is tolerated: drop still resets
+ * (harmlessly).  NOT nestable and NOT thread-safe (one global injection
+ * state); do not copy or move an active scope. */
+class alloc_fail_scope {
+    int armed;
+    int mode;
+    long count;
+
+    alloc_fail_scope(int scope_mode, long scope_count) {
+        self->armed = 1;
+        self->mode = scope_mode;
+        self->count = scope_count;
+        stdlib_alloc_fail_begin(scope_mode, scope_count);
+    }
+
+    /* 1 while the scope considers injection armed, 0 after reset_now(). */
+    int armed_now(void) {
+        return self->armed;
+    }
+
+    /* End injection early; idempotent (the destructor resets again). */
+    void reset_now(void) {
+        stdlib_alloc_fail_end();
+        self->armed = 0;
+    }
+
+    /* Deterministic cleanup at scope exit. */
+    void drop(void) {
+        stdlib_alloc_fail_end();
+        self->armed = 0;
+    }
+};
+
+#endif /* CPLUS_STD_ALLOCATOR_HP */

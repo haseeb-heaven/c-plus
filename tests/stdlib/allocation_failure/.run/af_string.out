@@ -1,0 +1,27 @@
+as_ctor_valid 1
+as_ctor_size 1
+as_ctor_cap 1
+as_ctor_cstr 1
+as_ctor_at0 1
+as_ctor_balanced 1
+as_ctor_retry 1
+as_ctor_cleaned 1
+as_reserve_fail 1
+as_reserve_state 1
+as_reserve_contents 1
+as_reserve_retry 1
+as_reserve_cleaned 1
+as_append_fail 1
+as_append_state 1
+as_append_contents 1
+as_append_retry 1
+as_append_noalloc_pre 1
+as_append_noalloc 1
+as_append_cleaned 1
+as_copy_fail 1
+as_copy_state 1
+as_copy_contents 1
+as_copy_fail_counted 1
+as_copy_retry 1
+as_copy_cleaned 1
+ALLOC_FAIL 26 0

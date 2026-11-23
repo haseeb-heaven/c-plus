@@ -1,0 +1,69 @@
+=== C-to-C+ interoperability lab ===
+arch=arm64 os=Darwin
+PATH=/usr/bin:/bin CPLUS_CLANG=/usr/bin/clang
+--- clang --version ---
+date_utc=2026-11-23T04:01:24Z
+arch=arm64 os=Darwin
+PATH=/usr/bin:/bin CPLUS_CLANG=/usr/bin/clang
+--- clang --version ---
+Apple clang version 16.0.0 (clang-1600.0.26.6)
+Target: arm64-apple-darwin27.2.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+--- c+ --version ---
+Apple clang version 16.0.0 (clang-1600.0.26.6)
+Target: arm64-apple-darwin27.2.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+--- c+ --version ---
+C+ 0.1.0
+Language: C+ (C with memory safety, deterministic RAII, lightweight classes)
+Backend: host Clang/LLVM
+================================
+CMD[C_compile] timeout=120s: /usr/bin/clang -O2 -std=c99 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp -c tests/abi/c_to_cp/c_to_cp_lib.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_lib.o
+C+ 0.1.0
+Language: C+ (C with memory safety, deterministic RAII, lightweight classes)
+Backend: host Clang/LLVM
+================================
+CMD[C_compile] timeout=120s: /usr/bin/clang -O2 -std=c99 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp -c tests/abi/c_to_cp/c_to_cp_lib.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_lib.o
+RC[C_compile]=0
+CMD[C_archive] timeout=60s: /usr/bin/ar rcs /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_lib.o
+RC[C_compile]=0
+CMD[C_archive] timeout=60s: /usr/bin/ar rcs /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_lib.o
+RC[C_archive]=0
+CMD[NM]: /usr/bin/nm -gU /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a > /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+RC[C_archive]=0
+MISSING SYMBOL cto_point_translate in /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+MISSING SYMBOL cto_rect_from_points in /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+MISSING SYMBOL cto_rect_area in /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+MISSING SYMBOL cto_sum_ints in /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+MISSING SYMBOL cto_scale_in_place in /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+CMD[NM]: /usr/bin/nm -gU /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a > /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+CHECK[no_cxx_mangling]: grep -Fq ' T __Z' /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt must be false
+CMD[Cplus_probe_link] timeout=180s: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build --strict --sanitize=none tests/abi/c_to_cp/c_to_cp_caller.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller_direct -- /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a
+CHECK[no_cxx_mangling]: grep -Fq ' T __Z' /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt must be false
+CMD[Cplus_probe_link] timeout=180s: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build --strict --sanitize=none tests/abi/c_to_cp/c_to_cp_caller.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller_direct -- /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a
+clang: warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a: 'linker' input unused [-Wunused-command-line-argument]
+RC[Cplus_probe_link]=0
+CMD[Cplus_build] timeout=180s: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build --strict --sanitize=none tests/abi/c_to_cp/c_to_cp_caller.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_caller -- /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a -Wno-unused-command-line-argument
+clang: warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a: 'linker' input unused [-Wunused-command-line-argument]
+RC[Cplus_probe_link]=0
+CMD[Cplus_build] timeout=180s: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build --strict --sanitize=none tests/abi/c_to_cp/c_to_cp_caller.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_caller -- /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/libc_to_cp.a -Wno-unused-command-line-argument
+RC[Cplus_build]=0
+CMD[Cplus_run] timeout=60s: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_caller
+RC[Cplus_build]=0
+CMD[Cplus_run] timeout=60s: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_caller
+RC[Cplus_run]=0
+CHECK[final_summary]: grep -F 'calls match' /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stdout
+RC[Cplus_run]=0
+CHECK[final_summary]: grep -F 'calls match' /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stdout
+RESULT: c_to_cp: 24 passed, 0 failed
+Full command/exit-code log: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/results.log
+Caller stdout: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stdout
+Caller stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stderr
+Archive symbols: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+RESULT: c_to_cp: 19 passed, 5 failed
+Full command/exit-code log: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/results.log
+Caller stdout: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stdout
+Caller stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stderr
+Archive symbols: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt

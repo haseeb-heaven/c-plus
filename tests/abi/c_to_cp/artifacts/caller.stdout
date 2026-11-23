@@ -1,0 +1,32 @@
+c_to_cp_caller: begin
+struct return: cto_point_translate -> {7,7}                    OK
+struct return: cto_rect_from_points lo                         OK
+struct return: cto_rect_from_points hi                         OK
+struct ptr arg + error code: rect_area -> 20                   OK
+error code: rect_area(NULL) -> CTO_ERR_NULL                    OK
+pointer arg: cto_sum_ints -> 15                                OK
+pointer arg: scale_in_place then sum -> 30                     OK
+error code: sum_ints(NULL) -> CTO_ERR_NULL                     OK
+callback: register C+ function into C                          OK
+callback: C fires C+ callback -> 110                           OK
+error code: fire after clear -> CTO_ERR_CALLBACK               OK
+function pointer arg: apply add -> 13                          OK
+function pointer arg: apply mul -> 42                          OK
+error code: apply(NULL op) -> CTO_ERR_NULL                     OK
+opaque handle: create returns non-NULL                         OK
+opaque handle: initial size 0                                  OK
+opaque handle: put(2,99)                                       OK
+opaque handle: size after put == 3                             OK
+opaque handle: get(2) -> 99                                    OK
+error code: get out of range -> CTO_ERR_RANGE                  OK
+opaque handle: destroy completed                               OK
+C->C+ memory: make buffer -> OK, len 4                         OK
+C->C+ memory: C+ reads C buffer -> 100                         OK
+C->C+ memory: C+ free() of C malloc block completed            OK
+error code: make buffer(NULL out) -> CTO_ERR_NULL              OK
+C+->C memory: host malloc non-NULL                             OK
+C+->C memory: C consumed values, checksum 10, freed            OK
+variadic: cto_vsum(5, 1..5) -> 15                              OK
+variadic: cto_vsum(3, -1, 0, 1) -> 0                           OK
+variadic: cto_vsum(0) -> 0                                     OK
+c_to_cp_caller: 30/30 calls match

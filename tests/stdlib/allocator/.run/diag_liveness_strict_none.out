@@ -1,0 +1,15 @@
+lv_live_state 1
+lv_dead_state 1
+lv_untracked_metadata 1
+lv_untracked_realloc_refused 1
+lv_untracked_realloc_diagnosed 1
+lv_mem_release_nulls 1
+lv_double_release_noop 1
+lv_null_release_noop 1
+lv_transfer_ok 1
+lv_transfer_stale_token 1
+lv_transfer_null_handles 1
+lv_transfer_untracked 1
+lv_transfer_self 1
+dl_terminated 1
+ALLOC_DIAG 14 0

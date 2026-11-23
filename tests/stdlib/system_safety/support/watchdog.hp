@@ -1,0 +1,175 @@
+/* Reusable bounded fork + alarm watchdog for C+ system tests.
+ *
+ * Design goals
+ * ------------
+ *   - The child runs a caller-supplied function (no closures needed).
+ *   - The parent is NEVER left blocking forever: a SIGALRM backstop with a
+ *     non-SA_RESTART disposition interrupts waitpid(), and SIGKILL escalation
+ *     guarantees the final reap terminates.
+ *   - The EXACT wait status is recorded (raw_status) together with decoded
+ *     WIFEXITED / WIFSIGNALED fields, so callers can distinguish a normal
+ *     exit code from a signal death and can assert on either.
+ *   - The previous SIGALRM disposition is restored before returning.
+ *
+ * Usage from a test (include path works from any tests/stdlib/**/*.cp):
+ *     #include "tests/stdlib/system_safety/support/watchdog.hp"
+ *     struct ss_watchdog_result r = ss_run_watchdog(my_child, 2, 1);
+ *
+ * No variable division or modulo is used; all bounds are explicit counts.
+ */
+#ifndef CPLUS_SYS_SAFETY_WATCHDOG_HP
+#define CPLUS_SYS_SAFETY_WATCHDOG_HP
+
+#include <unistd.h>
+#include <signal.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+typedef void (*ss_child_fn)(void);
+
+struct ss_watchdog_result {
+    pid_t child_pid;   /* pid returned by fork(), or -1 on fork failure    */
+    int reaped;        /* 1 when waitpid() actually reaped the child      */
+    int timed_out;     /* 1 when the alarm backstop fired / kill used     */
+    int exited;        /* 1 when WIFEXITED(raw_status)                    */
+    int signaled;      /* 1 when WIFSIGNALED(raw_status)                  */
+    int exit_code;     /* WEXITSTATUS when exited, else -1                */
+    int term_signal;   /* WTERMSIG when signaled, else 0                  */
+    int raw_status;    /* the unmodified status word from waitpid()       */
+};
+
+static volatile sig_atomic_t ss_watchdog_alarm_seen;
+
+static void ss_watchdog_on_alarm(int signo) {
+    (void)signo;
+    ss_watchdog_alarm_seen = 1;
+}
+
+/* Child convenience helpers. */
+static inline void ss_child_exit(int code) {
+    _exit(code);
+}
+
+static inline void ss_child_pause_forever(void) {
+    for (;;) {
+        pause();
+    }
+}
+
+/* Run child_fn in a forked child under a hard alarm backstop.
+ *
+ * hard_secs      : parent backstop, in seconds; must be > 0.
+ * child_alarm_secs: optional self-alarm installed in the child (0 = none).
+ *                   SIGALRM is reset to SIG_DFL in the child first, so an
+ *                   armed child alarm terminates it deterministically.
+ */
+static inline struct ss_watchdog_result ss_run_watchdog(ss_child_fn child_fn,
+                                                        unsigned int hard_secs,
+                                                        int child_alarm_secs) {
+    struct ss_watchdog_result result;
+    struct sigaction old_alarm_action;
+    struct sigaction child_default;
+    struct sigaction backstop;
+    pid_t child_pid;
+    pid_t wait_rc;
+    int status;
+    int reaped;
+    int timed_out;
+
+    result.child_pid = -1;
+    result.reaped = 0;
+    result.timed_out = 0;
+    result.exited = 0;
+    result.signaled = 0;
+    result.exit_code = -1;
+    result.term_signal = 0;
+    result.raw_status = 0;
+    status = 0;
+    reaped = 0;
+    timed_out = 0;
+
+    if (child_fn == (ss_child_fn)0 || hard_secs == 0)
+        return result;
+
+    child_pid = fork();
+    if (child_pid == (pid_t)0) {
+        /* Child: make its own alarm fatal, then run the payload. */
+        memset(&child_default, 0, sizeof(child_default));
+        child_default.sa_handler = SIG_DFL;
+        sigemptyset(&child_default.sa_mask);
+        child_default.sa_flags = 0;
+        (void)!sigaction(SIGALRM, &child_default, (struct sigaction *)0);
+        if (child_alarm_secs > 0)
+            alarm((unsigned int)child_alarm_secs);
+        child_fn();
+        _exit(0);
+    }
+    if (child_pid < (pid_t)0)
+        return result;
+
+    result.child_pid = child_pid;
+
+    memset(&backstop, 0, sizeof(backstop));
+    backstop.sa_handler = ss_watchdog_on_alarm;
+    sigemptyset(&backstop.sa_mask);
+    backstop.sa_flags = 0; /* intentionally NOT SA_RESTART: interrupt waitpid */
+    if (sigaction(SIGALRM, &backstop, &old_alarm_action) != 0) {
+        /* Cannot arm the backstop: kill and reap rather than block. */
+        (void)!kill(child_pid, SIGKILL);
+        while (waitpid(child_pid, &status, 0) < (pid_t)0) {
+            /* retry on EINTR */
+        }
+        result.reaped = 1;
+        result.timed_out = 1;
+        result.raw_status = status;
+        return result;
+    }
+
+    ss_watchdog_alarm_seen = 0;
+    (void)!alarm(hard_secs);
+
+    for (;;) {
+        wait_rc = waitpid(child_pid, &status, 0);
+        if (wait_rc == child_pid) {
+            reaped = 1;
+            break;
+        }
+        if (wait_rc < (pid_t)0 && errno == EINTR) {
+            if (ss_watchdog_alarm_seen) {
+                timed_out = 1;
+                break;
+            }
+            continue;
+        }
+        if (wait_rc < (pid_t)0)
+            break; /* unexpected error: fall through to kill + reap */
+    }
+
+    (void)!alarm(0);
+    (void)!sigaction(SIGALRM, &old_alarm_action, (struct sigaction *)0);
+
+    if (!reaped) {
+        timed_out = 1;
+        (void)!kill(child_pid, SIGKILL);
+        while (waitpid(child_pid, &status, 0) < (pid_t)0) {
+            /* SIGKILL is uncatchable; this reap is bounded. */
+        }
+        reaped = 1;
+    }
+
+    result.reaped = reaped;
+    result.timed_out = timed_out;
+    result.raw_status = status;
+    if (WIFEXITED(status)) {
+        result.exited = 1;
+        result.exit_code = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        result.signaled = 1;
+        result.term_signal = WTERMSIG(status);
+    }
+    return result;
+}
+
+#endif /* CPLUS_SYS_SAFETY_WATCHDOG_HP */

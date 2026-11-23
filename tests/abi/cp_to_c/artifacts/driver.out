@@ -1,0 +1,66 @@
+cp_to_c_driver: sizeof(void*)=8 sizeof(record)=48 align(record)=8
+PTR C side sizeof(void *) == 8                           OK
+PTR C+ layout_report rc == OK                            OK
+PTR C+ pointer_size == 8                                 OK
+PTR C+ pointer_size == C pointer_size                    OK
+PTR roundtrip rc == OK                                   OK
+PTR roundtrip is bit-identical                           OK
+PTR roundtrip short out -> ERR_SIZE                      OK
+PTR roundtrip null out -> ERR_NULL                       OK
+LAYOUT record_size matches C                             OK
+LAYOUT record_align matches C                            OK
+LAYOUT off_i matches C                                   OK
+LAYOUT off_u matches C                                   OK
+LAYOUT off_d matches C                                   OK
+LAYOUT off_p matches C                                   OK
+LAYOUT off_n matches C                                   OK
+LAYOUT off_q matches C                                   OK
+LAYOUT off_tag matches C                                 OK
+cp_to_c_driver: C+ layout size=48 align=8 i=0 u=4 d=8 p=16 n=24 q=32 tag=40
+CALL C->C+ add(20,22) == 42                              OK
+CALL C->C+ add(-5,5) == 0                                OK
+CALL C->C+ add(-2147483648,1) == -2147483647             OK
+CALL mixcall 7 mixed args accepted                       OK
+ERR mixcall arg a detected                               OK
+ERR mixcall arg b detected                               OK
+ERR mixcall arg p detected                               OK
+ERR mixcall pointed-to value detected                    OK
+ERR mixcall arg c detected                               OK
+ERR mixcall arg d detected                               OK
+ERR mixcall arg e detected                               OK
+ERR mixcall arg f detected                               OK
+STRUCT by value accepted                                 OK
+STRUCT by value leaves caller bytes unchanged            OK
+STRUCT by pointer accepted                               OK
+STRUCT null pointer -> ERR_NULL                          OK
+ERR field i by value                                     OK
+ERR field i by pointer                                   OK
+ERR field u                                              OK
+ERR field d                                              OK
+ERR field p                                              OK
+ERR field n                                              OK
+ERR field q                                              OK
+ERR field tag                                            OK
+PTR scale_sum rc == OK                                   OK
+PTR scale_sum result == 25.0                             OK
+ERR scale_sum n == 0 -> ERR_SIZE                         OK
+ERR scale_sum null p -> ERR_NULL                         OK
+ERR scale_sum null out -> ERR_NULL                       OK
+OWN create(4) returns non-null                           OK
+OWN buffer_meta rc == OK                                 OK
+OWN buffer_meta byte_size == 16                          OK
+OWN buffer_meta elem_count == 4                          OK
+OWN write idx 0..3 all OK                                OK
+OWN read idx 0..3 match written values                   OK
+ERR write out of range -> ERR_RANGE                      OK
+ERR read out of range -> ERR_RANGE                       OK
+ERR read null out -> ERR_NULL                            OK
+OWN destroy rc == OK                                     OK
+OWN destroy clears caller handle                         OK
+ERR destroy already-null handle -> ERR_NULL              OK
+ERR meta null handle -> ERR_NULL                         OK
+OWN create(0) returns NULL                               OK
+ERR echo ERR_FREE identity                               OK
+ERR echo OK identity                                     OK
+ERR echo 26 identity                                     OK
+cp_to_c: 63/63 boundary checks match
