@@ -1,0 +1,16 @@
+c2x	game_a	quit_q	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/game_a.c:44:39: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'sx'
+c2x	game_a	quit_q	legacy	0	0	0	0	yes	
+gnu2x	game_a	quit_q	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/game_a.c:44:39: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'sx'
+gnu2x	game_a	quit_q	legacy	0	0	0	0	yes	
+c2x	game_b	self_test	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/game_b.c:433:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+c2x	game_b	self_test	legacy	0	0	0	0	yes	
+gnu2x	game_b	self_test	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/game_b.c:433:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+gnu2x	game_b	self_test	legacy	0	0	0	0	yes	
+c2x	cli_app	version	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/cli_app.c:62:26: error: [CPLUS-OWNER] variable-length stack allocation has no bounds check; use cplus_alloc
+c2x	cli_app	version	legacy	0	0	0	0	yes	
+gnu2x	cli_app	version	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/cli_app.c:62:26: error: [CPLUS-OWNER] variable-length stack allocation has no bounds check; use cplus_alloc
+gnu2x	cli_app	version	legacy	0	0	0	0	yes	
+c2x	cli_app	help	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/cli_app.c:62:26: error: [CPLUS-OWNER] variable-length stack allocation has no bounds check; use cplus_alloc
+c2x	cli_app	help	legacy	0	0	0	0	yes	
+gnu2x	cli_app	help	safe	0	0	1	NA	no	tests/c_standards/latest/.work/run/sources/cli_app.c:62:26: error: [CPLUS-OWNER] variable-length stack allocation has no bounds check; use cplus_alloc
+gnu2x	cli_app	help	legacy	0	0	0	0	yes	

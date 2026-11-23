@@ -163,7 +163,7 @@ exit 0.
 
 **Result: behaviour matched — 12/12 checks, 0 differed.**
 
-### 2.2 `game_b` — CONVERT line PENDING; deterministic output verified by direct comparison
+### 2.2 `game_b` — behaviour MATCHED (CONVERT line available)
 
 Original recorded output (`ORIGINAL_EVIDENCE.md` §4):
 
@@ -177,9 +177,16 @@ Original recorded output (`ORIGINAL_EVIDENCE.md` §4):
 > not in bytes.
 
 Conversion artifacts landed: `external_projects/game_b/cplus/2048_modern.cp`
-and built `2048_modern`. **`external_projects/game_b/cplus/CONVERSION.md` has
-NOT landed as of this verification** — the `CONVERT game_b …` line cannot be
-quoted and is therefore marked **PENDING** (no fabrication).
+(strict-built `2048_modern`) and `external_projects/game_b/cplus/CONVERSION.md`.
+The landed `CONVERSION.md` quotes the verification result verbatim:
+
+> ```
+> CONVERT game_b 14 14 0
+> ```
+
+(exit 0 — 14 checks, 14 matched, 0 differed; the same line is recorded in
+`cplus/evidence/results/summary.txt`, including deterministic CLI, board/RNG
+and SIGINT cases).
 
 Independent direct comparison performed here against the original recorded
 logs:
@@ -191,13 +198,11 @@ logs:
 | `--help` | 0 | byte-identical (full usage block) |
 | stdin `qy` | 0 | control-flow markers identical (`QUIT? (y/n)`, `←,↑,→,↓ or q`, `\033[?25h\033[m`); tile positions differ as documented for a time-seeded board |
 
-**Result: deterministic modes matched by direct comparison; formal CONVERT-line
-verification PENDING.** Exact command to complete: when the conversion agent
-lands the doc, read `external_projects/game_b/cplus/CONVERSION.md` and quote its
-`CONVERT game_b <checks> <matched> <differed>` line (and run
-`sh external_projects/game_b/cplus/verify_conversion.sh` if a harness is added).
+**Result: behaviour matched — 14/14 checks, 0 differed**, confirmed both by
+the landed CONVERSION.md/harness summary and by this agent's independent
+direct comparison of the deterministic modes.
 
-### 2.3 `cli_app` — CONVERT line PENDING; original output independently confirmed
+### 2.3 `cli_app` — behaviour MATCHED (CONVERT line available)
 
 Original recorded output (`ORIGINAL_EVIDENCE.md` §4), all exit 0 unless noted:
 
@@ -209,10 +214,22 @@ Original recorded output (`ORIGINAL_EVIDENCE.md` §4), all exit 0 unless noted:
 > missing file → exit 0, stderr `xdump: cannot open "/definitely/not/a/file": No such file or directory`
 > stdin mode output identical to file mode
 
-Conversion artifacts landed: `external_projects/cli_app/cplus/xdump_modern.cp`
-and a strict-built `external_projects/cli_app/cplus/xdump_modern` binary.
-**`external_projects/cli_app/cplus/CONVERSION.md` has NOT landed** — the
-`CONVERT cli_app …` line is **PENDING** (no fabrication).
+Conversion artifacts landed: `external_projects/cli_app/cplus/xdump_modern.cp`,
+a strict-built `external_projects/cli_app/cplus/xdump_modern` binary, and
+`external_projects/cli_app/cplus/CONVERSION.md`. The landed `CONVERSION.md`
+quotes the verification result verbatim:
+
+> ```
+> CONVERT cli_app 24 24 0
+> ```
+
+(exit 0 — 24 checks = 8 fixed-input cases × 3 streams (stdout, stderr, exit),
+24 matched, 0 differed). The harness normalizes `argv[0]` to
+`./build/xdump` via `exec -a` so the `getopt` diagnostic is directly comparable;
+this is why the CONVERT line reports a match for `bad_flag` even though a raw
+path invocation embeds a different program name. I independently reproduced
+`CONVERT cli_app 24 24 0` (exit 0) with an isolated copy of `verify.sh` whose
+output directory was redirected to `/tmp`.
 
 Independent direct comparison performed here (converted binary vs original
 recorded logs):
@@ -222,17 +239,15 @@ recorded logs):
 | `-v` | 0 | stdout byte-identical (`xdump version 1.0.0`) |
 | `-h` | 0 | stdout byte-identical (full usage block) |
 | `build/fixtures/sample.bin` | 0 | stdout byte-identical (313-byte dump) |
-| `-Z` | 1 | stderr differs **only in `argv[0]`**: original recorded `./build/xdump: illegal option -- Z`, converted prints `external_projects/cli_app/cplus/xdump_modern: illegal option -- Z` when invoked by that path. `getopt` embeds `argv[0]`; invoking the same binary as `./xdump` yields the original form. No behavioural regression. |
+| `-Z` | 1 | stderr differs **only in `argv[0]`**: original recorded `./build/xdump: illegal option -- Z`, converted prints `external_projects/cli_app/cplus/xdump_modern: illegal option -- Z` when invoked by that path. `getopt` embeds `argv[0]`; the landed harness uses `exec -a ./build/xdump` to normalize it, reproducing the original form exactly. No behavioural regression. |
 
 Independent confirmation of the *original* performed here: re-ran
 `./build/xdump -v`, `-h` and `build/fixtures/sample.bin` (all exit 0); the file
 stdout was byte-identical to `build/runs/file_default.stdout`. Recorded exit
 codes (`build/runs/*.exit`: `bad_flag=1`, all others `0`) were confirmed.
 
-**Result: CONVERT-line verification PENDING.** Exact command to complete: when
-landed, read `external_projects/cli_app/cplus/CONVERSION.md` and quote its
-`CONVERT cli_app <checks> <matched> <differed>` line (and run
-`sh external_projects/cli_app/cplus/verify_conversion.sh` if a harness is added).
+**Result: behaviour matched — 24/24 checks, 0 differed** (landed CONVERSION.md
+and independently reproduced harness result).
 
 ---
 
@@ -274,13 +289,12 @@ symbols: `__mh_execute_header`, 7 `color_*` data globals, `columns_opt`,
 `pretty_printf`, `set_new_colors`, `str_to_color_code`, `str_to_long`,
 `xdump`, `main`. `nm -u` matches `build/nm_undefined.txt` (plain libc/POSIX
 imports: `fopen`, `fread`, `getopt`, `printf`, `isatty`, `strtol`, `exit`, …).
-A converted binary has now landed; direct comparison here:
+A converted binary has landed; direct comparison here:
 `nm -g external_projects/cli_app/cplus/xdump_modern` still defines **all 22**
 original global symbols with unchanged type (`comm -23 <original T/D/S names>
 <converted T/D/S names>` is **empty**); the converted binary has 54 defined
 text/data symbols, i.e. 32 additive C+/safe runtime symbols. Formal
-CONVERT-line verification is still **PENDING** because `CONVERSION.md` has not
-landed.
+CONVERT-line verification is complete (§2.3).
 
 ### 3.2 Required ABI commands — exact final lines
 
@@ -290,39 +304,29 @@ Command A (fingerprint compare), exactly as specified:
 sh tools/abi_compare/run.sh compare tests/abi/fingerprints/baseline.txt
 ```
 
-Observed **twice** with different results because other parallel agents were
-editing `stdlib/safe/` during this verification:
+**Final result: exit 0.** Final lines verbatim from the last execution:
 
-1. First execution (early in this verification, before the concurrent edits
-   landed): **exit 0**, final line verbatim:
+```
+abi_fp: ABI fingerprint MATCHES baseline (tests/abi/fingerprints/baseline.txt).
+abi_fp: diff is empty: tools/abi_compare/.out/compare/diff.txt
+```
 
-   ```
-   abi_fp: diff is empty: tools/abi_compare/.out/compare/diff.txt
-   ```
-
-   Full output also included `abi_fp: ABI fingerprint MATCHES baseline
-   (tests/abi/fingerprints/baseline.txt).` and `wrote … fingerprint.txt (1235
-   records)`.
-
-2. Final executions (after concurrent edits to `stdlib/safe/safe_alloc.h`,
-   `stdlib/safe/src/safe_alloc.c`, `stdlib/safe/src/safe_io.c`,
-   `stdlib/safe/src/safe_memory.c` by other agents): **exit 1**, final line
-   verbatim:
-
-   ```
-   abi_fp: full diff kept at tools/abi_compare/.out/compare/diff.txt
-   ```
-
-   The diff contains **only additive** records in `build/safe/libcplus_safecrt.a`
-   (archive count `289 → 292` and three new symbols:
-   `_cplus_io_stream_is_closed`, `_cplus_safe_transfer_ownership_generation`,
-   `_free_checked_generation_s`). It contains **no** layout (`L`), function
-   signature (`F`) or `size void *` change, and **no** `S` removal/rename. These
-   changes come from in-flight `stdlib/safe/` work by other agents, not from
-   the external-project conversions (which only add files under
-   `external_projects/`). `sizeof(void*)` and `sizeof(size_t)` remain `8` in
-   both baseline and regenerated fingerprint (`L size void *  8`,
-   `L size size_t  8`; target `arm64-apple-darwin27.2.0`, Apple clang 16).
+Chronology (no fabrication): an early execution also passed (1235 records,
+empty diff). Midway through this verification, concurrent edits by other agents
+to `stdlib/safe/safe_alloc.h`, `stdlib/safe/src/safe_alloc.c`,
+`stdlib/safe/src/safe_io.c` and `stdlib/safe/src/safe_memory.c` temporarily
+produced **exit 1**, with final line
+`abi_fp: full diff kept at tools/abi_compare/.out/compare/diff.txt`. That diff
+contained **only additive** records in `build/safe/libcplus_safecrt.a` (archive
+count `289 → 292` and three new symbols: `_cplus_io_stream_is_closed`,
+`_cplus_safe_transfer_ownership_generation`, `_free_checked_generation_s`) — no
+layout (`L`), function-signature (`F`) or `size void *` change and no `S`
+removal/rename. Those changes came from in-flight work outside
+`external_projects/`, not from the conversions. After the other agent refreshed
+`tests/abi/fingerprints/baseline.txt` (mtime 12:24), multiple re-runs returned
+MATCH with an empty diff. `sizeof(void*)` and `sizeof(size_t)` remain `8` in
+the baseline (`L size void *  8`, `L size size_t  8`; target
+`arm64-apple-darwin27.2.0`, Apple clang 16).
 
 Command B (layouts), exactly as specified:
 
@@ -382,7 +386,8 @@ additive symbol-count change from separate concurrent edits outside
    game/CLI function names remain defined with unchanged C signatures; no
    original symbol was removed, renamed or retyped (§3.1). Ordinary C ABI
    (`sizeof(void*) == 8`, struct layouts, 70/70 layout checks) is unchanged
-   (§3.2). The late fingerprint mismatch is additive-only and attributable to
+   (§3.2). The final fingerprint comparison MATCHES the baseline with an empty
+   diff; the transient mid-run mismatch was additive-only and attributable to
    concurrent edits under `stdlib/safe/`, not to these conversions.
 4. **Scope.** Verification is limited to **macOS arm64 with Apple clang
    16.0.0 (clang-1600.0.26.6)** and the repository's C+ driver on branch
@@ -391,22 +396,35 @@ additive symbol-count change from separate concurrent edits outside
 5. **Permissive-license-only policy.** All three projects are **MIT** licensed;
    no GPL/AGPL/copyleft text was found in any preserved `original/` tree.
 6. **No fabricated results.** Every command, hash, output and final line above
-   was executed or recomputed in this session. Where a conversion artifact
-   had not landed, it is explicitly marked PENDING with the exact command to
-   complete it.
+   was executed or recomputed in this session. Where a conversion artifact had
+   not landed at the time of writing, it is explicitly marked PENDING with the
+   exact command to complete it; no CONVERT line is quoted unless it was
+   actually emitted by a landed document or harness.
 
 ---
 
-## 5. PENDING items (not yet landed — no fabrication)
+## 5. PENDING items — none outstanding
 
-| Project | Missing artifact | Exact command to complete |
-| --- | --- | --- |
-| `game_b` | `external_projects/game_b/cplus/CONVERSION.md` (CONVERT line) | Read `external_projects/game_b/cplus/CONVERSION.md` once landed and quote `CONVERT game_b <checks> <matched> <differed>`; if present, run `sh external_projects/game_b/cplus/verify_conversion.sh` |
-| `cli_app` | `external_projects/cli_app/cplus/CONVERSION.md` and converted binary (CONVERT line + converted `nm`) | Read `external_projects/cli_app/cplus/CONVERSION.md` once landed and quote `CONVERT cli_app <checks> <matched> <differed>`; if present, run `sh external_projects/cli_app/cplus/verify_conversion.sh`; run `nm -g --defined-only external_projects/cli_app/cplus/xdump_modern` and compare to `external_projects/cli_app/build/nm_defined.txt` |
+All items that were PENDING mid-verification have since landed and been
+verified. Final state:
 
-All three `ORIGINAL_EVIDENCE.md` files and all `original/` file trees were
-landed and fully verified (§1–§2). `game_a` conversion evidence was fully
-landed and verified (CONVERT line quoted in §2.1). `game_b` and `cli_app`
-conversion source files and (for `game_b`) a built binary were landed, but
-their `CONVERSION.md` files were not; their formal CONVERT lines are therefore
-PENDING as required.
+| Project | Evidence landed | CONVERT line (quoted) | Behaviour |
+| --- | --- | --- | --- |
+| `game_a` | `ORIGINAL_EVIDENCE.md`, `cplus/CONVERSION.md`, `cplus/verify_conversion.sh` | `CONVERT game_a 12 12 0` | matched (12/12) |
+| `game_b` | `ORIGINAL_EVIDENCE.md`, `cplus/CONVERSION.md`, `cplus/verify.sh`, `cplus/evidence/results/` | `CONVERT game_b 14 14 0` | matched (14/14) |
+| `cli_app` | `ORIGINAL_EVIDENCE.md`, `cplus/CONVERSION.md`, `cplus/verify.sh`, `cplus/results/` | `CONVERT cli_app 24 24 0` | matched (24/24) |
+
+Reproduction commands (exact):
+
+```
+sh external_projects/game_a/cplus/verify_conversion.sh   # CONVERT game_a 12 12 0
+bash external_projects/game_b/cplus/verify.sh           # CONVERT game_b 14 14 0
+bash external_projects/cli_app/cplus/verify.sh          # CONVERT cli_app 24 24 0
+```
+
+Note: mid-verification, `game_b` and `cli_app` CONVERSION.md files had not yet
+landed; at that point their CONVERT lines were explicitly marked PENDING rather
+than guessed. Also note `game_b/cplus/CONVERSION.md` §1 states that
+`ORIGINAL_EVIDENCE.md` was "not present in this checkout" — that was true from
+that agent's earlier viewpoint, but the file **did** land and was fully read
+and independently re-verified for this document (§1.2, §2.2).

@@ -38,6 +38,48 @@ static int cplus_safe_reject_uaf(const void *ptr, const char *api) {
  * follow the common C habit of testing errno instead of the return code must
  * not mistake a refused operation for a successful one.  Success paths never
  * touch errno, so valid-input semantics are unchanged. */
+/* Red-team finding (tests/redteam/memstr/FINDINGS.md §1): safeclib's own
+ * constraint handler does `memset(dest, 0, dmax)` on a REFUSED operation
+ * (safe_mem_constraint.h:handle_mem_error; memcpy_s.c overlap branch).  When
+ * the caller supplies dmax > the real destination capacity, the refusal path
+ * itself becomes the out-of-bounds write.  Raw `cplus_sc_*` entry points and
+ * untracked stack destinations cannot be repaired from this layer (BOS is
+ * unknown inside a non-inlined callee); see HARDENING.md for the honest scope.
+ *
+ * Here we refuse BEFORE calling safeclib whenever a capacity is provable:
+ * tracked malloc_s metadata (including interior pointers) and
+ * __builtin_object_size (useful if the compiler can see through the call).
+ * A violation past that proven bound is reported as ESNOSPC (406) with
+ * errno=ERANGE; safeclib's zeroing path is never entered, so no byte is
+ * written.  Valid inputs (dmax <= proven capacity) proceed unchanged. */
+#define CPLUS_SAFE_ESNOSPC 406
+
+static int cplus_safe_refuse_unproven_dmax(const char *api, const void *dest,
+                                           rsize_t dmax) {
+    size_t provable = (size_t)-1;
+    size_t tracked;
+    size_t bos;
+    char msg[160];
+
+    if (dest == NULL) return 0; /* safeclib reports ESNULLP; no write happens */
+    tracked = cplus_safe_remaining_capacity(dest);
+    bos = (size_t)CPLUS_SAFE_OBJ_SIZE(dest);
+    if (tracked != (size_t)-1) provable = tracked;
+    if (bos != (size_t)-1 && (provable == (size_t)-1 || bos < provable))
+        provable = bos;
+    if (provable == (size_t)-1 || dmax <= provable) return 0;
+
+    errno = ERANGE;
+    cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "dmax exceeds proven capacity");
+    cplus_safe_stat_record(api, 0);
+    snprintf(msg, sizeof(msg),
+             "refused before safeclib: dmax %zu > proven destination capacity "
+             "%zu (ESNOSPC 406); error-path zeroing skipped",
+             (size_t)dmax, provable);
+    cplus_runtime_violation(api, msg);
+    return 1;
+}
+
 static void cplus_safe_publish_constraint_errno(errno_t r) {
     switch (r) {
     case 400: /* ESNULLP */
@@ -65,6 +107,8 @@ errno_t cplus_memcpy_s(void *dest, rsize_t dmax, const void *src, rsize_t smax) 
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "memcpy_s", "enter");
     if (cplus_safe_reject_uaf(dest, "memcpy_s") || cplus_safe_reject_uaf(src, "memcpy_s"))
         return 400;
+    if (cplus_safe_refuse_unproven_dmax("memcpy_s", dest, dmax))
+        return CPLUS_SAFE_ESNOSPC;
     errno_t r = cplus_sc_memcpy_s(dest, dmax, src, smax);
     if (r != 0) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memcpy_s", "constraint/error");
@@ -77,6 +121,8 @@ errno_t cplus_memmove_s(void *dest, rsize_t dmax, const void *src, rsize_t smax)
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "memmove_s", "enter");
     if (cplus_safe_reject_uaf(dest, "memmove_s") || cplus_safe_reject_uaf(src, "memmove_s"))
         return 400;
+    if (cplus_safe_refuse_unproven_dmax("memmove_s", dest, dmax))
+        return CPLUS_SAFE_ESNOSPC;
     errno_t r = cplus_sc_memmove_s(dest, dmax, src, smax);
     if (r != 0) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memmove_s", "constraint/error");
@@ -89,6 +135,8 @@ errno_t cplus_memset_s(void *dest, rsize_t dmax, int value, rsize_t n) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "memset_s", "enter");
     if (cplus_safe_reject_uaf(dest, "memset_s"))
         return 400;
+    if (cplus_safe_refuse_unproven_dmax("memset_s", dest, dmax))
+        return CPLUS_SAFE_ESNOSPC;
     errno_t r = cplus_sc_memset_s(dest, dmax, value, n);
     if (r != 0) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memset_s", "constraint/error");
@@ -103,6 +151,10 @@ errno_t cplus_memcmp_s(const void *dest, rsize_t dmax, const void *src, rsize_t 
         if (diff) *diff = -1;
         return 400;
     }
+    if (cplus_safe_refuse_unproven_dmax("memcmp_s", dest, dmax)) {
+        if (diff) *diff = -1;
+        return CPLUS_SAFE_ESNOSPC;
+    }
     errno_t r = cplus_sc_memcmp_s(dest, dmax, src, smax, diff);
     if (r != 0) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memcmp_s", "constraint/error");
@@ -115,6 +167,8 @@ errno_t cplus_memzero_s(void *dest, rsize_t dmax) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "memzero_s", "enter");
     if (cplus_safe_reject_uaf(dest, "memzero_s"))
         return 400;
+    if (cplus_safe_refuse_unproven_dmax("memzero_s", dest, dmax))
+        return CPLUS_SAFE_ESNOSPC;
     errno_t r = cplus_sc_memzero_s(dest, dmax);
     if (r != 0) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memzero_s", "constraint/error");

@@ -207,6 +207,47 @@ int main(void) {
         CHECK(errno != 0);
     }
 
+    /* ---- T10: REDTEAM corruption bug — oversized dmax on a TRACKED heap
+     * destination must be refused BEFORE safeclib's zeroing error path.
+     * Before: cplus_memcpy_s(dest, dmax=512, NULL, 3) returned 400 but memset
+     * 512 bytes, destroying the canary.  After: returns 406, 0 bytes written. */
+    {
+        unsigned char *buf = (unsigned char *)malloc_s(64);
+        unsigned char snap[64];
+        unsigned char src[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+        errno_t r;
+        size_t i;
+        CHECK(buf != NULL);
+        if (!buf) return 2;
+        fill_canary(buf, 64);
+        memcpy(snap, buf, sizeof snap);
+        errno = 0;
+        r = cplus_memcpy_s(buf, 512, NULL, 3);
+        CHECK(r == 406); /* ESNOSPC */
+        CHECK(errno == ERANGE);
+        CHECK(memcmp(buf, snap, sizeof snap) == 0);
+        errno = 0;
+        r = cplus_memmove_s(buf, 512, NULL, 3);
+        CHECK(r == 406);
+        CHECK(errno == ERANGE);
+        CHECK(memcmp(buf, snap, sizeof snap) == 0);
+        /* overlap violation with oversized dmax also must not clear dmax */
+        memset(src, 'Z', sizeof src);
+        errno = 0;
+        r = cplus_memcpy_s(buf, 512, buf + 4, 8);
+        CHECK(r == 406);
+        CHECK(errno == ERANGE);
+        CHECK(memcmp(buf, snap, sizeof snap) == 0);
+        /* VALID dmax on the same object still succeeds */
+        errno = 0;
+        r = cplus_memcpy_s(buf, 64, src, 8);
+        CHECK(r == 0);
+        CHECK(memcmp(buf, src, 8) == 0);
+        CHECK(all_canary(buf + 8, 56));
+        for (i = 8; i < 64; ++i) CHECK(buf[i] == CANARY);
+        free_s(buf);
+    }
+
     /* ---- T9: NULL and zero-length semantics unchanged ---- */
     {
         char buf[8] = "xyz";

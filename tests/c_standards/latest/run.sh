@@ -110,7 +110,11 @@ EOF
     > "$RUN/features/${name}_cp.build.out" 2> "$RUN/features/${name}_cp.build.err"
   cpr=$?
   first=$(head -1 "$RUN/features/${name}_cp.build.err")
-  [ -z "$first" ] && first='(none - compiled cleanly)'
+  if [ "$cpr" -eq 124 ]; then
+    first='(TIMEOUT after 10s - C+ frontend hung; no diagnostic emitted)'
+  elif [ -z "$first" ]; then
+    first='(none - compiled cleanly)'
+  fi
   printf '%s\t%s\t%s\t%s\n' "$name" "$cr" "$cpr" "$first" >> "$RUN/feature_matrix.tsv"
   printf '  %-18s clang_rc=%s C+_rc=%s  %s\n' "$name" "$cr" "$cpr" "$first"
 }
@@ -193,11 +197,13 @@ while IFS="$(printf '\t')" read -r proj scen src kind; do
       fi
       note=''
       if [ "$bcp" -ne 0 ]; then
-        note=$(head -1 "$RUN/p_${tag}_${mode}.build.err")
+        # Prefer the actual error line over a preceding warning line.
+        note=$(grep -m1 'error:' "$RUN/p_${tag}_${mode}.build.err" 2>/dev/null ||
+               head -1 "$RUN/p_${tag}_${mode}.build.err")
       fi
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$std" "$proj" "$scen" "$mode" "$brc" "$rrc" "$bcp" "$rcp" \
-        "$match"$'\t'"$note" >> "$RUN/projects.tsv"
+        "$match" "$note" >> "$RUN/projects.tsv"
       printf '  %-8s %-8s %-10s %-7s clang=%s/%s C+=%s/%s match=%s\n' \
         "$std" "$proj" "$scen" "$mode" "$brc" "$rrc" "$bcp" "$rcp" "$match"
     done
@@ -338,13 +344,13 @@ w("Scenarios (all runs wrapped in `timeout 30`): "
   "`cli_app/version` = `-v`; `cli_app/help` = `-h`.")
 w("Modes: `ref` = plain clang; `safe` = C+ default Safe mode; `legacy` = C+ "
   "`--legacy-c`. Builds use `timeout 60`.\n")
-w("| std | project | scenario | mode | build rc | run rc | stdout matches clang | first build diagnostic (if failed) |")
-w("|---|---|---|---|---:|---:|---|---|")
+w("| std | project | scenario | mode | clang build/run rc | C+ build/run rc | stdout matches clang | first C+ build diagnostic (if failed) |")
+w("|---|---|---|---|---|---|---|---|")
 for r in rows(os.path.join(run, "projects.tsv")):
-    std, proj, scen, mode, brc, rrc, bcp, rcp, rest = r[:9]
-    match = rest.split("\t")[0] if rest else "no"
-    note = rest.split("\t", 1)[1] if "\t" in rest else ""
-    w(f"| `{std}` | `{proj}` | `{scen}` | `{mode}` | {bcp} | {rcp} | **{match}** | {note} |")
+    std, proj, scen, mode, brc, rrc, bcp, rcp = r[:8]
+    match = r[8] if len(r) > 8 else "no"
+    note = r[9] if len(r) > 9 else ""
+    w(f"| `{std}` | `{proj}` | `{scen}` | `{mode}` | {brc}/{rrc} | {bcp}/{rcp} | **{match}** | {note} |")
 w("")
 w("### 5.1 Exact deterministic stdout (reference vs C+ `--legacy-c`)\n")
 for std in accepted:

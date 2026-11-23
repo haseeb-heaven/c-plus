@@ -22,3 +22,27 @@ Machine-readable result: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/test
 == step 3: C23 feature matrix ==
   bool_true          clang_rc=0 C+_rc=0  (none - compiled cleanly)
   binary_literal     clang_rc=0 C+_rc=0  (none - compiled cleanly)
+  digit_separator    clang_rc=0 C+_rc=124  (TIMEOUT after 10s - C+ frontend hung; no diagnostic emitted)
+  bitint             clang_rc=0 C+_rc=1  tests/c_standards/latest/.work/run/features/bitint.c:4:3: error: [CPLUS-FFI] _BitInt has no safe C+ lowering; use int64_t or cplus_checked arithmetic
+  typeof_operator    clang_rc=0 C+_rc=0  (none - compiled cleanly)
+  nullptr            clang_rc=0 C+_rc=1  tests/c_standards/latest/.work/run/features/nullptr.c:4:12: error: [CPLUS-FFI] C23 nullptr is not supported; use NULL
+== step 4: real projects ==
+  c2x      game_a   quit_q     safe    clang=0/0 C+=1/NA match=no
+  c2x      game_a   quit_q     legacy  clang=0/0 C+=0/0 match=yes
+  gnu2x    game_a   quit_q     safe    clang=0/0 C+=1/NA match=no
+  gnu2x    game_a   quit_q     legacy  clang=0/0 C+=0/0 match=yes
+  c2x      game_b   self_test  safe    clang=0/0 C+=1/NA match=no
+  c2x      game_b   self_test  legacy  clang=0/0 C+=0/0 match=yes
+  gnu2x    game_b   self_test  safe    clang=0/0 C+=1/NA match=no
+  gnu2x    game_b   self_test  legacy  clang=0/0 C+=0/0 match=yes
+  c2x      cli_app  version    safe    clang=0/0 C+=1/NA match=no
+  c2x      cli_app  version    legacy  clang=0/0 C+=0/0 match=yes
+  gnu2x    cli_app  version    safe    clang=0/0 C+=1/NA match=no
+  gnu2x    cli_app  version    legacy  clang=0/0 C+=0/0 match=yes
+  c2x      cli_app  help       safe    clang=0/0 C+=1/NA match=no
+  c2x      cli_app  help       legacy  clang=0/0 C+=0/0 match=yes
+  gnu2x    cli_app  help       safe    clang=0/0 C+=1/NA match=no
+  gnu2x    cli_app  help       legacy  clang=0/0 C+=0/0 match=yes
+== step 5: writing RESULTS.md ==
+wrote /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/latest/RESULTS.md
+Done. Report: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/latest/RESULTS.md

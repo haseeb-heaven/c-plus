@@ -157,8 +157,8 @@ note: use 'iso9899:199409' for 'ISO C 1990 with amendment 1' standard
 
 Evidence: `logs/ref_build_c99_features_c94.stderr` and
 `logs/cp_build_c99_features_c94.stderr`.  The C+ driver does not alias `c94` to
-`iso9899:199409`; it forwards the token.  All 10 `c94` build cases (2 sources x
-5 compiler/probe modes, plus 6 real-project builds) fail for this reason.
+`iso9899:199409`; it forwards the token.  All 12 `c94` build cases (2 sources x
+ref/c+/c+ped = 6, plus 3 projects x safe/legacy = 6) fail for this reason.
 
 ### 5.2 `iso9899:199409` is accepted as a spelling but is not C99 — PARTIAL
 

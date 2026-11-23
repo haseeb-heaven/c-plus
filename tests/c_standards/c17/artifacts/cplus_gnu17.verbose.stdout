@@ -24,6 +24,6 @@ backend: /usr/bin/clang
   -std=gnu17
   -c
   -o
-  /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-81763-0.o
-  tests/c_standards/c17/.cplus-tmp-81763-0.c
+  /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-94192-0.o
+  tests/c_standards/c17/.cplus-tmp-94192-0.c
 built /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/verbose_gnu17

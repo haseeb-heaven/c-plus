@@ -47,8 +47,34 @@ static int fmt_check_stream(const char *api, FILE *stream) {
     return 0;
 }
 
+/* Reject any "$" positional-argument marker outright (redteam F1).  In printf
+ * syntax '$' only ever has meaning immediately after '%' or after the decimal
+ * argument index of a conversion; a literal '$' in ordinary format text is
+ * left untouched, so valid non-positional formats keep their behavior.
+ *
+ * Rationale: a positional specifier can hide a '%n' conversion from an
+ * incomplete parser (e.g. "%1$2$n" was mis-scanned as width "2" followed by a
+ * stray '$', stepping past the 'n').  This library never needs positional
+ * arguments, so refusing them wholesale is safe and closes the whole class of
+ * bypasses (including "%11$22$n", which otherwise reads a wild vararg and
+ * crashes).  Returns 1 to be treated like a forbidden-%n violation. */
+static int cplus_fmt_has_positional(const char *fmt) {
+    const unsigned char *p = (const unsigned char *)fmt;
+    if (!p) return 0;
+    while (*p) {
+        if (*p != '%') { ++p; continue; }
+        ++p;
+        if (*p == '%') { ++p; continue; }          /* escaped '%' is literal */
+        if (*p == '$') return 1;                   /* %$... direct positional */
+        while (*p >= '0' && *p <= '9') ++p;
+        if (*p == '$') return 1;                   /* %N$... indexed positional */
+    }
+    return 0;
+}
+
 static int cplus_fmt_has_percent_n(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
+    if (cplus_fmt_has_positional(fmt)) return 1;   /* refuse all positional forms */
     if (!p) return 0;
     while (*p) {
         const unsigned char *q;
@@ -88,6 +114,11 @@ static int cplus_fmt_has_percent_n(const char *fmt) {
 /* Returns 0 if safe, 1 if %n present, 2 if unbounded %s or %[...]. */
 static int cplus_scanf_fmt_check(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
+    /* Same positional-specifier hazard as the printf scanner (redteam F1):
+     * '$' after a conversion index can hide a %n write from an incomplete
+     * parser.  Refuse positional forms in scanf as well; literal '$' text is
+     * unaffected by the helper. */
+    if (cplus_fmt_has_positional(fmt)) return 1;
     if (!p) return 0;
     while (*p) {
         int suppressed = 0;

@@ -33,6 +33,19 @@ typedef size_t rsize_t;
  * returns an error code only for constraint violations. `cplus_memzero_s` keeps
  * zero-length calls defined.
  *
+ * When a checked adapter has a PROVABLE destination capacity (a malloc_s /
+ * calloc_s / realloc_s allocation, including an interior pointer, or a
+ * compiler-visible object size), a caller-supplied `dmax` larger than that
+ * capacity is refused early with ESNOSPC (406) and errno = ERANGE. This avoids
+ * safeclib's constraint-error path, which clears `dmax` bytes of `dest` and
+ * would itself overrun the object. On ERROR paths the adapters also publish a
+ * standard errno value (EINVAL / ERANGE / EOVERFLOW) in addition to the safeclib
+ * code; test the return code with `!= 0`, or errno with `!= 0`, never `< 0`.
+ *
+ * Honest boundary: raw `cplus_sc_*` entry points and destinations whose
+ * capacity is unknown at the library layer (ordinary stack buffers, host
+ * malloc) cannot be clamped here; see tests/defense/memory/HARDENING.md.
+ *
  * Scope / honesty: these run runtime constraint checks (null, bounds, overlap,
  * max size). They do NOT prove pointer provenance, ownership, lifetime, or
  * alias/UAF safety — this is not Rust-grade safety, and those properties remain

@@ -49,7 +49,15 @@ for dir in */; do
     fi
 
     total=$((total + 1))
-    timeout 300 sh "$script" >"$log" 2>&1
+    # Honour each suite's shebang rather than forcing one shell: some suite
+    # scripts use bash, and not every one carries the executable bit.  We must
+    # not modify sibling files to make this aggregate runner work.
+    first_line=$(sed -n '1p' "$script")
+    case "$first_line" in
+        *bash*) runner=bash ;;
+        *)      runner=sh ;;
+    esac
+    timeout 300 "$runner" "$script" >"$log" 2>&1
     rc=$?
 
     case "$rc" in

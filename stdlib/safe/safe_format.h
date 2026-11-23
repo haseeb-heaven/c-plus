@@ -44,7 +44,14 @@ extern "C" {
 
 #ifndef CPLUS_SAFE_OBJ_SIZE
 #if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 0)
+/* Type 1 = nearest enclosing object.  Type 0 returns the OBJECT size of the
+ * whole enclosing struct for a member pointer (redteam F2: s.a[8] inside a
+ * 16-byte struct reported 16), which let dmax exceed the member's real extent
+ * and overwrite the adjacent field.  With type 1 the compiler uses the member
+ * subobject's true size, so struct members are checked just like flat arrays.
+ * For flat arrays and whole objects types 0 and 1 are identical, so valid
+ * non-member behavior is unchanged. */
+#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 1)
 #else
 #define CPLUS_SAFE_OBJ_SIZE(p) ((size_t)-1)
 #endif

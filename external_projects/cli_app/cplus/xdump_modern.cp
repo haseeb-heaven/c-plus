@@ -403,8 +403,12 @@ int main(int argc, char **argv) {
             if(argc != 1 && i + 1 < argc)
                 putchar('\n');
         }
-    } else
-        xdump(stdin, "(standard input)");
+    } else {
+        /* stdlib/file.hp borrowed handle: stdin stays owned by libc (no
+         * close), while the C+ wrapper documents the non-owning use. */
+        file std_input = file_borrow(stdin);
+        xdump(std_input.native(), "(standard input)");
+    }
 
     exit(EXIT_SUCCESS);
 }

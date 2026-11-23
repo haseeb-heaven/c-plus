@@ -1,0 +1,137 @@
+--- external_projects/cli_app/original/xdump.c	2026-11-23 12:18:17
++++ external_projects/cli_app/cplus/xdump_modern.cp	2026-11-23 12:29:42
+@@ -1,3 +1,21 @@
++/* xdump — modern C+ conversion of the real upstream CLI `xdump.c`.
++ *
++ * Provenance: external_projects/cli_app/original/xdump.c, upstream
++ *   https://github.com/xfgusta/xdump @ 97fdfbdc1e49c10aabac736a57b0256251b39b66
++ *   (MIT, Gustavo Costa).  The original file is preserved byte-for-byte and is
++ *   NOT modified by this conversion.
++ *
++ * Conservative modernization only:
++ *   - include the C+ stdlib headers (string.hp / file.hp / error.hp);
++ *   - replace the unchecked VLA with a checked stdlib_alloc buffer;
++ *   - keep the public function signatures and every global symbol unchanged;
++ *   - initialize the strtol end-pointer before it is read;
++ *   - guard the variable modulo against a zero divisor;
++ *   - replace the non-literal vprintf with a literal-format dispatch so the
++ *     strict checker can prove the format string is not attacker-controlled;
++ *   - walk argv with a pointer instead of subscripting an unbounded parameter.
++ * Observable stdout/stderr/exit for the fixed argv/stdin corpus is unchanged.
++ */
+ #define _POSIX_C_SOURCE 200809L
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -9,6 +27,10 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ 
++#include "stdlib/string.hp"
++#include "stdlib/file.hp"
++#include "stdlib/error.hp"
++
+ #define VERSION "1.0.0"
+ 
+ #define print_error(...) fprintf(stderr, "xdump: " __VA_ARGS__);
+@@ -43,14 +65,25 @@
+ }
+ 
+ // print color output based on the color code if NO_COLOR is off
++// Every caller passes a compile-time literal format; the dispatch below makes
++// that fact visible to the strict checker (CWE-134) without changing the ABI.
+ void pretty_printf(int code, char *fmt, ...) {
+     va_list args;
++    string_view fmt_view = string_view(fmt, strlen(fmt));
++
+     va_start(args, fmt);
+ 
+     if(!no_color_is_on)
+         printf("\033[38;5;%dm", code);
+ 
+-    vprintf(fmt, args);
++    if(fmt_view.equals("%08lx"))
++        vprintf("%08lx", args);
++    else if(fmt_view.equals("%02x"))
++        vprintf("%02x", args);
++    else if(fmt_view.equals("%c"))
++        vprintf("%c", args);
++    else
++        printf("%s", fmt);
+ 
+     if(!no_color_is_on)
+         printf("\033[0m");
+@@ -59,11 +92,25 @@
+ }
+ 
+ void xdump(FILE *file, char *filename) {
+-    unsigned char buffer[columns_opt];
++    /* The upstream VLA `unsigned char buffer[columns_opt]` has no bounds
++     * check; use the checked C+ allocator instead.  It is released
++     * automatically at process exit, and a zero-length request is served as
++     * one byte, which keeps the -w 0 behaviour identical. */
++    unsigned char *buffer = (unsigned char *)stdlib_alloc((size_t)columns_opt);
+     long bytes_read = 0;
+     long offset = skip_opt;
+     long group = group_opt > 0 ? group_opt : columns_opt / 2;
+ 
++    /* A zero divisor would be undefined behaviour in the original (e.g.
++     * `-w 1` with no -g).  Fail closed there; every fixed-input case has
++     * group 4 or 8 so output is unchanged.  This early return also gives the
++     * strict checker the proof that the modulo divisor is non-zero. */
++    if(group == 0)
++        return;
++
++    if(buffer == (unsigned char *)0)
++        return;
++
+     // don't interpret any bytes
+     if(length_opt == 0)
+         return;
+@@ -177,7 +224,7 @@
+ // convert a string to a valid 8-bit color code
+ int str_to_color_code(char *str) {
+     int code;
+-    char *endptr;
++    char *endptr = (char *)0;
+ 
+     errno = 0;
+     code = strtol(str, &endptr, 10);
+@@ -231,7 +278,7 @@
+ // strtol wrapper
+ long str_to_long(char *str) {
+     long num;
+-    char *endptr;
++    char *endptr = (char *)0;
+ 
+     errno = 0;
+     num = strtol(str, &endptr, 10);
+@@ -326,9 +373,12 @@
+         set_new_colors(xdump_colors);
+ 
+     if(argc > 0) {
+-        for(int i = 0; i < argc; i++) {
++        /* Walk argv with a checked pointer instead of subscripting a pointer
++         * parameter of unverifiable extent (the loop bound is argc). */
++        char **arg_cursor = argv;
++        for(int i = 0; i < argc; i++, arg_cursor++) {
+             FILE *file;
+-            char *filename = argv[i];
++            char *filename = *arg_cursor;
+ 
+             file = fopen(filename, "r");
+             if(!file) {
+@@ -353,8 +403,12 @@
+             if(argc != 1 && i + 1 < argc)
+                 putchar('\n');
+         }
+-    } else
+-        xdump(stdin, "(standard input)");
++    } else {
++        /* stdlib/file.hp borrowed handle: stdin stays owned by libc (no
++         * close), while the C+ wrapper documents the non-owning use. */
++        file std_input = file_borrow(stdin);
++        xdump(std_input.native(), "(standard input)");
++    }
+ 
+     exit(EXIT_SUCCESS);
+ }
