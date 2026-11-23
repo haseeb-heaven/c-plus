@@ -310,6 +310,13 @@ public:
   callParamExtents() const {
     return callParamExtents_;
   }
+  const std::set<std::pair<std::string, unsigned>> &conflictedParams() const {
+    return conflictedParams_;
+  }
+  void setConflictedParams(
+      const std::set<std::pair<std::string, unsigned>> &s) {
+    conflictedParams_ = s;
+  }
   void setCallParamExtents(
       const std::map<std::string, std::map<unsigned, ParamExtent>> &m) {
     callParamExtents_ = m;
@@ -325,6 +332,12 @@ public:
   }
   const std::map<std::string, long long> &returnedFixedExtents() const {
     return returnedFixedExtent_;
+  }
+  const std::map<std::string, long long> &returnedAllocExtents() const {
+    return returnedAllocExtent_;
+  }
+  void setReturnedAllocExtents(const std::map<std::string, long long> &m) {
+    returnedAllocExtent_ = m;
   }
   const std::map<unsigned, long long> &callReturnExtent() const {
     return callReturnExtent_;
@@ -893,14 +906,19 @@ public:
         return &cached;
       }
     }
+    // An explicit cast must not silently erase a proven extent.
+    std::string name = varNameOf(e);
+    if (name.empty())
+      name = castedVarName(e);
+    if (name.empty())
+      return nullptr;
+    auto it = heapAllocs_.find(name);
+    if (it == heapAllocs_.end() || !it->second.decl)
+      return nullptr;
     const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenImpCasts());
-    if (!ref)
-      return nullptr;
-    const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
-    if (!vd)
-      return nullptr;
-    auto it = heapAllocs_.find(vd->getNameAsString());
-    if (it == heapAllocs_.end() || it->second.decl != vd)
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (vd && it->second.decl != vd &&
+        it->second.decl->getCanonicalDecl() != vd->getCanonicalDecl())
       return nullptr;
     return &it->second;
   }
@@ -1887,9 +1905,13 @@ public:
     auto pit = callParamExtents_.find(currentFunction_);
     if (pit != callParamExtents_.end())
       for (const auto *pv : fd->parameters()) {
-        auto eit = pit->second.find(pv->getFunctionScopeIndex());
+        unsigned slot = pv->getFunctionScopeIndex();
+        auto eit = pit->second.find(slot);
         if (eit == pit->second.end())
           continue;
+        if (conflictedParams_.count({currentFunction_, slot}) ||
+            eit->second.bytes < 0)
+          continue; // no single proven extent for this parameter
         HeapAllocState st;
         st.bytes = eit->second.bytes;
         st.origin = eit->second.origin;
@@ -1903,11 +1925,39 @@ public:
       bool hasRetParam = false, ambiguous = false;
       long long fixedExtent = 0;
       bool hasFixed = false;
+      long long allocExtent = 0;
+      bool hasAlloc = false;
       std::function<void(const Stmt *)> scanRet = [&](const Stmt *n) {
         if (!n) return;
         if (const auto *ret = dyn_cast<ReturnStmt>(n))
           if (const Expr *rv = ret->getRetValue()) {
             const Expr *v = rv->IgnoreParenCasts();
+            // `return malloc(N)` / `return calloc(N,S)` is a heap factory:
+            // its extent is a property of the returned pointer value.
+            if (const auto *call = dyn_cast<CallExpr>(v))
+              if (call->getDirectCallee() && call->getNumArgs() >= 1) {
+                std::string cn = call->getDirectCallee()->getNameAsString();
+                if (cn == "malloc" || cn == "calloc" || cn == "realloc") {
+                  long long n = -1;
+                  const Expr *sz = cn == "realloc" && call->getNumArgs() >= 2
+                                       ? call->getArg(1)
+                                       : call->getArg(0);
+                  if (evalByteCount(sz->IgnoreParenImpCasts(), n) && n > 0) {
+                    if (cn == "calloc" && call->getNumArgs() >= 2) {
+                      long long elem = 1;
+                      if (evalByteCount(
+                              call->getArg(1)->IgnoreParenImpCasts(), elem) &&
+                          elem > 0 && n <= LLONG_MAX / elem)
+                        n *= elem;
+                    }
+                    if (cn != "calloc" || n > 0) {
+                      if (hasAlloc && allocExtent != n) ambiguous = true;
+                      allocExtent = n;
+                      hasAlloc = true;
+                    }
+                  }
+                }
+              }
             if (const auto *ref = dyn_cast<DeclRefExpr>(v)) {
               const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
               if (vd && !vd->hasLocalStorage() && vd->getType()->isArrayType())
@@ -1920,6 +1970,32 @@ public:
                     if (hasFixed && fixedExtent != bytes) ambiguous = true;
                     fixedExtent = bytes;
                     hasFixed = true;
+                  }
+                }
+              // `int *p = malloc(N); return p;` — the common heap factory.
+              if (vd && vd->hasLocalStorage() && vd->getInit())
+                if (const auto *ic = dyn_cast<CallExpr>(
+                        vd->getInit()->IgnoreParenCasts())) {
+                  const FunctionDecl *idc = ic->getDirectCallee();
+                  if (idc && ic->getNumArgs() >= 1) {
+                    std::string cn = idc->getNameAsString();
+                    if (cn == "malloc" || cn == "calloc") {
+                      long long nb = -1;
+                      if (evalByteCount(ic->getArg(0)->IgnoreParenImpCasts(),
+                                        nb) &&
+                          nb > 0) {
+                        if (cn == "calloc" && ic->getNumArgs() >= 2) {
+                          long long es = 1;
+                          if (evalByteCount(
+                                  ic->getArg(1)->IgnoreParenImpCasts(), es) &&
+                              es > 0 && nb <= LLONG_MAX / es)
+                            nb *= es;
+                        }
+                        if (hasAlloc && allocExtent != nb) ambiguous = true;
+                        allocExtent = nb;
+                        hasAlloc = true;
+                      }
+                    }
                   }
                 }
               const auto *pvd = dyn_cast<ParmVarDecl>(vd);
@@ -1937,6 +2013,8 @@ public:
       if (!ambiguous) {
         if (hasRetParam) returnedParam_[fd->getNameAsString()] = retParam;
         if (hasFixed) returnedFixedExtent_[fd->getNameAsString()] = fixedExtent;
+        if (hasAlloc)
+          returnedAllocExtent_[fd->getNameAsString()] = allocExtent;
       }
     }
     // Infer a tiny arithmetic effect for helpers like `int add(int a,int b)
@@ -2267,7 +2345,34 @@ public:
         aliasGroups_[alias] = group;
       if (releasedVars_.count(initName))
         releasedVars_.insert(vd->getNameAsString());
+      // A copy of a pointer with a proven extent keeps that extent.  This is
+      // the same propagate-on-copy discipline used by SoftBoundCETS's
+      // propagateMetadata, expressed in C+'s compiler-side extent table.
+      auto hit = heapAllocs_.find(initName);
+      if (hit != heapAllocs_.end() && hit->second.decl) {
+        HeapAllocState copied = hit->second;
+        copied.decl = vd;
+        heapAllocs_[vd->getNameAsString()] = copied;
+      }
+      auto sit = stackArrayExtents_.find(initName);
+      if (sit != stackArrayExtents_.end())
+        stackArrayExtents_[vd->getNameAsString()] = sit->second;
     }
+    // A heap factory (`return malloc(N)`) gives the call result a proven
+    // extent; carry it into the variable that receives the result.
+    if (conditionalDepth_ == 0 && vd->getInit())
+      if (const auto *call =
+              dyn_cast<CallExpr>(vd->getInit()->IgnoreParenCasts())) {
+        auto cit =
+            callReturnExtent_.find(call->getBeginLoc().getRawEncoding());
+        if (cit != callReturnExtent_.end() && cit->second > 0) {
+          HeapAllocState st;
+          st.bytes = cit->second;
+          st.origin = ExtentOrigin::Heap;
+          st.decl = vd;
+          heapAllocs_[vd->getNameAsString()] = st;
+        }
+      }
     return true;
   }
 
@@ -3091,19 +3196,32 @@ public:
       // Record allocation extents passed as arguments so the callee can
       // bounds-check its parameter accesses.
       for (unsigned i = 0; i < call->getNumArgs(); ++i) {
-        std::string an = varNameOf(call->getArg(i));
+        std::string an = castedVarName(call->getArg(i));
+        long long ext = -1;
+        ExtentOrigin origin = ExtentOrigin::Unknown;
         auto hit = heapAllocs_.find(an);
         if (!an.empty() && hit != heapAllocs_.end()) {
-          callParamExtents_[name][i].bytes = hit->second.bytes;
-          callParamExtents_[name][i].origin =
-              hit->second.origin == ExtentOrigin::Unknown
-                  ? ExtentOrigin::Heap
-                  : hit->second.origin;
+          ext = hit->second.bytes;
+          origin = hit->second.origin == ExtentOrigin::Unknown
+                       ? ExtentOrigin::Heap
+                       : hit->second.origin;
         }
         auto sit = stackArrayExtents_.find(an);
         if (!an.empty() && sit != stackArrayExtents_.end()) {
-          callParamExtents_[name][i].bytes = sit->second;
-          callParamExtents_[name][i].origin = ExtentOrigin::Stack;
+          ext = sit->second;
+          origin = ExtentOrigin::Stack;
+        }
+        if (ext < 0)
+          continue;
+        auto &slot = callParamExtents_[name][i];
+        // A second, different extent makes the parameter unverifiable:
+        // keep the "unknown" marker instead of last-writer-wins.
+        if (slot.bytes >= 0 && slot.bytes != ext) {
+          conflictedParams_.insert({name, i});
+          slot.bytes = -1;
+        } else if (slot.bytes < 0 || !conflictedParams_.count({name, i})) {
+          slot.bytes = ext;
+          slot.origin = origin;
         }
       }
       // Record the extent of a call that returns one of its pointer arguments
@@ -3125,6 +3243,9 @@ public:
       auto rf = returnedFixedExtent_.find(name);
       if (rf != returnedFixedExtent_.end() && rf->second > 0)
         callReturnExtent_[call->getBeginLoc().getRawEncoding()] = rf->second;
+      auto ra = returnedAllocExtent_.find(name);
+      if (ra != returnedAllocExtent_.end() && ra->second > 0)
+        callReturnExtent_[call->getBeginLoc().getRawEncoding()] = ra->second;
     }
 
     if (name == "signal" && call->getNumArgs() >= 2) {
@@ -4132,10 +4253,14 @@ private:
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, ParamExtent>> callParamExtents_;
+  // A callee parameter passed buffers of different sizes at different call
+  // sites has no single valid extent; do not trust any of them.
+  std::set<std::pair<std::string, unsigned>> conflictedParams_;
   /// Function name -> parameter index returned unchanged by `return p;`.
   std::map<std::string, unsigned> returnedParam_;
   /// Function name -> fixed extent returned from a static/global array.
   std::map<std::string, long long> returnedFixedExtent_;
+  std::map<std::string, long long> returnedAllocExtent_;
   /// Source location (raw encoding) of a call expression -> returned extent.
   std::map<unsigned, long long> callReturnExtent_;
   std::map<std::string, long long> stackArrayExtents_;
@@ -4295,8 +4420,10 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setAddressTakenVars(collect.addressTakenVars());
   check.setStackArrayExtents(collect.stackArrayExtents());
   check.setCallParamExtents(collect.callParamExtents());
+  check.setConflictedParams(collect.conflictedParams());
   check.setReturnedParams(collect.returnedParams());
   check.setReturnedFixedExtents(collect.returnedFixedExtents());
+  check.setReturnedAllocExtents(collect.returnedAllocExtents());
   check.setCallReturnExtent(collect.callReturnExtent());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
   if (needNativeArithmetic)

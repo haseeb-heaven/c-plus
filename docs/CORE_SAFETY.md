@@ -352,3 +352,20 @@ rust_o         real 0.45s
 The clang number is anomalous relative to earlier benches and needs repeated
 runs on a quiet machine; no performance victory is claimed. Safe C+ carries
 UBSan overhead, similar to Rust's debug-like check cost in this narrow probe.
+
+## P0 heap-bounds and alias pass (Agent 1)
+
+The compiler-side extent tables now propagate through pointer copies, explicit
+casts, conflicting call sites (fail-closed in STRICT) and heap factories
+(`return malloc(N)` / `int *p=malloc(N); return p;`). `heapStateOf` no longer
+loses provenance at an explicit cast. Regression evidence is
+`tests/compiler/agent1/run_bounds_matrix.sh` (13/13 PASS), covering the
+mandatory `malloc(1)` 10-element write, alias/cast/conflict/factory cases and
+three accepted safe controls.
+
+P0 temporal safety closes four previously escaping single-TU UAF shapes via
+cast-transparent aliases, `returnedParam_` alias transfer, a released-pointer
+call-boundary rule and a conservative runtime-index element rule. Evidence:
+`tests/metrics/uaf_evidence_run.py` 12/12 (10 static rejects). This is not a
+general temporal-safety guarantee; CFG-based ownership and symbol/region-keyed
+state remain the next foundation work.
