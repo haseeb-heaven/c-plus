@@ -1,0 +1,4 @@
+clang: error: no such file or directory: 'examples/crt/memcpy_s.c'
+clang: error: no such file or directory: 'build/safe/libcplus_safecrt.a'
+clang: error: no such file or directory: 'build/libc/libcplus_hardened.a'
+clang: error: no input files

@@ -31,3 +31,12 @@ Full command/exit-code log: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/t
 Caller stdout: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stdout
 Caller stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stderr
 Archive symbols: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt
+RC[Cplus_build]=0
+CMD[Cplus_run] timeout=60s: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/c_to_cp_caller
+RC[Cplus_run]=0
+CHECK[final_summary]: grep -F 'calls match' /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stdout
+RESULT: c_to_cp: 24 passed, 0 failed
+Full command/exit-code log: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/results.log
+Caller stdout: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stdout
+Caller stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/caller.stderr
+Archive symbols: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/c_to_cp/artifacts/nm_libc_to_cp.txt

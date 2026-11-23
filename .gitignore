@@ -94,3 +94,13 @@ benchmarks/rust_examples/**/results/
 benchmarks/rust_examples/**/bin/
 benchmarks/rust_examples/**/out/
 benchmarks/rust_examples/**/.out/
+# Generated stdc ABI proof artifacts.
+tests/abi/stdc_*/.build/
+tests/abi/stdc_*/artifacts/
+tests/abi/stdc_*/bin/
+benchmarks/example_rust_compare/**/out/
+benchmarks/example_rust_compare/**/.build/
+benchmarks/example_rust_compare/**/bin/
+benchmarks/example_rust_compare/**/cbuild/
+benchmarks/example_rust_compare/demos_a_d/orig_*
+benchmarks/example_rust_compare/demos_a_d/clang_*
