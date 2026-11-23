@@ -140,3 +140,25 @@ external_projects/**/results/
 tests/redteam/**/results/
 tests/defense/**/results/
 tools/c2modern*/.build/
+
+# All generated binaries and build output (never commit).
+out/
+results/
+*.dylib
+*.a
+examples/modern_gui/dashboard/dashboard
+examples/modern_gui/settings/settings_panel
+examples/utilities/dev_tools/envfilter
+examples/utilities/dev_tools/hexdump
+examples/utilities/dev_tools/numconv
+examples/utilities/dev_tools/sha_lite
+examples/utilities/dev_tools/timeconv
+examples/utilities/security_tools/bounds_check
+examples/utilities/security_tools/checksum
+examples/utilities/security_tools/pwdcheck
+examples/utilities/security_tools/safe_copy
+examples/utilities/security_tools/safe_token
+external_projects/cli_app/cplus/xdump_modern
+external_projects/game_a/cplus/snake_modern
+external_projects/game_b/2048_build
+external_projects/game_b/cplus/2048_modern
