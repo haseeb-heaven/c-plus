@@ -369,7 +369,10 @@ int cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s
         errno = EINVAL;
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memcmp_s", "null pointer");
         cplus_safe_stat_record("memcmp_s", 0);
-        return (s1 == s2) ? 0 : (s1 ? 1 : -1);
+        /* A NULL operand is a constraint violation, never an "equal" result.
+         * Return -1 (the error sentinel) for the both-NULL case too; the
+         * one-NULL ordering sentinels are kept for compatibility. */
+        return (s1 == s2) ? -1 : (s1 ? 1 : -1);
     }
     if (cplus_safe_check_capacity("memcmp_s", s1, n, known_s1, &d1)) return -1;
     if (cplus_safe_check_capacity("memcmp_s", s2, n, known_s2, &d2)) return -1;

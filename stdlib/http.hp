@@ -255,14 +255,19 @@ class http_client {
         }
         rc = curl_easy_perform(this->handle);
         curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, NULL);
-        if (rc != CURLE_OK) {
-            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
-                           curl_easy_strerror(rc));
-            return STDLIB_FAIL;
-        }
+        /* The write callback returns 0 (abort) when the response does not fit,
+         * so libcurl reports CURLE_WRITE_ERROR.  Check the sink FIRST: otherwise
+         * that generic transport error masks the documented bounds refusal and
+         * makes the STDLIB_CATEGORY_BOUNDS branch below unreachable.  Reordering
+         * two checks is ABI-neutral: no signature, layout or symbol change. */
         if (sink.overflow) {
             error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_IO,
                            "response larger than the caller buffer");
+            return STDLIB_FAIL;
+        }
+        if (rc != CURLE_OK) {
+            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                           curl_easy_strerror(rc));
             return STDLIB_FAIL;
         }
         return STDLIB_OK;

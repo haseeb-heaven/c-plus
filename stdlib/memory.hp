@@ -75,13 +75,63 @@ static inline size_t stdlib_mem_capacity(const void *ptr) {
     return stdlib_alloc_size(ptr);
 }
 
+/* Exact quotient without the variable-division operator (which the strict
+ * checker rejects).  Restoring shift-and-subtract long division: unlike
+ * stdlib_safe_div() in error.hp -- a 16-bit one-subtraction-per-bit shortcut
+ * whose result silently saturates once the quotient reaches 2^16 -- this loop
+ * carries the remainder across all size_t bits and is exact for every input.
+ * For elem_size > SIZE_MAX/2 the quotient can only be 0 or 1, which is handled
+ * before the loop so r << 1 can never overflow. */
+static inline size_t stdlib_mem_div_exact(size_t a, size_t b) {
+    size_t q = 0;
+    size_t r = 0;
+    size_t bit;
+    if (b == 0)
+        return 0;
+    if (b > (SIZE_MAX >> 1))
+        return a >= b ? 1 : 0;
+    bit = ((size_t)1) << (sizeof(size_t) * 8 - 1);
+    while (bit != 0) {
+        r = r << 1;
+        if ((a & bit) != 0)
+            r += 1;
+        if (r >= b) {
+            r -= b;
+            q |= bit;
+        }
+        bit >>= 1;
+    }
+    return q;
+}
+
 /* Element count for a tracked block. elem_size 0 means "use the allocation's
  * recorded element size". Returns 0 on success (mirroring
  * stdlib_alloc_query_length) and -1 for NULL/untracked; *out_count is set to 0
- * on failure and is never left stale. */
+ * on failure and is never left stale.
+ *
+ * HARDENING (agent E): this used to delegate to stdlib_alloc_query_length(),
+ * which resolves the quotient through stdlib_safe_div().  That helper only
+ * subtracts each bit once and therefore returns at most 2^16-1: a 100000-byte
+ * tracked block reported 65535 elements instead of 100000, so every bounded
+ * query built on stdlib_mem_count() was wrong for ordinary large buffers.
+ * Element-size resolution and the NULL/untracked contract are unchanged; only
+ * the quotient is now computed exactly. */
 static inline int stdlib_mem_count(const void *ptr, size_t elem_size,
                                    size_t *out_count) {
-    return stdlib_alloc_query_length(ptr, elem_size, out_count);
+    size_t bytes;
+    size_t eff;
+    if (out_count != NULL)
+        *out_count = 0;
+    if (ptr == NULL || out_count == NULL)
+        return -1;
+    bytes = stdlib_alloc_size(ptr);
+    if (bytes == 0)
+        return -1;
+    eff = elem_size > 0 ? elem_size : stdlib_alloc_elem_size(ptr);
+    if (eff == 0)
+        eff = 1;
+    *out_count = stdlib_mem_div_exact(bytes, eff);
+    return 0;
 }
 
 /* ---- generation tokens -------------------------------------------------- */

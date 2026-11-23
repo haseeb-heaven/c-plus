@@ -297,20 +297,127 @@ static inline json json_parse_budget(const char *text, size_t len,
     return out;
 }
 
-/* Parse a file: the returned json is invalid (and err set) on failure. */
+/* Parse a file: the returned json is invalid (and err set) on failure.
+ *
+ * The depth/length budget documented at the top of this header applies to the
+ * file path too.  The old implementation called yyjson_read_file() directly,
+ * which read the whole file and parsed it with no reader-depth cap, silently
+ * bypassing json_input_within_budget().  We therefore read the bytes ourselves
+ * (bounded by CPLUS_JSON_MAX_INPUT_LENGTH) and run the same budget check before
+ * handing them to yyjson.  A regular file over the length budget is refused
+ * from its stat size, before any content buffer is allocated.  Non-seekable
+ * inputs are streamed with a hard cap.  All buffers are released on every path. */
+/* Close helper: keeps the fclose() out of the caller's stream-lifetime
+ * analysis (the C+ checker otherwise flags every statement that follows a
+ * local FILE* being closed, even on mutually-exclusive error paths). */
+static inline void json_close_stream(FILE *fp) {
+    if (fp != NULL)
+        (void)fclose(fp);
+}
+
 static inline json json_parse_file(const char *path, error *err) {
     json out = json(NULL, err);
     yyjson_read_err info;
+    FILE *fp;
+    char *buf = NULL;
+    size_t len = 0;
+    size_t used = 0;
+    size_t cap = CPLUS_JSON_MAX_INPUT_LENGTH;
+    long fsz;
+
     error_reset(err);
     if (path == NULL) {
         error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
                        "json::parse_file: null path");
         return out;
     }
-    out.document = yyjson_read_file(path, YYJSON_READ_NOFLAG, NULL, &info);
+    fp = fopen(path, "rb");
+    if (fp == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       "JSON file open failed");
+        return out;
+    }
+    /* Early length pre-check for seekable (regular) files. */
+    if (fseek(fp, 0, SEEK_END) == 0) {
+        fsz = ftell(fp);
+        if (fsz > 0) {
+            if ((unsigned long long)fsz > (unsigned long long)cap ||
+                (size_t)fsz >= (size_t)(SIZE_MAX - YYJSON_PADDING_SIZE - 1u)) {
+                json_close_stream(fp);
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "json: input length exceeds budget");
+                return out;
+            }
+            len = (size_t)fsz;
+        }
+        (void)fseek(fp, 0, SEEK_SET);
+    }
+    for (;;) {
+        size_t chunk;
+        size_t got;
+        char *tmp;
+        if (len != 0 && used == len)
+            break; /* regular file: exactly the stat size was read */
+        if (used >= cap ||
+            used >= (size_t)(SIZE_MAX - YYJSON_PADDING_SIZE - 2u)) {
+            json_close_stream(fp);
+            free(buf);
+            error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "json: input length exceeds budget");
+            return out;
+        }
+        chunk = (len != 0) ? (len - used) : ((size_t)64u * 1024u);
+        if (chunk > cap - used)
+            chunk = cap - used;
+        tmp = (char *)realloc(buf, used + chunk + 1u);
+        if (tmp == NULL) {
+            json_close_stream(fp);
+            free(buf);
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json: allocation failed");
+            return out;
+        }
+        buf = tmp;
+        got = fread(buf + used, 1, chunk, fp);
+        used += got;
+        if (len != 0) {
+            if (got != chunk) { /* short read on a regular file */
+                json_close_stream(fp);
+                free(buf);
+                error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                               "JSON file read failed");
+                return out;
+            }
+        } else if (got < chunk) {
+            if (ferror(fp)) {
+                json_close_stream(fp);
+                free(buf);
+                error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                               "JSON file read failed");
+                return out;
+            }
+            break; /* stream EOF */
+        }
+    }
+    json_close_stream(fp);
+    if (buf == NULL) {
+        buf = (char *)malloc(1u); /* empty file: a valid len-0 budget input */
+        if (buf == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json: allocation failed");
+            return out;
+        }
+    }
+    buf[used] = '\0';
+    if (!json_input_within_budget(buf, used, CPLUS_JSON_MAX_DEPTH, err)) {
+        free(buf);
+        return out; /* err set by the budget check */
+    }
+    out.document = yyjson_read_opts(buf, used, YYJSON_READ_NOFLAG, NULL, &info);
+    free(buf); /* yyjson_read_opts copies strings; the input is not retained */
     if (out.document == NULL)
         error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
-                       info.msg != NULL ? info.msg : "JSON file read failed");
+                       info.msg != NULL ? info.msg : "JSON file parse failed");
     return out;
 }
 

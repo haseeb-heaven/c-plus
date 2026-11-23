@@ -14,6 +14,17 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 
+/* HARDENING (thread2): libuv's uv_run() accepts only UV_RUN_DEFAULT,
+ * UV_RUN_ONCE or UV_RUN_NOWAIT.  Any other int cast to uv_run_mode is silently
+ * treated as a no-op that returns 0, so an unvalidated loop::run() reported
+ * STDLIB_OK with a clear error even though no work happened.  This fail-closed
+ * predicate is a header-only static helper: no signature, struct layout or
+ * exported symbol changes. */
+static inline int stdlib_uv_run_mode_valid(int mode) {
+    return mode == (int)UV_RUN_DEFAULT || mode == (int)UV_RUN_ONCE ||
+           mode == (int)UV_RUN_NOWAIT;
+}
+
 class loop {
     uv_loop_t native_loop;
     int initialized;
@@ -45,6 +56,11 @@ class loop {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "loop::run: invalid loop");
             return STDLIB_FAIL;
         }
+        if (!stdlib_uv_run_mode_valid(mode)) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "loop::run: invalid uv_run mode");
+            return STDLIB_FAIL;
+        }
         if (uv_run(&this->native_loop, (uv_run_mode)mode) != 0)
             cplus_log(CPLUS_LOG_DEBUG, "loop::run: active handles remain");
         return STDLIB_OK;
@@ -72,8 +88,17 @@ class loop {
             uv_run(&this->native_loop, UV_RUN_NOWAIT);
             guard++;
         }
-        if (uv_loop_close(&this->native_loop) != 0)
+        /* HARDENING (thread2): uv_loop_close() fails with UV_EBUSY when a
+         * handle is still active.  The old code cleared `initialized` on that
+         * failure, which lied to valid() and made every later drop() a no-op,
+         * so the native loop could never be retried or released.  Stay
+         * initialized until the close actually succeeds: a later explicit
+         * drop() (and the compiler-emitted drop at scope exit) then retries
+         * the bounded drain instead of silently leaking the loop. */
+        if (uv_loop_close(&this->native_loop) != 0) {
             cplus_log(CPLUS_LOG_WARN, "loop::drop: libuv loop still busy");
+            return; /* keep initialized == 1 so a later drop() can retry */
+        }
         this->initialized = 0;
     }
 };
