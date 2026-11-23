@@ -94,6 +94,10 @@ build_run null_return_guard "$ROOT/tests/core/positive/null_return_guard.c"
 build_run init_all_branches "$ROOT/tests/core/positive/init_all_branches.c"
 build_run pointer_one_past "$ROOT/tests/core/positive/pointer_one_past.c"
 build_run explicit_drop_once "$ROOT/tests/core/positive/explicit_drop_once.cp"
+build_run raii_cast_drop "$ROOT/tests/core/positive/raii_cast_drop.cp"
+build_run raii_conditional_drop "$ROOT/tests/core/positive/raii_conditional_drop.cp"
+build_run raii_defer_cond "$ROOT/tests/core/positive/raii_defer_cond.cp"
+build_run raii_switch_continue "$ROOT/tests/core/positive/raii_switch_continue.cp"
 build_run loop_cleanup "$ROOT/tests/core/positive/loop_cleanup.cp"
 build_run recursive_resource "$ROOT/tests/core/positive/recursive_resource.cp"
 build_run partial_init "$ROOT/tests/core/positive/partial_init.cp"
@@ -201,6 +205,21 @@ expect_reject strcpy_overflow "$ROOT/tests/safety/strcpy_overflow.c"
 expect_reject strcpy_s_invalid_size "$ROOT/tests/safety/strcpy_s_invalid_size.c"
 expect_reject borrow_escape "$ROOT/tests/safety/borrow_escape.c"
 expect_reject thread_invalid_sharing "$ROOT/tests/safety/thread_invalid_sharing.c"
+
+# Diagnostics regression: STRICT must fail closed when the safety AST cannot
+# be built, in BOTH `check` and `build` (previously only `check` did).
+ast_parse_fail() {
+  name=$1; shift
+  if "$@" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
+    bad "$name" "STRICT accepted a TU with an unbuildable safety AST"
+  elif grep -q 'CPLUS-ANALYSIS' "$OUT/$name.stderr"; then
+    ok "$name"
+  else
+    bad "$name" "missing CPLUS-ANALYSIS diagnostic"
+  fi
+}
+ast_parse_fail ast_parse_check "$CPLUS" check --strict --sanitize=none "$ROOT/tests/safety/ast_parse_failure.c"
+ast_parse_fail ast_parse_build "$CPLUS" build --strict --sanitize=none "$ROOT/tests/safety/ast_parse_failure.c" -o "$OUT/ast_parse_failure.bin"
 
 echo "core safety: ownership warnings"
 build_expect_stderr moved_from_warning "$ROOT/tests/safety/moved_from_warning.cp" "use of moved-from"

@@ -1381,15 +1381,17 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
         }
 
         SafetyAstProbe probe = probeSafetyAst(loweredText, astArgs, input);
-        // Fail closed (every TU): a failed parse means checkAstSafety silently
-        // skipped every check. Reporting success in STRICT `check` would then
-        // accept a program that was never analysed.
-        if (!probe.parsed && isCheckCommand(opts)) {
+        // Fail closed (every TU, both `check` and `build`): a failed parse
+        // means checkAstSafety silently skipped every check.  Reporting
+        // success in STRICT `check` accepted a program that was never
+        // analysed; emitting an executable in STRICT `build` did the same
+        // thing while looking like a successful protected build.
+        if (!probe.parsed) {
           Diag d;
           d.level = DiagLevel::Error;
           d.message = "[CPLUS-ANALYSIS] cannot build the C+ safety AST for "
-                      "this translation unit; STRICT check would silently "
-                      "skip all safety analysis";
+                      "this translation unit; STRICT would silently skip all "
+                      "safety analysis";
           d.file = input;
           diags.report(std::move(d));
         }
