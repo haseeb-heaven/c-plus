@@ -48,3 +48,6 @@ build/fuzz100/
 build/final-evidence/
 tests/fuzz100/__pycache__/
 tests/stdlib/agent2/results/run/
+
+# Ignore all Apple property-list files
+*.plist
