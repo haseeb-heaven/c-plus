@@ -114,3 +114,7 @@ examples/expanded/**/_probe*
 examples/expanded/**/.probe*
 examples/expanded/**/results/
 examples/expanded/**/bin/
+examples/expanded/safety/bounds_demo
+examples/expanded/safety/lifetime_demo
+examples/expanded/safety/memcpy_s_demo
+examples/expanded/safety/sync_demo
