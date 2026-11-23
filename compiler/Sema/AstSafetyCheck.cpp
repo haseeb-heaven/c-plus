@@ -1559,18 +1559,20 @@ public:
       onePastEnd_.clear();
       strlenSized_.clear();
 
-      auto pit = callParamExtents_.find(currentFunction_);
-      if (pit != callParamExtents_.end())
-        for (const auto *pv : fd->parameters()) {
-          auto eit = pit->second.find(pv->getFunctionScopeIndex());
-          if (eit == pit->second.end())
-            continue;
-          HeapAllocState st;
-          st.bytes = eit->second;
-          st.decl = pv;
-          heapAllocs_[pv->getNameAsString()] = st;
-        }
     }
+    // Parameter extents inferred at call sites apply in both passes so
+    // nested calls can propagate them further.
+    auto pit = callParamExtents_.find(currentFunction_);
+    if (pit != callParamExtents_.end())
+      for (const auto *pv : fd->parameters()) {
+        auto eit = pit->second.find(pv->getFunctionScopeIndex());
+        if (eit == pit->second.end())
+          continue;
+        HeapAllocState st;
+        st.bytes = eit->second;
+        st.decl = pv;
+        heapAllocs_[pv->getNameAsString()] = st;
+      }
     // Infer a tiny arithmetic effect for helpers like `int add(int a,int b)
     // { return a + b; }` so callers with constant arguments can be checked
     // without requiring new annotations or interprocedural machinery.
@@ -1747,6 +1749,16 @@ public:
         } else {
         }
       }
+      // Fixed-size stack arrays have a known byte extent that can be passed
+      // to callees through array-to-pointer decay.
+      if (vd->hasLocalStorage() && vd->getType()->isArrayType())
+        if (const auto *cat = ctx_.getAsConstantArrayType(vd->getType())) {
+          QualType elem = cat->getElementType();
+          unsigned es = ctx_.getTypeSize(elem) / 8u;
+          if (es)
+            stackArrayExtents_[vd->getNameAsString()] =
+                static_cast<long long>(cat->getSize().getZExtValue() * es);
+        }
       // Record constant-valued struct fields from an aggregate initializer,
       // including designated ones: `struct P p = {.count = N, .size = 16};`
       // makes `p.count` / `p.size` compile-time constants.
@@ -2663,7 +2675,7 @@ public:
       }
     }
 
-    if (!report_ && callee) {
+    if (callee) {
       // Record allocation extents passed as arguments so the callee can
       // bounds-check its parameter accesses.
       for (unsigned i = 0; i < call->getNumArgs(); ++i) {
@@ -2671,6 +2683,9 @@ public:
         auto hit = heapAllocs_.find(an);
         if (!an.empty() && hit != heapAllocs_.end())
           callParamExtents_[name][i] = hit->second.bytes;
+        auto sit = stackArrayExtents_.find(an);
+        if (!an.empty() && sit != stackArrayExtents_.end())
+          callParamExtents_[name][i] = sit->second;
       }
     }
 
@@ -3360,6 +3375,20 @@ public:
             return true;
           }
     }
+    // A subscript through a pointer parameter with no proven extent is not
+    // safe by default. STRICT rejects it; DEFAULT warns. One-past pointer
+    // formation remains legal because this only checks actual subscripts.
+    const Expr *subBase = subscript->getBase()->IgnoreParenCasts();
+    if (const auto *pref = dyn_cast<DeclRefExpr>(subBase))
+      if (const auto *pvd = dyn_cast<ParmVarDecl>(pref->getDecl()))
+        if (pvd->getType()->isPointerType() && !heapStateOf(subBase)) {
+          std::string msg = "pointer parameter '" +
+                            pvd->getNameAsString() +
+                            "' has unverifiable extent; subscript cannot be "
+                            "proven safe";
+          if (strict_) report(subscript->getBeginLoc(), msg);
+          else warnAt(subscript->getBeginLoc(), msg);
+        }
     if (const auto *iref = dyn_cast<DeclRefExpr>(
             subscript->getIdx()->IgnoreParenCasts())) {
       auto it = snprintfResults_.find(iref->getDecl()->getNameAsString());
@@ -3641,6 +3670,7 @@ private:
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, long long>> callParamExtents_;
+  std::map<std::string, long long> stackArrayExtents_;
   std::set<std::string> allGlobals_;
   std::map<std::string, int> threadEntryCounts_;
   std::map<std::string, SourceLocation> threadEntryLocs_;
@@ -3736,7 +3766,10 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
     return; // AST parse failed; do not guess from a broken AST.
 
   SafetyVisitor collect(ast->getASTContext(), diags, filename, false);
-  collect.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
+  // Iterate the collection pass so parameter extents inferred at later call
+  // sites can propagate into earlier-defined callees (nested chains).
+  for (int round = 0; round < 3; ++round)
+    collect.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   SafetyVisitor check(ast->getASTContext(), diags, filename, true);
   check.setStrict(strict);

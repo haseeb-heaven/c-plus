@@ -52,6 +52,11 @@ static const Case cases[] = {
 {"zero_alloc", "#include <stdlib.h>\nint main(void){void*p=malloc(0);(void)p;return 0;}\n", "zero-size allocation"},
 {"strcpy_overflow", "#include <string.h>\nint main(void){char d[4];strcpy(d,\"abcdefgh\");return 0;}\n", "string copy of"},
 {"memcpy_overlap", "#include <string.h>\nint main(void){char b[8]={0};memcpy(b,b+2,4);return 0;}\n", "overlap"},
+{"decay_direct_bad", "int first(int*p){return p[4];}\nint main(void){int a[4]={0};return first(a);}\n", "array index 4 exceeds"},
+{"decay_nested_bad", "static int second(int*q){return q[7];}\nstatic int first(int*p){return second(p);}\nint main(void){int a[4]={1,2,3,4};return first(a);}\n", "array index 7 exceeds"},
+{"decay_nested_safe", "static int second(int*q){return q[3];}\nstatic int first(int*p){return second(p);}\nint main(void){int a[4]={1,2,3,4};return first(a);}\n", NULL},
+{"decay_unknown_ptr", "int at(int*p,int i){return p[i];}\nint main(void){int*a=(int*)0;return at(a,2);}\n", "unverifiable extent"},
+{"decay_one_past_safe", "int main(void){int a[4]={0};int*p=a+4;return p!=0?0:1;}\n", NULL},
 {"int_to_ptr", "#include <stdint.h>\nint main(void){int*p=(int*)(uintptr_t)0xdeadbeef;return *p;}\n", "unverifiable provenance"},
 };
 
