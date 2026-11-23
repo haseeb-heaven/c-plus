@@ -16,13 +16,14 @@
 #define CFG_DEPTH ((size_t)16384u)
 #define BCAP ((size_t)40000u + 64u)
 
-static void make_depth(const char *path, size_t depth) {
+static int make_depth(const char *path, size_t depth) {
     FILE *f = fopen(path, "wb");
     size_t i;
-    if (f == (FILE *)0) return;
+    if (f == (FILE *)0) return 0;
     for (i = 0; i < depth; i++) fputc('[', f);
     for (i = 0; i < depth; i++) fputc(']', f);
     fclose(f);
+    return 1;
 }
 
 int main(int argc, char **argv) {

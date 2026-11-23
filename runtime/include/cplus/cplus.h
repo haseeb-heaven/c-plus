@@ -13,12 +13,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 /* -------------------------------------------------------------------------
  * Optional logging/telemetry (disabled unless c+ is invoked with --log).
  * Uses the MIT-licensed clog library vendored as cplus/clog.h.
  * ------------------------------------------------------------------------- */
+extern int cplus_runtime_log_level; /* enabled by generated program constructor */
 #ifdef CPLUS_LOG_RUNTIME
 #include "cplus/clog.h"
 /* Avoid clog's generic convenience macro names colliding with user code. */
@@ -37,6 +39,9 @@
 #ifndef CPLUS_LOG_LEVEL
 #define CPLUS_LOG_LEVEL CPLUS_LOG_WARN
 #endif
+__attribute__((constructor)) static void cplus_runtime_logging_init(void) {
+  cplus_runtime_log_level = (int)CPLUS_LOG_LEVEL;
+}
 #define cplus_log(level, ...)                                                  \
   do {                                                                         \
     if ((int)(level) >= (int)CPLUS_LOG_LEVEL)                                   \
@@ -76,11 +81,16 @@ typedef enum {
   CPLUS_EXIT_OWNERSHIP = 106,
   CPLUS_EXIT_RESOURCE = 107,
   CPLUS_EXIT_UNSUPPORTED = 108,
-  CPLUS_EXIT_IO = 109
+  CPLUS_EXIT_IO = 109,
+  CPLUS_EXIT_ARITHMETIC = 110,
+  CPLUS_EXIT_CONVERSION = 111
 } cplus_exit_code;
 
 void cplus_fatal(cplus_exit_code code, const char *kind, const char *file,
                  int line, const char *msg);
+
+/* Optional test hook: called before terminating.  NULL in production. */
+extern void (*cplus_fatal_hook)(cplus_exit_code code, const char *kind);
 
 /* Emitted by the compiler for every checked array subscript. */
 void cplus_check_bounds(const void *base, size_t count, size_t index,
@@ -89,6 +99,57 @@ void cplus_check_bounds(const void *base, size_t count, size_t index,
 /* Emitted by the compiler for every checked pointer dereference. */
 void cplus_check_nonnull(const void *ptr, const char *file, int line,
                          const char *expr);
+
+/* Pointer formation guard: index must be in [0, count] (count is the
+ * one-past-the-end element).  Dereference remains index < count. */
+void cplus_check_ptr_formation(const void *base, size_t count, int64_t index,
+                               const char *file, int line, const char *expr);
+
+/* ABI-preserving registration of ordinary C allocations.  These helpers
+ * return/accept plain pointers; no pointer representation is changed. */
+void *cplus_register_allocation(void *p, size_t bytes, const char *file,
+                                int line);
+void cplus_free_registered(void *p, const char *file, int line);
+void *cplus_realloc_registered(void *oldp, void *newp, size_t bytes,
+                               const char *file, int line);
+
+/* -------------------------------------------------------------------------
+ * Native checked signed arithmetic (not UBSan)
+ *
+ * Inserted by the compiler for signed +, - and * whose operands are runtime
+ * values and cannot be folded. `bits` is the width of the *source expression*
+ * type (32 for `int`, 64 for `long long`), so e.g. `int` overflow is caught
+ * before it can wrap even though the arguments arrive as int64_t. Unsigned
+ * arithmetic is never instrumented: it is defined to wrap in C.
+ * ------------------------------------------------------------------------- */
+int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_div_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_rem_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_shl_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+int64_t __cplus_checked_shr_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned);
+
+/* Value-preserving integer conversion check.  The source value arrives as
+ * uint64_t bit pattern; sb/ss describe the source, db/ds the destination. */
+int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
+                                   unsigned db, unsigned ds);
+
+/* Floating-point -> integer range/NaN check.  `bits`/`isSigned` describe the
+ * destination integer type; the compiler emits the inline fast path and calls
+ * this helper only on the out-of-range path. */
+int64_t __cplus_checked_f2i_i64(double value, unsigned bits, unsigned isSigned);
+
+/* Overflow-checked element-count * element-size multiplication for allocation
+ * extents.  ABI-neutral: size_t in, size_t out. */
+size_t __cplus_checked_size_mul(size_t a, size_t b);
 
 /* -------------------------------------------------------------------------
  * Managed memory (ordinary heap objects)
@@ -107,6 +168,40 @@ void *cplus_realloc(void *ptr, size_t size);
 /* Zero `size` bytes at `p`.  Used by the cplus_move() ownership transfer. */
 void cplus_zero(void *p, size_t size);
 
+/* OPTIONAL compatibility helpers - NOT a memory-safety primitive.
+ *
+ * PR #16 architecture correction: these do not prove that source/destination
+ * regions are valid or large enough.  Actual byte/string work is delegated to
+ * the system C library (memmove / strnlen / snprintf).  Compiler-enforced
+ * safety comes from AST/CFG bounds analysis and Clang/LLVM instrumentation,
+ * not from these functions.  They are kept only for source compatibility. */
+static inline void *cplus_memcpy(void *dest, const void *src, size_t n) {
+  /* A zero-length copy is a no-op. Returning before memmove matters on glibc,
+   * whose declaration marks both arguments nonnull: UBSan's -fsanitize=null
+   * aborts even for n == 0 when NULL is passed (macOS headers omit the
+   * attribute), which made otherwise portable no-op probes fail on Linux. */
+  if (n == 0)
+    return dest;
+  return memmove(dest, src, n); /* overlap-safe superset of memcpy */  // NOSONAR: null misuse is an intentional test probe
+}
+static inline void *cplus_memmove(void *dest, const void *src, size_t n) {
+  if (n == 0)
+    return dest; /* same nonnull-attribute portability reason as above */
+  return memmove(dest, src, n);  // NOSONAR: null misuse is an intentional test probe
+}
+static inline size_t cplus_strnlen(const char *s, size_t max) {
+  return strnlen(s, max); /* POSIX/libc; never scans past max */  // NOSONAR: null misuse is an intentional test probe
+}
+static inline int cplus_strcpy(char *dest, size_t dest_size, const char *src) {
+  int written = snprintf(dest, dest_size, "%s", src); /* libc bounded copy */
+  if (written < 0)
+    cplus_fatal(CPLUS_EXIT_IO, "string copy failed", NULL, 0, "snprintf");
+  if ((size_t)written >= dest_size)
+    cplus_fatal(CPLUS_EXIT_BOUNDS, "string overflow", NULL, 0,
+                "source does not fit in destination");
+  return written;
+}
+
 /* Explicit release of a managed allocation.  Safe to call exactly once.
  * Calling it twice is a detected double-free, not silent corruption. */
 void cplus_release(void *ptr);
@@ -119,6 +214,64 @@ size_t cplus_alloc_bytes(const void *ptr);
 /* Abort unless `ptr` is a live C+ allocation.  This is an explicit check for
  * dangling managed pointers; ordinary dereferences are not instrumented. */
 void cplus_check_live(const void *ptr);
+
+/* Additive generation introspection (ABI-neutral; no existing signature
+ * changes).  Each registration receives a monotonically increasing generation
+ * recorded in the side table.  `cplus_allocation_generation` returns the live
+ * allocation's generation, or zero when the pointer is not live;
+ * `cplus_epoch` returns the most recently issued generation; and
+ * `cplus_address_retired` reports whether this address has been retired by the
+ * runtime at some point, and `cplus_retired_ledger_full` reports whether the
+ * bounded retired-address ledger has reached its 1,048,576-entry cap.  Zero is
+ * never a valid generation.  A retired address may legitimately be reused by a
+ * later allocation. */
+uint64_t cplus_allocation_generation(const void *ptr);
+uint64_t cplus_epoch(void);
+int cplus_address_retired(const void *ptr);
+int cplus_retired_ledger_full(void);
+
+/* Bounded side-table behavior (documented, deterministic):
+ *
+ *  - The live table is keyed on base addresses.  An interior pointer does not
+ *    match a live slot, so releasing or querying base+k is deterministically
+ *    rejected (105/type confusion) rather than silently accepted.  The stored
+ *    allocation size bounds copies and backs the length query; there is no
+ *    per-byte ownership map without an ABI change.
+ *  - The retired ledger holds at most 1,048,576 addresses.  When full, a
+ *    one-time stderr warning is emitted, cplus_retired_ledger_full() becomes
+ *    true, and later retirements evict one slot round-robin.  The address
+ *    retired now stays detectable as a double free (104); the evicted address
+ *    loses ledger coverage and cplus_address_retired() reports 0 for it.
+ *    This is a bounded-resource limit, not a silent correctness claim.
+ *  - Re-registering a *stale* retired address (freed, or still in quarantine)
+ *    is rejected (105/invalid free); accepting it would re-arm a genuine
+ *    second free.  A proven fresh malloc of the same address is accepted.
+ *    Caller-supplied registration sizes are clamped to the real usable block
+ *    size where the platform exposes one, so a false size cannot authorize a
+ *    copy past the allocation.
+ *  - The side table is internally serialized by a mutex, so concurrent calls
+ *    on different pointers have no data races; free() is executed while that
+ *    lock is held.  A single pointer must not be released/reallocated
+ *    concurrently with another operation on that same pointer: like
+ *    malloc/free, that is a caller-level race.
+ */
+
+/* OPEN LIMIT (F2): ordinary C pointers carry no generation token.  If an
+ * address is freed and later reused by malloc/realloc for a new live
+ * allocation, a stale alias of the old allocation is bit-identical to a
+ * genuine pointer to the new one, so a release/query through that alias is
+ * accepted.  The persistent retired-address ledger does make double frees and
+ * stale liveness queries deterministic while the address is NOT live (even
+ * after the bounded recent cache evicts), but it cannot disambiguate a live
+ * address.  Closing F2 requires an ABI change (compiler-supplied provenance
+ * token or a fat pointer); an earlier no-reuse retry policy was reverted
+ * because it cost ~31x on alloc_churn and was still not sound.  Ordinary
+ * dereferences are not instrumented by this runtime. */
+
+/* Inserted by the C+ compiler for dynamic indices into fixed-size arrays.
+ * Returns the index when it is in range; otherwise prints a diagnostic and
+ * aborts before the out-of-bounds access happens. */
+size_t __cplus_bounds_check(size_t index, size_t length, const char *name);
 size_t cplus_alloc_count(const void *ptr, size_t elem_size);
 
 /* Checked array index.  Returns `index` when it is in range and terminates
