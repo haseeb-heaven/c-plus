@@ -12,8 +12,9 @@ sh tests/defense/memory/run.sh        # timeout 30 on the binary
 ```
 
 Reference: `stdlib/safe/src/safe_memory.c` line numbers are from the
-**pre-hardening HEAD** version (`git show HEAD:stdlib/safe/src/safe_memory.c`,
-sha256 `d6d2c37c…`), unless marked "current".
+**pre-hardening snapshot** captured at the start of this session (sha256
+`d6d2c37c…`), unless marked "current". The hardening was committed upstream as
+`1b656ff`; line numbers marked "current" refer to that committed version.
 
 ---
 

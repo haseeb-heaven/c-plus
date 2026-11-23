@@ -1,7 +1,7 @@
-# Final integrity statement — external projects and C/C++ compiler support
+# Final integrity statement — external projects and C+ compiler support
 
-Status of this document: **comprehensive, with explicit PENDING entries for sibling
-artifacts that had not landed when this was written**. Every `OK` claim below is
+Status of this document: **complete — no outstanding PENDING artifacts.** Every
+document named in the task brief had landed and was read before finalization. Every `OK` claim below is
 backed by a command that was actually executed on this machine, an observed file
 hash, or a cited evidence file. Nothing is inferred from a build alone and nothing
 is fabricated. Anything not yet verified is marked **PENDING**, not asserted.
@@ -273,25 +273,45 @@ mode rejects legacy C sources for C+ *safety* reasons (bounds/lifetime/FFI diagn
 which is distinct from standard-version support; legacy C sources build in
 `--legacy-c` mode.
 
-The exact compiled-and-run support matrix is recorded by the sibling files
-`tests/c_standards/RESULTS.md` and `tests/c_standards/STD_SUPPORT_MATRIX.md`; those files
-were **PENDING** at the time of writing. The following is what is already backed by
-executed artifacts that have landed under `tests/c_standards/`:
+The authoritative aggregate files `tests/c_standards/RESULTS.md` and
+`tests/c_standards/STD_SUPPORT_MATRIX.md` **have landed**. They aggregate seven
+independently executed group reports under `tests/c_standards/<group>/RESULTS.md`
+(`c89`, `c99`, `c11`, `c17`, `c23`, `latest`, `real_projects`). The aggregate runner
+reported **7 suites run, 7 passed, 0 failed, 0 pending**. Verdict tokens below follow
+`STD_SUPPORT_MATRIX.md`: **PASS** = accepted and correct; **PARTIAL** = accepted and
+useful but some tested target/feature/mode failed; **FAIL (source)** = genuine source
+issue the reference compiler agrees with; **FAIL (spelling)** = clang rejects the value;
+**FAIL (safety)** = C+ default Safe-mode static-analysis rejection (not a C-version
+signal); **UNRECOGNIZED** = no such flag / no published standard behind it.
 
-| C version / spelling(s) | Status actually observed | Basis (landed artifact) |
+| C family / spelling(s) | Aggregate verdict | Exact evidence / honest qualifiers |
 |---|---|---|
-| **C89/C90**: `c89`, `c90`, `iso9899:1990`, `gnu89` | **SUPPORTED** (build exit 0 with and without `-pedantic-errors`; runtime stdout byte-identical to plain-clang reference). Real projects fail under pedantic `-std=c89` — as they should, since they use later C features; a genuine C89 negative control is correctly rejected. | `tests/c_standards/c89/run.log`, `artifacts/` |
-| **C94/C95**: `iso9899:199409` | **PARTIAL**: accepted by the driver for C94-conforming source and for two of the three real projects; rejects C99-only source where expected. The alias spelling `c94` is **not** a valid Clang spelling (exit 1 under plain clang and the driver). | `tests/c_standards/c99/logs/SUMMARY.txt`, `results.tsv` |
-| **C99/C9X/GNU99**: `c99`, `c9x`, `gnu99` | **SUPPORTED**: minimal C99 and C94 sources build and run with output matching plain clang. All three real projects build and run in `--legacy-c` mode with matching deterministic outputs; default **Safe** mode rejects them for C+ safety reasons, not standard reasons. Note `-pedantic` runs fail under Apple clang for some sources; this is documented, not a C+ C99 failure. | `tests/c_standards/c99/logs/SUMMARY.txt`, `results.tsv` |
-| **C11/C1X/GNU11**: `c11`, `c1x`, `gnu11` | **SUPPORTED**: minimal C11 source builds/runs under all three spellings (exit 0, zero diagnostics), and the C11-only source correctly fails under plain `clang -std=c99 -pedantic-errors`. Real projects build and run in `--legacy-c` mode with byte-identical deterministic outputs. (The driver's default `c17` token also appears in verbose logs but is overridden by the forwarded `-std=`.) | `tests/c_standards/c11/artifacts/run-report.log` |
-| **C17/C18**: `c17`, `c18`, `iso9899:2017`, `iso9899:2018`, `gnu17` | **SUPPORTED** for the C17 source under the driver; plain-clang and driver builds/runs recorded. C89 and bogus spellings are correctly rejected as negative controls. | `tests/c_standards/c17/artifacts/run_console.log` and captured `.exit`/stdout files |
-| **C23**: `c23`/`c2x`-family spellings | **PENDING** authoritative summary — `tests/c_standards/c23/run.sh` and `logs/` are present, but the matrix document has not landed. Do **not** claim full C23 support from this document without that summary. Feature probes (`typeof`, binary literals, `nullptr`, `#elifdef`, `__STDC_VERSION__`) exist under `tests/c_standards/c23/` and their results must be read from the landed matrix. | `tests/c_standards/c23/` (in progress) |
-| **C2y / C26 (draft)** | **NOT CLAIMED** — draft revision, no published standard; final matrix may record individual feature probes but must not call this "C21" or a finished standard. | — |
+| **C89/C90**: `c89`, `c90`, `iso9899:1990`, `gnu89` | **PARTIAL** (minimal source **PASS** for all four; real projects **FAIL (source)** 0/3 strict, 1/3 in legacy — 2048 only) | All four spellings build the genuine minimal C89 source with stdout byte-identical to strict clang. None of the three downloaded projects is genuine C89: strict clang rejects all three too. `-std=c89` alone does **not** enforce C90 (no `-pedantic-errors` by default); strict C90 requires the caller to add it. (`RESULTS.md` §3, `STD_SUPPORT_MATRIX.md` §1) |
+| **C94**: `iso9899:199409` | **PARTIAL** (minimal **PASS**; real **PARTIAL** 1/3 — 2048 only) | Valid spelling; C94-conformant source compiles/runs and matches. In legacy mode 2048 builds with 3/3 outputs matched; snake/xdump fail on genuine `redefinition of 'i'`. |
+| `c94` | **FAIL (spelling) / UNSUPPORTED** | `error: invalid value 'c94' in '-std=c94'` from clang 16; C+ forwards verbatim. 0/2 sources, 0/3 real projects. |
+| **C99/C9X/GNU99**: `c99`, `c9x`, `gnu99` | **PASS** (minimal and real) | `c99`/`c9x`/`gnu99` build both applicable minimal sources and all three real projects in `--legacy-c`, with 10/10 compiled legacy cells matching golden outputs (7/7 per project in the C99 group). Safe mode 0/15 — C+ safety diagnostics, not a C-version failure. |
+| **C11/C1X/GNU11**: `c11`, `c1x`, `gnu11` | **PASS** for `c11`, `c1x`, `gnu11` minimal; real projects tested with `c11` only (**PASS** 3/3, 12/13 byte-identical) | Genuine C11 source builds with 0 diagnostics and runs (`int counter=7`); three real projects build under `--legacy-c -std=c11`, 12/13 runs byte-identical (the one difference is a time-seeded 2048 stdin board). `c1x`/`gnu11` real-project cells are **NOT TESTED** in the cross-check except `gnu11` (Matrix B 3/3). Verbose logs confirm user `-std=` is appended last and wins over the driver's hardcoded default (`-std=gnu17` Safe, `-std=gnu89` legacy). |
+| **C17/C18**: `c17`, `c18`, `iso9899:2017`, `iso9899:2018`, `gnu17` | **PASS** (all five, minimal); real **PASS** with `c17` (3/3, 11/11 byte-identical) and `gnu17` (Matrix B 3/3) | clang and C+ both exit 0 with empty diagnostics for all five spellings; correct stdout. Negative controls (`c89` on C17 source, `bogus`) correctly rejected. `c18`/`iso9899:*` real-project cells are **NOT TESTED**. `gnu17` is a GNU superset, not strict ISO. |
+| **C23 by its published name**: `c23`, `gnu23` | **FAIL (spelling)** — 0/0 builds | `error: invalid value 'c23' in '-std=c23'` from clang 16, forwarded verbatim by C+. The published standard name is not reachable on this toolchain. |
+| **C23 draft mode**: `c2x`, `gnu2x` | **PASS** for minimal and real projects (legacy); **PARTIAL** for C23 feature coverage | Minimal C23-feature program builds/runs byte-identical to clang; real projects 6/6 scenarios byte-identical under `--legacy-c` (Safe mode 6/6 rejections). Feature matrix only 3/6 clean C+ passes: `bool_true`, `binary_literal`, `typeof_operator` pass; `nullptr` and `_BitInt` are rejected with `[CPLUS-FFI]`; digit separators hang (>10 s, rc=124). clang reports `__STDC_VERSION__ == 202000L` (working-draft value), not the final ISO C23 value. |
+| **C2y / C26** (draft only): `c2y`, `c26`, `gnu2y`, `c2y_draft`, `c2b`, `iso9899:2024` | **UNRECOGNIZED** — 0/0 | All rejected by clang 16 (`error: invalid value …`); no flag exists and no published standard under these names. Any C2y/C26 behaviour claim would be fabricated. |
+| **"C21"** | **NOT APPLICABLE** | No published ISO C standard and no compiler flag by this name. |
 
-**Explicit limitation on this table:** "supported" means the observed spelling compiled
-and ran the tested source on this host. It does not mean the C+ compiler implements every
-feature of that ISO C edition, and it does not override the authoritative matrix when it
-lands. Unknown `-std` spellings (e.g. `-std=bogus`) are rejected (exit 1).
+**Cross-cutting caveats recorded by the aggregate report** (not C-standard defects):
+the driver does not pass `-pedantic-errors` by default; the C+ rewriter drops the final
+newline of sources ending in a single `\n`, so an *extra* `-pedantic-errors` can produce
+`-Wnewline-eof` even for valid code (the prescribed command form is unaffected); and the
+default Safe mode rejects all three unmodified legacy projects before `-std` becomes
+decisive. **Real-project cross-check totals:** Matrix A (default Safe mode) 0/33 compiled;
+Matrix B (`--legacy-c`) 27/33 compiled and matched, 6/33 failed (pre-C99 `for(int i…)`
+in snake/xdump under `c89`/`c90`/`gnu89`). Combined 27/66 compiled and matched.
+
+**Explicit limitation:** "PASS" means the observed spelling compiled and ran the tested
+source on this host; it does not mean the C+ compiler implements every feature of that
+ISO C edition. The aggregate bottom line is explicit: the claim "C+ supports every
+version of C ever released" is **not supported** — C23-by-published-name fails at the
+backend and C23 draft feature coverage is partial. Unknown spellings (e.g.
+`-std=bogus`) are rejected, proving no silent normalization.
 
 ---
 
@@ -341,7 +361,9 @@ lands. Unknown `-std` spellings (e.g. `-std=bogus`) are rejected (exit 1).
 
 1. **No claim of universal C support.** Only the versions/spellings listed in §3, on this
    host, with the tested sources. No claim that every ISO C feature of any edition is
-   implemented; C23 and C2y/C26 coverage is explicitly limited/PENDING.
+   implemented: C23 coverage is explicitly **PARTIAL** (`c2x`/`gnu2x` only, with
+   `nullptr`/`_BitInt` rejected and digit separators hanging the frontend), and C2y/C26
+   is a draft that cannot be tested on this toolchain.
 2. **No "C21" standard exists.** C2y is the working name for the post-C23 revision whose
    intended published name is C26, and it remains a **draft**. Any "C21" claim is wrong
    and is not made here.
@@ -363,13 +385,20 @@ lands. Unknown `-std` spellings (e.g. `-std=bogus`) are rejected (exit 1).
 
 ---
 
-## 6. PENDING items (do not treat as verified until they land)
+## 6. PENDING items — **none**
 
-| Item | Reason | Where to read once landed |
-|---|---|---|
-| `tests/c_standards/RESULTS.md` | Authoritative standards results had not landed; §3 uses landed run artifacts | that file |
-| `tests/c_standards/STD_SUPPORT_MATRIX.md` | Authoritative matrix had not landed; §3 is a preliminary, evidence-backed summary | that file |
-| C23 / C2y / C26 feature conclusions | Only the in-progress probe scripts/logs were present | `tests/c_standards/c23/` and the landed matrix |
+All documents named in the task brief had landed and were read before this document was
+finalized:
 
-When a PENDING item lands, §1.2/§1.3, §2, and §3 should be reconciled against it; any
-conflict must be resolved in favour of the executed evidence recorded in that artifact.
+- `external_projects/{game_a,game_b,cli_app}/ORIGINAL_EVIDENCE.md` and each
+  `cplus/CONVERSION.md` (§1).
+- `docs/abi/EXTERNAL_PROJECTS_ABI.md` companion ABI record (§2).
+- `tests/c_standards/RESULTS.md` (aggregate), `tests/c_standards/STD_SUPPORT_MATRIX.md`
+  (aggregate), plus the seven per-directory `tests/c_standards/<group>/RESULTS.md`
+  reports (§3).
+
+The only qualifications that remain are honest evidence qualifications, not missing
+artifacts: the transient, additive-only fingerprint drift recorded by the companion ABI
+doc (resolved by a baseline refresh, §2); the C+ default Safe-mode rejection of the three
+unmodified legacy C sources (a safety gate, not a C-version result, §3); and the GUI
+converter's modelled `status=PENDING` report (its design limit, §4).

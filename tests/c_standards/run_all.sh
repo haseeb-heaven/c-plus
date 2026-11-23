@@ -3,7 +3,8 @@
 #
 # Discovers every immediate subdirectory of tests/c_standards/ that contains a
 # run.sh, executes it under a 300-second timeout, and captures/prints the final
-# lines of each run.  This is pure POSIX shell: no Python, no "|| true".
+# lines of each run.  Pure POSIX shell only: no scripting-language helpers and
+# no failure-suppressing no-op fallbacks.
 #
 # By default full per-suite logs go to a temporary directory that is removed on
 # exit.  Set C_STANDARDS_LOG_DIR to a writable path to retain them as evidence.

@@ -53,10 +53,20 @@ EXTERN void invoke_safe_mem_constraint_handler(const char *msg, void *ptr,
 
 static inline void handle_mem_error(void *restrict dest, rsize_t dmax,
                                     const char *err_msg, errno_t err_code) {
+    /* C+ SECURITY PATCH (2026-11-23): upstream safeclib wiping `dmax` bytes
+     * on a constraint violation trusts a caller-supplied size.  When a caller
+     * passes dmax larger than the real destination (a plausible input bug),
+     * this memset overran the object (observed SIGABRT / 512-byte canary
+     * clobber in tests/redteam/memstr).  The true capacity is not knowable
+     * here (the wrapper is a separate TU, so __builtin_object_size is
+     * unknown), so the memory-safe behaviour is to NOT write the destination
+     * at all on an error path: the return code already reports the refusal.
+     * The caller's buffer and its canaries remain byte-for-byte intact. */
+    (void)dest;
+    (void)dmax;
     (void)err_msg;
     (void)err_code;
 
-    memset(dest, 0, dmax);
     invoke_safe_mem_constraint_handler(err_msg, dest, err_code);
     return;
 }

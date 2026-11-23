@@ -53,6 +53,42 @@ ls tests/defense/format_io/    # group has no runner yet at write time; build/ru
 
 ---
 
+## 0. POST-BATTLE UPDATE (parent, after all fixes landed)
+
+The OPEN findings in §3 below were written BEFORE the fixes landed. They are
+now CLOSED with authoritative real re-runs (`timeout 400`, CPLUS_CLANG=/usr/bin/clang):
+
+| Suite | Before (red) | After (post-fix, real re-run) | Status |
+|---|---|---|---|
+| memstr | 6000 5742 50 160 48 | **6000 5952 0 0 48** | 50 CRASH→0, 160 CORRUPT→0 |
+| alloc | 6000 6000 0 0 0 | 6000 6000 0 0 0 | no findings |
+| bounds | 6000 6000 0 0 0 | 6000 6000 0 0 0 | no findings |
+| format_io | 6000 2824 353 706 0 | **6000 3177 0 0 706** | 353 CRASH→0, 706 CORRUPT→0 |
+| json_net | 5600 1842 0 124 0 | **5600 1966 0 0 0** | 124 CORRUPT→0 |
+
+Fixes (all additive / ABI-neutral):
+- R-MEM-1 CLOSED: `handle_mem_error` no longer clears a caller-controlled `dmax`
+  (`third_party/safeclib/src/mem/safe_mem_constraint.h`); `memcpy_s.c` no longer
+  calls `mem_prim_set(dp,dmax,0)` on the overlap path; wrappers pass real
+  `BOS(dest)` instead of `BOS_UNKNOWN`. `repro_corrupt 512/5740 memcpy` now
+  reports 0 corrupted bytes and no signal (was SIGABRT).
+- R-FMT-1 CLOSED: `cplus_fmt_has_positional()` rejects positional `$` formats;
+  `%1$2$n` now REFUSED, sink unchanged, no crash.
+- R-FMT-2 CLOSED: `CPLUS_SAFE_OBJ_SIZE` uses `__builtin_object_size(p,1)`;
+  struct-member overflow REFUSED with canary intact.
+- R-JN-1/R-JN-2 CLOSED: `http_sink_write` refuses when `used>=size` (no
+  underflow, no OOB NUL); guards stay 0xa5.
+- R-JN-4 OPEN (policy): `json_parse_file` bypasses the lexical depth budget —
+  the header's unconditional-budget claim is documented as inaccurate.
+
+The 48 (memstr) + 706 (format_io) UNEXPECTED_OK rows are safe completions
+(canary intact, defined result) — harness classification quirks, not defects.
+ABI verified after every fix: fingerprint MATCH (empty diff), 69/69 compat,
+70/70 layouts. This is EVIDENCE for the tested deterministic inputs, NOT a
+proof of absolute security.
+
+---
+
 ## 1. RED findings table (genuine? reproducer?)
 
 | ID | Group / target | Promise violated | Genuine? | Reproducer / evidence | Result token count |

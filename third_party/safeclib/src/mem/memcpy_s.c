@@ -132,7 +132,7 @@ EXPORT errno_t _memcpy_s_chk(void *restrict dest, rsize_t dmax,
 
     /* overlap is disallowed, but allow dest==src */
     if (unlikely(CHK_OVRLP_BUTSAME(dp, dmax, sp, slen))) {
-        mem_prim_set(dp, dmax, 0);
+        /* C+ SECURITY PATCH: no dest clear on refusal (dmax untrusted) */
         MEMORY_BARRIER;
         invoke_safe_mem_constraint_handler("memcpy_s: overlap undefined", dest,
                                            ESOVRLP);
@@ -159,7 +159,7 @@ EXPORT errno_t _memcpy_s_uchk(void *restrict dest, rsize_t dmax,
 
     /* overlap is disallowed, but allow dest==src */
     if (unlikely(CHK_OVRLP_BUTSAME(dp, dmax, sp, slen))) {
-        mem_prim_set(dp, dmax, 0);
+        /* C+ SECURITY PATCH: no dest clear on refusal (dmax untrusted) */
         MEMORY_BARRIER;
         invoke_safe_mem_constraint_handler("memcpy_s: overlap undefined", dest,
                                            ESOVRLP);

@@ -25,8 +25,9 @@ extern "C" {
  *     refuse unbounded `%s` and `%[...]` conversions unless an explicit field
  *     width (e.g. `%63s`) or assignment suppression (`%*s`) is present.
  *   - Destination capacity & UAF: `snprintf_s` / `sprintf_s` check `dest`
- *     against tracked `malloc_s` bounds and `__builtin_object_size(dest, 0)`
- *     to detect overflows where `dmax` exceeds the real buffer capacity, as
+ *     against tracked `malloc_s` bounds and `__builtin_object_size(dest, 1)`
+ *     (nearest enclosing object, so struct members use their own extent) to
+ *     detect overflows where `dmax` exceeds the real buffer capacity, as
  *     well as use-after-free pointers on `dest`, `fmt`, and `str`.
  *   - Return contract (these return `int`, NOT `errno_t` like mem/str):
  *       - return >= 0 : success (C99 snprintf would-be length or scanf count).
