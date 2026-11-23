@@ -48,7 +48,7 @@ echo "LIBC=$LIBC"
 NAMES="malloc calloc realloc free memset memcpy memmove memcmp strcpy strncpy strcat strncat fread fwrite printf fprintf"
 ROWS="$OUT/rows.txt"
 : > "$ROWS"
-pass=0; fail=0
+pass=0; fail=0; mapped_fail=0
 
 for n in $NAMES; do
   u=$(printf '%s' "$n" | tr '[:lower:]' '[:upper:]')
@@ -108,6 +108,7 @@ for n in $NAMES; do
     echo "ok   $n: valid $valid; hostile checked $hostile_checked; plain $hostile_plain"
   else
     fail=$((fail + 1))
+    mapped_fail=$((mapped_fail + 1))
     echo "FAIL $n: build(plain/checked)=$pbuild/$cbuild valid=$valid hostile=$hostile_checked"
     tail -6 "$OUT/$n.plain.build.log" 2>/dev/null
     tail -6 "$OUT/$n.checked.build.log" 2>/dev/null

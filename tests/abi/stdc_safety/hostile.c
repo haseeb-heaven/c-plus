@@ -75,6 +75,24 @@ static int seq_is(const unsigned char *p, size_t n) {
 #define GUARD_INIT(g) mem_fill((g).canary, CANARY_LEN, CANARY_BYTE)
 #define GUARD_OK(g)   mem_is((g).canary, CANARY_LEN, CANARY_BYTE)
 
+/* safe_c.h casts the memory-family macros to (void), so their return value
+ * cannot be observed.  Every checked refusal sets errno; raw libc calls on
+ * the hostile inputs do not.  That gives a uniform, source-level refusal
+ * signal in BOTH builds without changing any ABI or adding a symbol. */
+#define OP_BEGIN  errno = 0
+#define OP_REFUSED (errno != 0)
+
+/* Observe a memory-family operation (whose macro is cast to void). */
+static int do_memcpy(void *d, const void *s, size_t n) {
+    OP_BEGIN; memcpy(d, s, n); return OP_REFUSED;
+}
+static int do_memmove(void *d, const void *s, size_t n) {
+    OP_BEGIN; memmove(d, s, n); return OP_REFUSED;
+}
+static int do_memset(void *d, int v, size_t n) {
+    OP_BEGIN; memset(d, v, n); return OP_REFUSED;
+}
+
 static char *big_source(size_t n) {
     char *s = (char *)malloc(n + 1u);
     size_t i;
@@ -116,62 +134,78 @@ static outcome run_case(int api, int cas) {
     switch (api) {
     /* ---- memcpy -------------------------------------------------------- */
     case A_MEMCPY: {
-        gmem d; unsigned char src[16];
+        gmem d; unsigned char src[16]; int refused;
         GUARD_INIT(d); seq_fill(src, sizeof src);
+        OP_BEGIN;
         if (cas == C_VALID) {
-            void *r = memcpy(d.buf, src, 16);
-            o = mk(r == d.buf && seq_is(d.buf, 16), GUARD_OK(d), seq_is(d.buf, 16));
+            memcpy(d.buf, src, 16);
+            refused = OP_REFUSED;
+            o = mk(!refused && seq_is(d.buf, 16), GUARD_OK(d),
+                   !refused && seq_is(d.buf, 16));
         } else if (cas == C_NULL) {
-            void *r = memcpy(NULL, src, 16);
-            o = mk(r != NULL, GUARD_OK(d), r == NULL);
+            memcpy(NULL, src, 16);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused);
         } else if (cas == C_SMALL) {
-            void *r = memcpy(d.buf, src, 17);
-            o = mk(r == d.buf, GUARD_OK(d), r == NULL && GUARD_OK(d));
+            memcpy(d.buf, src, 17);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused && GUARD_OK(d));
         } else {
-            void *r = memcpy(d.buf, src, (size_t)-1);
-            o = mk(r == d.buf, GUARD_OK(d), r == NULL && GUARD_OK(d));
+            memcpy(d.buf, src, (size_t)-1);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused && GUARD_OK(d));
         }
         break;
     }
     /* ---- memmove ------------------------------------------------------- */
     case A_MEMMOVE: {
-        gmem d; unsigned char orig[16];
+        gmem d; unsigned char orig[16]; int refused;
         GUARD_INIT(d); seq_fill(d.buf, sizeof d.buf);
         for (i = 0; i < 16; ++i) orig[i] = d.buf[i];
+        OP_BEGIN;
         if (cas == C_VALID) {
-            void *r = memmove(d.buf + 4, d.buf, 8);
             int ok = 1;
+            memmove(d.buf + 4, d.buf, 8);
+            refused = OP_REFUSED;
             for (i = 0; i < 8; ++i) if (d.buf[4 + i] != orig[i]) ok = 0;
-            o = mk(r == d.buf && ok, GUARD_OK(d), ok);
+            o = mk(!refused && ok, GUARD_OK(d), ok);
         } else if (cas == C_NULL) {
-            void *r = memmove(NULL, d.buf, 8);
-            o = mk(r != NULL, GUARD_OK(d), r == NULL);
+            memmove(NULL, d.buf, 8);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused);
         } else if (cas == C_SMALL) {
-            void *r = memmove(d.buf, orig, 17);
-            o = mk(r == d.buf, GUARD_OK(d), r == NULL && GUARD_OK(d));
+            memmove(d.buf, orig, 17);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused && GUARD_OK(d));
         } else {
-            void *r = memmove(d.buf, orig, (size_t)-1);
-            o = mk(r == d.buf, GUARD_OK(d), r == NULL && GUARD_OK(d));
+            memmove(d.buf, orig, (size_t)-1);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused && GUARD_OK(d));
         }
         break;
     }
     /* ---- memset -------------------------------------------------------- */
     case A_MEMSET: {
-        gmem d;
+        gmem d; int refused;
         GUARD_INIT(d);
+        OP_BEGIN;
         if (cas == C_VALID) {
-            void *r = memset(d.buf, 0x5Au, 16);
-            o = mk(r == d.buf && mem_is(d.buf, 16, 0x5Au), GUARD_OK(d),
-                   mem_is(d.buf, 16, 0x5Au));
+            memset(d.buf, 0x5Au, 16);
+            refused = OP_REFUSED;
+            o = mk(!refused && mem_is(d.buf, 16, 0x5Au), GUARD_OK(d),
+                   !refused && mem_is(d.buf, 16, 0x5Au));
         } else if (cas == C_NULL) {
-            void *r = memset(NULL, 0x5Au, 16);
-            o = mk(r != NULL, GUARD_OK(d), r == NULL);
+            memset(NULL, 0x5Au, 16);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused);
         } else if (cas == C_SMALL) {
-            void *r = memset(d.buf, 0x5Au, 17);
-            o = mk(r == d.buf, GUARD_OK(d), r == NULL && GUARD_OK(d));
+            memset(d.buf, 0x5Au, 17);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused && GUARD_OK(d));
         } else {
-            void *r = memset(d.buf, 0x5Au, (size_t)-1);
-            o = mk(r == d.buf, GUARD_OK(d), r == NULL && GUARD_OK(d));
+            memset(d.buf, 0x5Au, (size_t)-1);
+            refused = OP_REFUSED;
+            o = mk(!refused, GUARD_OK(d), refused && GUARD_OK(d));
         }
         break;
     }
@@ -426,26 +460,25 @@ static outcome run_case(int api, int cas) {
         gmem guard; GUARD_INIT(guard);
         if (cas == C_VALID) {
             unsigned char *p = (unsigned char *)malloc(16);
-            void *r = p ? memset(p, 0x3Cu, 16) : NULL;
-            int ok = (p != NULL && r == p && mem_is(p, 16, 0x3Cu));
+            int ok = 0;
+            if (p) { int refused = do_memset(p, 0x3Cu, 16);
+                     ok = (!refused && mem_is(p, 16, 0x3Cu)); }
             free(p);
             o = mk(ok, GUARD_OK(guard), ok);
         } else if (cas == C_NULL) {
             void *p = malloc((size_t)-1);
             o = mk(p != NULL, GUARD_OK(guard), p == NULL);
         } else if (cas == C_SMALL) {
-            unsigned char *p = (unsigned char *)malloc(8);
-            void *r = NULL;
+            unsigned char *p = (unsigned char *)malloc(8); int refused;
             if (!p) { o = mk(0, GUARD_OK(guard), 0); break; }
-            r = memset(p + 1, 0x41, 8); /* one byte beyond tracked 8 */
-            o = mk(r != NULL, GUARD_OK(guard), r == NULL && GUARD_OK(guard));
+            refused = do_memset(p + 1, 0x41, 8); /* one byte beyond tracked 8 */
+            o = mk(!refused, GUARD_OK(guard), refused && GUARD_OK(guard));
             free(p);
         } else {
-            unsigned char *p = (unsigned char *)malloc(8);
-            void *r = NULL;
+            unsigned char *p = (unsigned char *)malloc(8); int refused;
             if (!p) { o = mk(0, GUARD_OK(guard), 0); break; }
-            r = memset(p, 0x41, (size_t)-1);
-            o = mk(r != NULL, GUARD_OK(guard), r == NULL && GUARD_OK(guard));
+            refused = do_memset(p, 0x41, (size_t)-1);
+            o = mk(!refused, GUARD_OK(guard), refused && GUARD_OK(guard));
             free(p);
         }
         break;
@@ -462,18 +495,16 @@ static outcome run_case(int api, int cas) {
             void *p = calloc((size_t)-1, 2); /* overflow */
             o = mk(p != NULL, GUARD_OK(guard), p == NULL);
         } else if (cas == C_SMALL) {
-            unsigned char *p = (unsigned char *)calloc(1, 8);
-            void *r = NULL;
+            unsigned char *p = (unsigned char *)calloc(1, 8); int refused;
             if (!p) { o = mk(0, GUARD_OK(guard), 0); break; }
-            r = memset(p + 1, 0x41, 8);
-            o = mk(r != NULL, GUARD_OK(guard), r == NULL && GUARD_OK(guard));
+            refused = do_memset(p + 1, 0x41, 8);
+            o = mk(!refused, GUARD_OK(guard), refused && GUARD_OK(guard));
             free(p);
         } else {
-            unsigned char *p = (unsigned char *)calloc(1, 8);
-            void *r = NULL;
+            unsigned char *p = (unsigned char *)calloc(1, 8); int refused;
             if (!p) { o = mk(0, GUARD_OK(guard), 0); break; }
-            r = memset(p, 0x41, (size_t)-1);
-            o = mk(r != NULL, GUARD_OK(guard), r == NULL && GUARD_OK(guard));
+            refused = do_memset(p, 0x41, (size_t)-1);
+            o = mk(!refused, GUARD_OK(guard), refused && GUARD_OK(guard));
             free(p);
         }
         break;
@@ -485,7 +516,7 @@ static outcome run_case(int api, int cas) {
             unsigned char *p = (unsigned char *)malloc(8);
             unsigned char *q = NULL;
             if (!p) { o = mk(0, GUARD_OK(guard), 0); break; }
-            memset(p, 0x11, 8);
+            do_memset(p, 0x11, 8);
             q = (unsigned char *)realloc(p, 16);
             { int ok = (q != NULL && mem_is(q, 8, 0x11));
               free(q); o = mk(ok, GUARD_OK(guard), ok); }
@@ -497,18 +528,16 @@ static outcome run_case(int api, int cas) {
             o = mk(q != NULL, GUARD_OK(guard), q == NULL);
             free(p); /* original block must still be live/untouched */
         } else if (cas == C_SMALL) {
-            unsigned char *p = (unsigned char *)malloc(8);
-            void *r = NULL;
+            unsigned char *p = (unsigned char *)malloc(8); int refused;
             if (!p) { o = mk(0, GUARD_OK(guard), 0); break; }
-            r = memset(p + 1, 0x41, 8);
-            o = mk(r != NULL, GUARD_OK(guard), r == NULL && GUARD_OK(guard));
+            refused = do_memset(p + 1, 0x41, 8);
+            o = mk(!refused, GUARD_OK(guard), refused && GUARD_OK(guard));
             free(p);
         } else {
-            unsigned char *p = (unsigned char *)malloc(8);
-            void *r = NULL;
+            unsigned char *p = (unsigned char *)malloc(8); int refused;
             if (!p) { o = mk(0, GUARD_OK(guard), 0); break; }
-            r = memset(p, 0x41, (size_t)-1);
-            o = mk(r != NULL, GUARD_OK(guard), r == NULL && GUARD_OK(guard));
+            refused = do_memset(p, 0x41, (size_t)-1);
+            o = mk(!refused, GUARD_OK(guard), refused && GUARD_OK(guard));
             free(p);
         }
         break;

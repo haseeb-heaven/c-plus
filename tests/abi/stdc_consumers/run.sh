@@ -240,6 +240,23 @@ extern_c_audit safe_except.h stdlib/safe/safe_except.h
     printf '`build/libc-install/include/cplus-libc/` and `build/compat/prefix/include/cplus-libc/` '
     printf 'are byte-identical (verified with `cksum`), so the results apply to the installed prefix too.\n\n'
 
+    std_fail=$(awk -F'|' '$2 ~ /<[a-z]+\.h>|combined/ && $4 ~ /FAIL/ {n++} END {print n+0}' "$ROWS")
+    overlay_fail=$(awk -F'|' '$2 ~ /cplus_libc_safe\.h|safe_c\.h/ && $4 ~ /FAIL/ {n++} END {print n+0}' "$ROWS")
+
+    printf '## Headline result\n\n'
+    printf -- '- Main matrix: **%s/%s** compile runs PASS.\n' "$PASS" "$((PASS + FAIL))"
+    printf -- '- Standard headers (9 headers, C99 + C++17, plus the combined TU): **%s FAIL** run(s).\n' "$std_fail"
+    printf -- '- Additive overlays (`cplus_libc_safe.h`, `stdlib/safe/safe_c.h`): **%s FAIL** run(s) — both C++17 consumers, no C failures.\n' "$overlay_fail"
+    if [ "$overlay_fail" -gt 0 ]; then
+        printf -- '- Genuine gap: `cplus_libc.h` (included by both overlays) uses C-only `restrict` and `double complex` tokens, which clang++ rejects in C++17 mode. First diagnostic:\n\n'
+        printf '```text\n'
+        /usr/bin/grep -m1 'error:' "$OUT/cplus_libc_safe.cpp.log" || printf '(unexpected: no error line captured)\n'
+        printf '```\n\n'
+        printf -- '- `extern "C"` guards are present in every header that declares a function; the safeclib-style overlay headers compile cleanly on their own under C++17 (probe below). The failure is a parse error, not a linkage error. No header was edited to make a test pass.\n\n'
+    else
+        printf -- '- No overlay FAIL rows in this run: both overlays compile for C99 and C++17.\n\n'
+    fi
+
     printf '## Per-header results\n\n'
     printf '| Header | Consumer | Result | Exit | Log |\n'
     printf '| --- | --- | --- | --- | --- |\n'

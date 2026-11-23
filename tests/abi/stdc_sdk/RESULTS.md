@@ -62,7 +62,7 @@ leaves a clean install prefix at `build/libc-install` containing
 `include/cplus-libc/cplus_libc.h`, the CMake package config and the contracts.
 The installed `cplus_libc.h` and `cplus_safecrt_upstream.h` are byte-identical
 to the repo's `libc/install-include/` copies (SHA-256
-`7c1acca2…a85027` and `568fcf64…b5b5eef9`).
+`7c1acca2…48ed0baa85027` and `568fcf64…c7c1f37aeeef9`).
 
 ---
 
