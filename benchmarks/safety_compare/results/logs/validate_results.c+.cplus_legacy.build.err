@@ -7,7 +7,7 @@ In file included from /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/benchma
 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/benchmarks/safety_compare/validate_results.cp:237:10: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
   237 |     for (int i = 0; i < n; i++) {
       |          ^
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/benchmarks/safety_compare/validate_results.cp:588:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
-  588 |         for (int k = 0; k < r->numeric_count; k++) {
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/benchmarks/safety_compare/validate_results.cp:598:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+  598 |         for (int k = 0; k < r->numeric_count; k++) {
       |              ^
 3 warnings generated.

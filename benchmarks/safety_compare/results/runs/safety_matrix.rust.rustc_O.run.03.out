@@ -1,9 +1,0 @@
-SCENARIO 01_null_argument REFUSED copy_checked(dest=None) -> Err(NullArgument); null &T is unrepresentable
-SCENARIO 02_zero_length OK Vec::new() len=0 (defined; C+ malloc_s(0) reports tracked_size=1)
-SCENARIO 03a_exact_fit OK copy_checked(dmax=8,smax=8) -> Ok(8)
-SCENARIO 03b_one_over REFUSED copy_checked(dmax=8,smax=9) -> Err(TooSmall); raw buf[8] would panic
-SCENARIO 04_integer_overflow REFUSED usize::MAX.checked_mul(2) -> None
-SCENARIO 05_alloc_atomicity REFUSED budget=0 reserve -> Err; original len=32 bytes_intact (atomic)
-SCENARIO 06_use_after_drop_runtime REFUSED Option::take() twice -> second=None (no second owner in safe Rust)
-SCENARIO 07_double_drop REFUSED Option::take() first=Some second=None (second drop refused)
-MATRIX_DONE 8

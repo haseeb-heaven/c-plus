@@ -33,6 +33,7 @@
 #include "stdlib/file.hp"
 
 #define LINE_CAP 2048
+#define EVIDENCE_CAP 65536
 #define FIELD_CAP 256
 #define MAX_FIELDS 48
 #define MAX_RECORDS 512
@@ -539,6 +540,13 @@ static int parse_json(const char *buf, size_t len) {
                         add_check("json.record_string", 0);
                         return 0;
                     }
+                } else if (byte_at(buf, i) == '{' || byte_at(buf, i) == '[') {
+                    /* Nested metadata (e.g. artifacts) is not evidence. */
+                    value[0] = '\0';
+                    if (!skip_json_value(buf, len, &i)) {
+                        add_check("json.nested_value", 0);
+                        return 0;
+                    }
                 } else if (!read_json_token(buf, len, &i, value, FIELD_CAP)) {
                     add_check("json.record_value", 0);
                     return 0;
@@ -583,7 +591,7 @@ static void validate_records(void) {
             char *end = NULL;
             long runs = strtol(r->runs_text, &end, 10);
             snprintf(tag, sizeof(tag), "record%d.runs_integer", i + 1);
-            add_check(tag, end != r->runs_text && *end == '\0' && runs > 0);
+            add_check(tag, end != r->runs_text && *end == '\0');
             snprintf(tag, sizeof(tag), "record%d.runs_ge_7", i + 1);
             add_check(tag, end != r->runs_text && *end == '\0' && runs >= 7);
         }
@@ -667,7 +675,7 @@ static void validate_checksums(void) {
 /* ------------------------------------------------------------------ */
 
 static void validate_file(const char *path) {
-    static char buf[LINE_CAP * 8];
+    static char buf[EVIDENCE_CAP];
     long count;
     size_t len;
     int is_json = 0;

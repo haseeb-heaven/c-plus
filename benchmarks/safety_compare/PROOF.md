@@ -533,3 +533,38 @@ Other sibling artifacts add the following outcomes:
 - This is one repository at one branch state, built around one C+ driver and
   toolchain set. It is not a general performance, safety, or "language X is
   faster/safer" claim about any language or standard library.
+
+## Final reproducible-driver run (after all integrations)
+
+Command:
+
+```sh
+sh benchmarks/safety_compare/run_all.sh
+```
+
+Actual final result: `ok=15 blocked=5 fail=0 required_failures=0`, driver exit 0.
+`BENCH_VALID 157 0` from `validate_results.cp`.
+
+Matched checksums: `loop=19999999900000000`, `nested=16000000`,
+`modern=2200000200000`, `bench_modern=5595356797869224`,
+`alloc_bench=4750706934088118880`.
+
+Selected medians from the final table (`results/table.txt`):
+
+| Workload | Variant | median (s) | p95 (s) | status |
+|---|---|---:|---:|---|
+| alloc_bench | Rust -O | 0.010404 | 0.013873 | ok |
+| alloc_bench | C+ legacy | 0.039720 | 0.049571 | ok |
+| bench_modern | Rust -O | 0.023018 | 0.026586 | ok |
+| bench_modern | C+ legacy | 0.020533 | 0.024590 | ok |
+| modern | Rust -O | 0.009449 | 0.011401 | ok |
+| modern | C+ legacy | 0.008306 | 0.010272 | ok |
+
+C+ safe rows are `blocked` by the external `CPLUS_EXIT_ARITHMETIC` runtime/
+header mismatch; no safe-mode timing is claimed from this driver run. Earlier
+direct `--strict --sanitize=none` measurements are recorded in the per-tool
+NOTES files and must not be presented as sanitizer results.
+
+These numbers show comparable observed throughput for matched workloads, not
+Rust-equivalent guarantees and not proof of memory safety. C+ checked APIs are
+runtime-enforced; Rust rejects several of the same errors at compile time.

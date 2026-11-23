@@ -290,6 +290,8 @@ process() {
     _p_tag="${_p_wl}_${_p_arg}"
     _p_label="$_p_wl/$_p_arg"
   fi
+  # argv may be a path; keep artifact file names flat and filesystem-safe.
+  _p_tag=$(printf '%s' "$_p_tag" | tr '/' '_')
 
   build_one "$_p_wl" "$_p_lang" "$_p_build"
   BUILD_EXIT_VAL=$BUILD_RC
