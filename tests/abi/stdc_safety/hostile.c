@@ -32,6 +32,16 @@
 #  define CHECKED 1
 #else
 #  define CHECKED 0
+/* macOS <secure/_string.h> layers fortify macros (calling __*_chk, which
+ * abort) on top of raw libc.  The PLAIN control must exercise genuine raw-C
+ * behaviour so the canary corruption is observable, so drop those macros. */
+#  undef memcpy
+#  undef memmove
+#  undef memset
+#  undef strcpy
+#  undef strncpy
+#  undef strcat
+#  undef strncat
 #endif
 
 #define CANARY_BYTE 0xA5u
@@ -41,7 +51,6 @@ typedef struct { unsigned char buf[16]; unsigned char canary[CANARY_LEN]; } gmem
 typedef struct { char buf[8];          unsigned char canary[CANARY_LEN]; } gstr;
 typedef struct { char buf[64];         unsigned char canary[CANARY_LEN]; } gname;
 
-static int g_quiet;          /* suppress incidental output in PLAIN children */
 static const char *g_outdir = ".";
 
 typedef struct { int acted; int canary_ok; int data_ok; } outcome;
@@ -82,13 +91,7 @@ static int seq_is(const unsigned char *p, size_t n) {
 #define OP_BEGIN  errno = 0
 #define OP_REFUSED (errno != 0)
 
-/* Observe a memory-family operation (whose macro is cast to void). */
-static int do_memcpy(void *d, const void *s, size_t n) {
-    OP_BEGIN; memcpy(d, s, n); return OP_REFUSED;
-}
-static int do_memmove(void *d, const void *s, size_t n) {
-    OP_BEGIN; memmove(d, s, n); return OP_REFUSED;
-}
+/* Observe a memset operation (safe_c.h casts the macro result to void). */
 static int do_memset(void *d, int v, size_t n) {
     OP_BEGIN; memset(d, v, n); return OP_REFUSED;
 }
@@ -599,8 +602,12 @@ static outcome run_case(int api, int cas) {
 }
 
 /* ---------------- counters + reporting ---------------------------------- */
-static unsigned long g_cases, g_refused, g_canary_ok, g_failures;
+static unsigned long g_failures;
+#if CHECKED
+static unsigned long g_cases, g_refused, g_canary_ok;
+#endif
 
+#if CHECKED
 static void emit_checked(int api, int cas, const outcome *o) {
     int hostile = (cas != C_VALID);
     int pass = hostile ? (!o->acted && o->data_ok && o->canary_ok)
@@ -612,6 +619,7 @@ static void emit_checked(int api, int cas, const outcome *o) {
     if (o->canary_ok) ++g_canary_ok;
     if (!pass) ++g_failures;
 }
+#endif /* CHECKED */
 
 int main(int argc, char **argv) {
     int api, cas;
@@ -634,10 +642,13 @@ int main(int argc, char **argv) {
     fflush(stdout);
     return g_failures ? 1 : 0;
 #else
-    (void)g_quiet;
     for (api = 0; api < A_COUNT; ++api) {
         for (cas = 0; cas < C_COUNT; ++cas) {
-            pid_t pid = fork();
+            pid_t pid;
+            /* stdout is fully buffered when redirected; a child must not
+             * inherit (and later re-flush) the supervisor's pending output. */
+            fflush(stdout);
+            pid = fork();
             if (pid == 0) {
                 outcome o = run_case(api, cas);
                 int hostile = (cas != C_VALID);

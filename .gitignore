@@ -105,3 +105,5 @@ benchmarks/example_rust_compare/**/cbuild/
 benchmarks/example_rust_compare/demos_a_d/orig_*
 benchmarks/example_rust_compare/demos_a_d/clang_*
 benchmarks/benchmarks/
+benchmarks/example_rust_compare/**/rbuild/
+benchmarks/example_rust_compare/**/cbuild/

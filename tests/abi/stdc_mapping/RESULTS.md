@@ -84,7 +84,7 @@ spelling in that TU is not redirected by a global symbol override.
 
 ## 4. Summary
 
-Mapped-name checks: **16 passed, 0 failed**.
+Mapped-name checks: **16 passed, 0 failed**. Total failures including nm/TU-isolation probes: **0**.
 
 Mechanism: the rewrite happens in the **including translation unit only**
 (preprocessor `#undef`/`#define`). There is **no symbol interposition**:

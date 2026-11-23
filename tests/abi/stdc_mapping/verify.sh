@@ -238,7 +238,7 @@ fi
   printf '\n'
 
   printf '## 4. Summary\n\n'
-  printf 'Mapped-name checks: **%d passed, %d failed**.\n\n' "$pass" "$fail"
+  printf 'Mapped-name checks: **%d passed, %d failed**. Total failures including nm/TU-isolation probes: **%d**.\n\n' "$pass" "$mapped_fail" "$fail"
   printf 'Mechanism: the rewrite happens in the **including translation unit only**\n'
   printf '(preprocessor `#undef`/`#define`). There is **no symbol interposition**:\n'
   printf 'a TU compiled without the header still relocates `malloc` to the host CRT,\n'
@@ -250,5 +250,5 @@ fi
 } > "$RESULTS"
 
 echo "RESULTS: $RESULTS"
-echo "SUMMARY: mapped-name pass=$pass fail=$fail; all failures(incl. nm/iso)=$fail"
+echo "SUMMARY: mapped-name pass=$pass fail=$mapped_fail; total failures(incl. nm/iso)=$fail"
 [ "$fail" -eq 0 ]

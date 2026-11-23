@@ -2,6 +2,22 @@
  * user explicitly links libcplus_hardened and uses these symbols. */
 #ifndef CPLUS_LIBC_H
 #define CPLUS_LIBC_H
+
+/* C++ compatibility: C99 `restrict` and `double complex` spellings are not
+ * valid C++.  Use the ABI-identical spellings __restrict / _Complex double
+ * in C++ translation units; C translation units keep the ISO C spellings.
+ * No layout, signature, or symbol name changes in either language. */
+#ifdef __cplusplus
+#define CPLUS_RESTRICT __restrict
+#define CPLUS_FLOAT_COMPLEX _Complex float
+#define CPLUS_DOUBLE_COMPLEX _Complex double
+#define CPLUS_LDOUBLE_COMPLEX _Complex long double
+#else
+#define CPLUS_RESTRICT restrict
+#define CPLUS_FLOAT_COMPLEX float complex
+#define CPLUS_DOUBLE_COMPLEX double complex
+#define CPLUS_LDOUBLE_COMPLEX long double complex
+#endif
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -83,17 +99,17 @@ void   cplus_alloc_fail_reset(void);
 #define realloc(p, sz)  cplus_realloc((p), (sz))
 #define free(p)         cplus_free(p)
 #endif
-void *cplus_memcpy(void*restrict,const void*restrict,size_t);
+void *cplus_memcpy(void*CPLUS_RESTRICT,const void*CPLUS_RESTRICT,size_t);
 void *cplus_memmove(void*,const void*,size_t);
 void *cplus_memset(void*,int,size_t);
 int   cplus_memcmp(const void*,const void*,size_t);
 void *cplus_memchr(const void*,int,size_t);
 size_t cplus_strlen(const char*);
 size_t cplus_strnlen(const char*,size_t);
-char *cplus_strcpy(char*restrict,const char*restrict);
-char *cplus_strncpy(char*restrict,const char*restrict,size_t);
-char *cplus_strcat(char*restrict,const char*restrict);
-char *cplus_strncat(char*restrict,const char*restrict,size_t);
+char *cplus_strcpy(char*CPLUS_RESTRICT,const char*CPLUS_RESTRICT);
+char *cplus_strncpy(char*CPLUS_RESTRICT,const char*CPLUS_RESTRICT,size_t);
+char *cplus_strcat(char*CPLUS_RESTRICT,const char*CPLUS_RESTRICT);
+char *cplus_strncat(char*CPLUS_RESTRICT,const char*CPLUS_RESTRICT,size_t);
 int   cplus_strcmp(const char*,const char*);
 int   cplus_strncmp(const char*,const char*,size_t);
 char *cplus_strchr(const char*,int);
@@ -187,8 +203,8 @@ int cplus_pthread_cond_init(pthread_cond_t*,const pthread_condattr_t*); int cplu
 /* fenv (platform-backed) */
 int cplus_feclearexcept(int); int cplus_fetestexcept(int); int cplus_fegetround(void); int cplus_fesetround(int); int cplus_fegetenv(fenv_t*); int cplus_fesetenv(const fenv_t*);
 /* complex (platform-backed; host <complex.h> has no cadd/cmul, so those are omitted) */
-double cplus_cabs(double complex); double cplus_carg(double complex); double cplus_creal(double complex); double cplus_cimag(double complex);
-double complex cplus_conj(double complex); double complex cplus_cexp(double complex); double complex cplus_csqrt(double complex);
+double cplus_cabs(CPLUS_DOUBLE_COMPLEX); double cplus_carg(CPLUS_DOUBLE_COMPLEX); double cplus_creal(CPLUS_DOUBLE_COMPLEX); double cplus_cimag(CPLUS_DOUBLE_COMPLEX);
+CPLUS_DOUBLE_COMPLEX cplus_conj(CPLUS_DOUBLE_COMPLEX); CPLUS_DOUBLE_COMPLEX cplus_cexp(CPLUS_DOUBLE_COMPLEX); CPLUS_DOUBLE_COMPLEX cplus_csqrt(CPLUS_DOUBLE_COMPLEX);
 /* wctype (platform-backed C17 <wctype.h>) */
 int cplus_iswalpha(wint_t); int cplus_iswdigit(wint_t); int cplus_iswspace(wint_t); int cplus_iswalnum(wint_t);
 int cplus_iswupper(wint_t); int cplus_iswlower(wint_t); int cplus_iswxdigit(wint_t); int cplus_iswprint(wint_t);
@@ -199,12 +215,12 @@ wctype_t cplus_wctype(const char*); int cplus_iswctype(wint_t, wctype_t);
 struct tm *cplus_gmtime_r(const time_t*, struct tm*); struct tm *cplus_localtime_r(const time_t*, struct tm*);
 char *cplus_asctime_r(const struct tm*, char*); char *cplus_ctime_r(const time_t*, char*);
 void cplus_rewind(FILE*); int cplus_fgetc(FILE*); int cplus_fputc(int, FILE*);
-intmax_t cplus_strtoimax(const char *restrict, char **restrict, int);
-uintmax_t cplus_strtoumax(const char *restrict, char **restrict, int);
-int cplus_mblen(const char*, size_t); int cplus_mbtowc(wchar_t *restrict, const char *restrict, size_t);
+intmax_t cplus_strtoimax(const char *CPLUS_RESTRICT, char **CPLUS_RESTRICT, int);
+uintmax_t cplus_strtoumax(const char *CPLUS_RESTRICT, char **CPLUS_RESTRICT, int);
+int cplus_mblen(const char*, size_t); int cplus_mbtowc(wchar_t *CPLUS_RESTRICT, const char *CPLUS_RESTRICT, size_t);
 int cplus_wctomb(char*, wchar_t);
-size_t cplus_mbstowcs(wchar_t *restrict, const char *restrict, size_t);
-size_t cplus_wcstombs(char *restrict, const wchar_t *restrict, size_t);
+size_t cplus_mbstowcs(wchar_t *CPLUS_RESTRICT, const char *CPLUS_RESTRICT, size_t);
+size_t cplus_wcstombs(char *CPLUS_RESTRICT, const wchar_t *CPLUS_RESTRICT, size_t);
 
 /* Additional gap-closing APIs defined in this library */
 int cplus_wcscoll(const wchar_t *ws1, const wchar_t *ws2);
@@ -287,66 +303,66 @@ int cplus_vswscanf(const wchar_t *str, const wchar_t *fmt, va_list ap);
 wctrans_t cplus_wctrans(const char *property);
 wint_t cplus_towctrans(wint_t wc, wctrans_t desc);
 /* complex (ISO C17 full family) */
-double complex cplus_csin(double complex z);
-double complex cplus_ccos(double complex z);
-double complex cplus_ctan(double complex z);
-double complex cplus_csinh(double complex z);
-double complex cplus_ccosh(double complex z);
-double complex cplus_ctanh(double complex z);
-double complex cplus_clog(double complex z);
-double complex cplus_cpow(double complex x, double complex y);
-double complex cplus_cproj(double complex z);
+CPLUS_DOUBLE_COMPLEX cplus_csin(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_ccos(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_ctan(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_csinh(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_ccosh(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_ctanh(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_clog(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_cpow(CPLUS_DOUBLE_COMPLEX x, CPLUS_DOUBLE_COMPLEX y);
+CPLUS_DOUBLE_COMPLEX cplus_cproj(CPLUS_DOUBLE_COMPLEX z);
 /* C17 complex inverse trigonometry (18 host-delegated entry points) */
-double complex cplus_cacos(double complex z);
-double complex cplus_casin(double complex z);
-double complex cplus_catan(double complex z);
-double complex cplus_cacosh(double complex z);
-double complex cplus_casinh(double complex z);
-double complex cplus_catanh(double complex z);
-float complex cplus_cacosf(float complex z);
-float complex cplus_casinf(float complex z);
-float complex cplus_catanf(float complex z);
-float complex cplus_cacoshf(float complex z);
-float complex cplus_casinhf(float complex z);
-float complex cplus_catanhf(float complex z);
-long double complex cplus_cacosl(long double complex z);
-long double complex cplus_casinl(long double complex z);
-long double complex cplus_catanl(long double complex z);
-long double complex cplus_cacoshl(long double complex z);
-long double complex cplus_casinhl(long double complex z);
-long double complex cplus_catanhl(long double complex z);
-float cplus_cabsf(float complex z);
-float cplus_cargf(float complex z);
-float cplus_crealf(float complex z);
-float cplus_cimagf(float complex z);
-float complex cplus_conjf(float complex z);
-float complex cplus_cexpf(float complex z);
-float complex cplus_csqrtf(float complex z);
-float complex cplus_csinf(float complex z);
-float complex cplus_ccosf(float complex z);
-float complex cplus_ctanf(float complex z);
-float complex cplus_csinhf(float complex z);
-float complex cplus_ccoshf(float complex z);
-float complex cplus_ctanhf(float complex z);
-float complex cplus_clogf(float complex z);
-float complex cplus_cpowf(float complex x, float complex y);
-float complex cplus_cprojf(float complex z);
-long double cplus_cabsl(long double complex z);
-long double cplus_cargl(long double complex z);
-long double cplus_creall(long double complex z);
-long double cplus_cimagl(long double complex z);
-long double complex cplus_conjl(long double complex z);
-long double complex cplus_cexpl(long double complex z);
-long double complex cplus_csqrtl(long double complex z);
-long double complex cplus_csinl(long double complex z);
-long double complex cplus_ccosl(long double complex z);
-long double complex cplus_ctanl(long double complex z);
-long double complex cplus_csinhl(long double complex z);
-long double complex cplus_ccoshl(long double complex z);
-long double complex cplus_ctanhl(long double complex z);
-long double complex cplus_clogl(long double complex z);
-long double complex cplus_cpowl(long double complex x, long double complex y);
-long double complex cplus_cprojl(long double complex z);
+CPLUS_DOUBLE_COMPLEX cplus_cacos(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_casin(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_catan(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_cacosh(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_casinh(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_DOUBLE_COMPLEX cplus_catanh(CPLUS_DOUBLE_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_cacosf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_casinf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_catanf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_cacoshf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_casinhf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_catanhf(CPLUS_FLOAT_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_cacosl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_casinl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_catanl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_cacoshl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_casinhl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_catanhl(long CPLUS_DOUBLE_COMPLEX z);
+float cplus_cabsf(CPLUS_FLOAT_COMPLEX z);
+float cplus_cargf(CPLUS_FLOAT_COMPLEX z);
+float cplus_crealf(CPLUS_FLOAT_COMPLEX z);
+float cplus_cimagf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_conjf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_cexpf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_csqrtf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_csinf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_ccosf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_ctanf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_csinhf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_ccoshf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_ctanhf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_clogf(CPLUS_FLOAT_COMPLEX z);
+CPLUS_FLOAT_COMPLEX cplus_cpowf(CPLUS_FLOAT_COMPLEX x, CPLUS_FLOAT_COMPLEX y);
+CPLUS_FLOAT_COMPLEX cplus_cprojf(CPLUS_FLOAT_COMPLEX z);
+long double cplus_cabsl(long CPLUS_DOUBLE_COMPLEX z);
+long double cplus_cargl(long CPLUS_DOUBLE_COMPLEX z);
+long double cplus_creall(long CPLUS_DOUBLE_COMPLEX z);
+long double cplus_cimagl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_conjl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_cexpl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_csqrtl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_csinl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_ccosl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_ctanl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_csinhl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_ccoshl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_ctanhl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_clogl(long CPLUS_DOUBLE_COMPLEX z);
+long CPLUS_DOUBLE_COMPLEX cplus_cpowl(long CPLUS_DOUBLE_COMPLEX x, long CPLUS_DOUBLE_COMPLEX y);
+long CPLUS_DOUBLE_COMPLEX cplus_cprojl(long CPLUS_DOUBLE_COMPLEX z);
 /* math (ISO C17 float family) */
 float cplus_sinf(float x);
 float cplus_cosf(float x);
@@ -469,8 +485,8 @@ void cplus_quick_exit(int status);
 int cplus_at_quick_exit(void (*func)(void));
 void cplus__Exit(int status);
 /* inttypes (ISO C17 wide intmax conversions) */
-intmax_t cplus_wcstoimax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
-uintmax_t cplus_wcstoumax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
+intmax_t cplus_wcstoimax(const wchar_t *CPLUS_RESTRICT nptr, wchar_t **CPLUS_RESTRICT endptr, int base);
+uintmax_t cplus_wcstoumax(const wchar_t *CPLUS_RESTRICT nptr, wchar_t **CPLUS_RESTRICT endptr, int base);
 #ifdef __cplusplus
 }
 #endif
