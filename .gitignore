@@ -85,3 +85,10 @@ tests/stdlib/method_tests/json_log_time/log_methods
 tests/stdlib/method_tests/json_log_time/time_methods
 tests/stdlib/method_tests/str_vec/string_methods
 tests/stdlib/method_tests/str_vec/vector_methods
+
+# Generated adversarial-campaign logs (never commit; text evidence stays in NOTES.md).
+tests/adversarial_1000/**/results/
+# Generated Rust-example build artifacts.
+benchmarks/rust_examples/**/.build/
+benchmarks/rust_examples/**/results/
+benchmarks/rust_examples/**/bin/
