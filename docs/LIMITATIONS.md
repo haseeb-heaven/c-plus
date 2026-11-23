@@ -40,7 +40,7 @@ depends on a runtime check, the check is named.
 | `p.m()` / `p->m()` sugar | supported | resolved from simple `T p;` / `T *p;` declarations in the same TU |
 | Pthreads + RAII mutex guard | supported | primitives and deterministic unlock; see race note below |
 | `--legacy-c` compatibility mode | supported | no safety checks; **not** memory safe |
-| Use-after-free detection | not enabled in the default build | opt-in `--sanitize=address` works with a backend such as Homebrew clang 23; see below |
+| Use-after-free detection | single-TU named shapes rejected statically | direct, local alias, field, constant array slot, `void*` cast, helper-return alias, released-pointer argument, and runtime-index element cases are rejected in DEFAULT and STRICT; general temporal safety (indirect calls, integer casts, heap address reuse, threads, cross-TU) is still unsupported and needs opt-in ASan where available |
 | Static verification that shared data is locked | **not implemented** | concurrency is primitive-based, not verified |
 | `goto` / `longjmp` cleanup | STRICT rejects live-resource cases | a jump that bypasses cleanup of a live allocation is a STRICT error; plain no-resource jumps warn and still bypass inserted destructors |
 | Constructors as class methods | supported | `T(...)` → `T_ctor`, no return type, no early return |
@@ -56,7 +56,7 @@ depends on a runtime check, the check is named.
 | bug | status in safe C+ | mechanism |
 | --- | --- | --- |
 | 1. Buffer overflow / bad index | caught | compile-time for constants and simple loops (including function-pointer arrays); C+ `__cplus_bounds_check` / UBSan `bounds` at run time |
-| 2. Use-after-free | **not caught** in default builds for raw `malloc`/`free`; opt-in ASan detects it with a working backend | C+ managed allocations detect double/invalid release, not stale dereferences |
+| 2. Use-after-free | **named single-TU shapes caught statically** (direct/alias/field/array/cast/helper-return/callee argument/runtime index); general raw `malloc`/`free` UAF still unsupported | cast-transparent alias groups, `returnedParam_` alias transfer, released-pointer call-boundary rule, conservative runtime-index element rule; managed allocations also detect double/invalid release |
 | 3. Returning a pointer to a local | caught | `-Werror=return-stack-address` |
 | 4. Memory leak on early return | prevented for managed/RAII allocations; not detected for raw `malloc` | scope-exit cleanup |
 | 5. Double free | caught for C+ allocations; not for raw `free` | allocator side table + freed-address cache |

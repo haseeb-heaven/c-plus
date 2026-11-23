@@ -100,21 +100,23 @@ CASES: tuple[Case, ...] = (
         "handling", None,
     ),
     Case(
-        "interproc_uaf", "stale pointer passed to a callee", True, "compile",
-        None, None, "ERROR: AddressSanitizer: heap-use-after-free",
+        "interproc_uaf", "stale pointer passed to a callee", True,
+        "reject", "[CPLUS-LIFETIME]", "use-after-free: released pointer", None,
     ),
     Case(
-        "cast_uaf", "alias hidden by a void* cast", True, "compile", None,
-        None, "ERROR: AddressSanitizer: heap-use-after-free",
+        "cast_uaf", "alias hidden by a void* cast", True,
+        "reject", "[CPLUS-LIFETIME]", "dereference of released pointer 'v'",
+        None,
     ),
     Case(
         "returned_alias_uaf", "alias returned from a helper function", True,
-        "compile", None, None, "ERROR: AddressSanitizer: heap-use-after-free",
+        "reject", "[CPLUS-LIFETIME]",
+        "dereference of released pointer 'q'", None,
     ),
     Case(
         "array_index_uaf", "array-of-pointer UAF with a runtime slot index",
-        True, "compile", None, None,
-        "ERROR: AddressSanitizer: heap-use-after-free",
+        True, "reject", "[CPLUS-LIFETIME]",
+        "possible use-after-free: element of", None,
     ),
     Case(
         "safe_free_null_guard", "free + NULL assignment + null guard", False,

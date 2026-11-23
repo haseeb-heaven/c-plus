@@ -125,6 +125,39 @@ Verification after this pass: native matrix **24/24 PASS** (6 cases × 4
 configurations), repo 109/0, core 152/0, CTest 2/2, Agent 1 suite 156 PASS /
 0 FAIL / 3 SKIP, metrics 90/90 + 0 FP + 51/51 clang-clean.
 
+## P0 enforcement pass (temporal safety)
+
+Ten parallel agents mapped the five P0 requirements onto the exact code
+surface (UAF/double-free, CFG ownership, pointer/bounds, alias, cross-function
+lifetime) and inspected upstream implementations at pinned commits.
+
+**Confirmed defect:** all four previously escaping UAF shapes passed
+`check --strict --sanitize=none`: stale pointer passed to a callee, `void*`
+cast hiding an alias, alias returned by a helper, and runtime-indexed array
+element after `free(slots[0])`.
+
+**Fixed (single-TU, direct-callee scope):**
+- cast-transparent alias resolution (`castedVarName`), plus read-side transfer
+  through `lvalueKey` in `isReleased`;
+- `returnedParam_` now seeds alias groups for `q = identity(p)`;
+- released pointer passed to any non-allocator/non-liveness call is an error
+  in STRICT and a warning in DEFAULT (`cplus_check_live`/`cplus_realloc`
+  exempted after a measured false positive on `quarantine_probe.c`);
+- conservative runtime-index element rule when a constant-index element of
+  the same base was released.
+
+Verification: UAF evidence suite **12/12** — 10 unsafe cases statically
+rejected (was 6) and 2 safe controls accepted/runtime-clean; no sanitizer
+needed for the new rejections. Full suites remain green: repo 109/0, core
+152/0, CTest 2/2, Agent 1 156 PASS / 0 FAIL / 3 SKIP, native matrix 24/24,
+metrics 90/90 with 0 false positives in both modes.
+
+**Still not claimed:** complete temporal safety across indirect calls,
+integer round-trips, heap address reuse, threads, cross-TU ownership,
+containers/fields, or arbitrary pointer provenance. CFG-based ownership and
+symbol/region-keyed state remain the next, larger migration; the Clang
+`runUninitializedVariablesAnalysis` replacement for definite-init is P1 work.
+
 ## Final verdict
 
 PARTIALLY COMPLETE. The audit, all inventories, the native runner, upstream

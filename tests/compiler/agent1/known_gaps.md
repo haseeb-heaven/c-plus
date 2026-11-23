@@ -35,9 +35,14 @@ tests/known_gaps/README.md, and docs/RUST_COMPARISON.md.
   synchronization` although `Guard_lock` protects the write. The token layer
   suppresses it (substring `lock`/`guard`), the AST layer does not. Fix:
   recognize same-TU lock helper functions by body, not callee name.
-- **Raw UAF escapes**: 4 of 12 evidence cases (callee parameter, `void*` cast,
-  helper-returned alias, runtime array index) pass `c+ check --strict` and are
-  detected only by opt-in ASan. See `tests/metrics/uaf_evidence_run.py`.
+- **Raw UAF escapes closed (single-TU, direct callees)**: all 12 evidence cases
+  are now statically rejected in STRICT (10 unsafe + 2 safe controls accepted
+  only when genuinely safe). The previously escaping shapes — callee
+  parameter, `void*` cast, helper-returned alias, runtime array index — are
+  rejected by cast-transparent alias groups, `returnedParam_` alias transfer,
+  a released-pointer call-boundary rule, and a conservative runtime-index
+  element rule. General temporal safety across indirect calls, integer casts,
+  heap address reuse, threads and multiple TUs is still not claimed.
 - **Element lifetimes**: constant-index field/array lvalues are already
   tracked, but runtime-indexed elements, scope-sensitive escape and
   indirect-call ownership are not; a sound minimal rule closes none of the

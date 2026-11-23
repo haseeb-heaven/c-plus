@@ -47,9 +47,9 @@ Optional environment overrides: `CPLUS_BIN`, `CPLUS_ASAN_CLANG`,
 | `array_ptr_uaf` | reject, `[CPLUS-LIFETIME]` | not built |
 | `double_free` | reject, `[CPLUS-OWNER]` | not built |
 | `use_after_realloc` | reject, `[CPLUS-ALIAS]` | not built |
-| `interproc_uaf` | compile (accepted) | ASan `heap-use-after-free` |
-| `cast_uaf` | compile (accepted) | ASan `heap-use-after-free` |
-| `returned_alias_uaf` | compile (accepted) | ASan `heap-use-after-free` |
-| `array_index_uaf` | compile (accepted) | ASan `heap-use-after-free` |
+| `interproc_uaf` | reject, `[CPLUS-LIFETIME]` (released pointer passed to callee) | not built |
+| `cast_uaf` | reject, `[CPLUS-LIFETIME]` (cast-transparent alias) | not built |
+| `returned_alias_uaf` | reject, `[CPLUS-LIFETIME]` (helper-return alias) | not built |
+| `array_index_uaf` | reject, `[CPLUS-LIFETIME]` (runtime index into released element) | not built |
 | `safe_free_null_guard` | compile (accepted) | clean, no diagnostic |
 | `safe_alias_before_free` | compile (accepted) | clean, no diagnostic |

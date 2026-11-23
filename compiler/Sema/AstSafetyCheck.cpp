@@ -373,6 +373,17 @@ public:
     return vd ? vd->getNameAsString() : std::string();
   }
 
+  /// Like varNameOf, but also looks through explicit C-style casts.  A
+  /// `(void *)p` alias must inherit p's release state.
+  std::string castedVarName(const Expr *expr) const {
+    if (!expr)
+      return std::string();
+    const Expr *e = expr->IgnoreParenImpCasts();
+    while (const auto *ce = dyn_cast<ExplicitCastExpr>(e))
+      e = ce->getSubExpr()->IgnoreParenImpCasts();
+    return varNameOf(e);
+  }
+
   // ---- Heap-extent tracking -------------------------------------------
   // Only allocations whose byte count is a compile-time constant are tracked.
   // Unknown or computed sizes are deliberately left untracked so that valid C
@@ -1332,7 +1343,8 @@ public:
   bool isReleased(const Expr *expr) const {
     std::string key = lvalueKey(expr);
     if (releasedVars_.count(varNameOf(expr)) != 0 ||
-        (!key.empty() && releasedFields_.count(key) != 0))
+        (!key.empty() && (releasedVars_.count(key) != 0 ||
+                          releasedFields_.count(key) != 0)))
       return true;
     // A field alias of an already-released field is also dangling.
     auto it = fieldAliases_.find(key);
@@ -2231,8 +2243,19 @@ public:
         }
       }
     }
-    // `T *q = p;` creates a simple alias and inherits the release state.
-    std::string initName = varNameOf(vd->getInit());
+    // `T *q = p;` (including explicit casts) creates a simple alias and
+    // inherits the release state.  `T *q = identity(p)` does the same when
+    // the callee was summarized as returning one of its pointer parameters.
+    std::string initName =
+        vd->getInit() ? castedVarName(vd->getInit()) : std::string();
+    if (initName.empty() && vd->getInit())
+      if (const auto *call =
+              dyn_cast<CallExpr>(vd->getInit()->IgnoreParenCasts()))
+        if (const FunctionDecl *callee = call->getDirectCallee()) {
+          auto rit = returnedParam_.find(callee->getNameAsString());
+          if (rit != returnedParam_.end() && rit->second < call->getNumArgs())
+            initName = castedVarName(call->getArg(rit->second));
+        }
     if (!initName.empty() && conditionalDepth_ == 0) {
       aliasLocs_[vd->getNameAsString()] = vd->getBeginLoc();
       auto &group = aliasGroups_[vd->getNameAsString()];
@@ -2923,6 +2946,27 @@ public:
         fmtShift = 2;
       else if (rawName.find("printf_chk") != std::string::npos) // printf
         fmtShift = 1;
+    }
+    // A released pointer must not cross a function boundary: the callee may
+    // dereference it and no single-TU summary is needed to see the risk.
+    // free/realloc are handled by their own release/double-free checks.
+    if (report_ && name != "free" && name != "cplus_release" &&
+        name != "realloc" && name != "cplus_realloc" &&
+        name != "cplus_check_live") {
+      for (const Expr *arg : call->arguments()) {
+        std::string an = castedVarName(arg);
+        if (an.empty())
+          continue;
+        if (releasedVars_.count(an) || isReleased(arg)) {
+          std::string msg = "use-after-free: released pointer '" + an +
+                            "' passed to '" + name + "'";
+          if (strict_)
+            report(call->getBeginLoc(), msg);
+          else
+            warnAt(call->getBeginLoc(), msg);
+          break;
+        }
+      }
     }
     if (!callee) {
       const Expr *calleeExpr = call->getCallee()->IgnoreParenImpCasts();
@@ -3757,6 +3801,26 @@ public:
   bool VisitArraySubscriptExpr(ArraySubscriptExpr *subscript) {
     if (!report_)
       return true;
+    // A runtime index into an array whose constant-index element was already
+    // released may select the stale slot.  Fail closed in STRICT, warn in
+    // DEFAULT; this is deliberately conservative (SoftBoundCETS/Clang SA
+    // would use symbolic element state, which is not yet modelled).
+    long long probe = 0;
+    std::string baseName = varNameOf(subscript->getBase());
+    if (!baseName.empty() && !evalIndexValue(subscript->getIdx(), probe)) {
+      for (const auto &key : releasedFields_) {
+        if (key.rfind(baseName + "[", 0) == 0) {
+          std::string msg =
+              "possible use-after-free: element of '" + baseName +
+              "' was released and the index is not statically known";
+          if (strict_)
+            report(subscript->getBeginLoc(), msg);
+          else
+            warnAt(subscript->getBeginLoc(), msg);
+          break;
+        }
+      }
+    }
     // A negative constant index is always out of bounds, heap or stack.
     long long constIdx = 0;
     if (evalIndexValue(subscript->getIdx(), constIdx) && constIdx < 0) {
