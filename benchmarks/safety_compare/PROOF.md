@@ -459,7 +459,7 @@ Other sibling artifacts add the following outcomes:
 | `docs/stdlib/TASK6_FINAL_REPORT.md` | earlier clean deep-stdlib run | present |
 | p95 for the 5-variant `loop`/`nested` rows and the 4-variant `modern` speed row | those tables record medians only (§3.5 p95 is a different build configuration) | **PENDING** |
 | Native safety-outcome matrix results (`safety_matrix.cp` Rust side + runner output) | `SAFETY_MATRIX_NOTES.md`: observed `OK`/`REFUSED`/`ABORT`/`COMPILE_ERROR` tokens, both layers, with explicit non-equivalence note | present |
-| `validate_results.cp` validation run output | `VALIDATOR_NOTES.md`: `BENCH_VALID 192 5` on `results/summary.json` (5 blocked rows counted as failures by the pre-fix validator); fixed blocked-row line **PENDING** | present (pre-fix); fixed line **PENDING** |
+| `validate_results.cp` validation run output | `VALIDATOR_NOTES.md` records both pre-fix `BENCH_VALID 192 5` and fixed `BENCH_BLOCKED 5` + `BENCH_VALID 192 0`; independently rebuilt and verified here, exit 0 | present (fixed, verified) |
 | Goose/plain-C/Fil-C peak RSS | out of scope / no toolchain | **PENDING** |
 | Fil-C speed and safety results | no `filc` toolchain installed | **PENDING** |
 
@@ -530,8 +530,10 @@ Other sibling artifacts add the following outcomes:
   build-only `-DCPLUS_EXIT_ARITHMETIC=110` shim), while Rust rejects null/use-after-move
   at *compile time*. Its observed `OK`/`REFUSED`/`ABORT`/`COMPILE_ERROR` tokens
   are evidence of observed behaviour only, **not** of equivalent guarantees.
-  `validate_results.cp` output is recorded in `VALIDATOR_NOTES.md`
-  (`BENCH_VALID 192 5`); the post-fix blocked-row line is **PENDING**.
+  `validate_results.cp` output: pre-fix `BENCH_VALID 192 5` is recorded in
+  `VALIDATOR_NOTES.md`; the fixed validator was rebuilt and verified here as
+  `BENCH_BLOCKED 5` + `BENCH_VALID 192 0`, exit 0 — blocked rows are reported
+  separately, never as failures or passes.
 - This is one repository at one branch state, built around one C+ driver and
   toolchain set. It is not a general performance, safety, or "language X is
   faster/safer" claim about any language or standard library.
@@ -550,23 +552,29 @@ Actual final result (verbatim from `results/summary.json`): `counts` =
 `"status":"blocked"` and `"reason":"external C+ runtime blocker:
 CPLUS_EXIT_ARITHMETIC"`; they are **not** timing results and **not** failures.
 
-Validator: `validate_results.cp` run on `results/summary.json` currently reports
-`BENCH_VALID 192 5` (exit 1). The previously recorded `BENCH_VALID 157 0` in this
-document was from an earlier evidence file and is **superseded** — the `5` is
-the count of externally blocked rows, which the current validator still counts
-as `runs_ge_7` failures because their `runs_ok` is 0.
+Validator: `validate_results.cp` was rebuilt from current source and run on
+`results/summary.json` with the verified output:
 
-**Validator blocked-row semantics (PENDING — fix not yet complete on disk).** A
-sibling agent is updating `validate_results.cp` so that a record with
-`"status":"blocked"` (or `"skipped"`) is treated as an externally blocked row:
-it is exempt from the runs>=7 and checksum rules, never contributes a failure,
-and is counted separately on a `BENCH_BLOCKED <count>` line; only
-`"status":"ok"` (or records with no status field) are validated strictly. With
-the fix applied, the expected line for this summary is `BENCH_VALID 192 0`
-plus `BENCH_BLOCKED 5` and exit 0. The in-progress source already declares the
-`BENCH_BLOCKED` line and suppresses failures for blocked rows but does not yet
-print that line, so the exact post-fix output is **PENDING** verification.
-Refresh after the fix lands with (from the repo root):
+```
+BENCH_BLOCKED 5
+BENCH_VALID 192 0
+exit=0
+```
+
+The pre-fix output was `BENCH_VALID 192 5` (exit 1), where the `5` counted the
+externally blocked rows as `runs_ge_7` failures because their `runs_ok` is 0.
+The earlier `BENCH_VALID 157 0` recorded in this document was from an even older
+evidence file and is **superseded**.
+
+**Validator blocked-row semantics (fixed and verified).** A record with
+`"status":"blocked"` (or `"skipped"`) is an externally blocked row: it is exempt
+from the runs>=7 and checksum rules, never contributes a failure, and is counted
+separately on a `BENCH_BLOCKED <count>` line; only `"status":"ok"` (or records
+with no status field) are validated strictly. Here the 5 blocked rows are
+reported as `BENCH_BLOCKED 5` and excluded from failures, giving an exit-0
+`BENCH_VALID 192 0` — a clean validation of the 15 measured rows, with the 5
+external build blockers accounted for separately. Reproduction (from the repo
+root):
 
 ```sh
 timeout 30 build/c+ build benchmarks/safety_compare/validate_results.cp \

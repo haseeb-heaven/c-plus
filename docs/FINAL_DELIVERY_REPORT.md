@@ -257,7 +257,7 @@ is claimed from this driver**.
 
 **Checksums matched** across compared variants: `loop=19999999900000000`,
 `nested=16000000`, `modern=2200000200000`, `bench_modern=5595356797869224`,
-`alloc_bench=4750706934088118880`. Validator: `BENCH_VALID 157 0`.
+`alloc_bench=4750706934088118880`. Validator (post-fix): `BENCH_VALID 192 0` with `BENCH_BLOCKED 5` reported separately; the older `BENCH_VALID 157 0` was from an earlier evidence file.
 
 ### 6.2 Earlier direct measurements (supplementary, different build configurations)
 

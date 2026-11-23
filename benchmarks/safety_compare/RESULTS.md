@@ -209,22 +209,30 @@ Matched-checksums from the driver: `loop=19999999900000000`,
 `alloc_bench=4750706934088118880` — each verifies one deterministic integer
 result, not a correctness or safety property.
 
-## Validator status (PENDING)
+## Validator status (fixed and verified)
 
-`validate_results.cp` on `results/summary.json` currently reports
-`BENCH_VALID 192 5` (exit 1): the `5` is the externally blocked rows, which the
-pre-fix validator counts as `runs_ge_7` failures because their `runs_ok` is 0.
+`validate_results.cp` was rebuilt from current source and run on
+`results/summary.json`. Verified output:
+
+```
+BENCH_BLOCKED 5
+BENCH_VALID 192 0
+exit=0
+```
+
+The pre-fix validator reported `BENCH_VALID 192 5` (exit 1), counting the 5
+externally blocked rows as `runs_ge_7` failures because their `runs_ok` is 0.
 The earlier `BENCH_VALID 157 0` record was from an older evidence file and is
 superseded.
 
-**Blocked-row semantics (once fixed):** a record with `"status":"blocked"` (or
+**Blocked-row semantics (fixed):** a record with `"status":"blocked"` (or
 `"skipped"`) is an externally blocked row — exempt from the runs>=7 and
 checksum rules, never a failure, counted separately on a `BENCH_BLOCKED <count>`
-line; only `"status":"ok"` (or no status) records are validated strictly. With
-the fix this summary should yield `BENCH_VALID 192 0`, `BENCH_BLOCKED 5`, exit 0.
-The fix is **in progress but not complete on disk** (the `BENCH_BLOCKED` output
-line is not yet printed), so the exact post-fix line is **PENDING** verification.
-Refresh after it lands with:
+line; only `"status":"ok"` (or no status) records are validated strictly. Here
+the 5 blocked rows produce `BENCH_BLOCKED 5` and are excluded from failures,
+yielding `BENCH_VALID 192 0`, exit 0 — the 15 measured rows validate cleanly and
+the 5 external build blockers are accounted for separately, neither pass nor
+failure. Reproduction:
 
 ```sh
 timeout 30 build/c+ build benchmarks/safety_compare/validate_results.cp \

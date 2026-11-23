@@ -27,6 +27,10 @@
  *  - fread/fwrite: the (size * count) product is checked against SIZE_MAX.
  *  - printf/fprintf: mapped to C+ wrappers carrying Clang `format` attributes
  *    so format/argument mismatches are diagnosed at compile time.
+ *  - memrchr_s/bsearch_s: unprefixed `_s` spellings mapped to compiled checked
+ *    implementations, with __builtin_object_size guarding caller-supplied
+ *    extents (ESNOSPC 406). strtok_s/strerror_s were already mapped in
+ *    safe_string.h. memchr_s/qsort_s have no compiled symbol and are NOT mapped.
  *
  * HONEST LIMITS
  * -------------
@@ -57,6 +61,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+/* Declarations for the two compiled checked _s entry points from
+ * build/libc/libcplus_hardened.a that are mapped near the end of this file.
+ * Same install directory as cplus_libc.h; adds no new include-path need. */
+#include "cplus_safecrt_upstream.h"
 
 #if !defined(CPLUS_SAFE_C_DISABLE)
 #define CPLUS_SAFE_C_ENABLE 1
@@ -113,6 +122,61 @@
 #undef fprintf
 #define printf(...)  cplus_printf(__VA_ARGS__)
 #define fprintf(...) cplus_fprintf(__VA_ARGS__)
+
+/* ---- additional `_s` names backed by compiled checked implementations ----
+ *
+ * Only two names in the memchr_s/memrchr_s/bsearch_s/qsort_s family have a
+ * symbol in the shipped archives: cplus_sc_upstream_memrchr_s and
+ * cplus_sc_upstream_bsearch_s (both in build/libc/libcplus_hardened.a). The
+ * other two have no compiled definition, so NO macro is defined for them:
+ * see docs/libc/SAFE_C_NEW_MAPPINGS.md for the nm audit. strtok_s and
+ * strerror_s are already mapped in safe_string.h (cplus_strtok_s /
+ * cplus_strerror_s in build/safe/libcplus_safecrt.a) and are left untouched.
+ *
+ * These are macro-only additions: they define no new function and change no
+ * exported C symbol or struct layout. For valid inputs they call the compiled
+ * implementation with the caller's arguments, preserving ordinary semantics.
+ * __builtin_object_size (via CPLUS_SAFE_OBJ_SIZE) adds the BOS constraint the
+ * standalone upstream ports omitted. Arguments should be side-effect free
+ * (the BOS operand must be a compile-time-known object).
+ */
+
+/* memrchr_s (safeclib extmem) -> cplus_sc_upstream_memrchr_s.
+ *   3 args (dest, ch, resultp): dmax inferred from CPLUS_SAFE_OBJ_SIZE(dest).
+ *   4 args (dest, dmax, ch, resultp): explicit dmax, refused with ESNOSPC (406)
+ *      and *resultp = NULL when dmax exceeds the proven object size; this
+ *      mirrors upstream _memrchr_s_chk / CHK_DEST_MEM_OVR.
+ * Return codes: EOK 0, ESNOTFND 409, ESNULLP 400, ESZEROL 401,
+ *               ESLEMAX 403 (dmax > RSIZE_MAX_MEM or ch > 255), ESNOSPC 406. */
+#define CPLUS_SAFE_MEMRCHR_S_3(dest, ch, resultp)                             \
+    cplus_sc_upstream_memrchr_s((dest), CPLUS_SAFE_OBJ_SIZE(dest), (ch), (resultp))
+#define CPLUS_SAFE_MEMRCHR_S_4(dest, dmax, ch, resultp)                       \
+    (((dest) != NULL && (resultp) != NULL &&                                  \
+      CPLUS_SAFE_OBJ_SIZE(dest) != (size_t)-1 &&                              \
+      (size_t)(dmax) > CPLUS_SAFE_OBJ_SIZE(dest))                             \
+         ? ((*((void **)(resultp)) = NULL), (int)CPLUS_SC_UPSTREAM_ESNOSPC)    \
+         : cplus_sc_upstream_memrchr_s((dest), (dmax), (ch), (resultp)))
+#undef memrchr_s
+#define memrchr_s(...)                                                        \
+    CPLUS_SAFE_CAT(CPLUS_SAFE_MEMRCHR_S_, CPLUS_SAFE_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+/* bsearch_s (C11 K.3.6.3.1) -> cplus_sc_upstream_bsearch_s. The 6-argument
+ * signature is unchanged, so context = NULL gives the ordinary bsearch shape.
+ * The macro adds the BOS check the standalone port omits: if nmemb*size is
+ * larger than __builtin_object_size(base), return NULL with errno = ESNOSPC
+ * (406). A clean search sets errno = 0; NULL key/base/compar gives ESNULLP
+ * (400); nmemb or size > RSIZE_MAX_MEM gives ESLEMAX (403). */
+#define CPLUS_SAFE_BSEARCH_BOS_OVER(base, nmemb, size)                        \
+    (CPLUS_SAFE_OBJ_SIZE(base) != (size_t)-1 && (size_t)(nmemb) != 0 &&        \
+     (size_t)(size) >                                                          \
+         CPLUS_SAFE_OBJ_SIZE(base) /                                           \
+             ((size_t)(nmemb) != 0 ? (size_t)(nmemb) : (size_t)1))
+#undef bsearch_s
+#define bsearch_s(key, base, nmemb, size, compar, context)                    \
+    ((CPLUS_SAFE_BSEARCH_BOS_OVER((base), (nmemb), (size)))                    \
+         ? (errno = CPLUS_SC_UPSTREAM_ESNOSPC, (void *)NULL)                   \
+         : cplus_sc_upstream_bsearch_s((key), (base), (nmemb), (size),          \
+                                       (compar), (context)))
 
 #endif /* CPLUS_SAFE_C_ENABLE */
 #endif /* CPLUS_SAFE_C_H */

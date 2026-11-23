@@ -6,6 +6,19 @@ Plain C, Goose, and Fil-C are out of scope for this task and were not measured h
 (Fil-C also has no installed toolchain). See [`RESULTS.md`](RESULTS.md) for the
 speed numbers and workload definitions; the workloads here are the same ones.
 
+> **Status and fairness note.** These RSS figures were measured from the
+> already-built binaries listed below on 2026-11-23. The later reproducible
+> driver run recorded in `results/table.txt` reports every `cplus_safe` row as
+> **BLOCKED** (`0/7`, numeric columns `-`) by the `CPLUS_EXIT_ARITHMETIC`
+> toolchain mismatch (`METHODOLOGY.md` §7.4), so these RSS values are earlier
+> observations, not output of that driver; no safe-mode result is claimed here
+> for the final driver. The `cplus_legacy` binaries are `--release --legacy-c`
+> (legacy C, **not** memory safe), **not** the fair C+ speed configuration
+> `--release --strict --sanitize=none`. RSS is not a speed metric, but do not
+> present these variants as a fair C+ vs Rust speed comparison: a C+ `-O0`
+> build against Rust `-O` is likewise not apples-to-apples (see
+> `ALLOC_COMPARE_NOTES.md` and `METHODOLOGY.md` §1.3).
+
 ## Measurement tool
 
 `/usr/bin/time -l <binary>` (macOS/BSD `time`). It is available on this host and
@@ -183,7 +196,11 @@ pass (range 20,250,624–23,396,352 bytes overall, about 19.3–22.3 MiB). Treat
   the three on every workload. File size and peak RSS measure different things.
 - **Scope:** only `maximum resident set size` from `/usr/bin/time -l` is compared.
   No safety guarantee, correctness property, or "memory safety" claim follows
-  from these numbers. Fil-C was not measured (no toolchain installed); plain C
-  and Goose were not measured because this task covered C+ and Rust only.
+  from these numbers. Equal or lower RSS never implies that C+ and Rust provide
+  equivalent guarantees: C+ relies on runtime/API-boundary checks plus
+  compile-time diagnostics, whereas Rust relies on compile-time ownership and
+  borrow checking plus checked returns. Fil-C was not measured (no toolchain
+  installed); plain C and Goose were not measured because this task covered C+
+  and Rust only.
 - One machine, three synthetic workloads, two measurement passes. Not a general
   memory-footprint claim about C+, Rust, or any standard library.

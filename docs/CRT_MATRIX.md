@@ -15,6 +15,32 @@ Evidence-based matrix for the shipped SafeCRT and hardened libc slice. Not a ful
 | `cplus_fread_s` / `cplus_fwrite_s` | CHECKED ADAPTER (Annex K `bmax`) | `stdlib/safe/safe_io.h` | `stdlib/safe/src/safe_io.c` | `test_iofam_stream.c`, `test_io50_clamp_bmax.c` | `fuzz_stdio.c` | Clamps `count` to `bmax / size` |
 | `cplus_snprintf_s` / `vsnprintf_s` / `sprintf_s` / `vsprintf_s` | CHECKED BOUNDED ADAPTER | `stdlib/safe/safe_format.h` | `stdlib/safe/src/safe_format.c` | `test_safe_format.c`, `test_allocfmt_roundtrip.c` | `fuzz_format.c` | C99 bounded NUL-terminated formatting |
 | `cplus_runtime_guard` / `cplus_runtime_push_cleanup` | RUNTIME RECOVERY + CLEANUP | `stdlib/safe/safe_runtime.h` | `stdlib/safe/src/safe_runtime.c` | `test_runtime_recover.c`, `test_runtime_cleanup.c` | — | LIFO cleanup stack; fail-stop mode supported |
+| ordinary `malloc`/`calloc`/`realloc`/`free`, `memset`/`memcpy`/`memmove`/`memcmp`, `strcpy`/`strncpy`/`strcat`/`strncat`, `fread`/`fwrite`, `printf`/`fprintf` | COMPILE-TIME MACRO → CHECKED `_s` (no new ABI) | `stdlib/safe/safe_c.h:61-117` | targets already shipped: `malloc_s`…, `cplus_*_s_auto`, `cplus_fread`/`cplus_fwrite`, `cplus_printf`/`cplus_fprintf` (`libcplus_safecrt.a` + `libcplus_hardened.a`) | `test_safe_c_api.c`, `scratch/demo.c` | — | ordinary spellings rewritten in the including TU only; no source/export change, no libc interposition; valid input gives the same data result, invalid input refused via `errno` + safeclib `ESNOSPC 406` diagnostic; unknown capacity unresolved by default |
+
+## ABI-preserving ordinary-C checked layer
+
+The last row is a **compile-time mapping**, not another backend or another
+shipped API surface. `stdlib/safe/safe_c.h` maps ordinary C names onto the
+checked implementations above in the including translation unit only; it edits
+no C source, renames no exported symbol, exports nothing itself, and does not
+interpose host libc. A precompiled library built without the header is
+unaffected. Valid input yields the same data result; invalid input is refused
+with the codes documented in `docs/libc/SAFE_CRT_MEMORY_CONTRACT.md` (direct
+`_s`: positive `ESNULLP` 400 … `ESNOSPC` 406; `_s_auto`: `errno = EINVAL` /
+`ERANGE` plus a diagnostic). Unknown capacity is still unchecked by default
+(strict mode: `cplus_safe_set_unknown_capacity_mode(1)`). No Rust equivalence
+or full safety claim is made.
+
+Full statement, exact reproduction commands and non-claims:
+[`docs/ABI_SAFE_LAYER.md`](ABI_SAFE_LAYER.md). ABI evidence:
+`build/abi/compat/results.log` (`abi_compat: 69 passed, 0 failed`, 22+10+7 =
+39 audited symbol names, no ` T __Z`), `docs/abi/compatibility-matrix.md`,
+`docs/stdlib/abi-preserving-runtime-safety.md` (70/70 layouts on both
+toolchains), `docs/stdlib/allocator/ABI_EVIDENCE.md` (`NO_ABI_IMPACT`). The
+C+-calls-precompiled-C lab reports `24 passed, 0 failed` and `30/30 calls match`
+(`tests/abi/c_to_cp/README.md`), superseding the older snapshot's 4/4 PARTIAL
+figure; the separate `tests/abi/precompiled/` suite was PENDING at the ABI
+snapshot. All evidence is macOS arm64 / Apple clang 16 only.
 
 ## Integration and verification inventory (2026-11-23)
 

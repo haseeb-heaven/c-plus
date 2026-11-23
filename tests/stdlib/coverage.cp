@@ -182,6 +182,12 @@ static int gather_sources(void) {
         read_list("find tests/stdlib/multi_tu -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
                   g_sources, &g_nsources, tmp) != 0 ||
         read_list("find tests/stdlib/examples -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
+                  g_sources, &g_nsources, tmp) != 0 ||
+        read_list("find tests/stdlib/upstream_reuse -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
+                  g_sources, &g_nsources, tmp) != 0 ||
+        read_list("find tests/stdlib/allocator -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
+                  g_sources, &g_nsources, tmp) != 0 ||
+        read_list("find tests/stdlib/system_safety/support -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
                   g_sources, &g_nsources, tmp) != 0) {
         remove(tmp);
         return -1;

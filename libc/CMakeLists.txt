@@ -34,6 +34,7 @@ set(LIBC_SOURCES
   src/string/musl_extra.c
   src/string/strndup.c
   src/string/strerror.c
+  src/string/upstream_safecrt.c
   src/stdio/stdio.c
   src/stdio/stdio2.c
   src/stdio/stdio3.c

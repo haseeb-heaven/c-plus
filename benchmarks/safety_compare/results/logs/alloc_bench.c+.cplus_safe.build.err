@@ -1,10 +1,17 @@
 clang: warning: -lyyjson: 'linker' input unused [-Wunused-command-line-argument]
 clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/ext' [-Wunused-command-line-argument]
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:130:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
-  130 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "signed integer overflow", NULL, 0,
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:144:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+  144 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "signed integer overflow", NULL, 0,
       |                       ^
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:137:21: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
-  137 |   cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, kind, NULL, 0, msg);
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:151:21: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+  151 |   cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, kind, NULL, 0, msg);
       |                     ^
-2 errors generated.
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:259:23: error: use of undeclared identifier 'CPLUS_EXIT_CONVERSION'; did you mean 'CPLUS_EXIT_OWNERSHIP'?
+  259 |     cplus_print_fatal(CPLUS_EXIT_CONVERSION, "implicit integer conversion",
+      |                       ^~~~~~~~~~~~~~~~~~~~~
+      |                       CPLUS_EXIT_OWNERSHIP
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/../runtime/include/cplus/cplus.h:76:3: note: 'CPLUS_EXIT_OWNERSHIP' declared here
+   76 |   CPLUS_EXIT_OWNERSHIP = 106,
+      |   ^
+3 errors generated.
 error: failed to compile instrumented C+ runtime

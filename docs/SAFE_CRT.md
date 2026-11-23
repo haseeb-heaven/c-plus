@@ -24,6 +24,57 @@ Status: **verified checked slice**. Not a full ISO C replacement and not a host 
 
 Opt-in Annex K name aliases: define `CPLUS_SAFE_USE_ANNEX_K_NAMES` before including SafeCRT headers where compatible.
 
+## ABI-preserving ordinary-C checked layer (macro-mapped `_s`)
+
+`stdlib/safe/safe_c.h` is an **optional, compile-time** layer over the APIs
+above. It does not change the ABI or add a new backend; it maps ordinary C
+spellings in the including translation unit onto the checked implementations
+already listed in the table. Full mechanism, exact commands, ABI evidence and
+non-claims are in [`docs/ABI_SAFE_LAYER.md`](ABI_SAFE_LAYER.md).
+
+- **Original C source and exported symbols are unchanged.** The layer is a
+  header of function-like macros (`safe_c.h:61-117`); it patches no `.c` file,
+  renames no export, and exports nothing itself. New helper symbols on this
+  branch are additive, not edits to existing symbols.
+- **Macro-mapped at compile time, not interposed at link time.**
+  `malloc/calloc/realloc/free` → `malloc_s/calloc_s/realloc_s/free_s`;
+  `memset/memcpy/memmove/memcmp` and `strcpy/strncpy/strcat/strncat` →
+  `cplus_*_s_auto`; `fread/fwrite` → `cplus_fread/cplus_fwrite`;
+  `printf/fprintf` → `cplus_printf/cplus_fprintf`. Include the header first (or
+  force-include it) and link `libcplus_safecrt.a` + `libcplus_hardened.a`;
+  `CPLUS_SAFE_C_DISABLE` gives declarations only.
+- **Precompiled libraries are unaffected.** A `.a` built without the header
+  keeps its original calls. The `c_to_cp` lab records `c_to_cp: 24 passed,
+  0 failed` and `30/30 calls match` for a C+ caller linking a precompiled C
+  archive (`tests/abi/c_to_cp/README.md`,
+  `tests/abi/c_to_cp/artifacts/results.log`); the separate
+  `tests/abi/precompiled/` suite was PENDING at the ABI snapshot, so no result
+  is claimed from it.
+- **Valid input behaves identically at the data level** (`test_safe_c_api.c`
+  asserts an in-bounds `memset` fills the same bytes); differences are added
+  checks/diagnostics and defined failure behaviour, not a different data
+  result for valid calls.
+- **Invalid input is refused with documented safeclib codes.** Direct `_s`
+  adapters return positive `errno_t` values (`ESNULLP` 400, `ESZEROL` 401,
+  `ESLEMIN` 402, `ESLEMAX` 403, `ESOVRLP` 404, `ESNOSPC` 406, `ESUNTERM` 407;
+  test `!= 0`, never `< 0`). The `_s_auto` wrappers used by the macros keep
+  standard C return types: `errno = EINVAL` for NULL/unknown capacity, or
+  `errno = ERANGE` plus a capacity diagnostic naming `ESNOSPC 406`
+  (`docs/libc/SAFE_CRT_MEMORY_CONTRACT.md` §0, §3).
+- **Unknown capacity remains unresolved.** When neither tracked metadata nor
+  `__builtin_object_size` can size the object, default mode preserves raw-C
+  behaviour with a warning and no safety claim; strict mode
+  (`cplus_safe_set_unknown_capacity_mode(1)`) refuses with `errno = EINVAL`.
+- **No Rust equivalence or full safety claim.** Pointer provenance, ownership,
+  lifetime, alias safety and untrusted `printf` formats are not proven; the
+  shipped header states this explicitly (`safe_memory.h:36-39`, `safe_c.h:38-40`).
+
+ABI evidence: `build/abi/compat/results.log` (`abi_compat: 69 passed, 0 failed`,
+39 audited symbol names, no ` T __Z`), `docs/abi/compatibility-matrix.md`,
+`docs/stdlib/abi-preserving-runtime-safety.md` (70/70 layouts on both
+toolchains), and `docs/stdlib/allocator/ABI_EVIDENCE.md` (`NO_ABI_IMPACT`).
+All of it is macOS arm64 / Apple clang 16 only.
+
 ## Logging & Telemetry
 
 - `safe_log.h`: OFF by default, metadata-only, never logs buffer contents or secrets.

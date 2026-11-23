@@ -51,3 +51,16 @@ tests/stdlib/agent2/results/run/
 
 # Ignore all Apple property-list files
 *.plist
+
+# Generated host binaries from ABI/benchmark labs (never commit build output).
+benchmarks/stdlib/allocator/allocator_bench
+benchmarks/stdlib/allocator/tracking_off
+benchmarks/stdlib/allocator/tracking_on
+tests/abi/c_to_cp/artifacts/c_to_cp_caller
+tests/abi/c_to_cp/artifacts/caller_direct
+tests/abi/cp_to_c/artifacts/cp_to_c_driver
+tests/stdlib/agent1_handoff/cross_tu/results/case_a
+tests/stdlib/agent1_handoff/cross_tu/results/case_b
+tests/stress/cplus_breaker_v3/25_freed_len_trap
+tests/abi/**/out/
+tests/crt/fuzz/out/

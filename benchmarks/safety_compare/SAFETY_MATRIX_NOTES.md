@@ -49,6 +49,21 @@ no scenario: the identical outcome table was reproduced with
 `--no-sanitize` (no UBSan). All refusals come from explicit checked runtime
 API calls, not from UBSan.
 
+Precisely, this is the **exact toolchain blocker**: the installed `build/c+`
+driver resolves its runtime *source* from the sibling `c-plus-core` tree
+(`cplus_runtime.c:130` calls
+`cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "signed integer overflow", …)`) but
+its *header* from this repo's `runtime/include/cplus/cplus.h`, whose
+`cplus_exit_code` enum ends at `CPLUS_EXIT_IO = 109` with no
+`CPLUS_EXIT_ARITHMETIC` (the sibling header defines it as `110`) — hence the
+error shown above. In the final reproducible driver run
+(`results/table.txt`) this makes every `cplus_safe` row **BLOCKED** (`0/7`,
+numeric columns `-`), including `safety_matrix/matrix` (C+ safe). **BLOCKED is
+not a pass and not a zero** (definitions: `METHODOLOGY.md` §3.1). The
+`-DCPLUS_EXIT_ARITHMETIC=110` shim is a build-only workaround for these specific
+observations, not a green result for the unmodified toolchain, and the final
+driver does not use it.
+
 ## Exact reproduction commands (from the repo root)
 
 ```sh
@@ -81,6 +96,12 @@ in the normal configuration.
 Classification tokens: `OK` (valid operation completed), `REFUSED` (a checked
 API/guard rejected an invalid operation with a defined result), `ABORT`
 (fail-fast process termination), `COMPILE_ERROR` (no binary produced).
+
+These are **outcome tokens for individual scenarios**, not the benchmark-row
+statuses defined in `METHODOLOGY.md` §3.1 (`PASS`/`FAIL`/`BLOCKED`). Equal tokens
+(e.g. `REFUSED / REFUSED`) record equal *observed* outcomes only; they are
+**not** evidence that C+ and Rust give equivalent guarantees. See the warning
+at the top and the "Honest interpretation" section below.
 
 | ID | Scenario | C+ contract (runtime API) | C+ observed | Rust construct (safe) | Rust observed | Class |
 |:--|:--|:--|:--|:--|:--|:--|
@@ -216,6 +237,9 @@ used here. No Rust ABORT row is claimed.
 - **Double release.** C+ actually executes a second release and has it refused
   by a bounded free table (`CPLUS_SAFE_EINVAL`); Rust cannot express a second
   owner at all, so the row models the refusal with `Option::take()`.
-- **Scope.** These are seven targeted scenarios on one host. They are not a
-  general memory-safety claim about either language, and the shared
-  `REFUSED`/`OK` tokens must not be reported as "equivalent safety".
+- **Scope.** These are eight recoverable matrix rows covering scenario families
+  01–07 (03 is split into exact-fit 03a and one-over 03b), plus one compile-only
+  rejection (06c) and one fatal-safety subprocess case, all on one host. They
+  are not a general memory-safety claim about either language, and the shared
+  `REFUSED`/`OK` tokens must not be reported as "equivalent safety" or
+  "equivalent guarantees".

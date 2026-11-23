@@ -1,0 +1,21 @@
+=== precompiled C library build (ONCE) ===
+date_utc=2026-11-23T04:35:26Z
+PATH=/usr/bin:/bin
+arch=arm64 os=Darwin
+--- clang --version ---
+Apple clang version 16.0.0 (clang-1600.0.26.6)
+Target: arm64-apple-darwin27.2.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+=========================================
+CMD[lib_compile]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer -c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/safe_layer_lib.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/libsafe_layer.o
+RC[lib_compile]=0
+--- stdout[lib_compile] ---
+--- stderr[lib_compile] ---
+CMD[lib_archive]: /usr/bin/ar rcs /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/libsafe_layer.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/libsafe_layer.o
+RC[lib_archive]=0
+--- stdout[lib_archive] ---
+--- stderr[lib_archive] ---
+SHA256[libsafe_layer.o]=23af1a5e46493e2de47ab5f09d2ed72a3354dc9c7fe96475fb36e3aa33e27721
+SHA256[libsafe_layer.a]=2be1e47b9d227fd045d7453b9b2e12d7a840992bba2c11adfd37a2291be1bf58
+RESULT: C library built once; baseline in /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/lib.sha256

@@ -209,7 +209,7 @@ for a result:
 
 | Status (token in `table.txt`) | Definition | Reported numbers |
 |---|---|---|
-| **PASS** (`ok`) | All 7 timed runs completed with exit code 0 **and** the expected checksum on every run (`run = 7/7`); median and p95 computed from the complete sample. | median/p95 in the row; eligible for comparison per §5. |
+| **PASS** (`ok`) | All 7 timed runs completed with exit code 0 (`run = 7/7`), and the expected checksum on every run **where a checksum applies** — rows with `-` in the checksum column (e.g. `safety_matrix`, `validate_results`) are timing/status-only and are exempt; median and p95 computed from the complete sample. | median/p95 in the row; eligible for comparison per §5 only when checksums apply and match. |
 | **FAIL** | Build or run error, non-zero exit, checksum mismatch on any timed run, or a `run` count below `7/7` for reasons other than a documented blocker. | Row is invalid; median/p95 must **not** be reported. Diagnose and re-run; a FAIL is never silently relabelled PASS. |
 | **BLOCKED** (`blocked`) | The binary cannot be built in this checkout because of an external toolchain/interface defect outside this repository (§7.4), not because a test failed. | `run = 0/7`, checksum/median/p95 shown as `-`. BLOCKED is **not** a pass, **not** a zero, and **not** evidence against the code under test. |
 
@@ -403,7 +403,7 @@ Before publishing a row in `RESULTS.md`, confirm:
 
 `sh benchmarks/safety_compare/run_all.sh` produced
 `ok=15 blocked=5 fail=0 required_failures=0` (driver exit 0) and
-`BENCH_VALID 157 0` from `validate_results.cp`. The complete final table is
+`BENCH_VALID 192 0` / `BENCH_BLOCKED 5` from `validate_results.cp` (blocked rows reported separately, not counted as failures). The complete final table is
 reproduced verbatim below; status tokens are defined in §3.1.
 
 ```

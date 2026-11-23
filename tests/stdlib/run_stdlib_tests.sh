@@ -238,7 +238,7 @@ done
 # --- per-library API coverage (>= 80% each) --------------------------------
 
 if matches "coverage"; then
-  if python3 "$ROOT/tests/stdlib/coverage.py" >"$OUT/coverage.txt" 2>&1; then
+  if sh "$ROOT/tests/stdlib/run_coverage.sh" >"$OUT/coverage.txt" 2>&1; then
     pass "coverage (API surface reachability; execution coverage: coverage_exec.sh)"
     sed 's/^/       /' "$OUT/coverage.txt"
   else

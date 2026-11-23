@@ -1,28 +1,27 @@
 # C+ ABI compatibility matrix
 
 > **Snapshot, not a live dashboard.** This document records only evidence that
-> was present in the working tree when it was captured. Cells without a
-> sibling-produced result are marked **PENDING**; they are neither passes nor
-> failures. Do not read a PENDING cell as an assertion of any kind.
+> was present in the working tree when it was captured. Every cell below was
+> produced by a sibling verification run on disk at capture time; no cell is a
+> prediction, and no result is generalized beyond the "TESTED" platform row.
 
 ## Snapshot metadata
 
 | item | value |
 | --- | --- |
-| captured (UTC) | `2026-11-23T03:58:05Z` (local capture `2026-11-23 09:27`, UTC+5) |
+| captured (UTC) | `2026-11-23T04:33:33Z` (local `2026-11-23 09:59:40`, UTC+5:30) |
 | repo | `/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib` |
 | branch | `agent/modern-stdlib` |
-| HEAD | `cbcea57174e5c6b26d07bcc4e1b5c8f7501b340a` |
+| HEAD | `2294cb1e7d880d55a8403b7c7e0e46a6ce85a41f` |
+| phase | final evidence **after upstream integrations** (`ce018ca`, `2294cb1`) |
 | author role | documentation only (docs/abi); no compiler, runtime, header or test edits |
+| driver | `./build/c+` → `C+ 0.1.0`, SHA-256 `b8b4be0e95533f4ea91b2756ded2a50d12192b3cbf622d761ab4eed92fa111a4` (unchanged from prior capture) |
 
 ---
 
 ## 1. Exact platform tested
 
-All completed evidence in this matrix was produced on **one** machine and
-toolchain. Values below are copied from `tests/abi/ABI_COMPAT_NOTES.md` and the
-driver's own `--verbose` transcript at
-`tests/abi/c_to_cp/probe_verbose.log`.
+All evidence in this matrix was produced on **one** machine and toolchain.
 
 | item | exact value |
 | --- | --- |
@@ -33,236 +32,159 @@ driver's own `--verbose` transcript at
 | InstalledDir | `/Library/Developer/CommandLineTools/usr/bin` |
 | resource dir | `/Library/Developer/CommandLineTools/usr/lib/clang/16` |
 | C+ driver | `./build/c+` → `C+ 0.1.0`, "Backend: host Clang/LLVM" |
-| driver binary | Mach-O 64-bit arm64 executable, 79,699,520 bytes, built `2026-11-23 08:07` |
-| driver runtime link | `/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build-verify-1123/libcplus_runtime.a` (externally supplied — see §6) |
 | system tools | `/usr/bin/clang`, `/usr/bin/ar`, `/usr/bin/nm`, `/usr/bin/diff`, `/usr/bin/timeout` |
-| runner environment | `PATH=/usr/bin:/bin`, `CPLUS_CLANG=/usr/bin/clang` (set by `run_abi_compat.sh`) |
-| step timeouts | compiles 120–300 s, program runs 60 s, `diff`/`nm` 60 s |
+| runner environment | `PATH=/usr/bin:/bin`, `CPLUS_CLANG=/usr/bin/clang` where the script honours it |
+| step timeouts | external `/usr/bin/timeout 600` per command; lab build 300 s / run 120 s |
 
 ## 2. Platform scope
 
 | platform | status | note |
 | --- | --- | --- |
-| macOS arm64 (Apple clang 16, C+ 0.1.0) | **TESTED** | the only platform with completed evidence in this snapshot |
+| macOS arm64 (Apple clang 16, C+ 0.1.0) | **TESTED** | the only platform with evidence in this snapshot |
 | macOS x86_64 | **UNTESTED** | no evidence |
 | Linux (glibc/musl, any arch) | **UNTESTED** | no evidence |
-| Windows (MSVC / UCRT, x86 or x64) | **UNTESTED** | no evidence; the repo's retail-x86 DLL guide is out of scope for this matrix |
-| other C++ compilers / C++ ABI | **UNTESTED / out of scope** | no mangled-C++ ABI is exercised (see §7) |
+| Windows (MSVC / UCRT, x86 or x64) | **UNTESTED** | no evidence; the repo's retail-x86 DLL guide is out of scope |
+| other C++ compilers / C++ ABI | **UNTESTED / out of scope** | no mangled-C++ ABI is exercised (see §8) |
 
 No result in this matrix may be generalized beyond the "TESTED" row.
 
 ---
 
-## 3. Master matrix (by directory)
+## 3. Final post-integration verification commands
 
-Denominators are stated as `passed/total`; timeouts are `timed-out/invocations`.
-"Runner steps" counts compile/link/run/check operations of the shell runners,
-not the program-internal `ck()` assertions (the two are different scales and are
-reported separately where known).
+The four required commands were run **serially**, each bounded by an external
+`/usr/bin/timeout 600`, from the repository root. No retry-until-green, no
+output masking, no rewritten exit codes.
 
-| Directory | What it checks | Checks on disk at capture | Pass / Fail / Timeout (denominators) | Status |
-| --- | --- | --- | --- | --- |
-| `tests/abi/` (baseline suite) | pointer representation, public C layouts, both C↔C+ directions, exported symbol names, header neutrality | `run_abi_compat.sh` + 2 build scripts; 6 numbered test groups | **69/69 passed, 0/69 failed, 0/69 timeouts** (runner steps) | **COMPLETE** — `build/abi/compat/results.log` |
-| `tests/abi/legacy_c/` | unchanged ordinary C: primitives, pointers, arrays, structs/unions/bitfields/enums, function pointers, callbacks, TLS, opaque handles, stdio/stdlib interop | 37 probe sources (`lc01`–`lc19`, `lc26`–`lc43`) | PENDING / PENDING / PENDING — no consolidated result log at capture | **PENDING** |
-| `tests/abi/c_to_cp/` | C+ caller links and calls a precompiled plain-C archive (struct by value, varargs, callbacks, alloc/free) | 1 shared header, 1 C source, 1 C+ caller, 1 archive, 1 built binary | build 1/1 rc=0, run 1/1 rc=0, **4/4 expected output values observed**, 0/2 timeouts; formal assertion total PENDING | **PARTIAL** — `tests/abi/c_to_cp/probe_run.log` |
-| `tests/abi/cp_to_c/` | C+ constructs lowered to plain C symbols called from C (classes, temporaries, div/mod, layout/ownership probes) | 13 `.cp` probes + lowered `.c`/`.o` artifacts | PENDING / PENDING / PENDING — exploratory probes only, no result log at capture | **PENDING** |
-| `tests/abi/precompiled/` | saved C library (`.a`) usable by a rebuilt C+ app; layout and by-value/by-pointer interchange; stdlib dependency rebuilt independently | 1 header, 1 C lib, 1 C+ app containing 30 `precomp_ck()` assertions | PENDING / PENDING / PENDING — no build/run result at capture | **PENDING** |
-| `tests/abi/fingerprints/` | (intended: symbol/header fingerprints pinning the audited revision) | empty directory at capture | PENDING / PENDING / PENDING — no files at capture | **PENDING** |
+| # | Command | Exit code | Exact final line(s) |
+| --- | --- | --- | --- |
+| 1 | `sh tools/abi_compare/run.sh compare tests/abi/fingerprints/baseline.txt` | `0` | `abi_fp: ABI fingerprint MATCHES baseline (tests/abi/fingerprints/baseline.txt).` / `abi_fp: diff is empty: tools/abi_compare/.out/compare/diff.txt` |
+| 2 | `sh tests/abi/run_abi_compat.sh` | `0` | `abi_compat: 69 passed, 0 failed` |
+| 3 | `CPLUS_CLANG=/usr/bin/clang sh tests/abi/run_abi_layouts.sh` | `0` | `abi_layouts: 70/70 layouts match` |
+| 4 | `bash tests/abi/run_legacy_labs.sh` | `0` | `run_legacy_labs: total=54 pass=54 fail=0 build_failure=0 timeout=0 skipped=0 blocked=0` / `required_failures=0  summary=…/build/abi-labs/summary.json  logs=…/build/abi-labs/logs` |
 
-Legend: **COMPLETE** = authoritative runner result on disk; **PARTIAL** = some
-artifacts/results exist but the formal count is not yet produced; **PENDING** =
-no sibling result available at capture.
+No layout, signature, enum, calling-convention or exported-symbol *name*
+changed by this work; the only baseline drift is two **additive** symbol
+exports (see §5.6).
 
 ---
 
-## 4. Per-directory detail and commands
+## 4. Master matrix (by directory)
 
-### 4.1 Baseline suite — `tests/abi/` (COMPLETE)
+Denominators are stated as `passed/total`; timeouts are `timed-out/invocations`.
+"Runner steps" counts compile/link/run/check operations of the shell runners,
+not the program-internal `ck()` assertions (the two are different scales).
 
-Entry point: `sh tests/abi/run_abi_compat.sh`. Restricted `PATH`, every command
-wrapped in `/usr/bin/timeout`, no `|| true` masking. Artifacts and transcript in
-`build/abi/compat/`.
+| Directory | What it checks | Result (denominators) | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| `tests/abi/fingerprints/` | deterministic C-ABI fingerprint (layout `L`, signature `F`, compiler `C`, symbol `S`, metadata `V`) vs committed baseline | **MATCH**, exit 0, empty diff; 1162 records | **COMPLETE** | command 1; refreshed baseline vs prior: additive-only (§5.6) |
+| `tests/abi/` (baseline suite) | pointer representation, public C layouts, both C↔C+ directions, exported symbol names, header neutrality | **69/69 passed, 0/69 failed, 0/69 timeouts** (runner steps) | **COMPLETE** | command 2; `abi_compat: 69 passed, 0 failed` |
+| `tests/abi/abi_layouts` | host-C vs C+-driver public-type layout agreement | **70/70 layouts match**, exit 0 | **COMPLETE** | command 3 |
+| `tests/abi/legacy_c/` | unchanged ordinary C: primitives, pointers, arrays, structs/unions/bitfields/enums, function pointers, callbacks, TLS, opaque handles, stdio/stdlib interop | **50/50 passed** (`lc01`–`lc50`), 0 fail/timeout | **COMPLETE** | command 4 (`run_legacy_labs`) |
+| `tests/abi/c_to_cp/` | C+ caller links and calls a precompiled plain-C archive | **PASS**, exit 0 | **COMPLETE** | command 4 (`c_to_cp`) |
+| `tests/abi/cp_to_c/` | C+ constructs lowered to plain C symbols called from C | **PASS**, exit 0 | **COMPLETE** | command 4 (`cp_to_c/cp_to_c`) |
+| `tests/abi/precompiled/` | saved C library (`.a`) usable by a rebuilt C+ app | **PASS**, exit 0 | **COMPLETE** | command 4 (`precompiled/precompiled_lab`) |
+| aggregated labs | unified runner over all of the above plus fingerprint compare | **54/54 passed, 0 fail, 0 build-failure, 0 timeout, 0 skipped, 0 blocked; `required_failures=0`** | **COMPLETE** | command 4; `build/abi-labs/summary.json` |
 
-Headline: `abi_compat: 69 passed, 0 failed` — 69/69 runner steps, 0 failures,
-0 timeouts. The 69-step denominator decomposes exactly as:
+Legend: **COMPLETE** = authoritative runner result produced at capture. All
+cells are populated for this snapshot.
+
+---
+
+## 5. Per-directory detail
+
+### 5.1 Fingerprint compare — `tools/abi_compare/` (COMPLETE)
+
+Command 1 regenerated a fingerprint (1162 records) and diffed it against
+`tests/abi/fingerprints/baseline.txt`: clean **MATCH**, empty diff, exit 0.
+The probe checks, at compile time, twelve public function signatures via
+`_Static_assert(__builtin_types_compatible_p(...))`, so a signature change
+would be a hard compile failure; none occurred.
+
+### 5.2 Baseline suite — `tests/abi/run_abi_compat.sh` (COMPLETE)
+
+Restricted `PATH`, every command wrapped in `/usr/bin/timeout`, no `|| true`
+masking. Headline: `abi_compat: 69 passed, 0 failed` — 69/69 runner steps,
+0 failures, 0 timeouts. The 69 steps decompose as:
 
 | group | runner steps |
 | --- | --- |
 | prerequisite library builds (libc, safecrt) | 2 |
-| T1 pointer ABI (compile, run, summary line) | 3 |
-| T2 layout constants (compile, run, summary line) | 3 |
-| T3a/4a C calls C+ (compile, ar, C compile, run, summary) | 5 |
-| T3b/4b C+ calls precompiled C (compile, ar, direct-link probe, build, run, summary) | 6 |
-| T5 symbols (2 `nm`, 22+10+7 = 39 symbol checks, 3 no-mangling checks) | 44 |
-| T6 header neutrality (5 steps + 1 line check) | 6 |
+| T1 pointer ABI | 3 |
+| T2 layout constants | 3 |
+| T3a C calls C+ | 5 |
+| T3b C+ calls precompiled C | 6 |
+| T5 symbols (2 `nm`, 39 symbol checks, 3 no-mangling checks) | 44 |
+| T6 header neutrality | 6 |
 | **total** | **69** |
 
-Program-internal (self-reported) assertion counts, a different scale:
-T1 `20/20 pointer ABI checks match`, T2 `80/80 layouts match`,
-T3a `13/13 C->C+ boundary checks match`,
-T3b `10/10 C+->C boundary checks match`, T5 `39/39` audited symbol names
-present with **no** ` T __Z` C++-mangled symbols in any audited archive, T6
-`diff -u` of with/without-cplus-headers output empty (37 layout lines each).
+Program-internal self-reported counts (different scale): T1 `20/20 pointer ABI
+checks match`, T2 `80/80 layouts match`, T3a `13/13 C->C+ boundary checks
+match`, T3b `10/10 C+->C boundary checks match`, T5 `39/39` audited symbol
+names present with **no** ` T __Z` C++-mangled symbols, T6 `diff -u` empty
+(37 layout lines each).
 
-Key commands (reproduced from `tests/abi/ABI_COMPAT_NOTES.md`, `$ROOT` = repo
-root):
+### 5.3 Layout agreement — `CPLUS_CLANG=/usr/bin/clang sh tests/abi/run_abi_layouts.sh` (COMPLETE)
 
-```sh
-sh tests/libc/build_libc.sh
-sh scripts/build_safecrt.sh
-/usr/bin/clang -O1 -std=c99 -Wall -Wextra -pedantic \
-  tests/abi/abi_compat_pointers.c -o build/abi/compat/pointers
-build/abi/compat/pointers
-/usr/bin/clang -O1 -std=c99 -Wall -Wextra -pedantic $INC \
-  tests/abi/abi_compat_layouts.c build/libc/libcplus_hardened.a \
-  build/safe/libcplus_safecrt.a -lm -pthread -o build/abi/compat/layouts
-./build/c+ build --sanitize=none tests/abi/abi_compat_cplus_lib.cp \
-  -c -o build/abi/compat/abi_compat_cplus_lib.o -- -I$ROOT/libc/install-include
-/usr/bin/ar rcs build/abi/compat/libabi_compat_cplus.a \
-  build/abi/compat/abi_compat_cplus_lib.o
-/usr/bin/clang -O1 -std=c99 -Wall -Wextra -pedantic $INC \
-  tests/abi/abi_compat_c_driver.c build/abi/compat/libabi_compat_cplus.a \
-  build/libc/libcplus_hardened.a -lm -pthread -o build/abi/compat/c_driver
-/usr/bin/clang -O2 -std=c99 -Wall -Wextra -pedantic -I$ROOT/tests/abi \
-  -c tests/abi/abi_compat_c_part.c -o build/abi/compat/abi_compat_c_part.o
-/usr/bin/ar rcs build/abi/compat/libabi_compat_cpart.a \
-  build/abi/compat/abi_compat_c_part.o
-./build/c+ build --sanitize=none tests/abi/abi_compat_cplus_caller.cp \
-  -o build/abi/compat/cplus_caller -- build/abi/compat/libabi_compat_cpart.a \
-  -Wno-unused-command-line-argument
-/usr/bin/nm -gU build/libc/libcplus_hardened.a
-/usr/bin/nm -gU build/safe/libcplus_safecrt.a
-/usr/bin/diff -u build/abi/compat/neutral_plain.out \
-  build/abi/compat/neutral_cplus.out
+Compiles and runs `tests/abi/abi_layouts.c` with both the host compiler and the
+C+ driver and diffs the outputs. Exit 0, final line `abi_layouts: 70/70 layouts
+match`. Two benign `-Wunused-command-line-argument` clang warnings arise from
+passing archives to a compile-only step; they do not affect the result. The
+`CPLUS_CLANG=/usr/bin/clang` pin is required to avoid the broken default-SDK
+toolchain state documented in §7.
+
+### 5.4 Legacy C and sibling labs — `bash tests/abi/run_legacy_labs.sh` (COMPLETE)
+
+Unified runner: `discovered=54 selected=54  build_timeout=300s
+run_timeout=120s`. All 54 labs PASS: `legacy_c/lc01_primitives` …
+`legacy_c/lc50_state_machine`, `c_to_cp`, `cp_to_c/cp_to_c`,
+`precompiled/precompiled_lab`, and `abi_compare`. 0 failures, 0 build
+failures, 0 timeouts, 0 skipped, 0 blocked; `required_failures=0`.
+Summary: `build/abi-labs/summary.json`; per-lab logs: `build/abi-labs/logs`.
+
+### 5.5 What the labs cover (detail)
+
+- `legacy_c/` — 50 ordinary-C probes: primitives, pointer basics and nested
+  pointers, arrays/multidim, structs/unions/nested structs, bitfields, enums,
+  function pointers, variadics, callbacks, flexible/packed arrays, alignment,
+  arrays of structs, string structs, pointer arithmetic, struct returns,
+  union bitfields, typedef fn pointers, `va_list`, nested flexible arrays,
+  ABI-mixed records, globals/aggregates, TLS, opaque handles/state machines,
+  stdio/stdlib interop, string and allocator interop, calloc zeroing, file
+  handles/seek-tell, string buffers, exported functions/vtables, tagged unions,
+  linked lists, state machines.
+- `c_to_cp` — C+ caller links and calls a precompiled plain-C archive.
+- `cp_to_c/cp_to_c` — C+ constructs lowered to plain C symbols called from C.
+- `precompiled/precompiled_lab` — saved C library consumed by a rebuilt C+ app.
+- `abi_compare` — fingerprint check from §5.1, re-run inside the unified lab.
+
+### 5.6 Fingerprint baseline refresh — additive only
+
+The committed baseline was refreshed after the upstream integration added two
+additive safeclib symbols. Diff of refreshed baseline vs prior baseline
+(`git show 960c997:tests/abi/fingerprints/baseline.txt`):
+
+```diff
+-S      archive build/libc/libcplus_hardened.a       count=782
++S      archive build/libc/libcplus_hardened.a       count=784
++S      symbol build/libc/libcplus_hardened.a::_cplus_sc_upstream_bsearch_s  1
++S      symbol build/libc/libcplus_hardened.a::_cplus_sc_upstream_memrchr_s  1
 ```
 
-`$INC` = `-I$ROOT/libc -I$ROOT/libc/include -I$ROOT/libc/install-include
--I$ROOT/stdlib/safe -I$ROOT/third_party/safeclib/include
--I$ROOT/third_party/intel-safestringlib/include -I$ROOT/tests/abi`.
-
-The C+ driver links a precompiled `.a` directly through its `--` forwarding
-path; the only diagnostic is a benign compile-step
-`-Wunused-command-line-argument` warning, suppressed in the production build.
-
-### 4.2 `legacy_c/` (PENDING)
-
-37 probe sources exist: `lc01_primitives.c` … `lc19_pointer_arithmetic.c`,
-`lc26_global_vars.c` … `lc43_bitfields.c`. Each prints one stable result line
-and is intended to exit 0 only when its checks pass (pattern visible in
-`lc26_global_vars.c`: `lc26 result: OK counter=20 total=20 epoch=7 label=lc26`).
-
-No runner script, result log or pass/fail tally was present in this directory
-at capture. **Counts: PENDING / PENDING / PENDING; 0 consolidated invocations
-recorded.** Do not infer results from the presence of source files.
-
-### 4.3 `c_to_cp/` (PARTIAL — available sibling result)
-
-A plain-C library is built by `/usr/bin/clang` and consumed by a C+ caller
-through the driver. Artifacts on disk: `probe_shared.h`, `probe_c.c`,
-`probe_c.o`, `libprobe.a`, `probe_caller.cp`, `probe_caller`,
-`probe_caller_v`, `probe_build.log` (empty), `probe_run.log`,
-`probe_verbose.log`.
-
-Observed result (`tests/abi/c_to_cp/probe_run.log`, all 4 lines matching the
-caller's expected values):
-
-```
-pair=3,9
-vsum=15
-fired=17
-alloc/free ok
-```
-
-Counts: build rc=0 (1/1), run rc=0 (1/1), 4/4 expected values observed,
-0 timeouts in 2 recorded invocations. **Formal assertion count PENDING** — the
-caller prints values but has no explicit `N/N` summary line, so no pass total
-is claimed beyond the four observations.
-
-Commands (reconstructed from the artifacts and `--verbose` transcript; the
-sibling's authoritative runner command list was not on disk at capture):
-
-```sh
-/usr/bin/clang -O2 -std=c99 -Wall -Wextra -pedantic \
-  -I tests/abi/c_to_cp -c tests/abi/c_to_cp/probe_c.c \
-  -o tests/abi/c_to_cp/probe_c.o
-/usr/bin/ar rcs tests/abi/c_to_cp/libprobe.a tests/abi/c_to_cp/probe_c.o
-./build/c+ build --sanitize=none tests/abi/c_to_cp/probe_caller.cp \
-  -o tests/abi/c_to_cp/probe_caller \
-  -- tests/abi/c_to_cp/libprobe.a -I tests/abi/c_to_cp
-tests/abi/c_to_cp/probe_caller > tests/abi/c_to_cp/probe_run.log
-```
-
-The verbose log confirms the driver linked `libprobe.a` directly together with
-the external `c-plus-core` runtime archive (see §6).
-
-### 4.4 `cp_to_c/` (PENDING)
-
-13 `.cp` probes plus lowered `.c`/`.o` artifacts exist, exploring C+ constructs
-lowered to plain C symbols: class method dispatch (`_probe.cp`, `_probe9.cp`),
-temporaries (`_probe7.cp`, `_probe8.cp`), direct loops and `__builtin_memcpy`
-(`_probe2.cp`, `_probe3.cp`), integer division/modulo (`_probe4.cp`–`_probe6.cp`),
-layout/ownership probes (`_probe10.cp`–`_probe12.cp`) and a record-field probe
-(`_probe13.cp`). This looks like exploratory investigation of what the
-externally rebuilt driver can lower; no consolidated run, no result log and no
-pass/fail tally was present at capture.
-
-**Counts: PENDING / PENDING / PENDING; 0 consolidated invocations recorded.**
-
-### 4.5 `precompiled/` (PENDING)
-
-Artifacts: `precomp_shared.h` (plain-C contract; documented layout
-`sizeof=32`, `align=8`, offsets `i=0,u=4,d=8,p=16,n=24`), `precomp_lib.c` (the
-library built once by `/usr/bin/clang`; 13 exported `precomp_*` functions), and
-`precomp_app.cp` (the C+ app, 30 `precomp_ck()` assertions covering scalar
-behaviour, C-library layout view, C+ layout view, by-value/by-pointer record
-round-trips, bad-record rejection, and a rebuilt `stdlib/vector.hp`
-dependency). The app sources reference a not-yet-present
-`build_app_against_precompiled.sh` runner.
-
-The intended build (from the header comment of `precomp_app.cp`, `$ROOT` = repo
-root):
-
-```sh
-/usr/bin/clang -c tests/abi/precompiled/precomp_lib.c \
-  -o build/abi-precompiled/precomp_lib.o
-/usr/bin/ar   rcs build/abi-precompiled/libprecomp.a \
-  build/abi-precompiled/precomp_lib.o
-./build/c+ build --sanitize=none tests/abi/precompiled/precomp_app.cp \
-  -o build/abi-precompiled/app_static \
-  -- build/abi-precompiled/libprecomp.a \
-     -I$ROOT/tests/abi/precompiled \
-     -DPRECOMP_REBUILD_NONCE=<n> -Wno-unused-command-line-argument
-build/abi-precompiled/app_static
-```
-
-No build output or run result existed at capture. **Counts: PENDING /
-PENDING / PENDING** (30 is the assertion *denominator designed into* the app,
-not a passing result).
-
-### 4.6 `fingerprints/` (PENDING)
-
-The directory existed but was **empty** at capture. No checks, commands or
-results are available. **Counts: PENDING / PENDING / PENDING.**
+(TAB-separated in the actual file.) Prior `1163` lines / `1160` records →
+refreshed `1165` lines / `1162` records. Only `S archive count` and two new
+`S symbol` records changed: **no** `L` layout, **no** `F` signature, **no** `V`
+metadata, **no** `C` compiler-define, no removed/renamed symbol, no size,
+alignment, offset or enum drift. Therefore: **no ABI layout/signature changes**;
+the only drift is additive exports.
 
 ---
 
-## 5. How counts were derived / refreshed
-
-1. Run the relevant sibling runner and keep its stdout/stderr plus exit codes.
-2. Record `passed/total`, `failed/total` and `timed-out/invocations` explicitly.
-3. Update only the affected cells in §3 and the matching §4 subsection; change
-   the status from PENDING to COMPLETE only when a result log is on disk.
-4. Re-stamp the snapshot metadata with the new UTC time and HEAD.
-5. Never fill a PENDING cell from a source file's *intended* assertion count.
-
 ## 6. External blocker (must be read with these results)
 
-`./build/c+` was **rebuilt externally**, outside this branch's runtime: its
-verbose transcript links
-`/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build-verify-1123/libcplus_runtime.a`,
-and the failing builds compile
-`/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c`.
-That runtime source references `CPLUS_EXIT_ARITHMETIC`:
+`./build/c+` is supplied externally, outside this branch's runtime. Instrumented
+builds compile `/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c`,
+which fails:
 
 ```
 cplus_runtime.c:129:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
@@ -272,61 +194,81 @@ cplus_runtime.c:129:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMET
 error: failed to compile instrumented C+ runtime
 ```
 
-This branch's runtime header `runtime/include/cplus/cplus.h` does **not**
-define that enumerator; its `cplus_exit_code` enum ends at `CPLUS_EXIT_IO = 109`
-(`OK=0`, `BOUNDS=101`, `NULL_POINTER=102`, `USE_AFTER_FREE=103`,
-`DOUBLE_FREE=104`, `TYPE_CONFUSION=105`, `OWNERSHIP=106`, `RESOURCE=107`,
-`UNSUPPORTED=108`, `IO=109`).
+- The failing source is in the separate `c-plus-core` git repository, not this
+  checkout. The external header declares `CPLUS_EXIT_ARITHMETIC = 110` at
+  `runtime/include/cplus/cplus.h:85`, but the instrumented-runtime compile
+  still fails in the external source path — an external compiler/runtime
+  mismatch owned by `c-plus-core`.
+- This branch's `runtime/include/cplus/cplus.h` ends its `cplus_exit_code` enum
+  at `CPLUS_EXIT_IO = 109` and does not define `CPLUS_EXIT_ARITHMETIC`.
+- Earlier Task 4 evidence: 51 `tests/out/*.build.log` files (mtime
+  `2026-11-23 09:44:59` local) show this failure for default/UBSan modes of
+  `run_tests.sh` / `run_deep_tests.sh`. It is **not** an ABI mismatch found by
+  the probes in this matrix.
+- All four final §3 commands use already-built runtime / non-instrumented
+  (`--sanitize=none`) paths, so they are unaffected by this blocker. No fresh
+  instrumented-path run was performed in this final capture; the blocker is
+  carried forward as **unresolved and external**, explicitly out of scope for
+  this ABI evidence task, and is not fixed here.
 
-Consequences and boundaries:
+See [`external_blocker_evidence.md`](external_blocker_evidence.md) for the
+full diagnostic and ownership analysis.
 
-* At capture, **51** build logs under `tests/out/*.build.log` (timestamps
-  `2026-11-23 09:25`–`09:26`) show this failure. It is an external
-  compiler/runtime mismatch, **not** an ABI mismatch found by these probes.
-* The probes that used the driver's already-built runtime (§4.1, §4.3) still
-  built and ran; the blocker affects paths that try to rebuild the instrumented
-  runtime from `c-plus-core` sources.
-* **No compiler or runtime edits were made by Agent 2 (or by this documentation
-  task).** This document records the blocker; it does not fix it. Any fix must
-  come from the owner of the external `c-plus-core` driver/runtime or from an
-  explicitly authorized change on this branch.
+---
 
-## 7. Explicit non-claims
+## 7. Toolchain-selection note (command 3)
+
+An earlier unpinned run of `run_abi_layouts.sh` failed with
+`fatal error: 'errno.h' file not found` because the c+ driver resolved a clang
+with a broken default SDK (`MacOSX27.sdk` absent; only up to `MacOSX15.2.sdk`
+installed). This is toolchain/sysroot selection state, **not** an ABI issue and
+not the `CPLUS_EXIT_ARITHMETIC` problem. Pinning `CPLUS_CLANG=/usr/bin/clang`
+(as in the required command 3) selects the working SDK and yields the official
+`abi_layouts: 70/70 layouts match` result above.
+
+---
+
+## 8. Explicit non-claims
 
 This matrix does **not** claim any of the following:
 
 1. **No cross-platform proof.** Only macOS arm64 / Apple clang 16 / C+ 0.1.0
    was exercised. Linux and Windows (MSVC/UCRT), x86_64 and x86 are UNTESTED;
-   nothing here predicts their layouts, calling conventions or symbol
-   behaviour.
-2. **No C++ mangling claim.** The checks exercise only C-linkage/plain-C
-   symbols. The only related observation is negative: `nm -gU` found no
-   ` T __Z` C++-mangled symbols in the audited archives. No Itanium/MSVC
-   mangled C++ ABI, class layout across compilers, or C++ exception ABI was
-   tested, and none is claimed to be stable.
-3. **No ABI changes.** This work produced probes and documentation only; no
-   public header, struct layout, enum value, calling convention or exported
-   symbol name was changed, and no ABI change is claimed, required or proven.
-   The results say the checked subsets matched the captured expectations — not
-   that any ABI was modified or that future edits cannot break it.
+   nothing here predicts their layouts, calling conventions or symbol behaviour.
+2. **No C++ mangling claim.** Checks exercise only C-linkage/plain-C symbols.
+   The only related observation is negative: `nm -gU` found no ` T __Z`
+   C++-mangled symbols in the audited archives. No Itanium/MSVC mangled C++ ABI,
+   cross-compiler class layout, or C++ exception ABI was tested or is claimed
+   stable.
+3. **No ABI layout or signature changes.** This work produced probes, a
+   refreshed fingerprint baseline and documentation only. No public header,
+   struct layout, enum value, calling convention or exported-symbol *name* was
+   changed. The fingerprint baseline drift is **two additive symbol exports**
+   (§5.6); no layout, signature, enum or metadata record changed. The results
+   say the checked subsets matched their expectations on this toolchain — not
+   that future edits cannot break the ABI.
 4. **No blanket safety claim.** Passing ABI checks say nothing about runtime
    memory safety, arbitrary raw pointers, uninstrumented precompiled libraries,
-   compiler diagnostics, or the unresolved `CPLUS_EXIT_ARITHMETIC` blocker in
-   §6.
-5. **No PENDING result is a result.** PENDING cells are absence of evidence at
-   capture time, not passes, not failures, and not timeouts.
+   compiler diagnostics, or the unresolved `CPLUS_EXIT_ARITHMETIC` blocker (§6).
+5. **No future-binary claim.** Results apply only to driver SHA-256
+   `b8b4be0e…` on the stated toolchain; they say nothing about a rebuilt
+   compiler, a different SDK/clang or remote CI (none was used).
 
-## 8. Evidence index
+---
+
+## 9. Evidence index
 
 | artifact | role |
 | --- | --- |
-| `build/abi/compat/results.log` | machine-readable command/exit-code transcript for the 69/69 baseline suite |
+| command 1 (`tools/abi_compare/run.sh compare …`) | fingerprint MATCH, empty diff, exit 0 |
+| command 2 (`tests/abi/run_abi_compat.sh`) | `abi_compat: 69 passed, 0 failed` |
+| command 3 (`CPLUS_CLANG=/usr/bin/clang sh tests/abi/run_abi_layouts.sh`) | `abi_layouts: 70/70 layouts match` |
+| command 4 (`bash tests/abi/run_legacy_labs.sh`) | 54/54 labs pass, 0 fail/timeout |
+| `build/abi-labs/summary.json`, `build/abi-labs/logs/` | machine-readable lab summary and per-lab logs |
+| `build/abi/compat/results.log` | command/exit transcript for the 69/69 baseline suite |
 | `tests/abi/ABI_COMPAT_NOTES.md` | authoritative notes for the baseline suite |
-| `tests/abi/run_abi_compat.sh` | baseline suite runner |
-| `tests/abi/abi_compat_expected_{libc,safecrt,compat}_symbols.txt` | 22 + 10 + 7 audited symbol names |
-| `tests/abi/c_to_cp/probe_run.log` | 4/4 observed values for the c_to_cp probe |
-| `tests/abi/c_to_cp/probe_verbose.log` | clang/cc1/ld transcript and external runtime link path |
+| `tests/abi/fingerprints/baseline.txt` / `baseline.json` | refreshed committed fingerprint baseline |
+| `tests/abi/fingerprints/RESULTS.md` | fingerprint capture/negative-test history (counts predate the 2 added symbols) |
 | `tests/out/*.build.log` (51 files) | external `CPLUS_EXIT_ARITHMETIC` blocker evidence |
-| `runtime/include/cplus/cplus.h` | this branch's `cplus_exit_code` enum (no `CPLUS_EXIT_ARITHMETIC`) |
-| `tests/abi/legacy_c/`, `c_to_cp/`, `cp_to_c/`, `precompiled/`, `fingerprints/` | sibling probe directories (status per §3) |
-| [`source_audit.md`](source_audit.md) | sibling source-level header-change audit (static complement to these runtime checks); concludes no consumer-visible `ABI_CHANGE` in the audited header series |
+| [`external_blocker_evidence.md`](external_blocker_evidence.md) | full external blocker diagnostic and final ABI results |
+| [`source_audit.md`](source_audit.md) | sibling source-level header-change audit; concludes no consumer-visible `ABI_CHANGE` |
