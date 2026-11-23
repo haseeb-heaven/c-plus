@@ -72,8 +72,9 @@ int main(void) {
     assert(cplus_memmove_s(NULL, sizeof dst, src, 4) == ESNULLP_C);
     memset(dst, 0xCC, sizeof dst);
     assert(cplus_memmove_s(dst, sizeof dst, NULL, 4) == ESNULLP_C);
-    /* on this violation the first dmax bytes are defined to be cleared */
-    assert(all_eq(dst, 0, sizeof dst, 0x00));
+    /* C+ SECURITY PATCH: no dmax-byte wipe on refusal (it could overrun an
+     * undersized destination); the return code is the refusal contract. */
+    assert(all_eq(dst, 0xCC, sizeof dst, 0xCC));
     assert(cplus_memmove_s(dst, 0, src, 4) == ESZEROL_C);
 
     /* ---- 8) zero-length move is a no-op success, even with NULL ---- */

@@ -6,6 +6,13 @@ Agent 2 has stopped adding new stdlib surface; the current priority is
 compiler-enforced safety (P0/P1/P2), which is Agent 1 work — see
 [`STATUS.md`](STATUS.md) and `docs/libc/AGENT1_PRIORITY_HANDOFF.md`.
 
+> **Current, verified state (2026-11-23, Phase 9):** see
+> [`stdlib/AGENT2_FINAL_REPORT.md`](stdlib/AGENT2_FINAL_REPORT.md) for the
+> consolidated counts, upstream-reuse credit, defects fixed, ABI/benchmark
+> results and blockers. §11 below is the short summary. Earlier snapshots in
+> §§8–10 are historical and are not the current numbers. API *reachability* is
+> not runtime *coverage*, and no 100% stdlib-safety claim is made.
+
 Scope: `stdlib/`, the vendored upstream C libraries in `third_party/`, their
 tests and examples in `tests/stdlib/`, and the interfaces this layer needs from
 the compiler/runtime owned by Agent 1 (`agent/core-safety`).
@@ -333,3 +340,46 @@ unverified remote gates remain. Source of truth:
 `tests/stdlib/agent2/results/summary.txt` and
 `tests/stdlib/agent2/SANITIZER_MATRIX.md`.  The stdlib itself is header-only apart from
 the compiled-once upstream units.
+
+## 11. Phase 9 verified synthesis (2026-11-23)
+
+Authoritative consolidated report: [`stdlib/AGENT2_FINAL_REPORT.md`](stdlib/AGENT2_FINAL_REPORT.md).
+Branch `agent/modern-stdlib`, HEAD `ab8cb51`; PR #17 open, nothing pushed or
+merged. The figures below are recorded results from the cited artifacts, not a
+new execution by the synthesis agent.
+
+**Headline counts (with denominators):**
+
+| Area | Result |
+| --- | --- |
+| Public APIs | **381** callable entries across **21** `stdlib/*.hp` headers; **255 of 381** have a static deep-test call-site (234 literal + 21 implicit `drop()` credits; strict code-only 250 of 381), **126 of 381** without. This is a **static name-reachability inventory, not execution coverage or a safety proof.** |
+| ISO C / SafeCRT | 27 of 948 ISO C APIs MISSING, 49 of 948 UNSUPPORTED; SafeCRT 40 of 437 integrated, 10 of 437 adapter-only, 387 of 437 not integrated. |
+| Audit findings | 127 total: 17 FIXED, 46 OPEN, 7 GAP-COMPILER, 4 BLOCKED, 53 documented-contract. |
+| Runtime tests (primary `--strict --sanitize=none`) | Agent 2 aggregate runner **50 of 50 PASS**, 0 FAIL/BUILD_FAILURE/TIMEOUT/SKIPPED/BLOCKED. Deep runner **28 of 28 per mode**, **84 of 84 invocations** across three modes. Aggregate evidence **23 of 23 suites**. |
+| Broader phase-3 audit | **99 discovered/executed: 88 PASS, 1 FAIL, 9 BUILD_FAIL, 1 TIMEOUT, 0 BLOCKED** (runner exit 1) — see `tests/audit_phase3/work/results.tsv`; these 11 non-passes are recorded, not folded into the 50/50 figure. |
+| Compile-time / sanitizers | 8 manifests / 52 cases: 6 of 9 REJECT, 19 of 19 ACCEPT, 24 of 24 RUNTIME; 27 capability gaps not counted as passes. Sanitizer matrix: 72 builds attempted, 27 executed, 23 PASS, 4 FAIL (`-fsanitize=integer` in external runtime hashing), 45 UNSUPPORTED; **0 of 9 tests ran under ASan**. |
+| Upstream reuse (source-level only) | **9 of 9** integrations have a changed source file + an executed regression (I1 safeclib, I2 mimalloc, I3 Fil-C queries, I4 GSL, I5 yyjson budgets, I6 SaferCPlusPlus, I7 SoftBoundCETS predicates, I8/I9 MS STL). Agent C's landed audit (`docs/stdlib/UPSTREAM_REUSE_AUDIT_AGENT2.md`) counts **8 projects with real code** (MS STL vector+string as one; plus GSL, SaferCPlusPlus, Fil-C predicates, SoftBoundCETS predicates, safeclib/Secure-CRT incl. 10 vendor groups, mimalloc, LLVM `memset_explicit`) and **18 of 19 named tests PASS** — the one failure `test_vendor_mem` is a documented security-patch/test-expectation mismatch, not a regression. Doc-only/rejected sources (Cake, jemalloc, TrapC, Fil-C pointer representation, SoftBoundCETS machinery) get **no** reuse credit. |
+| ABI | Fingerprint **MATCH** (1162 records, diff 0 bytes, SHA-256 `352b10e8…61027c`); compatibility **69 passed, 0 failed**; layouts **80/80** and **70/70**; C↔C+ interop and precompiled archives verified. **Windows x86 ABI UNVERIFIED.** |
+| Benchmarks (real medians) | Driver `ok=15, blocked=5, fail=0`, exit 0. Modern workload (7 interleaved runs): C+ safe 0.0140 s, C+ legacy 0.0061 s, Rust 0.0060 s, Goose 0.0044 s; safe/legacy ratio 2.31×. The 5 blocked rows are **externally blocked builds**, not timings. |
+
+**PENDING sibling artifacts (not landed at synthesis time — verify with the
+exact command, never fabricate):**
+
+| Artifact | Status | Exact command |
+| --- | --- | --- |
+| `docs/stdlib/API_INVENTORY_AGENT2.md` | PENDING | `test -f docs/stdlib/API_INVENTORY_AGENT2.md && echo LANDED || echo PENDING` |
+| `docs/stdlib/UPSTREAM_REUSE_AUDIT_AGENT2.md` | **LANDED** (Agent C; 8 projects with real code, 18/19 tests pass) | `test -f docs/stdlib/UPSTREAM_REUSE_AUDIT_AGENT2.md && echo LANDED || echo PENDING` |
+| `tests/defense/memory2/HARDENING.md` | PENDING | `test -f tests/defense/memory2/HARDENING.md && echo LANDED || echo PENDING` |
+| `tests/defense/containers2/HARDENING.md` | PENDING | `test -f tests/defense/containers2/HARDENING.md && echo LANDED || echo PENDING` |
+| `tests/defense/io_json2/HARDENING.md` | PENDING | `test -f tests/defense/io_json2/HARDENING.md && echo LANDED || echo PENDING` |
+| `tests/defense/thread2/HARDENING.md` | PENDING | `test -f tests/defense/thread2/HARDENING.md && echo LANDED || echo PENDING` |
+| `tests/defense/fs_net2/HARDENING.md` | PENDING | `test -f tests/defense/fs_net2/HARDENING.md && echo LANDED || echo PENDING` |
+| `benchmarks/phase8/RESULTS.md` | PENDING | `test -f benchmarks/phase8/RESULTS.md && echo LANDED || echo PENDING` |
+
+**Blockers / limits:** external `CPLUS_EXIT_ARITHMETIC` runtime/header skew
+(Agent 1; see `stdlib/AGENT1_EXTERNAL_RUNTIME_BLOCKER.md`), ASan and
+Leak/Thread/Memory/CFI unsupported on this host, macOS arm64 only (Linux CI,
+SonarCloud, Windows x86 and live-game unverified), 46 OPEN findings and 27
+compiler gaps. Overall verdict: **PARTIALLY COMPLETE**. This document does
+**not** claim 100% stdlib safety and does **not** treat API reachability as
+runtime coverage.

@@ -163,7 +163,10 @@ int main(void) {
         memset(dst, 'A', sizeof(dst));
         rc = cplus_v_memccpy_s(dst, sizeof(dst), NULL, 'a', 3);
         CHECK(rc == ESNULLP, "memccpy_s NULL src rc");
-        CHECK(dst[0] == '\0', "memccpy_s NULL src clears dest");
+        /* C+ SECURITY PATCH: on a constraint refusal the destination is NOT
+         * cleared (upstream's clear used the caller's dmax and could overrun).
+         * The refusal code is the contract; dst must remain intact. */
+        CHECK(dst[0] != '\0', "memccpy_s NULL src leaves dest intact");
     }
 
     /* ---- memccpy_s: zero dmax ---- */

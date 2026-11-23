@@ -29,10 +29,11 @@ int main(void) {
     char d[8] = "ok";
     assert(cplus_memcpy_s(NULL, sizeof(d), "x", 1) != 0);
 
-    /* 6. memcpy_s null src returns error and zeroes dest per safeclib behavior */
+    /* 6. memcpy_s null src returns error; C+ SECURITY PATCH keeps dest intact
+     * (upstream's dmax-byte wipe could overrun an undersized destination). */
     char d2[8] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', '\0' };
     assert(cplus_memcpy_s(d2, sizeof(d2), NULL, 1) != 0);
-    assert(d2[0] == '\0');
+    assert(d2[0] == 'A');
 
     /* 7. memset_s invalid args return error in IGNORE mode */
     assert(cplus_memset_s(NULL, 4, 0, 1) != 0);
