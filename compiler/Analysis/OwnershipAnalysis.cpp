@@ -158,6 +158,40 @@ static void addIndex(std::vector<int> &indices, int idx) {
     indices.push_back(idx);
 }
 
+/// Names with a built-in effect summary in libcEffect() even when the JSON
+/// contract file does not mention them. Kept in one place so the driver's
+/// "unverified extern" probe and libcEffect() cannot drift apart: a pure libc
+/// call must stay accepted while an unannotated user extern must not.
+static bool isBuiltinLibcEffectName(llvm::StringRef name) {
+  static const std::set<llvm::StringRef> kBuiltins = {
+      "malloc",    "calloc",    "malloc_s",  "calloc_s",   "realloc",
+      "realloc_s", "free",      "cplus_release", "free_s", "memcpy",
+      "memmove",   "memcpy_s",  "memmove_s", "memset",     "strcpy",
+      "strcpy_s",  "strncpy",   "strncpy_s", "strcat",     "strcat_s",
+      "strlen",    "strnlen_s", "strcmp",    "fopen",      "fopen_s",
+      "fclose",    "fread",     "fwrite",    "snprintf",   "sprintf_s",
+      "snprintf_s", "scanf_s"};
+  return kBuiltins.count(name) != 0;
+}
+
+/// True when a function declaration can carry safety-relevant pointer effects.
+/// Any pointer parameter (including a callback/function pointer) or a pointer
+/// return makes the callee's behaviour unverifiable without a body or a
+/// declared contract; scalar-only externs (e.g. `int ext_add(int,int)`) are
+/// pure by construction and must stay accepted in STRICT.
+static bool hasPointerEffectSignature(const clang::FunctionDecl *fd) {
+  auto isPtr = [](clang::QualType t) {
+    return t->isPointerType() || t->isFunctionPointerType() ||
+           t->isMemberPointerType();
+  };
+  if (isPtr(fd->getReturnType()))
+    return true;
+  for (const clang::ParmVarDecl *p : fd->parameters())
+    if (isPtr(p->getType()))
+      return true;
+  return false;
+}
+
 /// Argument index denoted by `ownershipTransfer` (with `transfer`/`ownership`
 /// as fallbacks) where the description refers to an argument rather than the
 /// return value. Returns -1 when no index is representable.
@@ -538,9 +572,20 @@ static ContractState &loadedContracts() {
   st.attempted = true;
 
   // Env override first: needed for tests and for relocatable installs.
+  // Track whether the user explicitly supplied a non-empty path: an unloadable
+  // explicit path must fail closed (no silent fallback to the compiled-in
+  // default), otherwise a program could be verified against a different
+  // contract than the one the user asked for. An empty value means "no
+  // override" and still uses the compiled-in default.
   std::string path;
-  if (const char *env = std::getenv("CPLUS_CONTRACT_PATH"))
+  bool explicitEnvPath = false;
+  if (const char *env = std::getenv("CPLUS_CONTRACT_PATH")) {
     path = env;
+    // An explicitly EMPTY value means "no override": fall back to the
+    // compiled-in default. A non-empty but unloadable path is a real override
+    // and must fail closed instead of being silently replaced by the default.
+    explicitEnvPath = !path.empty();
+  }
 #ifdef CPLUS_CONTRACT_PATH
   if (path.empty())
     path = CPLUS_CONTRACT_PATH;
@@ -555,7 +600,9 @@ static ContractState &loadedContracts() {
 #endif
   }
   auto buf = llvm::MemoryBuffer::getFile(path);
-  if (!buf) {
+  // The installed-layout fallback is only for the implicit (compiled-in or
+  // default) path. Never mask a bad CPLUS_CONTRACT_PATH with it.
+  if (!buf && !explicitEnvPath) {
     std::string exe = llvm::sys::fs::getMainExecutable("c+", nullptr);
     if (!exe.empty()) {
       llvm::SmallString<256> dir(llvm::sys::path::parent_path(exe));
@@ -589,8 +636,6 @@ static ContractState &loadedContracts() {
     st.issues.push_back({"", "libc contract has no 'functions' object"});
     return st;
   }
-  st.loaded = true;
-
   for (const auto &entry : *functions) {
     const std::string fn = entry.first.str();
     const llvm::json::Object *spec = entry.second.getAsObject();
@@ -763,6 +808,11 @@ static ContractState &loadedContracts() {
     }
     st.contracts[fn] = e;
   }
+  // A contract set with ANY validation issue (missing/unknown field, bad type,
+  // unrecognised effect, bad version) is not a sound safety summary. Treat it
+  // as not loaded so STRICT fails closed even when no call names that exact
+  // function; checkAstSafety already reports each individual issue at a call.
+  st.loaded = st.issues.empty();
   return st;
 }
 
@@ -844,14 +894,10 @@ bool contractsLoaded() {
   return loadedContracts().loaded;
 }
 
-SafetyAstProbe probeSafetyAst(const std::string &source,
-                              const std::vector<std::string> &args,
-                              const std::string &fileName) {
-  SafetyAstProbe result;
-
-  // Keep only the flags that affect parsing, matching checkAstSafety(). A
-  // synthetic .c name forces C (not C++) language inference by the tooling
-  // layer, and the resource dir mirrors the main safety AST build.
+/// Parse-relevant flags shared by the probe and the definition scanner. Kept
+/// in one place so both ASTs are always built from the same view of the TU.
+static std::vector<std::string>
+safetyParseArgs(const std::vector<std::string> &args) {
   std::vector<std::string> parseArgs;
   for (const auto &arg : args) {
     if (arg.rfind("-I", 0) == 0 || arg.rfind("-D", 0) == 0 ||
@@ -862,6 +908,35 @@ SafetyAstProbe probeSafetyAst(const std::string &source,
   parseArgs.push_back(std::string("-resource-dir=") + CPLUS_CLANG_RESOURCE_DIR);
 #endif
   parseArgs.push_back("-fsyntax-only");
+  return parseArgs;
+}
+
+bool hasDeclaredEffect(llvm::StringRef name) {
+  if (isBuiltinLibcEffectName(name))
+    return true;
+  // The rewriter lowers C+ operations into calls to the compiler/runtime API
+  // (cplus_register_allocation, __cplus_bounds_check, ...). These are emitted
+  // by the compiler itself, have known semantics, and are linked from the C+
+  // runtime rather than defined in the source TU. They are not user FFI and
+  // must not trip the unverified-extern gate.
+  if (name.starts_with("cplus_") || name.starts_with("__cplus_"))
+    return true;
+  return loadedContracts().contracts.count(name.str()) != 0;
+}
+
+SafetyAstProbe probeSafetyAst(const std::string &source,
+                              const std::vector<std::string> &args,
+                              const std::string &fileName) {
+  SafetyAstProbe result;
+
+  // Keep only the flags that affect parsing, matching checkAstSafety(). A
+  // synthetic .c name forces C (not C++) language inference by the tooling
+  // layer, and the resource dir mirrors the main safety AST build.
+  // NOTE: pass-through flags that change the parse but are discarded here
+  // (-include/-imacros/-isystem/-x/-include-pch) are hard-rejected by the
+  // driver in STRICT, so this probe can never analyse a different program
+  // than the backend compiles under the safety gate.
+  std::vector<std::string> parseArgs = safetyParseArgs(args);
   const std::string astFile = fileName + ".cprobe.c";
 
   clang::IgnoringDiagConsumer ignore;
@@ -878,35 +953,101 @@ SafetyAstProbe probeSafetyAst(const std::string &source,
   clang::ASTContext &ctx = ast->getASTContext();
   clang::SourceManager &sm = ctx.getSourceManager();
 
-  // Only report bodiless functions that are actually called and that are
-  // declared in user code (not a system header). Library declarations such as
-  // printf/malloc therefore never trigger the disclosure.
-  std::set<llvm::StringRef> called;
-  struct CallCollector : clang::RecursiveASTVisitor<CallCollector> {
-    std::set<llvm::StringRef> &names;
-    explicit CallCollector(std::set<llvm::StringRef> &n) : names(n) {}
+  // A function is "used" when it is directly called OR merely referenced
+  // (e.g. `void (*f)(int *) = ext; f(p);`). getDirectCallee() alone misses the
+  // latter, which is how the cross-TU disclosure used to be evaded. Collect
+  // both so an indirect call to a bodiless extern is still disclosed and,
+  // when it has unsafe pointer effects, rejected by STRICT check.
+  std::set<std::string> used;
+  struct RefCollector : clang::RecursiveASTVisitor<RefCollector> {
+    std::set<std::string> &names;
+    explicit RefCollector(std::set<std::string> &n) : names(n) {}
     bool VisitCallExpr(clang::CallExpr *call) {
       if (const clang::FunctionDecl *fd = call->getDirectCallee())
-        names.insert(fd->getName());
+        names.insert(fd->getNameAsString());
       return true;
     }
-  } calls(called);
-  calls.TraverseDecl(ctx.getTranslationUnitDecl());
+    bool VisitDeclRefExpr(clang::DeclRefExpr *ref) {
+      if (const auto *fd = dyn_cast<clang::FunctionDecl>(ref->getDecl()))
+        names.insert(fd->getNameAsString());
+      return true;
+    }
+  } refs(used);
+  refs.TraverseDecl(ctx.getTranslationUnitDecl());
 
   std::set<std::string> unresolved;
+  std::set<std::string> unverified;
+  std::set<std::string> headerExterns;
   struct DeclCollector : clang::RecursiveASTVisitor<DeclCollector> {
     clang::SourceManager &sm;
-    const std::set<llvm::StringRef> &called;
+    const std::set<std::string> &used;
     std::set<std::string> &out;
-    DeclCollector(clang::SourceManager &s, const std::set<llvm::StringRef> &c,
-                  std::set<std::string> &o)
-        : sm(s), called(c), out(o) {}
+    std::set<std::string> &unverified;
+    std::set<std::string> &headerExterns;
+    DeclCollector(clang::SourceManager &s, const std::set<std::string> &u,
+                  std::set<std::string> &o, std::set<std::string> &v,
+                  std::set<std::string> &h)
+        : sm(s), used(u), out(o), unverified(v), headerExterns(h) {}
     bool VisitFunctionDecl(clang::FunctionDecl *fd) {
       // hasBody() considers redeclarations, so a prototype followed by a
       // definition in the same TU is not mistaken for an external function.
       if (fd->isImplicit() || fd->hasBody())
         return true;
-      if (!called.count(fd->getName()))
+      const std::string name = fd->getNameAsString();
+      if (!used.count(name))
+        return true;
+      clang::SourceLocation loc = fd->getLocation();
+      // System-header declarations (printf/malloc/...) keep the disclosure
+      // exemption: they are the pure libc calls STRICT must accept. The
+      // driver rejects pass-through -isystem in STRICT, so user headers cannot
+      // disguise themselves as system headers to dodge this check.
+      if (loc.isValid() && sm.isInSystemHeader(loc))
+        return true;
+      out.insert(name);
+      // No body and no declared effect => the pointer effects of this extern
+      // are invisible to this TU. Flag for the driver's STRICT check gate.
+      if (hasPointerEffectSignature(fd) && !hasDeclaredEffect(fd->getName())) {
+        unverified.insert(name);
+        // Remember whether the prototype came from a header. The driver uses
+        // this to suppress the hard error when a sibling TU supplies the body
+        // for a normal multi-TU API, while a source-local extern (the red
+        // case) stays an error.
+        if (loc.isValid() && !sm.isInMainFile(loc))
+          headerExterns.insert(name);
+      }
+      return true;
+    }
+  } decls(sm, used, unresolved, unverified, headerExterns);
+  decls.TraverseDecl(ctx.getTranslationUnitDecl());
+
+  result.unresolvedFunctions.assign(unresolved.begin(), unresolved.end());
+  result.unverifiedPointerExterns.assign(unverified.begin(), unverified.end());
+  result.headerDeclaredExterns.assign(headerExterns.begin(), headerExterns.end());
+  return result;
+}
+
+std::set<std::string> definedFunctionNames(const std::string &source,
+                                           const std::vector<std::string> &args,
+                                           const std::string &fileName) {
+  std::set<std::string> defined;
+  clang::IgnoringDiagConsumer ignore;
+  std::unique_ptr<clang::ASTUnit> ast =
+      clang::tooling::buildASTFromCodeWithArgs(
+          source, safetyParseArgs(args), fileName + ".cdefs.c",
+          "cplus-ast-defs", std::make_shared<clang::PCHContainerOperations>(),
+          clang::tooling::getClangStripDependencyFileAdjuster(), {}, &ignore);
+  if (!ast || ast->getDiagnostics().hasErrorOccurred())
+    return defined;
+  clang::ASTContext &ctx = ast->getASTContext();
+  clang::SourceManager &sm = ctx.getSourceManager();
+  struct DefCollector : clang::RecursiveASTVisitor<DefCollector> {
+    clang::SourceManager &sm;
+    std::set<std::string> &out;
+    DefCollector(clang::SourceManager &s, std::set<std::string> &o)
+        : sm(s), out(o) {}
+    bool VisitFunctionDecl(clang::FunctionDecl *fd) {
+      if (fd->isImplicit() || !fd->doesThisDeclarationHaveABody() ||
+          !fd->getBody())
         return true;
       clang::SourceLocation loc = fd->getLocation();
       if (loc.isValid() && sm.isInSystemHeader(loc))
@@ -914,10 +1055,8 @@ SafetyAstProbe probeSafetyAst(const std::string &source,
       out.insert(fd->getNameAsString());
       return true;
     }
-  } decls(sm, called, unresolved);
-  decls.TraverseDecl(ctx.getTranslationUnitDecl());
-
-  result.unresolvedFunctions.assign(unresolved.begin(), unresolved.end());
-  return result;
+  } defs(sm, defined);
+  defs.TraverseDecl(ctx.getTranslationUnitDecl());
+  return defined;
 }
 } // namespace cplus

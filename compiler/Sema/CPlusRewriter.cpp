@@ -28,6 +28,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace cplus {
@@ -1842,17 +1843,553 @@ std::string sourceSlice(const std::string &s, size_t from, size_t to) {
   return s.substr(from, to - from);
 }
 
+// ---------------------------------------------------------------------------
+// Token-level fallback site recovery.
+//
+// The AST pass cannot record every guard-worthy spelling: compound operators
+// are distinct opcodes, macro/header locations are intentionally skipped, and
+// implicit conversions have no CStyleCastExpr.  The rewriter therefore recovers
+// the unambiguous forms directly from declaration/operator tokens.  No new
+// CheckedArithmeticSite kinds are needed -- the existing single-evaluation
+// emission below consumes these sites unchanged.
+// ---------------------------------------------------------------------------
+
+struct TokenType {
+  std::string spelling; ///< spelling usable in a generated C cast
+  unsigned bits = 0;
+  bool isSigned = true;
+  bool isFloat = false;
+  bool valid = false;
+};
+
+static bool isTriviaTok(const Token &t) {
+  return t.kind == TokKind::Whitespace || t.kind == TokKind::Comment;
+}
+
+static size_t nextSigTok(const std::vector<Token> &toks, size_t i) {
+  ++i;
+  while (i < toks.size() && isTriviaTok(toks[i]))
+    ++i;
+  return i;
+}
+
+static size_t prevSigTok(const std::vector<Token> &toks, size_t i) {
+  while (i > 0) {
+    --i;
+    if (!isTriviaTok(toks[i]))
+      return i;
+  }
+  return kNPos;
+}
+
+static size_t endOfToken(const Token &t) { return t.offset + t.text.size(); }
+
+static TokenType lookupVar(const std::map<std::string, TokenType> &vars,
+                           const std::string &name) {
+  auto it = vars.find(name);
+  return it == vars.end() ? TokenType() : it->second;
+}
+
+static bool isDeclQualifierTok(const std::string &s) {
+  return s == "const" || s == "volatile" || s == "static" ||
+         s == "extern" || s == "register" || s == "restrict" ||
+         s == "_Atomic" || s == "inline" || s == "auto";
+}
+
+/// Parse a built-in / fixed-width integer (or float) type spelling at `i`.
+static TokenType parseTokenType(const std::vector<Token> &toks, size_t i,
+                                size_t limit, size_t &next) {
+  TokenType out;
+  std::vector<std::string> words;
+  size_t k = i;
+  while (k < limit && toks[k].kind == TokKind::Identifier) {
+    const std::string &w = toks[k].text;
+    if (isDeclQualifierTok(w)) {
+      ++k;
+      continue;
+    }
+    words.push_back(w);
+    ++k;
+  }
+  next = k;
+  if (words.empty())
+    return out;
+
+  bool uns = false, sgn = false, ch = false, sh = false;
+  int lng = 0;
+  bool flt = false, dbl = false, bl = false;
+  std::string fixed;
+  for (const std::string &w : words) {
+    if (w == "unsigned") uns = true;
+    else if (w == "signed") sgn = true;
+    else if (w == "int") { /* default integer base word */ }
+    else if (w == "char") ch = true;
+    else if (w == "short") sh = true;
+    else if (w == "long") ++lng;
+    else if (w == "float") flt = true;
+    else if (w == "double") dbl = true;
+    else if (w == "_Bool") bl = true;
+    else if (w == "size_t" || w == "uintptr_t" || w == "uint64_t" ||
+             w == "uint32_t" || w == "uint16_t" || w == "uint8_t") {
+      fixed = w;
+      uns = true;
+    } else if (w == "ptrdiff_t" || w == "intptr_t" || w == "int64_t" ||
+               w == "int32_t" || w == "int16_t" || w == "int8_t") {
+      fixed = w;
+      sgn = true;
+    } else {
+      return out; // user-defined type: not modelled
+    }
+  }
+  for (size_t j = 0; j < words.size(); ++j) {
+    if (j)
+      out.spelling += " ";
+    out.spelling += words[j];
+  }
+  if (flt) {
+    out.bits = 32; out.isFloat = true; out.isSigned = true;
+  } else if (dbl) {
+    out.bits = 64; out.isFloat = true; out.isSigned = true;
+  } else if (bl) {
+    out.bits = 1; out.isSigned = false;
+  } else if (!fixed.empty()) {
+    if (fixed == "uint8_t" || fixed == "int8_t") out.bits = 8;
+    else if (fixed == "uint16_t" || fixed == "int16_t") out.bits = 16;
+    else if (fixed == "uint32_t" || fixed == "int32_t") out.bits = 32;
+    else out.bits = 64;
+    out.isSigned = sgn;
+  } else if (ch) {
+    out.bits = 8; out.isSigned = !uns;
+  } else if (sh) {
+    out.bits = 16; out.isSigned = !uns;
+  } else {
+    out.bits = (lng >= 1) ? 64 : 32;
+    out.isSigned = !uns;
+  }
+  out.valid = true;
+  return out;
+}
+
+/// Index of the first `;`/`,`/`}` at declaration nesting depth zero.
+static size_t findStmtEnd(const std::vector<Token> &toks, size_t from) {
+  int par = 0, brk = 0;
+  for (size_t k = from; k < toks.size(); ++k) {
+    if (toks[k].kind != TokKind::Punct)
+      continue;
+    const std::string &p = toks[k].text;
+    if (p == "(") ++par;
+    else if (p == ")") { if (par > 0) --par; }
+    else if (p == "[") ++brk;
+    else if (p == "]") { if (brk > 0) --brk; }
+    else if (par == 0 && brk == 0 &&
+             (p == ";" || p == "," || p == "}"))
+      return k;
+  }
+  return kNPos;
+}
+
+/// Whether a token can end a value operand.  Keywords such as `sizeof` are
+/// unary operators, not factors: `sizeof *p` is a dereference, not a product.
+static bool canEndFactor(const Token &t) {
+  if (t.kind == TokKind::Identifier) {
+    static const std::set<std::string> kKeywords = {
+        "sizeof", "return", "if", "while", "for", "switch", "case", "else",
+        "do", "goto", "break", "continue", "typedef", "struct", "union",
+        "enum", "const", "volatile", "unsigned", "signed", "long", "short",
+        "int", "char", "float", "double", "void", "static", "extern",
+        "register", "auto", "inline", "_Atomic"};
+    return kKeywords.count(t.text) == 0;
+  }
+  return t.kind == TokKind::Number || t.kind == TokKind::CharLit ||
+         t.kind == TokKind::StringLit ||
+         (t.kind == TokKind::Punct && (t.text == ")" || t.text == "]"));
+}
+
+static bool canStartFactor(const Token &t) {
+  return t.kind == TokKind::Identifier || t.kind == TokKind::Number ||
+         t.kind == TokKind::CharLit ||
+         (t.kind == TokKind::Punct && t.text == "(");
+}
+
+/// True when `inner` is a type spelling such as `int`, `long`, `unsigned int`
+/// or `uint32_t` (and not a parenthesized expression like `(d)`).
+static bool isTypeSpelling(const std::string &inner) {
+  const std::vector<Token> ts = lexCPlus(inner);
+  size_t next = 0;
+  const TokenType ty = parseTokenType(ts, 0, ts.size(), next);
+  if (!ty.valid)
+    return false;
+  for (size_t i = next; i < ts.size(); ++i)
+    // lexCPlus appends an EndOfFile token; it is not trivia but must not
+    // invalidate an otherwise complete type spelling such as "int".
+    if (!isTriviaTok(ts[i]) && ts[i].kind != TokKind::EndOfFile)
+      return false;
+  return true;
+}
+
+/// Offset just past any leading `(TYPE)` cast prefixes in `source[begin,end)`.
+/// The caller consumes those bytes so the f2i guard sees the original float
+/// expression rather than the already-truncated integer result.
+static size_t skipLeadingCasts(const std::string &source, size_t begin,
+                               size_t end) {
+  size_t p = begin;
+  while (p < end && source[p] == '(') {
+    size_t q = p + 1;
+    int par = 1;
+    while (q < end && par > 0) {
+      if (source[q] == '(') ++par;
+      else if (source[q] == ')') --par;
+      if (par > 0) ++q;
+    }
+    if (par != 0 || q >= end)
+      break;
+    if (!isTypeSpelling(sourceSlice(source, p + 1, q)))
+      break;
+    p = q + 1;
+    while (p < end && (source[p] == ' ' || source[p] == '\t' ||
+                       source[p] == '\n' || source[p] == '\r'))
+      ++p;
+  }
+  return p;
+}
+
+static std::vector<CheckedArithmeticSite>
+collectTokenArithmeticSites(const std::string &source) {
+  std::vector<Token> toks = lexCPlus(source);
+  std::vector<CheckedArithmeticSite> sites;
+  if (toks.empty())
+    return sites;
+
+  std::map<std::string, TokenType> vars;
+
+  // Phase 1: recover declared types, and implicit
+  // narrowing in simple `TYPE name = identifier;` initializers.
+  for (size_t i = 0; i < toks.size(); ++i) {
+    size_t after = kNPos;
+    TokenType ty = parseTokenType(toks, i, toks.size(), after);
+    if (!ty.valid || after == kNPos || after >= toks.size())
+      continue;
+    size_t n = after;
+    bool isPointer = false;
+    while (n < toks.size() && toks[n].kind == TokKind::Punct &&
+           toks[n].text == "*") {
+      isPointer = true;
+      ++n;
+    }
+    if (n >= toks.size() || toks[n].kind != TokKind::Identifier)
+      continue;
+    // Pointer arithmetic has its own extent-based guard path; never treat a
+    // pointer-typed declarator as an integer variable.
+    if (isPointer)
+      continue;
+    size_t afterName = nextSigTok(toks, n);
+    if (afterName == kNPos || toks[afterName].kind != TokKind::Punct)
+      continue;
+    const std::string &p = toks[afterName].text;
+    if (p != "=" && p != "," && p != ";" && p != "[" && p != ")" &&
+        p != "(")
+      continue;
+    vars[toks[n].text] = ty;
+
+    if (p == "=") {
+      size_t rhs = nextSigTok(toks, afterName);
+      if (rhs == kNPos || toks[rhs].kind != TokKind::Identifier)
+        continue;
+      // Only a bare identifier has a source type we can prove here.  A
+      // compound RHS (e.g. `char c = a + b`) must be guarded on the *result*,
+      // which is the AST producer's job; guessing from its first token would
+      // narrow the wrong operand.
+      size_t afterRhs = nextSigTok(toks, rhs);
+      if (afterRhs == kNPos || toks[afterRhs].kind != TokKind::Punct ||
+          (toks[afterRhs].text != ";" && toks[afterRhs].text != ","))
+        continue;
+      TokenType src = lookupVar(vars, toks[rhs].text);
+      if (!src.valid || ty.isFloat)
+        continue;
+      CheckedArithmeticSite s;
+      s.begin = toks[rhs].offset;
+      s.op = s.begin;
+      s.opLength = 0;
+      s.end = endOfToken(toks[rhs]);
+      s.bits = ty.bits;
+      s.isSigned = ty.isSigned;
+      s.type = ty.spelling;
+      if (src.isFloat) {
+        // Implicit float -> integer in an initializer: guard the float value.
+        s.kind = CheckedArithmeticSite::Op::FloatToInt;
+      } else {
+        if (src.bits <= ty.bits)
+          continue;
+        s.kind = CheckedArithmeticSite::Op::Narrow;
+        s.srcBits = src.bits;
+        s.srcIsSigned = src.isSigned;
+      }
+      sites.push_back(std::move(s));
+    }
+  }
+
+  // Phase 2: operator spellings.  Skip preprocessor lines -- macro bodies are
+  // not rewritable at their expansion point.
+  for (size_t i = 0; i < toks.size(); ++i) {
+    const Token &tk = toks[i];
+    if (isTriviaTok(tk))
+      continue;
+    size_t ls = i;
+    while (ls > 0 && toks[ls - 1].line == tk.line)
+      --ls;
+    bool ppLine = false;
+    for (size_t k = ls; k <= i; ++k)
+      if (toks[k].kind == TokKind::Punct && toks[k].text == "#")
+        ppLine = true;
+    if (ppLine)
+      continue;
+
+    const std::string op = tk.text;
+
+    // Allocation extent: malloc(count * size) can wrap before the allocator
+    // sees the request.  Wrap the multiplication in the checked size helper.
+    if (tk.kind == TokKind::Identifier &&
+        (op == "malloc" || op == "calloc" || op == "realloc")) {
+      size_t lp = nextSigTok(toks, i);
+      if (lp != kNPos && toks[lp].kind == TokKind::Punct &&
+          toks[lp].text == "(") {
+        int par = 0;
+        size_t star = kNPos, argStart = kNPos, argEnd = kNPos;
+        for (size_t k = lp + 1; k < toks.size(); ++k) {
+          const Token &a = toks[k];
+          if (isTriviaTok(a))
+            continue;
+          if (a.kind == TokKind::Punct && a.text == "(") { ++par; continue; }
+          if (a.kind == TokKind::Punct && a.text == ")") {
+            if (par == 0) { argEnd = k; break; }
+            --par;
+            continue;
+          }
+          if (par != 0)
+            continue;
+          if (a.kind == TokKind::Punct && a.text == ",") { argEnd = k; break; }
+          if (argStart == kNPos)
+            argStart = k;
+          if (a.kind == TokKind::Punct && a.text == "*")
+            star = k;
+        }
+        const size_t last = (argEnd == kNPos) ? kNPos : prevSigTok(toks, argEnd);
+        // A `*` is a multiplication only when it separates two complete
+        // factors.  In `malloc(sizeof *p)` it is a unary dereference whose
+        // left "operand" is the `sizeof` keyword, so neither side is a valid
+        // factor and no size_mul guard may be emitted.
+        if (star != kNPos && argStart != kNPos && star > argStart &&
+            last != kNPos && last > star && prevSigTok(toks, star) > argStart &&
+            canEndFactor(toks[prevSigTok(toks, star)]) &&
+            canStartFactor(toks[nextSigTok(toks, star)])) {
+          CheckedArithmeticSite s;
+          s.kind = CheckedArithmeticSite::Op::AllocExtent;
+          s.begin = toks[argStart].offset;
+          s.op = toks[star].offset;
+          s.opLength = 1;
+          s.end = endOfToken(toks[last]);
+          sites.push_back(std::move(s));
+        }
+      }
+      continue;
+    }
+
+    if (tk.kind == TokKind::Punct &&
+        (op == "+=" || op == "-=" || op == "*=" || op == "/=" ||
+         op == "%=" || op == "<<=" || op == ">>=")) {
+      size_t lhs = prevSigTok(toks, i);
+      TokenType ty = lookupVar(vars, lhs == kNPos ? std::string()
+                                                 : toks[lhs].text);
+      if (!ty.valid || ty.isFloat)
+        continue;
+      if (!ty.isSigned && (op == "+=" || op == "-=" || op == "*="))
+        continue; // unsigned add/sub/mul wrap by definition
+      CheckedArithmeticSite::Op kind = CheckedArithmeticSite::Op::Add;
+      if (op == "-=") kind = CheckedArithmeticSite::Op::Sub;
+      else if (op == "*=") kind = CheckedArithmeticSite::Op::Mul;
+      else if (op == "/=") kind = CheckedArithmeticSite::Op::Div;
+      else if (op == "%=") kind = CheckedArithmeticSite::Op::Rem;
+      else if (op == "<<=") kind = CheckedArithmeticSite::Op::Shl;
+      else if (op == ">>=") kind = CheckedArithmeticSite::Op::Shr;
+      const size_t stop = findStmtEnd(toks, nextSigTok(toks, i));
+      if (stop == kNPos || stop <= i)
+        continue;
+      const size_t last = prevSigTok(toks, stop);
+      if (last == kNPos || last < i || endOfToken(toks[last]) <= tk.offset)
+        continue;
+      CheckedArithmeticSite s;
+      s.kind = kind;
+      s.compound = true;
+      s.begin = toks[lhs].offset;
+      s.op = tk.offset;
+      s.opLength = op.size();
+      s.end = endOfToken(toks[last]);
+      s.bits = ty.bits;
+      s.isSigned = ty.isSigned;
+      s.type = ty.spelling;
+      sites.push_back(std::move(s));
+      continue;
+    }
+
+    if (tk.kind == TokKind::Punct && (op == "++" || op == "--")) {
+      size_t prev = prevSigTok(toks, i);
+      size_t nxt = nextSigTok(toks, i);
+      size_t target = kNPos;
+      bool postfix = false;
+      if (prev != kNPos &&
+          (toks[prev].kind == TokKind::Identifier ||
+           toks[prev].kind == TokKind::Number ||
+           (toks[prev].kind == TokKind::Punct &&
+            (toks[prev].text == ")" || toks[prev].text == "]" ||
+             toks[prev].text == "++" || toks[prev].text == "--")))) {
+        target = prev;
+        postfix = true;
+      } else if (nxt != kNPos && toks[nxt].kind == TokKind::Identifier) {
+        target = nxt;
+      }
+      TokenType ty = lookupVar(vars, target == kNPos ? std::string()
+                                                    : toks[target].text);
+      if (!ty.valid || ty.isFloat || !ty.isSigned)
+        continue;
+      CheckedArithmeticSite s;
+      s.kind = (op == "++") ? CheckedArithmeticSite::Op::Inc
+                           : CheckedArithmeticSite::Op::Dec;
+      s.postfix = postfix;
+      s.begin = postfix ? toks[target].offset : tk.offset;
+      s.op = tk.offset;
+      s.opLength = 2;
+      s.end = postfix ? endOfToken(tk) : endOfToken(toks[target]);
+      s.bits = ty.bits;
+      s.isSigned = ty.isSigned;
+      s.type = ty.spelling;
+      sites.push_back(std::move(s));
+      continue;
+    }
+
+    if (tk.kind == TokKind::Punct && op == "-") {
+      size_t prev = prevSigTok(toks, i);
+      bool unary = true;
+      if (prev != kNPos) {
+        const Token &p = toks[prev];
+        if (p.kind == TokKind::Identifier || p.kind == TokKind::Number ||
+            p.kind == TokKind::StringLit || p.kind == TokKind::CharLit ||
+            (p.kind == TokKind::Punct &&
+             (p.text == ")" || p.text == "]" || p.text == "++" ||
+              p.text == "--")))
+          unary = false;
+      }
+      if (!unary)
+        continue;
+      size_t nxt = nextSigTok(toks, i);
+      if (nxt == kNPos || toks[nxt].kind != TokKind::Identifier)
+        continue;
+      TokenType ty = lookupVar(vars, toks[nxt].text);
+      if (!ty.valid || ty.isFloat)
+        continue;
+      CheckedArithmeticSite s;
+      s.kind = CheckedArithmeticSite::Op::Neg;
+      s.begin = tk.offset;
+      s.op = tk.offset;
+      s.opLength = 1;
+      s.end = endOfToken(toks[nxt]);
+      s.bits = ty.bits;
+      s.isSigned = ty.isSigned;
+      s.type = ty.spelling;
+      sites.push_back(std::move(s));
+      continue;
+    }
+
+    // Explicit integer cast of a known float operand: (int)d, (long)x, ...
+    if (tk.kind == TokKind::Punct && op == "(") {
+      size_t ts = nextSigTok(toks, i);
+      if (ts == kNPos || toks[ts].kind != TokKind::Identifier)
+        continue;
+      size_t after = kNPos;
+      TokenType dst = parseTokenType(toks, ts, toks.size(), after);
+      if (!dst.valid || dst.isFloat || after == kNPos || after >= toks.size())
+        continue;
+      if (!(toks[after].kind == TokKind::Punct && toks[after].text == ")"))
+        continue;
+      size_t val = nextSigTok(toks, after);
+      if (val == kNPos || toks[val].kind != TokKind::Identifier)
+        continue;
+      TokenType src = lookupVar(vars, toks[val].text);
+      if (!src.valid || !src.isFloat)
+        continue;
+      CheckedArithmeticSite s;
+      s.kind = CheckedArithmeticSite::Op::FloatToInt;
+      s.begin = toks[val].offset;
+      s.op = s.begin;
+      s.opLength = 0;
+      s.end = endOfToken(toks[val]);
+      s.bits = dst.bits;
+      s.isSigned = dst.isSigned;
+      s.type = dst.spelling;
+      sites.push_back(std::move(s));
+      continue;
+    }
+  }
+  return sites;
+}
+
 } // namespace
 
 std::string instrumentDynamicArrayBounds(
     const std::string &source,
     const std::map<std::string, size_t> &arrayLengths) {
-  const std::vector<CheckedArithmeticSite> &arith = checkedArithmeticSites();
+  // Merge producer sites with the token-level fallback.  Dedup on the *full*
+  // (begin, op, opLength, end) tuple: nested sites legitimately share `begin`
+  // (e.g. `a+b+c`), so deduping on begin alone would drop required inner
+  // guards.
+  std::vector<CheckedArithmeticSite> arith = checkedArithmeticSites();
+  std::set<std::tuple<size_t, size_t, size_t, size_t>> seenArith;
+  for (const CheckedArithmeticSite &s : arith)
+    seenArith.insert(std::make_tuple(s.begin, s.op, s.opLength, s.end));
+  for (CheckedArithmeticSite &s : collectTokenArithmeticSites(source)) {
+    if (seenArith.insert(std::make_tuple(s.begin, s.op, s.opLength, s.end))
+            .second)
+      arith.push_back(std::move(s));
+  }
   const std::vector<CheckedBoundsSite> &bounds = checkedBoundsSites();
+  // RaiiLowering can emit `cplus_zero(&owner, sizeof(owner))` for an
+  // explicitly invoked destructor.  Those TUs may otherwise have no safety
+  // sites at all, so the declaration need must be part of the early-return
+  // condition (LEGACY never calls this function, so its bytes are untouched).
+  const bool needZeroDecl = source.find("cplus_zero") != std::string::npos;
   if (arrayLengths.empty() && arith.empty() && bounds.empty() &&
       checkedPointerSites().empty() && checkedAllocSites().empty() &&
-      checkedFreeSites().empty())
+      checkedFreeSites().empty() && !needZeroDecl)
     return source;
+
+  // Enum initializers must be integer constant expressions.  A checked helper
+  // call is not an ICE, so every site located inside an enum body is left as
+  // plain source (the static checker still validates the constants).
+  std::vector<std::pair<size_t, size_t>> enumRanges;
+  {
+    const std::vector<Token> etoks = lexCPlus(source);
+    for (size_t i = 0; i < etoks.size(); ++i) {
+      if (!(etoks[i].kind == TokKind::Identifier && etoks[i].text == "enum"))
+        continue;
+      size_t k = nextSigTok(etoks, i);
+      if (k != kNPos && etoks[k].kind == TokKind::Identifier)
+        k = nextSigTok(etoks, k);
+      if (k == kNPos || !(etoks[k].kind == TokKind::Punct &&
+                          etoks[k].text == "{"))
+        continue;
+      int depth = 0;
+      size_t close = kNPos;
+      for (size_t j = k; j < etoks.size(); ++j) {
+        if (etoks[j].kind != TokKind::Punct)
+          continue;
+        if (etoks[j].text == "{") ++depth;
+        else if (etoks[j].text == "}") {
+          if (--depth == 0) { close = j; break; }
+        }
+      }
+      if (close != kNPos)
+        enumRanges.emplace_back(etoks[k].offset, endOfToken(etoks[close]));
+    }
+  }
 
   std::vector<SafetyInsertion> insertions;
   // Offsets already guarded by the token-level pass; a resolved AST site for
@@ -1951,6 +2488,14 @@ std::string instrumentDynamicArrayBounds(
   }
 
   for (const CheckedArithmeticSite &site : arith) {
+    bool inEnum = false;
+    for (const auto &r : enumRanges)
+      if (site.begin >= r.first && site.end <= r.second) {
+        inEnum = true;
+        break;
+      }
+    if (inEnum)
+      continue; // integer constant expression: no runtime guard is legal
     const size_t span = site.end > site.begin ? site.end - site.begin : 0;
     const std::string fn =
         std::string("__cplus_inline_") + checkedOpName(site.kind) + "_i64";
@@ -1994,9 +2539,14 @@ std::string instrumentDynamicArrayBounds(
     if (kind == CheckedArithmeticSite::Op::Narrow ||
         kind == CheckedArithmeticSite::Op::FloatToInt) {
       if (kind == CheckedArithmeticSite::Op::FloatToInt) {
+        // Guard the ORIGINAL floating value.  A recorded site may span the
+        // explicit cast itself (`(int)d`); consuming that prefix here avoids
+        // checking the already-clamped integer result, which would silently
+        // accept an out-of-range conversion.
+        const size_t castEnd = skipLeadingCasts(source, site.begin, site.end);
         insertions.push_back({site.begin, span, 0,
                               "((" + dst + ")__cplus_inline_f2i_i64((double)(",
-                              0});
+                              castEnd > site.begin ? castEnd - site.begin : 0});
         insertions.push_back({site.end, span, 2, "), " + bits + ", " + sgn +
                                                     "))", 0});
         haveFloatToInt = true;
@@ -2056,6 +2606,29 @@ std::string instrumentDynamicArrayBounds(
 
     // --- unary minus: checked 0 - operand ---
     if (kind == CheckedArithmeticSite::Op::Neg) {
+      // A literal operand (`-1`, `-0x10u`) is a compile-time constant; the
+      // static checker already handles it and a macro call here would break
+      // integer constant expressions (enum bodies, case labels, array sizes).
+      const std::string operand =
+          sourceSlice(source, site.op + site.opLength, site.end);
+      auto isConstDigit = [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+               (c >= 'A' && c <= 'F');
+      };
+      size_t p = 0;
+      while (p < operand.size() &&
+             (operand[p] == ' ' || operand[p] == '\t' || operand[p] == '\n' ||
+              operand[p] == '\r'))
+        ++p;
+      bool literal = p < operand.size() && isConstDigit(operand[p]);
+      for (size_t k = p; literal && k < operand.size(); ++k) {
+        const char c = operand[k];
+        if (!(isConstDigit(c) || c == 'x' || c == 'X' || c == 'u' ||
+              c == 'U' || c == 'l' || c == 'L' || c == ' ' || c == '\t'))
+          literal = false;
+      }
+      if (literal)
+        continue;
       insertions.push_back({site.begin, span, 0, "CPLUS_NEG(", 0});
       insertions.push_back({site.op, span, 1, "", site.opLength});
       insertions.push_back({site.end, span, 2,
@@ -2163,15 +2736,28 @@ std::string instrumentDynamicArrayBounds(
   if (insertions.empty())
     return source;
 
+  // Nested sites can share an offset: for `a+b+c` the inner expression ends
+  // exactly where the outer operator sits.  At a shared offset the required
+  // order is prefix (outermost first), then suffix (innermost first), then the
+  // operator separator (which consumes the operator token).  Emitting a
+  // separator before the inner suffix used to skip the suffix entirely and
+  // leave unbalanced parentheses in the generated C.
+  auto insertionRank = [](int p) -> int {
+    if (p == 0) return 0; // prefix
+    if (p == 2) return 1; // suffix
+    return 2;             // operator separator
+  };
   std::stable_sort(insertions.begin(), insertions.end(),
-                   [](const SafetyInsertion &a, const SafetyInsertion &b) {
+                   [&](const SafetyInsertion &a, const SafetyInsertion &b) {
                      if (a.offset != b.offset)
                        return a.offset < b.offset;
-                     if (a.priority != b.priority)
-                       return a.priority < b.priority;
-                     if (a.priority == 0)
+                     const int ra = insertionRank(a.priority);
+                     const int rb = insertionRank(b.priority);
+                     if (ra != rb)
+                       return ra < rb;
+                     if (a.priority == 0 && b.priority == 0)
                        return a.span > b.span; // outer prefix first
-                     if (a.priority == 2)
+                     if (a.priority == 2 && b.priority == 2)
                        return a.span < b.span; // inner suffix first
                      return false;
                    });
@@ -2180,20 +2766,43 @@ std::string instrumentDynamicArrayBounds(
   out.reserve(source.size() + 64 * insertions.size());
   size_t pos = 0, next = 0;
   while (pos < source.size() || next < insertions.size()) {
+    // A wide insertion (e.g. a free-call replacement) may consume source past
+    // a weaker insertion recorded inside it; skip those defensively so the
+    // loop always makes progress.
+    while (next < insertions.size() && insertions[next].offset < pos)
+      ++next;
+    if (next < insertions.size() && insertions[next].offset > pos) {
+      const size_t upto = std::min(insertions[next].offset, source.size());
+      out.append(source, pos, upto - pos);
+      pos = upto;
+    }
+    // Emit *all* insertions at this offset before consuming source bytes.
+    // Taking the max replace length (rather than advancing per insertion) is
+    // what preserves the inner suffix that shares an outer operator offset.
+    size_t consume = 0;
     while (next < insertions.size() && insertions[next].offset == pos) {
       out += insertions[next].text;
-      pos += insertions[next].replace;
+      consume = std::max(consume, insertions[next].replace);
       ++next;
     }
-    if (pos >= source.size())
-      break;
-    out += source[pos];
-    ++pos;
+    if (consume != 0) {
+      pos += consume;
+      if (pos > source.size())
+        pos = source.size();
+    } else {
+      if (pos >= source.size())
+        break;
+      out += source[pos];
+      ++pos;
+    }
   }
 
   // Emit the helper declarations before the first #line directive so the
   // original source line numbers are preserved.
   std::string prelude;
+  if (needZeroDecl)
+    prelude += "#include <stddef.h>\n"
+               "extern void cplus_zero(void *, size_t);\n";
   if (haveBounds || havePtrFormation)
     prelude += "#include <stddef.h>\n";
   if (haveBounds)

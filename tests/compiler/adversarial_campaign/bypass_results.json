@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-23T10:37:51.316344+00:00",
+  "generated": "2026-11-23T13:00:27.507960+00:00",
   "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "mode": "c+ check --strict --sanitize=none",
   "note": "accepted_by_strict=True means the bypass is PRESENT in this binary",
@@ -14,10 +14,10 @@
     },
     {
       "case": "S2_fnptr_free",
-      "rc": 0,
-      "accepted_by_strict": true,
-      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_fnptr_free.c ok",
-      "stderr": "",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_fnptr_free.c:4:77: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p = malloc(sizeof(int)); void(*f)(int*)=consume; f(p); free(p); return 0; }\n                                                                              ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership",
       "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_fnptr_free.c"
     },
     {
@@ -38,10 +38,10 @@
     },
     {
       "case": "S6_global_alias_uaf",
-      "rc": 0,
-      "accepted_by_strict": true,
-      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S6_global_alias_uaf.c ok",
-      "stderr": "",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S6_global_alias_uaf.c:6:70: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){ int *p=malloc(sizeof(int)); setg(p); freeg(); return *p; }\n                                                                       ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S6_global_alias_ua",
       "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S6_global_alias_uaf.c"
     },
     {
@@ -94,10 +94,10 @@
     },
     {
       "case": "T1_fnptr_double_free",
-      "rc": 0,
-      "accepted_by_strict": true,
-      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c ok",
-      "stderr": "",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c:3:80: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p=malloc(4); if(!p) return 1; void(*f)(void*)=free; f(p); free(p); return 0; }\n                                                                                 ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership",
       "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c"
     },
     {

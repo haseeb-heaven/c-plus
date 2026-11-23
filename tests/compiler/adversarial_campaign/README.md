@@ -68,3 +68,25 @@ compare 14/14, source preservation 4/4, real-world C 6/6, C standards
 KNOWN ISSUE under repair: runtime never-reuse policy regressed alloc_churn
 from 0.98s to 31.02s (31.6x). Runtime owner is revising it. Do not commit
 wave 1 until performance is restored and re-measured.
+
+## Wave 2 launched (after wave 1 pushed as `3ebd44a`)
+
+5 red agents: indirect calls/globals; native guard emission; RAII control flow;
+cross-TU/configuration; residual spatial. 5 blue agents with disjoint ownership:
+AstSafetyCheck (indirect/global), CPlusRewriter+runtime (guard emission),
+RaiiLowering, StaticBoundsCheck, Driver/Ownership (cross-TU/config), plus a
+regression keeper owning new wave2 test + report files.
+
+Wave 1 wave-integration baseline is `bypass_results.BEFORE.json` (16/21 accepted).
+Wave 2 AFTER measurement will use the same `verify_bypasses.py` so the delta is
+directly comparable. Target: close the 6 remaining accepted cases without any
+regression in the full suite or alloc_churn performance (<1.5s).
+
+## Wave 2 result (measured, pushed separately)
+
+16/21 accepted at wave-1 baseline -> 3/21 after wave 2; 13 closed cumulatively,
+3/3 controls always rejected. The 3 remaining are static `check` gaps whose
+`build`-time guards trap at runtime (110/111/111). Two compiler crashes and
+a malformed-C emission bug were fixed. Full verification and non-claims:
+`docs/compiler/adversarial-wave2.md`. Raw before/after:
+`bypass_results.BEFORE_WAVE2.json` -> `bypass_results.json`.

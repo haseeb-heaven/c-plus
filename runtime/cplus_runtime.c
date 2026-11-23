@@ -263,6 +263,72 @@ int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
   return (int64_t)dst;
 }
 
+/* Floating-point -> integer conversion.  The compiler emits an inline
+ * range/NAN predicate and calls this helper only on the failure path, so the
+ * hot path needs no cross-TU call.  The full predicate is repeated here so
+ * the symbol is also correct when called directly.  No __int128 is needed:
+ * every bound is an exactly representable double power of two. */
+int64_t __cplus_checked_f2i_i64(double value, unsigned bits, unsigned isSigned) {
+  double lo, hi;
+  char buf[192];
+
+  if (bits == 0 || bits > 64) {
+    bits = 64;
+    isSigned = 1;
+  }
+  if (isSigned) {
+    if (bits == 64) {
+      lo = -9223372036854775808.0;
+      hi = 9223372036854775808.0;
+    } else {
+      int b = (int)bits, i;
+      double p = 1.0;
+      for (i = 0; i < b - 1; ++i)
+        p *= 2.0;
+      lo = -p;
+      hi = p;
+    }
+  } else {
+    if (bits == 64) {
+      lo = 0.0;
+      hi = 18446744073709551616.0;
+    } else {
+      int b = (int)bits, i;
+      double p = 1.0;
+      for (i = 0; i < b; ++i)
+        p *= 2.0;
+      lo = 0.0;
+      hi = p;
+    }
+  }
+
+  if (value == value && value >= lo && value < hi) {
+    if (!isSigned && bits == 64)
+      return (int64_t)(uint64_t)value; /* preserve the 64-bit bit pattern */
+    return (int64_t)value;
+  }
+  snprintf(buf, sizeof(buf),
+           "floating-point value does not fit in a %u-bit %s integer", bits,
+           isSigned ? "signed" : "unsigned");
+  cplus_print_fatal(CPLUS_EXIT_CONVERSION, "floating-point conversion", NULL, 0,
+                    buf);
+  return 0;
+}
+
+/* Allocation-extent multiplication.  size_t overflow silently under-allocates
+ * the object, so the check runs before the allocator is called. */
+size_t __cplus_checked_size_mul(size_t a, size_t b) {
+  if (b != 0 && a > ((size_t)-1) / b) {
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+             "allocation size %lu * %lu overflows size_t",
+             (unsigned long)a, (unsigned long)b);
+    cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                      0, buf);
+  }
+  return a * b;
+}
+
 void cplus_resource_check_borrow(const void *self, const char *file, int line,
                                  const char *expr) {
   if (self != NULL)

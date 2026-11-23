@@ -41,6 +41,9 @@ struct LoopInfo {
   /// compound statement.
   int bodyPos = -1;
   size_t stackSizeAtKeyword = 0;
+  /// A `switch` is tracked in the same stack as loops, but `continue` must
+  /// target the innermost real loop rather than the switch frame.
+  bool isSwitch = false;
 };
 
 struct Edit {
@@ -81,6 +84,11 @@ public:
     // ownership-lowering scan below: these patterns carry no C+ markers, so
     // they are diagnosed directly from the token stream.
     analyzePlainC();
+    // Global declarations and non-local-jump/termination helpers are needed by
+    // both the escape checks and the owner-aware jump checks below.  Computing
+    // them once keeps the token-level scan single-pass and cheap.
+    globalNames_ = collectGlobals();
+    collectControlFlowHelpers();
     scan();
     applyEdits();
 
@@ -186,6 +194,9 @@ private:
     edits_.push_back(Edit{toks_[i].offset,
                           toks_[semi].offset - toks_[i].offset,
                           std::string(), seq_++});
+    // Remember the removed span so an explicit drop *inside* a defer is not
+    // rewritten with a zeroing guard that would land in a deleted region.
+    deferRanges_.push_back({toks_[i].offset, toks_[semi].offset});
     atStmtStart_ = true;
   }
 
@@ -407,6 +418,15 @@ private:
         moved_.clear();
         movedOwners_.clear();
         explicitlyDropped_.clear();
+        // Parameters are out-param escape targets: storing a live owner into
+        // one hands its lifetime to the caller.
+        currentParams_.clear();
+        size_t open = matchingParenBackward(p);
+        if (open != kNPos) {
+          for (size_t k = open + 1; k < p; ++k)
+            if (toks_[k].kind == TokKind::Identifier)
+              currentParams_.insert(toks_[k].text);
+        }
       }
     }
 
@@ -437,8 +457,10 @@ private:
 
     // A name declared in this scope no longer suppresses cleanup for a
     // later, unrelated variable with the same name.
-    for (const auto &v : s.vars)
+    for (const auto &v : s.vars) {
       explicitlyDropped_.erase(v.name);
+      deferDropped_.erase(v.name);
+    }
     bool wasFunction = s.functionBody;
     scopes_.pop_back();
     if (functionDepth_ > 0)
@@ -453,18 +475,56 @@ private:
       handleDefer(i);
       return;
     }
-    // Track explicit moves so a borrow of the moved owner can be rejected.
-    // An explicit T_drop(&owner) consumes the automatic cleanup obligation.
+    // Track explicit destructors.  Historically `explicitlyDropped_` suppressed
+    // the automatic drop for the whole scope, but that set is path-insensitive:
+    // a drop inside `if (cond)` leaked on the fall-through path.  We now keep
+    // the automatic drop on every path and make the explicit drop idempotent by
+    // zeroing the handle right after it (the same guard `cplus_move` uses).
+    // `explicitlyDropped_` is retained only to detect a second explicit drop.
     if (t.text.size() > 5 &&
         t.text.compare(t.text.size() - 5, 5, "_drop") == 0) {
       size_t lp = nextSig(i);
       if (isPunct(lp, "(")) {
         size_t amp = nextSig(lp);
         size_t target = nextSig(amp);
+        bool inDefer = false;
+        for (const auto &r : deferRanges_)
+          if (toks_[i].offset >= r.first && toks_[i].offset < r.second) {
+            inDefer = true;
+            break;
+          }
         if (isPunct(amp, "&") && target < toks_.size() &&
             toks_[target].kind == TokKind::Identifier &&
-            owned_.count(toks_[target].text))
-          explicitlyDropped_.insert(toks_[target].text);
+            owned_.count(toks_[target].text)) {
+          const std::string &name = toks_[target].text;
+          if (!explicitlyDropped_.insert(name).second && strict_ &&
+              mode_ != Mode::LegacyC)
+            errorAt("resource '" + name + "' is explicitly dropped more than once",
+                    t, "release each owner exactly once; a second drop may "
+                       "free already-freed memory");
+          if (inDefer) {
+            // The defer text is re-emitted at scope exit.  Suppress the
+            // automatic drop so that text is not executed twice; no guard
+            // edit is needed because the defer span is removed from output.
+            deferDropped_.insert(name);
+          } else {
+            // `cplus_zero` is a no-op on an already empty handle, so the
+            // automatic drop inserted at scope exit cannot double-free.
+            size_t rp = matchingParen(lp);
+            if (rp != kNPos && rp < toks_.size())
+              edits_.push_back(Edit{
+                  toks_[rp].offset + toks_[rp].text.size(), 0,
+                  ", (void)cplus_zero(&" + name + ", sizeof(" + name + "))",
+                  seq_++});
+          }
+        } else if (strict_ && mode_ != Mode::LegacyC &&
+                   amp < toks_.size() &&
+                   toks_[amp].kind == TokKind::Identifier &&
+                   borrows_.count(toks_[amp].text)) {
+          errorAt("explicit drop through alias '" + toks_[amp].text +
+                      "' is not supported",
+                  t, "call the destructor with the owner's address directly");
+        }
       }
     }
     if (t.text == "cplus_move") {
@@ -514,7 +574,9 @@ private:
       return;
     }
     if (t.text == "break" || t.text == "continue") {
-      std::string drops = loopExitDrops();
+      // `continue` targets a loop; a switch frame on top of the stack must be
+      // skipped or the enclosing loop's owners would not be destroyed.
+      std::string drops = loopExitDrops(t.text == "continue");
       if (!drops.empty())
         insertStatementCleanup(i, drops);
       atStmtStart_ = false;
@@ -532,10 +594,33 @@ private:
       atStmtStart_ = false;
       return;
     }
+    if (t.text == "longjmp" ||
+        (longjmpHelpers_.count(t.text) && isPunct(nextSig(i), "("))) {
+      // Match the goto rule: STRICT rejects a non-local jump while a C+ owner
+      // is live.  Plain-C longjmp is untouched -- analyzePlainC keeps its own
+      // live-allocation rule, so no new diagnostic is emitted without owners.
+      if (strict_ && mode_ != Mode::LegacyC && hasLiveOwners())
+        errorAt("longjmp bypasses C+ cleanup; destructors may not run", t,
+                "use structured control flow or an explicit cleanup call");
+      atStmtStart_ = false;
+      return;
+    }
+    if ((t.text == "exit" || t.text == "_Exit" || t.text == "abort" ||
+         (terminationHelpers_.count(t.text) && isPunct(nextSig(i), "("))) &&
+        strict_ && mode_ != Mode::LegacyC && hasLiveOwners()) {
+      // Terminating the process never runs scope-exit destructors.  Emit a
+      // diagnostic (no new ABI/runtime call) while an owner is still live.
+      errorAt("'" + t.text + "' bypasses C+ cleanup; destructors may not run",
+              t, "release live owners before terminating, or use structured "
+                 "control flow");
+      atStmtStart_ = false;
+      return;
+    }
     if (t.text == "for" || t.text == "while" || t.text == "do" ||
         t.text == "switch") {
       LoopInfo l;
       l.stackSizeAtKeyword = scopes_.size();
+      l.isSwitch = t.text == "switch";
       loops_.push_back(l);
       atStmtStart_ = false;
       return;
@@ -597,9 +682,25 @@ private:
         Edit{toks_[semi].offset + toks_[semi].text.size(), 0, " }", seq_++});
   }
 
+  /// `owned_` accumulates for the whole function, so it cannot tell whether a
+  /// destructor is still pending at this point.  Consume the open scope stack
+  /// instead: only owners whose scope has not closed can be bypassed.
+  bool hasLiveOwners() const {
+    for (const auto &s : scopes_)
+      if (!s.vars.empty())
+        return true;
+    return false;
+  }
+
   /// Cleanup calls for scopes [from, to), innermost first, and within one
   /// scope in reverse declaration order.  `exclude` names a variable whose
   /// ownership has been transferred and must not be destroyed here.
+  ///
+  /// Explicit drops no longer suppress the automatic drop: a drop on only one
+  /// branch must not leak on the other.  Instead the explicit drop is guarded
+  /// with `cplus_zero`, so the automatic destructor sees an empty handle and
+  /// becomes a no-op.  The only remaining suppression is for a drop embedded
+  /// in `defer`, whose text is itself the scope-exit cleanup.
   std::string dropsFor(size_t from, size_t to,
                        const std::string &exclude) const {
     std::string out;
@@ -607,7 +708,7 @@ private:
       const auto &vars = scopes_[p - 1].vars;
       for (size_t k = vars.size(); k > 0; --k) {
         const OwnedVar &v = vars[k - 1];
-        if (v.name == exclude || explicitlyDropped_.count(v.name))
+        if (v.name == exclude || deferDropped_.count(v.name))
           continue;
         if (v.isDefer)
           out += v.deferText + "; ";
@@ -620,10 +721,19 @@ private:
     return out;
   }
 
-  std::string loopExitDrops() {
+  std::string loopExitDrops(bool continueStmt = false) {
     if (loops_.empty())
       return std::string();
-    const LoopInfo &l = loops_.back();
+    size_t p = loops_.size() - 1;
+    if (continueStmt) {
+      // `continue` never targets a switch; walk past switch frames so owners
+      // of the enclosing loop body still get destroyed.
+      while (p > 0 && loops_[p].isSwitch)
+        --p;
+      if (loops_[p].isSwitch)
+        return std::string(); // no enclosing loop
+    }
+    const LoopInfo &l = loops_[p];
     size_t from = l.bodyPos >= 0 ? static_cast<size_t>(l.bodyPos)
                                  : l.stackSizeAtKeyword;
     if (from > scopes_.size())
@@ -678,8 +788,25 @@ private:
     if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
       return;
     auto it = owned_.find(toks_[lhs].text);
-    if (it == owned_.end())
+    if (it == owned_.end()) {
+      // Storing a live owner into a global or an out-parameter lets its
+      // lifetime escape the scope that will release it.  `return owner;` is
+      // checked separately (a return transfers ownership); an assignment does
+      // not, so STRICT rejects it rather than emitting a later use-after-free.
+      size_t rhs = nextSig(i);
+      if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier &&
+          owned_.count(toks_[rhs].text) &&
+          (globalNames_.count(toks_[lhs].text) ||
+           currentParams_.count(toks_[lhs].text)) &&
+          strict_ && mode_ != Mode::LegacyC)
+        errorAt("resource '" + toks_[rhs].text +
+                    "' escapes through global/out-parameter '" +
+                    toks_[lhs].text + "'",
+                toks_[lhs],
+                "copy the data instead of storing the owner, or transfer it "
+                "explicitly");
       return;
+    }
 
     // `*p = ...` and `p->field = ...` modify the pointee, not the owner.
     size_t before = prevSig(lhs);
@@ -753,6 +880,39 @@ private:
       } else if (isPunct(k, ",") && paren == 0 && bracket == 0) {
         errorAt("declare one owning resource per statement", toks_[k]);
         return;
+      }
+    }
+
+    // A resource local initialised from a call that receives a live owner by
+    // value duplicates the handle (e.g. `R b = dupr(a);`): the callee's
+    // parameter and the new local both own it, so two destructors run.  STRICT
+    // rejects this; `cplus_move` is the only sanctioned transfer expression.
+    if (eq != kNPos) {
+      size_t init = nextSig(eq);
+      if (init < semi && toks_[init].kind == TokKind::Identifier &&
+          toks_[init].text != "cplus_move") {
+        size_t lp = nextSig(init);
+        if (isPunct(lp, "(")) {
+          size_t rp = matchingParen(lp);
+          if (rp != kNPos && rp <= semi) {
+            for (size_t k = lp + 1; k < rp; ++k) {
+              if (toks_[k].kind != TokKind::Identifier ||
+                  !owned_.count(toks_[k].text) || toks_[k].text == name)
+                continue;
+              size_t afterArg = nextSig(k);
+              if (isPunct(afterArg, ".") || isPunct(afterArg, "->") ||
+                  isPunct(afterArg, "[") || isPunct(prevSig(k), "&"))
+                continue; // field read or borrow, not a by-value copy
+              if (strict_ && mode_ != Mode::LegacyC)
+                errorAt("resource '" + toks_[k].text +
+                            "' cannot be copied into a call returning an owner",
+                        toks_[k],
+                        "transfer ownership with cplus_move(" +
+                            toks_[k].text + ") instead");
+              break;
+            }
+          }
+        }
       }
     }
 
@@ -1000,6 +1160,50 @@ private:
     return out;
   }
 
+  /// Collect the names of functions that contain `longjmp` or a process
+  /// terminator (`exit`/`_Exit`/`abort`).  These helpers bypass the destructors
+  /// of live owners in their *callers*, which a purely local scan cannot see.
+  /// The scan is deliberately token-level and conservative: a helper is only
+  /// recorded when its definition is visible in this translation unit.
+  void collectControlFlowHelpers() {
+    if (mode_ == Mode::LegacyC)
+      return;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "{"))
+        continue;
+      size_t before = prevSig(i);
+      if (before == kNPos || !isPunct(before, ")"))
+        continue; // not a function body
+      size_t end = matchingBrace(i);
+      if (end == kNPos)
+        continue;
+      size_t open = matchingParenBackward(before);
+      std::string name;
+      if (open != kNPos && open > 0) {
+        size_t nm = prevSig(open);
+        if (nm != kNPos && toks_[nm].kind == TokKind::Identifier)
+          name = toks_[nm].text;
+      }
+      bool jumps = false, terminates = false;
+      for (size_t k = i + 1; k < end; ++k) {
+        if (toks_[k].kind != TokKind::Identifier)
+          continue;
+        if (toks_[k].text == "longjmp")
+          jumps = true;
+        if (toks_[k].text == "exit" || toks_[k].text == "_Exit" ||
+            toks_[k].text == "abort")
+          terminates = true;
+      }
+      if (!name.empty()) {
+        if (jumps)
+          longjmpHelpers_.insert(name);
+        if (terminates)
+          terminationHelpers_.insert(name);
+      }
+      i = end;
+    }
+  }
+
   /// Record a simple `type *name` / `type name[N]` declaration.  Names found
   /// are added to `scope` (for locals) and, when non-null, to `out` (for
   /// file-scope declarations).
@@ -1060,8 +1264,12 @@ private:
       size_t before = prevSig(i);
       if (before == kNPos || !isPunct(before, ")"))
         continue; // not a function body (struct/initialiser/control block)
-      // Functions explicitly opted out of cleanup are left alone.
+      // `cplus_no_cleanup` is not an implemented attribute (see LangFeatures.h)
+      // and is intentionally unrecognised by the backend.  Silently honouring
+      // it would hide both raw-allocation and owner cleanup failures, so STRICT
+      // discloses the opt-out instead.  LegacyC is left untouched.
       bool noCleanup = false;
+      size_t noCleanupTok = kNPos;
       for (size_t k = before, steps = 0;
            k != kNPos && k > 0 && steps < 32; ++steps) {
         size_t p = prevSig(k);
@@ -1069,6 +1277,7 @@ private:
           break;
         if (isIdent(p, "cplus_no_cleanup")) {
           noCleanup = true;
+          noCleanupTok = p;
           break;
         }
         k = p;
@@ -1076,6 +1285,10 @@ private:
       size_t end = matchingBrace(i);
       if (end == kNPos)
         continue;
+      if (noCleanup && strict_)
+        errorAt("'cplus_no_cleanup' is not supported; cleanup analysis cannot "
+                "be opted out",
+                toks_[noCleanupTok == kNPos ? i : noCleanupTok]);
       if (!noCleanup)
         analyzeFunction(i, end, globals);
       i = end;
@@ -1560,7 +1773,17 @@ private:
   std::map<std::string, std::string> borrows_;
   std::set<std::string> moved_;
   std::set<std::string> movedOwners_;
+  /// Every owner with an explicit destructor call (used for duplicate-drop
+  /// detection).  Does NOT suppress the automatic drop.
   std::set<std::string> explicitlyDropped_;
+  /// The subset dropped inside `defer`; its text is the scope-exit cleanup,
+  /// so the automatically generated drop must be suppressed for these.
+  std::set<std::string> deferDropped_;
+  std::set<std::string> globalNames_;
+  std::set<std::string> currentParams_;
+  std::set<std::string> longjmpHelpers_;
+  std::set<std::string> terminationHelpers_;
+  std::vector<std::pair<size_t, size_t>> deferRanges_;
   size_t skipMoveArg_ = kNPos;
 
   std::vector<Scope> scopes_;

@@ -16,12 +16,15 @@
 #undef ERROR
 #undef FATAL
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -537,12 +540,27 @@ std::string preprocessModernHeaders(
 }
 
 /// Locate the runtime source so it can be instrumented for sanitizer builds.
+/// Deliberately does NOT use findSourceRoot(): CPLUS_ROOT is an untrusted env
+/// override and a fake root with a no-op __cplus_bounds_check would silently
+/// disable the runtime safety checks. Only the compiled-in source tree and
+/// the installed layout (both shipped with the compiler) are trusted.
 static std::string runtimeSourcePath() {
-  std::string root = findSourceRoot();
-  if (root.empty())
-    return std::string();
-  std::string candidate = joinPath(root, "runtime/cplus_runtime.c");
-  return fileExists(candidate) ? candidate : std::string();
+#ifdef CPLUS_SOURCE_DIR
+  std::string candidate =
+      joinPath(CPLUS_SOURCE_DIR, "runtime/cplus_runtime.c");
+  if (fileExists(candidate))
+    return candidate;
+#endif
+  std::string exe = llvm::sys::fs::getMainExecutable("c+", nullptr);
+  if (!exe.empty()) {
+    std::string dir = llvm::sys::path::parent_path(exe).str();
+    for (const char *up : {"", "../", "../../"}) {
+      std::string candidate = joinPath(dir, up) + "/runtime/cplus_runtime.c";
+      if (fileExists(candidate))
+        return candidate;
+    }
+  }
+  return std::string();
 }
 
 static Sanitizer effectiveSanitizer(const DriverOptions &opts) {
@@ -649,6 +667,118 @@ static bool extraArgsDisableSignedOverflow(const std::vector<std::string> &extra
     }
   }
   return false;
+}
+
+/// Pass-through flags that change what the *real* clang compile parses but
+/// are discarded before the in-memory safety AST (both checkAstSafety and
+/// probeSafetyAst keep only -I/-D/-std). Accepting them in STRICT would let
+/// `check` verify one program while `build` compiles a different one -- the
+/// same class of bypass as the wave-1 `-D` divergence. Reject them rather
+/// than trying to re-implement Clang's pre-processor in the probe. -isysroot
+/// is intentionally allowed: it selects an SDK, which the safety analysis
+/// does not use for its own decisions, and the regression suites pass it
+/// through legitimately.
+static bool extraArgsChangeParse(const std::vector<std::string> &extra) {
+  for (const auto &a : extra) {
+    if (a.rfind("-include", 0) == 0 || a.rfind("-imacros", 0) == 0 ||
+        a.rfind("-include-pch", 0) == 0 || a.rfind("-isystem", 0) == 0)
+      return true;
+    if (a == "-x" ||
+        (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
+         std::isalpha(static_cast<unsigned char>(a[2]))))
+      return true;
+  }
+  return false;
+}
+
+/// Whole comma-separated token membership for -f...= lists.
+static bool sanitizerListHas(llvm::StringRef list,
+                             llvm::ArrayRef<llvm::StringRef> tokens) {
+  size_t start = 0;
+  while (start <= list.size()) {
+    size_t comma = list.find(',', start);
+    llvm::StringRef token = list.substr(
+        start, comma == llvm::StringRef::npos ? llvm::StringRef::npos
+                                              : comma - start);
+    if (llvm::is_contained(tokens, token))
+      return true;
+    if (comma == llvm::StringRef::npos)
+      break;
+    start = comma + 1;
+  }
+  return false;
+}
+
+/// A pass-through `-fsanitize-recover=`/`-fno-sanitize-trap=` appended after
+/// base overrides the driver's `-fno-sanitize-recover=all`. With native
+/// arithmetic guards suppressed by the selected UBSan, that turns an aborting
+/// overflow check into a silent recovery -- a STRICT soundness hole.
+static bool extraArgsWeakenSanitizerAbort(const std::vector<std::string> &extra) {
+  static const llvm::StringRef kAbort[] = {"all", "undefined",
+                                           "signed-integer-overflow"};
+  for (const auto &a : extra) {
+    if (a.rfind("-fsanitize-recover=", 0) == 0)
+      if (sanitizerListHas(llvm::StringRef(a).substr(strlen("-fsanitize-recover=")),
+                           kAbort))
+        return true;
+    if (a.rfind("-fno-sanitize-trap=", 0) == 0)
+      if (sanitizerListHas(llvm::StringRef(a).substr(strlen("-fno-sanitize-trap=")),
+                           kAbort))
+        return true;
+  }
+  return false;
+}
+
+/// Bounds/null/alignment sanitizers are an independent witness for the C+
+/// checks. Disabling them via pass-through would let a runtime-swapped or
+/// otherwise broken check go unnoticed, so STRICT rejects the downgrade.
+static bool extraArgsDisablePointerSanitizers(
+    const std::vector<std::string> &extra) {
+  static const llvm::StringRef kPtr[] = {"bounds", "null", "alignment"};
+  for (const auto &a : extra)
+    if (a.rfind("-fno-sanitize=", 0) == 0)
+      if (sanitizerListHas(llvm::StringRef(a).substr(strlen("-fno-sanitize=")),
+                           kPtr))
+        return true;
+  return false;
+}
+
+/// Safety warnings promoted to errors by backendArgs() are a core STRICT gate.
+/// `-Wno-error=<safety>` (or `-Wno-<safety>`) appended after base downgrades
+/// them back to warnings, so `check` would report success on an unsafe TU.
+static bool extraArgsWeakenSafetyWarnings(
+    const std::vector<std::string> &extra) {
+  static const llvm::StringRef kSafety[] = {
+      "array-bounds", "return-stack-address", "uninitialized",
+      "sizeof-array-argument", "sizeof-pointer-div", "format-security",
+      "unsequenced", "shift-count-overflow", "shift-negative-value",
+      "varargs", "all"};
+  for (const auto &a : extra) {
+    llvm::StringRef token;
+    if (a == "-Wno-error")
+      return true; // disables every -Werror= gate below
+    if (a.rfind("-Wno-error=", 0) == 0)
+      token = llvm::StringRef(a).substr(strlen("-Wno-error="));
+    else if (a.rfind("-Wno-", 0) == 0)
+      token = llvm::StringRef(a).substr(strlen("-Wno-"));
+    else
+      continue;
+    if (llvm::is_contained(kSafety, token))
+      return true;
+  }
+  return false;
+}
+
+/// The exact -Werror= safety flags backendArgs() installs. Re-appended after
+/// pass-through flags so a user flag cannot silently downgrade a gate even in
+/// modes where we do not hard-reject it.
+static std::vector<std::string> safetyWarningErrorFlags() {
+  return {"-Werror=array-bounds",        "-Werror=return-stack-address",
+          "-Werror=uninitialized",       "-Wwrite-strings",
+          "-Werror=sizeof-array-argument", "-Werror=sizeof-pointer-div",
+          "-Werror=format-security",     "-Werror=unsequenced",
+          "-Werror=shift-count-overflow", "-Werror=shift-negative-value",
+          "-Werror=varargs"};
 }
 
 void printSanitizerInfo(llvm::raw_ostream &os) {
@@ -851,6 +981,35 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
             "'-fno-sanitize=undefined' or use --sanitize=none\n";
     return 1;
   }
+  // STRICT is a soundness contract: it must fail closed on any pass-through
+  // flag that can make the analysed program differ from the compiled one,
+  // downgrade a safety gate, or hide a runtime check. DEFAULT keeps accepting
+  // these (no soundness claim), and --legacy-c --strict only gets its
+  // documented no-effect disclosure so plain-C ABI/source stays untouched.
+  const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
+  if (strictSafe && extraArgsChangeParse(opts.extraArgs)) {
+    errs << "error: pass-through flags change how the C+ safety AST parses "
+            "the program but are not forwarded to it (-include, -imacros, "
+            "-isystem, -x, -include-pch); STRICT would analyse a different "
+            "program than it compiles\n";
+    return 1;
+  }
+  if (strictSafe && extraArgsWeakenSanitizerAbort(opts.extraArgs)) {
+    errs << "error: pass-through flags weaken sanitizer abort behaviour "
+            "(-fsanitize-recover / -fno-sanitize-trap) that C+ relies on; "
+            "remove them or use --sanitize=none\n";
+    return 1;
+  }
+  if (strictSafe && extraArgsDisablePointerSanitizers(opts.extraArgs)) {
+    errs << "error: pass-through flags disable bounds/null/alignment "
+            "sanitizers that witness the C+ runtime checks\n";
+    return 1;
+  }
+  if (strictSafe && extraArgsWeakenSafetyWarnings(opts.extraArgs)) {
+    errs << "error: pass-through flags downgrade a STRICT safety warning "
+            "promoted to error (-Wno-error=<safety> / -Wno-<safety>)\n";
+    return 1;
+  }
   // Capability probing compiles and runs a defect program. `check` must stay
   // a pure static-analysis command, so explicitly selected sanitizers are
   // accepted there without launching any probe.
@@ -876,6 +1035,25 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       output = defaultOutputName(inputs[0]);
   }
   std::vector<std::string> base = backendArgs(opts);
+  // `check` and `build` must feed the safety analyser the SAME gate tokens.
+  // backendArgs() omits sanitizer flags for `check` (it only type-checks and
+  // must not probe a sanitizer), but checkAstSafety uses their presence to
+  // decide whether native arithmetic guards are needed. Derive a dedicated
+  // analysis base that always carries them, so a program accepted by `check`
+  // is analysed exactly as `build` will compile it.
+  std::vector<std::string> analysisBase = base;
+  if (isCheckCommand(opts))
+    addSanitizerFlags(analysisBase, effectiveSanitizer(opts));
+  // Re-assert the gate flags AFTER pass-through flags. Clang uses the last
+  // occurrence of -Werror=/-Wno-error= and -f(no-)sanitize-recover, so an
+  // appended user token must not silently win over the driver's gate.
+  auto appendSafetyTail = [&](std::vector<std::string> &v) {
+    if (opts.mode == Mode::Safe && !opts.disableWarnings)
+      for (const auto &f : safetyWarningErrorFlags())
+        v.push_back(f);
+    if (san != Sanitizer::None)
+      v.push_back("-fno-sanitize-recover=all");
+  };
   std::vector<std::string> objects;
   bool instrumentedRuntime = false;
   bool strictDisclosureEmitted = false;
@@ -901,6 +1079,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       rtArgs.push_back(runtimeSrc);
       for (const auto &a : opts.extraArgs)
         rtArgs.push_back(a);
+      appendSafetyTail(rtArgs);
       if (runProgram(clang, rtArgs) != 0) {
         errs << "error: failed to compile instrumented C+ runtime\n";
         llvm::sys::fs::remove(objPath);
@@ -944,11 +1123,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     // The in-memory safety AST must represent the same program the backend
     // compiles. `base` alone omits pass-through -D/-I flags (Main.cpp stores
     // them in extraArgs), which previously let a macro-guarded unsafe path be
-    // analysed in one configuration and compiled in another. Add the real
-    // compile arguments that affect parsing; sanitizer flags are filtered out
-    // by checkAstSafety anyway and are deliberately left out so a pass-through
-    // token cannot perturb the native-guard gate.
-    std::vector<std::string> astArgs = base;
+    // analysed in one configuration and compiled in another. analysisBase is
+    // command-independent (see above) so check and build share the exact gate
+    // tokens; sanitizer -f* tokens are filtered here only because they cannot
+    // affect parsing and checkAstSafety re-derives its own gate from them.
+    std::vector<std::string> astArgs = analysisBase;
     llvm::StringRef astInputDir = llvm::sys::path::parent_path(input);
     if (astInputDir.empty())
       astInputDir = ".";
@@ -988,6 +1167,81 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
                       "skip all safety analysis";
           d.file = input;
           diags.report(std::move(d));
+        }
+        // A bodiless extern with pointer effects and no declared contract has
+        // unverifiable ownership/bounds behaviour. A clean `check` would be a
+        // false proof of safety, so make it a hard error in STRICT check.
+        // (Builds keep the warning disclosure below: they still emit an
+        // executable, and LEGACY/ABI source preservation is unaffected.)
+        // Pure libc calls are excluded by probeSafetyAst via the built-in
+        // effect table / JSON contract, so printf/malloc etc. stay accepted.
+        if (isCheckCommand(opts) &&
+            !probe.unverifiedPointerExterns.empty()) {
+          // Do NOT reject a normal multi-TU main: its API prototype lives in a
+          // header and the body lives in another input of this invocation or
+          // in a sibling helper file in the same directory. A source-local
+          // `extern` (the red case) has no such pairing and stays an error.
+          const std::set<std::string> headerDeclared(
+              probe.headerDeclaredExterns.begin(),
+              probe.headerDeclaredExterns.end());
+          std::set<std::string> definedInInputs, definedInSiblings;
+          auto scanDefs = [&](const std::vector<std::string> &files,
+                              std::set<std::string> &into) {
+            for (const auto &f : files) {
+              if (f == input)
+                continue;
+              std::string err;
+              std::string src = readFile(f, &err);
+              if (!err.empty())
+                continue;
+              // Cheap pre-filter: a file that never mentions any candidate
+              // name cannot define it. Avoids parsing every sibling TU.
+              bool mentions = false;
+              for (const auto &fn : probe.unverifiedPointerExterns)
+                if (src.find(fn) != std::string::npos) {
+                  mentions = true;
+                  break;
+                }
+              if (!mentions)
+                continue;
+              std::vector<std::string> defArgs = astArgs;
+              llvm::StringRef dir = llvm::sys::path::parent_path(f);
+              if (!dir.empty())
+                defArgs.push_back("-I" + std::string(dir));
+              auto defs = definedFunctionNames(src, defArgs, f);
+              into.insert(defs.begin(), defs.end());
+            }
+          };
+          scanDefs(inputs, definedInInputs);
+          std::vector<std::string> siblings;
+          llvm::StringRef inputDirRef = llvm::sys::path::parent_path(input);
+          std::string inputDir = inputDirRef.empty() ? "." : inputDirRef.str();
+          std::error_code dec;
+          for (llvm::sys::fs::directory_iterator it(inputDir, dec), end;
+               !dec && it != end; it.increment(dec)) {
+            llvm::StringRef ext = llvm::sys::path::extension(it->path());
+            if (ext != ".c" && ext != ".cp")
+              continue;
+            siblings.push_back(it->path());
+          }
+          scanDefs(siblings, definedInSiblings);
+
+          for (const auto &fn : probe.unverifiedPointerExterns) {
+            // Definition passed on this command line always suffices; a mere
+            // sibling file only counts for a header-declared multi-TU API.
+            if (definedInInputs.count(fn) ||
+                (headerDeclared.count(fn) && definedInSiblings.count(fn)))
+              continue;
+            Diag d;
+            d.level = DiagLevel::Error;
+            d.message = "[CPLUS-FFI] function '" + fn +
+                        "' has safety-relevant pointer effects but no "
+                        "definition in this translation unit or any paired "
+                        "input and no declared contract; STRICT check cannot "
+                        "verify its effects";
+            d.file = input;
+            diags.report(std::move(d));
+          }
         }
         // Per-TU disclosure: a body defined in another TU (or a library) is
         // not safety-checked here, so STRICT acceptance is not cross-TU proof.
@@ -1064,6 +1318,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     args.push_back("-I" + std::string(inputDir));
     for (const auto &a : opts.extraArgs)
       args.push_back(a);
+    appendSafetyTail(args);
     if (opts.command == "check") {
       args.push_back("-fsyntax-only");
     } else if (opts.preprocessOnly) {
@@ -1121,6 +1376,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   }
   for (const auto &a : opts.extraArgs)
     linkArgs.push_back(a);
+  appendSafetyTail(linkArgs);
   linkArgs.push_back("-o");
   linkArgs.push_back(output);
 

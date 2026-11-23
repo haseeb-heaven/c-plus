@@ -142,6 +142,15 @@ int64_t __cplus_checked_shr_i64(int64_t a, int64_t b, unsigned bits,
 int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
                                    unsigned db, unsigned ds);
 
+/* Floating-point -> integer range/NaN check.  `bits`/`isSigned` describe the
+ * destination integer type; the compiler emits the inline fast path and calls
+ * this helper only on the out-of-range path. */
+int64_t __cplus_checked_f2i_i64(double value, unsigned bits, unsigned isSigned);
+
+/* Overflow-checked element-count * element-size multiplication for allocation
+ * extents.  ABI-neutral: size_t in, size_t out. */
+size_t __cplus_checked_size_mul(size_t a, size_t b);
+
 /* -------------------------------------------------------------------------
  * Managed memory (ordinary heap objects)
  *

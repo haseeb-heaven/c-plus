@@ -6,6 +6,7 @@
 #include <clang/AST/Decl.h>
 
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,21 @@ struct FunctionEffect {
 /// Known libc effects. Unknown functions are NOT assumed safe.
 FunctionEffect libcEffect(llvm::StringRef name);
 
+/// True when `name` has a declared safety effect summary: either a v2 JSON
+/// contract (CPLUS_CONTRACT_PATH / compiled-in default) or one of the built-in
+/// libc fallbacks in libcEffect(). STRICT analysis may accept a bodiless call
+/// only when such a summary exists; an unannotated extern with pointer effects
+/// is unverifiable and must be rejected by `c+ check --strict`.
+bool hasDeclaredEffect(llvm::StringRef name);
+
+/// Names of functions actually DEFINED (given a body) in `source`, parsed with
+/// the same parse-relevant args as probeSafetyAst. The driver uses this to
+/// tell a genuine unverified extern from a multi-TU API whose implementation
+/// lives in another input file or a sibling helper in the same directory.
+std::set<std::string> definedFunctionNames(const std::string &source,
+                                           const std::vector<std::string> &args,
+                                           const std::string &fileName);
+
 /// A contract that could not be fully interpreted. STRICT safe mode must
 /// reject calls to functions with such contracts instead of assuming safety.
 struct ContractIssue {
@@ -79,6 +95,17 @@ struct SafetyAstProbe {
   /// translation unit but have no definition in it. Their bodies live in
   /// another TU or a library and are therefore not safety-checked here.
   std::vector<std::string> unresolvedFunctions;
+  /// Subset of `unresolvedFunctions` that (a) is referenced or called by the
+  /// TU, (b) is declared in user code (not a system header), (c) has pointer
+  /// effects in its signature, and (d) has NO declared contract. Their bodies
+  /// and effects are invisible to this TU, so STRICT `check` must reject them
+  /// instead of reporting a clean result. Pure libc calls are excluded here
+  /// because libcEffect()/the JSON contract already describes them.
+  std::vector<std::string> unverifiedPointerExterns;
+  /// Subset of `unverifiedPointerExterns` whose declaration lives in a header
+  /// (not the main source file). A source-local `extern` with no body is the
+  /// suspicious red case; a header-declared API is the normal multi-TU shape.
+  std::vector<std::string> headerDeclaredExterns;
 };
 
 /// Build an in-memory Clang AST for `source` with the same parse-relevant

@@ -74,6 +74,14 @@ public:
     collectFunctions();
     for (const auto &entry : funcs_)
       functionOpens_.insert(entry.second.bodyOpen);
+    // Wave 2: struct-field extent chains are resolved before the token loop
+    // so every subscript can consult the propagated field facts and the
+    // extents learned at recursive call sites.
+    collectStructShapes();
+    collectStructTypedVars();
+    collectFieldInitializers();
+    propagateFieldFactsToParams();
+    collectParamArrayExtents();
     // Red-team closure: bounds that escape single-function/loop analysis.
     // These run before the token loop so every subscript site can consult the
     // constant, recursion and out-param facts collected here.
@@ -105,6 +113,7 @@ public:
     checkCtypeChar();
     checkUncheckedIo();
     checkConstCastMutation();
+    checkUnsequencedModifications(); // UB hidden by ++ instrumentation in lowered C
     checkMacroStatements();
     checkForkThreads();
     checkRestrictAliasing();
@@ -117,7 +126,10 @@ public:
         checkPointerArithmetic(i);
         checkTrackedArrayPointer(i); // constant index / one-past / multi-dim
         checkRecursiveArraySubscript(i); // unbounded parameter in a cycle
+        checkRecursivePointerParamSubscript(i); // derived index via pointer param
         checkOutParamHeapSubscript(i);   // extent learned from make(&p)
+        checkStructFieldSubscript(i);    // field extent/index from call site
+        checkFoldedIndexSubscript(i);    // helper return / pointer-difference index
         checkDirectOnePastDeref(i);  // *(array + N) at the array extent
         checkUnrelatedPointerCompare(i);
         checkEmptyInfiniteLoop(i);
@@ -626,6 +638,31 @@ private:
     trim(&from, &to);
     if (from >= to)
       return false;
+    // Wave 2: fold a top-level `a + b` / `a - b` before the unary case.  This
+    // is what makes chained pointer formation (`q = a + 3 + 4`) and derived
+    // recursive indices (`p[i + 9]`) provable.  Doing it first keeps
+    // `-1 + 9` correct (the unary rule alone would read it as `-(1 + 9)`).
+    // Only fully constant operands are consumed; anything else falls through
+    // to the existing conservative handlers, so no valid C is rejected.
+    {
+      size_t op = kNPos;
+      int paren = 0, bracket = 0;
+      for (size_t k = from; k < to; ++k) {
+        if (isPunct(k, "(")) ++paren;
+        else if (isPunct(k, ")")) --paren;
+        else if (isPunct(k, "[")) ++bracket;
+        else if (isPunct(k, "]")) --bracket;
+        else if (k > from && paren == 0 && bracket == 0 &&
+                 (isPunct(k, "+") || isPunct(k, "-"))) { op = k; break; }
+      }
+      if (op != kNPos) {
+        long a = 0, b = 0;
+        if (indexExprValue(from, op, &a) && indexExprValue(op + 1, to, &b)) {
+          *out = isPunct(op, "+") ? a + b : a - b;
+          return true;
+        }
+      }
+    }
     if (isPunct(from, "-") || isPunct(from, "+")) {
       long v = 0;
       if (!indexExprValue(from + 1, to, &v))
@@ -1076,6 +1113,597 @@ private:
       errorAt(toks_[lb], "array index " + std::to_string(idx) +
               " is out of bounds of heap extent '" + toks_[i].text +
               "' of " + std::to_string(it->second.second) + " elements");
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Wave 2 — residual spatial hardening (struct fields / derived indices).
+  //
+  // Rationale: the wave-1 pass tracked bare array names and literal indices.
+  // The residual red findings all launder the extent through a second name:
+  // a struct field written at the call site, a pointer parameter of a
+  // recursive helper, or a helper's return value used as an index.  STRICT
+  // check emits no runtime guards, so a subscript that is *provable* through
+  // these chains must be rejected here rather than accepted and guarded
+  // later.  Every rule stays silent unless the whole chain (extent + index)
+  // folds to a compile-time constant; genuinely unknown indices are left to
+  // the AST owner's fail-closed rule, so DEFAULT never blanket-rejects C.
+  //===--------------------------------------------------------------------===//
+
+  struct FieldShape {
+    std::string name;
+    size_t extent = 0;    // non-zero for a fixed-size array field
+    bool pointer = false; // `T *p` (extent may arrive from its initialiser)
+    std::string structTag; // non-empty for an inline `struct T field;`
+  };
+
+  struct FieldFact {
+    bool valid = false;
+    bool isExtent = false; // true: value is an array extent; false: an integer
+    long value = 0;
+    std::string array;     // array name backing a pointer field
+    size_t pos = 0;        // source position from which the fact is visible
+  };
+
+  std::map<std::string, std::vector<FieldShape>> structFields_;
+  std::map<std::string, std::string> typedefStruct_; // multi-level typedef chain
+  std::map<std::string, std::string> varStruct_;     // object/param -> struct tag
+  std::map<std::string, FieldFact> fieldFacts_;      // "object.field" -> fact
+  std::map<std::string, std::map<size_t, size_t>> paramExtents_; // fn -> param -> extent
+
+  void parseFieldShape(size_t from, size_t to, std::vector<FieldShape> *fields) {
+    if (from >= to)
+      return;
+    bool pointer = false;
+    size_t name = kNPos;
+    size_t extent = 0;
+    std::string structTag;
+    for (size_t k = from; k < to; ++k) {
+      if (isPunct(k, "*")) pointer = true;
+      if (isPunct(k, "[")) {
+        long v = 0;
+        size_t n = nextSig(k);
+        if (n < to && number(toks_[n], &v) && v > 0)
+          extent = static_cast<size_t>(v);
+      }
+      if (isIdent(k, "struct") || isIdent(k, "union")) {
+        size_t t = nextSig(k); // raw k+1 may be whitespace
+        if (t < to && toks_[t].kind == TokKind::Identifier)
+          structTag = toks_[t].text;
+      }
+      // The last identifier that is not a type word is the declarator name.
+      if (toks_[k].kind == TokKind::Identifier && !isTypeWord(toks_[k].text)) {
+        if (k == from && (isIdent(from, "struct") || isIdent(from, "union")))
+          continue; // the tag of an inline `struct inner in;`
+        if (!structTag.empty() && toks_[k].text == structTag &&
+            k + 1 < to)
+          continue; // the tag, not the declarator
+        name = k;
+      }
+    }
+    if (name != kNPos) {
+      FieldShape f;
+      f.name = toks_[name].text;
+      f.pointer = pointer;
+      f.extent = extent;
+      f.structTag = structTag;
+      fields->push_back(f);
+    }
+  }
+
+  /// Read struct/union member shapes (including fixed arrays and FAMs) and
+  /// multi-level `typedef struct B TB; typedef TB TC;` aliases.  A flexible
+  /// array member has extent 0 here and can never produce a *provable* OOB,
+  /// so it is deliberately ignored (no false positive on valid FAM code).
+  void collectStructShapes() {
+    for (size_t i = 0; i + 2 < toks_.size(); ++i) {
+      if (!isIdent(i, "struct") && !isIdent(i, "union")) continue;
+      size_t tag = nextSig(i);
+      if (tag >= toks_.size() || toks_[tag].kind != TokKind::Identifier) continue;
+      size_t brace = nextSig(tag);
+      if (!isPunct(brace, "{")) continue;
+      size_t close = match(brace, "{", "}");
+      if (close == kNPos) continue;
+      std::vector<FieldShape> fields;
+      size_t start = nextSig(brace);
+      for (size_t k = brace + 1; k <= close; ++k) {
+        if (!isPunct(k, ";")) continue;
+        parseFieldShape(start, k, &fields);
+        start = nextSig(k);
+      }
+      if (!fields.empty())
+        structFields_[toks_[tag].text] = fields;
+    }
+    for (size_t i = 0; i + 2 < toks_.size(); ++i) {
+      if (!isIdent(i, "typedef")) continue;
+      size_t t = nextSig(i);
+      if (isIdent(t, "struct") || isIdent(t, "union")) t = nextSig(t);
+      if (t >= toks_.size() || toks_[t].kind != TokKind::Identifier) continue;
+      size_t alias = nextSig(t);
+      while (alias < toks_.size() && isPunct(alias, "*")) alias = nextSig(alias);
+      if (alias < toks_.size() && toks_[alias].kind == TokKind::Identifier &&
+          !isPunct(nextSig(alias), "("))
+        typedefStruct_[toks_[alias].text] = toks_[t].text;
+    }
+  }
+
+  std::string resolveStructTag(std::string name) const {
+    for (int guard = 0; guard < 8; ++guard) {
+      auto it = typedefStruct_.find(name);
+      if (it == typedefStruct_.end()) break;
+      name = it->second;
+    }
+    return structFields_.count(name) ? name : std::string();
+  }
+
+  /// Associate object and parameter names with their struct tag.  Covers
+  /// `struct B b;`, `struct B *s;` and typedef spellings on locals/params.
+  void collectStructTypedVars() {
+    for (size_t i = 0; i + 1 < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier) continue;
+      std::string tag;
+      size_t afterType = i;
+      if (isIdent(i, "struct") || isIdent(i, "union")) {
+        size_t t = nextSig(i);
+        if (t < toks_.size() && toks_[t].kind == TokKind::Identifier) {
+          tag = toks_[t].text;
+          afterType = t;
+        }
+      } else {
+        tag = resolveStructTag(toks_[i].text);
+      }
+      if (tag.empty() || !structFields_.count(tag)) continue;
+      size_t n = nextSig(afterType);
+      while (n < toks_.size() && isPunct(n, "*")) n = nextSig(n);
+      if (n < toks_.size() && toks_[n].kind == TokKind::Identifier &&
+          !isTypeWord(toks_[n].text))
+        varStruct_[toks_[n].text] = tag;
+    }
+  }
+
+  void setFieldFact(const std::string &obj, const std::string &field,
+                    bool isExtent, long value, const std::string &array,
+                    size_t pos) {
+    FieldFact f;
+    f.valid = true;
+    f.isExtent = isExtent;
+    f.value = value;
+    f.array = array;
+    f.pos = pos;
+    fieldFacts_[obj + "." + field] = f;
+  }
+
+  /// Record one field's value: a pointer field initialised from a fixed array
+  /// yields that array's extent; an integer field yields a folded constant.
+  void recordFieldValue(const std::string &obj, const std::string &fieldName,
+                        const std::vector<FieldShape> &fields, size_t from,
+                        size_t to, size_t pos) {
+    const FieldShape *shape = nullptr;
+    for (const auto &f : fields)
+      if (f.name == fieldName) { shape = &f; break; }
+    if (!shape) return;
+    size_t r = stripCast(from, to);
+    if (shape->pointer) {
+      if (r < to && toks_[r].kind == TokKind::Identifier) {
+        size_t extent = 0;
+        if (findExtent(toks_[r].text, r, &extent) && extent)
+          setFieldFact(obj, fieldName, true, static_cast<long>(extent),
+                       toks_[r].text, pos);
+      }
+    } else {
+      long v = 0;
+      if (indexExprValue(r, to, &v))
+        setFieldFact(obj, fieldName, false, v, std::string(), pos);
+    }
+  }
+
+  /// Call-site field initialisers: both brace form `{a, 4}` and assignment
+  /// form `b.p = a; b.n = 4;` are understood, by field position/name.
+  void collectFieldInitializers() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier) continue;
+      const std::string obj = toks_[i].text;
+      auto sit = varStruct_.find(obj);
+      if (sit == varStruct_.end()) continue;
+      auto fit = structFields_.find(sit->second);
+      if (fit == structFields_.end()) continue;
+      size_t dot = nextSig(i);
+      if (isPunct(dot, ".") || isPunct(dot, "->")) {
+        size_t field = nextSig(dot);
+        size_t eq = field == kNPos ? kNPos : nextSig(field);
+        if (field >= toks_.size() || toks_[field].kind != TokKind::Identifier ||
+            !isPunct(eq, "=")) continue;
+        size_t rhs = nextSig(eq);
+        recordFieldValue(obj, toks_[field].text, fit->second, rhs,
+                         stmtEnd(rhs), eq);
+        continue;
+      }
+      size_t eq = nextSig(i);
+      if (!isPunct(eq, "=")) continue;
+      size_t brace = nextSig(eq);
+      if (!isPunct(brace, "{")) continue;
+      size_t close = match(brace, "{", "}");
+      if (close == kNPos) continue;
+      auto args = splitArgs(brace + 1, close);
+      for (size_t a = 0; a < args.size() && a < fit->second.size(); ++a)
+        recordFieldValue(obj, fit->second[a].name, fit->second, args[a].first,
+                         args[a].second, eq);
+    }
+  }
+
+  /// Copy the caller's field facts onto a struct (or struct-pointer)
+  /// parameter.  Facts are function-scoped (pos 0) because the call site may
+  /// appear after the callee in source order; a later write to the parameter
+  /// is still handled by the existing invalidation passes.
+  void propagateFieldFactsToParams() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier) continue;
+      auto fit = funcs_.find(toks_[i].text);
+      if (fit == funcs_.end()) continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "(")) continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
+      auto args = splitArgs(lp + 1, rp);
+      const auto &params = fit->second.params;
+      for (size_t p = 0; p < params.size() && p < args.size(); ++p) {
+        if (!varStruct_.count(params[p])) continue;
+        size_t a = args[p].first;
+        if (isPunct(a, "&")) a = nextSig(a); // `wr(&s)` -> pointer param
+        if (a >= args[p].second || toks_[a].kind != TokKind::Identifier) continue;
+        const std::string src = toks_[a].text;
+        std::vector<std::pair<std::string, FieldFact>> copies;
+        for (const auto &kv : fieldFacts_) {
+          size_t dot = kv.first.find('.');
+          if (dot != std::string::npos && kv.first.compare(0, dot, src) == 0)
+            copies.push_back({params[p] + kv.first.substr(dot), kv.second});
+        }
+        for (auto &kv : copies) {
+          kv.second.pos = 0;
+          fieldFacts_[kv.first] = kv.second;
+        }
+      }
+    }
+  }
+
+  /// `b.p[b.n]` / `s->p[s->n]`: use the field extent (from the initialiser or
+  /// the declared array shape) and the folded field index.  Only a constant
+  /// index outside a known extent is reported, so valid dynamic accesses are
+  /// untouched.
+  void checkStructFieldSubscript(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier) return;
+    auto sit = varStruct_.find(toks_[i].text);
+    if (sit == varStruct_.end()) return;
+    std::string tag = sit->second;
+    std::string objPath = toks_[i].text;
+    size_t cursor = nextSig(i);
+    // Walk a member chain (`s.p[i]`, `o.in[1].v[3]`).  Each segment's extent
+    // comes from a call-site field fact when available, otherwise from the
+    // declared array shape; an unprovable index stops the walk silently.
+    for (int depth = 0; depth < 6; ++depth) {
+      if (!isPunct(cursor, ".") && !isPunct(cursor, "->")) return;
+      size_t field = nextSig(cursor);
+      if (field >= toks_.size() || toks_[field].kind != TokKind::Identifier) return;
+      auto fit = structFields_.find(tag);
+      if (fit == structFields_.end()) return;
+      const FieldShape *shape = nullptr;
+      for (const auto &f : fit->second)
+        if (f.name == toks_[field].text) { shape = &f; break; }
+      if (!shape) return;
+      size_t after = nextSig(field);
+      if (isPunct(after, "[")) {
+        size_t rb = match(after, "[", "]");
+        if (rb == kNPos) return;
+        long extent = 0;
+        auto ff = fieldFacts_.find(objPath + "." + toks_[field].text);
+        if (ff != fieldFacts_.end() && ff->second.valid &&
+            ff->second.isExtent && ff->second.pos <= i)
+          extent = ff->second.value; // pointer field initialised from an array
+        else
+          extent = static_cast<long>(shape->extent); // declared array field
+        if (extent > 0) {
+          long index = 0;
+          size_t idx = nextSig(after);
+          if (idx < rb && toks_[idx].kind == TokKind::Identifier &&
+              idx + 2 < rb && (isPunct(idx + 1, ".") ||
+                               isPunct(idx + 1, "->")) &&
+              toks_[idx + 2].kind == TokKind::Identifier) {
+            auto iit = fieldFacts_.find(objPath + "." + toks_[idx + 2].text);
+            if (iit != fieldFacts_.end() && iit->second.valid &&
+                !iit->second.isExtent && iit->second.pos <= i)
+              index = iit->second.value;
+            else
+              return; // index field not provable: stay silent
+          } else if (!constantIndexAt(idx, rb, &index)) {
+            return;
+          }
+          if (index < 0 || index >= extent) {
+            errorAt(toks_[after], "out-of-bounds access: index " +
+                                      std::to_string(index) +
+                                      " reaches past array '" + objPath + "." +
+                                      toks_[field].text + "' of length " +
+                                      std::to_string(extent));
+            return;
+          }
+        }
+        after = nextSig(rb);
+      }
+      if ((isPunct(after, ".") || isPunct(after, "->")) &&
+          !shape->structTag.empty()) {
+        std::string nextTag = resolveStructTag(shape->structTag);
+        if (nextTag.empty()) nextTag = shape->structTag;
+        if (!structFields_.count(nextTag)) return;
+        tag = nextTag;
+        objPath += "." + toks_[field].text;
+        cursor = after;
+        continue;
+      }
+      return;
+    }
+  }
+
+  /// Learn a pointer parameter's extent from call sites that pass a fixed
+  /// array.  A small fixed point carries extents across (mutually) recursive
+  /// calls, where the callee receives a caller parameter rather than a named
+  /// array.  Conflicting extents are forgotten, never guessed.
+  void collectParamArrayExtents() {
+    for (int iter = 0; iter < 3; ++iter) {
+      bool changed = false;
+      for (size_t i = 0; i < toks_.size(); ++i) {
+        if (toks_[i].kind != TokKind::Identifier) continue;
+        auto fit = funcs_.find(toks_[i].text);
+        if (fit == funcs_.end()) continue;
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "(")) continue;
+        size_t rp = match(lp, "(", ")");
+        if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
+        auto args = splitArgs(lp + 1, rp);
+        const auto &params = fit->second.params;
+        for (size_t p = 0; p < params.size() && p < args.size(); ++p) {
+          size_t a = args[p].first;
+          if (isPunct(a, "&")) a = nextSig(a);
+          if (a >= args[p].second || toks_[a].kind != TokKind::Identifier) continue;
+          size_t extent = 0;
+          if (!findExtent(toks_[a].text, a, &extent)) {
+            const std::string *caller = enclosingFunction(i);
+            if (!caller) continue;
+            const auto &cparams = funcs_.at(*caller).params;
+            for (size_t cp = 0; cp < cparams.size(); ++cp) {
+              if (cparams[cp] != toks_[a].text) continue;
+              auto cit = paramExtents_[*caller].find(cp);
+              if (cit != paramExtents_[*caller].end()) extent = cit->second;
+            }
+          }
+          if (!extent) continue;
+          auto &slot = paramExtents_[toks_[i].text][p];
+          if (slot && slot != extent) slot = 0;
+          else if (!slot) { slot = extent; changed = true; }
+        }
+      }
+      if (!changed) break;
+    }
+  }
+
+  /// `rec(p, i)` with `p[i + 9]` and a constant extent arriving at a cycle
+  /// entry: fold the derived index from the largest constant supplied at a
+  /// cycle call site.  An explicit upper guard suppresses the report (the
+  /// access is then provably bounded); no constant means no proof and hence
+  /// no diagnostic here — the AST owner applies STRICT fail-closed there.
+  void checkRecursivePointerParamSubscript(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier) return;
+    size_t lb = nextSig(i);
+    if (!isPunct(lb, "[")) return;
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos) return;
+    const std::string *fn = enclosingFunction(i);
+    if (!fn || !isRecursive(*fn)) return;
+    const FuncSig &sig = funcs_.at(*fn);
+    size_t pos = kNPos;
+    for (size_t p = 0; p < sig.params.size(); ++p)
+      if (sig.params[p] == toks_[i].text) { pos = p; break; }
+    if (pos == kNPos) return;
+    auto eit = paramExtents_.find(*fn);
+    if (eit == paramExtents_.end()) return;
+    auto pit = eit->second.find(pos);
+    if (pit == eit->second.end() || pit->second == 0) return;
+    long extent = static_cast<long>(pit->second);
+
+    size_t idx = nextSig(lb);
+    long delta = 0;
+    if (idx + 1 == rb && toks_[idx].kind == TokKind::Identifier) {
+      // bare parameter index
+    } else if (idx + 3 == rb && toks_[idx].kind == TokKind::Identifier &&
+               (isPunct(idx + 1, "+") || isPunct(idx + 1, "-")) &&
+               number(toks_[idx + 2], &delta)) {
+      if (isPunct(idx + 1, "-")) delta = -delta;
+    } else {
+      return;
+    }
+    // The derived index is often a *different* parameter from the pointer
+    // base (`p[i + 9]`), so resolve whichever parameter the index names.
+    if (toks_[idx].kind != TokKind::Identifier) return;
+    const std::string &param = toks_[idx].text;
+    if (hasUpperGuard(sig, param, i, extent)) return;
+    size_t argPos = kNPos;
+    for (size_t p = 0; p < sig.params.size(); ++p)
+      if (sig.params[p] == param) { argPos = p; break; }
+    if (argPos == kNPos) return;
+    long best = kInvalidConst;
+    for (const auto &entry : funcs_) {
+      if (!sameCycle(*fn, entry.first)) continue;
+      auto rit = recursiveMaxArg_.find(entry.first);
+      if (rit == recursiveMaxArg_.end() || argPos >= rit->second.size()) continue;
+      if (rit->second[argPos] > best) best = rit->second[argPos];
+    }
+    if (best == kInvalidConst) return;
+    long index = best + delta;
+    if (index < 0 || index >= extent)
+      errorAt(toks_[lb], "array index " + std::to_string(index) +
+                             " from recursive call is out of bounds of '" +
+                             toks_[i].text + "' of extent " +
+                             std::to_string(extent));
+  }
+
+  /// Values the host AST checker cannot fold: a literal-returning helper
+  /// (`int i = off(); a[i]`) or a difference of two constant-offset aliases
+  /// (`int d = q - p; a[d]`).  Both are provable with tokens + wave-1 facts.
+  bool novelIndexValue(size_t from, size_t to, long *out) const {
+    size_t r = from, e = to;
+    trim(&r, &e);
+    if (r >= e) return false;
+    if (r + 1 < e && toks_[r].kind == TokKind::Identifier &&
+        isPunct(nextSig(r), "(")) {
+      auto it = returnConstants_.find(toks_[r].text);
+      if (it != returnConstants_.end()) { *out = it->second; return true; }
+    }
+    if (e == r + 3 && toks_[r].kind == TokKind::Identifier &&
+        isPunct(r + 1, "-") && toks_[r + 2].kind == TokKind::Identifier) {
+      auto a = arrayPtrs_.find(toks_[r].text);
+      auto b = arrayPtrs_.find(toks_[r + 2].text);
+      if (a != arrayPtrs_.end() && b != arrayPtrs_.end() &&
+          a->second.array == b->second.array) {
+        *out = a->second.offset - b->second.offset;
+        return true;
+      }
+    }
+    if (e == r + 1 && toks_[r].kind == TokKind::Identifier) {
+      for (size_t k = r; k > 0; --k) {
+        if (!isPunct(k, "=")) continue;
+        size_t lhs = prevSig(k);
+        if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier ||
+            toks_[lhs].text != toks_[r].text) continue;
+        size_t rhs = nextSig(k);
+        if (novelIndexValue(rhs, stmtEnd(rhs), out)) return true;
+        break; // most recent assignment is not novel: stop looking
+      }
+    }
+    return false;
+  }
+
+  void checkFoldedIndexSubscript(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier) return;
+    size_t lb = nextSig(i);
+    if (!isPunct(lb, "[")) return;
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos) return;
+    const std::vector<size_t> *dims = nullptr;
+    if (!findShape(toks_[i].text, i, &dims) || dims->empty()) return;
+    long index = 0;
+    if (!novelIndexValue(lb + 1, rb, &index)) return;
+    long extent = static_cast<long>(dims->front());
+    if (index < 0)
+      errorAt(toks_[lb], "negative array index " + std::to_string(index) +
+                             " on '" + toks_[i].text + "'");
+    else if (index >= extent)
+      reportConstantIndex(toks_[lb], index, toks_[i].text,
+                          static_cast<size_t>(extent));
+  }
+
+  static bool isAssignOpToken(const Token &t) {
+    if (t.kind != TokKind::Punct) return false;
+    static const char *const kOps[] = {"=",  "+=",  "-=",  "*=",  "/=",
+                                       "%=", "<<=", ">>=", "&=",  "|=", "^="};
+    for (const char *op : kOps)
+      if (t.text == op) return true;
+    return false;
+  }
+
+  /// Multiple unsequenced modifications of one scalar in a single full
+  /// expression are undefined behaviour (`i++ + ++i`, `i = i++`, ...).  The
+  /// rewriter now lowers `++` to an instrumented call plus `+`, which hides
+  /// the UB from clang's `-Werror=unsequenced` on the generated C, so the
+  /// check must run on the ORIGINAL tokens here.  It is a proven error in
+  /// both DEFAULT and STRICT, not a STRICT-only rule.
+  ///
+  /// Sequence points that split the scan: `;`, `{`, `}`, the comma operator,
+  /// `&&`, `||` and `?:`.  A comma inside a call's argument list is NOT a
+  /// sequence point (`f(i++, i++)` is UB), whereas a comma inside grouping
+  /// parentheses is (`i = (i++, 5)` is fine).  Only pairs where at least one
+  /// event is an increment/decrement are reported, so ambiguous forms such as
+  /// `i = i = 2` are left to the host compiler rather than risking a false
+  /// positive.
+  void checkUnsequencedModifications() {
+    struct Mod {
+      std::string var;
+      size_t pos;
+      bool inc;
+    };
+    size_t start = 0;
+    for (size_t end = 0; end <= toks_.size(); ++end) {
+      bool boundary = end == toks_.size() || isPunct(end, ";") ||
+                      isPunct(end, "{") || isPunct(end, "}");
+      if (!boundary) continue;
+      std::vector<Mod> mods;
+      std::vector<size_t> barriers;
+      std::vector<bool> callParens; // stack: is this '(' a function call?
+      int bracket = 0;
+      for (size_t k = start; k < end; ++k) {
+        if (isPunct(k, "(")) {
+          size_t p = prevSig(k);
+          bool call = p != kNPos &&
+                      (toks_[p].kind == TokKind::Identifier ||
+                       isPunct(p, ")") || isPunct(p, "]"));
+          callParens.push_back(call);
+        } else if (isPunct(k, ")") && !callParens.empty()) {
+          callParens.pop_back();
+        } else if (isPunct(k, "[")) {
+          ++bracket;
+        } else if (isPunct(k, "]")) {
+          if (bracket > 0) --bracket;
+        } else if (isPunct(k, ",") || isPunct(k, "&&") || isPunct(k, "||") ||
+                   isPunct(k, "?") || isPunct(k, ":")) {
+          bool plain = bracket == 0;
+          for (bool call : callParens)
+            if (call) { plain = false; break; }
+          if (plain) barriers.push_back(k);
+        }
+
+        if (toks_[k].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[k].text)) {
+          size_t p = prevSig(k);
+          bool member = isPunct(p, ".") || isPunct(p, "->");
+          if (!member) {
+            size_t n = nextSig(k);
+            if (n < end && (isPunct(n, "++") || isPunct(n, "--")))
+              mods.push_back({toks_[k].text, k, true});
+            else if (n < end && isAssignOpToken(toks_[n])) {
+              // The write happens after the RHS is evaluated, so anchor it at
+              // the end of the full expression.  `i = (i++, 5)` then has the
+              // comma operator between the increment and the write and stays
+              // accepted, while `i = i++` has no barrier and is still caught.
+              size_t afterRhs = stmtEnd(nextSig(n));
+              mods.push_back({toks_[k].text,
+                              afterRhs < end ? afterRhs : end, false});
+            }
+          }
+        }
+        if ((isPunct(k, "++") || isPunct(k, "--")) && k < end) {
+          size_t id = nextSig(k);
+          if (id < end && toks_[id].kind == TokKind::Identifier &&
+              !isTypeWord(toks_[id].text) &&
+              !isPunct(prevSig(id), ".") && !isPunct(prevSig(id), "->"))
+            mods.push_back({toks_[id].text, k, true});
+        }
+      }
+      for (size_t a = 0; a < mods.size(); ++a)
+        for (size_t b = a + 1; b < mods.size(); ++b) {
+          if (mods[a].var != mods[b].var ||
+              (!mods[a].inc && !mods[b].inc))
+            continue;
+          size_t lo = mods[a].pos, hi = mods[b].pos;
+          if (lo > hi) std::swap(lo, hi);
+          bool separated = false;
+          for (size_t q : barriers)
+            if (q > lo && q < hi) { separated = true; break; }
+          if (!separated) {
+            errorAt(toks_[mods[a].pos],
+                    "multiple unsequenced modifications to '" + mods[a].var +
+                        "' in one expression");
+            a = mods.size(); // one diagnostic per full expression
+            break;
+          }
+        }
+      start = end + 1;
+    }
   }
 
   /// `* (Type *) &x` type punning is undefined under strict aliasing (except
@@ -1558,6 +2186,25 @@ private:
     return kNPos;
   }
 
+  /// True when the identifier at `lhs` is the *object* of a write-through
+  /// (`*p = v`, `s.p = v`) rather than the variable being assigned.  A
+  /// declaration `T *p = ...` is distinguished by its type-word/comma/`(`/
+  /// `*` predecessor, so it is still recognised as a real write to `p`.
+  bool isWriteThroughObject(size_t lhs) const {
+    size_t prev = prevSig(lhs);
+    if (isPunct(prev, ".") || isPunct(prev, "->")) return true;
+    if (isPunct(prev, "*")) {
+      size_t before = prevSig(prev);
+      if (before == kNPos) return true;
+      if ((toks_[before].kind == TokKind::Identifier &&
+           isTypeWord(toks_[before].text)) ||
+          isPunct(before, ",") || isPunct(before, "(") || isPunct(before, "*"))
+        return false;
+      return true;
+    }
+    return false;
+  }
+
   /// Parse an initialiser `a`, `a + N`, `a - N`, `&a[N]`, or another tracked
   /// pointer (optionally offset) into a constant-offset alias of `a`.
   bool parseArrayPointerInit(size_t rhs, TrackedArrayPointer *out) const {
@@ -1659,7 +2306,7 @@ private:
         lhs = rowPointerLhs(i);
         rowPointer = lhs != kNPos;
       }
-      if (lhs == kNPos)
+      if (lhs == kNPos || isWriteThroughObject(lhs))
         continue;
       const std::string var = toks_[lhs].text;
       TrackedArrayPointer tp;
@@ -1669,6 +2316,25 @@ private:
         continue;
       }
       if (arrayPtrInvalid_.count(var) || arrayPtrs_.count(var)) {
+        // Wave 2 (chained formation): `p = p + 6` moves the same pointer, it
+        // does not reassign a new provenance.  Fold the constant offset into
+        // the existing alias instead of invalidating it, so a one-past
+        // dereference after a chain remains provable.  Any other second write
+        // still invalidates the fact exactly as before.
+        auto existing = arrayPtrs_.find(var);
+        if (existing != arrayPtrs_.end() && !arrayPtrInvalid_.count(var)) {
+          size_t rhs = nextSig(i);
+          if (rhs + 2 < toks_.size() && toks_[rhs].kind == TokKind::Identifier &&
+              toks_[rhs].text == var &&
+              (isPunct(rhs + 1, "+") || isPunct(rhs + 1, "-"))) {
+            long amount = 0;
+            if (indexExprValue(rhs + 2, stmtEnd(rhs + 2), &amount)) {
+              existing->second.offset += isPunct(rhs + 1, "+") ? amount : -amount;
+              existing->second.pos = i; // recorded at the `=` token
+              continue;
+            }
+          }
+        }
         arrayPtrInvalid_.insert(var);
         arrayPtrs_.erase(var);
         continue;
@@ -1691,6 +2357,11 @@ private:
       // The fact was recorded at the `=` token, not at the LHS identifier.
       if (n == initial->second.pos)
         continue;
+      // A write *through* the pointer (`*p = v`, `s.p = v`) is not a write to
+      // the pointer variable itself; ignoring that distinction used to erase
+      // a valid alias before the very dereference we need to check.
+      if (isWriteThroughObject(i))
+        continue;
       long delta = 0;
       bool known = false;
       if (isPunct(n, "++")) { delta = 1; known = true; }
@@ -1703,7 +2374,10 @@ private:
           known = true;
         }
       } else if (isPunct(n, "=")) {
-        known = false; // a second assignment invalidates the old offset
+        // Every `=` was already classified by the first loop above (tracked,
+        // self-relative fold, or invalidated).  Re-handling it here used to
+        // erase a freshly folded alias at its own declaration's `=`.
+        continue;
       } else {
         continue;
       }
