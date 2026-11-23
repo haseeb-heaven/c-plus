@@ -447,6 +447,107 @@ private:
     }
   }
 
+  /// Built-in type words / qualifiers that may follow `owned` or `managed`
+  /// in a genuine C+ declaration.  Kept here (rather than local to
+  /// isDeclarationName) so both helpers agree on what a type token is.
+  static bool isBuiltinTypeWord(const std::string &s) {
+    static const std::set<std::string> kWords = {
+        "int",     "char",    "short",   "long",    "float",   "double",
+        "_Bool",   "void",    "size_t",  "struct",  "union",   "enum",
+        "unsigned", "signed", "const",   "volatile", "static", "extern",
+        "register", "_Atomic"};
+    return kWords.count(s) != 0;
+  }
+
+  /// Declaration qualifiers that may precede the actual type word.
+  static bool isDeclQualifier(const std::string &s) {
+    static const std::set<std::string> kWords = {
+        "const", "volatile", "static", "register", "extern",
+        "unsigned", "signed", "short", "long", "_Atomic"};
+    return kWords.count(s) != 0;
+  }
+
+  /// `owned` and `managed` are *contextual* keywords: ordinary C programs may
+  /// legitimately use them as identifiers (parameters, typedef names, struct
+  /// tags, function names, macro names).  Only lower them when the token
+  /// begins a genuine C+ declaration:
+  ///   [statement boundary] KEYWORD [quals] TYPE [*] NAME = ... ;
+  /// Anything else is emitted verbatim as plain C.  This is mode-independent
+  /// on purpose -- plain C that happens to use these names must never be
+  /// rewritten or diagnosed, in LEGACY *or* Safe mode.
+  bool looksLikeOwnedDeclaration(size_t start) const {
+    // 1. Must begin a declaration, not appear inside an expression or as a
+    //    declarator name following a type/keyword/punctuation.
+    size_t prev = ts.prevSig(start);
+    if (prev != kNPos &&
+        !(ts.isPunct(prev, ";") || ts.isPunct(prev, "{") ||
+          ts.isPunct(prev, "}") || ts.isPunct(prev, ":")))
+      return false;
+    // Not part of a preprocessor directive (#define managed ...).
+    size_t lineStart = start;
+    while (lineStart > 0 && ts[lineStart - 1].line == ts[start].line)
+      --lineStart;
+    for (size_t k = lineStart; k < start; ++k)
+      if (ts.isPunct(k, "#"))
+        return false;
+
+    // 2. Must have a statement terminator at this nesting level.
+    size_t semi = ts.statementEnd(start);
+    if (semi == kNPos)
+      return false;
+
+    // 3. Must have a top-level initializer (both C+ forms initialise).
+    size_t eq = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t i = start + 1; i < semi; ++i) {
+      if (ts.isPunct(i, "(")) ++paren;
+      else if (ts.isPunct(i, ")")) --paren;
+      else if (ts.isPunct(i, "[")) ++bracket;
+      else if (ts.isPunct(i, "]")) --bracket;
+      else if (ts.isPunct(i, "=") && paren == 0 && bracket == 0) {
+        eq = i;
+        break;
+      }
+    }
+    if (eq == kNPos)
+      return false;
+
+    // 4. Skip only declaration qualifiers; the next token is the type.  We
+    //    must NOT skip the core type word: `owned int v = 1;` is the genuine
+    //    C+ declaration that produces the "'int' is not a resource" error.
+    size_t typeIdx = ts.nextSig(start);
+    while (typeIdx != kNPos && typeIdx < semi &&
+           isDeclQualifier(ts[typeIdx].text))
+      typeIdx = ts.nextSig(typeIdx);
+    if (typeIdx == kNPos || typeIdx >= semi ||
+        ts[typeIdx].kind != TokKind::Identifier)
+      return false;
+    const std::string typeName = ts[typeIdx].text;
+    const bool isManaged = ts.isIdent(start, kw::kManaged);
+    const bool knownType = isBuiltinTypeWord(typeName) ||
+                           classNames_.count(typeName) ||
+                           resourceNames_.count(typeName) ||
+                           externalClassNames_.count(typeName);
+    if (!knownType) {
+      // An unknown identifier type after `owned` is a plain C typedef name
+      // ("typedef int owned; owned x = 1;"), not a C+ declaration.
+      if (!isManaged)
+        return false;
+      // `managed` always declares a pointer; require a '*' to disambiguate
+      // from an ordinary C identifier.
+      size_t star = ts.nextSig(typeIdx);
+      if (star == kNPos || star >= semi || !ts.isPunct(star, "*"))
+        return false;
+    }
+
+    // 5. A declared name must appear between the type and the '='.
+    bool haveName = false;
+    for (size_t i = ts.nextSig(typeIdx); i < eq; ++i)
+      if (ts[i].kind == TokKind::Identifier && !isBuiltinTypeWord(ts[i].text))
+        haveName = true;
+    return haveName;
+  }
+
   /// True when `nameIdx` looks like the declared name of an array rather than
   /// an array subscript in an expression.
   bool isDeclarationName(size_t nameIdx) const {
@@ -775,7 +876,8 @@ private:
           emit(lineDirective(filename_, ts[next].line));
         continue;
       }
-      if (ts.isIdent(i, kw::kManaged) || ts.isIdent(i, kw::kOwned)) {
+      if ((ts.isIdent(i, kw::kManaged) || ts.isIdent(i, kw::kOwned)) &&
+          looksLikeOwnedDeclaration(i)) {
         if (emitOwnedDeclaration(i)) {
           i = skipTo_;
           skipTo_ = kNPos;
@@ -1662,6 +1764,19 @@ const std::vector<CheckedPointerSite> &checkedPointerSites() {
   return checkedPointerSiteRegistry();
 }
 
+std::vector<CheckedBoundsSite> &checkedBoundsSiteRegistry() {
+  static std::vector<CheckedBoundsSite> sites;
+  return sites;
+}
+
+void setCheckedBoundsSites(std::vector<CheckedBoundsSite> sites) {
+  checkedBoundsSiteRegistry() = std::move(sites);
+}
+
+const std::vector<CheckedBoundsSite> &checkedBoundsSites() {
+  return checkedBoundsSiteRegistry();
+}
+
 std::vector<CheckedAllocSite> &checkedAllocSiteRegistry(bool freeSite) {
   static std::vector<CheckedAllocSite> allocs;
   static std::vector<CheckedAllocSite> frees;
@@ -1705,8 +1820,26 @@ const char *checkedOpName(CheckedArithmeticSite::Op kind) {
   case CheckedArithmeticSite::Op::Shl: return "shl";
   case CheckedArithmeticSite::Op::Shr: return "shr";
   case CheckedArithmeticSite::Op::Narrow: return "narrow";
+  case CheckedArithmeticSite::Op::FloatToInt: return "f2i";
+  case CheckedArithmeticSite::Op::AllocExtent: return "size_mul";
+  case CheckedArithmeticSite::Op::Inc: return "add";
+  case CheckedArithmeticSite::Op::Dec: return "sub";
+  case CheckedArithmeticSite::Op::Neg: return "sub";
   }
   return "add";
+}
+
+/// Byte slice clamped to the source.  Producers may record degenerate
+/// offsets for implicit sites; never let an out-of-range slice crash the
+/// rewriter or silently drop a site.
+std::string sourceSlice(const std::string &s, size_t from, size_t to) {
+  if (from > s.size())
+    from = s.size();
+  if (to < from)
+    to = from;
+  if (to > s.size())
+    to = s.size();
+  return s.substr(from, to - from);
 }
 
 } // namespace
@@ -1715,15 +1848,21 @@ std::string instrumentDynamicArrayBounds(
     const std::string &source,
     const std::map<std::string, size_t> &arrayLengths) {
   const std::vector<CheckedArithmeticSite> &arith = checkedArithmeticSites();
-  if (arrayLengths.empty() && arith.empty() &&
+  const std::vector<CheckedBoundsSite> &bounds = checkedBoundsSites();
+  if (arrayLengths.empty() && arith.empty() && bounds.empty() &&
       checkedPointerSites().empty() && checkedAllocSites().empty() &&
       checkedFreeSites().empty())
     return source;
 
   std::vector<SafetyInsertion> insertions;
+  // Offsets already guarded by the token-level pass; a resolved AST site for
+  // the same access must not emit a duplicate check.
+  std::set<size_t> guardedIndexOffsets;
   bool haveBounds = false;
   bool havePtrFormation = false;
   bool haveRuntimeRegistry = false;
+  bool haveFloatToInt = false;
+  bool haveSizeMul = false;
 
   if (!arrayLengths.empty()) {
     std::vector<Token> toks = lexCPlus(source);
@@ -1775,6 +1914,7 @@ std::string instrumentDynamicArrayBounds(
       size_t idxBegin = toks[first].offset;
       size_t outer = kNPos;
       haveBounds = true;
+      guardedIndexOffsets.insert(idxBegin);
       insertions.push_back({idxBegin, outer, 0,
                             "__cplus_bounds_check((size_t)(", 0});
       insertions.push_back({toks[close].offset, outer, 2,
@@ -1783,37 +1923,185 @@ std::string instrumentDynamicArrayBounds(
     }
   }
 
+  // Resolved sites from the AST pass.  These cover every aliased form the
+  // purely lexical pass cannot see (cast aliases, struct/union fields,
+  // multidim row pointers, interior pointers, typedef aliases, ...).  Wrap
+  // the index expression in place so it is evaluated exactly once; the helper
+  // returns the checked index.
+  for (const CheckedBoundsSite &site : bounds) {
+    if (guardedIndexOffsets.count(site.indexBegin))
+      continue; // same access already guarded by the token-level pass
+    // Clamp malformed producer offsets instead of dropping the site: a
+    // recorded site must never be silently skipped.
+    size_t idxBegin = site.indexBegin;
+    size_t idxEnd = site.indexEnd;
+    size_t close = site.close ? site.close : idxEnd;
+    if (idxBegin > source.size()) idxBegin = source.size();
+    if (idxEnd < idxBegin) idxEnd = idxBegin;
+    if (idxEnd > source.size()) idxEnd = source.size();
+    if (close < idxEnd) close = idxEnd;
+    if (close > source.size()) close = source.size();
+    insertions.push_back({idxBegin, 0, 0,
+                          "__cplus_bounds_check((size_t)(", 0});
+    insertions.push_back({close, 0, 2,
+                          "), (size_t)(" + site.count + "), \"" + site.name +
+                              "\")", 0});
+    guardedIndexOffsets.insert(idxBegin);
+    haveBounds = true;
+  }
+
   for (const CheckedArithmeticSite &site : arith) {
+    const size_t span = site.end > site.begin ? site.end - site.begin : 0;
     const std::string fn =
         std::string("__cplus_inline_") + checkedOpName(site.kind) + "_i64";
-    size_t span = site.end > site.begin ? site.end - site.begin : 0;
-    if (site.kind == CheckedArithmeticSite::Op::Narrow) {
-      // ((DST)__cplus_inline_narrow_i64((SRC)(value), srcBits, srcSigned,
-      //                                 dstBits, dstSigned))
-      insertions.push_back({site.begin, span, 0,
-                            "((" + site.type + ")" + fn + "((uint64_t)(", 0});
-      insertions.push_back({site.end, span, 2,
-                            "), " + std::to_string(site.srcBits) + ", " +
-                                (site.srcIsSigned ? "1" : "0") + ", " +
-                                std::to_string(site.bits) + ", " +
-                                (site.isSigned ? "1" : "0") + "))", 0});
+    const std::string bits = std::to_string(site.bits);
+    const std::string sgn = site.isSigned ? "1" : "0";
+    const std::string dst = site.type.empty() ? std::string("int") : site.type;
+    const std::string opText =
+        sourceSlice(source, site.op, site.op + site.opLength);
+
+    // Classify the syntactic form.  Producers may either set the explicit
+    // Op/flag fields or reuse a plain binary Op at a compound/inc/dec/unary
+    // token; both are recognised here so no recorded site is skipped.
+    CheckedArithmeticSite::Op kind = site.kind;
+    bool compound = site.compound;
+    bool postfix = site.postfix;
+    // Implicit conversion / extent sites carry no meaningful operator token;
+    // leave their classification to the producer.
+    if (kind != CheckedArithmeticSite::Op::Narrow &&
+        kind != CheckedArithmeticSite::Op::FloatToInt &&
+        kind != CheckedArithmeticSite::Op::AllocExtent) {
+      if (opText == "+=") { kind = CheckedArithmeticSite::Op::Add; compound = true; }
+      else if (opText == "-=") { kind = CheckedArithmeticSite::Op::Sub; compound = true; }
+      else if (opText == "*=") { kind = CheckedArithmeticSite::Op::Mul; compound = true; }
+      else if (opText == "/=") { kind = CheckedArithmeticSite::Op::Div; compound = true; }
+      else if (opText == "%=") { kind = CheckedArithmeticSite::Op::Rem; compound = true; }
+      else if (opText == "<<=") { kind = CheckedArithmeticSite::Op::Shl; compound = true; }
+      else if (opText == ">>=") { kind = CheckedArithmeticSite::Op::Shr; compound = true; }
+      else if (opText == "++") {
+        kind = CheckedArithmeticSite::Op::Inc;
+        postfix = site.op > site.begin;
+      } else if (opText == "--") {
+        kind = CheckedArithmeticSite::Op::Dec;
+        postfix = site.op > site.begin;
+      } else if (opText == "-" && site.op == site.begin &&
+                 kind == CheckedArithmeticSite::Op::Sub) {
+        kind = CheckedArithmeticSite::Op::Neg;
+      }
+    }
+
+    // --- value conversions: wrap the operand, no lvalue update needed ---
+    if (kind == CheckedArithmeticSite::Op::Narrow ||
+        kind == CheckedArithmeticSite::Op::FloatToInt) {
+      if (kind == CheckedArithmeticSite::Op::FloatToInt) {
+        insertions.push_back({site.begin, span, 0,
+                              "((" + dst + ")__cplus_inline_f2i_i64((double)(",
+                              0});
+        insertions.push_back({site.end, span, 2, "), " + bits + ", " + sgn +
+                                                    "))", 0});
+        haveFloatToInt = true;
+      } else {
+        // ((DST)__cplus_inline_narrow_i64((SRC)(value), sb, ss, db, ds))
+        const unsigned sb = site.srcBits ? site.srcBits : site.bits;
+        insertions.push_back({site.begin, span, 0,
+                              "((" + dst + ")" + fn + "((uint64_t)(", 0});
+        insertions.push_back({site.end, span, 2,
+                              "), " + std::to_string(sb) + ", " +
+                                  (site.srcIsSigned ? "1" : "0") + ", " +
+                                  bits + ", " + sgn + "))", 0});
+      }
       continue;
     }
-    // ((T)helper((int64_t)(lhs), (int64_t)(rhs), bits))
+
+    // --- allocation extent size multiplication ---
+    if (kind == CheckedArithmeticSite::Op::AllocExtent) {
+      if (span == 0) {
+        // Implicit extent: use producer-supplied expression text verbatim.
+        const std::string c = site.countExpr.empty() ? std::string("1")
+                                                    : site.countExpr;
+        const std::string e = site.elemExpr.empty() ? std::string("1")
+                                                   : site.elemExpr;
+        insertions.push_back({site.begin, 0, 0,
+                              "__cplus_inline_size_mul((size_t)(" + c +
+                                  "), (size_t)(" + e + "))", 0});
+      } else {
+        // Split at the '*' so nested insertions inside the operands survive.
+        insertions.push_back({site.begin, span, 0,
+                              "__cplus_inline_size_mul((size_t)(", 0});
+        insertions.push_back({site.op, span, 1, "), (size_t)(",
+                              site.opLength});
+        insertions.push_back({site.end, span, 2, "))", 0});
+      }
+      haveSizeMul = true;
+      continue;
+    }
+
+    // --- ++ / -- : add/sub one with a single-evaluation lvalue update ---
+    if (kind == CheckedArithmeticSite::Op::Inc ||
+        kind == CheckedArithmeticSite::Op::Dec) {
+      const std::string tail = ", " + dst + ", " + bits + ", " + sgn +
+                               ", 1, " + (postfix ? "1" : "0") + ")";
+      if (postfix) {
+        // `a++`: prefix before `a`, convert the operator into macro args.
+        insertions.push_back({site.begin, span, 0, "CPLUS_INC(", 0});
+        insertions.push_back({site.op, span, 1, tail, site.opLength});
+      } else {
+        // `++a`: swallow the operator, append macro args after the operand.
+        insertions.push_back({site.begin, span, 0, "CPLUS_INC(", 0});
+        insertions.push_back({site.op, span, 1, "", site.opLength});
+        insertions.push_back({site.end, span, 2, tail, 0});
+      }
+      continue;
+    }
+
+    // --- unary minus: checked 0 - operand ---
+    if (kind == CheckedArithmeticSite::Op::Neg) {
+      insertions.push_back({site.begin, span, 0, "CPLUS_NEG(", 0});
+      insertions.push_back({site.op, span, 1, "", site.opLength});
+      insertions.push_back({site.end, span, 2,
+                            ", " + dst + ", " + bits + ", " + sgn + ")", 0});
+      continue;
+    }
+
+    // --- compound assignment: preserve the lvalue update ---
+    if (compound) {
+      insertions.push_back({site.begin, span, 0,
+                            "CPLUS_CMPD_BIN(" + std::string(checkedOpName(kind)) +
+                                ", ", 0});
+      insertions.push_back({site.op, span, 1, ", " + dst + ", ",
+                            site.opLength});
+      insertions.push_back({site.end, span, 2,
+                            ", " + bits + ", " + sgn + ")", 0});
+      continue;
+    }
+
+    // --- plain binary: ((T)helper((int64_t)(lhs), (int64_t)(rhs), bits)) ---
     insertions.push_back({site.begin, span, 0,
-                          "((" + site.type + ")" + fn + "((int64_t)(", 0});
+                          "((" + dst + ")" + fn + "((int64_t)(", 0});
     insertions.push_back({site.op, span, 1, "), (int64_t)(", site.opLength});
     insertions.push_back({site.end, span, 2,
-                          "), " + std::to_string(site.bits) + ", " +
-                              (site.isSigned ? "1" : "0") + "))", 0});
+                          "), " + bits + ", " + sgn + "))", 0});
   }
   // Route ABI-visible malloc/free calls through the runtime side table.  The
   // helper returns the same pointer value, so no source semantics change.
   const auto &allocSites = checkedAllocSites();
   for (const CheckedAllocSite &site : allocSites) {
     size_t span = site.end > site.begin ? site.end - site.begin : 0;
-    if (!span)
+    if (span == 0) {
+      // Degenerate/implicit extent: never silently drop a recorded site.
+      const std::string arg = site.argText.empty() ? std::string("0")
+                                                   : site.argText;
+      const std::string bytes = std::to_string(site.bytes);
+      insertions.push_back({site.begin, 0, 0,
+                            site.isRealloc
+                                ? "cplus_realloc_registered((0), (" + arg +
+                                      "), " + bytes + ", __FILE__, __LINE__)"
+                                : "cplus_register_allocation((" + arg + "), " +
+                                      bytes + ", __FILE__, __LINE__)",
+                            0});
+      haveRuntimeRegistry = true;
       continue;
+    }
     if (site.isRealloc && !site.argText.empty()) {
       insertions.push_back({site.begin, span, 0,
                             "cplus_realloc_registered((" + site.argText +
@@ -1833,25 +2121,43 @@ std::string instrumentDynamicArrayBounds(
   const auto &freeSites = checkedFreeSites();
   for (const CheckedAllocSite &site : freeSites) {
     size_t span = site.end > site.begin ? site.end - site.begin : 0;
-    if (!span)
-      continue;
-    std::string repl = "cplus_free_registered(" + site.argText +
+    const std::string arg = site.argText.empty() ? std::string("0")
+                                                 : site.argText;
+    std::string repl = "cplus_free_registered(" + arg +
                        ", __FILE__, __LINE__)";
-    insertions.push_back({site.begin, span, 0, repl, span});
+    insertions.push_back({site.begin, span, 0, repl, span ? span : 0});
     haveRuntimeRegistry = true;
   }
   const auto &ptrSites = checkedPointerSites();
   for (const CheckedPointerSite &site : ptrSites) {
     size_t span = site.end > site.begin ? site.end - site.begin : 0;
-    if (!span)
-      continue;
-    std::string guard =
-        "(cplus_check_ptr_formation((const void *)(" + site.base + "), " +
-        "(size_t)(" + site.count + "), (int64_t)(" +
-        (site.negative ? "-" : "") + site.index + "), " +
-        "__FILE__, __LINE__, \"" + site.expr + "\"), (";
-    insertions.push_back({site.begin, span, 0, guard, 0});
-    insertions.push_back({site.end, span, 2, "))", 0});
+    const std::string macro = site.compound ? "CPLUS_PTR_CHECK_ASSIGN("
+                                            : "CPLUS_PTR_CHECK(";
+    const std::string tail =
+        ", " + (site.count.empty() ? std::string("0") : site.count) + ", " +
+        (site.negative ? "1" : "0") + ", \"" + site.expr + "\", " +
+        (site.deref ? "1" : "0") + ")";
+    if (span == 0) {
+      // No source extent (implicit site): use producer-supplied text verbatim.
+      const std::string call = macro + "(" + site.base + ", " + site.index +
+                               tail;
+      insertions.push_back({site.begin, 0, 0, call, 0});
+    } else {
+      size_t opPos = site.op;
+      size_t opLen = site.opLength;
+      if (opPos < site.begin || opPos + opLen > site.end || opLen == 0) {
+        opPos = source.find_first_of("+-", site.begin);
+        opLen = 1;
+        if (opPos != std::string::npos && opPos < site.end &&
+            opPos + 1 < source.size() && source[opPos + 1] == '=')
+          opLen = 2;
+      }
+      if (opPos == std::string::npos || opPos >= site.end)
+        opPos = site.begin; // never skip a recorded site
+      insertions.push_back({site.begin, span, 0, macro, 0});
+      insertions.push_back({opPos, span, 1, ", ", opLen});
+      insertions.push_back({site.end, span, 2, tail, 0});
+    }
     havePtrFormation = true;
   }
   if (insertions.empty())
@@ -1896,7 +2202,41 @@ std::string instrumentDynamicArrayBounds(
   if (havePtrFormation)
     prelude += "#include <stdint.h>\n"
                "extern void cplus_check_ptr_formation(const void *, size_t, "
-               "int64_t, const char *, int, const char *);\n";
+               "int64_t, const char *, int, const char *);\n"
+               "extern void cplus_check_bounds(const void *, size_t, size_t, "
+               "const char *, int, const char *);\n"
+               // Bind the base address and the index once each (GNU statement
+               // expressions; Clang accepts them in gnu89/gnu17/c99).  This
+               // avoids the double evaluation of base/index that a bare comma
+               // guard would cause for side-effecting operands.
+               "#if defined(__GNUC__) || defined(__clang__)\n"
+               "#define CPLUS_PTR_BODY(B, I, C, N, T, D) \\\n"
+               "  __typeof__(&(B)) __cplus_bp = &(B); \\\n"
+               "  __typeof__(I) __cplus_ip = (I); \\\n"
+               "  if (D) cplus_check_bounds((const void *)(*__cplus_bp), \\\n"
+               "      (size_t)(C), (size_t)(__cplus_ip), __FILE__, __LINE__, T); \\\n"
+               "  else cplus_check_ptr_formation((const void *)(*__cplus_bp), \\\n"
+               "      (size_t)(C), (int64_t)(__cplus_ip) * ((N) ? -1 : 1), \\\n"
+               "      __FILE__, __LINE__, T);\n"
+               "#define CPLUS_PTR_CHECK(B, I, C, N, T, D) \\\n"
+               "  ({ CPLUS_PTR_BODY(B, I, C, N, T, D) \\\n"
+               "     ((N) ? (*__cplus_bp - __cplus_ip) \\\n"
+               "          : (*__cplus_bp + __cplus_ip)); })\n"
+               "#define CPLUS_PTR_CHECK_ASSIGN(B, I, C, N, T, D) \\\n"
+               "  ({ CPLUS_PTR_BODY(B, I, C, N, T, D) \\\n"
+               "     *__cplus_bp = ((N) ? (*__cplus_bp - __cplus_ip) \\\n"
+               "                       : (*__cplus_bp + __cplus_ip)); \\\n"
+               "     *__cplus_bp; })\n"
+               "#else\n"
+               "#define CPLUS_PTR_CHECK(B, I, C, N, T, D) \\\n"
+               "  ((D) ? (cplus_check_bounds((const void *)(B), (size_t)(C), \\\n"
+               "       (size_t)(I), __FILE__, __LINE__, T), (B) + (I)) \\\n"
+               "       : (cplus_check_ptr_formation((const void *)(B), \\\n"
+               "       (size_t)(C), (int64_t)(I) * ((N) ? -1 : 1), \\\n"
+               "       __FILE__, __LINE__, T), (B) + (I)))\n"
+               "#define CPLUS_PTR_CHECK_ASSIGN(B, I, C, N, T, D) \\\n"
+               "  ((B) = CPLUS_PTR_CHECK(B, I, C, N, T, D))\n"
+               "#endif\n";
   if (haveRuntimeRegistry)
     prelude += "#include <stddef.h>\n"
                "extern void *cplus_register_allocation(void *, size_t, "
@@ -1925,6 +2265,50 @@ std::string instrumentDynamicArrayBounds(
       prelude += std::string("extern int64_t __cplus_checked_") + op +
                  "_i64(int64_t, int64_t, unsigned, unsigned);\n";
     }
+    // Float->int and allocation-extent helpers are emitted only when a site
+    // of that kind was actually recorded, so TUs that do not need them gain
+    // no new external dependencies.  The wrappers keep the check inline and
+    // defer diagnostics to the existing runtime trap symbols.
+    if (haveFloatToInt)
+      prelude +=
+          "extern int64_t __cplus_checked_f2i_i64(double, unsigned, "
+          "unsigned);\n"
+          "static inline int64_t __cplus_inline_f2i_i64(double v, "
+          "unsigned bits, unsigned sgn) {\n"
+          "  double lo, hi;\n"
+          "  if (v != v) return __cplus_checked_f2i_i64(v, bits, sgn);\n"
+          "  if (sgn) {\n"
+          "    if (bits == 32) { lo = -2147483648.0; hi = 2147483648.0; }\n"
+          "    else if (bits == 64) {\n"
+          "      lo = -9223372036854775808.0; hi = 9223372036854775808.0;\n"
+          "    } else {\n"
+          "      int b = (int)bits, i; double p = 1.0;\n"
+          "      for (i = 0; i < b - 1; ++i) p *= 2.0;\n"
+          "      lo = -p; hi = p;\n"
+          "    }\n"
+          "  } else {\n"
+          "    if (bits == 32) { lo = 0.0; hi = 4294967296.0; }\n"
+          "    else if (bits == 64) {\n"
+          "      lo = 0.0; hi = 18446744073709551616.0;\n"
+          "    } else {\n"
+          "      int b = (int)bits, i; double p = 1.0;\n"
+          "      for (i = 0; i < b; ++i) p *= 2.0;\n"
+          "      lo = 0.0; hi = p;\n"
+          "    }\n"
+          "  }\n"
+          "  if (!(v >= lo && v < hi)) return __cplus_checked_f2i_i64(v, "
+          "bits, sgn);\n"
+          "  return (int64_t)v;\n"
+          "}\n";
+    if (haveSizeMul)
+      prelude += "#include <stddef.h>\n"
+                 "extern size_t __cplus_checked_size_mul(size_t, size_t);\n"
+                 "static inline size_t __cplus_inline_size_mul(size_t a, "
+                 "size_t b) {\n"
+                 "  if (b != 0 && a > ((size_t)-1) / b)\n"
+                 "    return __cplus_checked_size_mul(a, b);\n"
+                 "  return a * b;\n"
+                 "}\n";
     prelude +=
         "#if defined(__has_builtin)\n"
         "#  if __has_builtin(__builtin_add_overflow) && "
@@ -2031,6 +2415,33 @@ std::string instrumentDynamicArrayBounds(
       prelude += std::string("#define __cplus_inline_") + op +
                  "_i64 __cplus_checked_" + op + "_i64\n";
     prelude += "#endif\n";
+
+    // Lvalue-preserving forms.  The GNU variants bind the lvalue address once
+    // so operands with side effects (e.g. `a[i++] += f()`) are evaluated
+    // exactly once; the portable fallback covers strict ISO C compilers.
+    prelude +=
+        "#if defined(__GNUC__) || defined(__clang__)\n"
+        "#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \\\n"
+        "  ({ __typeof__(&(P)) __cplus_ap = &(P); \\\n"
+        "     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \\\n"
+        "         (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \\\n"
+        "     *__cplus_ap; })\n"
+        "#define CPLUS_INC(P, T, BT, SG, D, POST) \\\n"
+        "  ({ __typeof__(&(P)) __cplus_ap = &(P); \\\n"
+        "     __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \\\n"
+        "     *__cplus_ap = (T)__cplus_inline_add_i64( \\\n"
+        "         (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \\\n"
+        "     (POST) ? __cplus_ov : *__cplus_ap; })\n"
+        "#else\n"
+        "#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \\\n"
+        "  ((P) = (T)__cplus_inline_##OP##_i64( \\\n"
+        "      (int64_t)(P), (int64_t)(B), (BT), (SG)))\n"
+        "#define CPLUS_INC(P, T, BT, SG, D, POST) \\\n"
+        "  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \\\n"
+        "      (int64_t)(D), (BT), (SG)))\n"
+        "#endif\n"
+        "#define CPLUS_NEG(X, T, BT, SG) \\\n"
+        "  ((T)__cplus_inline_sub_i64(0, (int64_t)(X), (BT), (SG)))\n";
   }
   return prelude + out;
 }

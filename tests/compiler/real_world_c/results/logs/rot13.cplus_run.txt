@@ -1,0 +1,9 @@
+case: rot13
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/rot13.cplus
+rc: 0
+timed_out: False
+--- stdout ---
+All tests have successfully passed!
+
+--- stderr ---
+

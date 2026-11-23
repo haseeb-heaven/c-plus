@@ -2,6 +2,7 @@
 
 #include "Driver/Driver.h"
 
+#include "Analysis/OwnershipAnalysis.h"
 #include "Sema/CPlusRewriter.h"
 #include "Sema/RaiiLowering.h"
 #include "Sema/StaticBoundsCheck.h"
@@ -23,6 +24,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <set>
@@ -623,6 +625,32 @@ static void addSanitizerFlags(std::vector<std::string> &args, Sanitizer san) {
   args.push_back("-g"); // debug info for actionable stack traces
 }
 
+/// True when pass-through flags disable the backend's signed-overflow
+/// sanitizer. checkAstSafety() suppresses native arithmetic guards when the
+/// driver selected that sanitizer, so disabling it from `extraArgs` would
+/// leave signed overflow silently unenforced. Reject the contradictory
+/// configuration instead of letting the gate be bypassed.
+static bool extraArgsDisableSignedOverflow(const std::vector<std::string> &extra) {
+  for (const auto &a : extra) {
+    if (a.rfind("-fno-sanitize=", 0) != 0)
+      continue;
+    std::string list = a.substr(strlen("-fno-sanitize="));
+    size_t start = 0;
+    while (start <= list.size()) {
+      size_t comma = list.find(',', start);
+      std::string token = list.substr(
+          start, comma == std::string::npos ? std::string::npos : comma - start);
+      if (token == "undefined" || token == "signed-integer-overflow" ||
+          token == "all")
+        return true;
+      if (comma == std::string::npos)
+        break;
+      start = comma + 1;
+    }
+  }
+  return false;
+}
+
 void printSanitizerInfo(llvm::raw_ostream &os) {
   os << "supported sanitizers: none";
   for (const auto &entry : kSanitizerEntries)
@@ -813,6 +841,16 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     errs << "error: unsupported sanitizer combination: " << conflict << "\n";
     return 1;
   }
+  // Native arithmetic guards are suppressed when checkAstSafety's gate sees
+  // the driver-selected Undefined sanitizer. A pass-through -fno-sanitize=
+  // flag could silently disable that backend check, so reject the pair.
+  if (wants(san, Sanitizer::Undefined) &&
+      extraArgsDisableSignedOverflow(opts.extraArgs)) {
+    errs << "error: pass-through flags disable the signed-integer-overflow "
+            "sanitizer that C+ relies on to suppress native guards; remove "
+            "'-fno-sanitize=undefined' or use --sanitize=none\n";
+    return 1;
+  }
   // Capability probing compiles and runs a defect program. `check` must stay
   // a pure static-analysis command, so explicitly selected sanitizers are
   // accepted there without launching any probe.
@@ -840,6 +878,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   std::vector<std::string> base = backendArgs(opts);
   std::vector<std::string> objects;
   bool instrumentedRuntime = false;
+  bool strictDisclosureEmitted = false;
   // Recompiling the C+ runtime with sanitizer flags is part of building an
   // instrumented executable. `check` never produces an executable, so skip it.
   if (san != Sanitizer::None && !isCheckCommand(opts)) {
@@ -901,8 +940,80 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
                                         &rewritten, false, opts.strict);
     DRIVER_LOG(CLOG_DEBUG, "lowered %s (%zu bytes)", input.c_str(),
                loweredText.size());
+
+    // The in-memory safety AST must represent the same program the backend
+    // compiles. `base` alone omits pass-through -D/-I flags (Main.cpp stores
+    // them in extraArgs), which previously let a macro-guarded unsafe path be
+    // analysed in one configuration and compiled in another. Add the real
+    // compile arguments that affect parsing; sanitizer flags are filtered out
+    // by checkAstSafety anyway and are deliberately left out so a pass-through
+    // token cannot perturb the native-guard gate.
+    std::vector<std::string> astArgs = base;
+    llvm::StringRef astInputDir = llvm::sys::path::parent_path(input);
+    if (astInputDir.empty())
+      astInputDir = ".";
+    astArgs.push_back("-I" + std::string(astInputDir));
+    for (const auto &a : opts.extraArgs) {
+      if (a.rfind("-fsanitize=", 0) == 0 || a.rfind("-fno-sanitize=", 0) == 0)
+        continue;
+      astArgs.push_back(a);
+    }
     if (opts.mode == Mode::Safe)
-      checkAstSafety(loweredText, input, base, diags, opts.strict);
+      checkAstSafety(loweredText, input, astArgs, diags, opts.strict);
+
+    if (opts.strict) {
+      if (opts.mode == Mode::LegacyC) {
+        // STRICT has no teeth in LEGACY: no C+ safety analysis runs at all.
+        // Disclose that instead of silently reporting a clean check.
+        if (!strictDisclosureEmitted) {
+          Diag d;
+          d.level = DiagLevel::Warning;
+          d.message = "[CPLUS-LEGACY] STRICT mode has no effect with --legacy-c: "
+                      "C+ safety analysis is disabled to preserve plain-C "
+                      "ABI and source";
+          d.file = input;
+          diags.report(std::move(d));
+          strictDisclosureEmitted = true;
+        }
+      } else {
+        SafetyAstProbe probe = probeSafetyAst(loweredText, astArgs, input);
+        // Fail closed (every TU): a failed parse means checkAstSafety silently
+        // skipped every check. Reporting success in STRICT `check` would then
+        // accept a program that was never analysed.
+        if (!probe.parsed && isCheckCommand(opts)) {
+          Diag d;
+          d.level = DiagLevel::Error;
+          d.message = "[CPLUS-ANALYSIS] cannot build the C+ safety AST for "
+                      "this translation unit; STRICT check would silently "
+                      "skip all safety analysis";
+          d.file = input;
+          diags.report(std::move(d));
+        }
+        // Per-TU disclosure: a body defined in another TU (or a library) is
+        // not safety-checked here, so STRICT acceptance is not cross-TU proof.
+        if (!strictDisclosureEmitted &&
+            (inputs.size() > 1 || !probe.unresolvedFunctions.empty())) {
+          std::string names;
+          for (const auto &fn : probe.unresolvedFunctions) {
+            if (!names.empty())
+              names += ", ";
+            names += "'" + fn + "'";
+          }
+          Diag d;
+          d.level = DiagLevel::Warning;
+          d.message =
+              "[CPLUS-MULTITU] STRICT analysis is per-translation-unit: ";
+          if (!names.empty())
+            d.message += "functions " + names +
+                         " have no definition in this TU; ";
+          d.message += "cross-TU control/data flow is not safety-checked here";
+          d.file = input;
+          diags.report(std::move(d));
+          strictDisclosureEmitted = true;
+        }
+      }
+    }
+
     printDiagnostics(diags, errs, input);
     if (diags.hasErrors())
       return 1;

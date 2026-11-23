@@ -242,10 +242,21 @@ if want_category strict_positive; then
     run_timed "$TIMEOUT" $CPLUS --strict --sanitize=none --emit-c "$gen" $srcs -o "$OUT/$name.sp.bin" >"$out" 2>"$err"
     code=$?
     if [ "$code" -eq 0 ]; then
-      run_timed "$TIMEOUT" "$OUT/$name.sp.bin" >"$out.run" 2>"$err.run"
-      rcode=$?
-      if [ "$rcode" -eq 0 ]; then record "$name" PASS "$cmd" "$(cat "$out.run")" "" "$rcode"
-      else record "$name" RUNTIME_FAILURE "$cmd && run" "rc=$rcode" "$(cat "$err.run")" "$rcode"; fi
+      # quarantine_probe is a deliberate use-after-free probe. Run it with
+      # CPLUS_QUARANTINE=1 (as tests/core/run.sh does) so the stale alias is
+      # caught and the correct result is the dangling-pointer exit (105).
+      # Without quarantine, allocator address reuse can make the stale alias
+      # bit-identical to a live pointer — a documented, still-open limitation.
+      case "$b" in
+        quarantine_probe.c)
+          run_timed "$TIMEOUT" env CPLUS_QUARANTINE=1 "$OUT/$name.sp.bin" >"$out.run" 2>"$err.run"
+          rcode=$?; expected_rcode=105 ;;
+        *)
+          run_timed "$TIMEOUT" "$OUT/$name.sp.bin" >"$out.run" 2>"$err.run"
+          rcode=$?; expected_rcode=0 ;;
+      esac
+      if [ "$rcode" -eq "$expected_rcode" ]; then record "$name" PASS "$cmd" "$(cat "$out.run")" "" "$rcode"
+      else record "$name" RUNTIME_FAILURE "$cmd && run (expected rc=$expected_rcode)" "rc=$rcode" "$(cat "$err.run")" "$rcode"; fi
     else
       record "$name" BUILD_FAILURE "$cmd" "" "$(head -3 "$err")" "$code"
     fi

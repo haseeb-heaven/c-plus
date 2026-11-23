@@ -1,0 +1,17 @@
+Real-world C: c+ --legacy-c --sanitize=none vs /usr/bin/clang
+generated: 2026-11-23T10:44:33.306912+00:00
+compiler: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+upstream: https://github.com/TheAlgorithms/C @ e5dad3fa8def3726ec850ca66a7f51521f8ad393
+
+counts: projects=6 passed=6 failed=0 failure_entries=0 source_preservation_passed=6 cplus_vs_clang_matches=6
+
+per-project:
+  catalan      status=PASS source=True stdout+exit=True cplus_rc=0 clang_rc=0
+  factorial    status=PASS source=True stdout+exit=True cplus_rc=0 clang_rc=0
+  gcd          status=PASS source=True stdout+exit=True cplus_rc=0 clang_rc=0
+  hash_crc32   status=PASS source=True stdout+exit=True cplus_rc=0 clang_rc=0
+  hash_djb2    status=PASS source=True stdout+exit=True cplus_rc=0 clang_rc=0
+  rot13        status=PASS source=True stdout+exit=True cplus_rc=0 clang_rc=0
+
+mismatches (0):
+  none

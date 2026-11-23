@@ -1,0 +1,8 @@
+case: catalan
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/catalan.clang
+rc: 0
+timed_out: False
+--- stdout ---
+42.00
+--- stderr ---
+

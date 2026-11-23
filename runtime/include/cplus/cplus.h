@@ -206,6 +206,30 @@ size_t cplus_alloc_bytes(const void *ptr);
  * dangling managed pointers; ordinary dereferences are not instrumented. */
 void cplus_check_live(const void *ptr);
 
+/* Additive generation introspection (ABI-neutral; no existing signature
+ * changes).  Each registration receives a monotonically increasing generation
+ * recorded in the side table.  `cplus_allocation_generation` returns the live
+ * allocation's generation, or zero when the pointer is not live;
+ * `cplus_epoch` returns the most recently issued generation; and
+ * `cplus_address_retired` reports whether this address has been retired by the
+ * runtime at some point.  Zero is never a valid generation.  A retired address
+ * may legitimately be reused by a later allocation. */
+uint64_t cplus_allocation_generation(const void *ptr);
+uint64_t cplus_epoch(void);
+int cplus_address_retired(const void *ptr);
+
+/* OPEN LIMIT (F2): ordinary C pointers carry no generation token.  If an
+ * address is freed and later reused by malloc/realloc for a new live
+ * allocation, a stale alias of the old allocation is bit-identical to a
+ * genuine pointer to the new one, so a release/query through that alias is
+ * accepted.  The persistent retired-address ledger does make double frees and
+ * stale liveness queries deterministic while the address is NOT live (even
+ * after the bounded recent cache evicts), but it cannot disambiguate a live
+ * address.  Closing F2 requires an ABI change (compiler-supplied provenance
+ * token or a fat pointer); an earlier no-reuse retry policy was reverted
+ * because it cost ~31x on alloc_churn and was still not sound.  Ordinary
+ * dereferences are not instrumented by this runtime. */
+
 /* Inserted by the C+ compiler for dynamic indices into fixed-size arrays.
  * Returns the index when it is in range; otherwise prints a diagnostic and
  * aborts before the out-of-bounds access happens. */

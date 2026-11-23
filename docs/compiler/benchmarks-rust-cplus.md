@@ -38,13 +38,22 @@ in bytes; stdout identical across all five configurations of each program).
 
 | program | c+ safe release | c+ legacy release | c+ debug | rustc -O | rustc opt-level=0 |
 | --- | --- | --- | --- | --- | --- |
-| bounds_sum | 0.030 s / 1,703,936 B | 0.030 s / 1,687,552 B | 0.080 s / 1,687,552 B | 0.010 s / 1,851,392 B | 0.450 s / 1,884,160 B |
-| integer_compute | 0.110 s / 1,671,168 B | 0.110 s / 1,687,552 B | 0.200 s / — | 0.120 s / — | 0.750 s / — |
-| pointer_chase | 0.070 s / — | 0.060 s / — | 0.080 s / — | 0.030 s / — | 0.450 s / — |
-| function_call | 0.140 s / — | 0.140 s / — | 1.510 s / — | 0.140 s / — | 0.910 s / — |
-| alloc_churn | 1.350 s / — | 1.330 s / — | 1.110 s / — | 0.170 s / — | 0.310 s / — |
-| raii_loop | 0.010 s / — | 0.010 s / — | 0.050 s / — | 0.010 s / — | 0.240 s / — |
-| method_dispatch | ≤0.01 s / — | ≤0.01 s / — | 0.110 s / — | ≤0.01 s / — | 0.340 s / — |
+| bounds_sum | 0.030 s / 1,687,552 B | 0.040 s / 1,687,552 B | 0.070 s / 1,703,936 B | 0.010 s / 1,851,392 B | 0.400 s / 1,884,160 B |
+| integer_compute | 0.110 s / 1,671,168 B | 0.110 s / 1,671,168 B | 0.160 s / — | 0.110 s / — | 0.580 s / — |
+| pointer_chase | 0.050 s / 17,645,568 B | 0.060 s / 17,678,336 B | 0.080 s / — | 0.040 s / 17,874,944 B | 0.420 s / — |
+| function_call | 0.140 s / — | 0.140 s / — | 1.420 s / — | 0.130 s / — | 0.760 s / — |
+| alloc_churn | 1.210 s / 1,785,856 B | 1.150 s / — | 1.240 s / — | 0.170 s / 1,900,544 B | 0.330 s / — |
+| raii_loop | 0.010 s / — | 0.010 s / — | 0.050 s / — | 0.010 s / — | 0.250 s / — |
+| method_dispatch | ≤0.01 s / — | ≤0.01 s / — | 0.120 s / — | ≤0.01 s / — | 0.350 s / — |
+
+These numbers were re-measured after wave 1 of the adversarial campaign; they
+supersede the earlier snapshot. During that campaign a prototype
+"never reuse retired addresses" runtime policy regressed `alloc_churn` to
+**31.02 s (31.6×)**. It was removed rather than accepted: the policy could not
+close the stale-free-after-reuse case without an ABI change, and the 31× cost
+was not justified. The current runtime performs one `malloc()` per managed
+allocation; `alloc_churn` is now 1.21 s versus a 0.98 s pre-campaign baseline
+(1.23×), with identical stdout.
 
 Full RSS values for every row are in the machine-readable summary; the table
 above is intentionally abbreviated. Ratios from the second runner (best time,
@@ -56,10 +65,10 @@ Rust peak RSS was about 1.8 MiB and C+ about 1.6–1.7 MiB (C+/Rust ratio
 ### Honest reading
 
 - **Same or close on compute/call-shaped work:** in the first runner,
-  `integer_compute` 0.110 s vs Rust -O 0.120 s (C+ **0.92×**, i.e. slightly
-  faster), `function_call` 0.140 s vs 0.140 s (**1.00×**), `raii_loop` 0.010 s
-  vs 0.010 s (**1.00×**). On `bounds_sum` C+ safe is 3× slower than Rust -O
-  on this run; on `alloc_churn` about 8× slower (side-table bookkeeping).
+  `integer_compute` 0.110 s vs Rust -O 0.110 s (**1.00×**),
+  `function_call` 0.140 s vs 0.130 s (**1.08×**), `raii_loop` 0.010 s
+  vs 0.010 s (**1.00×**). On `bounds_sum` C+ safe is ~3× slower than Rust -O
+  on this run; on `alloc_churn` ~7× slower (side-table bookkeeping).
 - C+ safe release and legacy release are nearly identical on all programs
   (mostly 1.00×), so the native checks cost little in these loops; the large
   allocation difference is the runtime side table, not general safety checks.

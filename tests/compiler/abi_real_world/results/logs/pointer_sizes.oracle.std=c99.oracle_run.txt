@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/pointer_sizes.oracle_std=c99.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+ptr=8,obj=8,ip=8,fn=8,vfn=8,up=8,st=8
+null=1,call=7
+
+--- stderr ---
+

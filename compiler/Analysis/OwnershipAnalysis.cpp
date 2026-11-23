@@ -9,6 +9,12 @@
 // see docs/compiler/upstream-reuse.md for the pinned source and notice.
 #include <clang/Analysis/Analyses/UninitializedValues.h>
 #include <clang/Analysis/AnalysisDeclContext.h>
+// For the driver's fail-closed parse probe. Licensed Apache-2.0 WITH
+// LLVM-exception; see docs/compiler/upstream-reuse.md.
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Frontend/ASTUnit.h>
+#include <clang/Frontend/PCHContainerOperations.h>
+#include <clang/Tooling/Tooling.h>
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -196,21 +202,32 @@ public:
     // valid macro-based I/O is not falsely diagnosed.
     bool unknownMacroCall = calleeName.empty() || !callee ||
                             calleeName.find("scan") != llvm::StringRef::npos;
-    if (!isOutputFunction(calleeName) && !unknownMacroCall)
-      return true;
+    const bool isOutput = isOutputFunction(calleeName) || unknownMacroCall;
     bool byValueOutput = unknownMacroCall || calleeName == "cplus_scan_one" ||
                          calleeName == "cplus_scan_value";
     for (const Expr *arg : call->arguments()) {
       const Expr *a = arg->IgnoreParenCasts();
       const auto *uo = dyn_cast<UnaryOperator>(a);
-      if (uo && uo->getOpcode() == UO_AddrOf)
+      if (uo && uo->getOpcode() == UO_AddrOf) {
         a = uo->getSubExpr()->IgnoreParenImpCasts();
-      else if (!byValueOutput)
+        if (const auto *ref = dyn_cast<DeclRefExpr>(a))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+            // C+ policy: only a whitelist of output functions initialises a
+            // variable through `&v`. An opaque callee does not. Record the
+            // latter separately so Clang's address-taken suppression can be
+            // compensated for without seeding the whitelist as initialised.
+            if (isOutput)
+              addrTaken_.insert(vd);
+            else
+              nonOutputAddrTaken_.insert(vd);
+          }
+        continue;
+      }
+      if (!byValueOutput)
         continue;
       if (const auto *ref = dyn_cast<DeclRefExpr>(a))
-        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
           addrTaken_.insert(vd);
-        }
     }
     return true;
   }
@@ -228,11 +245,15 @@ public:
 
   const std::vector<const VarDecl *> &vars() const { return vars_; }
   const std::set<const VarDecl *> &addrTaken() const { return addrTaken_; }
+  const std::set<const VarDecl *> &nonOutputAddrTaken() const {
+    return nonOutputAddrTaken_;
+  }
 
 private:
   ASTContext &ctx_;
   std::vector<const VarDecl *> vars_;
   std::set<const VarDecl *> addrTaken_;
+  std::set<const VarDecl *> nonOutputAddrTaken_;
 };
 
 class DefInitWalker {
@@ -385,11 +406,15 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
   // Upstream Clang dataflow replaces the previous hand-rolled worklist.
   // The handler filters to variables C+ tracks and to definitely-uninitialized
   // uses, preserving C+'s existing diagnostic wording and false-positive policy.
+  // Reported variables are recorded so the C+ policy pass below never emits a
+  // duplicate diagnostic for the same variable.
+  std::set<const VarDecl *> upstreamReported;
   class UpstreamUninitHandler : public clang::UninitVariablesHandler {
   public:
     UpstreamUninitHandler(const std::set<const VarDecl *> &tracked,
-                          const CfgReportFn &report)
-        : tracked_(tracked), report_(report) {}
+                          const CfgReportFn &report,
+                          std::set<const VarDecl *> &reported)
+        : tracked_(tracked), report_(report), reported_(reported) {}
 
     void handleUseOfUninitVariable(const VarDecl *vd,
                                    const clang::UninitUse &use) override {
@@ -409,27 +434,98 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
       case clang::UninitUse::Maybe:
         return;
       }
+      reported_.insert(vd);
       report_(user->getBeginLoc(),
               "variable '" + vd->getNameAsString() +
                   "' is uninitialized (read before it is initialized)");
     }
     void handleSelfInit(const VarDecl *vd) override {
-      if (vd && tracked_.count(vd))
+      if (vd && tracked_.count(vd)) {
+        reported_.insert(vd);
         report_(vd->getLocation(),
                 "variable '" + vd->getNameAsString() +
                     "' is uninitialized (read before it is initialized)");
+      }
     }
 
   private:
     const std::set<const VarDecl *> &tracked_;
     CfgReportFn report_;
+    std::set<const VarDecl *> &reported_;
   };
 
   clang::AnalysisDeclContext ac(nullptr, fd);
-  UpstreamUninitHandler handler(tracked, report);
+  UpstreamUninitHandler handler(tracked, report, upstreamReported);
   clang::UninitVariablesAnalysisStats stats{};
   clang::runUninitializedVariablesAnalysis(*fd, *cfg, ac, handler, stats);
-  (void)entryInit; // retained for the C+ collector; upstream seeds params itself
+
+  // Preserve C+'s diagnostic policy where upstream Clang deliberately
+  // suppresses reports: Clang treats a variable as initialised when its
+  // address is passed to *any* function, while C+ only recognises a whitelist
+  // of output functions (scanf/getline/pthread_init/...). A variable whose
+  // address escapes to an opaque callee would otherwise be accepted even when
+  // it is read before any definite initialisation (e.g. `void h(int*);
+  // int f(void){int x; h(&x); return x;}`). Run the original must-analysis
+  // worklist for precisely those variables, seeding the same entry state and
+  // skipping anything upstream already reported. Valid output-parameter and
+  // initialised programs are untouched, so this restores detection without
+  // introducing new diagnostics for correct code.
+  std::set<const VarDecl *> needsPolicyPass;
+  for (const VarDecl *vd : collector.nonOutputAddrTaken())
+    if (tracked.count(vd) && !entryInit.count(vd) &&
+        !upstreamReported.count(vd))
+      needsPolicyPass.insert(vd);
+  if (needsPolicyPass.empty())
+    return;
+
+  const size_t n = cfg->size();
+  std::vector<CFGBlock *> blocks(n, nullptr);
+  for (CFGBlock *b : *cfg)
+    if (b)
+      blocks[b->getBlockID()] = b;
+  std::vector<std::set<const VarDecl *>> in(n);
+  std::vector<bool> reached(n, false);
+  std::set<const Stmt *> reportedStmts;
+
+  std::deque<size_t> work;
+  const size_t entryId = cfg->getEntry().getBlockID();
+  in[entryId] = entryInit;
+  reached[entryId] = true;
+  work.push_back(entryId);
+
+  while (!work.empty()) {
+    const size_t id = work.front();
+    work.pop_front();
+    CFGBlock *block = blocks[id];
+    if (!block)
+      continue;
+    std::set<const VarDecl *> cur = in[id];
+    for (const CFGElement &el : *block) {
+      std::optional<CFGStmt> stmt = el.getAs<CFGStmt>();
+      if (!stmt)
+        continue;
+      DefInitWalker walker(ctx, needsPolicyPass, cur, report, reportedStmts);
+      walker.walk(stmt->getStmt());
+    }
+    for (const CFGBlock *succ : block->succs()) {
+      if (!succ)
+        continue;
+      const size_t sid = succ->getBlockID();
+      if (!reached[sid]) {
+        in[sid] = cur;
+        reached[sid] = true;
+        work.push_back(sid);
+      } else {
+        std::set<const VarDecl *> merged;
+        std::set_intersection(in[sid].begin(), in[sid].end(), cur.begin(),
+                              cur.end(), std::inserter(merged, merged.begin()));
+        if (merged != in[sid]) {
+          in[sid] = merged;
+          work.push_back(sid);
+        }
+      }
+    }
+  }
 }
 
 } // namespace cplus
@@ -746,5 +842,82 @@ const std::vector<ContractIssue> &contractIssues() {
 
 bool contractsLoaded() {
   return loadedContracts().loaded;
+}
+
+SafetyAstProbe probeSafetyAst(const std::string &source,
+                              const std::vector<std::string> &args,
+                              const std::string &fileName) {
+  SafetyAstProbe result;
+
+  // Keep only the flags that affect parsing, matching checkAstSafety(). A
+  // synthetic .c name forces C (not C++) language inference by the tooling
+  // layer, and the resource dir mirrors the main safety AST build.
+  std::vector<std::string> parseArgs;
+  for (const auto &arg : args) {
+    if (arg.rfind("-I", 0) == 0 || arg.rfind("-D", 0) == 0 ||
+        arg.rfind("-std=", 0) == 0)
+      parseArgs.push_back(arg);
+  }
+#ifdef CPLUS_CLANG_RESOURCE_DIR
+  parseArgs.push_back(std::string("-resource-dir=") + CPLUS_CLANG_RESOURCE_DIR);
+#endif
+  parseArgs.push_back("-fsyntax-only");
+  const std::string astFile = fileName + ".cprobe.c";
+
+  clang::IgnoringDiagConsumer ignore;
+  std::unique_ptr<clang::ASTUnit> ast =
+      clang::tooling::buildASTFromCodeWithArgs(
+          source, parseArgs, astFile, "cplus-ast-probe",
+          std::make_shared<clang::PCHContainerOperations>(),
+          clang::tooling::getClangStripDependencyFileAdjuster(), {}, &ignore);
+  if (!ast || ast->getDiagnostics().hasErrorOccurred()) {
+    result.parsed = false;
+    return result;
+  }
+
+  clang::ASTContext &ctx = ast->getASTContext();
+  clang::SourceManager &sm = ctx.getSourceManager();
+
+  // Only report bodiless functions that are actually called and that are
+  // declared in user code (not a system header). Library declarations such as
+  // printf/malloc therefore never trigger the disclosure.
+  std::set<llvm::StringRef> called;
+  struct CallCollector : clang::RecursiveASTVisitor<CallCollector> {
+    std::set<llvm::StringRef> &names;
+    explicit CallCollector(std::set<llvm::StringRef> &n) : names(n) {}
+    bool VisitCallExpr(clang::CallExpr *call) {
+      if (const clang::FunctionDecl *fd = call->getDirectCallee())
+        names.insert(fd->getName());
+      return true;
+    }
+  } calls(called);
+  calls.TraverseDecl(ctx.getTranslationUnitDecl());
+
+  std::set<std::string> unresolved;
+  struct DeclCollector : clang::RecursiveASTVisitor<DeclCollector> {
+    clang::SourceManager &sm;
+    const std::set<llvm::StringRef> &called;
+    std::set<std::string> &out;
+    DeclCollector(clang::SourceManager &s, const std::set<llvm::StringRef> &c,
+                  std::set<std::string> &o)
+        : sm(s), called(c), out(o) {}
+    bool VisitFunctionDecl(clang::FunctionDecl *fd) {
+      // hasBody() considers redeclarations, so a prototype followed by a
+      // definition in the same TU is not mistaken for an external function.
+      if (fd->isImplicit() || fd->hasBody())
+        return true;
+      if (!called.count(fd->getName()))
+        return true;
+      clang::SourceLocation loc = fd->getLocation();
+      if (loc.isValid() && sm.isInSystemHeader(loc))
+        return true;
+      out.insert(fd->getNameAsString());
+      return true;
+    }
+  } decls(sm, called, unresolved);
+  decls.TraverseDecl(ctx.getTranslationUnitDecl());
+
+  result.unresolvedFunctions.assign(unresolved.begin(), unresolved.end());
+  return result;
 }
 } // namespace cplus

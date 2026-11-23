@@ -1,0 +1,13 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/exported_symbols.oracle_std=c99.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+0000000100000000 T __mh_execute_header
+0000000100003ec4 T _main
+0000000100003e9c T _rw_add_exported
+0000000100008000 D _rw_glob_counter
+0000000100008008 D _rw_glob_name
+
+--- stderr ---
+

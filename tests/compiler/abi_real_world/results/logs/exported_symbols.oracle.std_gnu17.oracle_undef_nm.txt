@@ -1,0 +1,9 @@
+command: /usr/bin/nm -u /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/exported_symbols.oracle_std_gnu17.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+_printf
+
+--- stderr ---
+

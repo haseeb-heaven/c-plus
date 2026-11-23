@@ -281,25 +281,76 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
  * releases are detected without touching freed memory.  The metadata lives
  * beside the allocation, never in front of the user pointer.
  *
- * A small direct-mapped cache remembers recently freed addresses, which lets
- * us report a double release even when malloc has already handed the same
- * address out again.  It is bounded, so bookkeeping stays O(1).
+ * Temporal (generation) model
+ * ---------------------------
+ * Every registration gets a monotonically increasing generation stored in the
+ * side table.  A direct-mapped recent-free cache records the (address,
+ * generation) pair of each retired allocation, and a persistent retired-address
+ * ledger records the generation under which each address was last retired.
+ *
+ * The ledger is the important part: the recent cache and the quarantine ring
+ * are bounded and evict, but the ledger does not.  A release of an address that
+ * is no longer live is therefore a deterministic double free (104) even long
+ * after the recent cache has been overwritten, and a stale liveness query is a
+ * deterministic dangling-pointer failure (105).  A live-table hit is still a
+ * legitimate release, so ordinary alloc/free churn produces no false positives.
+ *
+ * OPEN LIMIT (F2 - stale free at a REUSED address; no pointer ABI change):
+ *   Ordinary C pointers carry no generation token.  If allocation A at address
+ *   X is freed and malloc later hands X out again as live allocation B, a
+ *   stale integer alias of A passed to cplus_release/cplus_free_registered is
+ *   bit-identical to a genuine pointer to B: cplus_find_live(X) finds B's live
+ *   slot and the release is accepted.  The retired ledger cannot help because
+ *   the address is legitimately live again, and rejecting it would produce
+ *   false positives on every normal reuse.
+ *
+ *   An earlier attempt to close F2 by refusing to re-register retired
+ *   addresses (malloc retry loops plus a quarantine of rejected blocks) was
+ *   reverted: on macOS allocator reuse it cost ~31x on alloc_churn while still
+ *   not being sound once the bounded ring wrapped.  Closing F2 requires an ABI
+ *   change (a compiler-supplied provenance token or a fat pointer).  Ordinary
+ *   dereferences are not instrumented by this runtime either.
  * ------------------------------------------------------------------------- */
 
 #define CPLUS_LIVE_INITIAL 64u
 #define CPLUS_RECENT_SLOTS 4096u
+#define CPLUS_RETIRED_INITIAL 256u
+/* Upper bound on retired ledger entries.  Beyond this we stop inserting new
+ * addresses and set cplus_retired_wrapped; double-free detection for those
+ * addresses then degrades to the bounded recent cache (documented above). */
+#define CPLUS_RETIRED_MAX 1048576u
 #define CPLUS_TOMBSTONE ((void *)(uintptr_t)-1)
 
 typedef struct cplus_live_slot {
   void *ptr;
   size_t size;
+  uint64_t generation;
 } cplus_live_slot;
+
+typedef struct cplus_recent_slot {
+  void *ptr;
+  uint64_t generation;
+} cplus_recent_slot;
+
+typedef struct cplus_retired_slot {
+  void *ptr;
+  uint64_t generation;
+} cplus_retired_slot;
+
+/* Generation zero is reserved for "none"; the counter starts at one. */
+static uint64_t cplus_generation = 1u;
 
 static cplus_live_slot *cplus_live = NULL;
 static size_t cplus_live_cap = 0;
 static size_t cplus_live_count = 0;
 static size_t cplus_live_deleted = 0;
-static void *cplus_recent[CPLUS_RECENT_SLOTS];
+static cplus_recent_slot cplus_recent[CPLUS_RECENT_SLOTS];
+
+static cplus_retired_slot *cplus_retired = NULL;
+static size_t cplus_retired_cap = 0;
+static size_t cplus_retired_count = 0;
+static size_t cplus_retired_deleted = 0;
+static int cplus_retired_wrapped = 0;
 
 /* Opt-in temporal-safety experiment: keep released blocks out of malloc's
  * reuse pool for a bounded time so stale aliases are detected instead of
@@ -339,6 +390,13 @@ static size_t cplus_recent_index(const void *p) {
   return (size_t)(cplus_hash(p) & (CPLUS_RECENT_SLOTS - 1u));
 }
 
+/* Called with the allocator lock held.  Never returns zero. */
+static uint64_t cplus_next_generation(void) {
+  if (cplus_generation == UINT64_MAX)
+    cplus_generation = 1u; /* wrap only after 2^64 registrations */
+  return cplus_generation++;
+}
+
 static cplus_live_slot *cplus_find_live(const void *p) {
   if (cplus_live_cap == 0)
     return NULL;
@@ -355,7 +413,7 @@ static cplus_live_slot *cplus_find_live(const void *p) {
   return NULL;
 }
 
-static void cplus_live_insert(const void *p, size_t size) {
+static void cplus_live_insert(const void *p, size_t size, uint64_t generation) {
   size_t mask = cplus_live_cap - 1;
   size_t i = cplus_hash(p) & mask;
   while (cplus_live[i].ptr != NULL && cplus_live[i].ptr != CPLUS_TOMBSTONE)
@@ -364,7 +422,91 @@ static void cplus_live_insert(const void *p, size_t size) {
     --cplus_live_deleted;
   cplus_live[i].ptr = (void *)p;
   cplus_live[i].size = size;
+  cplus_live[i].generation = generation;
   ++cplus_live_count;
+}
+
+/* Persistent retired-address ledger --------------------------------------- */
+
+static size_t cplus_retired_index(const void *p) {
+  return (size_t)(cplus_hash(p) & (cplus_retired_cap - 1u));
+}
+
+/* Called with the allocator lock held. */
+static cplus_retired_slot *cplus_find_retired(const void *p) {
+  if (cplus_retired_cap == 0)
+    return NULL;
+  size_t mask = cplus_retired_cap - 1;
+  size_t i = cplus_retired_index(p);
+  for (size_t probe = 0; probe <= mask; ++probe) {
+    void *slot = cplus_retired[i].ptr;
+    if (slot == p)
+      return &cplus_retired[i];
+    if (slot == NULL)
+      return NULL;
+    i = (i + 1) & mask;
+  }
+  return NULL;
+}
+
+/* Called with the allocator lock held. */
+static uint64_t cplus_retired_generation(const void *p) {
+  cplus_retired_slot *slot = cplus_find_retired(p);
+  return slot ? slot->generation : 0u;
+}
+
+/* Called with the allocator lock held. */
+static void cplus_retired_grow(void) {
+  size_t cap = cplus_retired_cap ? cplus_retired_cap * 2u
+                                 : CPLUS_RETIRED_INITIAL;
+  cplus_retired_slot *fresh =
+      (cplus_retired_slot *)calloc(cap, sizeof(*fresh));
+  if (!fresh) {
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "retired-address ledger failed");
+  }
+  for (size_t k = 0; k < cplus_retired_cap; ++k) {
+    void *p = cplus_retired[k].ptr;
+    if (p != NULL && p != CPLUS_TOMBSTONE) {
+      size_t mask = cap - 1u;
+      size_t i = (size_t)(cplus_hash(p) & mask);
+      while (fresh[i].ptr != NULL)
+        i = (i + 1) & mask;
+      fresh[i] = cplus_retired[k];
+    }
+  }
+  free(cplus_retired);
+  cplus_retired = fresh;
+  cplus_retired_cap = cap;
+  cplus_retired_deleted = 0;
+}
+
+/* Called with the allocator lock held.  Records the generation under which an
+ * address was retired.  A repeated retirement updates the recorded generation;
+ * the address may legitimately be reused by a later allocation. */
+static void cplus_retired_insert(const void *p, uint64_t generation) {
+  cplus_retired_slot *slot = cplus_find_retired(p);
+  if (slot) {
+    slot->generation = generation;
+    return;
+  }
+  if (cplus_retired_count + cplus_retired_deleted + 1u >= CPLUS_RETIRED_MAX) {
+    cplus_retired_wrapped = 1;
+    return;
+  }
+  if ((cplus_retired_count + cplus_retired_deleted + 1u) * 4u >
+      cplus_retired_cap * 3u)
+    cplus_retired_grow();
+  size_t mask = cplus_retired_cap - 1u;
+  size_t i = cplus_retired_index(p);
+  while (cplus_retired[i].ptr != NULL &&
+         cplus_retired[i].ptr != CPLUS_TOMBSTONE)
+    i = (i + 1) & mask;
+  if (cplus_retired[i].ptr == CPLUS_TOMBSTONE)
+    --cplus_retired_deleted;
+  cplus_retired[i].ptr = (void *)p;
+  cplus_retired[i].generation = generation;
+  ++cplus_retired_count;
 }
 
 /* Called with the allocator lock held. */
@@ -402,9 +544,10 @@ void *cplus_register_allocation(void *p, size_t bytes, const char *file,
     cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", file,
                       line, "pointer is already a live C+ allocation");
   }
+  uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
-  cplus_live_insert(p, bytes);
+  cplus_live_insert(p, bytes, gen);
   cplus_alloc_unlock();
   return p;
 }
@@ -414,18 +557,26 @@ void *cplus_realloc_registered(void *oldp, void *newp, size_t bytes,
   if (!newp)
     return newp; /* realloc failed: the old block is still live */
   cplus_alloc_lock();
+  /* Note (F2): raw realloc() may return the same address, or an address that
+   * was retired earlier.  We cannot relocate it without changing the pointer
+   * the caller expects, so an old alias at a reused address remains
+   * indistinguishable from the new allocation - documented in the file header. */
   if (oldp) {
     cplus_live_slot *old = cplus_find_live(oldp);
     if (old) {
+      uint64_t old_generation = old->generation;
       old->ptr = CPLUS_TOMBSTONE;
       --cplus_live_count;
       ++cplus_live_deleted;
-      cplus_recent[cplus_recent_index(oldp)] = oldp;
+      cplus_recent[cplus_recent_index(oldp)].ptr = oldp;
+      cplus_recent[cplus_recent_index(oldp)].generation = old_generation;
+      cplus_retired_insert(oldp, old_generation);
     }
   }
+  uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
-  cplus_live_insert(newp, bytes);
+  cplus_live_insert(newp, bytes, gen);
   cplus_alloc_unlock();
   return newp;
 }
@@ -434,20 +585,29 @@ void cplus_free_registered(void *p, const char *file, int line) {
   if (!p)
     return;
   cplus_alloc_lock();
+  /* The retired ledger is consulted on a live-table miss only.  A live hit is
+   * a legitimate release of the current generation, so normal reuse of an
+   * address produces no false double-free; a release of an address that is no
+   * longer live is deterministic even after the recent cache evicted. */
+  uint64_t retired_generation = cplus_retired_generation(p);
   cplus_live_slot *slot = cplus_find_live(p);
   if (!slot) {
-    int recently_freed = cplus_recent[cplus_recent_index(p)] == p;
+    cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(p)];
+    int recently_freed = recent->ptr == p;
     cplus_alloc_unlock();
-    if (recently_freed)
+    if (retired_generation != 0u || recently_freed)
       cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", file, line,
                         "allocation released twice");
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", file, line,
                       "pointer was not registered with the C+ runtime");
   }
+  uint64_t generation = slot->generation;
   slot->ptr = CPLUS_TOMBSTONE;
   --cplus_live_count;
   ++cplus_live_deleted;
-  cplus_recent[cplus_recent_index(p)] = p;
+  cplus_recent[cplus_recent_index(p)].ptr = p;
+  cplus_recent[cplus_recent_index(p)].generation = generation;
+  cplus_retired_insert(p, generation);
   cplus_alloc_unlock();
   free(p);
 }
@@ -461,9 +621,10 @@ void *cplus_alloc(size_t size) {
                       "managed allocation failed");
   }
   cplus_alloc_lock();
+  uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
-  cplus_live_insert(p, size);
+  cplus_live_insert(p, size, gen);
   cplus_alloc_unlock();
   return p;
 }
@@ -494,8 +655,10 @@ void *cplus_realloc(void *ptr, size_t size) {
     cplus_release(ptr);
     return NULL;
   }
-  /* cplus_realloc is an ownership transfer: the old pointer is released and
-   * every old alias becomes a dangling pointer, so stale use is detected. */
+  /* cplus_realloc is an ownership transfer: the old slot is retired with its
+   * generation and the fresh block gets a new generation.  If malloc happens
+   * to reuse the old address, an old alias can no longer be distinguished
+   * from the new allocation (F2, documented in the file header). */
   void *fresh = cplus_alloc(size);
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
@@ -517,20 +680,27 @@ void cplus_release(void *ptr) {
   cplus_log(CPLUS_LOG_DEBUG, "cplus_release ptr=%p", ptr);
 
   cplus_alloc_lock();
+  /* Retired-ledger hit on a live-table miss is authoritative and survives
+   * cache eviction; a live hit is always a legitimate release. */
+  uint64_t retired_generation = cplus_retired_generation(ptr);
   cplus_live_slot *slot = cplus_find_live(ptr);
   if (!slot) {
-    int recently_freed = cplus_recent[cplus_recent_index(ptr)] == ptr;
+    cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(ptr)];
+    int recently_freed = recent->ptr == ptr;
     cplus_alloc_unlock();
-    if (recently_freed)
+    if (retired_generation != 0u || recently_freed)
       cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", NULL, 0,
                         "managed memory released twice");
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", NULL, 0,
                       "pointer was not produced by the C+ allocator");
   }
+  uint64_t generation = slot->generation;
   slot->ptr = CPLUS_TOMBSTONE;
   --cplus_live_count;
   ++cplus_live_deleted;
-  cplus_recent[cplus_recent_index(ptr)] = ptr;
+  cplus_recent[cplus_recent_index(ptr)].ptr = ptr;
+  cplus_recent[cplus_recent_index(ptr)].generation = generation;
+  cplus_retired_insert(ptr, generation);
   if (cplus_quarantine_enabled()) {
     void *oldest = cplus_quarantine[cplus_quarantine_next];
     cplus_quarantine[cplus_quarantine_next] = ptr;
@@ -575,6 +745,34 @@ size_t cplus_alloc_bytes(const void *ptr) {
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
                       0, "pointer is not a live C+ allocation");
   return bytes;
+}
+
+/* Additive generation introspection.  These do not change any existing ABI. */
+
+uint64_t cplus_allocation_generation(const void *ptr) {
+  if (!ptr)
+    return 0u;
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_find_live(ptr);
+  uint64_t gen = slot ? slot->generation : 0u;
+  cplus_alloc_unlock();
+  return gen;
+}
+
+uint64_t cplus_epoch(void) {
+  cplus_alloc_lock();
+  uint64_t epoch = cplus_generation;
+  cplus_alloc_unlock();
+  return epoch;
+}
+
+int cplus_address_retired(const void *ptr) {
+  if (!ptr)
+    return 0;
+  cplus_alloc_lock();
+  int retired = cplus_retired_generation(ptr) != 0u;
+  cplus_alloc_unlock();
+  return retired;
 }
 
 size_t cplus_alloc_count(const void *ptr, size_t elem_size) {

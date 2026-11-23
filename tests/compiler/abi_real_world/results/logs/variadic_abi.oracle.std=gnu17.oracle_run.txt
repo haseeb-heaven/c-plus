@@ -1,0 +1,12 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/variadic_abi.oracle_std=gnu17.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+sum=36,42
+d=v,7,2.50,100,ok
+ret=107
+snp=11:fmt=3/1.5/z
+
+--- stderr ---
+

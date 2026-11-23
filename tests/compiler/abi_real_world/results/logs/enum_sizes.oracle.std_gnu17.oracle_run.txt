@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/enum_sizes.oracle_std_gnu17.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+e=4,4,4 v=7,2147483647,2147483646 raw=07000000
+
+--- stderr ---
+

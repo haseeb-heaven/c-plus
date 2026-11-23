@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/union_layout.oracle_std_gnu17.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+size=16 d=2.5:00000000000004400000000000000000
+i=-7:f9ffffffffffffff0000000000000000
+
+--- stderr ---
+

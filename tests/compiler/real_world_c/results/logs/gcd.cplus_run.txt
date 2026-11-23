@@ -1,0 +1,10 @@
+case: gcd
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/gcd.cplus
+rc: 0
+timed_out: False
+--- stdout ---
+Input two numbers:
+Greatest common divisor: 6
+
+--- stderr ---
+

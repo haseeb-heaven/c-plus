@@ -68,6 +68,26 @@ using CfgReportFn =
 void checkDefiniteInitialization(clang::ASTContext &ctx,
                                  clang::FunctionDecl *fd, const CfgReportFn &report);
 
+/// Result of a lightweight parse probe used by the driver to (a) fail closed
+/// when the in-memory safety AST cannot be built and (b) disclose that STRICT
+/// analysis stops at translation-unit boundaries.
+struct SafetyAstProbe {
+  /// False when the source (with the backend's parse-relevant flags) failed to
+  /// parse. The C+ safety analysis would then be silently skipped.
+  bool parsed = true;
+  /// Names of user (non-system-header) functions that are referenced by the
+  /// translation unit but have no definition in it. Their bodies live in
+  /// another TU or a library and are therefore not safety-checked here.
+  std::vector<std::string> unresolvedFunctions;
+};
+
+/// Build an in-memory Clang AST for `source` with the same parse-relevant
+/// arguments the backend compile uses. This never emits user-facing
+/// diagnostics; it only reports parse viability and bodiless user functions.
+SafetyAstProbe probeSafetyAst(const std::string &source,
+                              const std::vector<std::string> &args,
+                              const std::string &fileName);
+
 } // namespace cplus
 
 #endif

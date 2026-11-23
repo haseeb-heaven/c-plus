@@ -10,6 +10,8 @@
 
 #include "Sema/CPlusLexer.h"
 
+#include <algorithm>
+#include <climits>
 #include <cstdint>
 #include <cstdlib>
 #include <sstream>
@@ -44,6 +46,14 @@ struct TrackedArrayPointer {
 };
 
 class Checker {
+  // Declared before the helpers that use it.
+  struct FuncSig {
+    std::vector<std::string> params;
+    std::vector<bool> outParam; // `T **out`: an allocation written via *out
+    size_t bodyOpen = 0;
+    size_t bodyClose = 0;
+  };
+
 public:
   Checker(const std::string &source,
           const std::map<std::string, size_t> &arrays,
@@ -64,6 +74,13 @@ public:
     collectFunctions();
     for (const auto &entry : funcs_)
       functionOpens_.insert(entry.second.bodyOpen);
+    // Red-team closure: bounds that escape single-function/loop analysis.
+    // These run before the token loop so every subscript site can consult the
+    // constant, recursion and out-param facts collected here.
+    collectLocalConstants();
+    collectCallGraph();
+    collectRecursiveCallArgs();
+    collectOutParamAllocations();
     collectCallConstants();
     collectAllocations();
     collectReturnExtents();
@@ -99,6 +116,8 @@ public:
         checkTypePunnedDeref(i); // bug 45
         checkPointerArithmetic(i);
         checkTrackedArrayPointer(i); // constant index / one-past / multi-dim
+        checkRecursiveArraySubscript(i); // unbounded parameter in a cycle
+        checkOutParamHeapSubscript(i);   // extent learned from make(&p)
         checkDirectOnePastDeref(i);  // *(array + N) at the array extent
         checkUnrelatedPointerCompare(i);
         checkEmptyInfiniteLoop(i);
@@ -547,6 +566,518 @@ private:
     }
   }
 
+  //===--------------------------------------------------------------------===//
+  // Red-team closure: position-keyed constant facts and alias resolution.
+  //
+  // Rationale: the checker used to accept only literal subscripts, so any
+  // laundering step (cast, field store, typedef, ternary, ++ chain, recursion)
+  // hid a provably out-of-bounds index.  Every fact below is keyed by source
+  // position and invalidated on the next write, so a stale fact can never
+  // reject valid C.  Nothing here changes DEFAULT behaviour for unbounded
+  // indices: we only report a value we can actually prove.
+  //===--------------------------------------------------------------------===//
+
+  static constexpr long kInvalidConst = LONG_MIN;
+
+  size_t stmtEnd(size_t from) const {
+    int paren = 0, bracket = 0, brace = 0;
+    for (size_t k = from; k < toks_.size(); ++k) {
+      if (isPunct(k, "(")) ++paren;
+      else if (isPunct(k, ")")) { if (paren > 0) --paren; }
+      else if (isPunct(k, "[")) ++bracket;
+      else if (isPunct(k, "]")) { if (bracket > 0) --bracket; }
+      else if (isPunct(k, "{")) ++brace;
+      else if (isPunct(k, "}")) {
+        if (brace == 0) return k;
+        --brace;
+      } else if ((isPunct(k, ";") || isPunct(k, ",")) && paren == 0 &&
+                 bracket == 0 && brace == 0) {
+        return k;
+      }
+    }
+    return toks_.size();
+  }
+
+  void trim(size_t *from, size_t *to) const {
+    while (*from < *to && trivia(*from)) ++*from;
+    while (*to > *from && trivia(*to - 1)) --*to;
+  }
+
+  bool localConstAt(const std::string &name, size_t pos, long *out) const {
+    auto it = localConsts_.find(name);
+    if (it == localConsts_.end())
+      return false;
+    long value = kInvalidConst;
+    for (const auto &ev : it->second) {
+      if (ev.first > pos)
+        break;
+      value = ev.second;
+    }
+    if (value == kInvalidConst)
+      return false;
+    *out = value;
+    return true;
+  }
+
+  /// Evaluate a compile-time integer expression used as an index.  Handles
+  /// literals, signs, local constant facts, `cond ? a : b` and literal-return
+  /// helpers.  Unknown expressions simply return false (no diagnostic).
+  bool indexExprValue(size_t from, size_t to, long *out) const {
+    trim(&from, &to);
+    if (from >= to)
+      return false;
+    if (isPunct(from, "-") || isPunct(from, "+")) {
+      long v = 0;
+      if (!indexExprValue(from + 1, to, &v))
+        return false;
+      *out = isPunct(from, "-") ? -v : v;
+      return true;
+    }
+    size_t q = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t k = from; k < to; ++k) {
+      if (isPunct(k, "(")) ++paren;
+      else if (isPunct(k, ")")) --paren;
+      else if (isPunct(k, "[")) ++bracket;
+      else if (isPunct(k, "]")) --bracket;
+      else if (isPunct(k, "?") && paren == 0 && bracket == 0) { q = k; break; }
+    }
+    if (q != kNPos) {
+      size_t colon = kNPos;
+      paren = 0; bracket = 0;
+      for (size_t k = q + 1; k < to; ++k) {
+        if (isPunct(k, "(")) ++paren;
+        else if (isPunct(k, ")")) --paren;
+        else if (isPunct(k, "[")) ++bracket;
+        else if (isPunct(k, "]")) --bracket;
+        else if (isPunct(k, ":") && paren == 0 && bracket == 0) { colon = k; break; }
+      }
+      if (colon == kNPos)
+        return false;
+      long cond = 0;
+      if (indexExprValue(from, q, &cond))
+        return indexExprValue(cond ? q + 1 : colon + 1,
+                              cond ? colon : to, out);
+      long a = 0, b = 0;
+      bool okA = indexExprValue(q + 1, colon, &a);
+      bool okB = indexExprValue(colon + 1, to, &b);
+      if (!okA || !okB)
+        return false;
+      // Both branches are literals but the condition is not: take the larger
+      // branch so an unavoidable out-of-bounds path is still diagnosed.
+      *out = std::max(a, b);
+      return true;
+    }
+    if (isPunct(from, "(")) {
+      size_t close = matchIn(from, to, "(", ")");
+      if (close != kNPos) {
+        size_t last = close;
+        while (last > from + 1 && trivia(last - 1)) --last;
+        if (last == to)
+          return indexExprValue(from + 1, close, out);
+      }
+    }
+    if (from + 1 == to) {
+      long v = 0;
+      if (number(toks_[from], &v)) { *out = v; return true; }
+      if (toks_[from].kind == TokKind::Identifier) {
+        if (localConstAt(toks_[from].text, from, &v)) { *out = v; return true; }
+        auto r = returnConstants_.find(toks_[from].text);
+        if (r != returnConstants_.end()) { *out = r->second; return true; }
+      }
+    }
+    if (toks_[from].kind == TokKind::Identifier) {
+      size_t lp = nextSig(from);
+      if (lp < to && isPunct(lp, "(")) {
+        size_t rp = matchIn(lp, to, "(", ")");
+        if (rp != kNPos) {
+          bool tail = true;
+          for (size_t k = rp + 1; k < to; ++k)
+            if (!trivia(k)) { tail = false; break; }
+          auto r = returnConstants_.find(toks_[from].text);
+          if (tail && r != returnConstants_.end()) { *out = r->second; return true; }
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Record every write to a name with the value (or "invalid").  A fact is
+  /// only visible at source positions after its write and before the next.
+  void collectLocalConstants() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      const std::string name = toks_[i].text;
+      size_t n = nextSig(i);
+      if (isPunct(n, "=")) {
+        long v = 0;
+        size_t end = stmtEnd(nextSig(n));
+        auto &ev = localConsts_[name];
+        if (indexExprValue(nextSig(n), end, &v))
+          ev.push_back({i, v});
+        else
+          ev.push_back({i, kInvalidConst});
+        continue;
+      }
+      if (isPunct(n, "++") || isPunct(n, "--") || isPunct(n, "+=") ||
+          isPunct(n, "-=") || isPunct(n, "*=") || isPunct(n, "/=") ||
+          isPunct(n, "%=") || isPunct(prevSig(i), "&")) {
+        localConsts_[name].push_back({i, kInvalidConst});
+        continue;
+      }
+      if ((isPunct(i, "++") || isPunct(i, "--")) &&
+          n < toks_.size() && toks_[n].kind == TokKind::Identifier)
+        localConsts_[toks_[n].text].push_back({i, kInvalidConst});
+    }
+    // A function with one `return <literal>;` is a constant expression at
+    // its call sites (`a[nine()]` is otherwise invisible to token analysis).
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      long v = 0;
+      int count = 0;
+      bool single = true;
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (!isIdent(k, "return"))
+          continue;
+        ++count;
+        if (!indexExprValue(nextSig(k), stmtEnd(nextSig(k)), &v))
+          single = false;
+      }
+      if (count == 1 && single)
+        returnConstants_[entry.first] = v;
+    }
+  }
+
+  /// Strip `(Type *)` casts and fully enclosing parentheses from an
+  /// initialiser so `void *v = a; int *p = (int *)v;` stays one alias chain.
+  size_t stripCast(size_t from, size_t end) const {
+    size_t r = from;
+    for (int guard = 0; guard < 8; ++guard) {
+      while (r < end && trivia(r)) ++r;
+      if (!isPunct(r, "("))
+        break;
+      size_t close = matchIn(r, end, "(", ")");
+      if (close == kNPos)
+        break;
+      size_t last = close;
+      while (last > r + 1 && trivia(last - 1)) --last;
+      bool typed = false, valid = true;
+      for (size_t k = r + 1; k < last; ++k) {
+        if (toks_[k].kind == TokKind::Identifier) {
+          if (isTypeWord(toks_[k].text) || toks_[k].text == "void")
+            typed = true;
+        } else if (isPunct(k, "*")) {
+          typed = true;
+        } else {
+          valid = false;
+          break;
+        }
+      }
+      if (valid && typed) {
+        r = nextSig(close);
+        continue;
+      }
+      size_t after = nextSig(close);
+      bool onlyTrivia = true;
+      for (size_t k = after; k < end; ++k)
+        if (!trivia(k)) { onlyTrivia = false; break; }
+      if (onlyTrivia) { r = nextSig(r); continue; }
+      break;
+    }
+    return r;
+  }
+
+  /// Innermost function whose body contains `pos`.
+  const std::string *enclosingFunction(size_t pos) const {
+    const std::string *best = nullptr;
+    size_t bestOpen = 0;
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (pos >= sig.bodyOpen && pos <= sig.bodyClose &&
+          (!best || sig.bodyOpen > bestOpen)) {
+        best = &entry.first;
+        bestOpen = sig.bodyOpen;
+      }
+    }
+    return best;
+  }
+
+  // --- recursion / mutual recursion ----------------------------------------
+
+  std::map<std::string, std::set<std::string>> callGraph_;
+
+  void collectCallGraph() {
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      auto &out = callGraph_[entry.first];
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (toks_[k].kind != TokKind::Identifier ||
+            !funcs_.count(toks_[k].text))
+          continue;
+        size_t lp = nextSig(k);
+        if (!isPunct(lp, "(")) continue;
+        if (isPunct(prevSig(k), ".") || isPunct(prevSig(k), "->")) continue;
+        out.insert(toks_[k].text);
+      }
+    }
+  }
+
+  bool reaches(const std::string &from, const std::string &to) const {
+    std::set<std::string> seen;
+    std::vector<std::string> work;
+    auto it = callGraph_.find(from);
+    if (it != callGraph_.end())
+      for (const auto &n : it->second) work.push_back(n);
+    while (!work.empty()) {
+      std::string cur = work.back();
+      work.pop_back();
+      if (cur == to) return true;
+      if (!seen.insert(cur).second) continue;
+      auto jt = callGraph_.find(cur);
+      if (jt == callGraph_.end()) continue;
+      for (const auto &n : jt->second) work.push_back(n);
+    }
+    return false;
+  }
+
+  bool isRecursive(const std::string &fn) const { return reaches(fn, fn); }
+
+  bool sameCycle(const std::string &a, const std::string &b) const {
+    return a == b || (reaches(a, b) && reaches(b, a));
+  }
+
+  /// Largest constant argument supplied at a call to a recursive function.
+  /// Recursive self-calls pass expressions (`i - 1`) and are skipped; the
+  /// initial call from outside the cycle supplies the provable upper bound.
+  std::map<std::string, std::vector<long>> recursiveMaxArg_;
+
+  void collectRecursiveCallArgs() {
+    for (const auto &entry : funcs_) {
+      if (!isRecursive(entry.first))
+        continue;
+      size_t np = entry.second.params.size();
+      std::vector<long> slots(np, kInvalidConst);
+      for (size_t i = 0; i < toks_.size(); ++i) {
+        if (toks_[i].kind != TokKind::Identifier ||
+            toks_[i].text != entry.first)
+          continue;
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "(")) continue;
+        size_t rp = match(lp, "(", ")");
+        if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
+        auto args = splitArgs(lp + 1, rp);
+        if (args.size() != np) continue;
+        for (size_t a = 0; a < np; ++a) {
+          long v = 0;
+          if (indexExprValue(args[a].first, args[a].second, &v) && v > slots[a])
+            slots[a] = v;
+        }
+      }
+      recursiveMaxArg_[entry.first] = slots;
+    }
+  }
+
+  /// An explicit upper guard (`if (i >= E) return;` or a surrounding
+  /// `if (i < E)`) makes a parameter index provably bounded, so fail-closed
+  /// recursion rules must stay silent there.
+  bool hasUpperGuard(const FuncSig &sig, const std::string &var, size_t at,
+                     long extent) const {
+    for (size_t k = sig.bodyOpen; k < at; ++k) {
+      if (!isIdent(k, "if")) continue;
+      size_t lp = nextSig(k);
+      if (!isPunct(lp, "(")) continue;
+      size_t rp = matchIn(lp, at, "(", ")");
+      if (rp == kNPos) continue;
+      size_t v = kNPos;
+      for (size_t q = lp + 1; q < rp; ++q)
+        if (toks_[q].kind == TokKind::Identifier && toks_[q].text == var) {
+          v = q;
+          break;
+        }
+      if (v == kNPos) continue;
+      size_t op = nextSig(v);
+      if (op >= rp) continue;
+      long n = 0;
+      size_t nv = nextSig(op);
+      if (nv >= rp || !number(toks_[nv], &n)) continue;
+      size_t body = nextSig(rp);
+      size_t end = isPunct(body, "{") ? matchIn(body, at, "{", "}")
+                                      : stmtEnd(body);
+      bool early = false;
+      if ((isPunct(op, ">=") && n >= extent) ||
+          (isPunct(op, ">") && n >= extent - 1)) {
+        if (end != kNPos && end < at)
+          for (size_t q = body; q <= end; ++q)
+            if (isIdent(q, "return")) { early = true; break; }
+      }
+      if (early) return true;
+      if (((isPunct(op, "<") && n <= extent) ||
+           (isPunct(op, "<=") && n <= extent - 1)) &&
+          end != kNPos && at > body && at < end)
+        return true;
+    }
+    return false;
+  }
+
+  /// A parameter index into a fixed array inside a recursive cycle cannot be
+  /// bounded by local analysis.  When the call site supplies a constant that
+  /// already reaches the extent, the overflow is provable: reject it.  For a
+  /// genuinely unknown argument only warn (DEFAULT remains permissive).
+  void checkRecursiveArraySubscript(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier) return;
+    size_t lb = nextSig(i);
+    if (!isPunct(lb, "[")) return;
+    const std::vector<size_t> *dims = nullptr;
+    if (!findShape(toks_[i].text, i, &dims) || dims->empty()) return;
+    const std::string *fn = enclosingFunction(i);
+    if (!fn || !isRecursive(*fn)) return;
+    const FuncSig &sig = funcs_.at(*fn);
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos) return;
+    size_t idxTok = kNPos;
+    int parts = 0;
+    for (size_t k = lb + 1; k < rb; ++k) {
+      if (trivia(k)) continue;
+      ++parts;
+      if (toks_[k].kind == TokKind::Identifier) idxTok = k;
+    }
+    if (parts != 1 || idxTok == kNPos) return;
+    size_t pos = kNPos;
+    for (size_t p = 0; p < sig.params.size(); ++p)
+      if (sig.params[p] == toks_[idxTok].text) { pos = p; break; }
+    if (pos == kNPos) return;
+    long extent = static_cast<long>((*dims)[0]);
+    if (hasUpperGuard(sig, toks_[idxTok].text, i, extent)) return;
+    long best = kInvalidConst;
+    for (const auto &entry : funcs_) {
+      if (!sameCycle(*fn, entry.first)) continue;
+      auto it = recursiveMaxArg_.find(entry.first);
+      if (it == recursiveMaxArg_.end() || pos >= it->second.size()) continue;
+      if (it->second[pos] > best) best = it->second[pos];
+    }
+    if (best == kInvalidConst) {
+      warningAt(toks_[lb], "array index '" + toks_[idxTok].text +
+                "' into fixed array '" + toks_[i].text +
+                "' cannot be bounded across recursive calls; STRICT rejects "
+                "unverified recursive indices");
+      return;
+    }
+    if (best >= extent)
+      errorAt(toks_[lb], "array index " + std::to_string(best) +
+              " from recursive call is out of bounds of array '" +
+              toks_[i].text + "' of length " + std::to_string(extent));
+  }
+
+  // --- allocation extents written through out-parameters -------------------
+
+  std::map<std::string, std::pair<size_t, size_t>> outParamExtent_;
+
+  bool outParamAllocCount(size_t from, size_t to, size_t *count) const {
+    bool hasSizeof = false, hasStar = false;
+    for (size_t k = from; k < to; ++k) {
+      if (isIdent(k, "sizeof")) hasSizeof = true;
+      else if (isPunct(k, "*")) hasStar = true;
+    }
+    if (!hasSizeof) return allocationCount(from, to, count);
+    if (!hasStar) { *count = 1; return true; } // sizeof(T): one element
+    return allocationCount(from, to, count);
+  }
+
+  void collectOutParamAllocations() {
+    std::map<std::string, std::map<size_t, size_t>> writes;
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      for (size_t p = 0; p < sig.params.size(); ++p) {
+        if (!sig.outParam[p]) continue;
+        const std::string &name = sig.params[p];
+        for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+          if (!isPunct(k, "*")) continue;
+          size_t id = nextSig(k);
+          if (id >= toks_.size() || toks_[id].kind != TokKind::Identifier ||
+              toks_[id].text != name || !isPunct(nextSig(id), "="))
+            continue;
+          size_t alloc = nextSig(nextSig(id));
+          if (!(isIdent(alloc, "malloc") || isIdent(alloc, "calloc") ||
+                isIdent(alloc, "cplus_alloc") || isIdent(alloc, "cplus_zalloc")))
+            continue;
+          size_t lp = nextSig(alloc);
+          if (!isPunct(lp, "(")) continue;
+          size_t rp = matchIn(lp, toks_.size(), "(", ")");
+          if (rp == kNPos) continue;
+          size_t count = 0;
+          if (isIdent(alloc, "calloc")) {
+            // calloc(nmemb, size): nmemb, not the sizeof argument, is the
+            // element count; using 1 here would be an unsound over-approach.
+            auto a = splitArgs(lp + 1, rp);
+            long n = 0;
+            if (a.size() >= 2 &&
+                indexExprValue(a[0].first, a[0].second, &n) && n > 0)
+              count = static_cast<size_t>(n);
+          } else {
+            outParamAllocCount(lp + 1, rp, &count);
+          }
+          if (count)
+            writes[entry.first][p] = count;
+        }
+      }
+    }
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier) continue;
+      auto fit = writes.find(toks_[i].text);
+      if (fit == writes.end()) continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "(")) continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
+      auto args = splitArgs(lp + 1, rp);
+      for (const auto &kv : fit->second) {
+        if (kv.first >= args.size()) continue;
+        size_t a = args[kv.first].first, b = args[kv.first].second;
+        if (!isPunct(a, "&")) continue;
+        size_t name = nextSig(a);
+        if (name >= b || toks_[name].kind != TokKind::Identifier) continue;
+        auto &slot = outParamExtent_[toks_[name].text];
+        if (slot.second && slot.second != kv.second)
+          slot = {i, 0}; // conflicting extents: forget the fact
+        else
+          slot = {i, kv.second};
+      }
+    }
+    // A later write or address-taken use can replace the allocation; a stale
+    // extent must never reject a valid subscript.
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier) continue;
+      auto it = outParamExtent_.find(toks_[i].text);
+      if (it == outParamExtent_.end() || i <= it->second.first) continue;
+      size_t n = nextSig(i);
+      bool takenAtCall = isPunct(prevSig(i), "&") &&
+                         (isPunct(prevSig(prevSig(i)), "(") ||
+                          isPunct(prevSig(prevSig(i)), ","));
+      if (isPunct(n, "=") || isPunct(n, "++") || isPunct(n, "--") ||
+          isPunct(n, "+=") || isPunct(n, "-=") ||
+          (isPunct(prevSig(i), "&") && !takenAtCall))
+        it->second.second = 0;
+    }
+  }
+
+  void checkOutParamHeapSubscript(size_t i) {
+    auto it = outParamExtent_.find(toks_[i].text);
+    if (it == outParamExtent_.end() || i < it->second.first ||
+        it->second.second == 0)
+      return;
+    size_t lb = nextSig(i);
+    if (!isPunct(lb, "[")) return;
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos) return;
+    long idx = 0;
+    if (!constantIndexAt(lb + 1, rb, &idx) || idx < 0) return;
+    if (static_cast<size_t>(idx) >= it->second.second)
+      errorAt(toks_[lb], "array index " + std::to_string(idx) +
+              " is out of bounds of heap extent '" + toks_[i].text +
+              "' of " + std::to_string(it->second.second) + " elements");
+  }
+
   /// `* (Type *) &x` type punning is undefined under strict aliasing (except
   /// for character types, which C explicitly allows).
   void checkTypePun(size_t i) {
@@ -965,39 +1496,17 @@ private:
   /// already known to hold a negative value from the conservative bug-42
   /// facts.  Anything else returns false so no diagnostic is produced.
   bool constantIndexAt(size_t from, size_t to, long *out) const {
-    while (from < to && trivia(from))
-      ++from;
-    while (to > from && trivia(to - 1))
-      --to;
-    if (from >= to)
-      return false;
-    bool negative = false;
-    if (isPunct(from, "-")) {
-      negative = true;
-      ++from;
-      while (from < to && trivia(from))
-        ++from;
-    } else if (isPunct(from, "+")) {
-      ++from;
-      while (from < to && trivia(from))
-        ++from;
-    }
+    trim(&from, &to);
     if (from >= to)
       return false;
     long value = 0;
-    if (number(toks_[from], &value)) {
-      ++from;
-      while (from < to && trivia(from))
-        ++from;
-      if (from != to)
-        return false;
-      *out = negative ? -value : value;
+    if (indexExprValue(from, to, &value)) {
+      *out = value;
       return true;
     }
     // A name proved negative elsewhere is enough to establish the sign; use
     // -1 as a conservative representative (the rule only needs "< 0").
-    if (!negative && from + 1 == to &&
-        toks_[from].kind == TokKind::Identifier) {
+    if (from + 1 == to && toks_[from].kind == TokKind::Identifier) {
       const std::set<std::string> *neg = negativeFactsAt(from);
       if (neg && neg->count(toks_[from].text) &&
           !guardedNegative(from, toks_[from].text)) {
@@ -1033,6 +1542,13 @@ private:
       if (lp == 0) return kNPos;
       --lp;
     }
+    // A declarator is preceded by a type (`int (*r)[W]`); a subscript such as
+    // `(*pp)[9] = ...` is not, and must never be mistaken for a new alias
+    // assignment that would invalidate pp.
+    size_t beforeType = prevSig(lp);
+    if (beforeType == kNPos || toks_[beforeType].kind != TokKind::Identifier ||
+        !isTypeWord(toks_[beforeType].text))
+      return kNPos;
     size_t star = nextSig(lp);
     if (!isPunct(star, "*"))
       return kNPos;
@@ -1047,11 +1563,23 @@ private:
   bool parseArrayPointerInit(size_t rhs, TrackedArrayPointer *out) const {
     if (rhs >= toks_.size())
       return false;
+    size_t end = stmtEnd(rhs);
+    rhs = stripCast(rhs, end);
+    if (rhs >= toks_.size())
+      return false;
     if (isPunct(rhs, "&")) {
       size_t id = nextSig(rhs);
+      if (id >= toks_.size() || toks_[id].kind != TokKind::Identifier)
+        return false;
+      // `int **pp = &p`: keep p's proven offset through the indirection.
+      auto alias = arrayPtrs_.find(toks_[id].text);
+      if (alias != arrayPtrs_.end()) {
+        *out = alias->second;
+        out->pos = 0;
+        return true;
+      }
       size_t lb = nextSig(id);
-      if (id >= toks_.size() || toks_[id].kind != TokKind::Identifier ||
-          !isPunct(lb, "["))
+      if (!isPunct(lb, "["))
         return false;
       const std::vector<size_t> *dims = nullptr;
       if (!findShape(toks_[id].text, rhs, &dims) || dims->empty())
@@ -1065,23 +1593,34 @@ private:
       out->offset = idx;
       return true;
     }
+    // `int *p = s.p` / `int *p = s.a`: follow a struct/union field to the
+    // array (or pointer alias) previously stored in that field.
+    if (rhs + 2 < toks_.size() && toks_[rhs].kind == TokKind::Identifier &&
+        (isPunct(rhs + 1, ".") || isPunct(rhs + 1, "->")) &&
+        toks_[rhs + 2].kind == TokKind::Identifier) {
+      const std::string &field = toks_[rhs + 2].text;
+      auto fit = arrayPtrs_.find(field);
+      if (fit != arrayPtrs_.end()) {
+        *out = fit->second;
+        out->pos = 0;
+        return true;
+      }
+      const std::vector<size_t> *dims = nullptr;
+      if (findShape(field, rhs, &dims) && !dims->empty()) {
+        out->array = field;
+        out->dims = *dims;
+        out->offset = 0;
+        return true;
+      }
+    }
     if (toks_[rhs].kind != TokKind::Identifier)
       return false;
     const std::string &name = toks_[rhs].text;
     size_t after = nextSig(rhs);
     if (isPunct(after, "+") || isPunct(after, "-")) {
-      size_t num = nextSig(after);
       long amount = 0;
-      if (num >= toks_.size() || !number(toks_[num], &amount))
+      if (!constantIndexAt(after + 1, end, &amount))
         return false;
-      // The whole expression must be just `name +/- NUMBER`; a cast, call or
-      // further arithmetic makes the offset unprovable, so do not track it.
-      for (size_t k = nextSig(num); k < toks_.size(); ++k) {
-        if (isPunct(k, ";") || isPunct(k, ","))
-          break;
-        if (!trivia(k))
-          return false;
-      }
       out->offset = isPunct(after, "+") ? amount : -amount;
     }
     // A direct array name, or an already tracked pointer alias.
@@ -1138,17 +1677,44 @@ private:
       tp.rowPointer = rowPointer;
       arrayPtrs_[var] = tp;
     }
+    // Fold a constant increment chain (`p++; p++; ...`) instead of dropping
+    // the alias: a one-past dereference after four increments is provable.
+    // Any write we cannot evaluate invalidates the fact as before.
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (toks_[i].kind != TokKind::Identifier)
         continue;
       const std::string &var = toks_[i].text;
-      if (!arrayPtrs_.count(var))
+      auto initial = arrayPtrs_.find(var);
+      if (initial == arrayPtrs_.end())
         continue;
       size_t n = nextSig(i);
-      if (isPunct(n, "++") || isPunct(n, "--") || isPunct(n, "+=") ||
-          isPunct(n, "-=")) {
+      // The fact was recorded at the `=` token, not at the LHS identifier.
+      if (n == initial->second.pos)
+        continue;
+      long delta = 0;
+      bool known = false;
+      if (isPunct(n, "++")) { delta = 1; known = true; }
+      else if (isPunct(n, "--")) { delta = -1; known = true; }
+      else if (isPunct(n, "+=") || isPunct(n, "-=")) {
+        long v = 0;
+        size_t from = nextSig(n);
+        if (constantIndexAt(from, stmtEnd(from), &v)) {
+          delta = isPunct(n, "+=") ? v : -v;
+          known = true;
+        }
+      } else if (isPunct(n, "=")) {
+        known = false; // a second assignment invalidates the old offset
+      } else {
+        continue;
+      }
+      auto it = arrayPtrs_.find(var);
+      if (it == arrayPtrs_.end())
+        continue;
+      if (known)
+        it->second.offset += delta;
+      else {
         arrayPtrInvalid_.insert(var);
-        arrayPtrs_.erase(var);
+        arrayPtrs_.erase(it);
       }
     }
   }
@@ -1187,6 +1753,10 @@ private:
       return;
 
     size_t lb = nextSig(i);
+    // `(*pp)[k]`: the tracked pointer is the dereferenced operand, so the
+    // subscript follows the closing parenthesis rather than the identifier.
+    if (isPunct(lb, ")") && isPunct(prevSig(i), "*"))
+      lb = nextSig(lb);
     if (isPunct(lb, "[")) {
       if (tp.rowPointer) {
         // Pointer-to-row: the k-th subscript is checked against dims[k].
@@ -1197,12 +1767,15 @@ private:
           if (rb == kNPos) break;
           long idx = 0;
           if (constantIndexAt(cursor + 1, rb, &idx)) {
-            if (idx < 0)
-              reportNegativeAliasIndex(toks_[cursor], idx, tp.array,
+            // `int (*r)[W] = &a[K]` selects row K; the first subscript must
+            // be added to K before comparing with the row count.
+            long absolute = idx + (d == 0 ? tp.offset : 0);
+            if (absolute < 0)
+              reportNegativeAliasIndex(toks_[cursor], absolute, tp.array,
                                        toks_[i].text);
-            else if (static_cast<size_t>(idx) >= tp.dims[d])
-              reportAliasOutOfBounds(toks_[cursor], idx, tp.array, tp.dims[d],
-                                     toks_[i].text);
+            else if (static_cast<size_t>(absolute) >= tp.dims[d])
+              reportAliasOutOfBounds(toks_[cursor], absolute, tp.array,
+                                     tp.dims[d], toks_[i].text);
           }
           cursor = nextSig(rb);
         }
@@ -1273,15 +1846,9 @@ private:
     size_t op = nextSig(name);
     if (!isPunct(op, "+"))
       return;
-    size_t num = nextSig(op);
-    if (num >= rp)
-      return;
     long amount = 0;
-    if (!number(toks_[num], &amount))
+    if (!constantIndexAt(nextSig(op), rp, &amount))
       return;
-    for (size_t k = nextSig(num); k < rp; ++k)
-      if (!trivia(k))
-        return;
     size_t extent = 0;
     if (!findExtent(toks_[name].text, i, &extent) || extent == 0)
       return;
@@ -1779,18 +2346,22 @@ private:
           join(parts[0].first, parts[0].second).empty())
         continue;
       std::vector<std::string> params;
+      std::vector<bool> outFlags;
       for (const auto &part : parts) {
         size_t last = kNPos;
-        for (size_t k = part.first; k < part.second; ++k)
+        int stars = 0;
+        for (size_t k = part.first; k < part.second; ++k) {
           if (toks_[k].kind == TokKind::Identifier)
             last = k;
-        if (last == kNPos)
-          params.push_back(std::string());
-        else
-          params.push_back(toks_[last].text);
+          else if (isPunct(k, "*"))
+            ++stars;
+        }
+        params.push_back(last == kNPos ? std::string() : toks_[last].text);
+        outFlags.push_back(stars >= 2);
       }
       FuncSig sig;
       sig.params = params;
+      sig.outParam = outFlags;
       sig.bodyOpen = nextSig(rp);
       sig.bodyClose = match(sig.bodyOpen, "{", "}");
       funcs_[toks_[i].text] = sig;
@@ -2880,11 +3451,6 @@ private:
   std::string source_;
   std::map<std::string, size_t> arrays_;
   std::vector<ArrayShape> localArrays_;
-  struct FuncSig {
-    std::vector<std::string> params;
-    size_t bodyOpen = 0;
-    size_t bodyClose = 0;
-  };
   std::map<std::string, FuncSig> funcs_;
   std::map<std::string, long> constants_;
   std::set<std::string> conflict_;
@@ -2900,6 +3466,8 @@ private:
   std::set<std::string> typePunned_;     // bug 45
   std::map<std::string, TrackedArrayPointer> arrayPtrs_; // constant array aliases
   std::set<std::string> arrayPtrInvalid_;
+  std::map<std::string, std::vector<std::pair<size_t, long>>> localConsts_;
+  std::map<std::string, long> returnConstants_;
   DiagnosticEngine &diags_;
   std::string filename_;
 };

@@ -20,6 +20,7 @@
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Tooling/Tooling.h>
 
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <string>
@@ -241,6 +242,12 @@ public:
   void setDestructors(const std::set<std::string> &d) { destructors_ = d; }
   void setArithEffects(
       const std::map<std::string, ArithEffect> &e) { arithEffects_ = e; }
+  void setConstReturnValues(const std::map<std::string, long long> &m) {
+    constReturnValues_ = m;
+  }
+  const std::map<std::string, long long> &constReturnValues() const {
+    return constReturnValues_;
+  }
   const std::map<std::string, ArithEffect> &arithEffects() const {
     return arithEffects_;
   }
@@ -339,6 +346,44 @@ public:
   const std::map<std::string, unsigned> &returnedParams() const {
     return returnedParam_;
   }
+  void setReturnedOutParams(
+      const std::map<std::string, std::map<unsigned, unsigned>> &m) {
+    returnedOutParam_ = m;
+  }
+  const std::map<std::string, std::map<unsigned, unsigned>> &
+  returnedOutParams() const {
+    return returnedOutParam_;
+  }
+  void setReturnedOutAllocs(
+      const std::map<std::string, std::map<unsigned, long long>> &m) {
+    returnedOutAlloc_ = m;
+  }
+  const std::map<std::string, std::map<unsigned, long long>> &
+  returnedOutAllocs() const {
+    return returnedOutAlloc_;
+  }
+  void setUnionVars(const std::set<std::string> &s) { unionVars_ = s; }
+  const std::set<std::string> &unionVars() const { return unionVars_; }
+  void setFnPtrVarTargets(const std::map<std::string, std::string> &m) {
+    fnPtrVarTargets_ = m;
+  }
+  void setFnPtrParamTargets(
+      const std::map<std::string, std::map<unsigned, std::set<std::string>>> &m) {
+    fnPtrParamTargets_ = m;
+  }
+  const std::map<std::string, std::string> &fnPtrVarTargets() const {
+    return fnPtrVarTargets_;
+  }
+  const std::map<std::string, std::map<unsigned, std::set<std::string>>> &
+  fnPtrParamTargets() const {
+    return fnPtrParamTargets_;
+  }
+  void setGlobalPointsTo(const std::map<std::string, std::set<std::string>> &m) {
+    globalPointsTo_ = m;
+  }
+  const std::map<std::string, std::set<std::string>> &globalPointsTo() const {
+    return globalPointsTo_;
+  }
   void setReturnedFixedExtents(const std::map<std::string, long long> &m) {
     returnedFixedExtent_ = m;
   }
@@ -407,6 +452,180 @@ public:
     while (const auto *ce = dyn_cast<ExplicitCastExpr>(e))
       e = ce->getSubExpr()->IgnoreParenImpCasts();
     return varNameOf(e);
+  }
+
+  /// Find the original pointer variable behind an integer-laundering
+  /// expression such as `(uintptr_t)p`, `(uintptr_t)p | 2` or a tracked int.
+  std::string pointerSourceOf(const Expr *e) const {
+    if (!e)
+      return std::string();
+    e = e->IgnoreParenImpCasts();
+    if (const auto *cast = dyn_cast<CastExpr>(e))
+      if (cast->getType()->isIntegerType())
+        return castedVarName(cast->getSubExpr());
+    if (const auto *bo = dyn_cast<BinaryOperator>(e))
+      if (bo->isBitwiseOp()) {
+        std::string a = pointerSourceOf(bo->getLHS());
+        return a.empty() ? pointerSourceOf(bo->getRHS()) : a;
+      }
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        auto it = provenanceSource_.find(vd->getNameAsString());
+        if (it != provenanceSource_.end())
+          return it->second;
+      }
+    return std::string();
+  }
+
+  /// Name of the variable addressed by an out-parameter argument (`&q` -> q).
+  std::string varNameOfAddressArg(const Expr *e) const {
+    if (!e)
+      return std::string();
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(x))
+      if (uo->getOpcode() == UO_AddrOf)
+        x = uo->getSubExpr()->IgnoreParenImpCasts();
+    return castedVarName(x);
+  }
+
+  /// Merge two names into one alias group (used by out-params and provenance
+  /// round-trips so releasing one invalidates every view of the object).
+  void linkAlias(const std::string &a, const std::string &b) {
+    if (a.empty() || b.empty() || a == b)
+      return;
+    auto &ga = aliasGroups_[a];
+    auto gb = aliasGroups_[b];
+    ga.insert(a);
+    ga.insert(b);
+    ga.insert(gb.begin(), gb.end());
+    for (const auto &name : ga)
+      aliasGroups_[name] = ga;
+    aliasLocs_[a] = aliasLocs_[b] = currentFnDecl_ ? currentFnDecl_->getBeginLoc()
+                                                    : SourceLocation();
+  }
+
+  /// `memcpy(&q, &p, sizeof p)` copies pointer bytes, so q and p refer to the
+  /// same object.  Propagate the alias/release state instead of treating the
+  /// copy as an opaque byte write (integer/pointer-byte laundering UAF).
+  void propagatePointerBytes(const CallExpr *call) {
+    if (call->getNumArgs() < 3)
+      return;
+    Expr::EvalResult r;
+    if (!call->getArg(2)->EvaluateAsInt(r, ctx_) || !r.Val.isInt())
+      return;
+    unsigned long long ptrBytes = ctx_.getTypeSize(ctx_.VoidPtrTy) / 8u;
+    if (r.Val.getInt().getZExtValue() != ptrBytes || ptrBytes == 0)
+      return;
+    auto addressedPointer = [&](unsigned i) -> bool {
+      const Expr *x = call->getArg(i)->IgnoreParenImpCasts();
+      const auto *uo = dyn_cast<UnaryOperator>(x);
+      return uo && uo->getOpcode() == UO_AddrOf &&
+             uo->getSubExpr()->IgnoreParenImpCasts()->getType()->isPointerType();
+    };
+    if (!addressedPointer(0) || !addressedPointer(1))
+      return;
+    std::string dst = varNameOfAddressArg(call->getArg(0));
+    std::string src = varNameOfAddressArg(call->getArg(1));
+    if (dst.empty() || src.empty() || dst == src)
+      return;
+    linkAlias(dst, src);
+    if (releasedVars_.count(src))
+      markReleased(dst);
+  }
+
+  /// Strip casts/parens and no-op pointer offsets (`p + 0`, `0 + p`,
+  /// `p - 0`) so nullability/release checks see the underlying pointer.
+  const Expr *canonicalPointer(const Expr *e) const {
+    if (!e)
+      return nullptr;
+    e = e->IgnoreParenImpCasts();
+    for (unsigned depth = 0; depth < 8; ++depth) {
+      const auto *bo = dyn_cast<BinaryOperator>(e);
+      if (!bo || (bo->getOpcode() != BO_Add && bo->getOpcode() != BO_Sub))
+        break;
+      llvm::APSInt k;
+      if (knownConst(bo->getRHS(), k) && k.isZero() &&
+          bo->getLHS()->getType()->isPointerType()) {
+        e = bo->getLHS()->IgnoreParenImpCasts();
+        continue;
+      }
+      if (bo->getOpcode() == BO_Add && knownConst(bo->getLHS(), k) &&
+          k.isZero() && bo->getRHS()->getType()->isPointerType()) {
+        e = bo->getRHS()->IgnoreParenImpCasts();
+        continue;
+      }
+      break;
+    }
+    while (const auto *ce = dyn_cast<ExplicitCastExpr>(e))
+      e = ce->getSubExpr()->IgnoreParenImpCasts();
+    return e;
+  }
+
+  /// Resolve an expression to the index of a parameter of the current
+  /// function, following local aliases (`int *q = p; q = p;`) and zero-offset
+  /// arithmetic.  Returns -1 when the value is not traceable to a parameter.
+  int paramIndexOf(const Expr *e) const {
+    e = canonicalPointer(e);
+    if (!e)
+      return -1;
+    const auto *ref = dyn_cast<DeclRefExpr>(e);
+    if (!ref)
+      return -1;
+    const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+    if (!vd || !currentFnDecl_)
+      return -1;
+    if (const auto *pv = dyn_cast<ParmVarDecl>(vd)) {
+      if (pv->getDeclContext() != static_cast<const DeclContext *>(currentFnDecl_))
+        return -1;
+      return (int)pv->getFunctionScopeIndex();
+    }
+    auto it = localParamAliases_.find(vd->getNameAsString());
+    return it == localParamAliases_.end() ? -1 : it->second;
+  }
+
+  static bool isFunctionPointerParam(const ParmVarDecl *pv) {
+    if (!pv)
+      return false;
+    QualType t = pv->getType();
+    const auto *pt = t->getAs<PointerType>();
+    return pt && pt->getPointeeType()->isFunctionProtoType();
+  }
+
+  /// Possible named targets of an indirect call.  Direct calls resolve to
+  /// one name; function-pointer variables, struct fields and callback
+  /// parameters use the points-to facts gathered in the collection pass.
+  std::set<std::string> calleeNames(const CallExpr *call,
+                                    const FunctionDecl *direct) const {
+    if (direct)
+      return {direct->getNameAsString()};
+    std::set<std::string> out;
+    const Expr *callee = call->getCallee() ? call->getCallee()->IgnoreParenImpCasts()
+                                           : nullptr;
+    if (!callee)
+      return out;
+    if (const auto *ref = dyn_cast<DeclRefExpr>(callee)) {
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        auto it = fnPtrVarTargets_.find(currentFunction_ + "::" +
+                                        vd->getNameAsString());
+        if (it == fnPtrVarTargets_.end())
+          it = fnPtrVarTargets_.find(vd->getNameAsString());
+        if (it != fnPtrVarTargets_.end())
+          out.insert(it->second);
+        if (const auto *pv = dyn_cast<ParmVarDecl>(vd)) {
+          auto pit = fnPtrParamTargets_.find(currentFunction_);
+          if (pit != fnPtrParamTargets_.end()) {
+            auto sit = pit->second.find(pv->getFunctionScopeIndex());
+            if (sit != pit->second.end())
+              out.insert(sit->second.begin(), sit->second.end());
+          }
+        }
+      }
+    } else if (const auto *me = dyn_cast<MemberExpr>(callee)) {
+      auto it = fnPtrVarTargets_.find(me->getMemberDecl()->getNameAsString());
+      if (it != fnPtrVarTargets_.end())
+        out.insert(it->second);
+    }
+    return out;
   }
 
   // ---- Heap-extent tracking -------------------------------------------
@@ -521,8 +740,21 @@ public:
       return true;
     }
     llvm::APSInt v;
-    if (!evalConstArithmetic(arg, v) || v.isNegative())
+    if (!evalConstArithmetic(arg, v) || v.isNegative()) {
+      // A helper whose every return is the same constant is still a concrete
+      // size: `static int sz(void){ return 4; } malloc(sz())` (S9).
+      const Expr *x = arg->IgnoreParenImpCasts();
+      if (const auto *call = dyn_cast<CallExpr>(x)) {
+        for (const auto &cn : calleeNames(call, call->getDirectCallee())) {
+          auto it = constReturnValues_.find(cn);
+          if (it != constReturnValues_.end() && it->second >= 0) {
+            out = it->second;
+            return true;
+          }
+        }
+      }
       return false;
+    }
     unsigned long long z = v.getZExtValue();
     if (z > (1ULL << 40))
       return false;
@@ -878,6 +1110,12 @@ public:
     const Expr *x = e->IgnoreParenCasts();
     if (const auto *ref = dyn_cast<DeclRefExpr>(x))
       if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        // A branch/loop guard proves a variable non-zero only until that
+        // variable is assigned again.  VisitBinaryOperator erases the proof
+        // on a definite assignment; without this check a stale proof survives
+        // `if (d) { d = zero(); return 100 / d; }` and hides a real div-by-zero.
+        if (invalidatedNonZero_.count(vd))
+          return false;
         if (nonZeroVars_.count(vd))
           return true;
         auto it = loopLowerBound_.find(vd);
@@ -891,6 +1129,8 @@ public:
         if (const auto *ref = dyn_cast<DeclRefExpr>(
                 bo->getLHS()->IgnoreParenCasts()))
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+            if (invalidatedNonZero_.count(vd))
+              return false;
             auto it = loopLowerBound_.find(vd);
             if (it != loopLowerBound_.end() && it->second >= 0)
               return true;
@@ -1156,27 +1396,52 @@ public:
                       std::to_string(st->bytes) + " bytes");
   }
 
-  /// True when `e` is `array + N` with N exactly one past a fixed array's
-  /// end.  Dereferencing such a pointer is undefined behaviour.
+  /// Accumulate a chain of `array +/- K` operations into a base array and a
+  /// total constant offset.  `a + 1 + 4` is `a + 5`; a one-level check missed
+  /// it and allowed `*p` past the end.
+  bool onePastOffset(const Expr *e, const VarDecl *&base, long long &total,
+                     unsigned depth) const {
+    if (!e || depth > 8)
+      return false;
+    e = e->IgnoreParenImpCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e)) {
+      const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+      if (vd && ctx_.getAsConstantArrayType(vd->getType())) {
+        base = vd;
+        return true;
+      }
+      return false;
+    }
+    const auto *bo = dyn_cast<BinaryOperator>(e);
+    if (!bo || (bo->getOpcode() != BO_Add && bo->getOpcode() != BO_Sub))
+      return false;
+    llvm::APSInt k;
+    if (knownConst(bo->getRHS(), k)) {
+      long long c = k.getSExtValue();
+      if (bo->getOpcode() == BO_Sub)
+        c = -c;
+      if (onePastOffset(bo->getLHS(), base, total, depth + 1)) {
+        total += c;
+        return true;
+      }
+    }
+    if (bo->getOpcode() == BO_Add && knownConst(bo->getLHS(), k))
+      if (onePastOffset(bo->getRHS(), base, total, depth + 1)) {
+        total += k.getSExtValue();
+        return true;
+      }
+    return false;
+  }
+
+  /// True when `e` is `array + N` (including chained offsets) with N exactly
+  /// one past a fixed array's end.  Dereferencing such a pointer is undefined.
   bool isOnePastEndExpr(const Expr *e) const {
-    if (!e)
+    const VarDecl *base = nullptr;
+    long long total = 0;
+    if (!onePastOffset(e, base, total, 0) || !base)
       return false;
-    const auto *bo = dyn_cast<BinaryOperator>(e->IgnoreParenImpCasts());
-    if (!bo || bo->getOpcode() != BO_Add)
-      return false;
-    const auto *ref =
-        dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
-    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (!vd)
-      return false;
-    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
-    if (!at)
-      return false;
-    Expr::EvalResult r;
-    if (!bo->getRHS()->EvaluateAsInt(r, ctx_) || !r.Val.isInt())
-      return false;
-    return r.Val.getInt().getSExtValue() ==
-           (long long)at->getSize().getZExtValue();
+    const auto *at = ctx_.getAsConstantArrayType(base->getType());
+    return at && total == (long long)at->getSize().getZExtValue();
   }
 
   /// Reject dereferences at the extent of a heap allocation or one past a
@@ -1192,6 +1457,13 @@ public:
           return;
         }
       }
+    }
+    // Chained offsets such as `*(a + 1 + 4)` have no named pointer variable,
+    // so the onePastEnd_ set cannot catch them; check the expression itself.
+    if (isOnePastEndExpr(sub)) {
+      report(loc, "dereference one past the end of array via pointer "
+                  "arithmetic");
+      return;
     }
     const HeapAllocState *st = heapStateOf(sub);
     if (st) {
@@ -1393,17 +1665,45 @@ public:
     }
   }
 
+  /// Mark a name released and propagate the taint to every view of the same
+  /// object: simple/cast aliases, struct-field stores, union fields, integer
+  /// laundering round-trips and global pointers.  One-level name tracking let
+  /// `uintptr_t u=(uintptr_t)p; int *q=(int*)u; free(p); return *q;` slip by.
   void markReleased(const std::string &name) {
     if (name.empty())
       return;
-    releasedVars_.insert(name);
-    auto it = aliasGroups_.find(name);
-    if (it != aliasGroups_.end())
-      for (const auto &alias : it->second)
-        releasedVars_.insert(alias);
-    for (const auto &entry : borrowOwner_)
-      if (entry.second == name)
-        releasedVars_.insert(entry.first);
+    std::set<std::string> work{name}, seen;
+    while (!work.empty()) {
+      std::string cur = *work.begin();
+      work.erase(work.begin());
+      if (!seen.insert(cur).second)
+        continue;
+      releasedVars_.insert(cur);
+      auto ait = aliasGroups_.find(cur);
+      if (ait != aliasGroups_.end())
+        work.insert(ait->second.begin(), ait->second.end());
+      for (const auto &entry : borrowOwner_)
+        if (entry.second == cur || entry.first == cur)
+          work.insert(entry.first == cur ? entry.second : entry.first);
+      auto git = globalPointsTo_.find(cur);
+      if (git != globalPointsTo_.end())
+        work.insert(git->second.begin(), git->second.end());
+      for (const auto &kv : globalPointsTo_)
+        if (kv.second.count(cur))
+          work.insert(kv.first);
+      auto pit = provenanceSource_.find(cur);
+      if (pit != provenanceSource_.end())
+        work.insert(pit->second);
+      for (const auto &kv : provenanceSource_)
+        if (kv.second == cur)
+          work.insert(kv.first);
+      auto fit = fieldAliases_.find(cur);
+      if (fit != fieldAliases_.end())
+        work.insert(fit->second.begin(), fit->second.end());
+      for (const auto &kv : fieldAliases_)
+        if (kv.second.count(cur))
+          work.insert(kv.first);
+    }
   }
 
   void clearReleased(const std::string &name) {
@@ -1417,6 +1717,18 @@ public:
     for (const auto &entry : borrowOwner_)
       if (entry.second == name)
         releasedVars_.erase(entry.first);
+    // A fresh value assigned to one view of an object revives all aliases.
+    for (const auto &kv : globalPointsTo_)
+      if (kv.first == name || kv.second.count(name)) {
+        releasedVars_.erase(kv.first);
+        for (const auto &n : kv.second)
+          releasedVars_.erase(n);
+      }
+    for (const auto &kv : provenanceSource_)
+      if (kv.first == name || kv.second == name) {
+        releasedVars_.erase(kv.first);
+        releasedVars_.erase(kv.second);
+      }
   }
 
   /// Canonical key for a struct field / array-element lvalue, used for
@@ -1446,7 +1758,9 @@ public:
 
   bool isReleased(const Expr *expr) const {
     std::string key = lvalueKey(expr);
-    if (releasedVars_.count(varNameOf(expr)) != 0 ||
+    std::string name = varNameOf(expr);
+    std::string cname = castedVarName(expr);
+    if (releasedVars_.count(name) != 0 || releasedVars_.count(cname) != 0 ||
         (!key.empty() && (releasedVars_.count(key) != 0 ||
                           releasedFields_.count(key) != 0)))
       return true;
@@ -1454,8 +1768,28 @@ public:
     auto it = fieldAliases_.find(key);
     if (it != fieldAliases_.end())
       for (const auto &alias : it->second)
-        if (releasedFields_.count(alias))
+        if (releasedFields_.count(alias) || releasedVars_.count(alias))
           return true;
+    // Integer-laundered pointer: `(int *)u` where u came from freed p.
+    auto pit = provenanceSource_.find(cname);
+    if (pit != provenanceSource_.end() && releasedVars_.count(pit->second))
+      return true;
+    // A freed value reachable through a global pointer invalidates its aliases
+    // and vice versa (s06/s14/s19).
+    auto git = globalPointsTo_.find(cname);
+    if (git != globalPointsTo_.end())
+      for (const auto &n : git->second)
+        if (releasedVars_.count(n))
+          return true;
+    // Union punning: every field view aliases the same bytes.
+    size_t dot = key.find('.');
+    if (dot != std::string::npos) {
+      std::string base = key.substr(0, dot);
+      if (unionVars_.count(base))
+        for (const auto &field : releasedFields_)
+          if (field.rfind(base + ".", 0) == 0)
+            return true;
+    }
     return false;
   }
 
@@ -1546,10 +1880,24 @@ public:
     const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
     if (!vd || !vd->getInit())
       return false;
-    const auto *call = dyn_cast<CallExpr>(vd->getInit()->IgnoreParenImpCasts());
-    if (!call || !call->getDirectCallee() ||
-        call->getDirectCallee()->getNameAsString() != "realloc" ||
-        call->getNumArgs() < 1)
+    // Strip explicit casts as well (`int *q = (int *)realloc(...)`), and
+    // resolve indirect realloc through a function pointer (T1_indirect_realloc
+    // calls realloc via `void *(*r)(void*,size_t) = realloc`).  The
+    // branch-aware state machine below then invalidates the old pointer only
+    // on the SUCCESS path, so the failure-path `free(p)` stays valid.
+    const Expr *initE = vd->getInit()->IgnoreParenImpCasts();
+    while (const auto *ce = dyn_cast<ExplicitCastExpr>(initE))
+      initE = ce->getSubExpr()->IgnoreParenImpCasts();
+    const auto *call = dyn_cast<CallExpr>(initE);
+    if (!call || call->getNumArgs() < 1)
+      return false;
+    bool isRealloc = false;
+    for (const auto &cn : calleeNames(call, call->getDirectCallee()))
+      if (cn == "realloc") {
+        isRealloc = true;
+        break;
+      }
+    if (!isRealloc)
       return false;
     // `realloc(*pp, n)` with `*pp = t` in the success branch is the standard
     // out-parameter idiom and is fully handled.
@@ -1852,15 +2200,18 @@ public:
         if (lor->getOpcode() == BO_LOr) {
           if (const VarDecl *v = fromZeroEquality(lor->getLHS())) {
             nonZeroVars_.insert(v);
+            invalidatedNonZero_.erase(v);
             ifGuardVar = ifGuardVar ? ifGuardVar : v;
           }
           if (const VarDecl *v = fromZeroEquality(lor->getRHS())) {
             nonZeroVars_.insert(v);
+            invalidatedNonZero_.erase(v);
             ifGuardVar = ifGuardVar ? ifGuardVar : v;
           }
         }
       if (const VarDecl *v = fromZeroEquality(cond)) {
         nonZeroVars_.insert(v);
+        invalidatedNonZero_.erase(v);
         ifGuardVar = ifGuardVar ? ifGuardVar : v;
       }
     }
@@ -1871,6 +2222,7 @@ public:
           if (vd->getType()->isIntegerType()) {
             ifGuardVar = vd;
             nonZeroVars_.insert(vd);
+            invalidatedNonZero_.erase(vd);
           }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
     if (ifGuardVar && !containsReturn(s->getThen()))
@@ -1907,6 +2259,7 @@ public:
         hadLower = it != loopLowerBound_.end();
         if (hadLower) savedLower = it->second;
         loopLowerBound_[induction] = lr.Val.getInt().getSExtValue();
+        invalidatedNonZero_.erase(induction);
       }
     }
     auto oldIt = loopIndexOverride_.find(induction);
@@ -1943,6 +2296,7 @@ public:
           if (vd->getType()->isIntegerType()) {
             guardVar = vd;
             nonZeroVars_.insert(vd);
+            invalidatedNonZero_.erase(vd);
           }
     bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
     if (guardVar)
@@ -1971,6 +2325,7 @@ public:
     currentFunction_ = fd->getNameAsString();
     currentFnDecl_ = fd;
     stringPtrs_.clear(); // names are function-scoped, not TU-scoped
+    localParamAliases_.clear(); // per-function alias -> parameter slot map
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
@@ -2044,6 +2399,39 @@ public:
                   }
                 }
               }
+            // `return helper(p);` — follow the helper's returned-parameter /
+            // returned-extent summary to a fixpoint (S3 returned-alias chain).
+            if (const auto *call = dyn_cast<CallExpr>(v)) {
+              for (const auto &calleeName : calleeNames(call, call->getDirectCallee())) {
+                auto rp = returnedParam_.find(calleeName);
+                if (rp != returnedParam_.end() && rp->second < call->getNumArgs()) {
+                  int ps = paramIndexOf(call->getArg(rp->second));
+                  if (ps >= 0) {
+                    unsigned idx = (unsigned)ps;
+                    if (hasRetParam && retParam != idx) ambiguous = true;
+                    retParam = idx;
+                    hasRetParam = true;
+                  }
+                }
+                auto rf = returnedFixedExtent_.find(calleeName);
+                if (rf != returnedFixedExtent_.end() && rf->second > 0) {
+                  if (hasFixed && fixedExtent != rf->second) ambiguous = true;
+                  fixedExtent = rf->second;
+                  hasFixed = true;
+                }
+                auto ra = returnedAllocExtent_.find(calleeName);
+                if (ra != returnedAllocExtent_.end() && ra->second > 0) {
+                  if (hasAlloc && allocExtent != ra->second) ambiguous = true;
+                  allocExtent = ra->second;
+                  hasAlloc = true;
+                }
+              }
+            }
+            // `return 0;` through a helper that always returns null.
+            if (const auto *call = dyn_cast<CallExpr>(v))
+              for (const auto &calleeName : calleeNames(call, call->getDirectCallee()))
+                if (nullReturningFunctions_.count(calleeName))
+                  nullReturningFunctions_.insert(fd->getNameAsString());
             if (const auto *ref = dyn_cast<DeclRefExpr>(v)) {
               const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
               if (vd && !vd->hasLocalStorage() && vd->getType()->isArrayType())
@@ -2093,6 +2481,39 @@ public:
               }
             }
           }
+        // `*out = p;` transfers p's extent/release state to the caller's
+        // out-parameter (S9/S17 out-param alias).
+        if (const auto *bo = dyn_cast<BinaryOperator>(n))
+          if (bo->isAssignmentOp()) {
+            const Expr *lhs = bo->getLHS()->IgnoreParenImpCasts();
+            if (const auto *uo = dyn_cast<UnaryOperator>(lhs))
+              if (uo->getOpcode() == UO_Deref) {
+                int outSlot = paramIndexOf(uo->getSubExpr());
+                int srcSlot = paramIndexOf(bo->getRHS());
+                if (outSlot >= 0 && srcSlot >= 0)
+                  returnedOutParam_[fd->getNameAsString()][(unsigned)outSlot] =
+                      (unsigned)srcSlot;
+                if (outSlot >= 0) {
+                  const Expr *rhs = bo->getRHS()->IgnoreParenImpCasts();
+                  if (const auto *ac = dyn_cast<CallExpr>(rhs))
+                    if (ac->getDirectCallee()) {
+                      std::string cn = ac->getDirectCallee()->getNameAsString();
+                      if ((cn == "malloc" || cn == "calloc" ||
+                           cn == "realloc") &&
+                          ac->getNumArgs() >= 1) {
+                        long long nb = -1;
+                        const Expr *sz = cn == "realloc" && ac->getNumArgs() >= 2
+                                             ? ac->getArg(1)
+                                             : ac->getArg(0);
+                        if (evalByteCount(sz->IgnoreParenImpCasts(), nb) &&
+                            nb > 0)
+                          returnedOutAlloc_[fd->getNameAsString()]
+                                           [(unsigned)outSlot] = nb;
+                      }
+                    }
+                }
+              }
+          }
         for (const Stmt *c : n->children()) scanRet(c);
       };
       scanRet(fd->getBody());
@@ -2136,10 +2557,58 @@ public:
                 arithEffects_[fd->getNameAsString()] = eff;
               }
             }
+            // Compose arithmetic helpers to a fixpoint: `add2(a,b)` that
+            // returns `add(a,b)` inherits add's effect (S10).
+            if (const auto *call = dyn_cast<CallExpr>(rv->IgnoreParenCasts()))
+              for (const auto &cn :
+                   calleeNames(call, call->getDirectCallee())) {
+                auto it = arithEffects_.find(cn);
+                if (it == arithEffects_.end())
+                  continue;
+                const ArithEffect &he = it->second;
+                if (he.lhs >= (int)call->getNumArgs() ||
+                    he.rhs >= (int)call->getNumArgs())
+                  continue;
+                int li = paramIndexOf(call->getArg(he.lhs));
+                int ri = paramIndexOf(call->getArg(he.rhs));
+                if (li >= 0 && ri >= 0 && li != ri) {
+                  ArithEffect eff = he;
+                  eff.lhs = li;
+                  eff.rhs = ri;
+                  arithEffects_[fd->getNameAsString()] = eff;
+                }
+              }
           }
         for (const Stmt *c : n->children()) scan(c);
       };
       scan(fd->getBody());
+    }
+    // Constant-return helper summary for allocator size arguments (S9).
+    if (!report_ && fd->getBody() && fd->getReturnType()->isIntegerType()) {
+      std::set<std::string> retVals;
+      bool sawReturn = false;
+      std::function<void(const Stmt *)> scanRetConst = [&](const Stmt *n) {
+        if (!n)
+          return;
+        if (const auto *ret = dyn_cast<ReturnStmt>(n))
+          if (const Expr *rv = ret->getRetValue()) {
+            Expr::EvalResult r;
+            if (rv->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
+              sawReturn = true;
+              retVals.insert(std::to_string(r.Val.getInt().getZExtValue()));
+            }
+          }
+        for (const Stmt *c : n->children())
+          scanRetConst(c);
+      };
+      scanRetConst(fd->getBody());
+      if (sawReturn && retVals.size() == 1) {
+        long long v = 0;
+        if (llvm::StringRef(*retVals.begin()).getAsInteger(10, v))
+          v = -1;
+        if (v >= 0)
+          constReturnValues_[fd->getNameAsString()] = v;
+      }
     }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
     currentFunction_ = previousFunction;
@@ -2194,20 +2663,13 @@ public:
     // Interprocedural nullability: record pointer parameters that the callee
     // dereferences.  A provably null argument at a call site is then unsafe.
     struct DerefFinder : RecursiveASTVisitor<DerefFinder> {
-      const FunctionDecl *fn;
+      const SafetyVisitor &owner;
       std::set<unsigned> &slots;
-      DerefFinder(const FunctionDecl *f, std::set<unsigned> &s)
-          : fn(f), slots(s) {}
+      DerefFinder(const SafetyVisitor &o, std::set<unsigned> &s)
+          : owner(o), slots(s) {}
       unsigned slotOf(const Expr *e) const {
-        const auto *ref =
-            dyn_cast_or_null<DeclRefExpr>(e ? e->IgnoreParenCasts() : nullptr);
-        const auto *pv = ref ? dyn_cast<ParmVarDecl>(ref->getDecl()) : nullptr;
-        if (!pv || pv->getDeclContext() != static_cast<const DeclContext *>(fn))
-          return UINT_MAX;
-        for (unsigned i = 0; i < fn->getNumParams(); ++i)
-          if (fn->parameters()[i] == pv)
-            return i;
-        return UINT_MAX;
+        int s = owner.paramIndexOf(e);
+        return s < 0 ? UINT_MAX : (unsigned)s;
       }
       void note(const Expr *e) {
         unsigned s = slotOf(e);
@@ -2228,28 +2690,34 @@ public:
           note(m->getBase());
         return true;
       }
+      bool VisitCallExpr(CallExpr *c) {
+        // libc APIs dereference their pointer arguments; a local alias of a
+        // parameter used in `memcpy(p, ...)` must be recorded (s05).
+        static const std::set<std::string> kDeref = {
+            "memcpy", "memmove", "memset", "strcpy", "strncpy", "strcat",
+            "strncat", "strlen", "strcmp", "strncmp", "memcmp"};
+        if (const FunctionDecl *callee = c->getDirectCallee())
+          if (kDeref.count(callee->getNameAsString()))
+            for (const Expr *a : c->arguments())
+              if (a->getType()->isPointerType())
+                note(a);
+        return true;
+      }
     };
     std::set<unsigned> derefSlots;
-    DerefFinder df(fd, derefSlots);
+    DerefFinder df(*this, derefSlots);
     df.TraverseStmt(fd->getBody());
     // A callee that rejects null on an early path tolerates a null argument;
     // recording it as requiring non-null would be a false positive.
     std::set<unsigned> nullTolerant;
     struct NullGuardFinder : RecursiveASTVisitor<NullGuardFinder> {
-      const FunctionDecl *fn;
+      const SafetyVisitor &owner;
       std::set<unsigned> &tolerant;
-      NullGuardFinder(const FunctionDecl *f, std::set<unsigned> &t)
-          : fn(f), tolerant(t) {}
+      NullGuardFinder(const SafetyVisitor &o, std::set<unsigned> &t)
+          : owner(o), tolerant(t) {}
       unsigned slotOf(const Expr *e) const {
-        const auto *ref =
-            dyn_cast_or_null<DeclRefExpr>(e ? e->IgnoreParenCasts() : nullptr);
-        const auto *pv = ref ? dyn_cast<ParmVarDecl>(ref->getDecl()) : nullptr;
-        if (!pv || pv->getDeclContext() != static_cast<const DeclContext *>(fn))
-          return UINT_MAX;
-        for (unsigned i = 0; i < fn->getNumParams(); ++i)
-          if (fn->parameters()[i] == pv)
-            return i;
-        return UINT_MAX;
+        int s = owner.paramIndexOf(e);
+        return s < 0 ? UINT_MAX : (unsigned)s;
       }
       bool returnsIn(const Stmt *s) const {
         if (!s)
@@ -2287,7 +2755,7 @@ public:
         return true;
       }
     };
-    NullGuardFinder ng(fd, nullTolerant);
+    NullGuardFinder ng(*this, nullTolerant);
     ng.TraverseStmt(fd->getBody());
     for (unsigned slot : derefSlots)
       if (!nullTolerant.count(slot))
@@ -2331,10 +2799,48 @@ public:
       // still enforce the literal-format rule.
       const Expr *init = vd->getInit()->IgnoreParenImpCasts();
       if (const auto *ref = dyn_cast<DeclRefExpr>(init))
-        if (const auto *fd = dyn_cast<FunctionDecl>(ref->getDecl()))
+        if (const auto *fd = dyn_cast<FunctionDecl>(ref->getDecl())) {
           if (isFormatFunctionName(fd->getNameAsString()))
             formatFnAliases_[vd->getNameAsString()] = fd->getNameAsString();
+          // Resolve function-pointer variables/fields so indirect calls get
+          // the same free/null/deref summaries as direct calls (s02, s21).
+          QualType vt = vd->getType();
+          const auto *fpt = vt->getAs<PointerType>();
+          bool fpVar = fpt && fpt->getPointeeType()->isFunctionProtoType();
+          if (!fpVar)
+            if (const auto *at = ctx_.getAsConstantArrayType(vt))
+              fpVar = at->getElementType()->isPointerType();
+          if (fpVar)
+            fnPtrVarTargets_[currentFunction_ + "::" + vd->getNameAsString()] =
+                fd->getNameAsString();
+        }
+      // `int *q = p;` / `int *q = p + 0;` makes q an alias of p's slot, so a
+      // free or deref through q is attributed to the parameter (S2/S4).
+      int slot = paramIndexOf(init);
+      if (slot >= 0 && vd->hasLocalStorage())
+        localParamAliases_[vd->getNameAsString()] = slot;
+      // Aggregate init of a struct with function-pointer fields:
+      // `struct ops o = { consume };` resolves o.fn to consume (s21).
+      if (const auto *il = dyn_cast<InitListExpr>(init))
+        if (const auto *rd = vd->getType()->getAsRecordDecl()) {
+          unsigned idx = 0;
+          for (const FieldDecl *field : rd->fields()) {
+            if (idx >= il->getNumInits())
+              break;
+            QualType ft = field->getType();
+            const auto *fpt = ft->getAs<PointerType>();
+            if (fpt && fpt->getPointeeType()->isFunctionProtoType())
+              if (const auto *fr = dyn_cast<DeclRefExpr>(
+                      il->getInit(idx)->IgnoreParenCasts()))
+                if (const auto *fd = dyn_cast<FunctionDecl>(fr->getDecl()))
+                  fnPtrVarTargets_[field->getNameAsString()] =
+                      fd->getNameAsString();
+            ++idx;
+          }
+        }
     }
+    if (!report_ && vd->getType()->isUnionType())
+      unionVars_.insert(vd->getNameAsString());
     if (!report_ && vd->hasGlobalStorage()) {
       allGlobals_.insert(vd->getNameAsString());
       if (!vd->getType().isVolatileQualified())
@@ -2360,8 +2866,29 @@ public:
             return provenanceInts_.count(ivd->getNameAsString()) != 0;
         return false;
       };
-      if (derivedFromPointer(init))
+      if (derivedFromPointer(init)) {
         provenanceInts_.insert(vd->getNameAsString());
+        std::string src = pointerSourceOf(init);
+        if (!src.empty())
+          provenanceSource_[vd->getNameAsString()] = src;
+      }
+      // `(int *)u` where u carried p's provenance restores the same object:
+      // put q in p's alias group so free(p) taints q (integer-laundering UAF).
+      if (vd->getType()->isPointerType()) {
+        const Expr *x = init;
+        while (const auto *ce = dyn_cast_or_null<ExplicitCastExpr>(x))
+          x = ce->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *ref = dyn_cast_or_null<DeclRefExpr>(x))
+          if (const auto *ivd = dyn_cast<VarDecl>(ref->getDecl())) {
+            auto ps = provenanceSource_.find(ivd->getNameAsString());
+            if (ps != provenanceSource_.end()) {
+              linkAlias(vd->getNameAsString(), ps->second);
+              provenanceSource_[vd->getNameAsString()] = ps->second;
+              if (releasedVars_.count(ps->second))
+                releasedVars_.insert(vd->getNameAsString());
+            }
+          }
+      }
     }
     if (!report_) {
       // Record local integer constants for constant-propagated bounds checks.
@@ -2612,6 +3139,17 @@ public:
   }
 
   bool VisitBinaryOperator(BinaryOperator *op) {
+    if (report_ && op->isAssignmentOp()) {
+      // Kill guard-derived non-zero / lower-bound facts on a definite
+      // assignment; a later division must not reuse a stale `if (d)` proof.
+      const Expr *lhse = op->getLHS()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(lhse))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+          nonZeroVars_.erase(vd);
+          loopLowerBound_.erase(vd);
+          invalidatedNonZero_.insert(vd);
+        }
+    }
     if (!report_) {
       if (op->isAssignmentOp()) {
         assignedVars_.insert(varNameOf(op->getLHS()));
@@ -2629,6 +3167,41 @@ public:
                 fieldAliases_[rk].insert(lk);
               }
             }
+        // Local alias (`q = p`) and function-pointer binding (`fp = consume`)
+        // facts feed the interprocedural effect fixpoint.
+        std::string ln = varNameOf(op->getLHS());
+        int slot = paramIndexOf(rhs);
+        if (!ln.empty() && slot >= 0)
+          localParamAliases_[ln] = slot;
+        if (const auto *fr = dyn_cast<DeclRefExpr>(rhs))
+          if (const auto *fd = dyn_cast<FunctionDecl>(fr->getDecl()))
+            if (!ln.empty())
+              fnPtrVarTargets_[currentFunction_ + "::" + ln] =
+                  fd->getNameAsString();
+        // Global pointer points-to: `g = p;` records that releasing g also
+        // invalidates p (S6 global-alias UAF).
+        if (!ln.empty() && allGlobals_.count(ln)) {
+          int ps = paramIndexOf(rhs);
+          if (ps >= 0)
+            globalParamStores_[currentFunction_][(unsigned)ps].insert(ln);
+          else {
+            std::string rn = castedVarName(rhs);
+            if (!rn.empty())
+              globalPointsTo_[ln].insert(rn);
+          }
+        }
+        // Struct-field pointer store `s.p = q;` makes the field an alias of q
+        // so freeing q invalidates `*s.p`.  Only real field lvalues qualify:
+        // recording a plain `p = tmp` here would taint tmp when p is released
+        // and survive realloc's rebind clearing (false UAF).  Plain pointer
+        // copies are handled by aliasGroups_ in the reporting pass.
+        if (isa<MemberExpr>(op->getLHS()->IgnoreParenImpCasts()) && !lk.empty()) {
+          std::string rn = castedVarName(rhs);
+          if (!rn.empty()) {
+            fieldAliases_[lk].insert(rn);
+            fieldAliases_[rn].insert(lk);
+          }
+        }
       }
       return true;
     }
@@ -2749,10 +3322,23 @@ public:
           }
     }
     // `p = reallocTemp` rebinds only the owner name; stale aliases stay dead.
+    // Clear p's released state (the realloc succeeded) and give it the temp's
+    // tracked extent so later subscripts are still bounds-checked.
     if (!reallocRebindOwner_.empty() && op->isAssignmentOp() &&
         varNameOf(op->getLHS()) == reallocRebindOwner_ &&
-        varNameOf(op->getRHS()) == reallocRebindTemp_)
+        varNameOf(op->getRHS()) == reallocRebindTemp_) {
       releasedVars_.erase(reallocRebindOwner_);
+      std::string srcName = varNameOf(op->getRHS());
+      std::string dstName = varNameOf(op->getLHS());
+      auto sit = heapAllocs_.find(srcName);
+      if (sit != heapAllocs_.end() && sit->second.bytes > 0 &&
+          !dstName.empty()) {
+        HeapAllocState st = sit->second;
+        if (const auto *ref = dyn_cast<DeclRefExpr>(op->getLHS()->IgnoreParenImpCasts()))
+          st.decl = dyn_cast<VarDecl>(ref->getDecl());
+        heapAllocs_[dstName] = st;
+      }
+    }
     // An unsigned value compared with zero via < is always false: the check
     // can never protect anything, so it is a provable logic bug.
     // Subtracting or relationally comparing pointers into different objects
@@ -2828,9 +3414,16 @@ public:
       }
       if (const auto *ref = dyn_cast<DeclRefExpr>(lhs)) {
         if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
-          // Reassignment hands the pointer an extent we cannot prove.
+          // Reassignment hands the pointer an extent we cannot prove, except
+          // for the verified `p = reallocTemp` rebind, which carries the new
+          // allocation's extent (set above).
           auto hit = heapAllocs_.find(vd->getNameAsString());
-          if (hit != heapAllocs_.end() && hit->second.decl == vd)
+          bool isReallocRebind =
+              !reallocRebindOwner_.empty() &&
+              reallocRebindOwner_ == vd->getNameAsString() &&
+              varNameOf(op->getRHS()) == reallocRebindTemp_;
+          if (hit != heapAllocs_.end() && hit->second.decl == vd &&
+              !isReallocRebind)
             heapAllocs_.erase(hit);
           if (isOnePastEndExpr(op->getRHS()))
             onePastEnd_.insert(vd);
@@ -2882,8 +3475,11 @@ public:
       return true;
     }
     if (op->isAssignmentOp()) {
-      std::string lhsName = varNameOf(op->getLHS());
-      std::string rhsName = varNameOf(op->getRHS());
+      // Look through explicit casts: `int *q = (int *)(void *)p` (written here
+      // as `q = (int *)(void *)p`) must create the same alias group as `q = p`,
+      // otherwise releasing p leaves q's dereference unreported.
+      std::string lhsName = castedVarName(op->getLHS());
+      std::string rhsName = castedVarName(op->getRHS());
       if (!lhsName.empty() && !rhsName.empty() && lhsName != rhsName &&
           conditionalDepth_ == 0) {
         // q = p: simple pointer alias; merge their obligation groups.
@@ -2968,6 +3564,23 @@ public:
         if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
           nullVars_.erase(vd->getNameAsString());
       return true;
+    }
+    // Unary minus on the most-negative signed value overflows.  This is a
+    // static-only check: the native-site rewriter only understands binary
+    // operators, so emitting a site here would change the generated C.
+    if (op->getOpcode() == UO_Minus && op->getType()->isSignedIntegerType()) {
+      llvm::APSInt v;
+      unsigned w = ctx_.getIntWidth(op->getType());
+      __int128 minVal = w < 128 ? -((__int128)1 << (w - 1)) : 0;
+      if (knownConst(op->getSubExpr(), v) && w > 1 && w <= 64 &&
+          (__int128)v.getSExtValue() == minVal) {
+        if (strict_)
+          report(op->getBeginLoc(),
+                 "signed integer overflow in unary minus of minimum value");
+        else
+          warnAt(op->getBeginLoc(),
+                 "signed integer overflow in unary minus of minimum value");
+      }
     }
     if (op->getOpcode() == UO_Deref) {
       const Expr *sub = op->getSubExpr();
@@ -3230,6 +3843,59 @@ public:
     const FunctionDecl *callee = call->getDirectCallee();
     std::string rawName = callee ? callee->getNameAsString() : std::string();
     std::string name = normalizeFortifyName(rawName);
+
+    // ---- Interprocedural effect fixpoint ---------------------------------
+    // Summaries are built in the collector so the STRICT pass sees forward
+    // references, two-level relays and resolved function-pointer/callback
+    // calls.  `paramIndexOf` follows local aliases and `p + 0`.
+    if ((name == "free" || name == "cplus_release") && call->getNumArgs() >= 1) {
+      int slot = paramIndexOf(call->getArg(0));
+      if (slot >= 0)
+        userFrees_[currentFunction_].insert(slot);
+    }
+    if (!report_) {
+      std::set<std::string> targets = calleeNames(call, callee);
+      std::set<int> addFrees;
+      std::set<std::pair<std::string, unsigned>> addDerefs;
+      for (const auto &target : targets) {
+        auto fit = userFrees_.find(target);
+        if (fit != userFrees_.end())
+          for (int slot : fit->second) {
+            int ps = paramIndexOf(call->getArg((unsigned)slot));
+            if (ps >= 0)
+              addFrees.insert(ps);
+          }
+        for (const auto &pr : derefParams_)
+          if (pr.first == target) {
+            int ps = paramIndexOf(call->getArg(pr.second));
+            if (ps >= 0)
+              addDerefs.insert({currentFunction_, (unsigned)ps});
+          }
+        // A callback argument binds the callee's function-pointer parameter.
+        for (unsigned i = 0; callee && i < call->getNumArgs() &&
+                             i < callee->getNumParams(); ++i) {
+          if (!isFunctionPointerParam(callee->parameters()[i]))
+            continue;
+          if (const auto *fr = dyn_cast<DeclRefExpr>(call->getArg(i)->IgnoreParenCasts()))
+            if (const auto *fd = dyn_cast<FunctionDecl>(fr->getDecl()))
+              fnPtrParamTargets_[target][i].insert(fd->getNameAsString());
+        }
+        // Global points-to through a helper: `void store(int *p){g=p;}` used
+        // as `store(q)` makes g point at q.
+        auto git = globalParamStores_.find(target);
+        if (git != globalParamStores_.end())
+          for (const auto &kv : git->second) {
+            if (kv.first >= call->getNumArgs())
+              continue;
+            std::string an = castedVarName(call->getArg(kv.first));
+            if (!an.empty())
+              for (const auto &g : kv.second)
+                globalPointsTo_[g].insert(an);
+          }
+      }
+      userFrees_[currentFunction_].insert(addFrees.begin(), addFrees.end());
+      derefParams_.insert(addDerefs.begin(), addDerefs.end());
+    }
     // FORTIFY builtins insert extra object-size/flag arguments before the
     // format string.
     unsigned fmtShift = 0;
@@ -3284,24 +3950,29 @@ public:
     // callee that dereferences that parameter is unsafe even though the
     // dereference happens in the callee's body.
     if (report_) {
-      for (unsigned i = 0; i < call->getNumArgs(); ++i) {
-        if (!derefParams_.count({name, i}))
-          continue;
-        const Expr *arg = call->getArg(i);
-        std::string an = castedVarName(arg);
-        bool isNull = isNullConstant(arg) || (!an.empty() && nullVars_.count(an));
-        llvm::APSInt cv;
-        if (!isNull && knownConst(arg, cv))
-          isNull = cv.isZero();
-        if (!isNull)
-          continue;
-        std::string msg = "null pointer argument " + std::to_string(i) +
-                          " passed to '" + name + "'";
-        if (strict_)
-          report(call->getBeginLoc(), msg);
-        else
-          warnAt(call->getBeginLoc(), msg);
-        break;
+      bool reported = false;
+      for (const auto &target : calleeNames(call, callee)) {
+        for (unsigned i = 0; i < call->getNumArgs() && !reported; ++i) {
+          if (!derefParams_.count({target, i}))
+            continue;
+          // Canonicalize `p + 0` / `(T *)p` so a null pointer laundered
+          // through a zero offset is still recognized at the boundary (s20).
+          const Expr *arg = canonicalPointer(call->getArg(i));
+          std::string an = castedVarName(arg);
+          bool isNull = isNullConstant(arg) || (!an.empty() && nullVars_.count(an));
+          llvm::APSInt cv;
+          if (!isNull && knownConst(arg, cv))
+            isNull = cv.isZero();
+          if (!isNull)
+            continue;
+          std::string msg = "null pointer argument " + std::to_string(i) +
+                            " passed to '" + target + "'";
+          if (strict_)
+            report(call->getBeginLoc(), msg);
+          else
+            warnAt(call->getBeginLoc(), msg);
+          reported = true;
+        }
       }
     }
     if (!callee) {
@@ -3660,6 +4331,51 @@ public:
       // Contract-driven check: a function whose JSON contract declares a
       // nullable pointer argument must not receive a provably-null value.
       FunctionEffect contract = libcEffect(baseName);
+      // Enforce the precise v2 argument-index metadata.  Previously only the
+      // legacy `nullableArg` scalar was consumed, so freeEffects /
+      // writeEffects / ownershipTransfer were parsed but had no effect (S11).
+      bool isAllocatorFreeApi =
+          baseName == "free" || baseName == "cplus_release" ||
+          baseName == "realloc";
+      if (strict_) {
+        for (int idx : contract.freeArgs) {
+          if (isAllocatorFreeApi || idx < 0 || (unsigned)idx >= call->getNumArgs())
+            continue; // free/realloc already have their own state machine
+          std::string an = castedVarName(call->getArg(idx));
+          if (an.empty())
+            continue;
+          if (isReleased(call->getArg(idx)) || releasedVars_.count(an))
+            report(call->getBeginLoc(), "double free: '" + baseName +
+                                            "' frees argument " +
+                                            std::to_string(idx));
+          else if (conditionalDepth_ == 0)
+            markReleased(an);
+        }
+        for (int idx : contract.ownershipTransferArgs) {
+          // A realloc-style transfer is "success-only": the old pointer stays
+          // LIVE on failure (`if (!q) { free(p); return; }`) and becomes stale
+          // only after a successful rebind (`p = q`).  Releasing it here at
+          // the call site produced false UAFs / double frees.  The branch-aware
+          // realloc state machine (detectReallocSuccess / TraverseIfStmt)
+          // handles it correctly, including indirect calls via fn pointers.
+          if (isAllocatorFreeApi || idx < 0 ||
+              (unsigned)idx >= call->getNumArgs())
+            continue;
+          std::string an = castedVarName(call->getArg(idx));
+          if (!an.empty() && conditionalDepth_ == 0)
+            markReleased(an); // caller relinquishes the owned pointer
+        }
+        for (int idx : contract.writeArgs)
+          if (idx >= 0 && (unsigned)idx < call->getNumArgs()) {
+            const Expr *a = call->getArg(idx)->IgnoreParenCasts();
+            if (const auto *ref = dyn_cast<DeclRefExpr>(a))
+              if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+                heapWritten_.insert(vd);
+          }
+      }
+      // Keep the legacy nullableArg policy (all pointer args) unchanged; the
+      // precise nullableArgIndices mean "accepts NULL" and must not be
+      // reinterpreted as a violation.
       if (contract.nullableArg && !contract.frees)
         for (unsigned i = 0; i < call->getNumArgs(); ++i)
           if (isNullConstant(call->getArg(i)->IgnoreParenCasts()) ||
@@ -4011,6 +4727,7 @@ public:
         checkBoundedCopy(call);
         checkSourceExtent(call, 1, 2);
         checkLibcNullSource(call, baseName);
+        propagatePointerBytes(call);
       }
       if (baseName == "strncpy" && call->getNumArgs() >= 3) {
         // strncpy pads the destination with NULs, so a count larger than a
@@ -4103,24 +4820,57 @@ public:
         }
       }
       // User-function effect summaries: a function that frees its parameter
-      // transfers that obligation to the call site.
-      auto uit = userFrees_.find(name);
-      if (uit != userFrees_.end() && !uit->second.empty()) {
+      // transfers that obligation to the call site.  Resolved function-pointer
+      // and callback targets share the same summary (S2/S15/S21).
+      for (const auto &target : calleeNames(call, callee)) {
+        auto uit = userFrees_.find(target);
+        if (uit == userFrees_.end() || uit->second.empty())
+          continue;
         for (int idx : uit->second) {
           if (idx < 0 || (unsigned)idx >= call->getNumArgs())
             continue;
-          const Expr *arg = call->getArg(idx)->IgnoreParenImpCasts();
-          const auto *ref = dyn_cast<DeclRefExpr>(arg);
-          const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-          if (!vd)
+          // castedVarName looks through `(int *)(void *)p` so a free-relay
+          // reached through a laundering cast is still a double free (s18).
+          std::string an = castedVarName(call->getArg(idx));
+          if (an.empty())
             continue;
-          if (releasedVars_.count(vd->getNameAsString()))
-            report(call->getBeginLoc(), "double free after call to '" + name +
+          if (releasedVars_.count(an))
+            report(call->getBeginLoc(), "double free after call to '" + target +
                                             "' which frees its argument");
-          else
-            if (conditionalDepth_ == 0)
-              markReleased(vd->getNameAsString());
+          else if (conditionalDepth_ == 0)
+            markReleased(an);
         }
+      }
+      // Out-parameter summaries: `make(&q)` where make does `*out = malloc(N)`
+      // or `*out = p` gives q the allocation extent / release state of p
+      // (S3/S9/S17).
+      for (const auto &target : calleeNames(call, callee)) {
+        auto oit = returnedOutParam_.find(target);
+        if (oit != returnedOutParam_.end())
+          for (const auto &kv : oit->second) {
+            if (kv.first >= call->getNumArgs() || kv.second >= call->getNumArgs())
+              continue;
+            std::string dst = varNameOfAddressArg(call->getArg(kv.first));
+            std::string src = castedVarName(call->getArg(kv.second));
+            if (dst.empty() || src.empty() || dst == src)
+              continue;
+            linkAlias(dst, src);
+            if (releasedVars_.count(src))
+              markReleased(dst);
+          }
+        auto ait = returnedOutAlloc_.find(target);
+        if (ait != returnedOutAlloc_.end())
+          for (const auto &kv : ait->second) {
+            if (kv.first >= call->getNumArgs() || kv.second <= 0)
+              continue;
+            std::string dst = varNameOfAddressArg(call->getArg(kv.first));
+            if (dst.empty())
+              continue;
+            HeapAllocState st;
+            st.bytes = kv.second;
+            st.origin = ExtentOrigin::Heap;
+            heapAllocs_[dst] = st;
+          }
       }
     }
     if (!report_ && name == "pthread_create" && call->getNumArgs() >= 3) {
@@ -4462,11 +5212,40 @@ private:
   std::set<const VarDecl *> stringPtrs_;
   std::map<const VarDecl *, unsigned long long> compoundLiteralVars_;
   std::set<const VarDecl *> nonZeroVars_;
+  // Variables whose guard-derived non-zero / lower-bound proof was invalidated
+  // by a definite assignment later in the same traversal.
+  std::set<const VarDecl *> invalidatedNonZero_;
   std::map<const VarDecl *, long long> loopLowerBound_;
   std::set<std::string> overflowingConstVars_;
   std::map<std::string, std::string> stackAliasOwner_;
   std::map<std::string, std::string> aliasWriter_;
   std::map<std::string, ArithEffect> arithEffects_;
+  // Functions whose every return is the same integer constant, so a size
+  // argument like `malloc(sz())` still has a provable byte count (S9).
+  std::map<std::string, long long> constReturnValues_;
+  // --- Interprocedural effect fixpoint state (collection pass) -------------
+  // Local name -> parameter slot of the current function, so a free/deref on
+  // `int *q = p;` is attributed to p (one-level `free(p)` only missed this).
+  std::map<std::string, int> localParamAliases_;
+  // Function-pointer variable / struct-field name -> resolved callee name.
+  std::map<std::string, std::string> fnPtrVarTargets_;
+  // Callee name -> function-pointer parameter slot -> possible target names
+  // (callbacks passed from call sites, e.g. callit(consume, p)).
+  std::map<std::string, std::map<unsigned, std::set<std::string>>>
+      fnPtrParamTargets_;
+  // Function -> (`T **` out-param slot -> source param slot) for `*out = p`.
+  std::map<std::string, std::map<unsigned, unsigned>> returnedOutParam_;
+  // Function -> (`T **` out-param slot -> allocation bytes) for
+  // `*out = malloc(N)`.
+  std::map<std::string, std::map<unsigned, long long>> returnedOutAlloc_;
+  // Union-typed variables: all field views alias the same storage, so
+  // `free(u.p); return *u.i;` is a UAF even though the field names differ.
+  std::set<std::string> unionVars_;
+  // Global pointer -> names it may point at, and per-function records of a
+  // global assigned from a parameter (`void store(int *p){ g = p; }`).
+  std::map<std::string, std::set<std::string>> globalPointsTo_;
+  std::map<std::string, std::map<unsigned, std::set<std::string>>>
+      globalParamStores_;
   std::map<std::string, HeapAllocState> heapAllocs_;
   std::set<const VarDecl *> heapWritten_;
   std::set<const VarDecl *> heapInterior_;
@@ -4511,6 +5290,9 @@ public:
   std::set<std::string> releasedVars_;
   std::set<std::string> releasedFields_;
   std::map<std::string, std::set<std::string>> fieldAliases_;
+  // Integer laundering: provenance integer variable -> pointer variable it
+  // was derived from, so `(int *)u` inherits p's release state (provenance).
+  std::map<std::string, std::string> provenanceSource_;
   std::map<std::string, std::string> formatFnAliases_;
   std::map<std::string, std::string> snprintfResults_;
   std::map<std::string, std::string> freadResults_;
@@ -4568,6 +5350,17 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   bool needNativeArithmetic =
       !backendSanitizesSignedOverflow(backendArgs);
 
+  // An explicitly requested contract file that cannot be loaded must fail
+  // closed in STRICT: otherwise its effects would be silently assumed safe.
+  if (strict && std::getenv("CPLUS_CONTRACT_PATH") && !contractsLoaded()) {
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = "[CPLUS-LIBC] CPLUS_CONTRACT_PATH could not be loaded; STRICT "
+                "mode cannot verify libc effects";
+    d.file = filename;
+    diags.report(std::move(d));
+  }
+
   // Keep only parse-relevant flags; sanitizer and warning-as-error flags can
   // make the in-memory AST parse fail for unrelated reasons.
   std::vector<std::string> args;
@@ -4604,6 +5397,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
           s.find("field width") == std::string::npos &&
           s.find("precision") == std::string::npos &&
           s.find("will always overflow") == std::string::npos &&
+          s.find("overflow in") == std::string::npos &&
           s.find("division by zero") == std::string::npos)
         return;
       Diag d;
@@ -4630,9 +5424,10 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
     return; // AST parse failed; do not guess from a broken AST.
 
   SafetyVisitor collect(ast->getASTContext(), diags, filename, false);
-  // Iterate the collection pass so parameter extents inferred at later call
-  // sites can propagate into earlier-defined callees (nested chains).
-  for (int round = 0; round < 3; ++round)
+  // Iterate the collection pass to a fixpoint: parameter extents, free/deref
+  // effects, returned aliases and global points-to facts must flow through
+  // multi-level call chains regardless of definition order.
+  for (int round = 0; round < 8; ++round)
     collect.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   SafetyVisitor check(ast->getASTContext(), diags, filename, true);
@@ -4643,6 +5438,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setDestructors(collect.destructors());
   check.setFieldAliases(collect.fieldAliases());
   check.setArithEffects(collect.arithEffects());
+  check.setConstReturnValues(collect.constReturnValues());
   check.setFormatFnAliases(collect.formatFnAliases());
   check.setHandledReallocs(collect.handledReallocs());
   check.setConstLocals(collect.constLocals());
@@ -4650,6 +5446,13 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setNullReturningFunctions(collect.nullReturningFunctions());
   check.setDerefParams(collect.derefParams());
+  check.userFrees_ = collect.userFrees_;
+  check.setGlobalPointsTo(collect.globalPointsTo());
+  check.setUnionVars(collect.unionVars());
+  check.setFnPtrVarTargets(collect.fnPtrVarTargets());
+  check.setFnPtrParamTargets(collect.fnPtrParamTargets());
+  check.setReturnedOutParams(collect.returnedOutParams());
+  check.setReturnedOutAllocs(collect.returnedOutAllocs());
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
   check.setMaybeReleaseLines(collect.maybeReleaseLines());
   check.setAddressTakenVars(collect.addressTakenVars());

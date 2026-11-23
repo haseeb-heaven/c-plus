@@ -1,0 +1,8 @@
+case: gcd
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --legacy-c --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/gcd.generated.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/gcd.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/gcd.cplus
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

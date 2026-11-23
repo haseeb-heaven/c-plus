@@ -236,10 +236,14 @@ static volatile int idx = 2;
 int main(void){ int a[4]={1,2,3,4}; void *v=a; int *p=(int*)v; printf("v=%d\n", p[idx]); return 0; }
 ''', ("v=3",)),
 
-    asan_only("cast_oob", "casts", STD + r'''
+    # Wave 1 hardening: this cast-laundered OOB is now rejected statically
+    # by the STRICT bounds checker ([CPLUS-BOUNDS]). Previously it was an
+    # asan_only case (accepted by c+, caught only by sanitizer). Requiring
+    # static rejection is a strictly stronger expectation, not a weakened one.
+    static_reject("cast_oob", "casts", STD + r'''
 static volatile int idx = 6;
 int main(void){ int a[4]={1,2,3,4}; void *v=a; int *p=(int*)v; printf("v=%d\n", p[idx]); return 0; }
-''', ASAN_STACK),
+''', ("[CPLUS-BOUNDS]",)),
 
     # ------------------------------------------------------------------
     # Function parameters and returned pointers

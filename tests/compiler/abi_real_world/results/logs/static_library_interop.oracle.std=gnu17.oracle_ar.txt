@@ -1,0 +1,8 @@
+command: /usr/bin/ar rcs /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/libstatic_library_interop_oracle_std=gnu17.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.oracle_std=gnu17.helper.o
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

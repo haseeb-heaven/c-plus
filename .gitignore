@@ -51,3 +51,12 @@ tests/compiler/differential/probe/cases/*.bin
 tests/compiler/memory_safety_compare/cases/*.bin
 benchmarks/cplus_vs_rust/results/*.bin
 benchmarks/rust_vs_cplus/results/*.bin
+
+# Generated binaries from the new compatibility/adversarial harnesses
+tests/compiler/abi_real_world/cases/*.bin
+tests/compiler/abi_real_world/cases/*.o
+tests/compiler/abi_real_world/cases/*.a
+tests/compiler/real_world_c/bin/
+tests/compiler/real_world_c/cache/
+tests/compiler/c_standards/results/generated/*.bin
+tests/compiler/adversarial_campaign/results/*.bin

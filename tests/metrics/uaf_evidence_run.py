@@ -93,11 +93,13 @@ CASES: tuple[Case, ...] = (
         "double_free", "raw double free", True, "reject", "[CPLUS-OWNER]",
         "double free of 'p'", None,
     ),
+    # Wave 1: still rejected, now via the branch-aware realloc state machine
+    # with a lifetime diagnostic instead of the old generic [CPLUS-ALIAS]
+    # message. Keep requiring a hard reject; only the expected wording changed.
     Case(
         "use_after_realloc", "stale original pointer used after realloc", True,
-        "reject", "[CPLUS-ALIAS]",
-        "realloc result and original pointer require explicit success/failure "
-        "handling", None,
+        "reject", "[CPLUS-LIFETIME]",
+        "use-after-free: dereference of released pointer", None,
     ),
     Case(
         "interproc_uaf", "stale pointer passed to a callee", True,

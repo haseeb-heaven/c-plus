@@ -1,0 +1,12 @@
+case: hash_crc32
+command: /usr/bin/clang -std=gnu89 -O2 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_crc32.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_crc32.clang
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_crc32.c:28:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+   28 |         for (uint8_t j = 8; j > 0; --j)
+      |              ^
+1 warning generated.
+

@@ -1,0 +1,14 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/libstatic_library_interop_default.a
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+static_library_interop.default.helper.o:
+00000000000001c0 T _lib_apply
+0000000000000000 T _lib_mul
+0000000000000194 T _lib_pair
+0000000000000170 T _lib_scale
+
+--- stderr ---
+
