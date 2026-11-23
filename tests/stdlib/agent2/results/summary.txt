@@ -1,4 +1,4 @@
-Agent 2 aggregate regression summary (11831a2)
+Agent 2 aggregate regression summary (0261270)
 compiler=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build_timeout=90s run_timeout=30s
 
 TEST                                     GROUP     MODULE      CLASS          BUILD RUN DETAIL
@@ -31,6 +31,16 @@ deep_thread_nested                       deep      thread      PASS             
 deep_thread_task5                        deep      thread      PASS               0 0   
 deep_vector_task4                        deep      vector      PASS               0 0   
 cross_module                             agent2    agent2      PASS               0 0   
+extra_collections_clear                  agent2    agent2      PASS               0 0   
+extra_error_metadata                     agent2    agent2      PASS               0 0   
+extra_file_binary                        agent2    agent2      PASS               0 0   
+extra_fs_edges                           agent2    agent2      PASS               0 0   
+extra_io_whitespace                      agent2    agent2      PASS               0 0   
+extra_json_cleanup                       agent2    agent2      PASS               0 0   
+extra_log_edges                          agent2    agent2      PASS               0 0   
+extra_string_vector_alias                agent2    agent2      PASS               0 0   
+extra_thread_condvar                     agent2    agent2      PASS               0 0   
+extra_time_boundaries                    agent2    agent2      PASS               0 0   
 collections_test                         existing  existing    PASS               0 0   
 containers_safety_test                   existing  existing    PASS               0 0   
 core_extras_test                         existing  existing    PASS               0 0   
@@ -43,4 +53,4 @@ negative                                 existing  existing    PASS             
 net_test                                 existing  existing    PASS               0 0   
 stdlib_hardening_test                    existing  existing    PASS               0 0   
 
-SUMMARY PASS=40 FAIL=0 BUILD_FAILURE=0 TIMEOUT=0 SKIPPED=0 BLOCKED=0 TOTAL=40
+SUMMARY PASS=50 FAIL=0 BUILD_FAILURE=0 TIMEOUT=0 SKIPPED=0 BLOCKED=0 TOTAL=50

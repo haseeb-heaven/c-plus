@@ -84,16 +84,16 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
   like scpptool … you can define `MSE_SCOPEPOINTER_ENABLED` … [or]
   `MSE_SCOPEPOINTER_RUNTIME_CHECKS_ENABLED` … at a significant performance cost." The same
   source notes scope pointers are "just an alias for native pointers in non-debug builds" by
-  default (`msepointerbasics.h:130-138`: `MSE_SCOPEPOINTER_DISABLED` is defined under `NDEBUG`
+  default (`msepointerbasics.h:135-143`: `MSE_SCOPEPOINTER_DISABLED` is defined under `NDEBUG`
   unless `MSE_SCOPEPOINTER_RUNTIME_CHECKS_ENABLED` is set).
 - The type-level machinery is in `msepointerbasics.h`: empty marker base classes
   `XScopeTagBase`, `ReferenceableByScopePointerTagBase` ("objects that might have a scope pointer
   targeting them must live to the end of the scope in which they are declared"),
   `ContainsNonOwningScopeReferenceTagBase` ("not, in the general case, safe to assign the value of
   a scope pointer to another object as that object may outlive the target") **[SRC]**
-  (`msepointerbasics.h:1095-1130`). Template predicates `is_potentially_xscope` /
+  (`msepointerbasics.h:876-925`). Template predicates `is_potentially_xscope` /
   `is_potentially_not_xscope` and `T_valid_if_not_an_xscope_type()` turn misuse into compile errors
-  **[SRC]** (`msepointerbasics.h:1225-1270`).
+  **[SRC]** (`msepointerbasics.h:990-1050`).
 - `msescope.h` supplies `TXScopeObj<T>` (transparent wrapper making a local a "scope object"),
   `TXScopeFixedPointer<T>`, `TXScopeNotNullPointer`, `TXScopeOwnerPointer`, and a *type-level
   lifetime tag*: `typedef size_t lifetime_info1_t; static const lifetime_info1_t no_lifetime_info1
@@ -104,7 +104,7 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
 - Optional runtime checking is implemented by type erasure: with
   `MSE_SCOPEPOINTER_RUNTIME_CHECKS_ENABLED`, `TXScopeObjBase = mse::TNDNoradObj<_TROz>` and
   `TXScopeItemPointerBase = xsrtc::TAnyPointerBaseV1<_Ty>` **[SRC]**
-  (`msescope.h:829-831`), where `TAnyPointerBaseV1` stores a type-erased safe pointer in a custom
+  (`msescope.h:845-847`), where `TAnyPointerBaseV1` stores a type-erased safe pointer in a custom
   `any` (SOO storage + dynamic vtable) and only dereferences through the stored pointer's own
   safety check **[SRC]** (`msescope.h:660-735`).
 
@@ -112,7 +112,7 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
 
 - `mseslta.h` defines `LT(...)`, `LTP(...)`, `LT_RETVAL(...)`, `LT_THIS(...)`, `LT_ENCOMPASSES(x,y)`,
   `LT_FIRST_CAN_BE_ASSIGNED_TO_SECOND(x,y)` — all expand to
-  `__attribute__((annotate("mse::lifetime_…")))` on clang **[SRC]** (`mseslta.h:104-112`, with the
+  `__attribute__((annotate("mse::lifetime_…")))` on clang **[SRC]** (`mseslta.h:102-110`, with the
   generic `MSE_ATTR_STR` defined in `msepointerbasics.h:281-293`). Example **[SRC]**
   (`mseslta.h:83-93`): `MSE_INHERIT_LTA_ASSIGNMENT_OPERATOR_FROM` emits
   `mse::lifetime_notes{ label(mse_ilaof_42); this(mse_ilaof_42); return_value(mse_ilaof_42) }`.
@@ -260,7 +260,7 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
   `TAsyncSharedV2ExclusiveReadWritePointer` uses `unique_nonrecursive_lock`. `TXScope…` variants
   additionally derive from `XScopeTagBase`. `readlock_ptr()` / `writelock_ptr()` are the access
   points **[SRC]** (`mseasyncshared.h:2217, 2244`).
-- `mseasyncshared.h:342` states registered pointers "cannot be shared among asynchronous threads
+- `README.md:342` states registered pointers "cannot be shared among asynchronous threads
   (enforced by the type system and scpptool)"; cross-thread sharing goes through these async
   types. `AsyncNotShareableTagBase`/`AsyncNotPassableTagBase` are the markers.
 - For atomics, `msestaticimmutable.h:87-93` defines
@@ -279,10 +279,10 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
 
 ## 6. How invalid access is reported
 
-- Central macro **[SRC]** (`msepointerbasics.h:271-279`, repeated per header): `#ifdef
+- Central macro **[SRC]** (`msepointerbasics.h:262-266`, repeated per header): `#ifdef
   MSE_CUSTOM_THROW_DEFINITION → #define MSE_THROW(x) MSE_CUSTOM_THROW_DEFINITION(x)` else
   `#define MSE_THROW(x) throw(x)`. With exceptions disabled, `MSE_CUSTOM_THROW_DEFINITION(x)` is
-  defined as `exit(-11)` **[SRC]** (`msepointerbasics.h:99-101`). The sample config documents the
+  defined as `exit(-11)` **[SRC]** (`msepointerbasics.h:113-116`). The sample config documents the
   override explicitly: "[The following will result in program termination instead of exceptions
   being thrown when an invalid memory access is attempted]" **[SRC]**
   (`examples/msetl_example/msetl_example_defs.h:44-47`).
@@ -316,14 +316,14 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
 
 - The repository has **no `tests/` directory** **[SRC]** (recursive tree, row 12). `MSE_SELF_TESTS`
   is defined in `examples/msetl_example/msetl_example_defs.h:77` and gates in-header test code in
-  e.g. `mseslta.h:15-17` and `msemstdarray.h:811`.
+  e.g. `mseslta.h:22-24` and `msemstdarray.h:814-881`.
 - **`examples/msetl_example/msevector_test.h` (fetched, row 14)** is the main inspected test
   source. It defines `class msevector_test` with `run_all()` invoking 40+ methods
   (`msevec_test_1…7`, `capacity`, `at`, `pointer`, `auto_ref`, `iterators`, `ebo`, `bvec1`,
   `msevec_test_m1…m7`, `_i1…i7`, `_s1…s7`, `_ss1…ss7`, `_mt1…mt7`) across `msevector`, `ivector`,
   `mstd::vector` and "structure-safe" (`ss_begin`/`ss_iterator_type`) and "cipointer"/`ipointer`
   augmented-iterator variants **[SRC]** (`msevector_test.h:30-99`). Relevant cases actually read:
-  - `at()` **[SRC]** (`msevector_test.h:375-401`): after `v.push_back(10)`, `v.at(0)==10`, write
+  - `at()` **[SRC]** (`msevector_test.h:419-445`): after `v.push_back(10)`, `v.at(0)==10`, write
     through `v.at(0)`, then `MSE_TRY { v.at(1) = 20; EXAM_CHECK(false); } MSE_CATCH
     (std::out_of_range const&) { … }` — i.e. the checked accessor must throw, not corrupt.
   - `capacity()` (`:405-424`), `iterators()` (`:540-561`), `pointer()` (`:430-441`, vector of

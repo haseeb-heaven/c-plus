@@ -36,11 +36,11 @@ sh tests/stdlib/agent2/run_all.sh --clean
 Actual final result (**exit 0**):
 
 ```
-SUMMARY PASS=40 FAIL=0 BUILD_FAILURE=0 TIMEOUT=0 SKIPPED=0 BLOCKED=0 TOTAL=40
+SUMMARY PASS=50 FAIL=0 BUILD_FAILURE=0 TIMEOUT=0 SKIPPED=0 BLOCKED=0 TOTAL=50
 ```
 
-Breakdown of the 40: **28** `deep_*.cp`, **1** Agent 2 cross-module test,
-**11** curated existing non-deep stdlib tests. Every test was built with
+Breakdown of the 50: **28** `deep_*.cp`, **11** `agent2/*.cp` (10 closure tests
+plus the cross-module test), **11** curated existing non-deep stdlib tests. Every test was built with
 `--strict --sanitize=none`, executed under a timeout with its stdin fixture,
 and checked against byte-exact stdout/stderr fixtures where present. Full
 evidence: `tests/stdlib/agent2/results/summary.json`, `summary.txt`, and
@@ -97,8 +97,8 @@ in the commit history (`5fe387d`, `d45681b`, `1438bf2`, `a8dd030`, `584f290`,
 
 ## 12. Regression tests added
 
-28 `deep_*.cp` tests plus `agent2/cross_module.cp`, with 5 `.stdin` fixtures,
-28 stdout and 28 stderr expectation fixtures. New tests since the baseline
+28 `deep_*.cp` tests plus 11 `agent2/*.cp` tests, with 16 `.stdin` fixtures
+and byte-exact stdout/stderr expectation fixtures for every test. New tests since the baseline
 cover Task 2 I/O and file boundaries, Task 3 allocation-point enumeration and
 collections boundaries, Task 4 string/vector ownership, Task 5 thread/log/fs/
 net/error/json gaps, and cross-module failure composition. Every fix listed in
@@ -127,7 +127,7 @@ not referenced (`input.hp` 10/10, `video.hp` 22/25, `audio.hp` 21/29, `gui.hp`
 16/18, `http.hp` 14/19, `image.hp` 9/10, `graphics.hp` 9/16, `async.hp` 9/14,
 `window.hp` 6/11, plus small gaps elsewhere). Function-level runtime
 attribution for `.hp` headers is unavailable on this host, so execution is
-measured at test granularity (40 runner invocations in strict mode; 84 deep
+measured at test granularity (50 runner invocations in strict mode; 84 deep
 invocations in the three-mode runner). Name presence is not execution and is
 not proof of safety. No percentage is invented.
 
@@ -156,7 +156,7 @@ RAII, stale slice/view refusal without dereference, and telemetry
 
 ## 17–19. Remaining risks, compiler dependencies, reproduction
 
-**Verified** (by actual build+run+exit+output check): the 40 runner tests,
+**Verified** (by actual build+run+exit+output check): the 50 runner tests,
 compile-time classifications, allocation fault matrix, 70-layout ABI agreement.
 **Tested with limited coverage**: UBSan matrix; individual failure paths of
 each deep test. **Untested**: all platform modules' runtime behavior; JSON OOM
@@ -179,6 +179,16 @@ sh tests/stdlib/agent2/run_all.sh --clean
 CPLUS_BIN=$PWD/build/c+ sh tests/stdlib/compile_time/run_compile_time.sh
 sh tests/run_all_evidence.sh
 ```
+
+## Upstream reuse
+
+`docs/stdlib/upstream-reuse.md` and the 7 per-source studies in
+`docs/stdlib/upstream_study/` record actual source inspected (MS STL, GSL,
+SaferCPlusPlus, Microsoft Secure CRT + vendored safeclib, Cake, Fil-C, LLVM),
+exact URLs/revisions, licenses, adapted designs, and regression tests. Only
+LLVM `memset_explicit` was copied verbatim (pre-existing provenance); Cake was
+rejected on license; all other mechanisms were adapted to the C+ `error *`
+model and header-only API.
 
 ## Verdict
 
