@@ -4,10 +4,12 @@
 #include "../safe_alloc.h"
 #include "../safe_error.h"
 #include "../safe_log.h"
+#include "../safe_runtime.h"
 #include "../safe_stats.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Bounded stream-identity caches with fail-closed growth policy.
@@ -132,6 +134,18 @@ int cplus_io_stream_is_closed(const FILE *stream) {
     closed = stream_find(g_closed_streams, stream) != STREAM_CACHE_SLOTS;
     pthread_mutex_unlock(&g_io_lock);
     return closed;
+}
+
+int cplus_safe_stream_was_closed(const FILE *stream) {
+    return cplus_io_stream_is_closed(stream);
+}
+
+size_t cplus_safe_open_stream_count(void) {
+    size_t live;
+    pthread_mutex_lock(&g_io_lock);
+    live = g_live_count;
+    pthread_mutex_unlock(&g_io_lock);
+    return live;
 }
 
 /* Defense-in-depth for the caller-declared `bmax`.  The Annex K count clamp
@@ -283,4 +297,140 @@ size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, F
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fwrite_s", "ok");
     cplus_safe_stat_record("fwrite_s", 1);
     return r;
+}
+
+static int io_checked_guard(const char *api, const void *buf, size_t req_bytes,
+                            size_t known_bmax, const FILE *stream) {
+    size_t tracked;
+    size_t cap;
+    if (cplus_io_stream_is_closed(stream)) {
+        errno = EBADF;
+        cplus_safe_stat_record(api, 0);
+        cplus_runtime_violation(api, "use-after-close detected on FILE*");
+        return -1;
+    }
+    if (cplus_safe_ptr_was_freed(buf)) {
+        errno = EINVAL;
+        cplus_safe_stat_record(api, 0);
+        cplus_runtime_violation(api, "use-after-free detected in I/O buffer");
+        return -1;
+    }
+    tracked = cplus_safe_ptr_size(buf);
+    cap = tracked > 0 ? tracked : (known_bmax != (size_t)-1 ? known_bmax : 0);
+    if (cap > 0 && req_bytes > cap) {
+        errno = ERANGE;
+        cplus_safe_stat_record(api, 0);
+        cplus_runtime_violation(api, "requested I/O size exceeds buffer capacity");
+        return -1;
+    }
+    return 0;
+}
+
+char *cplus_fgets_s(char *buf, size_t bmax, int n, FILE *stream) {
+    return cplus_fgets_s_checked(buf, bmax, n, stream);
+}
+
+char *cplus_fgets_s_checked(char *buf, size_t known_bmax, int n, FILE *stream) {
+    char *r;
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fgets_s", "enter");
+    if (!buf || !stream || n <= 0) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fgets_s", "invalid args");
+        cplus_safe_stat_record("fgets_s", 0);
+        return NULL;
+    }
+    if (io_checked_guard("fgets_s", buf, (size_t)n, known_bmax, stream) < 0) return NULL;
+    r = fgets(buf, n, stream);
+    if (!r) {
+        buf[0] = '\0';
+        cplus_safe_log(CPLUS_SAFE_LOG_WARN, "fgets_s", "EOF or read error");
+        cplus_safe_stat_record("fgets_s", 0);
+        return NULL;
+    }
+    cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fgets_s", "ok");
+    cplus_safe_stat_record("fgets_s", 1);
+    return r;
+}
+
+size_t cplus_fread_s_checked(void *buf, size_t known_bmax, size_t bmax,
+                             size_t size, size_t count, FILE *stream) {
+    size_t r;
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fread_s", "enter");
+    if (!buf || !stream || size == 0 || count == 0) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fread_s", "invalid args");
+        cplus_safe_stat_record("fread_s", 0);
+        return 0;
+    }
+    if (count > SIZE_MAX / size) {
+        errno = EOVERFLOW;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fread_s", "size * count overflow");
+        cplus_safe_stat_record("fread_s", 0);
+        return 0;
+    }
+    if (io_checked_guard("fread_s", buf, bmax, known_bmax, stream) < 0) return 0;
+    if (count > bmax / size) count = bmax / size;
+    r = fread(buf, size, count, stream);
+    cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fread_s", "ok");
+    cplus_safe_stat_record("fread_s", 1);
+    return r;
+}
+
+size_t cplus_fwrite_s_checked(const void *buf, size_t known_bmax, size_t bmax,
+                              size_t size, size_t count, FILE *stream) {
+    size_t r;
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fwrite_s", "enter");
+    if (!buf || !stream || size == 0 || count == 0) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fwrite_s", "invalid args");
+        cplus_safe_stat_record("fwrite_s", 0);
+        return 0;
+    }
+    if (count > SIZE_MAX / size) {
+        errno = EOVERFLOW;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fwrite_s", "size * count overflow");
+        cplus_safe_stat_record("fwrite_s", 0);
+        return 0;
+    }
+    if (io_checked_guard("fwrite_s", buf, bmax, known_bmax, stream) < 0) return 0;
+    if (count > bmax / size) count = bmax / size;
+    r = fwrite(buf, size, count, stream);
+    cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fwrite_s", "ok");
+    cplus_safe_stat_record("fwrite_s", 1);
+    return r;
+}
+
+int cplus_getenv_s(size_t *len, char *value, size_t valuesz, const char *name) {
+    const char *v;
+    size_t n;
+    cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "getenv_s", "enter");
+    if (!name || (!value && valuesz > 0)) {
+        errno = EINVAL;
+        cplus_safe_stat_record("getenv_s", 0);
+        return EINVAL;
+    }
+    if (value && cplus_safe_ptr_was_freed(value)) {
+        errno = EINVAL;
+        cplus_safe_stat_record("getenv_s", 0);
+        cplus_runtime_violation("getenv_s", "use-after-free detected in output buffer");
+        return EINVAL;
+    }
+    v = getenv(name);
+    if (!v) {
+        if (len) *len = 0;
+        if (value && valuesz > 0) value[0] = '\0';
+        cplus_safe_stat_record("getenv_s", 1);
+        return 0;
+    }
+    n = strlen(v);
+    if (len) *len = n;
+    if (!value || valuesz <= n) {
+        if (value && valuesz > 0) value[0] = '\0';
+        errno = ERANGE;
+        cplus_safe_stat_record("getenv_s", 0);
+        return ERANGE;
+    }
+    memcpy(value, v, n + 1);
+    cplus_safe_stat_record("getenv_s", 1);
+    return 0;
 }

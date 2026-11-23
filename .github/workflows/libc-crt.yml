@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [develop]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   linux-crt:
     runs-on: ubuntu-latest
@@ -69,8 +73,6 @@ jobs:
         run: sh tests/exceptions/run_except_tests.sh
       - name: Runtime recover & cleanup tests
         run: sh tests/runtime/run_runtime_tests.sh
-      - name: Modern stdlib compile-time safety suite
-        run: sh tests/stdlib/compile_time/run_compile_time.sh
       - name: Libc fuzz
         run: sh tests/libc/run_fuzz.sh
       - name: Combined fuzz harness
@@ -122,13 +124,31 @@ jobs:
   # No ASAN_OPTIONS/suppressions are added and no coverage/threshold gates are
   # relaxed; every runner keeps its own pass/fail criteria.
   stdlib-deep-family-integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CPLUS_CLANG: clang
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/core-safety
+          path: .cplus-core-compiler
       - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm-dev libclang-dev cmake ninja-build python3 \
+                                  libprotobuf-dev protobuf-compiler-grpc libgrpc++-dev \
+                                  libabsl-dev libzstd-dev
+      - name: Build C+ compiler for stdlib integration
+        run: |
+          LLVM_VER="$(llvm-config --version | cut -d. -f1)"
+          cmake -S .cplus-core-compiler -B .cplus-core-compiler/build -G Ninja \
+            -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+            -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang"
+          cmake --build .cplus-core-compiler/build --target c+ --parallel
+          mkdir -p build
+          printf '#!/bin/sh\nexec "%s/.cplus-core-compiler/build/c+" "$@"\n' "$PWD" > build/c+
+          chmod +x build/c+
       - name: Deep stdlib tests
         run: sh tests/stdlib/run_deep_tests.sh
       - name: Modern stdlib compile-time safety suite

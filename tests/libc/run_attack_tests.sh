@@ -42,13 +42,20 @@ for t in tests/libc/test_*_attack.c; do
 done
 
 if [ -f tests/libc/test_contract_integrity.cp ]; then
-  if build/native-tools/test_contract_integrity >"$OUT/contract_integrity.run.log" 2>&1; then
-    echo "ok   test_contract_integrity.cp"
-    pass=$((pass + 1))
+  if [ ! -x build/native-tools/test_contract_integrity ] && [ -x build/c+ ] && [ -f tests/native/build_native_tools.sh ]; then
+    sh tests/native/build_native_tools.sh >/dev/null 2>&1 || true
+  fi
+  if [ -x build/native-tools/test_contract_integrity ]; then
+    if build/native-tools/test_contract_integrity "$ROOT" >"$OUT/contract_integrity.run.log" 2>&1; then
+      echo "ok   test_contract_integrity.cp"
+      pass=$((pass + 1))
+    else
+      echo "FAIL test_contract_integrity.cp"
+      tail -12 "$OUT/contract_integrity.run.log" || true
+      fail=$((fail + 1))
+    fi
   else
-    echo "FAIL test_contract_integrity.cp"
-    tail -12 "$OUT/contract_integrity.run.log" || true
-    fail=$((fail + 1))
+    echo "skip test_contract_integrity.cp (native tool unavailable without build/c+)"
   fi
 fi
 

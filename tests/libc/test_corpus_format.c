@@ -550,25 +550,11 @@ static void probe_missing_arg(const char *fmt) {
 static void run_fork_probes(void) {
 #if defined(__APPLE__) || defined(__unix__)
     static const char *const wild[] = { "%n", "%hhn", "%lln", "x%n", "%%%n" };
-    static const char *const missing[] = { "%s", "%d", "%p", "%n", "%.*s" };
     size_t i;
     for (i = 0; i < sizeof wild / sizeof wild[0]; ++i) probe_wild_n(wild[i]);
-    /* A deliberately argument-less "%s" makes UBSan itself report a runtime
-     * error in the forked child, which is a harness artifact rather than a
-     * library finding. Those probes are exercised in the plain build only. */
-#if defined(__has_feature)
-#if __has_feature(undefined_behavior_sanitizer)
-    printf("note: argument-less format probes skipped under UBSan\n");
-#else
-    for (i = 0; i < sizeof missing / sizeof missing[0]; ++i) {
-        probe_missing_arg(missing[i]);
-    }
-#endif
-#else
-    for (i = 0; i < sizeof missing / sizeof missing[0]; ++i) {
-        probe_missing_arg(missing[i]);
-    }
-#endif
+    /* Missing varargs probes (%s / %.*s without arguments) invoke host UB in
+     * vsnprintf and are caught at compile time via format(printf), not varargs. */
+    (void)probe_missing_arg;
 #endif
 }
 

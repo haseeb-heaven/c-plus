@@ -11,8 +11,8 @@ set -u
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$ROOT" || exit 1
 
-export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
-export CPLUS_CLANG=/usr/bin/clang
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH
+export CPLUS_CLANG=${CPLUS_CLANG:-clang}
 
 OUT="$ROOT/build/integration"
 mkdir -p "$OUT"

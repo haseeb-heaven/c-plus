@@ -47,49 +47,38 @@ static int fmt_check_stream(const char *api, FILE *stream) {
     return 0;
 }
 
-/* Reject any "$" positional-argument marker outright (redteam F1).  In printf
- * syntax '$' only ever has meaning immediately after '%' or after the decimal
- * argument index of a conversion; a literal '$' in ordinary format text is
- * left untouched, so valid non-positional formats keep their behavior.
- *
- * Rationale: a positional specifier can hide a '%n' conversion from an
- * incomplete parser (e.g. "%1$2$n" was mis-scanned as width "2" followed by a
- * stray '$', stepping past the 'n').  This library never needs positional
- * arguments, so refusing them wholesale is safe and closes the whole class of
- * bypasses (including "%11$22$n", which otherwise reads a wild vararg and
- * crashes).  Returns 1 to be treated like a forbidden-%n violation. */
-static int cplus_fmt_has_positional(const char *fmt) {
-    const unsigned char *p = (const unsigned char *)fmt;
-    if (!p) return 0;
-    while (*p) {
-        if (*p != '%') { ++p; continue; }
-        ++p;
-        if (*p == '%') { ++p; continue; }          /* escaped '%' is literal */
-        if (*p == '$') return 1;                   /* %$... direct positional */
-        while (*p >= '0' && *p <= '9') ++p;
-        if (*p == '$') return 1;                   /* %N$... indexed positional */
+/* Parse optional N$ positional argument index; returns 1 if consumed & valid
+ * (1..32), -1 if malformed/out-of-range (%$ / %0$ / >32), 0 if no N$. */
+static int parse_pos_dollar(const unsigned char **pp) {
+    const unsigned char *q = *pp;
+    unsigned int val = 0;
+    if (*q == '$') return -1;
+    while (*q >= '0' && *q <= '9') {
+        val = val < 100u ? (val * 10u + (unsigned int)(*q - '0')) : 100u;
+        ++q;
+    }
+    if (q > *pp && *q == '$') {
+        if (val == 0u || val > 32u) return -1;
+        *pp = q + 1;
+        return 1;
     }
     return 0;
 }
 
 static int cplus_fmt_has_percent_n(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
-    if (cplus_fmt_has_positional(fmt)) return 1;   /* refuse all positional forms */
     if (!p) return 0;
     while (*p) {
-        const unsigned char *q;
+        int pr;
         if (*p != '%') { ++p; continue; }
         ++p;
         if (*p == '%') { ++p; continue; }
-        q = p;
-        while (*q >= '0' && *q <= '9') ++q;
-        if (q > p && *q == '$') p = q + 1;
+        pr = parse_pos_dollar(&p);
+        if (pr < 0) return 1;
         while (*p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' || *p == '\'') ++p;
         if (*p == '*') {
             ++p;
-            q = p;
-            while (*q >= '0' && *q <= '9') ++q;
-            if (q > p && *q == '$') p = q + 1;
+            if (parse_pos_dollar(&p) < 0) return 1;
         } else {
             while (*p >= '0' && *p <= '9') ++p;
         }
@@ -97,49 +86,41 @@ static int cplus_fmt_has_percent_n(const char *fmt) {
             ++p;
             if (*p == '*') {
                 ++p;
-                q = p;
-                while (*q >= '0' && *q <= '9') ++q;
-                if (q > p && *q == '$') p = q + 1;
+                if (parse_pos_dollar(&p) < 0) return 1;
             } else {
                 while (*p >= '0' && *p <= '9') ++p;
             }
         }
+        if (*p == '$') return 1; /* repeated or misplaced positional marker (e.g. %1$2$n, %1$-2$n) */
         while (*p == 'h' || *p == 'l' || *p == 'j' || *p == 'z' || *p == 't' || *p == 'L' || *p == 'q') ++p;
-        if (*p == 'n') return 1;
+        if (*p == '$' || *p == 'n') return 1;
         if (*p) ++p;
     }
     return 0;
 }
 
-/* Returns 0 if safe, 1 if %n present, 2 if unbounded %s or %[...]. */
+/* Returns 0 if safe, 1 if %n / invalid positional present, 2 if unbounded %s or %[...]. */
 static int cplus_scanf_fmt_check(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
-    /* Same positional-specifier hazard as the printf scanner (redteam F1):
-     * '$' after a conversion index can hide a %n write from an incomplete
-     * parser.  Refuse positional forms in scanf as well; literal '$' text is
-     * unaffected by the helper. */
-    if (cplus_fmt_has_positional(fmt)) return 1;
     if (!p) return 0;
     while (*p) {
         int suppressed = 0;
         int has_width = 0;
-        const unsigned char *q;
+        int pr;
         if (*p != '%') { ++p; continue; }
         ++p;
         if (*p == '%') { ++p; continue; }
         if (*p == '*') { suppressed = 1; ++p; }
-        q = p;
-        while (*q >= '0' && *q <= '9') ++q;
-        if (q > p && *q == '$') {
-            p = q + 1;
-            if (*p == '*') { suppressed = 1; ++p; }
-        }
+        pr = parse_pos_dollar(&p);
+        if (pr < 0) return 1;
+        if (pr > 0 && *p == '*') { suppressed = 1; ++p; }
         while (*p >= '0' && *p <= '9') {
             if (*p >= '1') has_width = 1;
             ++p;
         }
+        if (*p == '$') return 1;
         while (*p == 'h' || *p == 'l' || *p == 'j' || *p == 'z' || *p == 't' || *p == 'L' || *p == 'q') ++p;
-        if (*p == 'n') return 1;
+        if (*p == '$' || *p == 'n') return 1;
         if (*p == 's' && !suppressed && !has_width) return 2;
         if (*p == '[') {
             if (!suppressed && !has_width) return 2;

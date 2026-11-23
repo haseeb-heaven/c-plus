@@ -13,6 +13,7 @@ if command -v xcrun >/dev/null 2>&1; then
 fi
 
 sh "$ROOT/scripts/build_safecrt.sh" >/dev/null
+sh "$ROOT/tests/libc/build_libc.sh" >/dev/null
 
 OUT="$ROOT/build/safecrt-cov"
 rm -rf "$OUT"
@@ -31,7 +32,7 @@ for f in "$ROOT"/stdlib/safe/src/*.c; do
     OBJ_ARGS="$OBJ_ARGS -object $o"
   fi
 done
-ar rcs "$OUT/libsafecrt_cov.a" "$ROOT"/build/safe/sc_*.o "$ROOT"/build/safe/e4c_*.o $WOBJS
+ar rcs "$OUT/libsafecrt_cov.a" "$ROOT"/build/safe/sc_*.o "$ROOT"/build/safe/up_*.o "$ROOT"/build/safe/v_*.o "$ROOT"/build/safe/e4c_*.o $WOBJS
 
 pass=0; fail=0
 for t in "$ROOT"/tests/crt/unit/test_*.c "$ROOT"/tests/crt/test_safe_*.c \
@@ -41,15 +42,21 @@ for t in "$ROOT"/tests/crt/unit/test_*.c "$ROOT"/tests/crt/test_safe_*.c \
   tag=$(echo "$t" | sed "s|$ROOT/||; s|/|_|g; s|\.c$||")
   b="$OUT/$tag"
   EXTRA=""
+  EXTRA_INC=""
   LINK_OBJS="$OUT/libsafecrt_cov.a"
   case "$t" in
     *test_runtime_cleanup.c)
       EXTRA="-fsanitize=undefined,bounds,null,alignment -fsanitize-recover=all -fno-sanitize-trap=all -fno-omit-frame-pointer"
       LINK_OBJS="$OUT/w_safe_runtime.o $OUT/w_safe_log.o $OUT/w_safe_stats.o"
       ;;
+    *safe_c_api*|*audit_high*|*p0_safe_crt*|*p0_alloc_contract*|*safe_c_mapping*|*checked_runtime_safety*)
+      EXTRA_INC="-I$ROOT/libc -I$ROOT/libc/install-include"
+      LINK_OBJS="$OUT/libsafecrt_cov.a $ROOT/build/libc/libcplus_hardened.a"
+      ;;
   esac
   if "$CC" -O0 -std=c99 $EXTRA -fprofile-instr-generate -I"$ROOT" -I"$ROOT/stdlib/safe" \
-      -I"$ROOT/third_party/exceptions4c" "$t" $LINK_OBJS -lpthread \
+      -I"$ROOT/third_party/safeclib/include" -I"$ROOT/third_party/intel-safestringlib/include" \
+      -I"$ROOT/third_party/exceptions4c" $EXTRA_INC "$t" $LINK_OBJS -lm -lpthread \
       -o "$b" >"$OUT/$tag.build.log" 2>&1; then
     if LLVM_PROFILE_FILE="$OUT/$tag.profraw" "$b" >"$OUT/$tag.out" 2>&1; then
       pass=$((pass + 1))

@@ -82,7 +82,19 @@ SRCS="
   libc/src/math/math_ldouble.c
   libc/src/stdlib/stdlib_c17.c
   libc/src/stdlib/inttypes_wide.c
+  libc/src/string/upstream_safecrt.c
+  libc/src/math/c23_nextup.c
+  libc/src/math/c23_arith.c
+  libc/src/math/c23_hypot16.c
+  libc/src/stdlib/c23_time_unicode.c
+  libc/src/thread/sync_checked.c
+  libc/src/stdlib/alloc_hardened.c
+  libc/src/runtime/violation_log.c
+  libc/src/math/math_c23_hypot3_f16.c
+  libc/src/math/math_c23_next.c
+  libc/src/stdlib/atomic_wrappers.c
 "
+sh "$ROOT/scripts/build_safecrt.sh" >/dev/null
 OBJS=""
 FIRST_OBJ=""
 OBJ_ARGS=""
@@ -104,6 +116,7 @@ for t in tests/libc/test_*.c; do
   EXTRA_INC=""; EXTRA_LIB=""
   case "$t" in
     *test_alloc_fault_matrix*) EXTRA_INC="-I."; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
+    *test_vendor_*) EXTRA_INC="-I. -Ithird_party/safeclib/include"; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
   esac
   if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC \
       "$t" "$OUT/libcplus_hardened_cov.a" $EXTRA_LIB -lm -lpthread -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then

@@ -162,11 +162,11 @@ static void test_exact_and_overflow(void) {
     CHECK(gb_ok(&g), "exact-size memcpy_s corrupted a canary");
 
     /* n+1 into an n-byte destination: defined ESNOSPC, no canary damage.
-     * Documented destination state: safeclib zeroes the first dmax bytes. */
+     * C+ SECURITY PATCH: destination remains intact on refusal (dmax untrusted). */
     gb_init(&g);
     r = cplus_memcpy_s(g.buf, BUF_N, src, BUF_N + 1u);
     CHECK_ERR("memcpy_s undersized dmax", r, ESNOSPC);
-    CHECK(all_bytes(g.buf, BUF_N, 0), "memcpy_s ESNOSPC did not clear first dmax bytes");
+    CHECK(all_bytes(g.buf, BUF_N, (unsigned char)CANARY), "memcpy_s ESNOSPC modified destination on refusal");
     CHECK(gb_ok(&g), "memcpy_s undersized dmax corrupted a canary");
 
     /* Same boundary for memset_s: clamps to dmax, first dmax bytes set. */
@@ -176,11 +176,11 @@ static void test_exact_and_overflow(void) {
     CHECK(all_bytes(g.buf, BUF_N, 0x5Au), "memset_s ESNOSPC did not clamp to dmax");
     CHECK(gb_ok(&g), "memset_s undersized dmax corrupted a canary");
 
-    /* Same boundary for memmove_s: clears first dmax bytes. */
+    /* Same boundary for memmove_s: destination remains intact on refusal. */
     gb_init(&g);
     r = cplus_memmove_s(g.buf, BUF_N, src, BUF_N + 1u);
     CHECK_ERR("memmove_s undersized dmax", r, ESNOSPC);
-    CHECK(all_bytes(g.buf, BUF_N, 0), "memmove_s ESNOSPC did not clear first dmax bytes");
+    CHECK(all_bytes(g.buf, BUF_N, (unsigned char)CANARY), "memmove_s ESNOSPC modified destination on refusal");
     CHECK(gb_ok(&g), "memmove_s undersized dmax corrupted a canary");
 
     /* strcpy_s with a source whose length exactly equals dmax (needs dmax+1). */
@@ -421,7 +421,10 @@ static void test_huge_lengths(void) {
     r = cplus_memcpy_s(g.buf, BUF_N, src, huge);
     CHECK_ERR("memcpy_s SIZE_MAX", r, ESLEMAX);
     CHECK(gb_ok(&g), "memcpy_s SIZE_MAX corrupted a canary");
-    CHECK(all_bytes(g.buf, BUF_N, 0), "memcpy_s SIZE_MAX did not clear first dmax bytes");
+    /* C+ SECURITY PATCH: on constraint refusal dmax-wipe is skipped so an
+     * untrusted dmax cannot cause an OOB write; destination remains intact. */
+    CHECK(all_bytes(g.buf, BUF_N, (unsigned char)CANARY),
+          "memcpy_s SIZE_MAX modified destination on refusal");
 
     gb_init(&g);
     r = cplus_memmove_s(g.buf, BUF_N, src, huge);

@@ -1063,7 +1063,7 @@ static void c077(obs *o) {
     if (p) { SET_CANARY(o, p, 64, 0xBD); CHK_CANARY(o, p, 64, 0xBD); }
     MARK(o, p != NULL && ((uintptr_t)p % 16u) == 0u, e);
     o->c = (unsigned long)((uintptr_t)p % 16u);
-    AA_HOST_FREE(p);
+    cplus_free(p);
 #else
     (void)o;
 #endif
@@ -1117,7 +1117,7 @@ static void c081(obs *o) {
         if (((uintptr_t)p % aligns[i]) != 0u) good = 0;
         SET_CANARY(o, p, sz, (int)i);
         CHK_CANARY(o, p, sz, (int)i);
-        AA_HOST_FREE(p);
+        cplus_free(p);
     }
     MARK(o, good, 0); o->b = 4UL;
 #else
@@ -1137,7 +1137,7 @@ static void c082(obs *o) {
         if (((uintptr_t)p % 16u) != 0u) good = 0;
         SET_CANARY(o, p, sz, i + 1);
         CHK_CANARY(o, p, sz, i + 1);
-        AA_HOST_FREE(p);
+        cplus_free(p);
         ++n;
     }
     MARK(o, good, 0); o->b = n;

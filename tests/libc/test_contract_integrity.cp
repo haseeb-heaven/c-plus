@@ -270,7 +270,7 @@ static void find_repo(char *out, size_t cap, const char *override) {
     for (;;) {
         error e = error();
         file f;
-        snprintf(probe, sizeof(probe), "%s/tests/libc/validate_contracts.py", cwd);
+        snprintf(probe, sizeof(probe), "%s/libc/contracts/contracts.json", cwd);
         f = file(probe, "r");
         if (f.is_open()) {
             snprintf(out, cap, "%s", cwd);
