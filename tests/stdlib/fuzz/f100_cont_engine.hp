@@ -1,0 +1,1057 @@
+/* F-061..F-075 deterministic fuzz engine for the modern C+ stdlib .hp containers.
+ *
+ * Shared implementation for tests/stdlib/fuzz/f100_cont_f*.cp and
+ * f100_vec_f*.cp.  Each config supplies F100_ID, F100_SEED, F100_OPS and
+ * F100_MODE, then includes this file.  The engine is a standalone program
+ * (it defines main) and never modifies a header or a build script.
+ *
+ * Properties enforced by every configuration:
+ *   - fixed-seed LCG (no clock, no rand(), no environment input);
+ *   - >= 2000 generated operations, each confined to documented valid inputs;
+ *   - an independent shadow model compared after every operation;
+ *   - deterministic digest over the schedule and the outcomes;
+ *   - explicit coverage for collision-heavy keys, tombstone reuse, capacity
+ *     growth/overflow, vector generation staleness (checked through slice
+ *     metadata and allocator metadata, never by dereferencing a stale
+ *     pointer), deterministic allocation-fault injection and, in the balance
+ *     configuration, telemetry/cleanup accounting.
+ */
+#ifndef F100_CONT_ENGINE_HP
+#define F100_CONT_ENGINE_HP
+
+#include <stdio.h>
+#include <string.h>
+#include <stddef.h>
+#include <stdint.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/collections.hp"
+#include "stdlib/vector.hp"
+
+/* ---- modes ------------------------------------------------------------- */
+#define F100_M_COLLIDE_INT 1
+#define F100_M_TOMB_INT    2
+#define F100_M_TOMB_SET    3
+#define F100_M_COLLIDE_STR 4
+#define F100_M_TOMB_STR    5
+#define F100_M_DEQUE       6
+#define F100_M_LIST        7
+#define F100_M_STACK       8
+#define F100_M_QUEUE       9
+#define F100_M_VEC_GROW    10
+#define F100_M_VEC_ERASE   11
+#define F100_M_VEC_STALE   12
+#define F100_M_VEC_FAULT   13
+#define F100_M_FAULT       14
+#define F100_M_BALANCE     15
+
+#ifndef F100_ID
+#define F100_ID "F-???"
+#endif
+#ifndef F100_SEED
+#define F100_SEED 0xC0FFEEULL
+#endif
+#ifndef F100_OPS
+#define F100_OPS 2048
+#endif
+#ifndef F100_MODE
+#define F100_MODE F100_M_BALANCE
+#endif
+
+#define F100_IS_INT_MODE (F100_MODE == F100_M_COLLIDE_INT || \
+                          F100_MODE == F100_M_TOMB_INT || \
+                          F100_MODE == F100_M_TOMB_SET)
+#define F100_IS_STR_MODE (F100_MODE == F100_M_COLLIDE_STR || \
+                          F100_MODE == F100_M_TOMB_STR)
+#define F100_IS_TOMB_MODE (F100_MODE == F100_M_TOMB_INT || \
+                           F100_MODE == F100_M_TOMB_SET || \
+                           F100_MODE == F100_M_TOMB_STR)
+#define F100_FAULT_ON (F100_MODE == F100_M_VEC_FAULT || \
+                       F100_MODE == F100_M_FAULT)
+#define F100_STALE_ON (F100_MODE == F100_M_VEC_STALE)
+#define F100_BALANCE_ON (F100_MODE == F100_M_BALANCE)
+
+#define KD 128             /* key slots: 0 .. KD-1 */
+#define MAXSEQ 128         /* bounded sequence-container extent */
+#define FNV_OFFSET 1469598103934665603ULL
+#define FNV_PRIME 1099511628211ULL
+
+/* ---- deterministic generator ------------------------------------------- */
+static unsigned long long f100_rng = F100_SEED;
+
+static unsigned int f100_rnd(void) {
+    f100_rng = f100_rng * 6364136223846793005ULL +
+               1442695040888963407ULL;
+    return (unsigned int)(f100_rng >> 33);
+}
+
+static unsigned long long f100_mix(unsigned long long d, unsigned long long v) {
+    return (d ^ v) * FNV_PRIME;
+}
+
+/* ---- live containers (zero initialised == valid empty containers) ------ */
+static intmap f100_im;
+static intset f100_is;
+static strmap f100_sm;
+static deque  f100_dq;
+static list   f100_lst;
+static stack  f100_stk;
+static queue  f100_q;
+static vector f100_vec;
+
+/* ---- key tables --------------------------------------------------------- */
+static int  f100_ik[KD];
+static char f100_sk[KD][16];
+static int  f100_kd = 0;
+
+/* ---- independent shadow models ----------------------------------------- */
+static unsigned char f100_im_has[KD], f100_is_has[KD], f100_sm_has[KD];
+static int f100_im_val[KD], f100_sm_val[KD];
+static size_t f100_im_n = 0, f100_is_n = 0, f100_sm_n = 0;
+
+static int    f100_dq_sh[MAXSEQ]; static size_t f100_dq_n = 0, f100_dq_cap = 0;
+static int    f100_lst_sh[MAXSEQ]; static size_t f100_lst_n = 0;
+static int    f100_stk_sh[MAXSEQ]; static size_t f100_stk_n = 0, f100_stk_cap = 0;
+static int    f100_q_sh[MAXSEQ]; static size_t f100_q_n = 0, f100_q_cap = 0;
+static int    f100_v_sh[MAXSEQ]; static size_t f100_v_n = 0, f100_v_cap = 0;
+
+/* ---- slice shadow for the generation-staleness configuration ----------- */
+#if F100_STALE_ON
+static slice      f100_view;
+static int        f100_view_vals[MAXSEQ];
+static size_t     f100_view_n = 0;
+static unsigned long long f100_view_gen = 0;
+#endif
+
+/* ---- run accounting ---------------------------------------------------- */
+static unsigned long long f100_digest = FNV_OFFSET;
+static long f100_ops = 0;
+static long f100_fault_shots = 0;
+static long f100_stale_hits = 0;
+static long f100_overflow_hits = 0;
+
+static int f100_bad(const char *label) {
+    print(F100_ID, "INVARIANT", label);
+    return 0;
+}
+
+static int f100_fail(const char *label) {
+    print(F100_ID, "INVARIANT", label);
+    return 1;
+}
+
+/* ---- key setup ----------------------------------------------------------
+ * Collision-heavy modes pick keys whose hash lands in bucket 0 or bucket 1
+ * modulo 256.  Because 256 is a multiple of every power-of-two capacity the
+ * maps use for this key domain (8..256), those keys remain clustered at every
+ * capacity the harness reaches.  Non-collision modes use plain sequential
+ * keys.  The hash helpers are the public inline functions from collections.hp
+ * -- no raw offsets, no private container state.
+ */
+static void f100_setup_keys(void) {
+    int collide = 0;
+    int bucket;
+    int found;
+    long candidate;
+#if F100_IS_STR_MODE
+    char text[16];
+#endif
+
+#if F100_IS_INT_MODE || F100_IS_STR_MODE
+    collide = 1;
+#endif
+
+    if (!collide) {
+        /* Always populate BOTH key tables: the FAULT and BALANCE modes drive
+         * every family, including strmap, from the same schedule. */
+        for (found = 0; found < KD; found++) {
+            f100_ik[found] = found;
+            snprintf(f100_sk[found], sizeof(f100_sk[found]), "s%d", found);
+        }
+        f100_kd = KD;
+        return;
+    }
+
+    {
+        long next_candidate[2];
+        next_candidate[0] = 0L;
+        next_candidate[1] = 0L;
+        for (bucket = 0; bucket < 2; bucket++) {
+            for (found = 0; found < KD / 2; found++) {
+                for (candidate = next_candidate[bucket]; candidate < 200000L;
+                     candidate++) {
+#if F100_IS_STR_MODE
+                    snprintf(text, sizeof(text), "k%ld", candidate);
+                    if ((long long)(stdlib_map_hash_text(text) & 255ULL) != bucket)
+                        continue;
+                    snprintf(f100_sk[f100_kd], sizeof(f100_sk[f100_kd]), "%s",
+                             text);
+#else
+                    if ((long long)(stdlib_map_hash_int((long long)candidate) &
+                                    255ULL) != bucket)
+                        continue;
+                    f100_ik[f100_kd] = (int)candidate;
+#endif
+                    next_candidate[bucket] = candidate + 1L;
+                    f100_kd++;
+                    break;
+                }
+                if (f100_kd >= KD)
+                    break;
+            }
+        }
+    }
+}
+
+/* ---- shadow verification ----------------------------------------------- */
+static int f100_check_shadows(void) {
+    int i;
+    int out = 0;
+    slice view;
+
+    if (!f100_im.valid() || f100_im.size() != f100_im_n)
+        return f100_bad("intmap.size");
+    for (i = 0; i < f100_kd; i++) {
+        int present = f100_im.contains(f100_ik[i]);
+        if (present != (int)f100_im_has[i])
+            return f100_bad("intmap.contains");
+        if (present) {
+            if (f100_im.get(f100_ik[i], &out) != 0 ||
+                out != f100_im_val[i])
+                return f100_bad("intmap.get");
+        }
+    }
+
+    if (!f100_is.valid() || f100_is.size() != f100_is_n)
+        return f100_bad("intset.size");
+    for (i = 0; i < f100_kd; i++)
+        if (f100_is.contains(f100_ik[i]) != (int)f100_is_has[i])
+            return f100_bad("intset.contains");
+
+    if (!f100_sm.valid() || f100_sm.size() != f100_sm_n)
+        return f100_bad("strmap.size");
+    for (i = 0; i < f100_kd; i++) {
+        int present = f100_sm.contains(f100_sk[i]);
+        if (present != (int)f100_sm_has[i])
+            return f100_bad("strmap.contains");
+        if (present) {
+            if (f100_sm.get(f100_sk[i], &out) != 0 ||
+                out != f100_sm_val[i])
+                return f100_bad("strmap.get");
+        }
+    }
+
+    if (f100_dq.size() != f100_dq_n)
+        return f100_bad("deque.size");
+    if (f100_dq.capacity() < f100_dq_n)
+        return f100_bad("deque.capacity");
+    for (i = 0; i < (int)f100_dq_n; i++)
+        if (f100_dq.at_checked((size_t)i, &out) != 0 ||
+            out != f100_dq_sh[i])
+            return f100_bad("deque.at");
+
+    if (f100_lst.size() != f100_lst_n)
+        return f100_bad("list.size");
+    for (i = 0; i < (int)f100_lst_n; i++)
+        if (f100_lst.at_checked((size_t)i, &out) != 0 ||
+            out != f100_lst_sh[i])
+            return f100_bad("list.at");
+
+    if (f100_stk.size() != f100_stk_n)
+        return f100_bad("stack.size");
+    if (f100_stk_n > 0 && (f100_stk.top_checked(&out) != 0 ||
+                           out != f100_stk_sh[f100_stk_n - 1]))
+        return f100_bad("stack.top");
+
+    if (f100_q.size() != f100_q_n)
+        return f100_bad("queue.size");
+    if (f100_q_n > 0 && (f100_q.front_checked(&out) != 0 ||
+                         out != f100_q_sh[0]))
+        return f100_bad("queue.front");
+
+    if (f100_vec.size() != f100_v_n || f100_vec.capacity() != f100_v_cap)
+        return f100_bad("vector.size.capacity");
+    if (f100_vec.capacity() < f100_vec.size())
+        return f100_bad("vector.capacity.lt.size");
+    for (i = 0; i < (int)f100_v_n; i++)
+        if (f100_vec.at_checked((size_t)i, &out) != 0 ||
+            out != f100_v_sh[i])
+            return f100_bad("vector.at");
+    view = f100_vec.view();
+    if (view.size() != f100_v_n || view.stale())
+        return f100_bad("vector.view");
+    for (i = 0; i < (int)f100_v_n; i++)
+        if (view.at_checked((size_t)i, &out) != 0 || out != f100_v_sh[i])
+            return f100_bad("vector.view.at");
+
+    return 1;
+}
+
+static void f100_fold_extents(void) {
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_im_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_is_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_sm_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_dq_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_lst_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_stk_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_q_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_v_n);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_dq_cap);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)f100_v_cap);
+}
+
+/* ---- operation families ------------------------------------------------ */
+static int f100_allowed(int k) {
+#if F100_IS_INT_MODE
+    return k >= 0 && k <= 5;
+#elif F100_IS_STR_MODE
+    return k >= 6 && k <= 8;
+#elif F100_MODE == F100_M_DEQUE
+    return k >= 9 && k <= 11;
+#elif F100_MODE == F100_M_LIST
+    return k >= 12 && k <= 13;
+#elif F100_MODE == F100_M_STACK
+    return k >= 14 && k <= 15;
+#elif F100_MODE == F100_M_QUEUE
+    return k >= 16 && k <= 17;
+#elif F100_MODE == F100_M_VEC_GROW
+    return k >= 18 && k <= 20;
+#elif F100_MODE == F100_M_VEC_ERASE
+    return k >= 18 && k <= 19;
+#elif F100_MODE == F100_M_VEC_STALE
+    return k >= 18 && k <= 21;
+#elif F100_MODE == F100_M_VEC_FAULT
+    return k >= 18 && k <= 20;
+#else
+    return k >= 0 && k <= 21; /* FAULT and BALANCE cover all families */
+#endif
+}
+
+static int f100_choose_kind(unsigned int r) {
+    int k = (int)(r % 22u);
+    int step;
+    for (step = 0; step < 22; step++) {
+        if (f100_allowed(k))
+            return k;
+        k = (k + 1) % 22;
+    }
+    return 0;
+}
+
+/* Key slot: collision/tombstone modes stay inside a single colliding bucket
+ * group so tombstones are actually reused; other modes use the whole table. */
+static int f100_key_slot(unsigned int r) {
+#if F100_IS_TOMB_MODE
+    return (int)(r % 16u);
+#else
+    return (int)(r % (unsigned int)f100_kd);
+#endif
+}
+
+static void f100_im_put(int a, int b, int *rc) {
+    if (f100_im_n >= KD - 2) {
+        f100_im.clear();
+        memset(f100_im_has, 0, sizeof(f100_im_has));
+        f100_im_n = 0;
+    }
+    *rc = f100_im.put(f100_ik[a], b);
+    if (*rc != 0)
+        return;
+    if (!f100_im_has[a]) { f100_im_has[a] = 1; f100_im_n++; }
+    f100_im_val[a] = b;
+}
+
+static void f100_is_insert(int a, int *rc) {
+    if (f100_is_n >= KD - 2) {
+        f100_is.clear();
+        memset(f100_is_has, 0, sizeof(f100_is_has));
+        f100_is_n = 0;
+    }
+    *rc = f100_is.insert(f100_ik[a]);
+    if (*rc == 0 && !f100_is_has[a]) { f100_is_has[a] = 1; f100_is_n++; }
+}
+
+static void f100_sm_put(int a, int b, int *rc) {
+    if (f100_sm_n >= KD - 2) {
+        f100_sm.clear();
+        memset(f100_sm_has, 0, sizeof(f100_sm_has));
+        f100_sm_n = 0;
+    }
+    *rc = f100_sm.put(f100_sk[a], b);
+    if (*rc != 0)
+        return;
+    if (!f100_sm_has[a]) { f100_sm_has[a] = 1; f100_sm_n++; }
+    f100_sm_val[a] = b;
+}
+
+static void f100_dq_push(int b, unsigned int r, int *rc) {
+    if (f100_dq_n >= MAXSEQ) { f100_dq.clear(); f100_dq_n = 0; } /* capacity persists */
+    if ((r & 1u) == 0) {
+        if (f100_dq_n == f100_dq_cap)
+            f100_dq_cap = (f100_dq_cap == 0) ? 8u : f100_dq_cap * 2u;
+        *rc = f100_dq.push_back(b);
+        if (*rc == 0) f100_dq_sh[f100_dq_n++] = b;
+    } else {
+        if (f100_dq_n == f100_dq_cap)
+            f100_dq_cap = (f100_dq_cap == 0) ? 8u : f100_dq_cap * 2u;
+        *rc = f100_dq.push_front(b);
+        if (*rc == 0) {
+            memmove(f100_dq_sh + 1, f100_dq_sh, f100_dq_n * sizeof(int));
+            f100_dq_sh[0] = b;
+            f100_dq_n++;
+        }
+    }
+}
+
+static void f100_lst_push(int b, unsigned int r, int *rc) {
+    if (f100_lst_n >= MAXSEQ) { f100_lst.clear(); f100_lst_n = 0; }
+    if ((r & 1u) == 0) {
+        *rc = f100_lst.push_back(b);
+        if (*rc == 0) f100_lst_sh[f100_lst_n++] = b;
+    } else {
+        *rc = f100_lst.push_front(b);
+        if (*rc == 0) {
+            memmove(f100_lst_sh + 1, f100_lst_sh, f100_lst_n * sizeof(int));
+            f100_lst_sh[0] = b;
+            f100_lst_n++;
+        }
+    }
+}
+
+static void f100_stk_push(int b, int *rc) {
+    if (f100_stk_n >= MAXSEQ) { f100_stk.clear(); f100_stk_n = 0; } /* capacity persists */
+    if (f100_stk_n == f100_stk_cap)
+        f100_stk_cap = (f100_stk_cap == 0) ? 8u : f100_stk_cap * 2u;
+    *rc = f100_stk.push(b);
+    if (*rc == 0) f100_stk_sh[f100_stk_n++] = b;
+}
+
+static void f100_q_push(int b, int *rc) {
+    if (f100_q_n >= MAXSEQ) { f100_q.clear(); f100_q_n = 0; } /* capacity persists */
+    if (f100_q_n == f100_q_cap)
+        f100_q_cap = (f100_q_cap == 0) ? 8u : f100_q_cap * 2u;
+    *rc = f100_q.push(b);
+    if (*rc == 0) f100_q_sh[f100_q_n++] = b;
+}
+
+static void f100_vec_push(int b, unsigned int r, int *rc) {
+    if (f100_v_n >= MAXSEQ) { f100_vec.clear(); f100_v_n = 0; } /* capacity persists */
+    if ((r & 1u) == 0) {
+        if (f100_v_n == f100_v_cap)
+            f100_v_cap = (f100_v_cap == 0) ? 4u : f100_v_cap * 2u;
+        *rc = f100_vec.push_back(b);
+        if (*rc == 0) f100_v_sh[f100_v_n++] = b;
+    } else {
+        size_t at = (size_t)(r % (f100_v_n + 1u));
+        if (f100_v_n == f100_v_cap)
+            f100_v_cap = (f100_v_cap == 0) ? 4u : f100_v_cap * 2u;
+        *rc = f100_vec.insert(at, b);
+        if (*rc == 0) {
+            memmove(f100_v_sh + at + 1, f100_v_sh + at,
+                    (f100_v_n - at) * sizeof(int));
+            f100_v_sh[at] = b;
+            f100_v_n++;
+        }
+    }
+}
+
+/* ---- explicit capacity-overflow probes (documented recoverable -1) ----- */
+static void f100_overflow_probe(long i, unsigned int r) {
+    int rc = 0;
+    (void)r;
+#if F100_BALANCE_ON
+    /* Expected-error probes increment bounds telemetry; the balance config
+     * deliberately asserts a clean telemetry record, so skip them there. */
+    (void)i;
+    return;
+#endif
+    if (i % 211L != 0L)
+        return;
+    switch ((int)(i / 211L) % 5) {
+    case 0: rc = f100_vec.reserve(SIZE_MAX); break;
+    case 1: rc = f100_dq.reserve(SIZE_MAX); break;
+    case 2: rc = f100_im.grow(SIZE_MAX); break;
+    case 3: rc = f100_is.grow(SIZE_MAX); break;
+    default: rc = f100_sm.grow(SIZE_MAX); break;
+    }
+    f100_overflow_hits++;
+    f100_digest = f100_mix(f100_digest, 0x0F0F0F0FULL);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)(rc + 2));
+    if (rc != -1) {
+        f100_bad("overflow.probe.rc");
+    }
+    /* No shadow change is expected; the verifier checks this next. */
+}
+
+/* ---- deterministic tombstone-reuse script ------------------------------ */
+static void f100_tomb_cycle(long i) {
+    int pass;
+    int a;
+    int rc = 0;
+    if (i % 32L != 0L)
+        return;
+    /* Insert the whole colliding group, remove it, then reinsert in reverse
+     * order so every put has to reuse a MAP_DELETED slot. */
+    for (pass = 0; pass < 2; pass++) {
+        for (a = 0; a < 16; a++) {
+            int slot = (pass == 0) ? a : (15 - a);
+            if (F100_MODE == F100_M_TOMB_SET) {
+                f100_is_insert(slot, &rc);
+            } else if (F100_MODE == F100_M_TOMB_STR) {
+                f100_sm_put(slot, 1000 + pass * 16 + a, &rc);
+            } else {
+                f100_im_put(slot, 1000 + pass * 16 + a, &rc);
+            }
+            f100_ops++;
+            f100_digest = f100_mix(f100_digest, 0x7000ULL +
+                                   (unsigned long long)pass * 16u +
+                                   (unsigned long long)a);
+            f100_digest = f100_mix(f100_digest, (unsigned long long)(rc + 2));
+            if (!f100_check_shadows()) { f100_bad("tomb.insert"); }
+        }
+        for (a = 0; a < 16; a++) {
+            int slot = (pass == 0) ? a : (15 - a);
+            if (F100_MODE == F100_M_TOMB_SET) {
+                rc = f100_is.remove(f100_ik[slot]);
+                if (rc == 0) { f100_is_has[slot] = 0; f100_is_n--; }
+            } else if (F100_MODE == F100_M_TOMB_STR) {
+                rc = f100_sm.remove(f100_sk[slot]);
+                if (rc == 0) { f100_sm_has[slot] = 0; f100_sm_n--; }
+            } else {
+                rc = f100_im.remove(f100_ik[slot]);
+                if (rc == 0) { f100_im_has[slot] = 0; f100_im_n--; }
+            }
+            f100_ops++;
+            f100_digest = f100_mix(f100_digest, 0x8000ULL +
+                                   (unsigned long long)pass * 16u +
+                                   (unsigned long long)a);
+            f100_digest = f100_mix(f100_digest, (unsigned long long)(rc + 2));
+            if (!f100_check_shadows()) { f100_bad("tomb.remove"); }
+        }
+    }
+}
+
+#if F100_FAULT_ON
+/* Snapshot taken immediately before arming an injection (any preparatory
+ * fill has already happened by then). */
+static size_t f100_saved_vn = 0, f100_saved_vcap = 0;
+static int f100_saved_vsh[MAXSEQ];
+
+static void f100_snapshot_vec(void) {
+    f100_saved_vn = f100_v_n;
+    f100_saved_vcap = f100_v_cap;
+    memcpy(f100_saved_vsh, f100_v_sh, sizeof(f100_saved_vsh));
+}
+
+/* Fail the next allocation at a deterministic point and prove failure atomicity:
+ * the operation returns -1 and every shadow (including vector capacity) is
+ * byte-for-byte unchanged.  Nothing is ever armed on a non-allocating path. */
+static void f100_fault_step(long i) {
+    int rc = 99;
+
+    if (i % 37L != 0L)
+        return;
+
+#if F100_MODE == F100_M_VEC_FAULT
+    /* Every variant calls an operation that MUST call stdlib_alloc: reserve
+     * with want > capacity, or shrink_to_fit with 0 < used < capacity.  No
+     * preparatory fill is needed, so the snapshot is trivially exact. */
+    switch ((int)((i / 37L) % 3L)) {
+    case 0:
+        f100_digest = f100_mix(f100_digest, 0xF100ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_vec.reserve(f100_v_cap + 1u);
+        stdlib_alloc_fail_reset();
+        break;
+    case 1:
+        f100_digest = f100_mix(f100_digest, 0xF101ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_vec.reserve(f100_v_cap + 16u);
+        stdlib_alloc_fail_reset();
+        break;
+    default:
+        f100_digest = f100_mix(f100_digest, 0xF102ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        if (f100_v_n > 0u && f100_v_n < f100_v_cap) {
+            rc = f100_vec.shrink_to_fit(); /* must allocate a smaller buffer */
+        } else {
+            rc = f100_vec.reserve(f100_v_cap + 8u);
+        }
+        stdlib_alloc_fail_reset();
+        break;
+    }
+#else
+    switch ((int)((i / 37L) % 6L)) {
+    case 0:
+        f100_digest = f100_mix(f100_digest, 0xF110ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_im.grow(512u);
+        stdlib_alloc_fail_reset();
+        break;
+    case 1:
+        f100_digest = f100_mix(f100_digest, 0xF111ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_is.grow(512u);
+        stdlib_alloc_fail_reset();
+        break;
+    case 2:
+        f100_digest = f100_mix(f100_digest, 0xF112ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_sm.grow(512u);
+        stdlib_alloc_fail_reset();
+        break;
+    case 3:
+        f100_digest = f100_mix(f100_digest, 0xF113ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_lst.push_back((int)(i & 0x3ffL));
+        stdlib_alloc_fail_reset();
+        break;
+    case 4: {
+        int b = (int)(i & 0x3ffL);
+        if (f100_q_n >= MAXSEQ) { f100_q.clear(); f100_q_n = 0; } /* capacity persists */
+        while (f100_q_n < f100_q_cap && f100_q_n < MAXSEQ) {
+            if (f100_q.push(b) != 0) break;
+            f100_q_sh[f100_q_n++] = b;
+        }
+        f100_digest = f100_mix(f100_digest, 0xF114ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_q.push(b); /* full => guaranteed reallocation */
+        stdlib_alloc_fail_reset();
+        break;
+    }
+    default:
+        f100_digest = f100_mix(f100_digest, 0xF115ULL);
+        f100_snapshot_vec();
+        stdlib_alloc_fail_at(1);
+        rc = f100_vec.reserve(f100_v_cap + 1u);
+        stdlib_alloc_fail_reset();
+        break;
+    }
+#endif
+
+    f100_fault_shots++;
+    f100_ops++;
+    f100_digest = f100_mix(f100_digest, (unsigned long long)(rc + 2));
+    if (rc != -1) {
+        f100_bad("fault.expected.minus1");
+    }
+    if (f100_v_n != f100_saved_vn || f100_v_cap != f100_saved_vcap ||
+        memcmp(f100_v_sh, f100_saved_vsh, sizeof(f100_saved_vsh)) != 0) {
+        f100_bad("fault.vector.not.atomic");
+    }
+    if (!f100_check_shadows()) {
+        f100_bad("fault.shadow");
+    }
+}
+#endif /* F100_FAULT_ON */
+
+#if F100_STALE_ON
+/* The slice records the vector's generation counter.  We read through it only
+ * while stale() == 0; after a shape change we assert that at_checked() refuses
+ * the read.  No raw pointer is ever dereferenced. */
+static void f100_stale_step(void) {
+    int out = 0;
+    int i;
+    int stale = f100_view.stale();
+
+    f100_digest = f100_mix(f100_digest, 0x5A1EULL);
+    f100_digest = f100_mix(f100_digest, (unsigned long long)stale);
+    if (stale) {
+        f100_stale_hits++;
+        if (f100_view.valid())
+            f100_bad("slice.stale.valid");
+        if (f100_view.at_checked(0u, &out) != -1)
+            f100_bad("slice.stale.read");
+        f100_view = f100_vec.view();
+        f100_view_n = f100_v_n;
+        f100_view_gen++;
+        for (i = 0; i < (int)f100_view_n; i++)
+            f100_view_vals[i] = f100_v_sh[i];
+    } else {
+        if (f100_view.size() != f100_view_n)
+            f100_bad("slice.size");
+        for (i = 0; i < (int)f100_view_n; i++)
+            if (f100_view.at_checked((size_t)i, &out) != 0 ||
+                out != f100_view_vals[i])
+                f100_bad("slice.read");
+    }
+}
+
+/* Allocator metadata carries its own generation: check staleness by identity,
+ * never by touching the retired address. */
+static void f100_meta_generation_probe(void) {
+    void *p = stdlib_alloc(64u);
+    void *q;
+    unsigned long long g0, g1;
+    if (p == NULL) { f100_bad("meta.alloc"); return; }
+    g0 = stdlib_alloc_generation(p);
+    if (g0 == 0) f100_bad("meta.gen0");
+    q = stdlib_realloc(p, 128u);
+    if (q == NULL) { stdlib_release(p); f100_bad("meta.realloc"); return; }
+    g1 = stdlib_alloc_generation(q);
+    if (g1 == 0 || g1 == g0) f100_bad("meta.gen1");
+    if (stdlib_alloc_check_generation(p, g0) != 0)
+        f100_bad("meta.old.generation.accepted");
+    if (stdlib_alloc_check_generation(q, g1) != 1)
+        f100_bad("meta.new.generation.rejected");
+    if (stdlib_alloc_length(q) != 128u)
+        f100_bad("meta.length");
+    stdlib_release(q);
+    f100_digest = f100_mix(f100_digest, 0x6E3AULL);
+    f100_digest = f100_mix(f100_digest, g1 - g0);
+}
+#endif /* F100_STALE_ON */
+
+/* ---- main -------------------------------------------------------------- */
+int main(void) {
+    long i;
+    char hex[24];
+    stdlib_telemetry_stats before, after;
+    int setup_rc;
+
+    f100_setup_keys();
+    if (f100_kd != KD) return f100_fail("key.setup");
+
+#if F100_BALANCE_ON
+    /* Enable and reset BEFORE the first allocation so every counted free
+     * has a matching counted allocation. */
+    stdlib_telemetry_set_enabled(1);
+    stdlib_telemetry_reset();
+    stdlib_telemetry_snapshot(&before);
+#else
+    (void)before;
+#endif
+
+    /* Make every map valid through the public grow() API. */
+    setup_rc = f100_im.grow(256u);
+    if (setup_rc != 0) return f100_fail("intmap.grow.init");
+    setup_rc = f100_is.grow(256u);
+    if (setup_rc != 0) return f100_fail("intset.grow.init");
+    setup_rc = f100_sm.grow(256u);
+    if (setup_rc != 0) return f100_fail("strmap.grow.init");
+
+#if F100_STALE_ON
+    f100_view = f100_vec.view();
+    f100_view_n = 0;
+    f100_meta_generation_probe();
+#endif
+
+    if (!f100_check_shadows()) return 1;
+
+    for (i = 0; i < (long)F100_OPS; i++) {
+        unsigned int r0 = f100_rnd();
+        unsigned int r1 = f100_rnd();
+        unsigned int r2 = f100_rnd();
+        int kind = f100_choose_kind(r0);
+        int a = f100_key_slot(r1);
+        int b = (int)(r2 & 0x3ffu);
+        int out = 0;
+        int rc = 0;
+        size_t at;
+
+        f100_digest = f100_mix(f100_digest, (unsigned long long)i);
+        f100_digest = f100_mix(f100_digest, (unsigned long long)kind);
+        f100_digest = f100_mix(f100_digest, (unsigned long long)a);
+        f100_digest = f100_mix(f100_digest, (unsigned long long)b);
+        f100_digest = f100_mix(f100_digest, (unsigned long long)r0);
+
+#if F100_FAULT_ON
+        f100_fault_step(i);
+#endif
+#if F100_IS_TOMB_MODE
+        f100_tomb_cycle(i);
+#endif
+        f100_overflow_probe(i, r2);
+
+        switch (kind) {
+        case 0: /* intmap put */
+            f100_im_put(a, b, &rc);
+            break;
+        case 1: /* intmap remove */
+            rc = f100_im.remove(f100_ik[a]);
+            if (rc == 0) { f100_im_has[a] = 0; f100_im_n--; }
+            else if (rc != -1) return f100_fail("im.remove.rc");
+            break;
+        case 2: /* intmap get */
+            rc = f100_im.get(f100_ik[a], &out);
+            if (f100_im_has[a]) {
+                if (rc != 0 || out != f100_im_val[a])
+                    return f100_fail("im.get.value");
+            } else if (rc != -1) {
+                return f100_fail("im.get.absent.rc");
+            }
+            break;
+        case 3: /* intset insert */
+            f100_is_insert(a, &rc);
+            break;
+        case 4: /* intset remove */
+            rc = f100_is.remove(f100_ik[a]);
+            if (rc == 0) { f100_is_has[a] = 0; f100_is_n--; }
+            else if (rc != -1) return f100_fail("is.remove.rc");
+            break;
+        case 5: /* intset contains */
+            rc = f100_is.contains(f100_ik[a]);
+            if (rc != (int)f100_is_has[a])
+                return f100_fail("is.contains");
+            break;
+        case 6: /* strmap put */
+            f100_sm_put(a, b, &rc);
+            break;
+        case 7: /* strmap remove */
+            rc = f100_sm.remove(f100_sk[a]);
+            if (rc == 0) { f100_sm_has[a] = 0; f100_sm_n--; }
+            else if (rc != -1) return f100_fail("sm.remove.rc");
+            break;
+        case 8: /* strmap get */
+            rc = f100_sm.get(f100_sk[a], &out);
+            if (f100_sm_has[a]) {
+                if (rc != 0 || out != f100_sm_val[a])
+                    return f100_fail("sm.get.value");
+            } else if (rc != -1) {
+                return f100_fail("sm.get.absent.rc");
+            }
+            break;
+        case 9: /* deque push back/front */
+            f100_dq_push(b, r2, &rc);
+            break;
+        case 10: /* deque pop + in-range read */
+            if (f100_dq_n > 0) {
+                if ((r2 & 1u) == 0) {
+                    rc = f100_dq.pop_front(&out);
+                    if (rc != 0 || out != f100_dq_sh[0])
+                        return f100_fail("dq.pop_front");
+                    memmove(f100_dq_sh, f100_dq_sh + 1,
+                            (f100_dq_n - 1u) * sizeof(int));
+                    f100_dq_n--;
+                } else {
+                    rc = f100_dq.pop_back(&out);
+                    if (rc != 0 || out != f100_dq_sh[f100_dq_n - 1u])
+                        return f100_fail("dq.pop_back");
+                    f100_dq_n--;
+                }
+            }
+            if (f100_dq_n > 0) {
+                rc = f100_dq.at_checked((size_t)(r2 % (unsigned int)f100_dq_n),
+                                        &out);
+                if (rc != 0) return f100_fail("dq.at");
+                f100_digest = f100_mix(f100_digest, (unsigned long long)out);
+            }
+            break;
+        case 11: /* deque reserve then optional clear (capacity preserved) */
+            if ((r2 & 1u) == 0) {
+                size_t want = f100_dq.capacity() + 8u;
+                if (want > 512u) want = 512u;
+                rc = f100_dq.reserve(want);
+                if (rc != 0) return f100_fail("dq.reserve");
+                f100_dq_cap = f100_dq.capacity();
+            } else {
+                f100_dq.clear();
+                f100_dq_n = 0;
+            }
+            break;
+        case 12: /* list push back/front */
+            f100_lst_push(b, r2, &rc);
+            break;
+        case 13: /* list pop + in-range read */
+            if (f100_lst_n > 0) {
+                if ((r2 & 1u) == 0) {
+                    rc = f100_lst.pop_front(&out);
+                    if (rc != 0 || out != f100_lst_sh[0])
+                        return f100_fail("lst.pop_front");
+                    memmove(f100_lst_sh, f100_lst_sh + 1,
+                            (f100_lst_n - 1u) * sizeof(int));
+                    f100_lst_n--;
+                } else {
+                    rc = f100_lst.pop_back(&out);
+                    if (rc != 0 || out != f100_lst_sh[f100_lst_n - 1u])
+                        return f100_fail("lst.pop_back");
+                    f100_lst_n--;
+                }
+            }
+            if (f100_lst_n > 0) {
+                rc = f100_lst.at_checked((size_t)(r2 % (unsigned int)f100_lst_n),
+                                         &out);
+                if (rc != 0) return f100_fail("lst.at");
+                f100_digest = f100_mix(f100_digest, (unsigned long long)out);
+            }
+            break;
+        case 14: /* stack push */
+            f100_stk_push(b, &rc);
+            break;
+        case 15: /* stack pop/top/clear */
+            if ((r2 & 3u) == 0u) {
+                f100_stk.clear();
+                f100_stk_n = 0;
+                rc = 0;
+            } else if (f100_stk_n > 0) {
+                if ((r2 & 1u) == 0) {
+                    rc = f100_stk.pop(&out);
+                    if (rc != 0 || out != f100_stk_sh[f100_stk_n - 1])
+                        return f100_fail("stk.pop");
+                    f100_stk_n--;
+                } else {
+                    rc = f100_stk.top_checked(&out);
+                    if (rc != 0 || out != f100_stk_sh[f100_stk_n - 1])
+                        return f100_fail("stk.top");
+                    f100_digest = f100_mix(f100_digest, (unsigned long long)out);
+                }
+            }
+            break;
+        case 16: /* queue push */
+            f100_q_push(b, &rc);
+            break;
+        case 17: /* queue pop/front */
+            if (f100_q_n > 0) {
+                if ((r2 & 1u) == 0) {
+                    rc = f100_q.pop(&out);
+                    if (rc != 0 || out != f100_q_sh[0])
+                        return f100_fail("q.pop");
+                    memmove(f100_q_sh, f100_q_sh + 1,
+                            (f100_q_n - 1u) * sizeof(int));
+                    f100_q_n--;
+                } else {
+                    rc = f100_q.front_checked(&out);
+                    if (rc != 0 || out != f100_q_sh[0])
+                        return f100_fail("q.front");
+                    f100_digest = f100_mix(f100_digest, (unsigned long long)out);
+                }
+            }
+            break;
+        case 18: /* vector push back / insert */
+            f100_vec_push(b, r2, &rc);
+            break;
+        case 19: /* vector erase / pop / clear */
+            if ((r2 & 3u) == 0u) {
+                f100_vec.clear();
+                f100_v_n = 0;
+                rc = 0;
+            } else if (f100_v_n > 0) {
+                at = (size_t)(r2 % (unsigned int)f100_v_n);
+                if ((r2 & 1u) == 0) {
+                    rc = f100_vec.erase(at, &out);
+                    if (rc != 0 || out != f100_v_sh[at])
+                        return f100_fail("v.erase");
+                    memmove(f100_v_sh + at, f100_v_sh + at + 1,
+                            (f100_v_n - at - 1u) * sizeof(int));
+                    f100_v_n--;
+                } else {
+                    rc = f100_vec.pop_back(&out);
+                    if (rc != 0 || out != f100_v_sh[f100_v_n - 1])
+                        return f100_fail("v.pop_back");
+                    f100_v_n--;
+                }
+            }
+            break;
+        case 20: /* vector reserve / shrink_to_fit / copy_from(self) */
+            at = (size_t)(r2 % 3u);
+            if (at == 0u) {
+                size_t want = f100_v_cap + 1u;
+                if (want > 512u) want = 512u;
+                rc = f100_vec.reserve(want);
+                if (rc != 0) return f100_fail("v.reserve");
+                f100_v_cap = f100_vec.capacity();
+            } else if (at == 1u) {
+                rc = f100_vec.shrink_to_fit();
+                if (rc != 0) return f100_fail("v.shrink");
+                f100_v_cap = f100_vec.capacity();
+            } else {
+                rc = f100_vec.copy_from(&f100_vec); /* documented self no-op */
+                if (rc != 0) return f100_fail("v.copy_from.self");
+            }
+            break;
+        case 21: /* vector stale-slice read path (verification only) */
+            rc = 0;
+#if F100_STALE_ON
+            if (f100_view.stale() == 0 && f100_view_n > 0) {
+                rc = f100_view.at_checked((size_t)(r2 % (unsigned int)f100_view_n),
+                                          &out);
+                if (rc != 0 || out != f100_view_vals[r2 % (unsigned int)f100_view_n])
+                    return f100_fail("view.read");
+            }
+#endif
+            break;
+        default:
+            rc = 0;
+            break;
+        }
+
+        f100_digest = f100_mix(f100_digest, (unsigned long long)(rc + 2));
+        f100_fold_extents();
+        if (!f100_check_shadows())
+            return 1;
+        f100_ops++;
+#if F100_STALE_ON
+        f100_stale_step();
+#endif
+    }
+
+    /* Release every container exactly once; drop() is idempotent. */
+    f100_vec.drop();
+    f100_q.drop();
+    f100_stk.drop();
+    f100_lst.drop();
+    f100_dq.drop();
+    f100_sm.drop();
+    f100_is.drop();
+    f100_im.drop();
+
+    /* No invariant check after drop(): released containers are deliberately
+     * invalid, and drop() has already been proven idempotent by the runtime. */
+
+#if F100_BALANCE_ON
+    stdlib_telemetry_snapshot(&after);
+    if (after.alloc_count != after.free_count) {
+        print(F100_ID, "TELEMETRY.alloc.free.mismatch",
+              after.alloc_count, after.free_count);
+        return 1;
+    }
+    if (after.alloc_count == 0) return f100_fail("telemetry.no.allocations");
+    if (after.alloc_failures != 0) return f100_fail("telemetry.alloc_failures");
+    if (after.invalid_ops != 0) return f100_fail("telemetry.invalid_ops");
+    if (after.bounds_violations != 0) return f100_fail("telemetry.bounds");
+    if (after.ownership_violations != 0) return f100_fail("telemetry.ownership");
+    if (after.lifecycle_failures != 0) return f100_fail("telemetry.lifecycle");
+    f100_digest = f100_mix(f100_digest, after.alloc_count);
+    f100_digest = f100_mix(f100_digest, after.free_count);
+    f100_digest = f100_mix(f100_digest, after.container_growths);
+    print(F100_ID, "telemetry", after.alloc_count, after.free_count,
+          after.container_growths);
+#else
+    (void)after;
+#endif
+
+    if (f100_ops < 2000L) return f100_fail("ops.below.2000");
+#if F100_FAULT_ON
+    if (f100_fault_shots == 0L) return f100_fail("fault.no.shots");
+    print(F100_ID, "faults", f100_fault_shots);
+#endif
+#if F100_STALE_ON
+    if (f100_stale_hits == 0L) return f100_fail("stale.no.hits");
+    print(F100_ID, "stale.hits", f100_stale_hits);
+#endif
+    if (F100_MODE == F100_M_VEC_GROW || F100_MODE == F100_M_DEQUE) {
+        if (f100_overflow_hits == 0L) return f100_fail("overflow.no.probes");
+        print(F100_ID, "overflow.probes", f100_overflow_hits);
+    }
+
+    snprintf(hex, sizeof(hex), "%016llx", f100_digest);
+    {
+        /* Suite convention: f061_digest, f062_digest, ... */
+        char tag[32];
+        snprintf(tag, sizeof(tag), "f%c%c%c_digest", F100_ID[2],
+                 F100_ID[3], F100_ID[4]);
+        print(tag, hex);
+    }
+    print(F100_ID, "ok", f100_ops, "ops");
+    return 0;
+}
+
+#endif /* F100_CONT_ENGINE_HP */
