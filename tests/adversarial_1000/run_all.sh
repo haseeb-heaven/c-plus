@@ -152,8 +152,15 @@ for _group in $groups; do
         fi
     fi
 
-    # The authoritative line is the last line starting with ADV1000.
-    _line=$(grep '^ADV1000 ' "$_log" | tail -n 1)
+    # The authoritative line is the last line containing a well-formed
+    # ADV1000 <group> <scenarios> record.  Some runners print it with a prefix
+    # (e.g. json_log prints "final=ADV1000 ..."), so strip any prefix while
+    # preserving the exact canonical record.  A prose line such as
+    # "ADV1000 json_log run summary" is rejected by the numeric third field.
+    _line=$(grep -E 'ADV1000 [A-Za-z_]+ [0-9]+ ' "$_log" | tail -n 1)
+    case "$_line" in
+        *ADV1000\ *) _line="ADV1000${_line##*ADV1000}" ;;
+    esac
     printf '%s\n' "$_line" >"$_final"
 
     if [ -z "$_line" ]; then
