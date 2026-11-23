@@ -75,3 +75,13 @@ benchmarks/safety_compare/per_method/field/field_harness
 benchmarks/safety_compare/per_method/field/*.out
 benchmarks/safety_compare/per_method/field/*.err
 benchmarks/safety_compare/per_method/field/token.diff
+
+# Generated per-method test binaries and logs (never commit).
+tests/stdlib/method_tests/**/bin/
+tests/stdlib/method_tests/**/out/
+tests/stdlib/method_tests/**/.build/
+tests/stdlib/method_tests/json_log_time/json_methods
+tests/stdlib/method_tests/json_log_time/log_methods
+tests/stdlib/method_tests/json_log_time/time_methods
+tests/stdlib/method_tests/str_vec/string_methods
+tests/stdlib/method_tests/str_vec/vector_methods
