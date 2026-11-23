@@ -64,3 +64,14 @@ tests/stdlib/agent1_handoff/cross_tu/results/case_b
 tests/stress/cplus_breaker_v3/25_freed_len_trap
 tests/abi/**/out/
 tests/crt/fuzz/out/
+
+# Generated per-method comparison binaries and raw streams (never commit).
+benchmarks/safety_compare/per_method/**/bin/
+benchmarks/safety_compare/per_method/**/results/
+benchmarks/safety_compare/per_method/**/out/
+benchmarks/safety_compare/per_method/**/.build/
+benchmarks/safety_compare/per_method/field/field
+benchmarks/safety_compare/per_method/field/field_harness
+benchmarks/safety_compare/per_method/field/*.out
+benchmarks/safety_compare/per_method/field/*.err
+benchmarks/safety_compare/per_method/field/token.diff
