@@ -102,10 +102,11 @@ void xdump(FILE *file, char *filename) {
     long group = group_opt > 0 ? group_opt : columns_opt / 2;
 
     /* A zero divisor would be undefined behaviour in the original (e.g.
-     * `-w 1` with no -g); normalize it to one.  For every fixed-input case
-     * group is already 4 or 8, so output is unchanged. */
+     * `-w 1` with no -g).  Fail closed there; every fixed-input case has
+     * group 4 or 8 so output is unchanged.  This early return also gives the
+     * strict checker the proof that the modulo divisor is non-zero. */
     if(group == 0)
-        group = 1;
+        return;
 
     if(buffer == (unsigned char *)0)
         return;

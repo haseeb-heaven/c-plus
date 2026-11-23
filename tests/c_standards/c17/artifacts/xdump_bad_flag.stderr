@@ -1,1 +1,1 @@
-tests/c_standards/c17/artifacts/cli_app_xdump: illegal option -- Z
+./build/xdump: illegal option -- Z

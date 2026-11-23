@@ -734,7 +734,6 @@ static void attack_mem_ops(struct case_spec *s, struct case_result *r) {
     int rc;
     int variant = (int)(s->a % 8ULL);
     make_stale_keep(&stale, &stale_tok);
-    (void)make_stale_keep; /* silence strict dead-store concerns */
     if (dst == (void *)0 || src == (void *)0) {
         setres(r, CLS_REFUSED, 99, 0);
         return;
@@ -765,16 +764,6 @@ static void attack_mem_ops(struct case_spec *s, struct case_result *r) {
         return;
     }
     if (!all_bytes(dst, 64u, 0xA5u)) {
-        const unsigned char *dbg = (const unsigned char *)dst;
-        size_t di;
-        for (di = 0; di < 64u; ++di) {
-            if (*(dbg + di) != 0xA5u) {
-                fprintf(stderr, "DBG memops corrupt variant=%d idx=%u byte=%02X\n",
-                        variant, (unsigned)di, (unsigned)*(dbg + di));
-                fflush(stderr);
-                break;
-            }
-        }
         setres(r, CLS_CORRUPT, 1, 0);
         return;
     }
@@ -805,7 +794,7 @@ static void attack_mem_transfer(struct case_spec *s, struct case_result *r) {
         saved_src = src;
         rc = stdlib_mem_transfer(&dst, (void **)0, (error *)0);
     } else if (variant == 2) {
-        saved_dst = src;
+        saved_dst = dst; /* dst operand aliases src: only one handle exists */
         saved_src = src;
         rc = stdlib_mem_transfer(&src, &src, (error *)0); /* dst == src */
     } else {
@@ -820,8 +809,10 @@ static void attack_mem_transfer(struct case_spec *s, struct case_result *r) {
     }
     /* A refused transfer must leave BOTH handles exactly as they were and
      * must not free the live source block. */
-    expect_clean(r, dst != saved_dst || src != saved_src ||
-                     stdlib_alloc_size(p) == 0u, 1);
+    if (dst != saved_dst || src != saved_src || stdlib_alloc_size(p) == 0u)
+        setres(r, CLS_CORRUPT, 1, 0);
+    else
+        setres(r, CLS_REFUSED, 1, 0);
 }
 
 static void attack_mem_release(struct case_spec *s, struct case_result *r) {
@@ -1016,7 +1007,47 @@ static const char *class_name(int cls) {
     return "REFUSED";
 }
 
+/* Single classification path, shared by the campaign and --selfcheck. */
+static int classify_child(int waited_ok, int status, ssize_t got,
+                          struct case_result *res) {
+    int cls;
+    if (!waited_ok || WIFSIGNALED(status) || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != 0 || got != (ssize_t)sizeof(*res))
+        return CLS_CRASH;
+    cls = res->cls;
+    if (cls < CLS_REFUSED || cls > CLS_CORRUPT)
+        return CLS_CRASH;
+    return cls;
+}
+
+/* Non-vacuity control: prove the classifier maps accepted / signal / fatal /
+ * canary / bogus outcomes to the right buckets.  No target code is touched. */
+static int selfcheck(void) {
+    struct case_result r = {0, 0, 0};
+    int status = 0;
+    int passed = 0;
+    r.cls = CLS_UNEXPECTED_OK;
+    if (classify_child(1, status, (ssize_t)sizeof(r), &r) == CLS_UNEXPECTED_OK)
+        passed++;
+    r.cls = CLS_REFUSED;
+    if (classify_child(1, (7 << 8), (ssize_t)sizeof(r), &r) == CLS_CRASH)
+        passed++;
+    if (classify_child(1, 11, (ssize_t)sizeof(r), &r) == CLS_CRASH)
+        passed++;
+    r.cls = CLS_CORRUPT;
+    if (classify_child(1, status, (ssize_t)sizeof(r), &r) == CLS_CORRUPT)
+        passed++;
+    r.cls = 99;
+    if (classify_child(1, status, (ssize_t)sizeof(r), &r) == CLS_CRASH)
+        passed++;
+    printf("SELFCHECK %d 5\n", passed);
+    return passed == 5 ? 0 : 1;
+}
+
 int main(void) {
+    const char *selfcheck_env = getenv("REDTEAM_SELFCHECK");
+    if (selfcheck_env != (const char *)0 && strcmp(selfcheck_env, "1") == 0)
+        return selfcheck();
     int logfd;
     int line_len;
     char line[512];
@@ -1024,7 +1055,7 @@ int main(void) {
     int counts[4];
     int fds[2];
     pid_t pid;
-    int status;
+    int status = 0;
     ssize_t got;
     struct case_spec spec;
     struct case_result result;
@@ -1074,16 +1105,8 @@ int main(void) {
         close(fds[1]);
         got = read(fds[0], &result, sizeof(result));
         close(fds[0]);
-        if (waitpid(pid, &status, 0) != pid) {
-            cls = CLS_CRASH;
-        } else if (WIFSIGNALED(status) || !WIFEXITED(status) ||
-                   WEXITSTATUS(status) != 0 || got != (ssize_t)sizeof(result)) {
-            cls = CLS_CRASH;
-        } else {
-            cls = result.cls;
-            if (cls < 0 || cls > CLS_CORRUPT)
-                cls = CLS_CRASH;
-        }
+        cls = classify_child(waitpid(pid, &status, 0) == pid, status, got,
+                             &result);
         counts[cls]++;
         line_len = snprintf(line, sizeof(line),
                             "%d %d %llu %llu %llu %s sub=%d got=%d cls=%d\n",

@@ -1,0 +1,27 @@
+tests/c_standards/c17/source.c:25:16: error: implicit declaration of function 'alignof' [-Werror,-Wimplicit-function-declaration]
+   25 | _Static_assert(alignof(char) == 1, "char must have alignment 1");
+      |                ^
+tests/c_standards/c17/source.c:25:24: error: expected expression
+   25 | _Static_assert(alignof(char) == 1, "char must have alignment 1");
+      |                        ^
+tests/c_standards/c17/source.c:26:25: error: use of undeclared identifier 'max_align_t'
+   26 | _Static_assert(_Alignof(max_align_t) >= 8, "max_align_t alignment too small");
+      |                         ^
+tests/c_standards/c17/source.c:26:16: warning: '_Alignof' applied to an expression is a GNU extension [-Wgnu-alignof-expression]
+   26 | _Static_assert(_Alignof(max_align_t) >= 8, "max_align_t alignment too small");
+      |                ^
+tests/c_standards/c17/source.c:29:16: error: expected parameter declarator
+   29 | static alignas(16) unsigned char aligned_bytes[32];
+      |                ^
+tests/c_standards/c17/source.c:29:16: error: expected ')'
+tests/c_standards/c17/source.c:29:15: note: to match this '('
+   29 | static alignas(16) unsigned char aligned_bytes[32];
+      |               ^
+tests/c_standards/c17/source.c:29:19: error: expected ';' after top level declarator
+   29 | static alignas(16) unsigned char aligned_bytes[32];
+      |                   ^
+      |                   ;
+tests/c_standards/c17/source.c:60:20: error: expected expression
+   60 |            alignof(int), classify(7), atomic_load(&counter));
+      |                    ^
+1 warning and 7 errors generated.

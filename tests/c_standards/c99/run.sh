@@ -147,7 +147,7 @@ summary ""
 # timeout 30 and byte-compare against the original upstream outputs.
 # ===========================================================================
 summary "=== PART 3: real-project compile + run under C+ driver ==="
-PROJECT_STDS=(c99 iso9899:199409 c94)
+PROJECT_STDS=("${STDS[@]}")
 
 # --- helper: build a project and record exactly one build case --------------
 build_project() {

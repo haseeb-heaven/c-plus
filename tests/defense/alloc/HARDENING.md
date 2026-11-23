@@ -137,8 +137,12 @@ timeout 30 sh tests/defense/alloc/run_before_after.sh
 
 Output:
 
+The runner uses the commit immediately before `CPLUS_SAFE_HAS_GENERATION_HELPERS`
+was introduced as its baseline (resolved automatically via `git log -S`), so
+it stays reproducible after the hardening work itself is committed.
+
 ```
-===== BEFORE (HEAD) =====
+===== BEFORE (pre-hardening baseline 49aa06868cce1077e79705026ce9fb2a36a74294) =====
 FEATURES tagged_recent=0 generation_helpers=0
 RECENT_COLLISION legacy_misclassification 1
 STALE_ALIAS legacy_stale_alias_frees_new_owner 1

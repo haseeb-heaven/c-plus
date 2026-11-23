@@ -1,0 +1,63 @@
+external_projects/game_b/original/2048.c:72:23: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+  				uint32_t number = 1 << board[x][y];
+                        ^
+external_projects/game_b/original/2048.c:152:16: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+  					*score += 1 << array[t];
+                 ^
+external_projects/game_b/original/2048.c:301:7: warning: [CPLUS-ARITH] remainder by zero
+  		r = rand() % len;
+        ^~~~
+external_projects/game_b/original/2048.c:433:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+  	printf("         TERMINATED         \n");
+   ^~~~~~
+external_projects/game_b/original/2048.c:436:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+  	printf("\033[?25h\033[m");
+   ^~~~~~
+external_projects/game_b/original/2048.c:451:14: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
+               ^~~~
+external_projects/game_b/original/2048.c:451:44: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
+                                             ^~~~
+external_projects/game_b/original/2048.c:463:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0)
+                    ^~~~
+external_projects/game_b/original/2048.c:463:49: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0)
+                                                  ^~~~
+external_projects/game_b/original/2048.c:468:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "blackwhite") == 0)
+                    ^~~~
+external_projects/game_b/original/2048.c:472:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "bluered") == 0)
+                    ^~~~
+external_projects/game_b/original/2048.c:476:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "whiteblack") == 0)
+                    ^~~~
+external_projects/game_b/original/2048.c:480:19: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "test") == 0)
+                    ^~~~
+external_projects/game_b/original/2048.c:486:72: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  			printf("Invalid option: %s\n\nTry '%s --help' for more options.\n", argv[1], argv[0]);
+                                                                         ^~~~
+external_projects/game_b/original/2048.c:486:81: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  			printf("Invalid option: %s\n\nTry '%s --help' for more options.\n", argv[1], argv[0]);
+                                                                                  ^~~~
+external_projects/game_b/original/2048.c:61:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+external_projects/game_b/original/2048.c:61:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~
+external_projects/game_b/original/2048.c:69:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+external_projects/game_b/original/2048.c:69:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~
+external_projects/game_b/original/2048.c:86:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+external_projects/game_b/original/2048.c:86:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~

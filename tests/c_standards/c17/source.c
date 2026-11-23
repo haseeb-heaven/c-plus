@@ -28,8 +28,9 @@ _Static_assert(_Alignof(max_align_t) >= 8, "max_align_t alignment too small");
 /* A 16-byte aligned object; alignment is a C11/C17 semantic area. */
 static alignas(16) unsigned char aligned_bytes[32];
 
-/* noreturn is the C17-standard spelling from <stdnoreturn.h>. */
-noreturn static void fatal_unexpected(const char *what)
+/* Both the _Noreturn specifier and the noreturn macro from <stdnoreturn.h>
+ * are part of C11 and carried unchanged into C17. */
+_Noreturn static void fatal_unexpected(const char *what)
 {
     fprintf(stderr, "unexpected condition: %s\n", what);
     for (;;) {

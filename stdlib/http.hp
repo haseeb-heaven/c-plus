@@ -111,11 +111,21 @@ static size_t http_sink_write(char *ptr, size_t size, size_t nmemb,
         return 0;
     /* Overflow-safe: `used` never exceeds `size - 1`, so the subtraction
      * cannot wrap, and an oversized chunk cannot wrap the sum either. */
-    if (sink->used >= sink->size ||
-        bytes > sink->size - sink->used - 1) {
-        size_t room = sink->size > sink->used + 1 ? sink->size - sink->used - 1 : 0;
-        if (room > 0)
-            memcpy(sink->buf + sink->used, ptr, room);
+    /* Defense: refuse before any write when the sink is already full or the
+     * bookkeeping is corrupt (used >= size).  The old code computed
+     * `size - used - 1` and wrote `buf[used]`, which underflows when
+     * used == SIZE_MAX and writes one byte past the buffer when
+     * used == size.  Never touch the buffer on a refusal. */
+    if (sink->buf == NULL || sink->used >= sink->size) {
+        sink->overflow = 1;
+        return 0; /* refuse: no write, no NUL, no underflow */
+    }
+    if (bytes > sink->size - sink->used - 1) {
+        /* Clamp to the remaining capacity (at most size - used - 1 >= 1).
+         * Copy only what fits, NUL-terminate at the final index, and set
+         * overflow.  `used` stays < size, so buf[used] is always in range. */
+        size_t room = sink->size - sink->used - 1;
+        memcpy(sink->buf + sink->used, ptr, room);
         sink->used += room;
         sink->buf[sink->used] = '\0';
         sink->overflow = 1;

@@ -6,3 +6,4 @@ stdout_sink.txt
 stderr.log
 build.log
 *.bin
+*.bin.dSYM/

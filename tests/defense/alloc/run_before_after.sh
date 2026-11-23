@@ -8,10 +8,19 @@ P=${CPLUS_ALLOC_DEFENSE_TMP:-/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c000
 CC=${CPLUS_CLANG:-/usr/bin/clang}
 mkdir -p "$P/headcopy/stdlib/safe/src"
 
+# Use the commit immediately before the marker was introduced as the baseline.
+# This stays correct even after the hardening work itself is committed.
+BASE=$(git -C "$ROOT" log --format=%H -S 'CPLUS_SAFE_HAS_GENERATION_HELPERS' \
+  -- stdlib/safe/safe_alloc.h | tail -1)
+if [ -n "$BASE" ]; then
+  BASE=$(git -C "$ROOT" rev-parse "${BASE}^")
+else
+  BASE=HEAD
+fi
 for f in safe_alloc.h safe_error.h safe_log.h safe_stats.h; do
-  git -C "$ROOT" show HEAD:stdlib/safe/$f > "$P/headcopy/stdlib/safe/$f"
+  git -C "$ROOT" show "${BASE}:stdlib/safe/$f" > "$P/headcopy/stdlib/safe/$f"
 done
-git -C "$ROOT" show HEAD:stdlib/safe/src/safe_alloc.c > "$P/headcopy/stdlib/safe/src/safe_alloc.c"
+git -C "$ROOT" show "${BASE}:stdlib/safe/src/safe_alloc.c" > "$P/headcopy/stdlib/safe/src/safe_alloc.c"
 
 CFLAGS="-O1 -g -std=c11 -Wall -Wextra -Wno-unused-parameter"
 for f in safe_log safe_stats; do
@@ -28,7 +37,7 @@ $CC $CFLAGS -I"$ROOT/stdlib/safe" -c "$ROOT/stdlib/safe/src/safe_alloc.c" -o "$P
 $CC $CFLAGS -I"$ROOT/stdlib/safe" -I"$ROOT" "$ROOT/tests/defense/alloc/defense_alloc.c" \
   "$P/safe_alloc.o" "$P/safe_log.o" "$P/safe_stats.o" -pthread -o "$P/defense_alloc_hardened"
 
-echo '===== BEFORE (HEAD) ====='
+echo "===== BEFORE (pre-hardening baseline ${BASE}) ====="
 timeout 30 "$P/defense_alloc_head"
 echo '===== AFTER (HARDENED) ====='
 timeout 30 "$P/defense_alloc_hardened"
