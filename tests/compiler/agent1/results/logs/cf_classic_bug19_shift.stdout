@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug19_shift.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug19_shift.c:6:20: warning: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand

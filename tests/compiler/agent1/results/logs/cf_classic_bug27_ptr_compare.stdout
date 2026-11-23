@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug27_ptr_compare.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug27_ptr_compare.c:3:45: error: [CPLUS-FFI] relational comparison of pointers to different objects is undefined

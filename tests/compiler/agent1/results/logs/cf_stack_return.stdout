@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_stack_return.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/stack_return.c:5:13: error: address of stack memory associated with local variable 'local_var' returned [-Werror,-Wreturn-stack-address]

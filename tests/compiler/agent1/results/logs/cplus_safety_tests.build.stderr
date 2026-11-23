@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/native/cplus_safety_tests.c:107:8: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+  107 |   for (size_t i = 0; i < total; ++i) {
+      |        ^
+1 warning generated.

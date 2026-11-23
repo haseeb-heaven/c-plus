@@ -1,0 +1,13 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug1_oob.c:5:5: warning: array index 5 is past the end of the array (that has type 'int[3]') [-Warray-bounds]
+    5 |     numbers[5] = 99;
+      |     ^       ~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug1_oob.c:4:5: note: array 'numbers' declared here
+    4 |     int numbers[3] = {10, 20, 30};
+      |     ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug1_oob.c:6:20: warning: array index 5 is past the end of the array (that has type 'int[3]') [-Warray-bounds]
+    6 |     printf("%d\n", numbers[5]);
+      |                    ^       ~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug1_oob.c:4:5: note: array 'numbers' declared here
+    4 |     int numbers[3] = {10, 20, 30};
+      |     ^
+2 warnings generated.

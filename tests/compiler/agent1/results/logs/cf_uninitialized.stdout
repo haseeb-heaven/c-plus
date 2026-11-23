@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_uninitialized.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/uninitialized.c:5:9: error: [CPLUS-LIFETIME] variable 'count' is uninitialized (read before it is initialized)

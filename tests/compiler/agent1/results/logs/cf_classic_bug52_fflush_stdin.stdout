@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug52_fflush_stdin.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug52_fflush_stdin.c:3:45: error: [CPLUS-FFI] fflush(stdin) is undefined; discard input explicitly
