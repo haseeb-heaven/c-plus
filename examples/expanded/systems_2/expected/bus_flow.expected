@@ -1,0 +1,17 @@
+EB topic room
+EB sub room alice
+EB sub room bob
+EB pub room deliver= 2 payload= hello
+EB deliver room -> alice hello
+EB deliver room -> bob hello
+EB expect room alice OK subscribed
+EB unsub room bob
+EB pub room deliver= 1 payload= bye
+EB deliver room -> alice bye
+EB dump topics= 1
+EB topic room subs= 1
+EB has room alice
+EB deliveries n= 2
+EB delivery 0 2
+EB delivery 1 1
+EB_SUMMARY 8 8 0 0

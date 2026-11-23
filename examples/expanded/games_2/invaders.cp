@@ -264,7 +264,7 @@ static int refuse(const char *message) {
 }
 
 static int read_stdin(vector *out) {
-    char buf[MAX_TOKEN_LEN + 2];
+    char buf[MAX_TOKEN_LEN + 4];
     size_t got;
     if (fgets(buf, (int)sizeof(buf), stdin) == NULL)
         return -1;
@@ -272,6 +272,12 @@ static int read_stdin(vector *out) {
     while (buf[got] != '\0' && got < sizeof(buf))
         got++;
     if (got >= sizeof(buf) - 1)
+        return -2;
+    while (got > 0 && (buf[got - 1] == '\n' || buf[got - 1] == '\r')) {
+        got--;
+        buf[got] = '\0';
+    }
+    if (got > MAX_TOKEN_LEN)
         return -2;
     return parse_cmds(buf, out);
 }

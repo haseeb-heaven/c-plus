@@ -119,3 +119,12 @@ examples/expanded/safety/lifetime_demo
 examples/expanded/safety/memcpy_s_demo
 examples/expanded/safety/sync_demo
 logs/
+
+# Generated build output for all new example trees (never commit binaries/logs).
+examples/**/.run/
+examples/**/.build/
+examples/**/results/
+examples/**/bin/
+examples/**/out/
+examples/**/logs/
+examples/**/tmp/

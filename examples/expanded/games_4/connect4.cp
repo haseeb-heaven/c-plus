@@ -39,7 +39,7 @@
 #define E_COUNT 5
 
 /* Built-in deterministic sequence: vertical red four in column 3. */
-static const char *DEFAULT_MOVES = "3 3 4 4 3 3 3";
+static const char *DEFAULT_MOVES = "3 2 3 2 3 2 3";
 
 static const char *refuse_name(int code) {
     if (code == E_OVERSIZE) return "E_OVERSIZE";
@@ -124,23 +124,59 @@ static int parse_int_token(string *s, size_t *cursor, int *out) {
     return 0;
 }
 
+/* A multi-character token made only of columns 0..6 is the compact form:
+ * one digit per move.  Tokens containing 7..9, '-' or other characters are
+ * parsed as a single signed integer instead, so "7" and "-1" are still
+ * refused as out-of-range columns rather than silently split. */
+static int is_compact(string *s, size_t start, size_t end) {
+    size_t i;
+    if (end <= start + 1)
+        return 0;
+    for (i = start; i < end; i++) {
+        char ch = s->at(i);
+        if (ch < '0' || ch > '6')
+            return 0;
+    }
+    return 1;
+}
+
 /* Parse a whole line/token into column moves.  Returns 0 or a stable code. */
 static int parse_columns(const char *text, vector *out) {
     string s = string(text);
-    size_t cursor = 0;
+    size_t n = s.size();
+    size_t i = 0;
     int rc;
     int parsed = 0;
-    for (;;) {
-        int value = 0;
-        rc = parse_int_token(&s, &cursor, &value);
-        if (rc == E_COUNT)
+    while (i < n) {
+        size_t start;
+        size_t end;
+        while (i < n && is_space(s.at(i)))
+            i++;
+        if (i >= n)
             break;
-        if (rc != 0)
-            return rc;
-        if (parsed >= CELLS)
-            return E_COUNT;
-        out->push_back(value);
-        parsed++;
+        start = i;
+        while (i < n && !is_space(s.at(i)))
+            i++;
+        end = i;
+        if (is_compact(&s, start, end)) {
+            size_t k;
+            for (k = start; k < end; k++) {
+                if (parsed >= CELLS)
+                    return E_COUNT;
+                out->push_back((int)(s.at(k) - '0'));
+                parsed++;
+            }
+        } else {
+            size_t cursor = start;
+            int value = 0;
+            rc = parse_int_token(&s, &cursor, &value);
+            if (rc != 0)
+                return rc;
+            if (parsed >= CELLS)
+                return E_COUNT;
+            out->push_back(value);
+            parsed++;
+        }
     }
     if (parsed == 0)
         return E_COUNT;

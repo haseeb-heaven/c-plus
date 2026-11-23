@@ -1,9 +1,18 @@
 # Adversarial refusal results — `examples/expanded/*`
 
-Scope: hostile-input testing of the newly added expanded C+ examples. All
-created/modified files live only under `tests/expanded_examples_adversarial/`.
-No files under `examples/expanded/` were edited. Nothing was staged or
-committed by this agent.
+Scope: hostile-input testing of the 20 added expanded C+ examples
+(`cli`, `games`, `database`, `engine`, `safety`). All created/modified files
+live only under `tests/expanded_examples_adversarial/`. No file under
+`examples/expanded/` was edited. Nothing was staged or committed by this
+agent.
+
+The suite covers every example present in those five categories at the time
+of the final run (18 built targets: 4 `cli`, 5 `games`, 3 `database`,
+3 `engine`, 3 `safety`). Other parallel agents created additional in-flight
+categories (`games_2/`, `games_3/`, `games_4/`, `apps_2/`) while this work was
+in progress; those were outside the stated 20-example scope, were still being
+written, and are deliberately **not** covered by these verdicts. A `REFUSED`
+line below never refers to those examples.
 
 ## Evidence statement (read this first)
 
@@ -13,13 +22,14 @@ other input.** A `REFUSED` verdict means only that, for that one invocation,
 the process either exited nonzero or printed the example's explicit refusal
 token, stayed within the `timeout 120` bound, did not terminate on a signal,
 and (where the example exposes one) preserved its canary/sentinel token.
-Nothing here establishes the examples are formally correct or exhaustively
-safe. No passes were fabricated; the two initially mis-specified cases are
-disclosed below.
+Nothing here establishes that the examples are formally correct or
+exhaustively safe. No passes were fabricated; the two initially
+mis-specified cases and one harness defect are disclosed below.
 
 ## Exact commands
 
-Builds (per example) are performed by `common.sh:build_one` from the repo root:
+Every example is rebuilt per category script by `common.sh:build_one`, from
+the repo root:
 
 ```sh
 ./build/c+ build <repo-relative-source> --strict --sanitize=none -I. -o tests/expanded_examples_adversarial/bin/<name>
@@ -27,42 +37,70 @@ Builds (per example) are performed by `common.sh:build_one` from the repo root:
 #   build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
 ```
 
-Every individual invocation is bounded:
+Every individual program invocation is bounded:
 
 ```sh
 timeout 120 <binary> [argv...] <fixture-or-/dev/null> > tests/expanded_examples_adversarial/logs/<example>.<case>.out 2>&1
 ```
 
-Master command actually executed (final run):
+Authoritative final command actually executed (exit status `0`):
 
 ```sh
-timeout 120 sh tests/expanded_examples_adversarial/run_all.sh > tests/expanded_examples_adversarial/logs/run3.out 2>&1
+timeout 120 sh tests/expanded_examples_adversarial/run_all.sh > tests/expanded_examples_adversarial/logs/final.out 2>&1
 # observed exit status: 0
 ```
 
-Earliest run (`logs/run1.out`) produced `ADV_EXPANDED_TOTAL 87 85 0 2`;
-the two `UNEXPECTED_OK` rows were **my test-design errors**, not example
-defects:
+### Run history and disclosed corrections
 
-* `calculator invalid_command` used `1++2`, which is valid under this
-  example's documented grammar (`1 + (+2) = 3`, exit 0). Replaced with `foo`.
-* `kv_store size_max_value` used a 20-character value, which is within
-  `KV_VAL_MAX = 24` and therefore legitimately accepted. Replaced with
-  `size_max_key` (20-character key, over `KV_KEY_MAX = 16`) plus a real
-  `oversized_value` case (10 KB).
+* `logs/run1.out` — `ADV_EXPANDED_TOTAL 87 85 0 2`. Both `UNEXPECTED_OK`
+  rows were my test-design errors, not example defects:
+  * `calculator invalid_command` used `1++2`, which is valid under this
+    example's documented grammar (`1 + (+2) = 3`, exit 0). Replaced with
+    `foo`.
+  * `kv_store size_max_value` used a 20-character value, within
+    `KV_VAL_MAX = 24` and legitimately accepted. Replaced with `size_max_key`
+    (a 20-character key over `KV_KEY_MAX = 16`) plus a real `oversized_value`
+    case (10 KB).
+* `logs/run2.out` — 110 cases before four more examples landed.
+* `logs/run3.out` — 110 cases, all `REFUSED` (pre-isolation).
+* `logs/run4.out` — **incomplete: `ADV_EXPANDED_TOTAL 59 59 0 0` with exit
+  status 0.** This was a genuine harness defect, not a pass: a concurrent
+  `run_all.sh` invocation shared `logs/adv_all.log` and
+  `logs/<category>.driver.out`, so one process truncated the other's output
+  mid-run and the survivor silently reported a partial total (only `cli`,
+  `engine`, `safety` — 59 of 110 cases — were present). The totals were
+  recomputed from that truncated file, which is why the false `59` appeared
+  consistent internally.
 
-The corrected runs are `logs/run2.out` (110 cases before four more examples
-landed) and `logs/run3.out` (final, 110 cases). A reproducibility rerun
-(`logs/final.out`) produced byte-identical `ADV_EXPANDED` case lines and the
-same `ADV_EXPANDED_TOTAL 110 110 0 0`. All raw stdout+stderr per case is
-retained under `logs/`.
+### Harness fix (not a paper-over)
+
+`run_all.sh` now gives each invocation a private scratch tree
+(`logs/.run.<pid>/{bin,logs,fixtures,adv_all.log,*driver.out}`) via the
+`ADV_BIN` / `ADV_LOGS` / `ADV_FIX` overrides added to `common.sh`. The
+canonical `logs/adv_all.log`, `logs/<cat>.driver.out` and raw `*.out` files
+are refreshed from that private tree only at the end; this script's stdout
+(and the caller's captured `runN.out`) is the authoritative per-run record.
+Verification that the fix holds under contention:
+
+```sh
+# two full suites launched concurrently
+timeout 300 sh tests/expanded_examples_adversarial/run_all.sh > logs/conA.out 2>&1 &
+timeout 300 sh tests/expanded_examples_adversarial/run_all.sh > logs/conB.out 2>&1 &
+wait
+# logs/conA.rc = 0, conA: 110 ADV_EXPANDED lines, ADV_EXPANDED_TOTAL 110 110 0 0
+# logs/conB.rc = 0, conB: 110 ADV_EXPANDED lines, ADV_EXPANDED_TOTAL 110 110 0 0
+```
+
+`logs/run5.out` was the first clean uncontended run after the fix (110/110).
+`logs/final.out` is the final authoritative run quoted verbatim below.
 
 ## Classification rules
 
 * Exit `>= 128`, or `124`/`137` from `timeout` → `CRASHED`.
 * Nonzero exit `1..127` → `REFUSED`.
 * Exit 0 with the example's explicit refusal token (`REFUSED`, `REFUSE`,
-  `CALC ERROR`, `TODO error`, `BAD_INPUT`, `FAIL`, `usage:`) → `REFUSED`.
+  `CALC ERROR`, `TODO error`, `BAD_INPUT`, `usage:`, `(^| )FAIL( |$)`) →
+  `REFUSED`.
 * Exit 0 for a self-contained demo with its expected refusal/sentinel token
   → `REFUSED` (these are `SURVIVE` cases: the demo constructs its own hostile
   scenario; hostile argv is injected to check it is ignored without crashing).
@@ -72,12 +110,27 @@ retained under `logs/`.
 
 Input families covered: 10 KB strings, SIZE_MAX-looking decimal strings,
 empty/whitespace arguments, duplicate keys / ids / cells, out-of-range
-indices and ids, invalid commands, truncated/missing paths and one-over files,
-10 KB stdin streams, invalid UTF-8 bytes, self-collision move sequences,
-double-release / use-after-release / stale-generation scenarios, and missing
-(NULL-like) operands.
+indices and ids, invalid commands, truncated/missing paths and one-over
+files, 10 KB stdin streams, invalid UTF-8 bytes, self-collision move
+sequences, double-release / use-after-release / stale-generation scenarios,
+and missing (NULL-like) operands.
 
-## Final verbatim output (`logs/run3.out`)
+Exit semantics: `subtotal` and `run_all.sh` return nonzero when any case is
+`CRASHED` or `UNEXPECTED_OK`, when a build fails, or when zero cases run.
+This was exercised explicitly:
+
+```sh
+# forced CRASHED (child exits 139):
+ADV_EXPANDED probe crashed CRASHED 139
+ADV_EXPANDED_SUBTOTAL probe cases=1 refused=0 crashed=1 unexpected_ok=0 blocked=0
+subtotal_rc=1
+# forced UNEXPECTED_OK (/usr/bin/true, exit 0, no refusal token):
+ADV_EXPANDED probe unexpected_ok UNEXPECTED_OK 0
+ADV_EXPANDED_SUBTOTAL probe cases=1 refused=0 crashed=0 unexpected_ok=1 blocked=0
+subtotal_rc=1
+```
+
+## Final verbatim output (`logs/final.out`)
 
 ```
 ADV_EXPANDED calculator oversized_expr REFUSED 1
@@ -204,9 +257,19 @@ ADV_EXPANDED_TOTAL 110 110 0 0
   three `safety/*_demo` programs return exit 0 for handled refusals; their
   contract is the explicit `REFUSED`/`REFUSE` token. Verdicts above are based
   on those tokens, with canary/summary sentinels required where available.
+  Spot-checked raw evidence: `kv_store.post_hostile_integrity.out` keeps
+  `KV item 0 k v`; `table_query.post_hostile_integrity.out` keeps
+  `TQ count grp 10 1`; `safety_demo.*.out` ends in `SAFETY FINAL_CANARY ok`
+  and `SAFETY_SUMMARY 5 5 5 0`.
 * `memcpy_s_demo` intentionally forks a child that corrupts *its own* canary;
   that is a deliberate subprocess case. The parent's `parent_canary OK`
-  sentinel is required in every case, and the parent never exited on a signal.
+  sentinel is required in every case, and the parent never exited on a
+  signal.
+* `bounds_demo` and `lifetime_demo` drive their own out-of-range span, stale
+  generation, stale token and double-release scenarios; the required tokens
+  (`bounds one_over REFUSED`, `bounds stale_generation REFUSED`,
+  `lifetime stale_token_refused REFUSED`, `lifetime double_release_refused
+  REFUSED`) are present in each raw `.out`.
 * `snake_core` and `snake_cli self_collision_stream` are containment checks:
   hostile argv / a 10 KB direction stream must not crash the bounded core.
 * `truncated.db` is generated but not used as a named case because these
@@ -219,4 +282,6 @@ ADV_EXPANDED_TOTAL 110 110 0 0
 
 `common.sh`, `cli.sh`, `games.sh`, `database.sh`, `engine.sh`, `safety.sh`,
 `run_all.sh`, `RESULTS.md`, generated `fixtures/`, built `bin/`, and raw
-`logs/` — all under `tests/expanded_examples_adversarial/`.
+`logs/` (including `final.out`, `run1..run5.out`, `conA.out`/`conB.out`,
+per-case `*.out`, and per-category `*.driver.out`) — all under
+`tests/expanded_examples_adversarial/`.

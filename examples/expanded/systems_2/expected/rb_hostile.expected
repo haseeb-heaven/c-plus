@@ -1,0 +1,13 @@
+RB REFUSE cap cat= 2 code= 101 msg= capacity out of range
+RB REFUSE push cat= 2 code= 101 msg= zero capacity
+RB cap 4
+RB PUSH n= 4 used= 0
+RB push_bytes used= 4 head= 0
+RB REFUSE push cat= 2 code= 107 msg= overflow
+RB REFUSE pop cat= 2 code= 101 msg= underflow
+RB REFUSE peek cat= 2 code= 101 msg= count out of range
+RB REFUSE push cat= 2 code= 101 msg= byte out of range
+RB REFUSE cap cat= 2 code= 101 msg= capacity out of range
+RB REFUSE push cat= 2 code= 101 msg= batch too large
+RB REFUSE bogus cat= 1 code= 108 msg= unknown command
+RB_SUMMARY 11 2 9 0
