@@ -49,8 +49,17 @@ Exact symbol-surface enumeration used by `ALL_APIS.md`:
 ```sh
 nm -g build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
 nm -g --defined-only build/safe/libcplus_safecrt.a | awk '$2=="T"{print $3}' | sort -u | grep '^_cplus_' | wc -l   # 167
-nm -g --defined-only build/libc/libcplus_hardened.a  | awk '$2=="T"{print $3}' | sort -u | grep '^_cplus_' | wc -l   # 783
+nm -g --defined-only build/libc/libcplus_hardened.a  | awk '$2=="T"{print $3}' | sort -u | grep '^_cplus_' | wc -l   # 783 at task baseline; 805 after a parallel rebuild
 ```
+
+A parallel agent rebuilt `build/libc/libcplus_hardened.a` mid-session (mtime
+11:13 local), adding 22 exported `_cplus_*` symbols (including
+`_cplus_mtx_destroy_checked`, `_cplus_cnd_destroy_checked`,
+`_cplus_thrd_join_checked`, `_cplus_alloc_checked_free`,
+`_cplus_violation_log_*`, and C23 math wrappers). The full delta is listed in
+`ALL_APIS.md`. The table below was re-run **after** that rebuild and is
+byte-identical to the pre-rebuild run; the complete current 972-symbol surface
+(167 + 805) is enumerated in `ALL_APIS.md`.
 
 ## Real run — captured final lines (verbatim)
 

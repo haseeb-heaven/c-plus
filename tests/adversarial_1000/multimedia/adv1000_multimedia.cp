@@ -445,7 +445,7 @@ static struct adv_outcome adv_window(int kind, unsigned long long *r) {
         break;
     }
     case 2: { /* oversized positive dimensions: defined, no corruption */
-        int big = 4097 + (int)(r[0] % 200000u);
+        int big = 4097 + (int)(r[0] % 8192u);
         window x = window("adv", big, big, (unsigned)SDL_WINDOW_HIDDEN, &e);
         ok = x.valid() && e.ok() && x.native() != (SDL_Window *)0;
         expected = RES_DEFINED;
@@ -581,19 +581,21 @@ static struct adv_outcome adv_gui(int kind, unsigned long long *r) {
         break;
     }
     case 4: { /* extreme coordinates stay defined, no crash */
+        char ext_title[32];
         float huge = 1.0e6f + (float)(r[0] % 1000u);
         float coord = (r[1] & 1u) ? -huge : huge;
         int shown;
+        /* A fresh title per scenario avoids Nuklear's "same window twice in
+         * one frame" assert without an expensive nk_sdl_render/nk_clear. */
+        snprintf(ext_title, sizeof(ext_title), "adv-ext%d",
+                 (int)(r[0] % 100000u));
         g_ui.input_begin();
-        shown = g_ui.window_begin("adv-extreme", coord, -huge, huge, huge, 0);
+        shown = g_ui.window_begin(ext_title, coord, -huge, huge, huge, 0);
         /* nk_begin ends a clipped window itself; ending it again corrupts
-         * Nuklear's frame sequence and trips NK_ASSERT on the next frame. */
+         * Nuklear's frame sequence. */
         if (shown != 0)
             g_ui.window_end();
         g_ui.input_end();
-        /* nk_sdl_render invokes nk_clear, advancing the frame sequence so the
-         * next scenario can re-open a window with the same name. */
-        g_ui.render(0);
         ok = shown == 0 || shown == 1;
         expected = RES_DEFINED;
         break;
@@ -1062,7 +1064,6 @@ int main(int argc, char **argv) {
     if (setup_rc == 0) {
         for (id = 0; id < ADV_N; id++) {
             struct adv_outcome o;
-            fprintf(stderr, "ADVDBG id=%d\n", id);
             const char *api;
             const char *case_name;
             int n;

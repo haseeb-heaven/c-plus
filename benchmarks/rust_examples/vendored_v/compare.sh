@@ -67,7 +67,7 @@ cplus_v__strcoll_s_chk
 "
 
 summary_zero() {
-  printf 'RUST_EXAMPLES vendored_v 0 0 0 0\n'
+  printf 'RUST_EXAMPLES vendored_v 0 0 0 0 0\n'
 }
 
 # --- prerequisites ---------------------------------------------------------
@@ -149,7 +149,6 @@ fi
 
 # --- counts and diff -------------------------------------------------------
 API_COUNT=$(grep -c . "$OUT/out.apis" || true)
-CASE_COUNT=$(awk '{print $2}' "$OUT/r.tokens" | sort -u | grep -c . || true)
 C_LINES=$(grep -c . "$OUT/c.tokens" || true)
 R_LINES=$(grep -c . "$OUT/r.tokens" || true)
 LC_ALL=C sort "$OUT/c.tokens" > "$OUT/c.sorted"
@@ -157,8 +156,8 @@ LC_ALL=C sort "$OUT/r.tokens" > "$OUT/r.sorted"
 MATCHED=$(LC_ALL=C comm -12 "$OUT/c.sorted" "$OUT/r.sorted" | grep -c . || true)
 MISMATCHED=$((C_LINES + R_LINES - 2 * MATCHED))
 
-printf 'RUST_EXAMPLES vendored_v %s %s %s %s\n' \
-  "$API_COUNT" "$CASE_COUNT" "$MATCHED" "$MISMATCHED"
+printf 'RUST_EXAMPLES vendored_v %s %s %s %s 0\n' \
+  "$API_COUNT" "$R_LINES" "$MATCHED" "$MISMATCHED"
 
 if [ "$MISMATCHED" -ne 0 ]; then
   diff -u "$OUT/c.tokens" "$OUT/r.tokens" >&2 || true

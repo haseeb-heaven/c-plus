@@ -17,24 +17,75 @@ nm -g --defined-only build/libc/libcplus_hardened.a  | awk '$2=="T"{print $3}' |
 ```
 
 - `build/safe/libcplus_safecrt.a`: **167** `_cplus_*` `T` symbols
-- `build/libc/libcplus_hardened.a`: **783** `_cplus_*` `T` symbols
-- **Total checked API surface: 950 symbols**
+- `build/libc/libcplus_hardened.a`: **805** `_cplus_*` `T` symbols
+- **Total checked API surface enumerated here: 972 symbols**
+
+### Baseline vs. current archive (parallel rebuild during this run)
+
+The task-specified baseline was **167 + 783 = 950** symbols. A parallel agent
+rebuilt `build/libc/libcplus_hardened.a` during this session (archive mtime
+11:13 local), adding **22** exported `_cplus_*` symbols and removing none. The
+current `nm` therefore yields **167 + 805 = 972**. To avoid documenting a stale
+surface, the table below enumerates all **972 currently exported** symbols; the
+950-symbol baseline is a strict subset. The group results were re-run after the
+rebuild and are byte-identical (see `RESULTS.md`).
+
+Added by the rebuild (all currently **NOT EXERCISED** by any Rust example):
+
+- `_cplus_alloc_atomic_realloc` — `0000000000000000 T _cplus_alloc_atomic_realloc`
+- `_cplus_alloc_checked_free` — `00000000000001c4 T _cplus_alloc_checked_free`
+- `_cplus_alloc_state_dump` — `0000000000000280 T _cplus_alloc_state_dump`
+- `_cplus_c23_exp16` — `0000000000000160 T _cplus_c23_exp16`
+- `_cplus_c23_fma16` — `000000000000013c T _cplus_c23_fma16`
+- `_cplus_c23_frexp16` — `0000000000000120 T _cplus_c23_frexp16`
+- `_cplus_c23_hypot3` — `0000000000000000 T _cplus_c23_hypot3`
+- `_cplus_c23_logb16` — `0000000000000144 T _cplus_c23_logb16`
+- `_cplus_c8rtomb` — `00000000000003a8 T _cplus_c8rtomb`
+- `_cplus_cnd_destroy_checked` — `000000000000022c T _cplus_cnd_destroy_checked`
+- `_cplus_faddf` — `000000000000003c T _cplus_faddf`
+- `_cplus_fdivf` — `000000000000024c T _cplus_fdivf`
+- `_cplus_fmulf` — `000000000000019c T _cplus_fmulf`
+- `_cplus_fsubf` — `00000000000000ec T _cplus_fsubf`
+- `_cplus_mbrtoc8` — `0000000000000090 T _cplus_mbrtoc8`
+- `_cplus_mtx_destroy_checked` — `0000000000000000 T _cplus_mtx_destroy_checked`
+- `_cplus_thrd_join_checked` — `0000000000000328 T _cplus_thrd_join_checked`
+- `_cplus_timespec_getres` — `0000000000000000 T _cplus_timespec_getres`
+- `_cplus_violation_log_close` — `0000000000000274 T _cplus_violation_log_close`
+- `_cplus_violation_log_count` — `00000000000002b8 T _cplus_violation_log_count`
+- `_cplus_violation_log_event` — `00000000000000a4 T _cplus_violation_log_event`
+- `_cplus_violation_log_open` — `0000000000000000 T _cplus_violation_log_open`
 
 The full `nm -g` output also contains vendored/private symbols (yyjson, e4c,
 ubsan, `_mem_prim_*`, `__*_*_uchk`, `___cplus_errno_location`, etc.). Those are
 not part of the public `_cplus_*` checked-API surface and are excluded from the
-167 + 783 counts; they are not wrapped by any Rust example.
+counts above; they are not wrapped by any Rust example.
 
 ## Coverage summary
 
 | Category | Symbols | Notes |
 |---|---:|---|
-| COVERED by a Rust example | 155 | exact symbol appears in a group's compare.sh/harness.c/*.rs |
-| BLOCKED (with reason) | 2 | explicit BLOCKED declaration + nm evidence/reason |
-| NOT EXERCISED | 793 | enumerated, no example models it; **not** counted as a pass |
-| **Total** | **950** | |
+| COVERED by a Rust example | 155 | exact symbol appears in a group's harness.c or paired *.rs (executable evidence) |
+| BLOCKED (with reason) | 2 | structured BLOCKED declaration in compare.sh/NOTES + exact nm line |
+| NOT EXERCISED | 815 | enumerated, no example models it; **not** counted as a pass |
+| **Total** | **972** | |
 
 Groups represented: `alloc`, `format`, `io`, `json_log`, `runtime_diag`, `safecrt_memstr`, `search`, `threading`, `vendored_v`.
+
+Method notes:
+
+- **COVERED** means the exact symbol (or its bare `cplus_*` spelling) is called in a
+  group's C harness or named in its paired Rust example. A BLOCKED declaration in
+  `compare.sh` prose is deliberately **not** coverage.
+- **BLOCKED** means no group exercises the symbol and at least one group has a
+  *structured* declaration naming it (for example `BLOCKED cplus_... nm=present(T)`
+  with a reason). The exact nm line is quoted in the table.
+- Some COVERED symbols have a **per-case BLOCKED note**: an individual case is
+  unobservable (e.g. an injection counter that an API never consults) while other
+  cases of the same symbol are exercised. Those stay COVERED, with the note shown.
+- **NOT EXERCISED** is an honest gap, not a pass. Most of the hardened symbols
+  are generic libc/math/thread wrappers outside the scope of these nine examples.
+
+Consequently this document does **not** claim 100% API coverage: 155/972 symbols have executable Rust-example evidence.
 
 ## Non-equivalence of outcome tokens
 
@@ -226,7 +277,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_vsnprintf_s` | COVERED | format | safecrt | `0000000000000000 T _cplus_vsnprintf_s` |
 | `_cplus_vsprintf_s` | COVERED | format | safecrt | `000000000000165c T _cplus_vsprintf_s` |
 
-## `build/libc/libcplus_hardened.a` — 783 symbols
+## `build/libc/libcplus_hardened.a` — 805 symbols
 
 | Symbol | Status | Group / exact reason | Archive | exact nm line |
 |---|---|---|---|---|
@@ -241,7 +292,9 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_acoshl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000244 T _cplus_acoshl` |
 | `_cplus_acosl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000000d0 T _cplus_acosl` |
 | `_cplus_aligned_alloc` | COVERED | alloc<br>per-case BLOCKED note: [alloc] `cplus_aligned_alloc` cases are `BLOCKED` too. Metadata queries | hardened | `0000000000000000 T _cplus_aligned_alloc` |
+| `_cplus_alloc_atomic_realloc` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_alloc_atomic_realloc` |
 | `_cplus_alloc_check_generation` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000001110 T _cplus_alloc_check_generation` |
+| `_cplus_alloc_checked_free` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000001c4 T _cplus_alloc_checked_free` |
 | `_cplus_alloc_double_free_count` | COVERED | alloc<br>per-case BLOCKED note: [threading] both columns emit `BLOCKED`. (`_cplus_alloc_double_free_count` in the archive | hardened | `0000000000001384 T _cplus_alloc_double_free_count` |
 | `_cplus_alloc_elem_size` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000e6c T _cplus_alloc_elem_size` |
 | `_cplus_alloc_fail_after` | COVERED | alloc | hardened | `00000000000013fc T _cplus_alloc_fail_after` |
@@ -256,6 +309,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_alloc_query_length` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000001000 T _cplus_alloc_query_length` |
 | `_cplus_alloc_remaining_capacity` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000b14 T _cplus_alloc_remaining_capacity` |
 | `_cplus_alloc_size` | COVERED | alloc | hardened | `0000000000000da8 T _cplus_alloc_size` |
+| `_cplus_alloc_state_dump` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000280 T _cplus_alloc_state_dump` |
 | `_cplus_asctime` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_asctime` |
 | `_cplus_asctime_r` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000174 T _cplus_asctime_r` |
 | `_cplus_asin` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000003c T _cplus_asin` |
@@ -443,7 +497,13 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_atomic_thread_fence` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000002f28 T _cplus_atomic_thread_fence` |
 | `_cplus_bsearch` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000001f0 T _cplus_bsearch` |
 | `_cplus_c16rtomb` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000178 T _cplus_c16rtomb` |
+| `_cplus_c23_exp16` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000160 T _cplus_c23_exp16` |
+| `_cplus_c23_fma16` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000013c T _cplus_c23_fma16` |
+| `_cplus_c23_frexp16` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000120 T _cplus_c23_frexp16` |
+| `_cplus_c23_hypot3` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_c23_hypot3` |
+| `_cplus_c23_logb16` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000144 T _cplus_c23_logb16` |
 | `_cplus_c32rtomb` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000002f0 T _cplus_c32rtomb` |
+| `_cplus_c8rtomb` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000003a8 T _cplus_c8rtomb` |
 | `_cplus_cabs` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_cabs` |
 | `_cplus_cabsf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000234 T _cplus_cabsf` |
 | `_cplus_cabsl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000005fc T _cplus_cabsl` |
@@ -496,6 +556,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_clogl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000008f8 T _cplus_clogl` |
 | `_cplus_cnd_broadcast` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000874 T _cplus_cnd_broadcast` |
 | `_cplus_cnd_destroy` | COVERED | threading | hardened | `0000000000000a34 T _cplus_cnd_destroy` |
+| `_cplus_cnd_destroy_checked` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000022c T _cplus_cnd_destroy_checked` |
 | `_cplus_cnd_init` | COVERED | threading | hardened | `0000000000000768 T _cplus_cnd_init` |
 | `_cplus_cnd_signal` | COVERED | threading | hardened | `00000000000007f0 T _cplus_cnd_signal` |
 | `_cplus_cnd_timedwait` | COVERED | threading | hardened | `000000000000098c T _cplus_cnd_timedwait` |
@@ -567,6 +628,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_fabsf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000708 T _cplus_fabsf` |
 | `_cplus_fabsl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000007d8 T _cplus_fabsl` |
 | `_cplus_fadd` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_fadd` |
+| `_cplus_faddf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000003c T _cplus_faddf` |
 | `_cplus_faddl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000074 T _cplus_faddl` |
 | `_cplus_fclose` | COVERED | io | hardened | `000000000000016c T _cplus_fclose` |
 | `_cplus_fcvt` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000005c T _cplus_fcvt` |
@@ -574,6 +636,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_fdimf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000007b4 T _cplus_fdimf` |
 | `_cplus_fdiml` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000008f4 T _cplus_fdiml` |
 | `_cplus_fdiv` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000210 T _cplus_fdiv` |
+| `_cplus_fdivf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000024c T _cplus_fdivf` |
 | `_cplus_fdivl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000284 T _cplus_fdivl` |
 | `_cplus_fdopen` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000178 T _cplus_fdopen` |
 | `_cplus_feclearexcept` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_feclearexcept` |
@@ -613,6 +676,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_fmodf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000073c T _cplus_fmodf` |
 | `_cplus_fmodl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000080c T _cplus_fmodl` |
 | `_cplus_fmul` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000160 T _cplus_fmul` |
+| `_cplus_fmulf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000019c T _cplus_fmulf` |
 | `_cplus_fmull` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000001d4 T _cplus_fmull` |
 | `_cplus_fopen` | COVERED | io | hardened | `00000000000000fc T _cplus_fopen` |
 | `_cplus_fprintf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000734 T _cplus_fprintf` |
@@ -632,6 +696,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_fseek` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_fseek` |
 | `_cplus_fsetpos` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000000cc T _cplus_fsetpos` |
 | `_cplus_fsub` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000000b0 T _cplus_fsub` |
+| `_cplus_fsubf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000000ec T _cplus_fsubf` |
 | `_cplus_fsubl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000124 T _cplus_fsubl` |
 | `_cplus_ftell` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000004c T _cplus_ftell` |
 | `_cplus_fwprintf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000000c0 T _cplus_fwprintf` |
@@ -737,6 +802,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_mblen` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000002c0 T _cplus_mblen` |
 | `_cplus_mbrtoc16` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000003c T _cplus_mbrtoc16` |
 | `_cplus_mbrtoc32` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000238 T _cplus_mbrtoc32` |
+| `_cplus_mbrtoc8` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000090 T _cplus_mbrtoc8` |
 | `_cplus_mbrtowc` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_mbrtowc` |
 | `_cplus_mbsinit` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000288 T _cplus_mbsinit` |
 | `_cplus_mbsrtowcs` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000000a0 T _cplus_mbsrtowcs` |
@@ -762,6 +828,7 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_modff` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000bfc T _cplus_modff` |
 | `_cplus_modfl` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000ad0 T _cplus_modfl` |
 | `_cplus_mtx_destroy` | COVERED | threading | hardened | `0000000000000724 T _cplus_mtx_destroy` |
+| `_cplus_mtx_destroy_checked` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_mtx_destroy_checked` |
 | `_cplus_mtx_init` | COVERED | threading | hardened | `000000000000037c T _cplus_mtx_init` |
 | `_cplus_mtx_lock` | COVERED | threading | hardened | `0000000000000488 T _cplus_mtx_lock` |
 | `_cplus_mtx_timedlock` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000050c T _cplus_mtx_timedlock` |
@@ -940,10 +1007,12 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_thrd_equal` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000118 T _cplus_thrd_equal` |
 | `_cplus_thrd_exit` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000228 T _cplus_thrd_exit` |
 | `_cplus_thrd_join` | COVERED | threading | hardened | `0000000000000254 T _cplus_thrd_join` |
+| `_cplus_thrd_join_checked` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000328 T _cplus_thrd_join_checked` |
 | `_cplus_thrd_sleep` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000001a0 T _cplus_thrd_sleep` |
 | `_cplus_thrd_yield` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000204 T _cplus_thrd_yield` |
 | `_cplus_time` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_time` |
 | `_cplus_timespec_get` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000078 T _cplus_timespec_get` |
+| `_cplus_timespec_getres` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_timespec_getres` |
 | `_cplus_tmpfile` | COVERED | io | hardened | `000000000000024c T _cplus_tmpfile` |
 | `_cplus_toascii` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000038 T _cplus_toascii` |
 | `_cplus_tolower` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000045c T _cplus_tolower` |
@@ -967,6 +1036,10 @@ behavioural correspondence for the enumerated case set only.
 | `_cplus_vfscanf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000b10 T _cplus_vfscanf` |
 | `_cplus_vfwprintf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000130 T _cplus_vfwprintf` |
 | `_cplus_vfwscanf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000004d0 T _cplus_vfwscanf` |
+| `_cplus_violation_log_close` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000274 T _cplus_violation_log_close` |
+| `_cplus_violation_log_count` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000002b8 T _cplus_violation_log_count` |
+| `_cplus_violation_log_event` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000000a4 T _cplus_violation_log_event` |
+| `_cplus_violation_log_open` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000000 T _cplus_violation_log_open` |
 | `_cplus_vprintf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `0000000000000ab4 T _cplus_vprintf` |
 | `_cplus_vscanf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `000000000000011c T _cplus_vscanf` |
 | `_cplus_vsnprintf` | NOT EXERCISED | no Rust example models this wrapper; no explicit BLOCKED declaration | hardened | `00000000000005cc T _cplus_vsnprintf` |

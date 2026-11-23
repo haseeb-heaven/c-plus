@@ -154,7 +154,7 @@ $(awk '
 ' "$OUT/c.out" "$OUT/rust.out" 2> "$OUT/mismatch_detail.txt")
 EOF
 
-echo "RUST_EXAMPLES safecrt_memstr $napis $cases $matched $mismatched"
+echo "RUST_EXAMPLES safecrt_memstr $napis $cases $matched $mismatched 0"
 if [ "$mismatched" -ne 0 ]; then
     cat "$OUT/mismatch_detail.txt" >&2
     exit 1
