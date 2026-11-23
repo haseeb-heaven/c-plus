@@ -92,3 +92,4 @@ tests/adversarial_1000/**/results/
 benchmarks/rust_examples/**/.build/
 benchmarks/rust_examples/**/results/
 benchmarks/rust_examples/**/bin/
+benchmarks/rust_examples/**/out/
