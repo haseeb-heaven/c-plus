@@ -186,6 +186,22 @@ static unsigned long long meta_insert(void *p, size_t byte_size, size_t elem_siz
     return gen;
 }
 
+/* Register a block allocated by a different host API (currently C11
+ * aligned_alloc) in the same hardened side table. Returns 0 on success or -1
+ * if the table cannot grow, in which case the caller must release the block
+ * with its matching host deallocator. */
+int cplus_alloc_meta_register(void *p, size_t bytes, size_t elem_size) {
+    int rc;
+    if (p == NULL)
+        return -1;
+    pthread_mutex_lock(&g_meta_lock);
+    rc = meta_reserve_one();
+    if (rc == 0)
+        meta_insert(p, bytes, elem_size); /* accounts for g_live_bytes */
+    pthread_mutex_unlock(&g_meta_lock);
+    return rc;
+}
+
 static void meta_remove(meta_slot *s) {
     g_live_bytes -= s->byte_size;
     --g_live;

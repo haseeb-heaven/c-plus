@@ -70,12 +70,16 @@ set(LIBC_SOURCES
   src/uchar/uchar_c23.c
   src/math/math_c23_upstream.c
   src/math/math_c23.c
+  src/math/math_c23_farith.c
+  src/math/math_c23_hypot3_f16.c
+  src/math/math_c23_next.c
   src/math/math_c23_musl.c
   src/math/math_gaps.c
   src/math/math_float.c
   src/math/math_ldouble.c
   src/stdlib/stdlib_c17.c
   src/stdlib/inttypes_wide.c
+  src/stdlib/atomic_wrappers.c
 )
 
 add_library(cplus_hardened_libc STATIC ${LIBC_SOURCES})

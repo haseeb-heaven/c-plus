@@ -74,18 +74,14 @@ extern long double cplus_nextdownl(long double);
  * fsubf.cpp, fmulf.cpp and fdivf.cpp -- there is no single-precision
  * entry point to copy for the /f variants at all.
  * Not copied. */
-extern double cplus_fadd(double, double);
+/* The eight C23 narrowing entry points (fadd/faddl, fsub/fsubl, fmul/fmull,
+ * fdiv/fdivl) are now DEFINED in math_c23_farith.c with the correct C23
+ * float-returning signatures; their stale double/long-double externs were
+ * removed. The four /f names below remain declared-only (not C23 APIs). */
 extern float cplus_faddf(float, float);
-extern long double cplus_faddl(long double, long double);
-extern double cplus_fsub(double, double);
 extern float cplus_fsubf(float, float);
-extern long double cplus_fsubl(long double, long double);
-extern double cplus_fmul(double, double);
 extern float cplus_fmulf(float, float);
-extern long double cplus_fmull(long double, long double);
-extern double cplus_fdiv(double, double);
 extern float cplus_fdivf(float, float);
-extern long double cplus_fdivl(long double, long double);
 
 /* ------------------------------------------------------------------------ */
 /* 3-argument hypot (1)                                                     */
@@ -98,8 +94,8 @@ extern long double cplus_fdivl(long double, long double);
  *   (generic/hypot3.cpp and generic/hypotf16.cpp are HTTP 404). There is no
  *   upstream source to copy for the C23 hypot(x, y, z) API.
  * Exported under the distinct name cplus_hypot3 to avoid colliding with the
- * existing two-argument cplus_hypot. Not copied. */
-extern double cplus_hypot3(double, double, double);
+ * existing two-argument cplus_hypot. Not copied upstream, but now DEFINED in
+ * math_c23_hypot3_f16.c as a nested composition of the host 2-arg hypot. */
 
 /* ------------------------------------------------------------------------ */
 /* _Float16 helpers: frexp16, fma16, logb16, exp16 (4)                      */
@@ -120,10 +116,9 @@ extern double cplus_hypot3(double, double, double);
  * Blocker for all four: fputil::{frexp,logb,fma} and the expf16 algorithm are
  * src/__support/FPUtil C++ machinery; exp16 additionally needs two upstream
  * tables from expxf16.h. No self-contained closure, no cplus_* substitute.
- * Not copied. The declarations below are guarded exactly as in math_c23.c. */
+ * Not copied upstream. These four are now DEFINED in
+ * math_c23_hypot3_f16.c (host-primitive compositions / builtins); the old
+ * declaration-only guard is retired here to avoid duplicate stale externs. */
 #if defined(__FLT16_MANT_DIG__)
-extern _Float16 cplus_frexp16(_Float16, int *);
-extern _Float16 cplus_fma16(_Float16, _Float16, _Float16);
-extern _Float16 cplus_logb16(_Float16);
-extern _Float16 cplus_exp16(_Float16);
+/* definitions provided by math_c23_hypot3_f16.c */
 #endif /* __FLT16_MANT_DIG__ */

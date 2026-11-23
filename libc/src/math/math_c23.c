@@ -188,7 +188,7 @@ double cplus_fadd(double x, double y) {
     return __builtin_fadd(x, y);
 }
 #else
-extern double cplus_fadd(double, double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_faddf)
@@ -206,7 +206,7 @@ long double cplus_faddl(long double x, long double y) {
     return __builtin_faddl(x, y);
 }
 #else
-extern long double cplus_faddl(long double, long double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_fsub)
@@ -215,7 +215,7 @@ double cplus_fsub(double x, double y) {
     return __builtin_fsub(x, y);
 }
 #else
-extern double cplus_fsub(double, double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_fsubf)
@@ -233,7 +233,7 @@ long double cplus_fsubl(long double x, long double y) {
     return __builtin_fsubl(x, y);
 }
 #else
-extern long double cplus_fsubl(long double, long double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_fmul)
@@ -242,7 +242,7 @@ double cplus_fmul(double x, double y) {
     return __builtin_fmul(x, y);
 }
 #else
-extern double cplus_fmul(double, double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_fmulf)
@@ -260,7 +260,7 @@ long double cplus_fmull(long double x, long double y) {
     return __builtin_fmull(x, y);
 }
 #else
-extern long double cplus_fmull(long double, long double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_fdiv)
@@ -269,7 +269,7 @@ double cplus_fdiv(double x, double y) {
     return __builtin_fdiv(x, y);
 }
 #else
-extern double cplus_fdiv(double, double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_fdivf)
@@ -287,7 +287,7 @@ long double cplus_fdivl(long double x, long double y) {
     return __builtin_fdivl(x, y);
 }
 #else
-extern long double cplus_fdivl(long double, long double);
+/* Definition lives in math_c23_farith.c (C23 narrowing signature: float). */
 #endif
 
 /* ==================================================================== */
@@ -306,7 +306,7 @@ double cplus_hypot3(double x, double y, double z) {
     return __builtin_hypot3(x, y, z);
 }
 #else
-extern double cplus_hypot3(double, double, double);
+/* Definition lives in math_c23_hypot3_f16.c (nested host hypot). */
 #endif
 
 /* ==================================================================== */
@@ -324,8 +324,7 @@ _Float16 cplus_frexp16(_Float16 x, int *exp) {
     return __builtin_frexp16(x, exp);
 }
 #else
-/* NOTES: platform gap -- no frexp16 symbol, builtin or vendored source. */
-extern _Float16 cplus_frexp16(_Float16, int *);
+/* Definition lives in math_c23_hypot3_f16.c (exact frexpf composition). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_fma16)
@@ -334,8 +333,7 @@ _Float16 cplus_fma16(_Float16 x, _Float16 y, _Float16 z) {
     return __builtin_fma16(x, y, z);
 }
 #else
-/* NOTES: platform gap -- no fma16 symbol, builtin or vendored source. */
-extern _Float16 cplus_fma16(_Float16, _Float16, _Float16);
+/* Definition lives in math_c23_hypot3_f16.c (fmaf16 builtin / double fma). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_logb16)
@@ -344,8 +342,7 @@ _Float16 cplus_logb16(_Float16 x) {
     return __builtin_logb16(x);
 }
 #else
-/* NOTES: platform gap -- no logb16 symbol, builtin or vendored source. */
-extern _Float16 cplus_logb16(_Float16);
+/* Definition lives in math_c23_hypot3_f16.c (exact logbf composition). */
 #endif
 
 #if CPLUS_C23_HAS_BUILTIN(__builtin_exp16)
@@ -354,7 +351,6 @@ _Float16 cplus_exp16(_Float16 x) {
     return __builtin_exp16(x);
 }
 #else
-/* NOTES: platform gap -- no exp16 symbol, builtin or vendored source. */
-extern _Float16 cplus_exp16(_Float16);
+/* Definition lives in math_c23_hypot3_f16.c (expf16 builtin / double exp). */
 #endif
 #endif /* __FLT16_MANT_DIG__ */

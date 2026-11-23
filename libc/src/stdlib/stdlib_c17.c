@@ -44,13 +44,21 @@
 
 #include "../../log/log.h"
 #include <errno.h>
+#include <pthread.h>
 #include <stdlib.h>
+
+/* Forward declarations from the hardened allocator in libc/src/stdlib/alloc.c.
+ * Keeping an aligned allocation in the same metadata side table means the
+ * ordinary cplus_free/cplus_alloc_* queries can see it, and double/invalid
+ * free detection works instead of leaking the block. */
+extern int cplus_alloc_meta_register(void *p, size_t bytes, size_t elem_size);
 
 #if defined(_WIN32)
 #include <malloc.h>
 #endif
 
 void *cplus_aligned_alloc(size_t alignment, size_t size) {
+    void *p;
     cplus_libc_log("aligned_alloc", "enter");
     /* Short-circuit order matters: never take "size % alignment" when
      * alignment is zero. */
@@ -64,10 +72,26 @@ void *cplus_aligned_alloc(size_t alignment, size_t size) {
     /* MSVC has no C11 aligned_alloc. _aligned_malloc takes (size, alignment)
      * (note the reversed argument order) and its blocks MUST be freed with
      * _aligned_free(), not free(). */
-    return _aligned_malloc(size, alignment);
+    p = _aligned_malloc(size, alignment);
 #else
-    return aligned_alloc(alignment, size);
+    p = aligned_alloc(alignment, size);
 #endif
+    if (p == NULL) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    if (cplus_alloc_meta_register(p, size, 1u) != 0) {
+        /* Metadata table refusal: release with the matching host deallocator
+         * and fail rather than returning an untrackable pointer. */
+#if defined(_WIN32)
+        _aligned_free(p);
+#else
+        free(p);
+#endif
+        errno = ENOMEM;
+        return NULL;
+    }
+    return p;
 }
 
 void cplus_quick_exit(int status) {

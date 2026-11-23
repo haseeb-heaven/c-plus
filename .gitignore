@@ -41,3 +41,10 @@ tests/**/.cplus-tmp-*.c
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Generated adversarial/fuzz evidence (logs and executables; never commit).
+tests/stdlib/reports/
+build/fuzz100/
+build/final-evidence/
+tests/fuzz100/__pycache__/
+tests/stdlib/agent2/results/run/

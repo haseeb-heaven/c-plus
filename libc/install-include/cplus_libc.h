@@ -17,6 +17,13 @@
 #include <time.h>
 #include <signal.h>
 #include <wctype.h>
+/* Namespaced C11/C23 <stdatomic.h> ABI surface (additive, C99-clean). */
+#include "cplus_stdatomic.h"
+/* C23 <math.h> farith and hypot3/_Float16 closures (additive, C99-clean).
+ * Full contracts: docs/libc/C23_FARITH_CLOSURE.md and
+ * docs/libc/C23_HYPOT_F16_CLOSURE.md. */
+#include "cplus_math_c23_farith.h"
+#include "cplus_math_c23_hypot3_f16.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -153,6 +160,10 @@ double cplus_copysign(double,double); double cplus_ldexp(double,int); double cpl
 double cplus_nan(const char*); double cplus_nextafter(double,double); double cplus_fdim(double,double); double cplus_remainder(double,double); double cplus_log1p(double); double cplus_expm1(double); double cplus_asinh(double); double cplus_acosh(double); double cplus_atanh(double); double cplus_erf(double); double cplus_erfc(double); double cplus_tgamma(double); double cplus_lgamma(double);
 double cplus_fma(double,double,double); double cplus_remquo(double,double,int*);
 double cplus_rint(double); double cplus_nexttoward(double,long double); long cplus_lround(double); long long cplus_llround(double); double cplus_scalbln(double,long); int cplus_vscanf(const char*,va_list); double cplus_logb(double); int cplus_ilogb(double); float cplus_nanf(const char*); double cplus_exp2(double); double cplus_nearbyint(double); long cplus_lrint(double); long long cplus_llrint(double); double cplus_scalbn(double,int);
+/* ISO C23 nextup/nextdown family (defined in src/math/math_c23_next.c).
+ * Full contract and deviations: docs/libc/C23_NEXT_CLOSURE.md. */
+double cplus_nextup(double); float cplus_nextupf(float); long double cplus_nextupl(long double);
+double cplus_nextdown(double); float cplus_nextdownf(float); long double cplus_nextdownl(long double);
 long cplus_time(long*); double cplus_difftime(long,long); long cplus_clock(void);
 struct tm; struct tm *cplus_gmtime(const long*); struct tm *cplus_localtime(const long*); long cplus_mktime(struct tm*);
 size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
