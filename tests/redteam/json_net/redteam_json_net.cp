@@ -344,10 +344,10 @@ static void f_sink_bounds(int id, int fd, Rng *r) {
         } else { exp_ret = bytes; exp_used = used + bytes; }
     }
     if (ret != exp_ret || s.used != exp_used || s.overflow != ovf) ok = 0;
-    /* full-buffer canaries + physical guard check (final NUL at index cap-1) */
+    /* full-buffer canaries + physical guard check (final NUL at used_after) */
     sent = guard_s_ok(gs);
-    if (cap > 0 && gs[GUARD + cap - 1u] != '\0') sent = 0;
-    for (k = exp_used; k < cap; k++)
+    if (cap > 0 && exp_used < cap && gs[GUARD + exp_used] != '\0') sent = 0;
+    for (k = exp_used + 1u; k < cap; k++)
         if (gs[GUARD + k] != (char)0xA5) sent = 0;
     promise = (mode == 0 || mode == 1 || mode == 3);
     snprintf(result, sizeof(result), "%s", ovf ? "REFUSED" : "DEFINED_OK");
@@ -399,7 +399,8 @@ static void f_sink_null(int id, int fd, Rng *r) {
          ((mode == 4) ? (s.overflow == 1) : (s.overflow == ovf_before));
     sent = guard_s_ok(gs);
     snprintf(name, sizeof(name), "snull_%04d", id);
-    report(fd, id, "http_sink_write", name, "REFUSED", sent, ok, 1);
+    report(fd, id, "http_sink_write", name,
+           (mode == 4 && !sent) ? "CORRUPT" : "REFUSED", sent, ok, 1);
 }
 
 /* Poisoned `used` near SIZE_MAX: documented FORTHCOMING FINDING reproducer.
@@ -656,6 +657,9 @@ static void f_utf8_stream(int id, int fd, Rng *r) {
 static void dispatch(int id, int fd) {
     Rng r;
     rinit(&r, case_seed(id));
+    fill(gj, sizeof(gj));
+    fill(gs, sizeof(gs));
+    fill(gr, sizeof(gr));
     if (id < 400) f_json_null_zero(id, fd, &r);
     else if (id < 800) f_json_depth(id, fd, &r);
     else if (id < 1100) f_json_escaped_budget(id, fd, &r);
@@ -743,7 +747,7 @@ int main(int argc, char **argv) {
         }
         snprintf(text, sizeof(text), "%s\n", line);
         log_text(text);
-        if (v_sent) g_sent_ok++; else g_corrupt++;
+        if (v_sent) g_sent_ok++;
         if (!v_ok) g_mismatch++;
         if (strncmp(result, "CORRUPT", 7) == 0) g_corrupt++;
         if (strncmp(result, "UNEXPECTED_OK", 13) == 0) g_unexpected++;

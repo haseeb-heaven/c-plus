@@ -1,0 +1,36 @@
+=== C89/C90 support matrix ===
+date: 2026-11-23T06:55:51Z
+driver: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+
+clang:  /usr/bin/clang (Apple clang version 16.0.0 (clang-1600.0.26.6))
+root:   /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+
+--- 1. Reference: plain clang on genuine C89 source ---
+$ /usr/bin/clang -std=c89 -pedantic-errors hello89.c -o hello89.ref
+[exit=0]
+RESULT reference clang -std=c89 -pedantic-errors hello89.c exit=0
+
+--- 2. C+ driver: hello89.c, -std spelling variants ---
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c89 --sanitize=none -o hello89.cplus.c89
+[exit=0]
+RESULT spelling=c89 source=hello89.c build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c90 --sanitize=none -o hello89.cplus.c90
+[exit=0]
+RESULT spelling=c90 source=hello89.c build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=iso9899:1990 --sanitize=none -o hello89.cplus.iso9899:1990
+[exit=0]
+RESULT spelling=iso9899:1990 source=hello89.c build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=gnu89 --sanitize=none -o hello89.cplus.gnu89
+[exit=0]
+RESULT spelling=gnu89 source=hello89.c build_exit=0
+
+--- 3. C+ driver: hello89.c, -std spelling variants + -pedantic-errors ---
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c89 -pedantic-errors --sanitize=none -o hello89.ped.c89
+[exit=0]
+RESULT spelling=c89 source=hello89.c pedantic=1 build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=c90 -pedantic-errors --sanitize=none -o hello89.ped.c90
+[exit=0]
+RESULT spelling=c90 source=hello89.c pedantic=1 build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=iso9899:1990 -pedantic-errors --sanitize=none -o hello89.ped.iso9899:1990
+[exit=0]
+RESULT spelling=iso9899:1990 source=hello89.c pedantic=1 build_exit=0
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build hello89.c -std=gnu89 -pedantic-errors --sanitize=none -o hello89.ped.gnu89

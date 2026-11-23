@@ -18,7 +18,20 @@ typedef struct slot {
 } slot;
 
 #define TOMB ((void *)(uintptr_t)1)
+#define RECENT_TOMB ((void *)(uintptr_t)2)
 #define RECENT_SLOTS 1024u
+
+/* Recently-freed addresses are kept in an OPEN-ADDRESSED, generation-tagged
+ * table.  A direct-mapped single-pointer cache used to misclassify a genuine
+ * double free as an invalid free whenever two freed addresses collided in one
+ * bucket: the second free evicted the first.  Linear probing gives each
+ * distinct address its own slot until the bounded table fills.  The generation
+ * is recorded so a caller (through the generation-aware checked APIs) can tell
+ * a stale alias from the current owner of a reissued address. */
+typedef struct recent_slot {
+    void *ptr;                  /* NULL = empty */
+    unsigned long long generation;
+} recent_slot;
 
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static slot *g_tab;
@@ -27,14 +40,18 @@ static size_t g_used;           /* live + tombstones */
 static size_t g_live;
 static size_t g_live_bytes;
 static unsigned long long g_gen;
-static void *g_recent[RECENT_SLOTS];
+static recent_slot g_recent[RECENT_SLOTS];
 static long g_inject = -1;      /* -1 off; else successes still allowed */
 static unsigned long g_seq;
 
+/* Stronger 3-round mix; also used by the libc-layer recent cache.  Distribution
+ * only: no exported value or layout depends on it. */
 static size_t hash_ptr(const void *p) {
     uintptr_t x = (uintptr_t)p;
     x ^= x >> 33;
     x *= (uintptr_t)0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    x *= (uintptr_t)0xc4ceb9fe1a85ec53ULL;
     x ^= x >> 33;
     return (size_t)x;
 }
@@ -42,6 +59,53 @@ static size_t hash_ptr(const void *p) {
 static size_t recent_index(const void *p) { return hash_ptr(p) & (RECENT_SLOTS - 1u); }
 
 /* All helpers below require g_lock held. */
+
+/* Return the slot index of a recently-freed address, or RECENT_SLOTS when it
+ * is not present.  Linear probing skips deletion markers but stops at a
+ * genuinely empty slot, so removing a reissued address cannot truncate the
+ * probe chain of a colliding neighbor. */
+static size_t recent_find(const void *p) {
+    size_t mask = RECENT_SLOTS - 1u;
+    size_t i, n;
+    if (!p || p == TOMB || p == RECENT_TOMB) return RECENT_SLOTS;
+    i = recent_index(p);
+    for (n = 0; n < RECENT_SLOTS; ++n) {
+        if (g_recent[i].ptr == NULL) return RECENT_SLOTS;
+        if (g_recent[i].ptr == p) return i;
+        i = (i + 1u) & mask;
+    }
+    return RECENT_SLOTS;
+}
+
+static int recent_contains(const void *p) { return recent_find(p) < RECENT_SLOTS; }
+
+static void recent_remove(const void *p) {
+    size_t i = recent_find(p);
+    if (i < RECENT_SLOTS) {
+        /* Tombstone rather than NULL: keep the probe chain intact. */
+        g_recent[i].ptr = RECENT_TOMB;
+        g_recent[i].generation = 0;
+    }
+}
+
+static void recent_add(const void *p, unsigned long long generation) {
+    size_t mask = RECENT_SLOTS - 1u;
+    size_t start = recent_index(p);
+    size_t i = start, n;
+    if (!p || p == TOMB || p == RECENT_TOMB) return;
+    for (n = 0; n < RECENT_SLOTS; ++n) {
+        if (g_recent[i].ptr == NULL || g_recent[i].ptr == RECENT_TOMB ||
+            g_recent[i].ptr == p) {
+            g_recent[i].ptr = (void *)p;
+            g_recent[i].generation = generation;
+            return;
+        }
+        i = (i + 1u) & mask;
+    }
+    /* Table full: overwrite the home bucket.  Bounded diagnostic only. */
+    g_recent[start].ptr = (void *)p;
+    g_recent[start].generation = generation;
+}
 
 static slot *tab_find_addr(uintptr_t addr) {
     size_t mask, i, n;
@@ -108,13 +172,15 @@ static void tab_insert(void *p, size_t size, size_t elem_size) {
         ++g_live;
         g_live_bytes += size;
     }
-    if (g_recent[recent_index(p)] == p) g_recent[recent_index(p)] = NULL;
+    recent_remove(p);
 }
 
 static void tab_remove(slot *s) {
+    void *p = s->ptr;
+    unsigned long long generation = s->generation;
     g_live_bytes -= s->size;
     --g_live;
-    g_recent[recent_index(s->ptr)] = s->ptr;
+    recent_add(p, generation);
     s->ptr = TOMB;
     s->size = 0;
     s->elem_size = 0;
@@ -329,7 +395,7 @@ int free_checked_s(void *ptr) {
         if (s) {
             tab_remove(s);
             release = 1;
-        } else if (g_recent[recent_index(ptr)] == ptr) {
+        } else if (recent_contains(ptr)) {
             rc = CPLUS_SAFE_EINVAL;
             cplus_safe_stat_record("double_free", 0);
         } else {
@@ -357,6 +423,49 @@ void free_s(void *ptr) {
     }
     rc = free_checked_s(ptr);
     cplus_safe_stat_record("free_s", rc == CPLUS_SAFE_OK);
+}
+
+/* Generation-aware free.  Refuses a stale alias whose address was reissued to
+ * a newer live block: the pointer is only released when it is live AND its
+ * current generation matches the one the caller captured.  A refusal never
+ * touches the live table, the payload, or the caller's pointer.  Additive: the
+ * legacy free_s/free_checked_s behavior is unchanged. */
+int free_checked_generation_s(void *ptr, unsigned long long generation) {
+    int release = 0;
+    int rc = CPLUS_SAFE_EINVAL;
+    if (!ptr || generation == 0) {
+        errno = EINVAL;
+        cplus_safe_stat_record("free_checked_generation_s", 0);
+        return CPLUS_SAFE_EINVAL;
+    }
+    pthread_mutex_lock(&g_lock);
+    {
+        slot *s = tab_find(ptr);
+        if (s && s->generation == generation) {
+            tab_remove(s);
+            release = 1;
+            rc = CPLUS_SAFE_OK;
+        } else if (s) {
+            /* Live, but the caller's generation is stale: do not free the
+             * current owner of a recycled address (F-01). */
+            cplus_safe_stat_record("stale_free", 0);
+        } else if (recent_contains(ptr)) {
+            cplus_safe_stat_record("double_free", 0);
+        } else {
+            cplus_safe_stat_record("invalid_free", 0);
+        }
+    }
+    pthread_mutex_unlock(&g_lock);
+    if (release) {
+        free(ptr);
+        cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "free_checked_generation_s", "ok");
+    } else {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "free_checked_generation_s",
+                       "refused: generation mismatch / not live");
+    }
+    cplus_safe_stat_record("free_checked_generation_s", rc == CPLUS_SAFE_OK);
+    return rc;
 }
 
 /* Remaining writable bytes from ptr to the end of its containing live
@@ -427,7 +536,7 @@ int cplus_safe_ptr_was_freed(const void *ptr) {
     int freed;
     if (!ptr) return 0;
     pthread_mutex_lock(&g_lock);
-    freed = (tab_find(ptr) == NULL) && (g_recent[recent_index(ptr)] == ptr);
+    freed = (tab_find(ptr) == NULL) && recent_contains(ptr);
     pthread_mutex_unlock(&g_lock);
     return freed;
 }
@@ -526,6 +635,35 @@ int cplus_safe_transfer_ownership(void **dst, void **src) {
     *src = NULL;
     pthread_mutex_unlock(&g_lock);
     cplus_safe_stat_record("transfer_owner", 1);
+    return CPLUS_SAFE_OK;
+}
+
+/* Generation-aware ownership transfer.  Identical to
+ * cplus_safe_transfer_ownership except that it additionally requires the
+ * source slot's generation to equal `generation`.  A stale alias at a reissued
+ * address is refused with EINVAL and leaves both pointers and metadata
+ * untouched.  Additive: the legacy transfer function is unchanged. */
+int cplus_safe_transfer_ownership_generation(void **dst, void **src,
+                                            unsigned long long generation) {
+    slot *s;
+    if (!dst || !src || !*src || *dst != NULL || dst == src || generation == 0) {
+        errno = EINVAL;
+        cplus_safe_stat_record("transfer_owner_generation", 0);
+        return CPLUS_SAFE_EINVAL;
+    }
+    pthread_mutex_lock(&g_lock);
+    s = tab_find(*src);
+    if (!s || s->generation != generation) {
+        pthread_mutex_unlock(&g_lock);
+        errno = EINVAL;
+        cplus_safe_stat_record("stale_transfer", 0);
+        return CPLUS_SAFE_EINVAL;
+    }
+    s->generation = ++g_gen;
+    *dst = *src;
+    *src = NULL;
+    pthread_mutex_unlock(&g_lock);
+    cplus_safe_stat_record("transfer_owner_generation", 1);
     return CPLUS_SAFE_OK;
 }
 

@@ -518,11 +518,9 @@ static void cmd_refuse(int argc, char **argv, error *err) {
                           (const char *)0, &rep, err);
     } else if (strcmp(name, "null-context") == 0) {
         /* Guard reachable without SDL: NULL Nuklear context is refused before
-         * any widget or conversion call.  Also prove the gui wrapper itself
-         * refuses NULL native handles instead of dereferencing them. */
-        (void)gui_convert_context((struct nk_context *)0,
-                                  "tools/c2modern_gui/fixtures/hello.c",
-                                  "out.cpp", &rep, err);
+         * any widget or conversion call.  First prove the gui wrapper itself
+         * refuses NULL native handles instead of dereferencing them, then let
+         * the explicit context guard record the final, reported error. */
         {
             gui bad = gui((SDL_Window *)0, (SDL_Renderer *)0, err);
             if (bad.valid()) {
@@ -532,6 +530,9 @@ static void cmd_refuse(int argc, char **argv, error *err) {
             }
             bad.drop();
         }
+        (void)gui_convert_context((struct nk_context *)0,
+                                  "tools/c2modern_gui/fixtures/hello.c",
+                                  "out.cpp", &rep, err);
     } else if (strcmp(name, "missing-file") == 0) {
         (void)gui_convert("tools/c2modern_gui/fixtures/no_such_file.c",
                           "out.cpp", &rep, err);

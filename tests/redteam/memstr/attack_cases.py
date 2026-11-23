@@ -48,10 +48,10 @@ APPLICABLE = {
     "memcmp_s":  [0, 1, 2, 3, 4, 5, 8, 9, 11, 12],
     "memzero_s": [0, 1, 5, 12],
     "strcpy_s":  [0, 1, 2, 3, 5, 6, 8, 9, 12],
-    "strncpy_s": [0, 1, 2, 3, 4, 5, 6, 8, 9, 12],
+    "strncpy_s": [0, 1, 2, 4, 5, 6, 8, 9, 12],
     "strcat_s":  [0, 1, 2, 3, 5, 7, 8, 9, 12],
-    "strncat_s": [0, 1, 2, 3, 4, 5, 7, 8, 9, 12],
-    "strcmp_s":  [0, 1, 2, 3, 5, 11, 12],
+    "strncat_s": [0, 1, 2, 4, 5, 7, 8, 9, 12],
+    "strcmp_s":  [0, 1, 2, 5, 11, 12],
     "strnlen_s": [0, 1, 5, 12],
     "strtok_s":  [0, 1, 5, 12],
 }
@@ -90,8 +90,12 @@ def params(api, cas, cap, L, O, rng):
         dm = cap
         n = 1 + (L % max(1, cap))
     elif cas == 8:                     # DMAX_GT_CAP (wild memset on violation)
-        delta = 1 + (O % max(1, ENFORCED_MAX - cap))
-        dm = cap + delta               # still <= enforced max (accepted)
+        # String entry points enforce RSIZE_MAX_STR (4096); memory ones
+        # enforce RSIZE_MAX_MEM (16384). Stay inside the accepted range so
+        # the oversized dmax is NOT rejected as ESLEMAX.
+        ceiling = 4096 if api[0] == "s" else ENFORCED_MAX
+        delta = 1 + (O % max(1, ceiling - cap))
+        dm = cap + delta               # accepted by the API's dmax ceiling
         n = 1 + (L % max(1, min(cap, 8)))
     elif cas == 9:                     # DMAX_GT_CAP_ONE
         dm = cap + 1

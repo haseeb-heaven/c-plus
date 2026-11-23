@@ -19,13 +19,15 @@
  *
  * No source files are modified by this harness. Artifacts live next to it.
  */
-#define _POSIX_C_SOURCE 200112L
+#define _DARWIN_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 

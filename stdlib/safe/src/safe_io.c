@@ -182,6 +182,12 @@ FILE *cplus_fopen_s(const char *name, const char *mode) {
         cplus_safe_stat_record("fopen_s", 0);
         return NULL;
     }
+    if (cplus_safe_ptr_was_freed(name) || cplus_safe_ptr_was_freed(mode)) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fopen_s", "use-after-free detected in name/mode");
+        cplus_safe_stat_record("fopen_s", 0);
+        return NULL;
+    }
     f = fopen(name, mode);
     if (!f) {
         cplus_safe_log(CPLUS_SAFE_LOG_WARN, "fopen_s", "open failed");
@@ -271,6 +277,7 @@ size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, F
         cplus_safe_stat_record("fwrite_s", 0);
         return 0;
     }
+    if (io_check_buf("fwrite_s", buf, bmax) < 0 || io_check_stream("fwrite_s", stream) < 0) return 0;
     if (count > bmax / size) count = bmax / size;
     r = fwrite(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fwrite_s", "ok");

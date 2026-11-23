@@ -101,7 +101,8 @@ static void noop_handler(const char *m, void *p, int e) {
  * caller wraps it (see run_child).  `is_query` marks strnlen/strtok. */
 static long long call_api(int fam, int api, void *dp, const void *sp,
                           rsize_t dm, rsize_t n, int value, int *diff, int *ind,
-                          rsize_t *dmaxp, char **tok, const char *delim) {
+                          rsize_t *dmaxp, char **tok, const char *delim,
+                          int null_diff) {
     switch (api) {
     case A_MEMCPY:
         return fam == 0 ? cplus_sc_memcpy_s(dp, dm, sp, n) : cplus_memcpy_s(dp, dm, sp, n);
@@ -110,7 +111,8 @@ static long long call_api(int fam, int api, void *dp, const void *sp,
     case A_MEMSET:
         return fam == 0 ? cplus_sc_memset_s(dp, dm, value, n) : cplus_memset_s(dp, dm, value, n);
     case A_MEMCMP:
-        return fam == 0 ? cplus_sc_memcmp_s(dp, dm, sp, n, diff) : cplus_memcmp_s(dp, dm, sp, n, diff);
+        return fam == 0 ? cplus_sc_memcmp_s(dp, dm, sp, n, null_diff ? NULL : diff)
+                        : cplus_memcmp_s(dp, dm, sp, n, null_diff ? NULL : diff);
     case A_MEMZERO:
         return fam == 0 ? cplus_sc_memzero_s(dp, dm) : cplus_memzero_s(dp, dm);
     case A_STRCPY:
@@ -122,7 +124,8 @@ static long long call_api(int fam, int api, void *dp, const void *sp,
     case A_STRNCAT:
         return fam == 0 ? cplus_sc_strncat_s((char *)dp, dm, (const char *)sp, n) : cplus_strncat_s((char *)dp, dm, (const char *)sp, n);
     case A_STRCMP:
-        return fam == 0 ? cplus_sc_strcmp_s((const char *)dp, dm, (const char *)sp, ind) : cplus_strcmp_s((const char *)dp, dm, (const char *)sp, ind);
+        return fam == 0 ? cplus_sc_strcmp_s((const char *)dp, dm, (const char *)sp, null_diff ? NULL : ind)
+                        : cplus_strcmp_s((const char *)dp, dm, (const char *)sp, null_diff ? NULL : ind);
     case A_STRNLEN:
         return fam == 0 ? (long long)cplus_sc_strnlen_s((const char *)sp, dm) : (long long)cplus_strnlen_s((const char *)sp, dm);
     case A_STRTOK: {
@@ -158,12 +161,15 @@ static void run_child(const Case *c, int wrfd) {
     memset(sbuf, 'A', sizeof sbuf);
     srclen = (size_t)(c->L % (c->cap + 1));
     sbuf[srclen < MAXBUF ? srclen : MAXBUF - 1] = 0;
-    off = 1 + (size_t)(c->O % 8);
+    /* Keep the overlap offset inside the live region so the harness's own
+     * setup never touches the canary (only the API under test may). */
+    off = 1 + (size_t)(c->O % (c->cap > 8 ? 8 : c->cap - 1));
 
     /* Per-attack pointer / content setup.  dm and n come from the case. */
     switch (c->cas) {
     case C_NULL_DEST:
         dp = NULL;
+        if (c->api == A_STRNLEN) sp = NULL; /* strnlen's "str" is the src slot */
         break;
     case C_NULL_SRC:
         sp = NULL;
@@ -176,8 +182,12 @@ static void run_child(const Case *c, int wrfd) {
         break;
     case C_OVERLAP:
         sp = buf + off;
-        memset(buf + off, 'B', 12);
-        buf[off + 12] = 0;
+        {
+            size_t room = c->cap - off - 1; /* leave the last live byte for NUL */
+            size_t cnt = room < 12 ? room : 12;
+            memset(buf + off, 'B', cnt);
+            buf[off + cnt] = 0; /* strictly inside [0,cap) */
+        }
         break;
     case C_UNTERMINATED:
         memset(buf, 'A', c->cap); /* no NUL in [0,cap) */
@@ -187,13 +197,15 @@ static void run_child(const Case *c, int wrfd) {
         /* Wild-memset trigger: dmax>real cap + a self-detected violation. */
         sp = NULL;                 /* null src where the API has a src */
         if (c->api == A_MEMCPY || c->api == A_STRCPY || c->api == A_STRNCPY) {
+            size_t room = c->cap - off - 1;
+            size_t cnt = room < 12 ? room : 12;
             sp = buf + off;        /* overlap also triggers the wild memset */
-            memset(buf + off, 'B', 12);
-            buf[off + 12] = 0;
+            memset(buf + off, 'B', cnt);
+            buf[off + cnt] = 0;    /* strictly inside [0,cap) */
         }
         break;
     case C_EMBEDDED_NUL: {
-        size_t pos = (size_t)(c->extra % MAXBUF);
+        size_t pos = (size_t)(c->extra % c->cap); /* inside the live src */
         sbuf[pos] = 0;             /* embedded NUL inside the source */
         break;
     }
@@ -207,14 +219,21 @@ static void run_child(const Case *c, int wrfd) {
         buf[0] = 0;
     }
     if (c->api == A_STRTOK) {
+        static const char toksrc[] = "aaa bbb ccc";
+        size_t tlen = sizeof toksrc - 1;
         dmaxp = c->dm;
         if (dmaxp > c->cap && dmaxp < 4096) dmaxp = (rsize_t)c->cap; /* keep token scan in-bounds */
-        memcpy(buf, "aaa bbb ccc", 11);
-        buf[11] = 0;
+        /* Only place the token string if it fits strictly inside the live
+         * region; otherwise leave canary-filled buf untouched (the API is
+         * being tested, not the harness setup). */
+        if (c->cap > tlen) {
+            memcpy(buf, toksrc, tlen);
+            buf[tlen] = 0;
+        }
     }
 
     rc = call_api(c->fam, c->api, dp, sp, c->dm, c->n, c->value,
-                  &diff, &ind, &dmaxp, &tok, delim);
+                  &diff, &ind, &dmaxp, &tok, delim, c->cas == C_DIFF_NULL);
 
     for (i = c->cap; i < MAXBUF; i++) {
         if (buf[i] != CAN) { bad = (int)i; break; }

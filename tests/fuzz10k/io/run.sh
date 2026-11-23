@@ -53,6 +53,7 @@ echo "build ok: $BIN"
 echo "== FUZZ10K io run (fixed seed 0x46555A5A3130304B, timeout 600) =="
 /usr/bin/timeout 600 "$BIN" "$LOG" "$TMPD" >"$SUMFILE" 2>"$ERR"
 hrc=$?
+sync
 echo "harness exit = $hrc"
 
 # Digest of the exact scenario log (S-lines + trailers).

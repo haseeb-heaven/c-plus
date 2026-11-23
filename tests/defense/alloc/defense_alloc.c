@@ -239,13 +239,15 @@ out:
 /* 4. F-01: stale alias at a reissued address must be refusable explicitly.  */
 /* ------------------------------------------------------------------------ */
 static void test_stale_alias(void) {
-    void *p = malloc_s(64);
+    void *p;
     void *q = NULL;
     cplus_safe_alloc_meta m0, m1;
     unsigned long long g0;
-    size_t l0 = cplus_safe_alloc_live_count();
-    size_t b0 = cplus_safe_alloc_live_bytes();
+    size_t l0, b0;
     int attempt;
+    l0 = cplus_safe_alloc_live_count();
+    b0 = cplus_safe_alloc_live_bytes();
+    p = malloc_s(64);
     CHK(p != NULL, "stale setup");
     if (!p) return;
     CHK(cplus_safe_alloc_get_meta(p, &m0) == CPLUS_SAFE_OK && m0.generation != 0,
@@ -295,10 +297,6 @@ static void test_stale_alias(void) {
     }
 #endif
     if (q) free_s(q);
-    if (cplus_safe_alloc_live_count() != l0 || cplus_safe_alloc_live_bytes() != b0)
-        fprintf(stderr, "DEBUG stale counters: live=%zu/%zu bytes=%zu/%zu q=%p p=%p\n",
-                cplus_safe_alloc_live_count(), l0, cplus_safe_alloc_live_bytes(), b0,
-                (void *)q, (void *)p);
     CHK(cplus_safe_alloc_live_count() == l0 && cplus_safe_alloc_live_bytes() == b0,
         "stale alias counters restored");
 }

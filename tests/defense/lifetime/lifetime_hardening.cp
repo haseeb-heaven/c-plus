@@ -82,9 +82,12 @@ static void gap_checked_release(void) {
     tok = stdlib_mem_token(p);
     stale = p;
 
-    /* NULL handle is an idempotent no-op, matching stdlib_mem_release(). */
-    h_check("rel_null_noop", stdlib_mem_release_checked((void **)0, 0ULL, &e) == STDLIB_OK);
-    h_check("rel_null_clean", h_err_is(&e, 0, 0, 0));
+    /* A NULL handle-pointer is an invalid argument (fail closed, like the
+     * other checked helpers); a *non-NULL* handle holding NULL is the
+     * idempotent no-op, exercised as rel_repeated_noop below. */
+    h_check("rel_null_refused", stdlib_mem_release_checked((void **)0, 0ULL, &e) == STDLIB_FAIL);
+    h_check("rel_null_error",
+            h_err_is(&e, 1, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_NULL_POINTER));
 
     /* Wrong token on a live block is refused without freeing it. */
     e.clear();
@@ -114,9 +117,12 @@ static void gap_checked_release(void) {
 /* GAP 3: owners had no side-effect-free liveness query. */
 static void gap_owner_live(void) {
     error e = error();
-    lifetime_owner o = lifetime_owner();
-    lifetime_owner src = lifetime_owner();
-    lifetime_owner dst = lifetime_owner();
+    lifetime_owner o;
+    lifetime_owner src;
+    lifetime_owner dst;
+    memset(&o, 0, sizeof(o));
+    memset(&src, 0, sizeof(src));
+    memset(&dst, 0, sizeof(dst));
 
     h_check("owner_null_not_live", lifetime_owner_is_live((const lifetime_owner *)0) == 0);
     h_check("owner_empty_not_live", lifetime_owner_is_live(&o) == 0);

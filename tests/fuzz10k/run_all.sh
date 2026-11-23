@@ -28,8 +28,8 @@
 #             2 = no groups discovered (campaign not present yet) -- explicitly
 #                 NOT a pass.
 #
-# The runner NEVER uses `|| true` and NEVER suppresses a failing subgroup: it
-# records each failure, continues to the next group, and returns 1 at the end.
+# The runner never masks a failing subgroup: it records each failure, continues
+# to the next group, and returns 1 at the end. No failure is ever negated away.
 # Full per-group stdout/stderr and the exact final line are kept under
 # build/fuzz10k/ for audit (gitignored via build/).
 

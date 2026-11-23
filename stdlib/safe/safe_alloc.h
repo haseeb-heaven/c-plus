@@ -9,6 +9,11 @@ extern "C" {
 #ifndef RSIZE_MAX_MEM
 #define RSIZE_MAX_MEM ((size_t)(SIZE_MAX >> 1))
 #endif
+/* Additive internal hardening marker: the recent-free cache is open-addressed
+ * and generation-tagged, so colliding freed addresses no longer evict one
+ * another and a real double free is classified as such even after a bucket
+ * collision.  The layout of cplus_safe_alloc_meta is unchanged. */
+#define CPLUS_SAFE_HAS_TAGGED_RECENT_CACHE 1
 /* Optional C+ extension with standard C allocator signatures and a
  * thread-safe live-allocation metadata table.
  *
@@ -30,11 +35,15 @@ extern "C" {
  * free_s/realloc_s is refused (the block is left alone: a leak is safer than
  * corrupting the heap) and sets errno = EINVAL.
  *
- * Limits (honest): the recent-free cache is bounded, so a double free of a
- * very old block whose address has not been reused is still reported as an
- * *invalid* free (never freed twice); a stale alias of a block whose address
- * was re-issued is indistinguishable from the new owner unless checked via
- * generation.  This is runtime diagnosis, not a proof of lifetime safety.
+ * Limits (honest): the recent-free cache is bounded (1024 entries,
+ * open-addressed with linear probing and a recorded generation), so a double
+ * free of a very old block whose address has not been reused is still reported
+ * as an *invalid* free (never freed twice).  Colliding freed addresses no
+ * longer evict one another.  A stale alias of a block whose address was
+ * re-issued is indistinguishable from the new owner to the legacy free APIs;
+ * use free_checked_generation_s / cplus_safe_transfer_ownership_generation to
+ * reject it explicitly.  This is runtime diagnosis, not a proof of lifetime
+ * safety.
  *
  * Contracts (standard C parameter lists and return types):
  *   malloc_s(size): returns NULL (errno=EINVAL if size > RSIZE_MAX_MEM,
@@ -56,6 +65,23 @@ void free_s(void *ptr);
 /* Checked extension returning CPLUS_SAFE_OK (0) for NULL or a valid live block,
  * or CPLUS_SAFE_EINVAL for a double free or unowned/invalid pointer (refused). */
 int free_checked_s(void *ptr);
+
+/* Additive generation-aware hardening (no change to the symbols above).
+ * Define CPLUS_SAFE_HAS_GENERATION_HELPERS when these are available.
+ *
+ * free_checked_generation_s releases `ptr` only when it is a live block whose
+ * generation equals `generation` (captured earlier via cplus_safe_alloc_get_meta).
+ * A stale alias at a reissued address, a double free, or an unowned pointer is
+ * refused with CPLUS_SAFE_EINVAL / errno=EINVAL and leaves the live table and
+ * the block untouched. generation == 0 and NULL are refused.
+ *
+ * cplus_safe_transfer_ownership_generation is the same as
+ * cplus_safe_transfer_ownership but additionally refuses when the source
+ * generation no longer matches; both out-params are untouched on refusal. */
+#define CPLUS_SAFE_HAS_GENERATION_HELPERS 1
+int free_checked_generation_s(void *ptr, unsigned long long generation);
+int cplus_safe_transfer_ownership_generation(void **dst, void **src,
+                                            unsigned long long generation);
 
 /* Aligned allocation returning NULL on invalid alignment or OOM. */
 void *aligned_alloc_s(size_t alignment, size_t size);

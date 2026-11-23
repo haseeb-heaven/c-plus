@@ -1,0 +1,52 @@
+Apple clang version 16.0.0 (clang-1600.0.26.6)
+Target: arm64-apple-darwin27.2.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+ "/Library/Developer/CommandLineTools/usr/bin/clang" -cc1 -triple arm64-apple-macosx15.2.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name .cplus-tmp-97561-0.c -mrelocation-model pic -pic-level 2 -mframe-pointer=non-leaf -fno-strict-return -ffp-contract=on -fno-rounding-math -funwind-tables=1 -fobjc-msgsend-selector-stubs -target-sdk-version=15.2 -fvisibility-inlines-hidden-static-local-var -fno-modulemap-allow-subdirectory-search -target-cpu apple-m1 -target-feature +v8.5a -target-feature +aes -target-feature +crc -target-feature +dotprod -target-feature +fp-armv8 -target-feature +fp16fml -target-feature +lse -target-feature +ras -target-feature +rcpc -target-feature +rdm -target-feature +sha2 -target-feature +sha3 -target-feature +neon -target-feature +zcm -target-feature +zcz -target-feature +fullfp16 -target-abi darwinpcs -debug-info-kind=standalone -dwarf-version=5 -debugger-tuning=lldb -target-linker-version 1115.7.3 -v -fcoverage-compilation-dir=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib -resource-dir /Library/Developer/CommandLineTools/usr/lib/clang/16 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -D CPLUS=1 -D CPLUS_SAFE=1 -I /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/../runtime/include -I /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11 -I/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Library/Developer/CommandLineTools/usr/lib/clang/16/include -internal-externc-isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Library/Developer/CommandLineTools/usr/include -O0 -Wno-unused-parameter -Werror=array-bounds -Werror=return-stack-address -Werror=uninitialized -Wwrite-strings -Werror=sizeof-array-argument -Werror=sizeof-pointer-div -Werror=format-security -Werror=unsequenced -Werror=shift-count-overflow -Werror=shift-negative-value -Werror=varargs -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -std=c11 -fconst-strings -fdebug-compilation-dir=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib -ferror-limit 19 -pthread -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fmax-type-align=16 -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-97561-0.o -x c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/.cplus-tmp-97561-0.c
+clang -cc1 version 16.0.0 (clang-1600.0.26.6) default target arm64-apple-darwin27.2.0
+ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/../runtime/include
+ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11
+ /usr/local/include
+ /Library/Developer/CommandLineTools/usr/lib/clang/16/include
+ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include
+ /Library/Developer/CommandLineTools/usr/include
+ /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+Apple clang version 16.0.0 (clang-1600.0.26.6)
+Target: arm64-apple-darwin27.2.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+ "/Library/Developer/CommandLineTools/usr/bin/ld" -demangle -lto_library /Library/Developer/CommandLineTools/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch arm64 -platform_version macos 15.2.0 15.2 -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -O0 -mllvm -enable-linkonceodr-outlining -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/artifacts/src_c11 -L/usr/local/lib /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-97561-0.o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build-verify-1123/libcplus_runtime.a -lSystem /Library/Developer/CommandLineTools/usr/lib/clang/16/lib/darwin/libclang_rt.osx.a
+backend: /usr/bin/clang
+  -std=gnu17
+  -fno-common
+  -Wno-unused-parameter
+  -DCPLUS=1
+  -O0
+  -g
+  -pthread
+  -Werror=array-bounds
+  -Werror=return-stack-address
+  -Werror=uninitialized
+  -Wwrite-strings
+  -Werror=sizeof-array-argument
+  -Werror=sizeof-pointer-div
+  -Werror=format-security
+  -Werror=unsequenced
+  -Werror=shift-count-overflow
+  -Werror=shift-negative-value
+  -Werror=varargs
+  -DCPLUS_SAFE=1
+  -v
+  -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/../runtime/include
+  -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11
+  -std=c11
+  -c
+  -o
+  /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-97561-0.o
+  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/.cplus-tmp-97561-0.c
+built /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/artifacts/src_c11

@@ -87,7 +87,7 @@ static int f_ovr_malloc(const Case *c) {
     size_t sz = (size_t)c->p[0];
     void *p = malloc_s(sz);
     if (p != NULL) {
-        DET("UNEXPECTED_OK: malloc_s(0x%zx) with sz>RSIZE_MAX returned %p", sz, p);
+        DET("UNEXPECTED_OK: malloc_s(0x%zx) with sz>RSIZE_MAX returned <ptr>", sz);
         return V_UNEXPECTED_OK;
     }
     DET("malloc_s(0x%zx) refused errno=%d", sz, errno);
@@ -103,10 +103,10 @@ static int f_ovr_calloc(const Case *c) {
     else overflow = (n * s > RSIZE_MAX_LOCAL);
     p = calloc_s(n, s);
     if (overflow && p != NULL) {
-        DET("UNEXPECTED_OK: calloc_s(0x%zx,0x%zx) overflow returned %p", n, s, p);
+        DET("UNEXPECTED_OK: calloc_s(0x%zx,0x%zx) overflow returned <ptr>", n, s);
         return V_UNEXPECTED_OK;
     }
-    DET("calloc_s(0x%zx,0x%zx) overflow=%d -> %p errno=%d", n, s, overflow, p, errno);
+    DET("calloc_s(0x%zx,0x%zx) overflow=%d -> <ptr>", n, s, overflow);
     return V_CLEAN;
 }
 
@@ -119,8 +119,7 @@ static int f_ovr_realloc(const Case *c) {
     fill_pattern(p, alloc_sz, 0x41);
     q = realloc_s(p, huge);
     if (q != NULL) {
-        DET("UNEXPECTED_OK: realloc_s(%p,0x%zx) with huge size returned %p",
-            p, huge, q);
+        DET("UNEXPECTED_OK: realloc_s(<ptr>,0x%zx) with huge size returned <ptr>", huge);
         return V_UNEXPECTED_OK;
     }
     if (!cplus_safe_ptr_is_live(p) || cplus_safe_ptr_size(p) != alloc_sz ||
@@ -129,7 +128,7 @@ static int f_ovr_realloc(const Case *c) {
         return V_CORRUPT;
     }
     free_s(p);
-    DET("realloc_s(%p,0x%zx) refused; original preserved", p, huge);
+    DET("realloc_s(<ptr>,0x%zx) refused; original preserved", huge);
     return V_CLEAN;
 }
 
@@ -165,7 +164,7 @@ static int f_align_bad(const Case *c) {
     size_t align = (size_t)c->p[0], sz = (size_t)c->p[1] ? (size_t)c->p[1] : 32;
     void *p = aligned_alloc_s(align, sz);
     if (p != NULL) {
-        DET("UNEXPECTED_OK: aligned_alloc_s(align=0x%zx,sz=%zu) returned %p", align, sz, p);
+        DET("UNEXPECTED_OK: aligned_alloc_s(align=0x%zx,sz=%zu) returned <ptr>", align, sz);
         return V_UNEXPECTED_OK;
     }
     DET("aligned_alloc_s(align=0x%zx) refused errno=%d", align, errno);
@@ -177,7 +176,7 @@ static int f_align_ok(const Case *c) {
     void *p = aligned_alloc_s(align, sz);
     if (!p) { DET("SELFERR: aligned_alloc_s(0x%zx,%zu) failed", align, sz); return V_SELFERR; }
     if (((uintptr_t)p & (uintptr_t)(align - 1)) != 0) {
-        DET("CORRUPT: aligned_alloc_s(%zu) returned misaligned %p", align, p);
+        DET("CORRUPT: aligned_alloc_s(%zu) returned misaligned <ptr>", align);
         return V_CORRUPT;
     }
     fill_pattern(p, sz, 0x5C);
@@ -186,7 +185,7 @@ static int f_align_ok(const Case *c) {
         return V_CORRUPT;
     }
     free_s(p);
-    DET("aligned_alloc_s(%zu,%zu) honoured (%p)", align, sz, p);
+    DET("aligned_alloc_s(%zu,%zu) honoured (<ptr>)", align, sz);
     return V_CLEAN;
 }
 
@@ -214,7 +213,7 @@ static int f_double_free(const Case *c) {
         free_s(p);
         void *q = realloc_s(p, sz * 2);   /* realloc of freed ptr: must refuse */
         if (q != NULL) {
-            DET("UNEXPECTED_OK: realloc_s on freed pointer returned %p", q);
+            DET("UNEXPECTED_OK: realloc_s on freed pointer returned <ptr>");
             return V_UNEXPECTED_OK;
         }
     }
@@ -251,7 +250,7 @@ static int f_invalid_ptr(const Case *c) {
     }
     int rc = free_checked_s(forged);
     if (rc == CPLUS_SAFE_OK) {
-        DET("UNEXPECTED_OK: free_checked_s accepted forged pointer kind=%u %p", kind, forged);
+        DET("UNEXPECTED_OK: free_checked_s accepted forged pointer kind=%u <ptr>", kind);
         return V_UNEXPECTED_OK;
     }
     void *q = realloc_s(forged, 8);
@@ -265,7 +264,7 @@ static int f_invalid_ptr(const Case *c) {
         return V_CORRUPT;
     }
     free_s(p);
-    DET("invalid pointer kind=%u (%p) refused", kind, forged);
+    DET("invalid pointer kind=%u (<ptr>) refused", kind);
     return V_CLEAN;
 }
 
@@ -295,7 +294,7 @@ static int f_realloc_atomic(const Case *c) {
         cplus_safe_alloc_fail_reset();
     }
     if (q != NULL) {
-        DET("UNEXPECTED_OK: realloc_s(sub=%u) returned %p though failure expected", sub, q);
+        DET("UNEXPECTED_OK: realloc_s(sub=%u) returned <ptr> though failure expected", sub);
         return V_UNEXPECTED_OK;
     }
     if (!cplus_safe_ptr_is_live(p) || cplus_safe_ptr_size(p) != sz ||
@@ -542,11 +541,11 @@ static int f_forged_batch(const Case *c) {
         }
         if (cplus_safe_ptr_is_live(f)) continue; /* avoid false positive */
         if (free_checked_s(f) == CPLUS_SAFE_OK) {
-            DET("UNEXPECTED_OK: forged batch pointer %p (i=%lu) was freed", f, i);
+            DET("UNEXPECTED_OK: forged batch pointer <ptr> (i=%lu) was freed", i);
             return V_UNEXPECTED_OK;
         }
         if (realloc_s(f, 8) != NULL) {
-            DET("UNEXPECTED_OK: forged batch pointer %p (i=%lu) was realloc'd", f, i);
+            DET("UNEXPECTED_OK: forged batch pointer <ptr> (i=%lu) was realloc'd", i);
             return V_UNEXPECTED_OK;
         }
     }
@@ -706,12 +705,12 @@ static int f_hardened(const Case *c) {
         q = cplus_realloc(p, RSIZE_MAX_LOCAL + 1);
         /* hardened libc has no RSIZE cap; a huge realloc simply OOMs, which
          * is still a refusal. Accept only NULL, and verify atomicity. */
-        if (q != NULL) { DET("UNEXPECTED_OK: cplus_realloc huge returned %p", q); return V_UNEXPECTED_OK; }
+        if (q != NULL) { DET("UNEXPECTED_OK: cplus_realloc huge returned <ptr>"); return V_UNEXPECTED_OK; }
     } else if (sub == 1) {
         cplus_alloc_fail_after(0);
         q = cplus_realloc(p, sz + 64);
         cplus_alloc_fail_reset();
-        if (q != NULL) { DET("UNEXPECTED_OK: cplus_realloc ignored injection %p", q); return V_UNEXPECTED_OK; }
+        if (q != NULL) { DET("UNEXPECTED_OK: cplus_realloc ignored injection <ptr>"); return V_UNEXPECTED_OK; }
     } else if (sub == 2) {
         cplus_free(p);
         if (cplus_alloc_is_live(p)) { DET("CORRUPT: cplus_free left block live"); return V_CORRUPT; }

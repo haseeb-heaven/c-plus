@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 
 #include "cplus/cplus.h"
@@ -92,6 +93,7 @@ enum {
 
 /* ---- deterministic PRNG ------------------------------------------------- */
 static unsigned long long g_rng;
+static unsigned char g_anchor;
 
 static unsigned long long next_rand(void) {
     unsigned long long z;
@@ -149,15 +151,15 @@ static int id_is_zero(const stdlib_alloc_id *id) {
 /* A wild, non-canonical-ish address.  It is only ever compared as an integer
  * by metadata predicates; it is NEVER dereferenced by this harness. */
 static const void *wild_ptr(unsigned long long v) {
-    return (const void *)(uintptr_t)(0x1000000000000000ULL |
-                                    (v & 0xFFFFFFFFFFULL));
+    (void)v;
+    return (const void *)&g_anchor; /* real provenance, untracked by metadata */
 }
 
 /* Address arithmetic via uintptr_t keeps the strict bounds checker from
  * treating an intentional one-past/interior probe as an illegal dereference;
  * the result is only ever compared as an integer by metadata queries. */
 static void *offset_ptr(const void *base, size_t off) {
-    return (void *)(uintptr_t)((uintptr_t)base + (uintptr_t)off);
+    return (void *)((unsigned char *)base + off);
 }
 
 /* stdlib_mem_release NULLs the handle, so use stdlib_release directly here
@@ -222,10 +224,10 @@ static void attack_span_contains(struct case_spec *s, struct case_result *r) {
 }
 
 static void attack_bounds(struct case_spec *s, struct case_result *r) {
-    void *stale;
-    unsigned long long tok;
+    void *stale = (void *)0;
+    unsigned long long tok = 0ULL;
     const void *ptr;
-    const void *ob = (const void *)1;
+    const void *ob = (const void *)&g_anchor;
     size_t os = 12345u;
     int rc;
     int variant = (int)(s->a % 5ULL);
@@ -255,8 +257,8 @@ static void attack_bounds(struct case_spec *s, struct case_result *r) {
 static void attack_key_current(struct case_spec *s, struct case_result *r) {
     void *p = stdlib_alloc(64);
     void *q = stdlib_alloc(64);
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     unsigned long long gen = stdlib_mem_token(p);
     unsigned long long key;
     int variant = (int)(s->a % 5ULL);
@@ -279,8 +281,8 @@ static void attack_key_current(struct case_spec *s, struct case_result *r) {
 
 static void attack_query(struct case_spec *s, struct case_result *r) {
     void *p = stdlib_alloc(64);
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     unsigned long long gen = stdlib_mem_token(p);
     size_t off = 8u;
     size_t n = 8u;
@@ -309,8 +311,8 @@ static void attack_query(struct case_spec *s, struct case_result *r) {
 }
 
 static void attack_capacity_count(struct case_spec *s, struct case_result *r) {
-    void *stale;
-    unsigned long long tok;
+    void *stale = (void *)0;
+    unsigned long long tok = 0ULL;
     const void *ptr;
     size_t elem = (size_t)(s->b % 5ULL); /* 0..4 */
     size_t out = 999u;
@@ -348,8 +350,8 @@ static void attack_alloc_identity(struct case_spec *s, struct case_result *r) {
     stdlib_alloc_id id = stdlib_alloc_id_zero;
     stdlib_alloc_id out = stdlib_alloc_id_zero;
     stdlib_alloc_id forged = stdlib_alloc_id_zero;
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     int rc;
     int variant = (int)(s->a % 7ULL);
     (void)stdlib_alloc_identity(p, &id);
@@ -399,8 +401,8 @@ static void attack_alloc_views(struct case_spec *s, struct case_result *r) {
     void *p = stdlib_alloc(64);
     void *q = (void *)0;
     void *src = p;
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     unsigned long long gen = stdlib_mem_token(p);
     size_t off;
     int variant = (int)(s->a % 7ULL);
@@ -434,8 +436,8 @@ static void attack_alloc_views(struct case_spec *s, struct case_result *r) {
 
 static void attack_cap_queries(struct case_spec *s, struct case_result *r) {
     void *p = stdlib_alloc(64);
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     unsigned long long gen = stdlib_mem_token(p);
     int variant = (int)(s->a % 6ULL);
     make_stale_keep(&stale, &stale_tok);
@@ -460,13 +462,13 @@ static void attack_cap_queries(struct case_spec *s, struct case_result *r) {
 }
 
 static void attack_lifetime_check(struct case_spec *s, struct case_result *r) {
-    lifetime_owner o = lifetime_owner();
-    lifetime_owner src = lifetime_owner();
-    lifetime_owner dst = lifetime_owner();
-    lifetime_borrow b = lifetime_borrow();
+    lifetime_owner o = {0};
+    lifetime_owner src = {0};
+    lifetime_owner dst = {0};
+    lifetime_borrow b = {0};
     error e = error();
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     int rc;
     int variant = (int)(s->a % 6ULL);
     make_stale_keep(&stale, &stale_tok);
@@ -511,8 +513,8 @@ static void attack_lifetime_check(struct case_spec *s, struct case_result *r) {
 
 static void attack_lifetime_owner_release(struct case_spec *s,
                                           struct case_result *r) {
-    lifetime_owner o = lifetime_owner();
-    lifetime_owner copy = lifetime_owner();
+    lifetime_owner o = {0};
+    lifetime_owner copy = {0};
     unsigned long long before;
     unsigned long long after;
     int rc;
@@ -557,13 +559,15 @@ static void attack_lifetime_owner_release(struct case_spec *s,
 
 static void attack_lifetime_transfer(struct case_spec *s,
                                      struct case_result *r) {
-    lifetime_owner a = lifetime_owner();
-    lifetime_owner b = lifetime_owner();
-    lifetime_owner c = lifetime_owner();
-    void *stale;
-    unsigned long long stale_tok;
+    lifetime_owner a = {0};
+    lifetime_owner b = {0};
+    lifetime_owner c = {0};
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     void *saved_a;
     unsigned long long saved_token;
+    void *saved_b;
+    int accepted;
     int rc;
     int variant = (int)(s->a % 5ULL);
     make_stale_keep(&stale, &stale_tok);
@@ -572,25 +576,32 @@ static void attack_lifetime_transfer(struct case_spec *s,
         return;
     }
     if (variant == 0) {
+        saved_a = a.ptr;
+        saved_token = a.token;
         rc = lifetime_transfer(&a, &a, (error *)0);
-        expect_refuse(r, rc == STDLIB_OK, 0, rc);
+        accepted = rc == STDLIB_OK || a.ptr != saved_a || a.token != saved_token;
+        expect_refuse(r, accepted, 0, rc);
     } else if (variant == 1) {
         if (lifetime_owner_init(&b, 64u, (error *)0) != STDLIB_OK) {
             setres(r, CLS_REFUSED, 98, 0);
             return;
         }
+        saved_b = b.ptr;
         rc = lifetime_transfer(&b, &a, (error *)0); /* dst non-empty */
-        expect_refuse(r, rc == STDLIB_OK || b.ptr != (void *)0, 0, rc);
+        accepted = rc == STDLIB_OK || b.ptr != saved_b;
+        expect_refuse(r, accepted, 0, rc);
         lifetime_owner_release(&b, (error *)0);
     } else if (variant == 2) {
         a.ptr = (void *)0;
         rc = lifetime_transfer(&b, &a, (error *)0);
-        expect_refuse(r, rc == STDLIB_OK, 0, rc);
+        accepted = rc == STDLIB_OK || b.ptr != (void *)0;
+        expect_refuse(r, accepted, 0, rc);
     } else if (variant == 3) {
         a.ptr = stale;
         a.token = stale_tok;
         rc = lifetime_transfer(&b, &a, (error *)0);
-        expect_refuse(r, rc == STDLIB_OK || b.ptr != (void *)0, 0, rc);
+        accepted = rc == STDLIB_OK || b.ptr != (void *)0;
+        expect_refuse(r, accepted, 0, rc);
     } else {
         saved_a = a.ptr;
         saved_token = a.token;
@@ -600,9 +611,11 @@ static void attack_lifetime_transfer(struct case_spec *s,
             return;
         }
         rc = lifetime_transfer(&c, &a, (error *)0); /* a is moved-from */
-        expect_refuse(r, rc == STDLIB_OK || c.ptr != (void *)0 ||
-                         lifetime_check(saved_a, saved_token, (error *)0) == STDLIB_OK,
-                      0, rc);
+        /* The old borrow descriptor (saved_a/saved_token) must be stale, and
+         * the refused second transfer must leave c empty. */
+        accepted = rc == STDLIB_OK || c.ptr != (void *)0 ||
+                   lifetime_check(saved_a, saved_token, (error *)0) == STDLIB_OK;
+        expect_refuse(r, accepted, 0, rc);
         if (rc == STDLIB_OK && c.ptr != (void *)0)
             lifetime_owner_release(&c, (error *)0);
         lifetime_owner_release(&b, (error *)0);
@@ -613,9 +626,9 @@ static void attack_lifetime_transfer(struct case_spec *s,
 }
 
 static void attack_lifetime_access(struct case_spec *s, struct case_result *r) {
-    lifetime_owner o = lifetime_owner();
-    lifetime_borrow b = lifetime_borrow();
-    lifetime_borrow stale_b = lifetime_borrow();
+    lifetime_owner o = {0};
+    lifetime_borrow b = {0};
+    lifetime_borrow stale_b = {0};
     unsigned char dst[24];
     unsigned char src[8];
     size_t off;
@@ -658,8 +671,8 @@ static void attack_lifetime_access(struct case_spec *s, struct case_result *r) {
 
 /* LIVE borrow but hostile range: validates the bounds gate before any copy. */
 static void attack_lifetime_bounds(struct case_spec *s, struct case_result *r) {
-    lifetime_owner o = lifetime_owner();
-    lifetime_borrow b = lifetime_borrow();
+    lifetime_owner o = {0};
+    lifetime_borrow b = {0};
     unsigned char dst[16];
     unsigned char src[4];
     size_t off;
@@ -714,13 +727,18 @@ static void attack_mem_ops(struct case_spec *s, struct case_result *r) {
     void *dst = stdlib_alloc(64);
     void *src = stdlib_alloc(64);
     unsigned long long gen = stdlib_mem_token(dst);
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
     size_t off;
     size_t n = 8u;
     int rc;
     int variant = (int)(s->a % 8ULL);
     make_stale_keep(&stale, &stale_tok);
+    (void)make_stale_keep; /* silence strict dead-store concerns */
+    if (dst == (void *)0 || src == (void *)0) {
+        setres(r, CLS_REFUSED, 99, 0);
+        return;
+    }
     memset(dst, 0xA5u, 64u);
     memset(src, 0x5Au, 64u);
     if (variant == 0) {
@@ -747,6 +765,16 @@ static void attack_mem_ops(struct case_spec *s, struct case_result *r) {
         return;
     }
     if (!all_bytes(dst, 64u, 0xA5u)) {
+        const unsigned char *dbg = (const unsigned char *)dst;
+        size_t di;
+        for (di = 0; di < 64u; ++di) {
+            if (*(dbg + di) != 0xA5u) {
+                fprintf(stderr, "DBG memops corrupt variant=%d idx=%u byte=%02X\n",
+                        variant, (unsigned)di, (unsigned)*(dbg + di));
+                fflush(stderr);
+                break;
+            }
+        }
         setres(r, CLS_CORRUPT, 1, 0);
         return;
     }
@@ -760,27 +788,40 @@ static void attack_mem_transfer(struct case_spec *s, struct case_result *r) {
     void *p = stdlib_alloc(64);
     void *dst = (void *)0;
     void *src = p;
-    void *stale;
-    unsigned long long stale_tok;
+    void *stale = (void *)0;
+    unsigned long long stale_tok = 0ULL;
+    void *saved_dst;
+    void *saved_src;
     int rc;
     int variant = (int)(s->a % 4ULL);
     make_stale_keep(&stale, &stale_tok);
     if (variant == 0) {
         dst = p; /* non-empty destination */
+        saved_dst = dst;
+        saved_src = src;
         rc = stdlib_mem_transfer(&dst, &src, (error *)0);
     } else if (variant == 1) {
+        saved_dst = dst;
+        saved_src = src;
         rc = stdlib_mem_transfer(&dst, (void **)0, (error *)0);
     } else if (variant == 2) {
+        saved_dst = src;
+        saved_src = src;
         rc = stdlib_mem_transfer(&src, &src, (error *)0); /* dst == src */
     } else {
         src = stale;
+        saved_dst = dst;
+        saved_src = src;
         rc = stdlib_mem_transfer(&dst, &src, (error *)0);
     }
     if (rc == STDLIB_OK) {
         setres(r, CLS_UNEXPECTED_OK, 0, rc);
         return;
     }
-    expect_clean(r, p != (void *)0 || dst != (void *)0, 1);
+    /* A refused transfer must leave BOTH handles exactly as they were and
+     * must not free the live source block. */
+    expect_clean(r, dst != saved_dst || src != saved_src ||
+                     stdlib_alloc_size(p) == 0u, 1);
 }
 
 static void attack_mem_release(struct case_spec *s, struct case_result *r) {
@@ -808,7 +849,7 @@ static void attack_recycled(struct case_spec *s, struct case_result *r) {
     void *p = stdlib_alloc(64);
     stdlib_alloc_id old_id = stdlib_alloc_id_zero;
     stdlib_alloc_id new_id = stdlib_alloc_id_zero;
-    lifetime_borrow b = lifetime_borrow();
+    lifetime_borrow b = {0};
     unsigned long long old_tok = stdlib_mem_token(p);
     void *q = (void *)0;
     int i;
@@ -841,10 +882,10 @@ static void attack_recycled(struct case_spec *s, struct case_result *r) {
 
 static void attack_null_args(struct case_spec *s, struct case_result *r) {
     void *p = stdlib_alloc(64);
-    lifetime_owner o = lifetime_owner();
-    lifetime_borrow b = lifetime_borrow();
+    lifetime_owner o = {0};
+    lifetime_borrow b = {0};
     stdlib_alloc_id id = stdlib_alloc_id_zero;
-    const void *ob = (const void *)1;
+    const void *ob = (const void *)&g_anchor;
     size_t os = 99u;
     size_t out = 77u;
     void *q = (void *)0;
@@ -976,7 +1017,9 @@ static const char *class_name(int cls) {
 }
 
 int main(void) {
-    FILE *log;
+    int logfd;
+    int line_len;
+    char line[512];
     int i;
     int counts[4];
     int fds[2];
@@ -994,16 +1037,17 @@ int main(void) {
     stdlib_telemetry_set_enabled(0);
     g_rng = RNG_SEED;
 
-    log = fopen(LOG_PATH, "w");
-    if (log == (FILE *)0) {
+    logfd = open(LOG_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (logfd < 0) {
         fprintf(stderr, "cannot open %s\n", LOG_PATH);
-        if (log != (FILE *)0)
-            fclose(log);
         printf("REDTEAM bounds 0 0 0 0 0\n");
         return 2;
     }
-    fprintf(log, "# bounds redteam seed=%016llx cases=%d families=%d\n",
-            RNG_SEED, N_CASES, F_COUNT);
+    line_len = snprintf(line, sizeof(line),
+                        "# bounds redteam seed=%016llx cases=%d families=%d\n",
+                        RNG_SEED, N_CASES, F_COUNT);
+    if (line_len > 0)
+        (void)write(logfd, line, (size_t)line_len);
 
     for (i = 0; i < N_CASES; ++i) {
         spec = gen_spec(i);
@@ -1041,18 +1085,23 @@ int main(void) {
                 cls = CLS_CRASH;
         }
         counts[cls]++;
-        fprintf(log,
-                "%d %d %llu %llu %llu %s sub=%d got=%d cls=%d\n",
-                i, spec.family, spec.a, spec.b, spec.c,
-                class_name(cls),
-                cls == CLS_CRASH ? -1 : result.sub,
-                cls == CLS_CRASH ? -1 : result.got, cls);
+        line_len = snprintf(line, sizeof(line),
+                            "%d %d %llu %llu %llu %s sub=%d got=%d cls=%d\n",
+                            i, spec.family, spec.a, spec.b, spec.c,
+                            class_name(cls),
+                            cls == CLS_CRASH ? -1 : result.sub,
+                            cls == CLS_CRASH ? -1 : result.got, cls);
+        if (line_len > 0)
+            (void)write(logfd, line, (size_t)line_len);
     }
 
-    fprintf(log, "# SUMMARY cases=%d refused=%d crashes=%d corrupt=%d unexpected_ok=%d\n",
-            N_CASES, counts[CLS_REFUSED], counts[CLS_CRASH],
-            counts[CLS_CORRUPT], counts[CLS_UNEXPECTED_OK]);
-    fclose(log);
+    line_len = snprintf(line, sizeof(line),
+                        "# SUMMARY cases=%d refused=%d crashes=%d corrupt=%d unexpected_ok=%d\n",
+                        N_CASES, counts[CLS_REFUSED], counts[CLS_CRASH],
+                        counts[CLS_CORRUPT], counts[CLS_UNEXPECTED_OK]);
+    if (line_len > 0)
+        (void)write(logfd, line, (size_t)line_len);
+    close(logfd);
 
     printf("REDTEAM bounds %d %d %d %d %d\n",
            N_CASES, counts[CLS_REFUSED], counts[CLS_CRASH],

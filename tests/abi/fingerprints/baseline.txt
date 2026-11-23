@@ -946,7 +946,7 @@ S	symbol build/libc/libcplus_hardened.a::_nextdownl	1
 S	symbol build/libc/libcplus_hardened.a::_nextup	1
 S	symbol build/libc/libcplus_hardened.a::_nextupf	1
 S	symbol build/libc/libcplus_hardened.a::_nextupl	1
-S	archive build/safe/libcplus_safecrt.a	count=289
+S	archive build/safe/libcplus_safecrt.a	count=292
 S	symbol build/safe/libcplus_safecrt.a::___ubsan_on_report	1
 S	symbol build/safe/libcplus_safecrt.a::__memccpy_s_uchk	1
 S	symbol build/safe/libcplus_safecrt.a::__memchr_s_uchk	1
@@ -989,6 +989,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_fread_s	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fscanf_s	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fscanf_s_checked	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fwrite_s	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_io_stream_is_closed	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_json_free	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_json_get_int	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_json_get_str	1
@@ -1047,6 +1048,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_dump	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_get	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_reset	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_transfer_ownership	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_transfer_ownership_generation	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_unknown_capacity_strict	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_sc__memcmp_s_chk	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_sc__memcpy_s_chk	1
@@ -1161,6 +1163,7 @@ S	symbol build/safe/libcplus_safecrt.a::_e4c_set_context_supplier	1
 S	symbol build/safe/libcplus_safecrt.a::_e4c_start	1
 S	symbol build/safe/libcplus_safecrt.a::_e4c_throw	1
 S	symbol build/safe/libcplus_safecrt.a::_e4c_try	1
+S	symbol build/safe/libcplus_safecrt.a::_free_checked_generation_s	1
 S	symbol build/safe/libcplus_safecrt.a::_free_checked_s	1
 S	symbol build/safe/libcplus_safecrt.a::_free_s	1
 S	symbol build/safe/libcplus_safecrt.a::_handle_mem_bos_chk_warn	1
