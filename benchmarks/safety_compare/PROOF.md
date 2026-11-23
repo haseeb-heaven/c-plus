@@ -451,15 +451,15 @@ Other sibling artifacts add the following outcomes:
 | `benchmarks/safety_compare/ALLOC_COMPARE_NOTES.md`, `alloc_bench.{cp,rs}` | C+ `stdlib_alloc` vs Rust `Vec` medians/p95, checksum (§3.6) | present |
 | `benchmarks/safety_compare/{modern,loop,nested}.{cp,c,rs,goose}`, `bench_modern.{cp,rs}`, `run_bench.sh` | workload sources / reproducibility | present |
 | `benchmarks/stdlib/allocator/NOTES.md`, `results/allocator_bench.csv` | allocator medians/p95, tracking toggle, findings | present (CSV read) |
-| `benchmarks/safety_compare/safety_matrix.cp`, `validate_results.cp`, `results/_probe/` | native safety-outcome matrix (C+ side) and probe artifacts | source present; **results/notes PENDING** |
+| `benchmarks/safety_compare/safety_matrix.cp`, `validate_results.cp`, `results/_probe/` | native safety-outcome matrix (C+ side) and probe artifacts | source present; results now recorded in `SAFETY_MATRIX_NOTES.md` / `VALIDATOR_NOTES.md` |
 | `tests/scenarios/cve_like/NOTES_1.md` … `NOTES_5.md` | 15-case safety-outcome matrix, gate output | present |
 | `docs/security/verification-status.md` | tool versions, suite matrix, blockers, sanitizer status | present |
 | `tests/security/resource_exhaustion/NOTES.md` | 16/16 resource-exhaustion outcomes, SKIP | present |
 | `tests/fuzz100/RESULTS.md` | fuzz100 pass/fail counts | present |
 | `docs/stdlib/TASK6_FINAL_REPORT.md` | earlier clean deep-stdlib run | present |
 | p95 for the 5-variant `loop`/`nested` rows and the 4-variant `modern` speed row | those tables record medians only (§3.5 p95 is a different build configuration) | **PENDING** |
-| Native safety-outcome matrix results (`safety_matrix.cp` Rust side + runner output) | source present, no results/notes yet | **PENDING** |
-| `validate_results.cp` validation run output | validator source present, no recorded run | **PENDING** |
+| Native safety-outcome matrix results (`safety_matrix.cp` Rust side + runner output) | `SAFETY_MATRIX_NOTES.md`: observed `OK`/`REFUSED`/`ABORT`/`COMPILE_ERROR` tokens, both layers, with explicit non-equivalence note | present |
+| `validate_results.cp` validation run output | `VALIDATOR_NOTES.md`: `BENCH_VALID 192 5` on `results/summary.json` (5 blocked rows counted as failures by the pre-fix validator); fixed blocked-row line **PENDING** | present (pre-fix); fixed line **PENDING** |
 | Goose/plain-C/Fil-C peak RSS | out of scope / no toolchain | **PENDING** |
 | Fil-C speed and safety results | no `filc` toolchain installed | **PENDING** |
 
@@ -525,11 +525,13 @@ Other sibling artifacts add the following outcomes:
   correctness or safety; `modern` C+ safe RSS is explicitly approximate.
 - **Fil-C was not measured** (no toolchain); its absence in any table is a
   limitation, not a zero or a failure. Plain C and Goose RSS are PENDING.
-- The **native safety-outcome matrix** (`safety_matrix.cp`, C+ side) has source
-  present but no recorded results/notes at synthesis time — **PENDING**. Its
-  protocol classifies observed `OK`/`REFUSED`/`ABORT` tokens; equality of tokens
-  would be evidence of observed behaviour only, not of equivalent guarantees.
-  `validate_results.cp` output is also PENDING.
+- The **native safety-outcome matrix** is now recorded in
+  `SAFETY_MATRIX_NOTES.md`: C+ refusals come from *runtime* checked APIs (with a
+  build-only `-DCPLUS_EXIT_ARITHMETIC=110` shim), while Rust rejects null/use-after-move
+  at *compile time*. Its observed `OK`/`REFUSED`/`ABORT`/`COMPILE_ERROR` tokens
+  are evidence of observed behaviour only, **not** of equivalent guarantees.
+  `validate_results.cp` output is recorded in `VALIDATOR_NOTES.md`
+  (`BENCH_VALID 192 5`); the post-fix blocked-row line is **PENDING**.
 - This is one repository at one branch state, built around one C+ driver and
   toolchain set. It is not a general performance, safety, or "language X is
   faster/safer" claim about any language or standard library.
@@ -542,14 +544,45 @@ Command:
 sh benchmarks/safety_compare/run_all.sh
 ```
 
-Actual final result: `ok=15 blocked=5 fail=0 required_failures=0`, driver exit 0.
-`BENCH_VALID 157 0` from `validate_results.cp`.
+Actual final result (verbatim from `results/summary.json`): `counts` =
+`{"ok": 15, "blocked": 5, "fail": 0}`, `required_failures: 0`, `status:
+"PASS"`, driver exit 0. The 5 `blocked` rows are recorded with
+`"status":"blocked"` and `"reason":"external C+ runtime blocker:
+CPLUS_EXIT_ARITHMETIC"`; they are **not** timing results and **not** failures.
+
+Validator: `validate_results.cp` run on `results/summary.json` currently reports
+`BENCH_VALID 192 5` (exit 1). The previously recorded `BENCH_VALID 157 0` in this
+document was from an earlier evidence file and is **superseded** — the `5` is
+the count of externally blocked rows, which the current validator still counts
+as `runs_ge_7` failures because their `runs_ok` is 0.
+
+**Validator blocked-row semantics (PENDING — fix not yet complete on disk).** A
+sibling agent is updating `validate_results.cp` so that a record with
+`"status":"blocked"` (or `"skipped"`) is treated as an externally blocked row:
+it is exempt from the runs>=7 and checksum rules, never contributes a failure,
+and is counted separately on a `BENCH_BLOCKED <count>` line; only
+`"status":"ok"` (or records with no status field) are validated strictly. With
+the fix applied, the expected line for this summary is `BENCH_VALID 192 0`
+plus `BENCH_BLOCKED 5` and exit 0. The in-progress source already declares the
+`BENCH_BLOCKED` line and suppresses failures for blocked rows but does not yet
+print that line, so the exact post-fix output is **PENDING** verification.
+Refresh after the fix lands with (from the repo root):
+
+```sh
+timeout 30 build/c+ build benchmarks/safety_compare/validate_results.cp \
+  --strict --sanitize=none -o build/validate_results
+build/validate_results benchmarks/safety_compare/results/summary.json
+echo "exit=$?"
+```
 
 Matched checksums: `loop=19999999900000000`, `nested=16000000`,
 `modern=2200000200000`, `bench_modern=5595356797869224`,
 `alloc_bench=4750706934088118880`.
 
-Selected medians from the final table (`results/table.txt`):
+All 15 `ok` rows from the final table (`results/table.txt`), medians and p95
+quoted verbatim (p95 by linear interpolation, `runs=7`, `warmup=1` per the
+`summary.json` `method` field). The 5 `cplus_safe` rows are the blocked rows
+listed above and carry no median/p95 (`-`).
 
 | Workload | Variant | median (s) | p95 (s) | status |
 |---|---|---:|---:|---|
@@ -557,14 +590,37 @@ Selected medians from the final table (`results/table.txt`):
 | alloc_bench | C+ legacy | 0.039720 | 0.049571 | ok |
 | bench_modern | Rust -O | 0.023018 | 0.026586 | ok |
 | bench_modern | C+ legacy | 0.020533 | 0.024590 | ok |
+| legacy_speed/loop | C `-O2` | 0.002890 | 0.003327 | ok |
+| legacy_speed/nested | C `-O2` | 0.004658 | 0.008925 | ok |
+| loop | C `-O2` | 0.005660 | 0.006696 | ok |
+| loop | Rust -O | 0.005310 | 0.008098 | ok |
 | modern | Rust -O | 0.009449 | 0.011401 | ok |
 | modern | C+ legacy | 0.008306 | 0.010272 | ok |
+| nested | C `-O2` | 0.004812 | 0.009405 | ok |
+| nested | Rust -O | 0.003341 | 0.006325 | ok |
+| safety_matrix | Rust -O | 0.005170 | 0.014102 | ok |
+| safety_matrix/matrix | C+ legacy | 0.006687 | 0.014287 | ok |
+| validate_results/…/evidence.csv | C+ legacy | 0.004316 | 0.008333 | ok |
 
-C+ safe rows are `blocked` by the external `CPLUS_EXIT_ARITHMETIC` runtime/
-header mismatch; no safe-mode timing is claimed from this driver run. Earlier
+The 5 C+ safe rows (`alloc_bench`, `bench_modern`, `modern`,
+`safety_matrix/matrix`, `validate_results/…/evidence.csv`) are `blocked` by the
+external `CPLUS_EXIT_ARITHMETIC` runtime/header mismatch: their safe-mode builds
+exit 1 while compiling the instrumented C+ runtime, before benchmark code is
+reached. They are **externally blocked build attempts, not timing results** —
+no median, p95 or checksum exists for them and none is claimed. The 15 `ok` rows
+above are the complete set of measured results from this driver run. Earlier
 direct `--strict --sanitize=none` measurements are recorded in the per-tool
 NOTES files and must not be presented as sanitizer results.
 
-These numbers show comparable observed throughput for matched workloads, not
-Rust-equivalent guarantees and not proof of memory safety. C+ checked APIs are
-runtime-enforced; Rust rejects several of the same errors at compile time.
+Non-claims for this driver run, stated explicitly:
+
+- **No Rust equivalence.** Matching checksums (e.g. `bench_modern=5595356797869224`)
+  verify one deterministic integer result per workload; they say nothing about
+  type systems or equivalent safety guarantees. C+ checked APIs are
+  runtime-enforced; Rust rejects several of the same errors at compile time.
+- **No memory-safety proof.** These are throughput observations from one host
+  and synthetic workloads, not evidence that any implementation is memory-safe.
+- **No sanitizer-as-proof.** The blocked safe-mode builds attempted UBSan
+  instrumentation but never produced a binary; an unsupported or blocked
+  sanitizer configuration is not counted as a pass. A clean sanitizer run, where
+  one exists, is evidence about a specific execution, not a proof.

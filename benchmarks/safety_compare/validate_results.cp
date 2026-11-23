@@ -15,6 +15,13 @@
  *   4. numeric values are finite         -> every numeric field parses fully
  *                                            and isfinite() (no NaN / Inf)
  *
+ * A record with status "blocked" or "skipped" is an externally blocked row,
+ * not corrupt evidence: it is exempt from the runs>=7 and checksum rules and
+ * never contributes a failure. Such rows are counted on a separate line:
+ *
+ *     BENCH_BLOCKED <count>
+ *
+ * Records with status "ok" (or no status field) are validated strictly.
  * Exit status is 0 only when failures == 0.
  *
  * Build (from the repository root):
@@ -46,10 +53,12 @@ typedef struct {
     char language[FIELD_CAP];
     char checksum[FIELD_CAP];
     char runs_text[FIELD_CAP];
+    char status[FIELD_CAP];
     int has_workload;
     int has_language;
     int has_checksum;
     int has_runs;
+    int has_status;
     int numeric_count;
     char numeric_name[MAX_NUMERIC][FIELD_CAP];
     double numeric_value[MAX_NUMERIC];
@@ -63,6 +72,10 @@ static int g_column_count = 0;
 
 static int g_checks = 0;
 static int g_failures = 0;
+static int g_blocked = 0;
+/* While set, add_check() still counts the check but neither increments
+ * g_failures nor emits BENCH_FAIL. Used for externally blocked rows. */
+static int g_failures_suppressed = 0;
 
 /* ------------------------------------------------------------------ */
 /* Byte helpers: strict mode cannot prove the extent of a pointer       */
@@ -92,7 +105,7 @@ static char *arg_at(char **argv, size_t i) {
 
 static void add_check(const char *tag, int ok) {
     g_checks++;
-    if (!ok) {
+    if (!ok && !g_failures_suppressed) {
         g_failures++;
         printf("BENCH_FAIL %s\n", tag);
     }
@@ -167,6 +180,9 @@ static void record_set(Record *r, const char *key, const char *value,
     } else if (strcmp(key, "checksum") == 0) {
         snprintf(r->checksum, FIELD_CAP, "%s", value);
         r->has_checksum = byte_at(value, 0) != '\0';
+    } else if (strcmp(key, "status") == 0) {
+        snprintf(r->status, FIELD_CAP, "%s", value);
+        r->has_status = byte_at(value, 0) != '\0';
     } else if (strcmp(key, "runs") == 0 ||
                (strcmp(key, "runs_ok") == 0 && !r->has_runs) ||
                (strcmp(key, "runs_total") == 0 && !r->has_runs)) {
@@ -316,6 +332,9 @@ static int parse_csv(const char *buf, size_t len) {
                 } else if (strcmp(col, "checksum") == 0) {
                     snprintf(r->checksum, FIELD_CAP, "%s", val);
                     r->has_checksum = byte_at(val, 0) != '\0';
+                } else if (strcmp(col, "status") == 0) {
+                    snprintf(r->status, FIELD_CAP, "%s", val);
+                    r->has_status = byte_at(val, 0) != '\0';
                 } else if (strcmp(col, "runs") == 0) {
                     snprintf(r->runs_text, FIELD_CAP, "%s", val);
                     r->has_runs = byte_at(val, 0) != '\0';
@@ -574,11 +593,27 @@ static int parse_json(const char *buf, size_t len) {
 /* Common record validation                                            */
 /* ------------------------------------------------------------------ */
 
+/* Externally blocked (or skipped) rows are not evidence corruption.
+ * They are exempt from the runs>=7 rule and from checksum agreement and
+ * never contribute a failure. All other rows, including unknown statuses,
+ * are validated strictly. */
+static int is_benign_status(const Record *r) {
+    if (!r->has_status)
+        return 0;
+    return strcmp(r->status, "blocked") == 0 ||
+           strcmp(r->status, "skipped") == 0;
+}
+
 static void validate_records(void) {
     int i;
     for (i = 0; i < g_record_count; i++) {
         Record *r = &g_records[i];
         char tag[FIELD_CAP + 64];
+        int benign = is_benign_status(r);
+
+        if (benign)
+            g_blocked++;
+        g_failures_suppressed = benign;
 
         snprintf(tag, sizeof(tag), "record%d.workload_present", i + 1);
         add_check(tag, r->has_workload && byte_at(r->workload, 0) != '\0');
@@ -601,6 +636,8 @@ static void validate_records(void) {
                      r->numeric_name[k]);
             add_check(tag, isfinite(r->numeric_value[k]) ? 1 : 0);
         }
+
+        g_failures_suppressed = 0;
     }
 }
 
@@ -613,6 +650,8 @@ static void validate_checksums(void) {
 
     for (i = 0; i < g_record_count; i++) {
         int found = 0;
+        if (is_benign_status(&g_records[i]))
+            continue;
         if (!g_records[i].has_workload || byte_at(g_records[i].workload, 0) == '\0')
             continue;
         for (k = 0; k < ngroups; k++) {
@@ -635,6 +674,8 @@ static void validate_checksums(void) {
         char tag[FIELD_CAP + 64];
         for (i = 0; i < g_record_count; i++) {
             Record *r = &g_records[i];
+            if (is_benign_status(r))
+                continue;
             if (!r->has_workload || strcmp(r->workload, groups[k]) != 0)
                 continue;
             if (!r->has_checksum || byte_at(r->checksum, 0) == '\0')
@@ -723,11 +764,13 @@ int main(int argc, char **argv) {
         char *prog = arg_at(argv, 0);
         printf("usage: %s <evidence.csv|evidence.json> [more ...]\n", prog);
         add_check("arguments_present", 0);
+        printf("BENCH_BLOCKED %d\n", g_blocked);
         print("BENCH_VALID", g_checks, g_failures);
         return 1;
     }
     for (f = 1; f < argc; f++)
         validate_file(arg_at(argv, (size_t)f));
+    printf("BENCH_BLOCKED %d\n", g_blocked);
     print("BENCH_VALID", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

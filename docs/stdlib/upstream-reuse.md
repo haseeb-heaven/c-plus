@@ -115,7 +115,9 @@ tutorial example, **not** a statement of TrapC's license.
 1. `memset_explicit` — previously copied into this repository from LLVM libc
    `llvmorg-20.1.1`, Apache-2.0 WITH LLVM-exception, with a glibc duplicate-provider
    guard. Provenance recorded in `docs/libc/C23_MATH_DEPENDENCY_CLOSURE.md` and
-   related inventory docs. This is the only verbatim upstream code in the scope.
+   related inventory docs. Within §§1–9 this was the only verbatim upstream
+   code; the later safeclib integration (I1 in §10.3) also ports upstream bodies
+   verbatim under the MIT license, with notices reproduced.
 2. safeclib / Intel SafeStringLib sources are vendored and compiled by
    `scripts/build_safecrt.sh` (40 integrated APIs, 10 adapter-only, 387 not
    integrated). No new upstream source was added in this work.
@@ -289,8 +291,8 @@ alone.
 | I5 | yyjson depth/length budgets | `ibireme/yyjson` @ `be9bd74bb3c96e00006c2075c330a6b8b90123dc` (v0.13.0) | MIT | `stdlib/json.hp` (modified, +122 lines) | `JSON_YYJSON 35 0`, rc 0 | **None** — additive `json_parse_budget`, `read_size()`, `value_count()`; constructor signature and single-member layout unchanged |
 | I6 | SaferCPlusPlus lifetime tokens | `duneroadrunner/SaferCPlusPlus` @ `5edaf67acf746d9ee472a06a51094b31a3db57c0` | BSL-1.0 | `stdlib/lifetime_adapt.hp` (new) | `LIFETIME_ADAPT 25 0`, rc 0 | **None** — two new additive value descriptors; no `T*` redefinition |
 | I7 | SoftBoundCETS check predicates | `santoshn/softboundcets-34` @ `9a9c09f04e16f2d1ef3a906fd138a7b89df44996` | BSD-3-Clause tree / per-file MIT-style | `stdlib/memory.hp` (modified, +130 lines) | `SOFTBOUND 51 0`, rc 0 | **None** — `static inline` helpers on the existing side table; no new symbol |
-| I8 | Microsoft STL string growth / overlap-safe append | `microsoft/STL` @ `0cabaf3c7e0a73fe3040aabce40cd8833e80392b` | Apache-2.0 WITH LLVM-exception | `stdlib/string.hp` (modified, +120/−lines) | `upstream-string-checks 28 / upstream-string-failures 0`, rc 0 | **None** — same 3 fields and method signatures; new helper additive |
-| I9 | Microsoft STL vector growth / commit-last guards | `microsoft/STL` @ `0cabaf3c7e0a73fe3040aabce40cd8833e80392b` | Apache-2.0 WITH LLVM-exception | `stdlib/vector.hp` (modified, +118/−lines) | `VECTOR_STL 14 0`, rc 0 | **None** — two new helpers; existing methods and capacity contract unchanged |
+| I8 | Microsoft STL string growth / overlap-safe append | `microsoft/STL` @ `0cabaf3c7e0a73fe3040aabce40cd8833e80392b` | Apache-2.0 WITH LLVM-exception | `stdlib/string.hp` (modified) | `upstream-string-checks 28 / upstream-string-failures 0`, rc 0 | **None** — same 3 fields and method signatures; new helper additive |
+| I9 | Microsoft STL vector growth / commit-last guards | `microsoft/STL` @ `0cabaf3c7e0a73fe3040aabce40cd8833e80392b` | Apache-2.0 WITH LLVM-exception | `stdlib/vector.hp` (modified) | `VECTOR_STL 14 0`, rc 0 | **None** — two new helpers; existing methods and capacity contract unchanged |
 
 ### 10.3 INTEGRATED — per-record detail
 

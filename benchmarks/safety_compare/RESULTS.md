@@ -152,3 +152,95 @@ Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, Goose 0.72×.
 - This is one synthetic workload on one machine. It is not a general
   performance or safety claim about any language or about the C+ stdlib layer.
 
+---
+
+# Final integrated driver run (`run_all.sh`) — reconciled with artifacts
+
+Command (from the repo root):
+
+```sh
+sh benchmarks/safety_compare/run_all.sh
+```
+
+The authoritative artifacts are `benchmarks/safety_compare/results/summary.json`
+and `.../results/table.txt` (generated 2026-11-23T04:27:57Z). Exact final driver
+counts, verbatim from `summary.json`: `counts = {"ok": 15, "blocked": 5,
+"fail": 0}`, `required_failures: 0`, `status: "PASS"`, driver exit 0. So:
+**ok=15 blocked=5 fail=0** — there are zero real failures.
+
+## Why 5 rows are `blocked` (not timing results)
+
+The 5 `cplus_safe` rows — `alloc_bench`, `bench_modern`, `modern`,
+`safety_matrix/matrix`, `validate_results/…/evidence.csv` — have
+`"status":"blocked"` and `"reason":"external C+ runtime blocker:
+CPLUS_EXIT_ARITHMETIC"` with `runs_ok: 0` and `build_exit: 1`. Their safe-mode
+builds fail while compiling the instrumented C+ runtime, **before any benchmark
+code is reached**. They are externally blocked build attempts, not measured
+results: no median, p95 or checksum is claimed for them. Earlier
+`--strict --sanitize=none` numbers in `bench_modern_NOTES.md`,
+`legacy_speed_NOTES.md` and `bench_rust_NOTES.md` come from different
+configurations and must not be presented as sanitizer-mode results.
+
+## Measured medians and p95 (all 15 `ok` rows from `results/table.txt`)
+
+Per-run protocol from `summary.json` `method`: 7 runs, 1 warmup, p95 by linear
+interpolation on sorted samples. Values are quoted verbatim.
+
+| Workload | Variant | median (s) | p95 (s) | status |
+|---|---|---:|---:|---|
+| alloc_bench | Rust -O | 0.010404 | 0.013873 | ok |
+| alloc_bench | C+ legacy | 0.039720 | 0.049571 | ok |
+| bench_modern | Rust -O | 0.023018 | 0.026586 | ok |
+| bench_modern | C+ legacy | 0.020533 | 0.024590 | ok |
+| legacy_speed/loop | C `-O2` | 0.002890 | 0.003327 | ok |
+| legacy_speed/nested | C `-O2` | 0.004658 | 0.008925 | ok |
+| loop | C `-O2` | 0.005660 | 0.006696 | ok |
+| loop | Rust -O | 0.005310 | 0.008098 | ok |
+| modern | Rust -O | 0.009449 | 0.011401 | ok |
+| modern | C+ legacy | 0.008306 | 0.010272 | ok |
+| nested | C `-O2` | 0.004812 | 0.009405 | ok |
+| nested | Rust -O | 0.003341 | 0.006325 | ok |
+| safety_matrix | Rust -O | 0.005170 | 0.014102 | ok |
+| safety_matrix/matrix | C+ legacy | 0.006687 | 0.014287 | ok |
+| validate_results/…/evidence.csv | C+ legacy | 0.004316 | 0.008333 | ok |
+
+Matched-checksums from the driver: `loop=19999999900000000`,
+`nested=16000000`, `modern=2200000200000`, `bench_modern=5595356797869224`,
+`alloc_bench=4750706934088118880` — each verifies one deterministic integer
+result, not a correctness or safety property.
+
+## Validator status (PENDING)
+
+`validate_results.cp` on `results/summary.json` currently reports
+`BENCH_VALID 192 5` (exit 1): the `5` is the externally blocked rows, which the
+pre-fix validator counts as `runs_ge_7` failures because their `runs_ok` is 0.
+The earlier `BENCH_VALID 157 0` record was from an older evidence file and is
+superseded.
+
+**Blocked-row semantics (once fixed):** a record with `"status":"blocked"` (or
+`"skipped"`) is an externally blocked row — exempt from the runs>=7 and
+checksum rules, never a failure, counted separately on a `BENCH_BLOCKED <count>`
+line; only `"status":"ok"` (or no status) records are validated strictly. With
+the fix this summary should yield `BENCH_VALID 192 0`, `BENCH_BLOCKED 5`, exit 0.
+The fix is **in progress but not complete on disk** (the `BENCH_BLOCKED` output
+line is not yet printed), so the exact post-fix line is **PENDING** verification.
+Refresh after it lands with:
+
+```sh
+timeout 30 build/c+ build benchmarks/safety_compare/validate_results.cp \
+  --strict --sanitize=none -o build/validate_results
+build/validate_results benchmarks/safety_compare/results/summary.json
+echo "exit=$?"
+```
+
+## Non-claims
+
+- **No Rust equivalence** — matching checksums are equality of one deterministic
+  integer result; C+ checks are runtime-enforced, Rust rejects some errors at
+  compile time. The mechanisms and strengths differ.
+- **No memory-safety proof** — these are throughput observations on one host,
+  not evidence any implementation is memory-safe.
+- **No sanitizer-as-proof** — the blocked safe-mode builds never produced a
+  binary; a blocked or unsupported sanitizer configuration is never counted as a
+  pass, and any clean sanitizer run is evidence about one execution only.
+

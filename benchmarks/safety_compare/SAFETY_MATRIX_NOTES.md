@@ -12,9 +12,18 @@ outcomes only**: exact exit codes, return codes, and diagnostic strings.
 > checked return values for the rest. The mechanisms and the strength of the
 > guarantees are different; only the observed tokens are comparable.
 
+> **Status cross-reference.** `PROOF.md` §7/§8 marked the native safety-matrix
+> results and the `validate_results.cp` output as **PENDING** at synthesis time.
+> This document records the matrix results and `results/table.txt` records the
+> final driver/validator numbers, so those PENDING markers are superseded — but
+> nothing here converts a **BLOCKED** benchmark row into a pass.
+
 ## Environment
 
-- Host: macOS arm64, Darwin 27.2.0, Apple M3 Pro (`arm64`, T8112).
+- Host: macOS arm64, Darwin 27.2.0, macOS 27.2.1, Apple **M2**
+  (`hw.model = Mac14,7`, `arm64`, T8112), 8 logical cores / 8 GiB RAM. This
+  supersedes the earlier "Apple M3 Pro" label; the authoritative record is
+  `METHODOLOGY.md` §6.
 - C+ driver: `C+ 0.1.0`, backend host Clang/LLVM, `--release` (`-O2`), full
   safe mode (UBSan/bounds/null/alignment instrumentation) for the primary run.
 - Backend C compiler: Apple clang 16.0.0 (`clang-1600.0.26.6`, `/usr/bin/clang`).
