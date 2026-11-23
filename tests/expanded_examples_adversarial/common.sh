@@ -8,9 +8,12 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd) || exit 1
 cd "$ROOT" || exit 1
 
-BIN="$HERE/bin"
-LOGS="$HERE/logs"
-FIX="$HERE/fixtures"
+# Output locations are overridable so run_all.sh can give each concurrent
+# invocation a private scratch tree. Direct category-script use keeps the
+# canonical paths below.
+BIN=${ADV_BIN:-$HERE/bin}
+LOGS=${ADV_LOGS:-$HERE/logs}
+FIX=${ADV_FIX:-$HERE/fixtures}
 mkdir -p "$BIN" "$LOGS" "$FIX" || exit 1
 
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}

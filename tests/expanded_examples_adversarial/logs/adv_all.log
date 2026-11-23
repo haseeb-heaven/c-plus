@@ -1,17 +1,3 @@
-ADV_EXPANDED engine_loop oversized_token REFUSED 2
-ADV_EXPANDED engine_loop empty_token REFUSED 2
-ADV_EXPANDED engine_loop invalid_command REFUSED 2
-ADV_EXPANDED engine_loop size_max_token REFUSED 2
-ADV_EXPANDED engine_loop whitespace_token REFUSED 2
-ADV_EXPANDED engine_loop null_like_no_args REFUSED 2
-ADV_EXPANDED ecs oversized_argv REFUSED 0
-ADV_EXPANDED ecs size_max_argv REFUSED 0
-ADV_EXPANDED ecs null_like_argv REFUSED 0
-ADV_EXPANDED resource_cache oversized_argv REFUSED 0
-ADV_EXPANDED resource_cache size_max_argv REFUSED 0
-ADV_EXPANDED resource_cache empty_argv REFUSED 0
-ADV_EXPANDED resource_cache null_like_argv REFUSED 0
-ADV_EXPANDED_SUBTOTAL engine cases=13 refused=13 crashed=0 unexpected_ok=0 blocked=0
 ADV_EXPANDED calculator oversized_expr REFUSED 1
 ADV_EXPANDED calculator size_max_number REFUSED 1
 ADV_EXPANDED calculator empty_expr REFUSED 1
@@ -47,19 +33,6 @@ ADV_EXPANDED text_tools invalid_command REFUSED 1
 ADV_EXPANDED text_tools bad_operand_count REFUSED 1
 ADV_EXPANDED text_tools null_like_args REFUSED 2
 ADV_EXPANDED_SUBTOTAL cli cases=34 refused=34 crashed=0 unexpected_ok=0 blocked=0
-ADV_EXPANDED memcpy_s_demo oversized_argv REFUSED 0
-ADV_EXPANDED memcpy_s_demo size_max_argv REFUSED 0
-ADV_EXPANDED memcpy_s_demo empty_argv REFUSED 0
-ADV_EXPANDED memcpy_s_demo null_like_argv REFUSED 0
-ADV_EXPANDED bounds_demo oversized_argv REFUSED 0
-ADV_EXPANDED bounds_demo size_max_argv REFUSED 0
-ADV_EXPANDED bounds_demo empty_argv REFUSED 0
-ADV_EXPANDED bounds_demo null_like_argv REFUSED 0
-ADV_EXPANDED lifetime_demo oversized_argv REFUSED 0
-ADV_EXPANDED lifetime_demo size_max_argv REFUSED 0
-ADV_EXPANDED lifetime_demo empty_argv REFUSED 0
-ADV_EXPANDED lifetime_demo null_like_argv REFUSED 0
-ADV_EXPANDED_SUBTOTAL safety cases=12 refused=12 crashed=0 unexpected_ok=0 blocked=0
 ADV_EXPANDED game2048 oversized_direction REFUSED 2
 ADV_EXPANDED game2048 invalid_command REFUSED 2
 ADV_EXPANDED game2048 empty_arg REFUSED 2

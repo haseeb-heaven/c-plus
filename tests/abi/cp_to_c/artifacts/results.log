@@ -1,5 +1,5 @@
 === C+ -> C interoperability lab ===
-date_utc=2026-11-23T05:54:41Z
+date_utc=2026-11-23T06:18:42Z
 PATH=/usr/bin:/bin
 CPLUS_CLANG=/usr/bin/clang
 arch=arm64 os=Darwin
@@ -14,7 +14,7 @@ C+ 0.1.0
 Language: C+ (C with memory safety, deterministic RAII, lightweight classes)
 Backend: host Clang/LLVM
 ================================
-PREREQUISITE OK: -rw-r--r--@ 1 haseeb-mir  staff  295592 Nov 23 11:23 build/libc/libcplus_hardened.a
+PREREQUISITE OK: -rw-r--r--@ 1 haseeb-mir  staff  295592 Nov 23 11:47 build/libc/libcplus_hardened.a
 CMD[T1_cplus_lower_compile] timeout=180s: ./build/c+ build --strict --sanitize=none tests/abi/cp_to_c/cp_to_c_lib.cp --emit-c tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c -c -o tests/abi/cp_to_c/artifacts/cp_to_c_lib.o -- -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/cp_to_c
 RC[T1_cplus_lower_compile]=0
 CMD[T1_ar_archive] timeout=60s: /usr/bin/ar rcs tests/abi/cp_to_c/artifacts/libcp_to_c.a tests/abi/cp_to_c/artifacts/cp_to_c_lib.o

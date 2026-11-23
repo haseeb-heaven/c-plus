@@ -1,13 +1,13 @@
 === stdc_precompiled: precompiled standard-C library ABI proof ===
-date_utc=2026-11-23T05:57:02Z
+date_utc=2026-11-23T06:19:03Z
 arch=arm64 os=Darwin
 PATH=/usr/bin:/bin
 Apple clang version 16.0.0 (clang-1600.0.26.6)
 Target: arm64-apple-darwin27.2.0
 Thread model: posix
 InstalledDir: /Library/Developer/CommandLineTools/usr/bin
-support: SAFECRT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a sha256=ac66b0246dbac3337f439e4b91b0e50f901aac7f07bba0ecb1581c637187ef2e
-support: HARDENED=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a sha256=86f6a7223f19d10a3e8b1d9b9902731ba05fc061e7ce1463c08a3047281c5dda
+support: SAFECRT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a sha256=d64b6bf1f0c7e40b9453e16f8d7b27eb72bb1c27b04852779c6cf46f6007e154
+support: HARDENED=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a sha256=fa80fac8fd79c3bd27194ff3664192fb6714917f7b90042048b84218490a32b2
 ==========================================================
 -- stage 1: compile legacy.c exactly once and archive --
 CMD[lib_compile]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/legacy.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/stdc_legacy.o
@@ -19,9 +19,9 @@ RC[lib_archive]=0
 --- stdout[lib_archive] ---
 --- stderr[lib_archive] ---
 SHA256[stdc_legacy.o]=57ec4966a559090df3370f2137e49d2a0d0692875aedb1cd24761f3b02e0c1a1  <-- bit-reproducible object baseline
-SHA256[libstdc_legacy.a]=ddca3e14c2a164459541194f8bcc5ebd0213ed9e449cd988592f30b20eaeb651  <-- baseline (ar embeds a timestamp)
+SHA256[libstdc_legacy.a]=f1a181cf73e063e7764e386a0db4ef0c3135239d55c4ab0d42ece07363b60e7a  <-- baseline (ar embeds a timestamp)
 -- stage 2: build callers against the SAME saved archive --
-PRE-LINK sha256(libstdc_legacy.a)=ddca3e14c2a164459541194f8bcc5ebd0213ed9e449cd988592f30b20eaeb651
+PRE-LINK sha256(libstdc_legacy.a)=f1a181cf73e063e7764e386a0db4ef0c3135239d55c4ab0d42ece07363b60e7a
 PRE-LINK sha256(stdc_legacy.o)=57ec4966a559090df3370f2137e49d2a0d0692875aedb1cd24761f3b02e0c1a1
 PASS archive unchanged before links
 PASS object unchanged before links
@@ -37,7 +37,7 @@ CMD[build_negative]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/User
 RC[build_negative]=0
 --- stdout[build_negative] ---
 --- stderr[build_negative] ---
-POST-LINK sha256(libstdc_legacy.a)=ddca3e14c2a164459541194f8bcc5ebd0213ed9e449cd988592f30b20eaeb651
+POST-LINK sha256(libstdc_legacy.a)=f1a181cf73e063e7764e386a0db4ef0c3135239d55c4ab0d42ece07363b60e7a
 POST-LINK sha256(stdc_legacy.o)=57ec4966a559090df3370f2137e49d2a0d0692875aedb1cd24761f3b02e0c1a1
 PASS archive unchanged after all links
 PASS object unchanged after all links

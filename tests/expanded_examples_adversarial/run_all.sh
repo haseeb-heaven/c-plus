@@ -10,12 +10,24 @@ set -u
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 mkdir -p "$HERE/logs" || exit 1
-ALL="$HERE/logs/adv_all.log"
+# Per-invocation scratch directory. Two concurrent run_all.sh invocations used
+# to share logs/adv_all.log and logs/<cat>.driver.out, so one would truncate the
+# other's output mid-run: a run could report a partial TOTAL (observed: 59 of
+# 110 cases) and still exit 0. Keep all mutable aggregation state private to
+# this PID; refresh the canonical evidence snapshots only at the end.
+RUNID=$$
+RUNDIR="$HERE/logs/.run.$RUNID"
+mkdir -p "$RUNDIR" || exit 1
+ADV_BIN="$RUNDIR/bin"
+ADV_LOGS="$RUNDIR/logs"
+ADV_FIX="$RUNDIR/fixtures"
+export ADV_BIN ADV_LOGS ADV_FIX
+ALL="$RUNDIR/adv_all.log"
 : > "$ALL"
 
 overall=0
 for cat in cli games database engine safety; do
-    catlog="$HERE/logs/$cat.driver.out"
+    catlog="$RUNDIR/$cat.driver.out"
     sh "$HERE/$cat.sh" >"$catlog" 2>&1
     crc=$?
     cat "$catlog" >> "$ALL"
@@ -53,5 +65,15 @@ if [ "$cases" -eq 0 ]; then
     echo "ADV_NO_CASES zero cases executed is never a pass" >&2
     overall=1
 fi
+
+# Refresh canonical evidence snapshots (this script's own stdout and the
+# caller's captured runN.out remain the authoritative per-run record).
+cat "$ALL" > "$HERE/logs/adv_all.log" 2>/dev/null || :
+for cat in cli games database engine safety; do
+    cat "$RUNDIR/$cat.driver.out" > "$HERE/logs/$cat.driver.out" 2>/dev/null || :
+done
+# Copy raw per-case outputs and build logs back to the canonical logs/ dir.
+cp -R "$ADV_LOGS/." "$HERE/logs/" 2>/dev/null || :
+rm -rf "$RUNDIR" 2>/dev/null || :
 
 exit "$overall"
