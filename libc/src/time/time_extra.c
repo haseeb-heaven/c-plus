@@ -1,7 +1,17 @@
 /* Platform-backed time extras (C+ libc slice). Delegate to the installed
  * system libc; logged per C+ convention. Covers the POSIX clock_gettime()/
  * nanosleep() pair and the C11 timespec_get(). */
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif
+#if !defined(__APPLE__)
+#  ifndef _POSIX_C_SOURCE
+#    define _POSIX_C_SOURCE 200809L
+#  endif
+#  ifndef _ISOC11_SOURCE
+#    define _ISOC11_SOURCE
+#  endif
+#endif
 #include "../../log/log.h"
 #include <errno.h>
 #include <time.h>

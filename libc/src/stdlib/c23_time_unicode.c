@@ -38,10 +38,23 @@
  * Defining _POSIX_C_SOURCE here would HIDE TIME_UTC, so it is deliberately
  * absent. */
 
+#if !defined(__APPLE__)
+#  ifndef _DEFAULT_SOURCE
+#    define _DEFAULT_SOURCE
+#  endif
+#  ifndef _POSIX_C_SOURCE
+#    define _POSIX_C_SOURCE 200809L
+#  endif
+#  ifndef _ISOC11_SOURCE
+#    define _ISOC11_SOURCE
+#  endif
+#endif
+
 #include "../../log/log.h"
 #include "../../install-include/cplus_c23_time_unicode.h"
 #include <errno.h>
 #include <limits.h>
+#include <pthread.h>
 #include <string.h>
 #include <time.h>
 #include <wchar.h>
@@ -123,13 +136,14 @@ typedef struct {
     unsigned char r_in_len;
 } cplus_c23_tu_state;
 
-/* The private state must fit in the opaque host object. */
-typedef char cplus_c23_tu_state_fits[
-    (sizeof(cplus_c23_tu_state) <= sizeof(mbstate_t)) ? 1 : -1];
-
 static mbstate_t cplus_c23_tu_internal_ps; /* ps == NULL state object */
 /* Per-call scratch host state and output buffer live on the stack so that
  * concurrent calls with distinct ps objects never share mutable storage. */
+
+#if defined(__APPLE__)
+/* macOS mbstate_t is 128 bytes: inline memcpy directly into *ps. */
+typedef char cplus_c23_tu_state_fits[
+    (sizeof(cplus_c23_tu_state) <= sizeof(mbstate_t)) ? 1 : -1];
 
 static cplus_c23_tu_state *cplus_c23_tu_get(mbstate_t *ps,
                                             cplus_c23_tu_state *copy) {
@@ -146,6 +160,54 @@ static void cplus_c23_tu_put(mbstate_t *ps, const cplus_c23_tu_state *st) {
     if (ps == NULL) ps = &cplus_c23_tu_internal_ps;
     memcpy(ps, st, sizeof *st);
 }
+#else
+/* Platforms with compact mbstate_t (e.g. glibc 8-byte mbstate_t): store an
+ * 8-byte handle (magic + pool slot) in *ps backed by a mutex-protected pool. */
+#define CPLUS_C23_TU_POOL_SIZE 64u
+
+typedef struct {
+    unsigned int magic;
+    unsigned int slot;
+} cplus_c23_tu_handle;
+
+typedef char cplus_c23_tu_handle_fits[
+    (sizeof(cplus_c23_tu_handle) <= sizeof(mbstate_t)) ? 1 : -1];
+
+static cplus_c23_tu_state cplus_c23_tu_pool[CPLUS_C23_TU_POOL_SIZE];
+static unsigned int cplus_c23_tu_next_slot = 0u;
+static pthread_mutex_t cplus_c23_tu_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static cplus_c23_tu_state *cplus_c23_tu_get(mbstate_t *ps,
+                                            cplus_c23_tu_state *copy) {
+    cplus_c23_tu_handle h;
+    if (ps == NULL) ps = &cplus_c23_tu_internal_ps;
+    memcpy(&h, ps, sizeof h);
+    if (h.magic == CPLUS_C23_TU_MAGIC && h.slot < CPLUS_C23_TU_POOL_SIZE) {
+        pthread_mutex_lock(&cplus_c23_tu_mu);
+        *copy = cplus_c23_tu_pool[h.slot];
+        pthread_mutex_unlock(&cplus_c23_tu_mu);
+        if (copy->magic == CPLUS_C23_TU_MAGIC)
+            return copy;
+    }
+    memset(copy, 0, sizeof *copy);
+    copy->magic = CPLUS_C23_TU_MAGIC;
+    return copy;
+}
+
+static void cplus_c23_tu_put(mbstate_t *ps, const cplus_c23_tu_state *st) {
+    cplus_c23_tu_handle h;
+    if (ps == NULL) ps = &cplus_c23_tu_internal_ps;
+    memcpy(&h, ps, sizeof h);
+    pthread_mutex_lock(&cplus_c23_tu_mu);
+    if (h.magic != CPLUS_C23_TU_MAGIC || h.slot >= CPLUS_C23_TU_POOL_SIZE) {
+        h.magic = CPLUS_C23_TU_MAGIC;
+        h.slot = (cplus_c23_tu_next_slot++) % CPLUS_C23_TU_POOL_SIZE;
+        memcpy(ps, &h, sizeof h);
+    }
+    cplus_c23_tu_pool[h.slot] = *st;
+    pthread_mutex_unlock(&cplus_c23_tu_mu);
+}
+#endif
 
 /* RFC 3629 / Unicode UTF-8 encoder. Returns 0 for a surrogate or out-of-range
  * code point. This is a from-standard encoding, not vendored code. */
