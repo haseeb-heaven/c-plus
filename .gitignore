@@ -128,3 +128,15 @@ examples/**/bin/
 examples/**/out/
 examples/**/logs/
 examples/**/tmp/
+# Generated fuzz/comparison build artifacts (never commit).
+tests/fuzz10k/**/results/
+tests/fuzz10k/**/logs/
+tests/fuzz10k/**/bin/
+benchmarks/example_rust_compare/**/.build*/
+benchmarks/example_rust_compare/**/out/
+external_projects/**/build/
+external_projects/**/.build/
+external_projects/**/results/
+tests/redteam/**/results/
+tests/defense/**/results/
+tools/c2modern*/.build/

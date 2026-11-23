@@ -215,6 +215,16 @@ static inline int stdlib_mem_bounds(const void *ptr, const void **base,
  * side-effect free. */
 static inline int stdlib_mem_key_current(const void *ptr,
                                          unsigned long long key) {
+    /* HARDENING (blue-10): "no live lock" is a key MISS, not a success.
+     * Before this check, key == 0 returned 1 for NULL / untracked / freed
+     * pointers, contradicting this predicate's stated contract ("1 iff the key
+     * still matches the block's lock") and giving callers that use 0 as a
+     * "no key captured" sentinel a fail-open liveness answer.  A tracked block
+     * with key == 0 still opts out of the generation comparison and still
+     * returns 1, so every valid-input use is unchanged (softbound.cp
+     * stale_key_zero_opts_out, adv1000/fuzz10k `key_current(p, 0) == 1`). */
+    if (ptr == NULL || stdlib_alloc_size(ptr) == 0)
+        return 0;
     if (key == 0)
         return 1;
     return stdlib_alloc_check_generation(ptr, key) != 0;
@@ -379,6 +389,53 @@ static inline void stdlib_mem_release(void **ptr) {
         return;
     stdlib_release(*ptr);
     *ptr = NULL;
+}
+
+/* HARDENING (blue-10): checked release for callers that may hold a stale alias.
+ *
+ * stdlib_mem_release() is intentionally token-less and release-once-PER-HANDLE;
+ * it calls stdlib_release() unconditionally.  Two `void *` handles that alias
+ * one block (`void *b = a;`) let a second release reach cplus_release() with a
+ * dangling pointer after the first release freed it: a genuine double-free /
+ * recycled-address hazard (see docs/stdlib/allocator/INFRASTRUCTURE_AUDIT.md
+ * section 5.2, the stdlib-layer mirror of F-01).
+ *
+ * This is an ADDITIVE helper: it refuses to free a pointer that is not a live
+ * tracked stdlib block (covering an already-freed stale alias, a block whose
+ * address was recycled, and a plain malloc/stack pointer) and, when `token` is
+ * non-zero, refuses a generation mismatch.  The handle is NULLed BEFORE the
+ * allocator call so a repeated call on the same handle is a no-op.  Existing
+ * signatures, struct layouts and the behaviour of stdlib_mem_release() are
+ * completely unchanged; no ABI-visible symbol is added (static inline).
+ *
+ * Returns STDLIB_OK for a performed release or an idempotent no-op; STDLIB_FAIL
+ * with `err` set (NULL err is allowed -- stdlib_note still reports) when a
+ * non-NULL handle is stale/untracked or carries a stale token. */
+static inline int stdlib_mem_release_checked(void **ptr,
+                                              unsigned long long token,
+                                              error *err) {
+    void *p;
+    if (ptr == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "stdlib_mem_release_checked: NULL handle"),
+               STDLIB_FAIL;
+    if (*ptr == NULL)
+        return STDLIB_OK; /* idempotent, like stdlib_mem_release */
+    if (stdlib_alloc_size(*ptr) == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "stdlib_mem_release_checked: stale or untracked handle"),
+               STDLIB_FAIL;
+    if (token != 0 && !stdlib_alloc_check_generation(*ptr, token))
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "stdlib_mem_release_checked: stale generation token"),
+               STDLIB_FAIL;
+    p = *ptr;
+    *ptr = NULL; /* NULL before free: no window for a repeated same-handle call */
+    stdlib_release(p);
+    return STDLIB_OK;
 }
 
 #endif /* CPLUS_STD_MEMORY_HP */

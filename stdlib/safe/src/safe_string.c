@@ -129,6 +129,52 @@ static int cplus_safe_resolve_str_dmax(const char *dest, size_t fallback,
     return 1;
 }
 
+/* Defense-in-depth for the standard-C-signature (auto) wrappers.
+ *
+ * The checked safeclib primitives already bound every read they perform by
+ * dmax/slen.  The wrappers, however, used to call strlen() on caller buffers
+ * to compute a fallback dmax - an unterminated src/dest therefore caused an
+ * unbounded over-read before safeclib could refuse it.  We now:
+ *
+ *   1. derive a hard scan ceiling from the destination's provable capacity
+ *      (tracked remaining bytes and/or __builtin_object_size), capped at the
+ *      RSIZE_MAX_STR ceiling safeclib itself enforces; and
+ *   2. use the bounded cplus_strnlen_s() query instead of strlen(), refusing
+ *      when no NUL appears within that bound.
+ *
+ * A string that is not terminated within the destination capacity could never
+ * be copied/appended successfully, so this only converts a malformed input
+ * from an unbounded read into a defined refusal (NULL + ERANGE).  All
+ * valid-input results and the public ABI are unchanged; these are file-local
+ * static helpers and no signature, symbol or layout is altered. */
+static size_t cplus_safe_str_scan_ceiling(const char *dest, size_t known_dmax) {
+    size_t cap = (size_t)-1;
+    size_t tracked;
+    if (!dest) return RSIZE_MAX_STR;
+    tracked = cplus_safe_remaining_capacity(dest);
+    if (tracked != (size_t)-1) cap = tracked;
+    if (known_dmax != (size_t)-1 && (cap == (size_t)-1 || known_dmax < cap))
+        cap = known_dmax;
+    if (cap == (size_t)-1 || cap > RSIZE_MAX_STR) cap = RSIZE_MAX_STR;
+    return cap;
+}
+
+static int cplus_safe_bounded_strlen(const char *s, size_t ceiling, size_t *out) {
+    size_t n;
+    if (!s || !out || ceiling == 0) return 0;
+    if (ceiling > RSIZE_MAX_STR) ceiling = RSIZE_MAX_STR;
+    n = cplus_strnlen_s(s, ceiling); /* bounded read, never strlen() */
+    if (n >= ceiling) return 0;      /* no NUL within the bound */
+    *out = n;
+    return 1;
+}
+
+static void cplus_safe_str_refuse_unterminated(const char *api) {
+    cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "unterminated string within bound");
+    cplus_safe_stat_record(api, 0);
+    errno = ERANGE;
+}
+
 char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax) {
     size_t len, dmax;
     errno_t r;
@@ -140,7 +186,11 @@ char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax) {
         cplus_safe_stat_record("strcpy_s", 0);
         return NULL;
     }
-    len = strlen(src);
+    len = 0;
+    if (!cplus_safe_bounded_strlen(src, cplus_safe_str_scan_ceiling(dest, known_dmax), &len)) {
+        cplus_safe_str_refuse_unterminated("strcpy_s");
+        return NULL;
+    }
     if (!cplus_safe_resolve_str_dmax(dest, (len < RSIZE_MAX_STR) ? (len + 1u) : RSIZE_MAX_STR, known_dmax, &dmax)) {
 
         errno = EINVAL;
@@ -171,6 +221,8 @@ char *cplus_strncpy_s_auto(char *dest, const char *src, size_t n, size_t known_d
         cplus_safe_stat_record("strncpy_s", 1);
         return dest;
     }
+    /* No unbounded read here: safeclib strncpy_s reads at most slen (n) bytes
+     * from src and the fallback dmax is n+1, never strlen(src). */
     if (!cplus_safe_resolve_str_dmax(dest, (n < RSIZE_MAX_STR) ? (n + 1u) : RSIZE_MAX_STR, known_dmax, &dmax)) {
 
         errno = EINVAL;
@@ -197,8 +249,18 @@ char *cplus_strcat_s_auto(char *dest, const char *src, size_t known_dmax) {
         cplus_safe_stat_record("strcat_s", 0);
         return NULL;
     }
-    dlen = strlen(dest);
-    slen = strlen(src);
+    /* Bound both scans by the destination's provable capacity: a string that
+     * is not terminated within dmax could never be concatenated anyway. */
+    {
+        size_t ceiling = cplus_safe_str_scan_ceiling(dest, known_dmax);
+        dlen = 0;
+        slen = 0;
+        if (!cplus_safe_bounded_strlen(dest, ceiling, &dlen) ||
+            !cplus_safe_bounded_strlen(src, ceiling, &slen)) {
+            cplus_safe_str_refuse_unterminated("strcat_s");
+            return NULL;
+        }
+    }
     if (dlen > RSIZE_MAX_STR - slen - 1u) {
         errno = ERANGE;
         cplus_safe_stat_record("strcat_s", 0);
@@ -234,7 +296,13 @@ char *cplus_strncat_s_auto(char *dest, const char *src, size_t n, size_t known_d
         cplus_safe_stat_record("strncat_s", 1);
         return dest;
     }
-    dlen = strlen(dest);
+    /* Only dest needs an unbounded-scan fix: safeclib strncat_s reads at most
+     * slen (n) bytes from src.  Bound the dest scan by its provable capacity. */
+    dlen = 0;
+    if (!cplus_safe_bounded_strlen(dest, cplus_safe_str_scan_ceiling(dest, known_dmax), &dlen)) {
+        cplus_safe_str_refuse_unterminated("strncat_s");
+        return NULL;
+    }
     if (n >= RSIZE_MAX_STR - dlen) {
         errno = ERANGE;
         cplus_safe_stat_record("strncat_s", 0);

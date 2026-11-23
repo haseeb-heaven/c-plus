@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200112L
 #define CPLUS_SAFE_NO_UNPREFIXED_MACROS
 #include "../safe_io.h"
+#include "../safe_alloc.h"
 #include "../safe_error.h"
 #include "../safe_log.h"
 #include "../safe_stats.h"
@@ -121,6 +122,59 @@ static int stream_remove(FILE **table, size_t *count, size_t *tombstones, FILE *
     return 1;
 }
 
+/* Additive query: is this stream one that cplus_fclose_s already closed (and
+ * that cplus_fopen_s has not since re-registered)?  Held under the same lock as
+ * the cache itself so a concurrent close/open cannot race the answer. */
+int cplus_io_stream_is_closed(const FILE *stream) {
+    int closed;
+    if (!stream) return 0;
+    pthread_mutex_lock(&g_io_lock);
+    closed = stream_find(g_closed_streams, stream) != STREAM_CACHE_SLOTS;
+    pthread_mutex_unlock(&g_io_lock);
+    return closed;
+}
+
+/* Defense-in-depth for the caller-declared `bmax`.  The Annex K count clamp
+ * (`count <= bmax/size`) is only as good as the caller's bound; for buffers that
+ * came from the checked allocator we have a second, independent source of truth
+ * and refuse a bmax larger than the real allocation -- the same rule the format
+ * adapters apply to `dmax`.  Stack/static buffers are not tracked by the
+ * allocator; they remain protected by the count clamp (and, at the call site,
+ * by __builtin_object_size for the unprefixed format-style macros).  A freed
+ * buffer is refused even when its size metadata is still cached. */
+static int io_check_buf(const char *api, const void *buf, size_t bmax) {
+    size_t tracked;
+    if (!buf) return 0; /* the existing NULL-argument path owns this case */
+    if (cplus_safe_ptr_was_freed(buf)) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "use-after-free detected in I/O buffer");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    tracked = cplus_safe_ptr_size(buf);
+    if (tracked > 0 && bmax > tracked) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "I/O bmax exceeds tracked buffer capacity");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    return 0;
+}
+
+/* Refuse a stream that the checked layer already closed: fread/fwrite on it
+ * would reach the host with a freed FILE*.  Returns -1 (caller maps that to the
+ * API's defined failure value), 0 when the stream is still usable/untracked. */
+static int io_check_stream(const char *api, FILE *stream) {
+    if (!stream) return 0; /* the existing NULL-argument path owns this case */
+    if (cplus_io_stream_is_closed(stream)) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "checked stream was closed (use-after-close)");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    return 0;
+}
+
 FILE *cplus_fopen_s(const char *name, const char *mode) {
     FILE *f;
     if (!name || !mode) {
@@ -201,6 +255,7 @@ size_t cplus_fread_s(void *buf, size_t bmax, size_t size, size_t count, FILE *st
         cplus_safe_stat_record("fread_s", 0);
         return 0;
     }
+    if (io_check_buf("fread_s", buf, bmax) < 0 || io_check_stream("fread_s", stream) < 0) return 0;
     if (count > bmax / size) count = bmax / size;
     r = fread(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fread_s", "ok");

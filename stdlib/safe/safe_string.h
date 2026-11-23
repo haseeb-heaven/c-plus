@@ -32,6 +32,13 @@ typedef size_t rsize_t;
  *
  * Non-`errno_t` members: `cplus_strnlen_s` is a bounded length query returning a
  * count in [0, smax]; `cplus_strtok_s` returns the next token pointer or NULL.
+ * For `strnlen_s`, an out-of-range `smax` (0 or > RSIZE_MAX_STR) is a defined
+ * refusal that returns 0; a terminating NUL is never sought past `smax`.
+ *
+ * The standard-C-signature `_auto` wrappers derive a hard scan ceiling from
+ * the destination's provable capacity and use bounded length queries, so an
+ * unterminated source/destination is refused (NULL + ERANGE) instead of being
+ * over-read.  Valid-input behaviour is unchanged.
  *
  * Scope / honesty: these run runtime constraint checks (null, bounds, overlap,
  * max size). They do NOT prove pointer provenance, ownership, lifetime, or

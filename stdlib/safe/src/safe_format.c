@@ -1,5 +1,6 @@
 #include "../safe_format.h"
 #include "../safe_alloc.h"
+#include "../safe_io.h"
 #include "../safe_log.h"
 #include "../safe_runtime.h"
 #include "../safe_stats.h"
@@ -32,6 +33,18 @@ static int fmt_violation(const char *api, const char *msg) {
     cplus_safe_stat_record(api, 0);
     cplus_runtime_violation(api, msg);
     return -1;
+}
+
+/* Defense-in-depth: a FILE* handed to fprintf_s/fscanf_s may have already been
+ * closed through cplus_fclose_s.  Calling vfprintf/vfscanf on it is a
+ * use-after-free even if the caller's pointer is non-NULL, so refuse it before
+ * any host I/O.  Streams never seen by the checked I/O layer report 0 and keep
+ * their normal behavior (raw-host streams remain supported). */
+static int fmt_check_stream(const char *api, FILE *stream) {
+    if (!stream) return 0; /* the existing NULL-stream path owns this */
+    if (cplus_io_stream_is_closed(stream))
+        return fmt_violation(api, "checked stream was closed (use-after-close)");
+    return 0;
 }
 
 static int cplus_fmt_has_percent_n(const char *fmt) {
@@ -203,6 +216,7 @@ int cplus_fprintf_s(FILE *stream, const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fprintf_s", "enter");
     if (!stream) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fprintf_s", "null stream"); cplus_safe_stat_record("fprintf_s", 0); return -1; }
     if (!fmt) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fprintf_s", "null format"); cplus_safe_stat_record("fprintf_s", 0); return -1; }
+    if (fmt_check_stream("fprintf_s", stream) < 0) return -1;
     if (cplus_safe_ptr_was_freed(fmt)) return fmt_violation("fprintf_s", "use-after-free detected in format string");
     if (cplus_fmt_has_percent_n(fmt)) return fmt_violation("fprintf_s", "forbidden %n specifier in format string");
     {
@@ -218,6 +232,7 @@ int cplus_fprintf_s_checked(int fmt_is_literal, FILE *stream, const char *fmt, .
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fprintf_s", "enter");
     if (!stream) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fprintf_s", "null stream"); cplus_safe_stat_record("fprintf_s", 0); return -1; }
     if (!fmt) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fprintf_s", "null format"); cplus_safe_stat_record("fprintf_s", 0); return -1; }
+    if (fmt_check_stream("fprintf_s", stream) < 0) return -1;
     if (cplus_safe_ptr_was_freed(fmt)) return fmt_violation("fprintf_s", "use-after-free detected in format string");
     if (!fmt_is_literal) return fmt_violation("fprintf_s", "non-literal format string refused (CWE-134)");
     if (cplus_fmt_has_percent_n(fmt)) return fmt_violation("fprintf_s", "forbidden %n specifier in format string");
@@ -263,6 +278,7 @@ int cplus_fscanf_s(FILE *stream, const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fscanf_s", "enter");
     if (!stream) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fscanf_s", "null stream"); cplus_safe_stat_record("fscanf_s", 0); return -1; }
     if (!fmt) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fscanf_s", "null format"); cplus_safe_stat_record("fscanf_s", 0); return -1; }
+    if (fmt_check_stream("fscanf_s", stream) < 0) return -1;
     if (cplus_safe_ptr_was_freed(fmt)) return fmt_violation("fscanf_s", "use-after-free detected in format string");
     if (fmt_check_scanf_spec("fscanf_s", fmt) < 0) return -1;
     {
@@ -278,6 +294,7 @@ int cplus_fscanf_s_checked(int fmt_is_literal, FILE *stream, const char *fmt, ..
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "fscanf_s", "enter");
     if (!stream) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fscanf_s", "null stream"); cplus_safe_stat_record("fscanf_s", 0); return -1; }
     if (!fmt) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fscanf_s", "null format"); cplus_safe_stat_record("fscanf_s", 0); return -1; }
+    if (fmt_check_stream("fscanf_s", stream) < 0) return -1;
     if (cplus_safe_ptr_was_freed(fmt)) return fmt_violation("fscanf_s", "use-after-free detected in format string");
     if (!fmt_is_literal) return fmt_violation("fscanf_s", "non-literal format string refused (CWE-134)");
     if (fmt_check_scanf_spec("fscanf_s", fmt) < 0) return -1;

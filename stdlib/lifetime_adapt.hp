@@ -220,6 +220,21 @@ static inline int lifetime_borrow_is_live(const lifetime_borrow *b) {
            stdlib_alloc_check_generation(b->ptr, b->token);
 }
 
+/* HARDENING (blue-10): non-dereferencing liveness query for OWNERS, the missing
+ * counterpart of lifetime_borrow_is_live().  Without it a caller that wants to
+ * avoid the error/telemetry side effects of lifetime_owner_release() or
+ * lifetime_transfer() has no side-effect-free way to ask whether an owner still
+ * holds a live block, and is tempted to inspect o->ptr directly (which is
+ * insufficient: a recycled address can be live under a different generation).
+ * This predicate consults metadata only, never touches the target, and fails
+ * closed for NULL, empty, untracked and stale-generation owners.  It is purely
+ * additive -- no signature, layout or existing behaviour changes. */
+static inline int lifetime_owner_is_live(const lifetime_owner *o) {
+    return o != NULL && o->ptr != NULL && o->token != LIFETIME_NO_TOKEN &&
+           stdlib_alloc_size(o->ptr) != 0 &&
+           stdlib_alloc_check_generation(o->ptr, o->token);
+}
+
 /* Guarded read.  The token and [off, off+n) range are validated against
  * metadata BEFORE any byte of the target is read.  On failure nothing is
  * copied and `err` describes the refusal. */

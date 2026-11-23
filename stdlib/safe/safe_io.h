@@ -14,6 +14,15 @@ int cplus_fclose_s(FILE *stream);
 size_t cplus_fread_s(void *buf, size_t bmax, size_t size, size_t count, FILE *stream);
 size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, FILE *stream);
 
+/* Additive hardening query (no existing symbol/signature/layout is changed):
+ * returns 1 when `stream` is recorded as closed by cplus_fclose_s and has not
+ * since been re-registered by cplus_fopen_s, 0 otherwise (including NULL).
+ * The checked format adapters use this to refuse use-after-close streams before
+ * handing them to the host vfprintf/vfscanf, and the checked I/O adapters use it
+ * to avoid fread/fwrite on a freed FILE*.  A stream that was never opened through
+ * this layer is simply unreported (0), so raw-host streams keep their semantics. */
+int cplus_io_stream_is_closed(const FILE *stream);
+
 #ifndef CPLUS_SAFE_NO_UNPREFIXED_MACROS
 #undef fopen_s
 #define fopen_s cplus_fopen_s
