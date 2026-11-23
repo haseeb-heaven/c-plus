@@ -112,3 +112,5 @@ examples/expanded/**/.run/
 examples/expanded/**/bin_*
 examples/expanded/**/_probe*
 examples/expanded/**/.probe*
+examples/expanded/**/results/
+examples/expanded/**/bin/
