@@ -35,6 +35,13 @@ set(LIBC_SOURCES
   src/string/strndup.c
   src/string/strerror.c
   src/string/upstream_safecrt.c
+  src/math/c23_nextup.c
+  src/math/c23_arith.c
+  src/math/c23_hypot16.c
+  src/stdlib/c23_time_unicode.c
+  src/thread/sync_checked.c
+  src/stdlib/alloc_hardened.c
+  src/runtime/violation_log.c
   src/stdio/stdio.c
   src/stdio/stdio2.c
   src/stdio/stdio3.c
@@ -71,7 +78,6 @@ set(LIBC_SOURCES
   src/uchar/uchar_c23.c
   src/math/math_c23_upstream.c
   src/math/math_c23.c
-  src/math/math_c23_farith.c
   src/math/math_c23_hypot3_f16.c
   src/math/math_c23_next.c
   src/math/math_c23_musl.c

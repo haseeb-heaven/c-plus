@@ -133,7 +133,7 @@ C	define __arm64__	1
 C	define __clang__	1
 C	define __clang_major__	16
 C	define __clang_minor__	0
-S	archive build/libc/libcplus_hardened.a	count=784
+S	archive build/libc/libcplus_hardened.a	count=812
 S	symbol build/libc/libcplus_hardened.a::___cplus_errno_location	1
 S	symbol build/libc/libcplus_hardened.a::_cplus__Exit	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_abort	1
@@ -145,7 +145,9 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_acoshf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_acoshl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_acosl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_aligned_alloc	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_atomic_realloc	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_check_generation	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_checked_free	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_double_free_count	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_elem_size	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_fail_after	1
@@ -160,6 +162,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_meta_register	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_query_length	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_remaining_capacity	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_size	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_state_dump	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_asctime	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_asctime_r	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_asin	1
@@ -347,7 +350,13 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_atomic_store_ulong	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_atomic_thread_fence	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_bsearch	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_c16rtomb	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_c23_exp16	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_c23_fma16	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_c23_frexp16	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_c23_hypot3	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_c23_logb16	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_c32rtomb	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_c8rtomb	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cabs	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cabsf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cabsl	1
@@ -400,6 +409,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_clogf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_clogl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cnd_broadcast	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cnd_destroy	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_cnd_destroy_checked	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cnd_init	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cnd_signal	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_cnd_timedwait	1
@@ -471,6 +481,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_fabs	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fabsf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fabsl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fadd	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_faddf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_faddl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fclose	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fcvt	1
@@ -478,6 +489,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_fdim	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fdimf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fdiml	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fdiv	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_fdivf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fdivl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fdopen	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_feclearexcept	1
@@ -517,6 +529,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_fmod	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fmodf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fmodl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fmul	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_fmulf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fmull	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fopen	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fprintf	1
@@ -536,6 +549,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_fscanf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fseek	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fsetpos	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fsub	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_fsubf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fsubl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_ftell	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_fwprintf	1
@@ -641,6 +655,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_malloc	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mblen	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mbrtoc16	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mbrtoc32	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_mbrtoc8	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mbrtowc	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mbsinit	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mbsrtowcs	1
@@ -666,6 +681,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_modf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_modff	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_modfl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mtx_destroy	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_mtx_destroy_checked	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mtx_init	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mtx_lock	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_mtx_timedlock	1
@@ -844,10 +860,12 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_thrd_detach	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_thrd_equal	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_thrd_exit	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_thrd_join	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_thrd_join_checked	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_thrd_sleep	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_thrd_yield	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_time	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_timespec_get	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_timespec_getres	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_tmpfile	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_toascii	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_tolower	1
@@ -871,6 +889,10 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_vfprintf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_vfscanf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_vfwprintf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_vfwscanf	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_violation_log_close	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_violation_log_count	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_violation_log_event	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_violation_log_open	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_vprintf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_vscanf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_vsnprintf	1
@@ -918,6 +940,12 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_wmemmove	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_wmemset	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_wprintf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_wscanf	1
+S	symbol build/libc/libcplus_hardened.a::_nextdown	1
+S	symbol build/libc/libcplus_hardened.a::_nextdownf	1
+S	symbol build/libc/libcplus_hardened.a::_nextdownl	1
+S	symbol build/libc/libcplus_hardened.a::_nextup	1
+S	symbol build/libc/libcplus_hardened.a::_nextupf	1
+S	symbol build/libc/libcplus_hardened.a::_nextupl	1
 S	archive build/safe/libcplus_safecrt.a	count=289
 S	symbol build/safe/libcplus_safecrt.a::___ubsan_on_report	1
 S	symbol build/safe/libcplus_safecrt.a::__memccpy_s_uchk	1
