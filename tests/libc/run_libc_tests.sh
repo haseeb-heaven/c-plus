@@ -13,6 +13,7 @@ for t in tests/libc/test_*.c; do
   EXTRA_INC=""; EXTRA_LIB=""
   case "$t" in
     *test_alloc_fault_matrix*) EXTRA_INC="-I."; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
+    *test_vendor_*) EXTRA_INC="-I. -Ithird_party/safeclib/include"; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
   esac
   if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC "$t" "$LIB" $EXTRA_LIB -lm -pthread -o "$b" && "$b" >/tmp/libc_test.out 2>&1; then
     echo "ok $(basename "$t")"; pass=$((pass+1))

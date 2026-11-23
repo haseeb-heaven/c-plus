@@ -132,5 +132,14 @@ for f in "$ROOT"/stdlib/safe/src/*.c; do
   "$CC" $CFLAGS_W -I$SC/include -c "$f" -o "$OUT/w_$base.o"
 done
 
-ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/up_*.o "$OUT"/w_*.o "$OUT"/e4c_*.o
+# Already-made safeclib functions included verbatim via the preprocessor with
+# only cplus_v_* symbol-name prefixing (see docs/libc/vendor_*.md). Additive:
+# no existing symbol is replaced or renamed.
+for f in "$ROOT"/libc/src/safecrt_vendor/*.c; do
+  [ -f "$f" ] || continue
+  base=$(basename "$f" .c)
+  "$CC" $CFLAGS_SC -Wno-macro-redefined -c "$f" -o "$OUT/v_$base.o"
+done
+
+ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/up_*.o "$OUT"/w_*.o "$OUT"/v_*.o "$OUT"/e4c_*.o
 echo "$OUT/libcplus_safecrt.a"
