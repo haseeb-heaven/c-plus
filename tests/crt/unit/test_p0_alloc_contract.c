@@ -120,7 +120,9 @@ static void test_realloc_contract(void) {
     q = (unsigned char *)realloc_s(p, 64);
     CHECK("realloc_ok_nonnull", q != NULL);
     if (q != NULL) {
-        CHECK("realloc_ok_old_not_live", cplus_safe_ptr_is_live(p) == 0);
+        CHECK("realloc_ok_old_not_live",
+              (q == p) ? (cplus_safe_ptr_check_generation(p, g0) == 0)
+                       : (cplus_safe_ptr_is_live(p) == 0));
         CHECK("realloc_ok_new_size", cplus_safe_ptr_size(q) == 64);
         CHECK("realloc_ok_preserves_bytes", all_bytes_byte(q, 16, 0x5A));
         CHECK("realloc_meta_after", cplus_safe_alloc_get_meta(q, &m) == CPLUS_SAFE_OK);
