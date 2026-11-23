@@ -157,8 +157,10 @@ static void prep_free(const allocator_api *a, size_t ops, size_t param) {
 static void run_free(const allocator_api *a, size_t ops, size_t param) {
     size_t i;
     (void)param;
-    for (i = 0; i < ops; ++i)
+    for (i = 0; i < ops; ++i) {
+        do_free_queries(a);
         a->free_fn(g_arr[i]);
+    }
 }
 static void fin_free(const allocator_api *a, size_t ops, size_t param) {
     (void)a; (void)ops; (void)param;

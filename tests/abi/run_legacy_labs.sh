@@ -682,8 +682,7 @@ done
         j=$((j+1))
     done
     printf '},\n'
-    printf '  "counts": {"total": %d, "pass": %d, "fail": %d, "build_failure": %d, '
-    printf '"timeout": %d, "skipped": %d, "blocked": %d},\n' \
+    printf '  "counts": {"total": %d, "pass": %d, "fail": %d, "build_failure": %d, "timeout": %d, "skipped": %d, "blocked": %d},\n' \
         "${#RESULT_NAME[@]}" "$COUNT_PASS" "$COUNT_FAIL" "$COUNT_BUILD" \
         "$COUNT_TIMEOUT" "$COUNT_SKIPPED" "$COUNT_BLOCKED"
     printf '  "required_failures": %d,\n' "$REQUIRED_FAILURES"

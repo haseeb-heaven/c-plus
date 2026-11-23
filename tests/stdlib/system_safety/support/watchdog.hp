@@ -11,9 +11,13 @@
  *     exit code from a signal death and can assert on either.
  *   - The previous SIGALRM disposition is restored before returning.
  *
- * Usage from a test (include path works from any tests/stdlib/**/*.cp):
- *     #include "tests/stdlib/system_safety/support/watchdog.hp"
+ * Usage from a test: include this header with the repo-root-relative path
+ * "tests/stdlib/system_safety/support/watchdog.hp"; that resolves from any
+ * test source under tests/stdlib:
  *     struct ss_watchdog_result r = ss_run_watchdog(my_child, 2, 1);
+ *
+ * NOTE: do not put a literal include directive in a comment of a .hp file:
+ * the C+ header preprocessor matches the include token even inside comments.
  *
  * No variable division or modulo is used; all bounds are explicit counts.
  */

@@ -189,11 +189,17 @@ static inline const char *stdlib_category_name(int category) {
     }
 }
 
+/* Shared per-thread re-entrancy guard for the error callback.  A `static`
+ * local inside a static inline function would give every translation unit its
+ * own copy, so a callback installed in one TU could recurse when the nested
+ * failure is raised from another TU.  A weak file-scope TLS definition is
+ * merged into one guard per thread per program. */
+__attribute__((weak)) __thread int stdlib_error_reporting;
+
 /* Record a failure: counters first, then the optional callback.  Allocates
  * nothing, formats nothing, and drops re-entrant reports. */
 static inline void stdlib_note(int category, cplus_exit_code code,
                                const char *message) {
-    static __thread int reporting;
     stdlib_error_callback callback;
     switch (category) {
     case STDLIB_CATEGORY_MEMORY:
@@ -214,10 +220,10 @@ static inline void stdlib_note(int category, cplus_exit_code code,
     }
     stdlib_tm_add(STDLIB_TM_API_FAIL, 1);
     callback = __atomic_load_n(&stdlib_state.callback, __ATOMIC_ACQUIRE);
-    if (callback != NULL && !reporting) {
-        reporting = 1;
+    if (callback != NULL && !stdlib_error_reporting) {
+        stdlib_error_reporting = 1;
         callback(category, code, message != NULL ? message : "");
-        reporting = 0;
+        stdlib_error_reporting = 0;
     }
 }
 

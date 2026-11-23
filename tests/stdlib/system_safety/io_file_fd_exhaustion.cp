@@ -63,6 +63,8 @@ int main(void) {
         int ifde_i;
         int ifde_opened = 0;
         int ifde_st;
+        for (ifde_i = 0; ifde_i < 64; ifde_i++)
+            ifde_held[ifde_i] = NULL;
         signal(SIGALRM, ifde_alarm_handler);
         alarm(8);
 

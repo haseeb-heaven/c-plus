@@ -137,6 +137,7 @@ static void al_telemetry_tests(void) {
     void *atm_b;
     void *atm_c;
 
+    stdlib_telemetry_set_enabled(1);
     stdlib_telemetry_reset();
     stdlib_alloc_tm_snapshot(&atm_before);
     atm_a = stdlib_alloc(8);
@@ -144,12 +145,6 @@ static void al_telemetry_tests(void) {
     atm_c = stdlib_alloc(8);
     stdlib_alloc_tm_snapshot(&atm_after);
     stdlib_alloc_tm_delta(&atm_before, &atm_after, &atm_delta);
-    print("DBG before_alloc", atm_before.alloc_count);
-    print("DBG after_alloc", atm_after.alloc_count);
-    print("DBG delta_alloc", atm_delta.alloc_count);
-    print("DBG delta_bytes", atm_delta.bytes_allocated);
-    print("DBG delta_free", atm_delta.free_count);
-    print("DBG counter_alloc", stdlib_alloc_tm_counter(STDLIB_TM_ALLOC));
     al_check("tm_delta", atm_delta.alloc_count == 3 &&
              atm_delta.bytes_allocated == 24 && atm_delta.free_count == 0 &&
              stdlib_alloc_tm_counter(STDLIB_TM_ALLOC) == 3 &&

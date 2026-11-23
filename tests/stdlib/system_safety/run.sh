@@ -63,10 +63,20 @@ modes=""
 json_path=""
 json_stdout=0
 
+# Accept repeatable --only and comma-separated values in one flag.
+add_only() {
+  _oifs=$IFS; IFS=,; set -- $1; IFS=$_oifs
+  for _o in "$@"; do
+    _o=$(printf '%s' "$_o" | tr -d ' \t\r\n')
+    [ -n "$_o" ] || continue
+    only="$only $_o"
+  done
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --only) [ "$#" -ge 2 ] || die "--only requires a NAME"; only="$only $2"; shift 2 ;;
-    --only=*) only="$only ${1#--only=}"; shift ;;
+    --only) [ "$#" -ge 2 ] || die "--only requires a NAME"; add_only "$2"; shift 2 ;;
+    --only=*) add_only "${1#--only=}"; shift ;;
     --mode) [ "$#" -ge 2 ] || die "--mode requires a LIST"; modes="$modes $2"; shift 2 ;;
     --mode=*) modes="$modes ${1#--mode=}"; shift ;;
     --json) [ "$#" -ge 2 ] || die "--json requires a PATH"; json_path=$2; shift 2 ;;

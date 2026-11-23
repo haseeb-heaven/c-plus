@@ -176,7 +176,7 @@ int main(void) {
     fso_rc = fs_rename(fso_b, fso_badparent, &fso_err);
     fso("FSO_RENAME_MISSING_PARENT",
         fso_rc == STDLIB_FAIL && fso_err.category() == STDLIB_CATEGORY_IO &&
-            fs_is_file(fso_b) == 1 && fs_size(fso_b, &fso_err) == 3 &&
+            fs_is_file(fso_b) == 1 && fs_size(fso_b, &fso_err) == 14 &&
             fs_exists(fso_badparent) == 0);
 
     /* ---- repeated delete of a missing path ------------------------------ */

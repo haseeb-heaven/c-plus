@@ -1,0 +1,66 @@
+/* POSIX resource-limit helpers used by the fd/socket/thread exhaustion cases.
+ *
+ * All lowering is soft-limit only, never raises the hard limit, and every
+ * successful change is paired with an explicit restore on every child path.
+ * If getrlimit/setrlimit is unavailable or refuses the change, callers report
+ * a declared SKIP instead of treating the missing injection as a pass.
+ *
+ * re_fd_count() uses a fixed 0..255 fcntl scan: bounded, no /proc, no
+ * directory stream descriptor of its own (unlike an opendir("/dev/fd") count).
+ */
+#ifndef CPLUS_RE_LIMITS_HP
+#define CPLUS_RE_LIMITS_HP
+
+#include <fcntl.h>
+#include <sys/resource.h>
+#include <unistd.h>
+
+static int re_fd_count(void) {
+    int re_lim_fd;
+    int re_lim_n = 0;
+    for (re_lim_fd = 0; re_lim_fd < 256; re_lim_fd++) {
+        if (fcntl(re_lim_fd, F_GETFD) != -1)
+            re_lim_n++;
+    }
+    return re_lim_n;
+}
+
+static int re_limit_supported(int resource_id) {
+    struct rlimit re_lim_cur;
+    return getrlimit(resource_id, &re_lim_cur) == 0 ? 1 : 0;
+}
+
+/* Lower the soft limit to `wanted` (clamped to the existing hard limit).
+ * Returns 1 on success OR when the current soft limit is already low enough;
+ * 0 only when the platform cannot provide the injection. `saved` is filled on
+ * every successful return and must be passed to re_limit_restore(). */
+static int re_limit_lower(int resource_id, rlim_t wanted,
+                          struct rlimit *saved) {
+    struct rlimit re_lim_cur;
+    struct rlimit re_lim_next;
+
+    if (saved == (struct rlimit *)0)
+        return 0;
+    if (getrlimit(resource_id, &re_lim_cur) != 0)
+        return 0;
+    *saved = re_lim_cur;
+    if (re_lim_cur.rlim_cur <= wanted)
+        return 1;
+
+    re_lim_next.rlim_cur = wanted;
+    re_lim_next.rlim_max = re_lim_cur.rlim_max;
+    if (re_lim_cur.rlim_max != RLIM_INFINITY &&
+        re_lim_next.rlim_cur > re_lim_cur.rlim_max)
+        re_lim_next.rlim_cur = re_lim_cur.rlim_max;
+    if (setrlimit(resource_id, &re_lim_next) != 0)
+        return 0;
+    return 1;
+}
+
+static void re_limit_restore(int resource_id, const struct rlimit *saved) {
+    if (saved == (struct rlimit *)0)
+        return;
+    (void)!setrlimit(resource_id, saved);
+}
+
+#endif /* CPLUS_RE_LIMITS_HP */
