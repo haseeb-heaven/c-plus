@@ -46,9 +46,8 @@ int main(void) {
         CHECK(r == ESNOSPC);
         CHECK(dst[4] == 0xEE);               /* guard byte past dmax intact */
         CHECK(dst[5] == 0xEE && dst[6] == 0xEE && dst[7] == 0xEE);
-        /* C11 memcpy_s contract: a rejected copy ZEROES the first dmax bytes
-           (a defined outcome); it never leaves a partial/garbage copy. */
-        CHECK(dst[0] == 0 && dst[1] == 0 && dst[2] == 0 && dst[3] == 0);
+        /* C+ security contract: a rejected copy leaves dst intact (no OOB-prone dmax wipe). */
+        CHECK(dst[0] == 0xEE && dst[1] == 0xEE && dst[2] == 0xEE && dst[3] == 0xEE);
     }
 
     /* --- same shape, grossly over-long request: still rejected --- */

@@ -42,10 +42,10 @@ int main(void) {
     cplus_safe_set_constraint_mode(CPLUS_SAFE_CONSTRAINT_IGNORE);
     for (i = 0; i < TOTAL; i++) src[i] = (unsigned char)(0x20 + i);
 
-    /* (1) NULL src with a non-zero length -> ESNULLP, prefix cleared */
+    /* (1) NULL src with a non-zero length -> ESNULLP, destination intact */
     memset(dst, 0x5A, sizeof dst);
     CHECK(cplus_memcpy_s(dst, DMAX, NULL, 4) == ESNULLP);
-    CHECK(all_eq(dst, 0, DMAX, 0x00));       /* rejected prefix zeroed */
+    CHECK(all_eq(dst, 0, DMAX, 0x5A));       /* destination kept intact */
     CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));   /* guard past dmax intact */
 
     /* (2) NULL dest with a non-zero length -> ESNULLP */
@@ -65,10 +65,10 @@ int main(void) {
     /* (6) zero dmax with zero length -> EOK */
     CHECK(cplus_memcpy_s(dst, 0, src, 0) == 0);
 
-    /* (7) slen > dmax -> ESNOSPC; prefix zeroed, guard intact */
+    /* (7) slen > dmax -> ESNOSPC; destination and guard left intact */
     memset(dst, 0x5A, sizeof dst);
     CHECK(cplus_memcpy_s(dst, DMAX, src, DMAX + 1) == ESNOSPC);
-    CHECK(all_eq(dst, 0, DMAX, 0x00));
+    CHECK(all_eq(dst, 0, DMAX, 0x5A));
     CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));
 
     /* (8) slen much larger than dmax -> still ESNOSPC */
@@ -81,26 +81,26 @@ int main(void) {
     CHECK(cplus_memcpy_s(dst, (rsize_t)RSIZE_MAX_MEM + 1, src, 1) == ESLEMAX);
     CHECK(all_eq(dst, 0, TOTAL, 0x5A));      /* dest untouched: no prefix clear */
 
-    /* (10) slen > RSIZE_MAX_MEM (with valid dmax) -> ESLEMAX, prefix cleared */
+    /* (10) slen > RSIZE_MAX_MEM (with valid dmax) -> ESLEMAX, destination intact */
     memset(dst, 0x5A, sizeof dst);
     CHECK(cplus_memcpy_s(dst, DMAX, src, (rsize_t)RSIZE_MAX_MEM + 1) == ESLEMAX);
-    CHECK(all_eq(dst, 0, DMAX, 0x00));
+    CHECK(all_eq(dst, 0, DMAX, 0x5A));
     CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));
 
     /* (11) slen == the public header's RSIZE_MAX_MEM. The public header
      * advertises RSIZE_MAX_MEM = SIZE_MAX>>1, but the vendored safeclib backend
      * enforces a much smaller per-call limit (RSIZE_MAX_STR * 4, i.e. 16384).
-     * Either way an oversized slen maps to ESLEMAX, and the destination prefix
-     * is cleared. Anomaly reported separately; library code is not changed. */
+     * Either way an oversized slen maps to ESLEMAX, and the destination is
+     * left intact. Anomaly reported separately; library code is not changed. */
     memset(dst, 0x5A, sizeof dst);
     CHECK(cplus_memcpy_s(dst, DMAX, src, (rsize_t)RSIZE_MAX_MEM) == ESLEMAX);
-    CHECK(all_eq(dst, 0, DMAX, 0x00));
+    CHECK(all_eq(dst, 0, DMAX, 0x5A));
 
     /* (12) repeated identical rejection is deterministic */
     memset(dst, 0x5A, sizeof dst);
     CHECK(cplus_memcpy_s(dst, DMAX, NULL, 4) == ESNULLP);
     CHECK(cplus_memcpy_s(dst, DMAX, NULL, 4) == ESNULLP);
-    CHECK(all_eq(dst, 0, DMAX, 0x00));
+    CHECK(all_eq(dst, 0, DMAX, 0x5A));
     CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));
 
     if (failures == 0) {

@@ -56,7 +56,7 @@ int main(void) {
     memset(b, 0x5A, sizeof b);
     memcpy(b, "ABCDEFGH", 8);
     CHECK(cplus_memcpy_s(b, 6, b + 2, 6) == ESOVRLP);
-    CHECK(all_eq(b, 0, 6, 0x00));            /* rejected prefix zeroed */
+    CHECK(memcmp(b, "ABCDEFGH", 8) == 0);     /* rejected copy leaves buffer intact */
     CHECK(all_eq(b, 8, TOTAL, 0x5A));
 
     /* (3) backward overlap (dest > src): memmove_s shifts correctly */
@@ -71,7 +71,7 @@ int main(void) {
     memcpy(b, "ABCDEFGH", 8);
     CHECK(cplus_memcpy_s(b + 2, 6, b, 6) == ESOVRLP);
     CHECK(b[0] == 'A' && b[1] == 'B');       /* bytes before dest intact */
-    CHECK(all_eq(b, 2, 8, 0x00));            /* [dest, dest+dmax) zeroed */
+    CHECK(memcmp(b, "ABCDEFGH", 8) == 0);     /* [dest, dest+dmax) left intact */
     CHECK(all_eq(b, 8, TOTAL, 0x5A));
 
     /* (5) single-byte partial overlap just past an edge is still overlap */
@@ -97,7 +97,7 @@ int main(void) {
     memset(dst, 0x5A, sizeof dst);
     CHECK(cplus_memmove_s(NULL, DMAX, src, 1) == ESNULLP);
     CHECK(cplus_memmove_s(dst, DMAX, NULL, 1) == ESNULLP);
-    CHECK(all_eq(dst, 0, DMAX, 0x00));       /* null src clears prefix */
+    CHECK(all_eq(dst, 0, DMAX, 0x5A));       /* null src leaves dst intact */
     CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));
     CHECK(cplus_memmove_s(dst, 0, src, 1) == ESZEROL);
     CHECK(cplus_memmove_s(dst, 0, src, 0) == 0);

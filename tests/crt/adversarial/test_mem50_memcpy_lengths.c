@@ -57,10 +57,10 @@ int main(void) {
     CHECK(memcmp(dst, src, DMAX) == 0);
     CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));    /* guard past dmax intact */
 
-    /* (3) one-past-fit is rejected; the rejected prefix is zeroed */
+    /* (3) one-past-fit is rejected; destination left intact */
     memset(dst, 0x5A, sizeof dst);
     CHECK(cplus_memcpy_s(dst, DMAX, src, DMAX + 1) == ESNOSPC);
-    CHECK(all_eq(dst, 0, DMAX, 0x00));
+    CHECK(all_eq(dst, 0, DMAX, 0x5A));
     CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));    /* guard past dmax intact */
 
     /* (4) far-past-fit (a full buffer length) is also rejected */

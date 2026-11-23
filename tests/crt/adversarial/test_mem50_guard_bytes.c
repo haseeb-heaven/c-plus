@@ -51,10 +51,10 @@ int main(void) {
     CHECK(memcmp(buf, src, LEN) == 0);
     CHECK(all_eq(buf, LEN, TOTAL, GUARD));
 
-    /* (2) memcpy_s one-past rejection: guard intact, prefix zeroed */
+    /* (2) memcpy_s one-past rejection: guard and prefix left intact */
     memset(buf, GUARD, sizeof buf);
     CHECK(cplus_memcpy_s(buf, LEN, src, LEN + 1) == ESNOSPC);
-    CHECK(all_eq(buf, 0, LEN, 0x00));
+    CHECK(all_eq(buf, 0, LEN, GUARD));
     CHECK(all_eq(buf, LEN, TOTAL, GUARD));
 
     /* (3) memcpy_s NULL-src rejection: guard intact */
@@ -111,7 +111,7 @@ int main(void) {
     CHECK(cplus_memcpy_s(buf + 4, LEN, NULL, 1) == ESNULLP);
     CHECK(all_eq(buf, 0, 4, GUARD));         /* leading guard intact */
     CHECK(all_eq(buf, 12, TOTAL, GUARD));    /* trailing guard intact */
-    CHECK(all_eq(buf, 4, 12, 0x00));         /* interior prefix cleared */
+    CHECK(all_eq(buf, 4, 12, GUARD));        /* interior prefix intact */
 
     if (failures == 0) {
         printf("test_mem50_guard_bytes: ok\n");

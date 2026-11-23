@@ -53,11 +53,11 @@ int main(void) {
         }
     }
 
-    /* (2) 100x: one-past-fit rejected, prefix zeroed, guard intact */
+    /* (2) 100x: one-past-fit rejected, destination and guard intact */
     for (iter = 0; iter < 100; iter++) {
         memset(dst, 0x5A, sizeof dst);
         CHECK(cplus_memcpy_s(dst, DMAX, src, DMAX + 1) == ESNOSPC);
-        CHECK(all_eq(dst, 0, DMAX, 0x00));
+        CHECK(all_eq(dst, 0, DMAX, 0x5A));
         CHECK(all_eq(dst, DMAX, TOTAL, 0x5A));
     }
 
@@ -75,7 +75,7 @@ int main(void) {
     for (iter = 0; iter < 100; iter++) {
         memcpy(b, "ABCDEFGHIJKL", DMAX);
         CHECK(cplus_memcpy_s(b, DMAX - 2, b + 2, DMAX - 2) == ESOVRLP);
-        CHECK(all_eq(b, 0, DMAX - 2, 0x00));
+        CHECK(memcmp(b, "ABCDEFGHIJKL", DMAX) == 0);
     }
 
     /* (5) 100x: memcmp sign for equal / less / greater */

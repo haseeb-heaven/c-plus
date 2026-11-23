@@ -49,7 +49,7 @@ int main(void) {
         r = cplus_memcpy_s(arena, 6, src, 10);       /* 10 > truthful dmax 6 */
         CHECK(r != 0);
         CHECK(r == ESNOSPC);
-        for (i = 0; i < 6; ++i) CHECK(arena[i] == 0); /* zeroed [0,dmax)     */
+        for (i = 0; i < 6; ++i) CHECK(arena[i] == sentinel); /* [0,dmax) intact */
         for (i = 6; i < 16; ++i) CHECK(arena[i] == sentinel); /* guard intact */
 
         /* retry with the correct bound: succeeds, exact bytes land */
@@ -115,7 +115,7 @@ int main(void) {
         r = cplus_memcpy_s(arena, 6, NULL, 3);
         CHECK(r != 0);
         CHECK(r == ESNULLP);
-        for (i = 0; i < 6; ++i) CHECK(arena[i] == 0);
+        for (i = 0; i < 6; ++i) CHECK(arena[i] == sentinel);
         for (i = 6; i < 12; ++i) CHECK(arena[i] == sentinel);
 
         /* retry with a real source and correct bounds */

@@ -79,7 +79,7 @@ int main(void) {
     /* (5) overlap: memcpy rejected, memmove recovers the same data */
     memcpy(buf, "ABCDEFGH", DMAX);
     CHECK(cplus_memcpy_s(buf, DMAX - 2, buf + 2, DMAX - 2) == ESOVRLP);
-    CHECK(all_eq(buf, 0, DMAX - 2, 0x00));   /* prefix cleared by rejection */
+    CHECK(memcmp(buf, "ABCDEFGH", DMAX - 2) == 0); /* destination left intact on rejection */
     memcpy(buf, "ABCDEFGH", DMAX);
     CHECK(cplus_memmove_s(buf, DMAX - 2, buf + 2, DMAX - 2) == 0);
     CHECK(memcmp(buf, "CDEFGH", DMAX - 2) == 0);
@@ -87,7 +87,7 @@ int main(void) {
     /* (6) one-past rejection then a successful exact copy */
     memset(buf, 0x5A, sizeof buf);
     CHECK(cplus_memcpy_s(buf, DMAX, src, DMAX + 1) == ESNOSPC);
-    CHECK(all_eq(buf, 0, DMAX, 0x00));
+    CHECK(all_eq(buf, 0, DMAX, 0x5A));
     CHECK(cplus_memcpy_s(buf, DMAX, src, DMAX) == 0);
     CHECK(memcmp(buf, src, DMAX) == 0);
     CHECK(buf[DMAX] == 0x5A);

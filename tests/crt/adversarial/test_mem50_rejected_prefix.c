@@ -45,34 +45,34 @@ int main(void) {
     cplus_safe_set_constraint_mode(CPLUS_SAFE_CONSTRAINT_IGNORE);
     for (i = 0; i < TOTAL; i++) src[i] = (unsigned char)(0x80 + i);
 
-    /* (1) memcpy_s NULL src clears exactly [0, DMAX), guard intact */
+    /* (1) memcpy_s NULL src leaves [0, DMAX) and guard intact */
     memset(buf, SENT, sizeof buf);
     CHECK(cplus_memcpy_s(buf, DMAX, NULL, 4) == ESNULLP);
-    CHECK(all_eq(buf, 0, DMAX, 0x00));
+    CHECK(all_eq(buf, 0, DMAX, SENT));
     CHECK(all_eq(buf, DMAX, TOTAL, SENT));
 
-    /* (2) memcpy_s slen > dmax clears exactly [0, DMAX) */
+    /* (2) memcpy_s slen > dmax leaves [0, DMAX) intact */
     memset(buf, SENT, sizeof buf);
     CHECK(cplus_memcpy_s(buf, DMAX, src, DMAX + 1) == ESNOSPC);
-    CHECK(all_eq(buf, 0, DMAX, 0x00));
+    CHECK(all_eq(buf, 0, DMAX, SENT));
     CHECK(all_eq(buf, DMAX, TOTAL, SENT));
 
-    /* (3) memcpy_s overlap clears exactly [0, DMAX) */
+    /* (3) memcpy_s overlap leaves [0, DMAX) intact */
     memset(buf, SENT, sizeof buf);
     memcpy(buf, "ABCDEFGH", DMAX);
     CHECK(cplus_memcpy_s(buf, DMAX, buf + 1, DMAX - 1) == ESOVRLP);
-    CHECK(all_eq(buf, 0, DMAX, 0x00));
+    CHECK(memcmp(buf, "ABCDEFGH", DMAX) == 0);
 
-    /* (4) memmove_s NULL src clears exactly [0, DMAX) */
+    /* (4) memmove_s NULL src leaves [0, DMAX) intact */
     memset(buf, SENT, sizeof buf);
     CHECK(cplus_memmove_s(buf, DMAX, NULL, 1) == ESNULLP);
-    CHECK(all_eq(buf, 0, DMAX, 0x00));
+    CHECK(all_eq(buf, 0, DMAX, SENT));
     CHECK(all_eq(buf, DMAX, TOTAL, SENT));
 
-    /* (5) memmove_s slen > dmax clears exactly [0, DMAX) */
+    /* (5) memmove_s slen > dmax leaves [0, DMAX) intact */
     memset(buf, SENT, sizeof buf);
     CHECK(cplus_memmove_s(buf, DMAX, src, DMAX + 1) == ESNOSPC);
-    CHECK(all_eq(buf, 0, DMAX, 0x00));
+    CHECK(all_eq(buf, 0, DMAX, SENT));
     CHECK(all_eq(buf, DMAX, TOTAL, SENT));
 
     /* (6) memset_s n > dmax does a partial VALUE write, not a zero clear */
@@ -101,10 +101,10 @@ int main(void) {
     CHECK(cplus_memcpy_s(again, DMAX, NULL, 4) == ESNULLP);
     CHECK(memcmp(buf, again, TOTAL) == 0);
 
-    /* (10) a subsequent valid copy overwrites the cleared prefix */
+    /* (10) a subsequent valid copy succeeds after an intact rejection */
     memset(buf, SENT, sizeof buf);
     CHECK(cplus_memcpy_s(buf, DMAX, NULL, 1) == ESNULLP);
-    CHECK(all_eq(buf, 0, DMAX, 0x00));
+    CHECK(all_eq(buf, 0, DMAX, SENT));
     CHECK(cplus_memcpy_s(buf, DMAX, src, DMAX) == 0);
     CHECK(memcmp(buf, src, DMAX) == 0);
     CHECK(buf[DMAX] == SENT);                /* guard still intact */

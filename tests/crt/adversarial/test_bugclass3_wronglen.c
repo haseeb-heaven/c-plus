@@ -43,8 +43,8 @@ int main(void) {
         r = cplus_memcpy_s(dst, sizeof dst, src, sizeof src); /* 3 vs 8 */
         CHECK(r != 0);
         CHECK(r == ESNOSPC);
-        /* rejected copy deterministically zeroes the destination (defined) */
-        CHECK(dst[0] == 0 && dst[1] == 0 && dst[2] == 0);
+        /* rejected copy leaves the destination intact */
+        CHECK(dst[0] == 0xC3 && dst[1] == 0xC3 && dst[2] == 0xC3);
     }
 
     /* --- guard byte just past the small destination is untouched --- */
@@ -86,8 +86,8 @@ int main(void) {
         r = cplus_memcpy_s(dst, sizeof dst, src, sizeof src); /* 12 vs 20 */
         CHECK(r != 0);
         CHECK(r == ESNOSPC);
-        CHECK(((unsigned char *)dst)[0] == 0); /* zeroed, not corrupted */
-        CHECK(((unsigned char *)dst)[sizeof dst - 1] == 0);
+        CHECK(((unsigned char *)dst)[0] == 0x7E); /* intact, not corrupted */
+        CHECK(((unsigned char *)dst)[sizeof dst - 1] == 0x7E);
     }
 
     /* --- typed arrays: equal sizes succeed, contents land intact --- */

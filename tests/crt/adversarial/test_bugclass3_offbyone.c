@@ -40,7 +40,7 @@ int main(void) {
         memset(dst, 0xAA, sizeof dst);
         CHECK(cplus_memcpy_s(dst, 8, src, 9) == ESNOSPC); /* one too many */
         CHECK(dst[8] == 0xAA);            /* guard byte past dmax intact */
-        CHECK(dst[0] == 0 && dst[7] == 0); /* rejected copy zeroes [0,dmax) */
+        CHECK(dst[0] == 0xAA && dst[7] == 0xAA); /* rejected copy leaves [0,dmax) intact */
     }
 
     /* --- cplus_memcpy_s with n == dmax is ok --- */

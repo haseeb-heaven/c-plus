@@ -162,3 +162,10 @@ external_projects/cli_app/cplus/xdump_modern
 external_projects/game_a/cplus/snake_modern
 external_projects/game_b/2048_build
 external_projects/game_b/cplus/2048_modern
+# Generated test-work artifacts (never commit).
+tests/audit_phase3/work/
+tests/c_standards/**/.work/
+tests/c_standards/**/artifacts/
+tests/c_standards/c89/hello89.*
+tests/c_standards/c89/probe.*
+tests/crt/adversarial/out/
