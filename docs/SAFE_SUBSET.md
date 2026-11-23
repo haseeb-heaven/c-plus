@@ -110,3 +110,11 @@ Structured diagnostic categories emitted by the Clang AST checker:
 `CPLUS-SAFE-FFI`, `CPLUS-SAFE-CRT`. Each includes file, line, API reason and
 expected/inferred bounds where known. Logging remains opt-in and does not log
 buffer contents.
+## Array-decay ABI note
+
+The generated C is unchanged; no metadata is passed at runtime and no calling
+convention or ABI changes are required. Array extents are inferred entirely at
+compile time from local declarations and simple pointer-return helpers, then
+used to reject provable out-of-bounds subscripts. STRICT rejects pointer
+subscripts whose extent cannot be established; DEFAULT warns. Legal one-past
+pointer formation remains accepted.

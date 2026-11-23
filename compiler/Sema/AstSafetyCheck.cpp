@@ -269,6 +269,24 @@ public:
       const std::map<std::string, std::map<unsigned, long long>> &m) {
     callParamExtents_ = m;
   }
+  void setReturnedParams(const std::map<std::string, unsigned> &m) {
+    returnedParam_ = m;
+  }
+  const std::map<std::string, unsigned> &returnedParams() const {
+    return returnedParam_;
+  }
+  void setReturnedFixedExtents(const std::map<std::string, long long> &m) {
+    returnedFixedExtent_ = m;
+  }
+  const std::map<std::string, long long> &returnedFixedExtents() const {
+    return returnedFixedExtent_;
+  }
+  const std::map<unsigned, long long> &callReturnExtent() const {
+    return callReturnExtent_;
+  }
+  void setCallReturnExtent(const std::map<unsigned, long long> &m) {
+    callReturnExtent_ = m;
+  }
   const std::set<std::string> &allGlobals() const { return allGlobals_; }
   const std::map<std::string, int> &threadEntryCounts() const {
     return threadEntryCounts_;
@@ -575,6 +593,17 @@ public:
   const HeapAllocState *heapStateOf(const Expr *e) const {
     if (!e)
       return nullptr;
+    const Expr *x = e->IgnoreParenCasts();
+    if (const auto *call = dyn_cast<CallExpr>(x)) {
+      auto it = callReturnExtent_.find(call->getBeginLoc().getRawEncoding());
+      if (it != callReturnExtent_.end()) {
+        // Cached per-expression extent for pointer-returning helpers.
+        static thread_local HeapAllocState cached;
+        cached.bytes = it->second;
+        cached.decl = nullptr;
+        return &cached;
+      }
+    }
     const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenImpCasts());
     if (!ref)
       return nullptr;
@@ -1573,6 +1602,49 @@ public:
         st.decl = pv;
         heapAllocs_[pv->getNameAsString()] = st;
       }
+    // Summarize simple pointer-return helpers: `return p;` for a pointer
+    // parameter, or `return global_array;` for a fixed-size global array.
+    if (!report_ && fd->getBody() && fd->getReturnType()->isPointerType()) {
+      unsigned retParam = 0;
+      bool hasRetParam = false, ambiguous = false;
+      long long fixedExtent = 0;
+      bool hasFixed = false;
+      std::function<void(const Stmt *)> scanRet = [&](const Stmt *n) {
+        if (!n) return;
+        if (const auto *ret = dyn_cast<ReturnStmt>(n))
+          if (const Expr *rv = ret->getRetValue()) {
+            const Expr *v = rv->IgnoreParenCasts();
+            if (const auto *ref = dyn_cast<DeclRefExpr>(v)) {
+              const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+              if (vd && !vd->hasLocalStorage() && vd->getType()->isArrayType())
+                if (const auto *cat = ctx_.getAsConstantArrayType(vd->getType())) {
+                  QualType elem = cat->getElementType();
+                  unsigned es = ctx_.getTypeSize(elem) / 8u;
+                  if (es) {
+                    long long bytes = static_cast<long long>(
+                        cat->getSize().getZExtValue() * es);
+                    if (hasFixed && fixedExtent != bytes) ambiguous = true;
+                    fixedExtent = bytes;
+                    hasFixed = true;
+                  }
+                }
+              const auto *pvd = dyn_cast<ParmVarDecl>(vd);
+              if (pvd && pvd->getType()->isPointerType()) {
+                unsigned idx = pvd->getFunctionScopeIndex();
+                if (hasRetParam && retParam != idx) ambiguous = true;
+                retParam = idx;
+                hasRetParam = true;
+              }
+            }
+          }
+        for (const Stmt *c : n->children()) scanRet(c);
+      };
+      scanRet(fd->getBody());
+      if (!ambiguous) {
+        if (hasRetParam) returnedParam_[fd->getNameAsString()] = retParam;
+        if (hasFixed) returnedFixedExtent_[fd->getNameAsString()] = fixedExtent;
+      }
+    }
     // Infer a tiny arithmetic effect for helpers like `int add(int a,int b)
     // { return a + b; }` so callers with constant arguments can be checked
     // without requiring new annotations or interprocedural machinery.
@@ -2687,6 +2759,25 @@ public:
         if (!an.empty() && sit != stackArrayExtents_.end())
           callParamExtents_[name][i] = sit->second;
       }
+      // Record the extent of a call that returns one of its pointer arguments
+      // or a fixed global array, so chained calls retain bounds metadata.
+      auto rp = returnedParam_.find(name);
+      if (rp != returnedParam_.end() && rp->second < call->getNumArgs()) {
+        const Expr *arg = call->getArg(rp->second)->IgnoreParenCasts();
+        auto hit = heapAllocs_.find(varNameOf(arg));
+        auto sit = stackArrayExtents_.find(varNameOf(arg));
+        auto ait = callReturnExtent_.find(
+            arg->getBeginLoc().getRawEncoding());
+        long long ext = -1;
+        if (hit != heapAllocs_.end()) ext = hit->second.bytes;
+        else if (sit != stackArrayExtents_.end()) ext = sit->second;
+        else if (ait != callReturnExtent_.end()) ext = ait->second;
+        if (ext > 0)
+          callReturnExtent_[call->getBeginLoc().getRawEncoding()] = ext;
+      }
+      auto rf = returnedFixedExtent_.find(name);
+      if (rf != returnedFixedExtent_.end() && rf->second > 0)
+        callReturnExtent_[call->getBeginLoc().getRawEncoding()] = rf->second;
     }
 
     if (name == "signal" && call->getNumArgs() >= 2) {
@@ -3670,6 +3761,12 @@ private:
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, long long>> callParamExtents_;
+  /// Function name -> parameter index returned unchanged by `return p;`.
+  std::map<std::string, unsigned> returnedParam_;
+  /// Function name -> fixed extent returned from a static/global array.
+  std::map<std::string, long long> returnedFixedExtent_;
+  /// Source location (raw encoding) of a call expression -> returned extent.
+  std::map<unsigned, long long> callReturnExtent_;
   std::map<std::string, long long> stackArrayExtents_;
   std::set<std::string> allGlobals_;
   std::map<std::string, int> threadEntryCounts_;
@@ -3787,6 +3884,9 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setMaybeReleasedVars(collect.maybeReleasedVars());
   check.setMaybeReleaseLines(collect.maybeReleaseLines());
   check.setCallParamExtents(collect.callParamExtents());
+  check.setReturnedParams(collect.returnedParams());
+  check.setReturnedFixedExtents(collect.returnedFixedExtents());
+  check.setCallReturnExtent(collect.callReturnExtent());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // Thread-race heuristic: the same entry function passed to more than one
