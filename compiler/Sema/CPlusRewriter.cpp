@@ -1625,88 +1625,237 @@ void clearExternalClasses() {
   externalResources().clear();
 }
 
+namespace {
+
+std::vector<CheckedArithmeticSite> &checkedArithmeticSiteRegistry() {
+  static std::vector<CheckedArithmeticSite> sites;
+  return sites;
+}
+
+} // namespace
+
+void setCheckedArithmeticSites(std::vector<CheckedArithmeticSite> sites) {
+  checkedArithmeticSiteRegistry() = std::move(sites);
+}
+
+const std::vector<CheckedArithmeticSite> &checkedArithmeticSites() {
+  return checkedArithmeticSiteRegistry();
+}
+
+namespace {
+
+/// One text edit applied to the lowered C. `priority` orders nested edits at
+/// the same offset: prefixes outside-in, operator separators, suffixes
+/// inside-out. `span` breaks ties between prefixes/suffixes of nested
+/// expressions; bounds checks use the maximum span so they wrap arithmetic.
+struct SafetyInsertion {
+  size_t offset = 0;
+  size_t span = 0;
+  int priority = 0; // 0 = prefix, 1 = operator separator, 2 = suffix
+  std::string text;
+  size_t replace = 0; // source bytes consumed at `offset`
+};
+
+const char *checkedOpName(CheckedArithmeticSite::Op kind) {
+  switch (kind) {
+  case CheckedArithmeticSite::Op::Add: return "add";
+  case CheckedArithmeticSite::Op::Sub: return "sub";
+  case CheckedArithmeticSite::Op::Mul: return "mul";
+  }
+  return "add";
+}
+
+} // namespace
+
 std::string instrumentDynamicArrayBounds(
     const std::string &source,
     const std::map<std::string, size_t> &arrayLengths) {
-  if (arrayLengths.empty())
+  const std::vector<CheckedArithmeticSite> &arith = checkedArithmeticSites();
+  if (arrayLengths.empty() && arith.empty())
     return source;
-  std::vector<Token> toks = lexCPlus(source);
-  auto significant = [&](size_t i) -> bool {
-    return toks[i].kind != TokKind::Whitespace &&
-           toks[i].kind != TokKind::Comment;
-  };
-  auto nextSig = [&](size_t i) -> size_t {
-    while (i < toks.size() && !significant(i))
-      ++i;
-    return i < toks.size() ? i : kNPos;
-  };
-  struct Insertion {
-    size_t offset;
-    std::string text;
-  };
-  std::vector<Insertion> insertions;
-  for (size_t i = 0; i < toks.size(); ++i) {
-    if (toks[i].kind != TokKind::Identifier)
-      continue;
-    auto ai = arrayLengths.find(toks[i].text);
-    if (ai == arrayLengths.end())
-      continue;
-    size_t open = nextSig(i + 1);
-    if (open == kNPos || toks[open].text != "[")
-      continue;
-    int depth = 0;
-    size_t close = kNPos;
-    for (size_t k = open; k < toks.size(); ++k) {
-      if (toks[k].kind == TokKind::Punct) {
-        if (toks[k].text == "[") ++depth;
-        else if (toks[k].text == "]") {
-          if (--depth == 0) { close = k; break; }
+
+  std::vector<SafetyInsertion> insertions;
+  bool haveBounds = false;
+
+  if (!arrayLengths.empty()) {
+    std::vector<Token> toks = lexCPlus(source);
+    auto significant = [&](size_t i) -> bool {
+      return toks[i].kind != TokKind::Whitespace &&
+             toks[i].kind != TokKind::Comment;
+    };
+    auto nextSig = [&](size_t i) -> size_t {
+      while (i < toks.size() && !significant(i))
+        ++i;
+      return i < toks.size() ? i : kNPos;
+    };
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind != TokKind::Identifier)
+        continue;
+      auto ai = arrayLengths.find(toks[i].text);
+      if (ai == arrayLengths.end())
+        continue;
+      size_t open = nextSig(i + 1);
+      if (open == kNPos || toks[open].text != "[")
+        continue;
+      int depth = 0;
+      size_t close = kNPos;
+      for (size_t k = open; k < toks.size(); ++k) {
+        if (toks[k].kind == TokKind::Punct) {
+          if (toks[k].text == "[") ++depth;
+          else if (toks[k].text == "]") {
+            if (--depth == 0) { close = k; break; }
+          }
         }
       }
+      if (close == kNPos)
+        continue;
+      size_t first = nextSig(open + 1);
+      if (first >= close)
+        continue; // empty subscript: declaration, not an access
+      // Constant indices are diagnosed statically; no runtime check needed.
+      size_t last = close;
+      do { --last; } while (last > first && !significant(last));
+      size_t sigCount = 0;
+      bool onlyNumber = true;
+      for (size_t k = first; k <= last; ++k) {
+        if (!significant(k)) continue;
+        ++sigCount;
+        if (toks[k].kind != TokKind::Number) onlyNumber = false;
+      }
+      if (sigCount == 1 && onlyNumber)
+        continue;
+      size_t idxBegin = toks[first].offset;
+      size_t outer = kNPos;
+      haveBounds = true;
+      insertions.push_back({idxBegin, outer, 0,
+                            "__cplus_bounds_check((size_t)(", 0});
+      insertions.push_back({toks[close].offset, outer, 2,
+                            "), " + std::to_string(ai->second) + ", \"" +
+                                toks[i].text + "\")", 0});
     }
-    if (close == kNPos)
-      continue;
-    size_t first = nextSig(open + 1);
-    if (first >= close)
-      continue; // empty subscript: declaration, not an access
-    // Constant indices are diagnosed statically; no runtime check needed.
-    size_t last = close;
-    do { --last; } while (last > first && !significant(last));
-    size_t sigCount = 0;
-    bool onlyNumber = true;
-    for (size_t k = first; k <= last; ++k) {
-      if (!significant(k)) continue;
-      ++sigCount;
-      if (toks[k].kind != TokKind::Number) onlyNumber = false;
-    }
-    if (sigCount == 1 && onlyNumber)
-      continue;
-    size_t idxBegin = toks[first].offset;
-    std::string indexText =
-        source.substr(idxBegin, toks[last].offset + toks[last].text.size() -
-                                     idxBegin);
-    (void)indexText;
-    insertions.push_back({idxBegin,
-                          "__cplus_bounds_check((size_t)("});
-    insertions.push_back({toks[close].offset,
-                          "), " + std::to_string(ai->second) + ", \"" +
-                              toks[i].text + "\")"});
+  }
+
+  for (const CheckedArithmeticSite &site : arith) {
+    const std::string fn =
+        std::string("__cplus_inline_") + checkedOpName(site.kind) + "_i64";
+    size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    // ((T)helper((int64_t)(lhs), (int64_t)(rhs), bits))
+    insertions.push_back({site.begin, span, 0,
+                          "((" + site.type + ")" + fn + "((int64_t)(", 0});
+    insertions.push_back({site.op, span, 1, "), (int64_t)(", site.opLength});
+    insertions.push_back({site.end, span, 2,
+                          "), " + std::to_string(site.bits) + "))", 0});
   }
   if (insertions.empty())
     return source;
-  std::string out = source;
+
   std::stable_sort(insertions.begin(), insertions.end(),
-                   [](const Insertion &a, const Insertion &b) {
-                     return a.offset > b.offset;
+                   [](const SafetyInsertion &a, const SafetyInsertion &b) {
+                     if (a.offset != b.offset)
+                       return a.offset < b.offset;
+                     if (a.priority != b.priority)
+                       return a.priority < b.priority;
+                     if (a.priority == 0)
+                       return a.span > b.span; // outer prefix first
+                     if (a.priority == 2)
+                       return a.span < b.span; // inner suffix first
+                     return false;
                    });
-  for (const auto &ins : insertions)
-    out.insert(ins.offset, ins.text);
-  // Put the helper declaration before the first #line directive so the
+
+  std::string out;
+  out.reserve(source.size() + 64 * insertions.size());
+  size_t pos = 0, next = 0;
+  while (pos < source.size() || next < insertions.size()) {
+    while (next < insertions.size() && insertions[next].offset == pos) {
+      out += insertions[next].text;
+      pos += insertions[next].replace;
+      ++next;
+    }
+    if (pos >= source.size())
+      break;
+    out += source[pos];
+    ++pos;
+  }
+
+  // Emit the helper declarations before the first #line directive so the
   // original source line numbers are preserved.
-  out = "#include <stddef.h>\n"
-        "extern size_t __cplus_bounds_check(size_t, size_t, const char *);\n" +
-        out;
-  return out;
+  std::string prelude;
+  if (haveBounds)
+    prelude += "#include <stddef.h>\n"
+               "extern size_t __cplus_bounds_check(size_t, size_t, "
+               "const char *);\n";
+  if (!arith.empty()) {
+    // The runtime helpers produce the deterministic trap, but an ordinary
+    // cross-TU call on every arithmetic operation is far too expensive in hot
+    // loops.  When the backend has overflow builtins, emit inline wrappers:
+    // the overflow check folds into the surrounding code and only the trap
+    // path calls the runtime helper.  Falls back to the plain runtime call.
+    prelude +=
+        "#include <stdint.h>\n"
+        "extern int64_t __cplus_checked_add_i64(int64_t, int64_t, unsigned);\n"
+        "extern int64_t __cplus_checked_sub_i64(int64_t, int64_t, unsigned);\n"
+        "extern int64_t __cplus_checked_mul_i64(int64_t, int64_t, unsigned);\n"
+        "#if defined(__has_builtin)\n"
+        "#  if __has_builtin(__builtin_add_overflow) && "
+        "__has_builtin(__builtin_sub_overflow) && "
+        "__has_builtin(__builtin_mul_overflow)\n"
+        "#    define CPLUS_HAVE_INLINE_ARITH 1\n"
+        "#  endif\n"
+        "#endif\n"
+        "#ifdef CPLUS_HAVE_INLINE_ARITH\n"
+        "#define CPLUS_ARITH_INLINE __attribute__((unused)) static inline\n"
+        "CPLUS_ARITH_INLINE int64_t __cplus_inline_add_i64(int64_t a, "
+        "int64_t b, unsigned bits) {\n"
+        "  int64_t r; int32_t r32;\n"
+        "  if (bits == 32) {\n"
+        "    if (__builtin_add_overflow((int32_t)a, (int32_t)b, &r32))\n"
+        "      return __cplus_checked_add_i64(a, b, bits);\n"
+        "    return (int64_t)r32;\n"
+        "  }\n"
+        "  if (bits == 64) {\n"
+        "    if (__builtin_add_overflow(a, b, &r))\n"
+        "      return __cplus_checked_add_i64(a, b, bits);\n"
+        "    return r;\n"
+        "  }\n"
+        "  return __cplus_checked_add_i64(a, b, bits);\n"
+        "}\n"
+        "CPLUS_ARITH_INLINE int64_t __cplus_inline_sub_i64(int64_t a, "
+        "int64_t b, unsigned bits) {\n"
+        "  int64_t r; int32_t r32;\n"
+        "  if (bits == 32) {\n"
+        "    if (__builtin_sub_overflow((int32_t)a, (int32_t)b, &r32))\n"
+        "      return __cplus_checked_sub_i64(a, b, bits);\n"
+        "    return (int64_t)r32;\n"
+        "  }\n"
+        "  if (bits == 64) {\n"
+        "    if (__builtin_sub_overflow(a, b, &r))\n"
+        "      return __cplus_checked_sub_i64(a, b, bits);\n"
+        "    return r;\n"
+        "  }\n"
+        "  return __cplus_checked_sub_i64(a, b, bits);\n"
+        "}\n"
+        "CPLUS_ARITH_INLINE int64_t __cplus_inline_mul_i64(int64_t a, "
+        "int64_t b, unsigned bits) {\n"
+        "  int64_t r; int32_t r32;\n"
+        "  if (bits == 32) {\n"
+        "    if (__builtin_mul_overflow((int32_t)a, (int32_t)b, &r32))\n"
+        "      return __cplus_checked_mul_i64(a, b, bits);\n"
+        "    return (int64_t)r32;\n"
+        "  }\n"
+        "  if (bits == 64) {\n"
+        "    if (__builtin_mul_overflow(a, b, &r))\n"
+        "      return __cplus_checked_mul_i64(a, b, bits);\n"
+        "    return r;\n"
+        "  }\n"
+        "  return __cplus_checked_mul_i64(a, b, bits);\n"
+        "}\n"
+        "#else\n"
+        "#define __cplus_inline_add_i64 __cplus_checked_add_i64\n"
+        "#define __cplus_inline_sub_i64 __cplus_checked_sub_i64\n"
+        "#define __cplus_inline_mul_i64 __cplus_checked_mul_i64\n"
+        "#endif\n";
+  }
+  return prelude + out;
 }
 
 } // namespace cplus

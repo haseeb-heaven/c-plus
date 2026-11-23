@@ -106,6 +106,45 @@ void cplus_check_nonnull(const void *ptr, const char *file, int line,
                     line, buf);
 }
 
+/* -------------------------------------------------------------------------
+ * Native checked signed arithmetic
+ *
+ * The exact mathematical result is computed in 128 bits, so the check itself
+ * never overflows.  We compare against the width of the source expression,
+ * not int64_t: `int a = INT_MAX; a + 1` must trap even though it fits in 64
+ * bits.  This is independent of UBSan and is emitted only for expressions the
+ * compiler cannot fold to a constant.
+ * ------------------------------------------------------------------------- */
+static int64_t cplus_checked_result(__int128 r, unsigned bits,
+                                    const char *operation) {
+  if (bits == 0 || bits > 64)
+    return (int64_t)r; /* no supported narrowing check; keep value semantics */
+  __int128 lo = -((__int128)1 << (bits - 1));
+  __int128 hi = ((__int128)1 << (bits - 1)) - 1;
+  if (r < lo || r > hi) {
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+             "%s result does not fit in a %u-bit signed integer", operation,
+             bits);
+    cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "signed integer overflow", NULL, 0,
+                      buf);
+  }
+  return (int64_t)r;
+}
+
+int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits) {
+  return cplus_checked_result((__int128)a + (__int128)b, bits, "addition");
+}
+
+int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits) {
+  return cplus_checked_result((__int128)a - (__int128)b, bits, "subtraction");
+}
+
+int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits) {
+  return cplus_checked_result((__int128)a * (__int128)b, bits,
+                              "multiplication");
+}
+
 void cplus_resource_check_borrow(const void *self, const char *file, int line,
                                  const char *expr) {
   if (self != NULL)

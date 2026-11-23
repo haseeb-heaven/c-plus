@@ -22,6 +22,28 @@ tests/known_gaps/README.md, and docs/RUST_COMPARISON.md.
 - `if (d != 0)` style guards are not yet recognized (bare `if(d)` is).
 - Division by runtime unknown is rejected in STRICT (fail-closed).
 
+## Integration findings (2026-11-23)
+
+- **Verified race diagnostic false positive**: `tests/core/positive/thread_guard_ok.cp`
+  emits `[CPLUS-FFI] multiple threads mutate shared global 'shared' without
+  synchronization` although `Guard_lock` protects the write. The token layer
+  suppresses it (substring `lock`/`guard`), the AST layer does not. Fix:
+  recognize same-TU lock helper functions by body, not callee name.
+- **Raw UAF escapes**: 4 of 12 evidence cases (callee parameter, `void*` cast,
+  helper-returned alias, runtime array index) pass `c+ check --strict` and are
+  detected only by opt-in ASan. See `tests/metrics/uaf_evidence_run.py`.
+- **Element lifetimes**: constant-index field/array lvalues are already
+  tracked, but runtime-indexed elements, scope-sensitive escape and
+  indirect-call ownership are not; a sound minimal rule closes none of the
+  25 `bugs51_97` gaps as written.
+- **Cross-TU ownership**: unsupported by construction — one
+  `buildASTFromCodeWithArgs` buffer per TU, per-TU diagnostics discarded. A
+  manifest design exists but is not implemented.
+- **Pre-existing robustness defect**: Safe-mode `c+ check` hangs on an
+  unbalanced brace (reproduced with the older baseline compiler). Legacy mode
+  rejects it. Root cause is in the token checker's bracket matching, not the
+  new arithmetic instrumentation.
+
 ## Test-infrastructure gaps
 - 11 top-level safety fixtures + 100 subdirectory sources are not asserted by
   an active runner (see test_inventory.md).

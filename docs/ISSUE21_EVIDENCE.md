@@ -53,12 +53,16 @@ bug detection 80/107 DEFAULT (74.8%) and 97/107 STRICT (90.7%).
    claim.
 5. **CI:** `.github/workflows/compiler.yml` now runs on PR #16.
    **Linux x86-64 job: PASS** (build, CTest, core safety suite) at commit
-   `b18cfbc`. The macOS arm64 job is cancelled by the runner with zero steps
-   executed (no macOS capacity available for this repository), so macOS CI
-   green is **not claimed** — local macOS arm64 verification is green instead.
-   SonarCloud Quality Gate still fails (27% duplication on new code,
-   reliability/security E) and GitGuardian passes. PR overall remains
-   UNSTABLE because of SonarCloud and the cancelled macOS job.
+   `b18cfbc`. The macOS arm64 job was cancelled with zero steps executed because
+   the `macos-14` runner label was **retired by GitHub on 2026-11-02** (the
+   earlier "no macOS capacity for this repository" explanation was inaccurate).
+   The workflow now uses the supported `macos-15` arm64 label and a concurrency
+   group that collapses duplicate push + pull_request runs. macOS CI green is
+   **not claimed** until a run on the new label is actually observed; local
+   macOS arm64 verification remains green. SonarCloud Quality Gate still fails
+   (27% duplication on new code, reliability/security E) and GitGuardian passes.
+   PR overall remains UNSTABLE because of SonarCloud and the previously
+   cancelled macOS job.
 6. **Docs:** `docs/SAFE_SUBSET.md` updated for C+ inserted bounds checks,
    configurable sanitizers, the new setjmp/goto policy and the fail-closed
    status; `docs/RUST_COMPARISON.md` records the paired C+/Rust evidence.

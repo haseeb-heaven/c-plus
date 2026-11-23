@@ -81,7 +81,8 @@ typedef enum {
   CPLUS_EXIT_OWNERSHIP = 106,
   CPLUS_EXIT_RESOURCE = 107,
   CPLUS_EXIT_UNSUPPORTED = 108,
-  CPLUS_EXIT_IO = 109
+  CPLUS_EXIT_IO = 109,
+  CPLUS_EXIT_ARITHMETIC = 110
 } cplus_exit_code;
 
 void cplus_fatal(cplus_exit_code code, const char *kind, const char *file,
@@ -97,6 +98,19 @@ void cplus_check_bounds(const void *base, size_t count, size_t index,
 /* Emitted by the compiler for every checked pointer dereference. */
 void cplus_check_nonnull(const void *ptr, const char *file, int line,
                          const char *expr);
+
+/* -------------------------------------------------------------------------
+ * Native checked signed arithmetic (not UBSan)
+ *
+ * Inserted by the compiler for signed +, - and * whose operands are runtime
+ * values and cannot be folded. `bits` is the width of the *source expression*
+ * type (32 for `int`, 64 for `long long`), so e.g. `int` overflow is caught
+ * before it can wrap even though the arguments arrive as int64_t. Unsigned
+ * arithmetic is never instrumented: it is defined to wrap in C.
+ * ------------------------------------------------------------------------- */
+int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits);
+int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits);
+int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits);
 
 /* -------------------------------------------------------------------------
  * Managed memory (ordinary heap objects)

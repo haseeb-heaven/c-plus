@@ -2,6 +2,7 @@
 
 #include "Diagnostics.h"
 #include "Analysis/OwnershipAnalysis.h"
+#include "Sema/SemaCPlus.h"
 
 #include <llvm/ADT/StringRef.h>
 
@@ -10,9 +11,11 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/ParentMapContext.h>
+#include <clang/AST/PrettyPrinter.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Frontend/PCHContainerOperations.h>
+#include <clang/Lex/Lexer.h>
 
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Tooling/Tooling.h>
@@ -219,6 +222,10 @@ public:
     return arithEffects_;
   }
   void setStrict(bool strict) { strict_ = strict; }
+  void setRecordArithmeticSites(bool v) { recordArithmeticSites_ = v; }
+  std::vector<CheckedArithmeticSite> takeArithmeticSites() {
+    return std::move(arithmeticSites_);
+  }
   const std::map<std::string, std::set<std::string>> &fieldAliases() const {
     return fieldAliases_;
   }
@@ -480,6 +487,71 @@ public:
     }
     overflow = r < lo || r > hi;
     return true;
+  }
+
+  /// Record a runtime-value signed add/sub/mul so the source instrumenter can
+  /// wrap it in a native (non-UBSan) checked call.  Fully constant expressions
+  /// are handled by the static check above and must be left untouched.
+  void maybeRecordCheckedArithmetic(const BinaryOperator *op) {
+    if (!recordArithmeticSites_ || !op ||
+        isHeaderLocation(op->getBeginLoc()))
+      return;
+    CheckedArithmeticSite::Op kind;
+    switch (op->getOpcode()) {
+    case BO_Add: kind = CheckedArithmeticSite::Op::Add; break;
+    case BO_Sub: kind = CheckedArithmeticSite::Op::Sub; break;
+    case BO_Mul: kind = CheckedArithmeticSite::Op::Mul; break;
+    default: return;
+    }
+    QualType ty = op->getType();
+    if (!ty->isSignedIntegerType() || ty->isDependentType())
+      return;
+    // Pointer subtraction also has a signed integer (ptrdiff_t) result, but
+    // its operands are pointers: rewriting it as integer subtraction of the
+    // raw addresses would silently change one-past/offset semantics.
+    if (!op->getLHS()->getType()->isIntegerType() ||
+        !op->getRHS()->getType()->isIntegerType())
+      return;
+    unsigned bits = ctx_.getIntWidth(ty);
+    if (bits == 0 || bits > 64)
+      return; // __int128 and wider: no int64_t helper, leave unchanged
+    llvm::APSInt unused;
+    if (knownConst(op->getLHS(), unused) && knownConst(op->getRHS(), unused))
+      return; // compile-time expression: the static check already covered it
+
+    SourceManager &sm = ctx_.getSourceManager();
+    SourceLocation b = op->getBeginLoc(), o = op->getOperatorLoc(),
+                   e = op->getEndLoc();
+    // Macro-generated arithmetic cannot be rewritten safely at the macro
+    // expansion point; the backend sanitizer (when enabled) still covers it.
+    if (b.isInvalid() || o.isInvalid() || e.isInvalid() || b.isMacroID() ||
+        o.isMacroID() || e.isMacroID())
+      return;
+    FileID main = sm.getMainFileID();
+    if (sm.getFileID(b) != main || sm.getFileID(o) != main ||
+        sm.getFileID(e) != main)
+      return;
+    SourceLocation afterOp =
+        Lexer::getLocForEndOfToken(o, 0, sm, ctx_.getLangOpts());
+    SourceLocation afterEnd =
+        Lexer::getLocForEndOfToken(e, 0, sm, ctx_.getLangOpts());
+    if (afterOp.isInvalid() || afterEnd.isInvalid())
+      return;
+    size_t begin = sm.getFileOffset(b), opOff = sm.getFileOffset(o);
+    size_t end = sm.getFileOffset(afterEnd);
+    size_t opLen = sm.getFileOffset(afterOp) - opOff;
+    if (begin >= opOff || opOff + opLen > end)
+      return;
+    PrintingPolicy pp(ctx_.getLangOpts());
+    CheckedArithmeticSite site;
+    site.kind = kind;
+    site.begin = begin;
+    site.op = opOff;
+    site.opLength = opLen;
+    site.end = end;
+    site.bits = bits;
+    site.type = ty.getCanonicalType().getAsString(pp);
+    arithmeticSites_.push_back(std::move(site));
   }
 
   /// A divisor is provably non-zero when it is a known constant, a variable
@@ -2063,6 +2135,8 @@ public:
             else warnAt(op->getBeginLoc(), msg);
           }
         }
+        // Runtime operands cannot be folded: queue a native checked call.
+        maybeRecordCheckedArithmetic(op);
       }
       // Shift counts must be in [0, promoted-left-width). Volatile-backed
       // constants are tracked like other local constants by knownConst.
@@ -3731,6 +3805,8 @@ private:
   std::string filename_;
   bool report_;
   bool strict_ = false;
+  bool recordArithmeticSites_ = false;
+  std::vector<CheckedArithmeticSite> arithmeticSites_;
   std::set<unsigned> handledReallocs_;
   std::map<std::string, SourceLocation> allocLocs_;
   std::map<std::string, SourceLocation> aliasLocs_;
@@ -3798,9 +3874,30 @@ public:
 
 } // namespace
 
+namespace {
+/// True when the backend already sanitises signed integer overflow.  Native
+/// checks are only queued when it does not (notably --sanitize=none), so the
+/// two mechanisms never duplicate work.
+bool backendSanitizesSignedOverflow(const std::vector<std::string> &args) {
+  for (const auto &a : args) {
+    if (a.rfind("-fsanitize=", 0) != 0)
+      continue;
+    if (a.find("undefined") != std::string::npos ||
+        a.find("signed-integer-overflow") != std::string::npos)
+      return true;
+  }
+  return false;
+}
+} // namespace
+
 void checkAstSafety(const std::string &loweredC, const std::string &filename,
                     const std::vector<std::string> &backendArgs,
                     DiagnosticEngine &diags, bool strict) {
+  // A prior TU must not leak its sites into this one.
+  setCheckedArithmeticSites({});
+  bool needNativeArithmetic =
+      !backendSanitizesSignedOverflow(backendArgs);
+
   // Keep only parse-relevant flags; sanitizer and warning-as-error flags can
   // make the in-memory AST parse fail for unrelated reasons.
   std::vector<std::string> args;
@@ -3870,6 +3967,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
 
   SafetyVisitor check(ast->getASTContext(), diags, filename, true);
   check.setStrict(strict);
+  check.setRecordArithmeticSites(needNativeArithmetic);
   check.setHandlers(collect.handlers());
   check.setGlobals(collect.nonVolatileGlobals());
   check.setDestructors(collect.destructors());
@@ -3888,6 +3986,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setReturnedFixedExtents(collect.returnedFixedExtents());
   check.setCallReturnExtent(collect.callReturnExtent());
   check.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
+  if (needNativeArithmetic)
+    setCheckedArithmeticSites(check.takeArithmeticSites());
 
   // Thread-race heuristic: the same entry function passed to more than one
   // pthread_create that writes a global has unsynchronised shared mutable

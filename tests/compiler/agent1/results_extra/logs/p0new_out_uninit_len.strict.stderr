@@ -1,0 +1,3 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_out_uninit_len.c:14:21: error: [CPLUS-LIFETIME] variable 'n' is uninitialized (read before it is initialized)
+      int taken = buf[n];
+                      ^

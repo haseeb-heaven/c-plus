@@ -31,6 +31,7 @@
 #include "Diagnostics.h"
 #include "LangFeatures.h"
 
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
@@ -67,6 +68,26 @@ struct RewrittenSource {
 std::string instrumentDynamicArrayBounds(
     const std::string &source,
     const std::map<std::string, size_t> &arrayLengths);
+
+/// One signed add/sub/mul expression whose operands are not compile-time
+/// constants and therefore needs a native checked-arithmetic call.  Offsets
+/// are byte offsets into the lowered C buffer that checkAstSafety analysed.
+struct CheckedArithmeticSite {
+  enum class Op : unsigned char { Add, Sub, Mul };
+  size_t begin = 0;  ///< offset of the expression's first token
+  size_t op = 0;     ///< offset of the operator token
+  size_t end = 0;    ///< offset one past the expression's last token
+  size_t opLength = 1;
+  Op kind = Op::Add;
+  std::string type;  ///< canonical C spelling of the result type
+  unsigned bits = 0; ///< width of the result type (1..64)
+};
+
+/// Hand the sites found by checkAstSafety() to the source instrumenter.  The
+/// driver calls checkAstSafety() before instrumentDynamicArrayBounds() for
+/// every translation unit, so the registry is replaced for each TU.
+void setCheckedArithmeticSites(std::vector<CheckedArithmeticSite> sites);
+const std::vector<CheckedArithmeticSite> &checkedArithmeticSites();
 
 RewrittenSource rewriteCPlusSyntax(const std::string &source,
                                    DiagnosticEngine &diags,

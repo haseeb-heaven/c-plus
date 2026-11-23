@@ -1,0 +1,49 @@
+C+ runtime performance re-baseline (Agent 1 safety checks)
+compiler: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+version:  C+ 0.1.0
+date:     2026-11-23T04:02:14Z
+host:     Darwin 27.2.0 arm64
+method:   /usr/bin/time -l; best (min real) of 3 timed runs after 1 warm-up
+configs:  safe_release     = c+ build <src> --release --sanitize=none
+          safe_debug       = c+ build <src> --debug --sanitize=none
+          legacy_c_release = c+ build <src> --legacy-c --release
+regression = safe_release real > 2.0x legacy_c_release real
+
+PROGRAM     CONFIG            REAL_S   USER_S   SYS_S    RSS_BYTES   RC   
+----------------------------------------------------------------------
+array       safe_release      0.03     0.03     0.00     1638400     0    
+array       safe_debug        0.73     0.70     0.00     1654784     0    
+array       legacy_c_release  0.05     0.04     0.00     1638400     0    
+array       RATIOS            sr/lr=0.600  sd/sr=24.333  regressed_2x=False
+
+pointer     safe_release      0.03     0.02     0.00     1654784     0    
+pointer     safe_debug        0.58     0.58     0.00     1654784     0    
+pointer     legacy_c_release  0.04     0.03     0.00     1638400     0    
+pointer     RATIOS            sr/lr=0.750  sd/sr=19.333  regressed_2x=False
+
+arith       safe_release      0.20     0.20     0.00     1638400     0    
+arith       safe_debug        0.62     0.62     0.00     1638400     0    
+arith       legacy_c_release  0.20     0.20     0.00     1622016     0    
+arith       RATIOS            sr/lr=1.000  sd/sr=3.100  regressed_2x=False
+
+nested      safe_release      0.16     0.16     0.00     1638400     0    
+nested      safe_debug        2.94     2.90     0.00     1638400     0    
+nested      legacy_c_release  0.17     0.17     0.00     1638400     0    
+nested      RATIOS            sr/lr=0.941  sd/sr=18.375  regressed_2x=False
+
+alloc       safe_release      0.09     0.08     0.00     1654784     0    
+alloc       safe_debug        1.77     1.75     0.00     1671168     0    
+alloc       legacy_c_release  0.07     0.07     0.00     1671168     0    
+alloc       RATIOS            sr/lr=1.286  sd/sr=19.667  regressed_2x=False
+
+ASSERTIONS
+  all timed runs exit 0 ............... yes
+  release stdout == debug stdout ...... yes
+  release stdout == legacy stdout ..... yes
+REGRESSION VERDICT (safe_release vs legacy_c_release, threshold 2.0x)
+  array       sr/lr = 0.600x  ok
+  pointer     sr/lr = 0.750x  ok
+  arith       sr/lr = 1.000x  ok
+  nested      sr/lr = 0.941x  ok
+  alloc       sr/lr = 1.286x  ok
+  any config regressed >2x: False

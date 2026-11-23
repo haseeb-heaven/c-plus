@@ -6,9 +6,18 @@ on:
   pull_request:
     branches: [develop]
 
+# Collapse the duplicate push + pull_request runs that fire when a branch with
+# an open PR is pushed (e.g. agent/core-safety / PR #16). head_ref is set for
+# pull_request and ref_name for push, so both resolve to the same branch name.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   macos-arm64-cplus:
-    runs-on: macos-14
+    # GitHub retired the macos-14 runner label on 2026-11-02; macos-15 is the
+    # supported arm64 label. The old label caused jobs to cancel with 0 steps.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

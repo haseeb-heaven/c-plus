@@ -41,9 +41,13 @@ evidence. No claim of absence of untested bugs is made.
 it belongs to Agent 2's `libc/**`/safeclib integration and their `libc-crt`
 workflow, which I must not modify. The compiler workflow
 `.github/workflows/compiler.yml` was rerun repeatedly: **Linux x86-64 now
-passes** (build, CTest, core suite). macOS arm64 jobs are cancelled by the
-runner with zero steps executed, so macOS CI green is not claimed; local macOS
-verification is green. SonarCloud remains the blocking remote check.
+passes** (build, CTest, core suite). macOS arm64 jobs were cancelled with zero
+steps executed because the `macos-14` runner label was **retired by GitHub on
+2026-11-02** (the earlier "no macOS capacity" explanation was inaccurate). The
+workflow now uses the supported `macos-15` arm64 label, plus a concurrency group
+that collapses duplicate push + pull_request runs. macOS CI green is **not
+claimed** until a run on the new label is observed; local macOS verification is
+green. SonarCloud remains the blocking remote check.
 
 ## 6. Code quality
 
