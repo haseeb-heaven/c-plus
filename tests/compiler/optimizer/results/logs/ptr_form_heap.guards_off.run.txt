@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/ptr_form_heap.guards_off.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+ph=4
+
+--- stderr ---
+

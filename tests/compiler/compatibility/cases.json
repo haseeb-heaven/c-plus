@@ -1,0 +1,155 @@
+{
+  "suite": "native C compatibility (LEGACY C mode)",
+  "standard": "gnu89",
+  "standard_rationale": "Driver.cpp::backendArgs uses -std=gnu89 for Mode::LegacyC and -std=gnu17 only for Safe mode. Only gnu89 is in scope here. Designated initializers, compound literals, flexible array members and __restrict are GNU extensions accepted by clang's gnu89 mode; __STDC__ is 1.",
+  "invocation": "<CPLUS_BIN> run --legacy-c <fixture>",
+  "cases": [
+    {
+      "id": "integer_promotions",
+      "feature": "integer promotions",
+      "file": "fixtures/integer_promotions.c",
+      "expected_stdout": "-1 200 -2 65535\n1 1 40000\n-201\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "signed_unsigned",
+      "feature": "signed/unsigned conversions",
+      "file": "fixtures/signed_unsigned.c",
+      "expected_stdout": "1\n0 1\n1\n0\n1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "pointer_conversions",
+      "feature": "pointer conversions",
+      "file": "fixtures/pointer_conversions.c",
+      "expected_stdout": "7 1\n1\n1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "array_pointer_expressions",
+      "feature": "array/pointer expressions",
+      "file": "fixtures/array_pointer_expressions.c",
+      "expected_stdout": "5 1\n30 30 30\n1 1\n5 20\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "function_pointers",
+      "feature": "function pointers",
+      "file": "fixtures/function_pointers.c",
+      "expected_stdout": "7 5\n3 -1\n1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "variadic_functions",
+      "feature": "variadic functions",
+      "file": "fixtures/variadic_functions.c",
+      "expected_stdout": "6 0\n10,20,30,40\nhi\n3\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "struct_union_layout",
+      "feature": "struct/union layout (sizeof/offsetof)",
+      "file": "fixtures/struct_union_layout.c",
+      "expected_stdout": "12 4 8\n8 1 4\n1 1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "bitfields",
+      "feature": "bitfields",
+      "file": "fixtures/bitfields.c",
+      "expected_stdout": "5 10 1\n4\n1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "enums",
+      "feature": "enums",
+      "file": "fixtures/enums.c",
+      "expected_stdout": "0 5 6 -2\n6 1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "designated_initializers",
+      "feature": "designated initializers",
+      "file": "fixtures/designated_initializers.c",
+      "expected_stdout": "10 0 30\n0 11 0 0 44 0\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "compound_literals",
+      "feature": "compound literals",
+      "file": "fixtures/compound_literals.c",
+      "expected_stdout": "3 4\n7 8 9\n25\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "flexible_array_members",
+      "feature": "flexible array members",
+      "file": "fixtures/flexible_array_members.c",
+      "expected_stdout": "5 hello\n1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "cv_qualifiers",
+      "feature": "const/volatile/restrict",
+      "file": "fixtures/cv_qualifiers.c",
+      "expected_stdout": "12 10\n1 1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "function_declarations",
+      "feature": "function declarations",
+      "file": "fixtures/function_declarations.c",
+      "expected_stdout": "42 6\n42\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "preprocessor_macros",
+      "feature": "preprocessor macros",
+      "file": "fixtures/preprocessor_macros.c",
+      "expected_stdout": "4 25 3\nhello N\n12\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "conditional_compilation",
+      "feature": "conditional compilation",
+      "file": "fixtures/conditional_compilation.c",
+      "expected_stdout": "A mid ok\nstdc=1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "typedef",
+      "feature": "typedef",
+      "file": "fixtures/typedef.c",
+      "expected_stdout": "1 2 17\n1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "nested_declarations",
+      "feature": "nested declarations",
+      "file": "fixtures/nested_declarations.c",
+      "expected_stdout": "7 8 9 10\n100\n1\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "complex_expressions",
+      "feature": "complex expressions",
+      "file": "fixtures/complex_expressions.c",
+      "expected_stdout": "11 16 5\n2 8 13\n1 1\n2\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "libc_calls",
+      "feature": "libc calls",
+      "file": "fixtures/libc_calls.c",
+      "expected_stdout": "5 Hello,World 11\n1 1\n12-34\n130\n",
+      "expected_exit": 0
+    },
+    {
+      "id": "exit_status",
+      "feature": "harness validation: non-zero exit code",
+      "file": "fixtures/exit_status.c",
+      "expected_stdout": "before exit\n",
+      "expected_exit": 42
+    }
+  ]
+}

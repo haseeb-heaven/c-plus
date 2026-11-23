@@ -40,3 +40,9 @@ __pycache__/
 
 # Transient perf-runner work directories (binaries/timing logs)
 tests/compiler/agent1/results_perf/work*/
+
+# Generated differential/optimizer binaries
+tests/compiler/optimizer/results/bin/
+tests/compiler/fuzz/results/failures/
+tests/compiler/differential/results/mismatches/*/*.bin
+tests/compiler/differential/probe/cases/*.bin

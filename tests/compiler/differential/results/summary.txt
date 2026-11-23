@@ -1,0 +1,62 @@
+C+ reference-compiler differential harness
+====================================================================
+binary       : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+c+ version   : ['C+ 0.1.0', 'Language: C+ (C with memory safety, deterministic RAII, lightweight classes)', 'Backend: host Clang/LLVM']
+c+ flags     : build --legacy-c --sanitize=none
+platform     : Darwin/arm64
+SDK          : /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+generated    : 2026-11-23T12:57:53
+corpus       : 25 fixtures, master seed 4850460728029430833
+compiles     : -std=c11 -O0 -isysroot <SDK>
+timeouts     : 120s build, 20s run
+workers      : 4
+
+REFERENCE COMPILERS
+--------------------------------------------------------------------
+  clang            Homebrew clang version 23.1.6
+      command : clang
+      path    : /opt/homebrew/Cellar/llvm/23.1.6/bin/clang-23
+      family  : clang
+      probe   : OK
+  apple_clang      Apple clang version 16.0.0 (clang-1600.0.26.6)
+      command : gcc
+      path    : /usr/bin/gcc
+      family  : apple_clang
+      probe   : OK
+  gcc              gcc-14 (Homebrew GCC 14.2.0_1) 14.2.0
+      command : gcc-14
+      path    : /opt/homebrew/Cellar/gcc/14.2.0_1/bin/gcc-14
+      family  : gcc
+      probe   : OK
+  apple_clang_2    Apple clang version 16.0.0 (clang-1600.0.26.6)
+      command : /usr/bin/clang
+      path    : /usr/bin/clang
+      family  : apple_clang
+      probe   : OK
+  apple_clang_3    Apple clang version 16.0.0 (clang-1600.0.26.6)
+      command : cc
+      path    : /usr/bin/cc
+      family  : apple_clang
+      probe   : OK
+
+TOTALS
+--------------------------------------------------------------------
+  comparisons : 125
+  passed      : 125
+  mismatched  : 0
+  unavailable compilers : 0
+
+MISMATCHES (0)
+--------------------------------------------------------------------
+  (none)
+
+By category:
+  arithmetic     total=30 pass=30 mismatch=0
+  arrays         total=20 pass=20 mismatch=0
+  callbacks      total=15 pass=15 mismatch=0
+  pointers       total=20 pass=20 mismatch=0
+  stdio          total=20 pass=20 mismatch=0
+  structs        total=20 pass=20 mismatch=0
+
+Artifacts: results/summary.txt, results/summary.json, results/logs/,
+           results/mismatches/<case>__<compiler>/ (seed, source, commands, logs)
