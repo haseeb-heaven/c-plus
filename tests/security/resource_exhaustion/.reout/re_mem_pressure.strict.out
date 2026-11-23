@@ -1,0 +1,18 @@
+re_mp_child_reaped 1
+re_mp_child_no_watchdog 1
+re_mp_child_exited 1
+re_mp_child_checks 1
+re_mp_oneshot_null 1
+re_mp_oneshot_seq 1
+re_mp_oneshot_recovers 1
+re_mp_oneshot_balanced 1
+re_mp_growth_refused 1
+re_mp_growth_state 1
+re_mp_growth_no_leak 1
+re_mp_growth_recovers 1
+re_mp_over_limit_null 1
+re_mp_over_limit_no_seq 1
+re_mp_calloc_overflow_null 1
+re_mp_calloc_overflow_no_seq 1
+re_mp_over_limit_no_alloc 1
+RESOURCE_EXHAUSTION 17 0

@@ -269,9 +269,13 @@ while IFS="$(printf '\t')" read -r grp nm safe src srel; do
       se_rel=$se; case "$se_rel" in "$ROOT"/*) se_rel=${se_rel#"$ROOT"/} ;; esac
       rf_rel=$rf; case "$rf_rel" in "$ROOT"/*) rf_rel=${rf_rel#"$ROOT"/} ;; esac
 
-      bcmd="$CPLUS build $src $flags -o $bin"
-      # shellcheck disable=SC2086  # $flags must word-split into CLI flags
-      timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$src" $flags \
+      extra=""
+      if grep -q 'stdlib/json.hp' "$src" 2>/dev/null; then
+        extra="-I$ROOT/third_party/yyjson -L$ROOT/build/ext -lyyjson"
+      fi
+      bcmd="$CPLUS build $src $flags $extra -o $bin"
+      # shellcheck disable=SC2086  # $flags/$extra must word-split into CLI flags
+      timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$src" $flags $extra \
         -o "$bin" > "$blog" 2>&1
       brc=$?
 

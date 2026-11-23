@@ -180,11 +180,13 @@ class thread {
             return STDLIB_FAIL;
         }
         rc = pthread_join(this->handle, out);
-        this->joinable = 0;
         if (rc != 0) {
+            /* pthread_join did not reap the thread: keep the handle joinable
+             * so a later join() or drop() can still try to reap it. */
             error_fail(err, CPLUS_EXIT_RESOURCE, "thread::join: pthread_join failed");
             return STDLIB_FAIL;
         }
+        this->joinable = 0;
         return STDLIB_OK;
     }
 

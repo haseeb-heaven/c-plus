@@ -150,12 +150,6 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-# Fresh evidence directory.   Only generated artifacts live here.
-rm -rf "$OUT"
-mkdir -p "$LOG_DIR" "$ARTIFACT_DIR" "$STATUS_DIR" || exit 2
-: > "$RESULTS_JSONL" || exit 2
-: > "$COMMANDS_LOG" || exit 2
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -419,6 +413,13 @@ if [ "$LIST_ONLY" -eq 1 ]; then
     done
     exit 0
 fi
+
+# Fresh evidence directory.  Only generated artifacts live here.  Created only
+# for real runs: `--list` must not destroy a previous run's evidence.
+rm -rf "$OUT"
+mkdir -p "$LOG_DIR" "$ARTIFACT_DIR" "$STATUS_DIR" || exit 2
+: > "$RESULTS_JSONL" || exit 2
+: > "$COMMANDS_LOG" || exit 2
 
 # ---------------------------------------------------------------------------
 # Result registry

@@ -1,9 +1,13 @@
 # Legacy ABI labs — unified runner evidence
 
 Owner: Task 4.  Files authored: `tests/abi/run_legacy_labs.sh` (executable) and
-this document.  No other file was created, edited, staged or committed.  In
-particular, no lab source, lab runner, compiler, runtime or stdlib file was
-touched.  All generated output is under `build/abi-labs/`.
+this document.  No other source, test, runner or configuration file was created
+or edited; no lab source, lab runner, compiler, runtime or stdlib file was
+touched, and nothing was staged or committed by this task.  The only additional
+files on disk are generated output under `build/abi-labs/`.  (An intermediate
+version of the runner was picked up by the parent agent's commit `ec8f2e2`
+while this task was in progress; the final, corrected runner is the working-tree
+copy.)
 
 ---
 
@@ -69,7 +73,8 @@ Timeouts: build 300 s, run 120 s by default; overridable with
 Filters: `--only NAME`, `--group NAME`, `--only=NAME`, `--group=NAME`,
 repeatable and comma-separated; matching is substring-based on the full lab
 name (`group/lab`) or on the group name.  `--list` prints discovery without
-running.  `--help` prints usage; unknown options exit 2.
+running and without wiping prior evidence.  `--help` prints usage; unknown
+options exit 2.
 
 ---
 
@@ -98,10 +103,10 @@ All commands were run from the repository root on branch `agent/modern-stdlib`,
 JSON; the runner itself emits JSON with pure shell `printf` (no Python in the
 correctness path), matching `tools/run_final_evidence.sh`.
 
-### Authoritative run (V3, final re-run at `2026-11-23T04:04:36Z`)
+### Authoritative run (V3, final re-run; `started=2026-11-23T04:06:06Z`, `finished=2026-11-23T04:06:38Z`)
 
 ```
-unified ABI lab runner: branch=agent/modern-stdlib started=2026-11-23T04:04:36Z
+unified ABI lab runner: branch=agent/modern-stdlib started=2026-11-23T04:06:06Z
 discovered=54 selected=54  build_timeout=300s run_timeout=120s
 evidence: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/abi-labs
 ...

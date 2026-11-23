@@ -1,0 +1,9 @@
+re_tf_child_reaped 1
+re_tf_child_no_watchdog 1
+re_tf_injection 1
+SKIP_REASON re_tf_injection pthread_create failure not injectable via RLIMIT_NPROC on this host
+re_tf_null_fn_refused 1
+re_tf_start_after_failure 1
+re_tf_double_start_refused 1
+re_tf_drop_joins 1
+RESOURCE_EXHAUSTION 7 0

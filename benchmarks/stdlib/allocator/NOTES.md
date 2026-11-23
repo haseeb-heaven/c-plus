@@ -134,28 +134,39 @@ present.) On this run: `small` ≈ +15.8 ns/pair, `realloc` ≈ +25.6 ns/call,
 `large` ≈ +32 ns/pair — consistent with three mutex-protected side-table
 lookups per query.
 
-**The side-table overhead is only bounded, not isolated.** `tracked − raw`
-includes the global mutex, size/overflow checks and side-table maintenance, not
-metadata alone, and `raw` is a different allocator (host malloc). To measure
-the pure tracking-toggle delta from the same source, compile with the
-documented `CPLUS_MALLOC_TRACKING` macro on/off — but note both builds still
-link the hardened libc, so this is left as the exact isolation command rather
-than a reported number here:
+**Tracking enabled vs disabled IS isolated too**, from one source file
+(`tracking_toggle.c`) that only differs by the documented
+`CPLUS_MALLOC_TRACKING` compile-time macro (which redirects `malloc`/`free` to
+the tracked C+ allocator). Exact commands:
 
 ```sh
-/usr/bin/clang -O2 -std=gnu17 \
-  -Ilibc/install-include -DCPLUS_MALLOC_TRACKING \
-  benchmarks/stdlib/allocator/tracking_toggle.c \
-  build/libc/libcplus_hardened.a -lm -pthread -o /tmp/track_on
-/usr/bin/clang -O2 -std=gnu17 \
-  -Ilibc/install-include \
-  benchmarks/stdlib/allocator/tracking_toggle.c \
-  build/libc/libcplus_hardened.a -lm -pthread -o /tmp/track_off
+INC=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include
+SRC=benchmarks/stdlib/allocator/tracking_toggle.c
+LIB=build/libc/libcplus_hardened.a
+/usr/bin/clang -O2 -std=gnu17 -I"$INC" "$SRC" "$LIB" -lm -pthread \
+  -o benchmarks/stdlib/allocator/tracking_off
+/usr/bin/clang -O2 -std=gnu17 -I"$INC" -DCPLUS_MALLOC_TRACKING "$SRC" "$LIB" \
+  -lm -pthread -o benchmarks/stdlib/allocator/tracking_on
+./benchmarks/stdlib/allocator/tracking_off 200000
+./benchmarks/stdlib/allocator/tracking_on 200000
 ```
 
-`tracking_toggle.c` is not part of this deliverable (file ownership is limited
-to this directory and the benchmark above already isolates queries); the
-command is given so the parent task can reproduce the toggle if needed.
+Actual output (`results/tracking_toggle.txt`, canonical run; 200,000 × 32 B
+alloc+free pairs, 11 rounds, 2 warmup, seed 314159265):
+
+| Build | min (s) | **median (s)** | max (s) | ns/op |
+|---|---:|---:|---:|---:|
+| tracking **OFF** (host malloc/free) | 0.003874 | **0.004004** | 0.004179 | 20.02 |
+| tracking **ON** (cplus_malloc/free + side table) | 0.011407 | **0.012287** | 0.016104 | 61.44 |
+
+So enabling C+ metadata tracking costs **+41.42 ns/op (~3.07×)** on this
+machine for this source. A second invocation of the same binaries measured OFF
+0.003623 s / 18.11 ns/op and ON 0.010617 s / 53.08 ns/op (~2.93×), showing
+process-to-process variance; the table above is the canonical recorded run.
+
+Note `tracked − raw` in the main matrix still only *bounds* total side-table
+overhead (it also includes the global mutex and checks, and `raw` is a
+different allocator); the toggle experiment above is the clean isolation.
 
 ## Caveats / honest limitations
 

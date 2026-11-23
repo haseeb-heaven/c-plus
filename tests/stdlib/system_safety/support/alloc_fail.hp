@@ -16,7 +16,7 @@
 #ifndef CPLUS_SYS_SAFETY_ALLOC_FAIL_HP
 #define CPLUS_SYS_SAFETY_ALLOC_FAIL_HP
 
-#include "stdlib/error.hp"
+#include "../../../../stdlib/error.hp"
 
 class alloc_fail_scope {
     int armed;

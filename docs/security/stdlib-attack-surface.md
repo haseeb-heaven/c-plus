@@ -104,39 +104,44 @@ inside the wrapper constructors, not to env/argv parsing in these headers.)
 |---|---:|---|
 | `.hp` headers on disk under `stdlib/` | 23 | `find stdlib -maxdepth 1 -name '*.hp'` |
 | Canonical modulus in `REGRESSION_INVENTORY.md` | 21 | `docs/stdlib/REGRESSION_INVENTORY.md §2` |
-| Headers inventoried here | 23 | all on-disk headers, incl. `allocator.hp`, `memory.hp` |
-| In-scope functions inventoried | 230 | enumerated in §2 (sum of per-header counts) |
-| Categories with ≥1 in-scope function | 7 | paths/file I/O, network, JSON, strings/buffers, thread sync, allocation, SDL user input/media |
-| Categories with zero functions | 2 | environment variables, process arguments (§0.6) |
-| In-scope functions with an OBSERVED call-site | 226 | §4 register (230 − 4 UNTESTED) |
-| In-scope functions with no test call-site | 4 | §5 register |
-| Public functions documented with an explicit contract | 230 | §3 (every in-scope function has header-level validation/failure/cleanup text or guard code) |
+| Headers represented in the master inventory | 23 | all on-disk headers, incl. `allocator.hp`, `memory.hp` |
+| In-scope functions explicitly inventoried (master-table rows) | 230 | counted in §2 (`grep -cE '^\| [0-9]+ \| .stdlib/'`) |
+| Master-table rows with an OBSERVED call-site | 228 | §3 evidence column; 230 − 2 UNTESTED rows |
+| Master-table rows with no test call-site | 2 | rows #48 and #143 (§5) |
+| Functions with no direct call-site anywhere in `tests/stdlib/**/*.cp` | 4 | §5 (2 table rows + 2 outside the table) |
+| Requested categories with ≥1 in-scope function | 7 | paths/file I/O, network, JSON, strings/buffers, thread sync, allocation, SDL input/media (§3.1–3.7) |
+| Requested categories with zero functions | 2 | environment variables, process arguments (§0.6) |
+| Master-table rows with a documented contract | 230 | §3 (every row states validation/failure/cleanup from the header source) |
 
-## 2. Per-header in-scope counts
+## 2. Per-header master-table row counts
 
-| Header | In-scope functions | Out-of-scope observers (not counted) |
+The table in §3 lists **230** named functions. Its distribution by header (verified with
+`grep -oE '^\| [0-9]+ \| `stdlib/[a-z]+\.hp' docs/security/stdlib-attack-surface.md | sort | uniq -c`):
+
+| Header | Rows | Trivial observers excluded from rows (out of scope per §0.2) |
 |---|---:|---|
 | `stdlib/fs.hp` | 8 | — |
 | `stdlib/io.hp` | 6 | `println` (no external data; example-only call-site) |
 | `stdlib/file.hp` | 11 | `is_open`, `native` |
-| `stdlib/log.hp` | 10 | `log_level_name`, `level`, `valid`, `enabled`, `native` |
-| `stdlib/net.hp` | 10 | `is_valid`, `descriptor` (x2) |
-| `stdlib/http.hp` | 15 | `http_version`, `valid` (x3), `native`, `headers->valid`, `header_lines` |
-| `stdlib/async.hp` | 8 | `valid` (x2), `native`, `now_ms`, `is_active` |
-| `stdlib/json.hp` | 20 | `valid` (x3), type predicates (`is_object/is_array/is_number/is_string/is_bool`), `size`, `root` |
-| `stdlib/string.hp` | 18 | `size`, `capacity`, `valid`, `clear`, `size_view`, `data` |
+| `stdlib/log.hp` | 8 | `log_level_name`, `log_level_parse`'s helpers, `valid`, `native`, `level`, `enabled`, `set_level`, `log_stderr`, `log_stdout` |
+| `stdlib/net.hp` | 10 | `is_valid` (x2), `descriptor` (x2) |
+| `stdlib/http.hp` | 13 | `http_version`, `valid` (x4), `native`, `header_lines` |
+| `stdlib/async.hp` | 8 | `valid` (x2), `native`, `now_ms`, `is_active`, `stop`, `sleep_ms`, `uv_error_text`, `stdlib_timer_release_handle` |
+| `stdlib/json.hp` | 20 | `valid` (x3), type predicates, `size`, `root` |
+| `stdlib/string.hp` | 18 | `size`, `capacity`, `valid`, `clear`, `c_str`, `size_view`, `data` |
 | `stdlib/memory.hp` | 12 | — |
+| `stdlib/collections.hp` | 11 | scalar-key and checked out-pointer methods (named in §3.4 note) |
+| `stdlib/error.hp` | 18 | `category_name`, telemetry toggles/reset, `stdlib_meta_find`, `stdlib_safe_div`, `stdlib_alloc_length`, `stdlib_alloc_elem_size`, `error` accessors |
 | `stdlib/allocator.hp` | 19 | `armed_now` |
-| `stdlib/error.hp` | 19 | `category_name`, `is_enabled`, `reset`, `telemetry_reset`, `ok`, `failed_now`, `code`, `what`, `category`, `clear`, `set`, `set_category` |
-| `stdlib/thread.hp` | 16 | `is_valid` (x3), `native`, `holds`, `is_joinable` |
+| `stdlib/thread.hp` | 15 | `is_valid` (x3), `native`, `holds`, `is_joinable` |
 | `stdlib/time.hp` | 1 | `time_now_ns/ms`, `time_monotonic_ns/ms`, `time_sleep_ms` |
-| `stdlib/window.hp` | 6 | `valid`, `native`, `subsystem_flags` |
-| `stdlib/gui.hp` | 10 | `valid`, `native`, `input_begin`, `input_end`, `window_end`, `layout_row_dynamic/static`, `render`, `style_text_color` |
-| `stdlib/image.hp` | 7 | `valid`, `width`, `height`, `channels`, `size_bytes` |
-| `stdlib/graphics.hp` | 6 | `valid`, `width`, `height`, `native`, `set_color`, `clear`, `fill_rect`, `line`, `present`, `set_vsync` |
-| `stdlib/video.hp` | 9 | `valid` (x3), `width`/`height`/`format`/`pts` (frame), `width`/`height` (decoder), `stream_count`, `video_index`, `video_width/height/codec`, `duration_ms`, `video_codec_id`, `video_stream_params` |
-| `stdlib/audio.hp` | 9 | `valid` (x5), `native` (x2), `playing`, `running`, `set_volume`, `stop` (sound/device), `channels`, `sample_rate`, `frame_count`, `audio_sleep_ms` |
 | `stdlib/input.hp` | 10 | — |
+| `stdlib/window.hp` | 6 | `valid`, `native`, `subsystem_flags` |
+| `stdlib/gui.hp` | 10 | `valid`, `native`, `input_begin/end`, `window_end`, layout/render/style helpers |
+| `stdlib/image.hp` | 7 | `valid`, `width`, `height`, `channels`, `size_bytes` |
+| `stdlib/graphics.hp` | 6 | `valid`, `width`, `height`, `native`, draw/render helpers |
+| `stdlib/video.hp` | 9 | `valid` (x3), metadata accessors, `video_codec_id`, `video_stream_params` |
+| `stdlib/audio.hp` | 4 | `valid` (x5), `native` (x2), metadata/state helpers, `audio_sleep_ms` (named in §3.7 note) |
 | **Total** | **230** | — |
 
 ## 3. DOCUMENTED register — the full inventory
@@ -302,12 +307,11 @@ Trust-boundary legend:
 | 124 | `stdlib/collections.hp:982` | `int stack::top_checked(int *out)` | out BUF | NULL out → -1 | -1 | none | COL |
 | 125 | `stdlib/collections.hp:1061` | `int queue::front_checked(int *out)` | out BUF | NULL out → -1 | -1 | none | COL |
 
-Note (collections): the remaining `collections.hp` methods accepted only scalar keys or
-`int *out` pointers and are allocation-bearing but share the exact guards above; they
-are exercised by `COL` and enumerated by name in `docs/stdlib/REGRESSION_INVENTORY.md §4`
-(all 63 entries reported exercised there). They are intentionally not re-listed as
-separate rows to avoid duplicating identical cells; the **230** headline counts only the
-rows actually present in this document — see §6 reconciliation.
+Note (collections): the remaining `collections.hp` methods accept only scalar keys or
+`int *out` pointers and share the exact guards above; they are exercised by `COL` and
+enumerated by name in `docs/stdlib/REGRESSION_INVENTORY.md §4` (all 63 entries reported
+exercised there by the static call-site measure). They are not re-listed here to avoid
+duplicating identical cells; see the coverage note after §3.7.
 
 ### 3.5 Allocation, telemetry, and error buffers
 
@@ -429,37 +433,37 @@ rows actually present in this document — see §6 reconciliation.
 | 229 | `stdlib/audio.hp:90` | `int audio_sound::play(error *err)` | sound state | valid; `ma_sound_start` rc | STDLIB_FAIL IO | none | AUDIO |
 | 230 | `stdlib/audio.hp:168` | `int audio_engine::play(const char *path, error *err)` | PATH | valid/path NULL; `ma_engine_play_sound` rc | STDLIB_FAIL IO | none | AUDIO |
 
-**Reconciliation note.** The table numbers **1–230** are the document's internal row IDs,
-not a claim that every one of the 230 in-scope functions from §2 has a dedicated row.
-Rows 1–230 cover 230 named functions explicitly; the §2 per-header totals count the
-same 230 named functions, including the handful enumerated only in §3.4's collections
-note and the out-of-scope-neutral observers intentionally excluded. Where a family shares
-identical cells (e.g. `io.hp` readers), each member still has its own `header:line` and
-signature in its own row. No count in this document is an estimate.
+**Coverage note.** Rows **1–230** are the document's internal row IDs and each names one
+function with an exact `header:line` and signature; the per-header counts in §2 are the
+counts of those rows. The **230** figure is the number of functions explicitly inventoried
+here, not an estimate and not a claim that no other callable exists in the headers. The
+following public functions also consume in-scope data but are grouped under a shared-family
+row or a helper note instead of receiving a dedicated row; all are OBSERVED via the cited
+alias and DOCUMENTED in the named header (their exact names and `header:line` are also in
+`docs/stdlib/REGRESSION_INVENTORY.md §4`):
 
-Remaining in-scope functions named in §2 but represented by a shared-family row rather
-than their own row (all OBSERVED via the cited alias, all DOCUMENTED in the named header):
-`audio_sound::stop:103`, `audio_sound::playing:116`, `audio_engine::load:182`,
-`audio_device::audio_device:199`, `audio_device::start:232`, `audio_device::stop:245`,
-`audio_decoder::audio_decoder:274`, `audio_decoder::read:311`, `decoder_from_memory:337`
-(AUDIO); `http_headers::http_headers:51`, `http_client::valid:144`, `http::valid:32`
-(HTTP); `timer::valid:117`, `loop::valid:33`, `loop::native:38`, `loop::stop:53`,
-`loop::now_ms:58`, `timer::is_active:150`, `stdlib_timer_release_handle:82`, `sleep_ms:218`,
-`uv_error_text:222` (ASYNC); the `intmap`/`intset`/`deque`/`list`/`stack`/`queue` checked
-accessors and rebuild/grow/put/insert/push/drop methods in `collections.hp` (COL);
-`string::c_str:158`, `string::clear:299` (STR-D); `fs`-adjacent `log_sink::valid:75`,
-`log_sink::native:79`, `log_sink::enabled:91`, `log_sink::set_level:87`, `log_stderr:221`,
-`log_stdout:226` (LOG); `connection::is_valid:31`, `listener::is_valid:132`,
-`connection::descriptor:35`, `listener::descriptor:136` (NET-D); `mutex::native:50`,
-`mutex::is_valid:36`, `guard::holds:72`, `condvar::is_valid:102`, `thread::is_joinable:144`
-(THREAD-D); and `stdlib_telemetry_set_enabled:133`, `stdlib_telemetry_is_enabled:138`,
-`stdlib_telemetry_reset:142`, `stdlib_alloc_fail_at:227`, `stdlib_alloc_fail_after:234`,
-`stdlib_alloc_fail_reset:241`, `stdlib_alloc_seq:249`, `stdlib_meta_find:273` (ALLOC/FAULT/ADV).
+- AUDIO: `audio_sound::stop:103`, `playing:116`, `audio_engine::load:182`,
+  `audio_device::audio_device:199`, `start:232`, `stop:245`, `audio_decoder::audio_decoder:274`,
+  `read:311`, `decoder_from_memory:337`.
+- ASYNC/HTTP: `loop::valid:33`, `native:38`, `stop:53`, `now_ms:58`, `timer::valid:117`,
+  `is_active:150`, `stdlib_timer_release_handle:82`, `sleep_ms:218`, `uv_error_text:222`,
+  `http::valid:32`, `http_client::valid:144`, `http_headers::http_headers:51`.
+- COL: the remaining scalar-key and checked out-pointer methods of `intmap`, `intset`,
+  `deque`, `list`, `stack`, `queue` (`get`, `contains`, `remove`, `pop_*`, `at_checked`,
+  `top_checked`, `front_checked`, plus allocation-bearing `grow`/`reserve`/`insert`/`push`
+  and `drop`).
+- Error/allocator helpers: `stdlib_telemetry_set_enabled:133`, `is_enabled:138`,
+  `reset:142`, `stdlib_alloc_fail_at:227`, `fail_after:234`, `fail_reset:241`,
+  `stdlib_alloc_seq:249`, `stdlib_alloc_length:499`, `stdlib_safe_div:462`,
+  `stdlib_meta_find:273` (the last has no direct call-site; see §5).
+- Trivial observers (`valid`, `native`, `size`, metadata getters) are excluded per §0.2.
 
 ## 4. OBSERVED register — functions with a test call-site
 
-All in-scope functions except the four in §5 have at least one call-site. The exact paths
-are the alias expansions in §0.4; the most load-bearing examples are:
+Of the 230 master-table rows, **228** have at least one call-site. (Two rows — #48 and
+#143 — do not; see §5. Four functions total have no direct call-site anywhere in
+`tests/stdlib/**/*.cp`, counting two outside the table.) The exact paths are the alias
+expansions in §0.4; the most load-bearing examples are:
 
 - **Paths / file I/O**: `tests/stdlib/deep_fs_task5.cp`, `tests/stdlib/deep_file_lifecycle.cp`,
   `tests/stdlib/deep_io_token.cp`, `tests/stdlib/system_safety/fs_symlink_safety.cp`,
@@ -483,17 +487,20 @@ matching, implicit `drop()` credits, no branch/execution proof). It is not a saf
 
 ## 5. UNTESTED register — no test call-site found
 
-| Function | header:line | Type | Why no coverage |
-|---|---|---|---|
-| `println` | `stdlib/io.hp:23` | public, no external data (out of scope) | Only call-site is `tests/stdlib/examples/io_demo.cp`; no assertion test. Listed for completeness, not counted in the 230. |
-| `http_sink_write` | `stdlib/http.hp:97` | `static` internal callback | No direct call-site in any `tests/stdlib/**/*.cp`. Reached only indirectly when libcurl invokes it from `http_client::request` (#53). Its overflow branch is therefore exercised, if at all, only through the HTTP suite (§0.5). |
-| `stdlib_tm_add` | `stdlib/error.hp:127` | `static inline` internal helper | No direct call-site; invoked indirectly from `stdlib_note`, alloc, realloc, etc. |
-| `stdlib_meta_find` | `stdlib/error.hp:273` | `static inline` internal helper | No direct call-site; invoked indirectly from `stdlib_meta_record`, `stdlib_alloc_size`, generation checks, etc. |
+Four functions have no direct call-site anywhere in `tests/stdlib/**/*.cp`. Two of them
+are master-table rows (#48 and #143); the other two are outside the 230-row table.
 
-Also with no direct call-site but **not** public stdlib functions: `video_stream_params`
+| Function | header:line | In 230-row table? | Type | Why no coverage |
+|---|---|---|---|---|
+| `println` | `stdlib/io.hp:23` | No | public, no external data (out of scope per §0.2) | Only call-site is `tests/stdlib/examples/io_demo.cp`; no assertion test. |
+| `http_sink_write` | `stdlib/http.hp:97` | **Yes (#48)** | `static` internal callback | No direct call-site. Reached only indirectly when libcurl invokes it from `http_client::request` (#53); its overflow branch is exercised, if at all, only through the HTTP suite (§0.5). |
+| `stdlib_tm_add` | `stdlib/error.hp:127` | **Yes (#143)** | `static inline` internal helper | No direct call-site; invoked indirectly from `stdlib_note`, `stdlib_alloc`, `stdlib_realloc`, etc. |
+| `stdlib_meta_find` | `stdlib/error.hp:273` | No (grouped in §3.7 coverage note) | `static inline` internal helper | No direct call-site; invoked indirectly from `stdlib_meta_record`, `stdlib_alloc_size`, generation checks, etc. |
+
+Also with no direct call-site but **not** stdlib API functions: `video_stream_params`
 (`stdlib/video.hp:67`, internal helper) and the upstream `stbi_load`/`av_*`/`curl_*`
-calls are delegated to third-party libraries. No *public* in-scope function other than
-`println` lacks a test call-site.
+calls, which are delegated to third-party libraries. No **public** in-scope function
+other than the out-of-scope `println` lacks a test call-site.
 
 ## 6. Known gaps and caveats carried forward
 

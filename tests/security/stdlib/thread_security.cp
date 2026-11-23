@@ -205,6 +205,26 @@ struct ts_shared {
 };
 static struct ts_shared g_ts;
 
+/* Self-join probe state (single-threaded writer / single worker reader). */
+static thread *ts_self_target;
+static volatile int ts_self_go;
+static volatile int ts_self_finished;
+static int ts_self_join_rc;
+static int ts_self_joinable_after;
+
+static void *ts_selfjoin_worker(void *arg) {
+    error sj_err = error();
+    (void)arg;
+    while (__atomic_load_n(&ts_self_go, __ATOMIC_ACQUIRE) == 0)
+        sched_yield();
+    /* pthread_join(pthread_self()) fails with EDEADLK: a deterministic
+     * join() error path that does not depend on resource exhaustion. */
+    ts_self_join_rc = ts_self_target->join(NULL, &sj_err);
+    ts_self_joinable_after = ts_self_target->is_joinable();
+    __atomic_store_n(&ts_self_finished, 1, __ATOMIC_RELEASE);
+    return NULL;
+}
+
 static void ts_count_step(struct ts_shared *s, int i) {
     guard step_g = guard(s->first);
     s->counter++;
@@ -412,6 +432,35 @@ int main(void) {
                      ts_s4_err.category() == STDLIB_CATEGORY_LIFECYCLE);
         ts_s4_t.drop();
         ts_check("ts_s4_drop_inert", !ts_s4_t.is_joinable());
+    }
+
+    /* ---- 4b. join() failure path keeps the resource joinable ------------- */
+    {
+        thread ts_4b_t = thread();
+        error ts_4b_err = error();
+        int ts_4b_rc;
+        int ts_4b_spin;
+
+        ts_self_go = 0;
+        ts_self_finished = 0;
+        ts_self_join_rc = STDLIB_OK;
+        ts_self_joinable_after = 0;
+        ts_4b_rc = ts_4b_t.start(ts_selfjoin_worker, NULL, &ts_4b_err);
+        ts_self_target = &ts_4b_t;
+        __atomic_store_n(&ts_self_go, 1, __ATOMIC_RELEASE);
+        for (ts_4b_spin = 0; ts_4b_spin < 1000000; ts_4b_spin++) {
+            if (__atomic_load_n(&ts_self_finished, __ATOMIC_ACQUIRE) != 0)
+                break;
+            sched_yield();
+        }
+        ts_check("ts_4b_worker_finished",
+                 __atomic_load_n(&ts_self_finished, __ATOMIC_ACQUIRE) != 0);
+        ts_check("ts_4b_selfjoin_fails",
+                 ts_4b_rc == STDLIB_OK && ts_self_join_rc == STDLIB_FAIL);
+        ts_check("ts_4b_joinable_kept_on_failure",
+                 ts_self_joinable_after != 0);
+        ts_4b_t.drop(); /* reaps the still-running worker via pthread_join */
+        ts_check("ts_4b_drop_inert", !ts_4b_t.is_joinable());
     }
 
     /* ---- 5. partial-init cleanup ----------------------------------------- */

@@ -10,10 +10,10 @@
  * purpose (this directory is header-owned); the exact passing stdout is
  * recorded in NOTES.md.
  */
-#include "tests/stdlib/system_safety/support/watchdog.hp"
-#include "tests/stdlib/system_safety/support/alloc_fail.hp"
-#include "tests/stdlib/system_safety/support/fd_count.hp"
-#include "tests/stdlib/system_safety/support/temp_path.hp"
+#include "watchdog.hp"
+#include "alloc_fail.hp"
+#include "fd_count.hp"
+#include "temp_path.hp"
 
 #include <stdio.h>
 #include <string.h>
