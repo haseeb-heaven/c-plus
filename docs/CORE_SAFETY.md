@@ -369,3 +369,69 @@ call-boundary rule and a conservative runtime-index element rule. Evidence:
 `tests/metrics/uaf_evidence_run.py` 12/12 (10 static rejects). This is not a
 general temporal-safety guarantee; CFG-based ownership and symbol/region-keyed
 state remain the next foundation work.
+
+## Evidence-based progress audit (branch `agent/core-safety`, HEAD `9df3507`)
+
+This section records an audit of executable code and machine-generated result
+files, not documentation percentages. Branch diff vs `develop`:
+3,542 files changed; compiler/runtime source changes are concentrated in
+`AstSafetyCheck.cpp` (+6,681), `StaticBoundsCheck.cpp` (+2,667),
+`CPlusRewriter.cpp` (+1,964), `RaiiLowering.cpp` (+1,382),
+`OwnershipAnalysis.cpp` (+1,222), `Driver.cpp` (+989) and
+`runtime/cplus_runtime.c` (+796).
+
+### Feature inventory (explicit denominator: 22 audited features)
+
+Counted from source + artifacts: **7 IMPLEMENTED AND VERIFIED**,
+**11 IMPLEMENTED BUT PARTIALLY VERIFIED**, **3 PARTIALLY IMPLEMENTED**,
+**1 BLOCKED** (provenance under allocator address reuse, F2), **0 NOT
+IMPLEMENTED** in the audited set.
+
+| Feature | Classification | Evidence |
+| --- | --- | --- |
+| Static bounds checking | IMPLEMENTED BUT PARTIALLY VERIFIED | bounds matrix 13/13; native matrix 24/24; 6 interprocedural OOB cases still accepted |
+| Array decay | IMPLEMENTED BUT PARTIALLY VERIFIED | `a_array_decay_bounds` 4/4; `array_decay` 2/2; lost through `int **` and struct fields |
+| Pointer arithmetic | IMPLEMENTED BUT PARTIALLY VERIFIED | `f_pointer_arithmetic_beyond_array` 4/4; cross-object cases BLOCKED |
+| Pointer provenance | BLOCKED (F2) | `cplus.h:259-271`; `tests/known_gaps/allocator_reuse.c`; needs ABI token |
+| Nullability | IMPLEMENTED AND VERIFIED | interprocedural 6/6; `memory_safety_compare` 14/14; `S4_null_wrapper` closed |
+| Uninitialized variables | IMPLEMENTED BUT PARTIALLY VERIFIED | Clang `runUninitializedVariablesAnalysis` linked at `OwnershipAnalysis.cpp:541`; 90/90 safe corpus; some fixtures BLOCKED |
+| Integer overflow | IMPLEMENTED BUT PARTIALLY VERIFIED | native matrix `b_runtime_signed_overflow` rc 110/134; 3 check-mode gaps |
+| Division by zero | IMPLEMENTED AND VERIFIED | native matrix `c_runtime_div_mod_zero` 4/4; `A1_stale_nonzero` closed |
+| Invalid shifts | IMPLEMENTED AND VERIFIED | native matrix `d_invalid_shift_count` 4/4 |
+| Narrowing/conversions | IMPLEMENTED BUT PARTIALLY VERIFIED | native matrix `e_narrowing_conversion` 4/4; 2 check-mode gaps |
+| Ownership | IMPLEMENTED AND VERIFIED | 10/10 closed adversarial cases; double-free controls rejected |
+| Lifetimes | IMPLEMENTED BUT PARTIALLY VERIFIED | UAF evidence 12/12; runtime memory 28/28; F2 unsound at reuse |
+| Use-after-move | IMPLEMENTED AND VERIFIED | `cf_use_after_move`; exact "moved-from" needles in core |
+| Escape analysis | IMPLEMENTED AND VERIFIED | `cf_borrow_escape`, `cf_managed_escape`; managed return rejected |
+| Interprocedural analysis | PARTIALLY IMPLEMENTED | 55/61 cases pass; 6 soundness gaps accepted |
+| Function pointer safety | IMPLEMENTED BUT PARTIALLY VERIFIED | fnptr double-free cases closed; `fnptr_bounds` BLOCKED |
+| Struct/union safety | IMPLEMENTED BUT PARTIALLY VERIFIED | ABI 9/9+6/6; `struct_ptr_oob` accepted |
+| Control-flow analysis | IMPLEMENTED BUT PARTIALLY VERIFIED | `dataflow` 4/6; `loop_while_oob`, `dataflow_phi_oob` accepted |
+| Cleanup analysis | IMPLEMENTED AND VERIFIED | optimizer 66 builds/66 runs/174 guard checks, 0 differences |
+| Goto handling | IMPLEMENTED BUT PARTIALLY VERIFIED | plain goto control passes; forward-goto-over-owner has no counted negative artifact |
+| Recursion | PARTIALLY IMPLEMENTED | literal-argument recursion closed; `call_recursive_oob`/`call_mutual_oob` accepted |
+| Aliasing | IMPLEMENTED BUT PARTIALLY VERIFIED | `interior_pointers` 2/2; `ptr2_oob`, `struct_ptr_oob` accepted |
+
+### Testing inventory (not blended)
+
+Test fixtures discovered: ~840 authored `.c`/`.cp` + runner scripts; executed
+suites and counts at HEAD: repo 109 pass/0 fail, core 152/0, agent1 156 pass/
+0 fail/3 skip, CTest 2/2, native matrix 24/24, bounds matrix 13/13,
+runtime memory 28/28, ABI 33/33, ABI real-world 36/36, differential 125/0
+mismatches, compatibility 21/21, optimizer 11/11, upstream 20/20, fuzz 200/0,
+metrics 90/90 accepted with 0 false positives and STRICT 97/107 detection,
+UAF evidence 12/12, source preservation 4/4, real-world C 6/6 and wave3
+175 pass/5 mode-rejected/0 hard failures, C standards 48 pass/0 fail/8
+unsupported, memory-safety compare 14/14. Timeouts: 0 recorded.
+`agent1/results_extra` has 71 BLOCKED fixtures — inventory, not passes.
+Sanitizer-enabled runs: 28 supplementary ASan checks, 6 UBSan native-matrix
+builds, 3 agent1 sanitizer configs; sanitizer-disabled runs dominate.
+
+### Most serious verified gaps still open
+
+1. Six interprocedural spatial cases accepted in DEFAULT and STRICT
+   (`call_recursive_oob`, `call_mutual_oob`, `ptr2_oob`, `struct_ptr_oob`,
+   `loop_while_oob`, `dataflow_phi_oob`).
+2. F2 provenance under address reuse — ABI-bound.
+3. Three `check`-mode arithmetic/conversion cases (compound, implicit narrowing,
+   float→int); `build` traps at 110/111/111.

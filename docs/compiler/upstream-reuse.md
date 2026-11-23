@@ -532,3 +532,31 @@ In all four areas the enforcement mechanism is the same: C+ decides at compile
 time in its AST visitors and, where a value is not statically known, emits its
 own guards into the generated C (`__cplus_checked_*`, `__cplus_bounds_check`).
 None of this is achieved by linking UBSan or by importing GPL analyzer code.
+
+## Audit corrections (2026-11-23, verified against source)
+
+- The only **actual code reuse** in this branch is LLVM/Clang APIs:
+  `compiler/Analysis/OwnershipAnalysis.cpp:541` calls
+  `clang::runUninitializedVariablesAnalysis`, with `CFG::buildCFG` at `:463-464`
+  and `tooling::buildASTFromCodeWithArgs` at `:1016`, `:1107`, `:1189`.
+  `nm` on the linked `libclangAnalysis.a` confirms the symbol. Apache-2.0 WITH
+  LLVM-exception; notice in `THIRD_PARTY_NOTICES.md`.
+- Checked C and Apple Bounds Safety sources were inspected line-by-line at the
+  cited local pins and their **rules were adapted, not copied**: Checked C
+  `SemaBounds.cpp:129/264/2480`, `BoundsUtils.cpp:39/69/109`, `3C/Constraints.cpp:307`;
+  Apple `DynamicCountPointerAssignmentAnalysis.cpp:44/1096/3693-3698`.
+- Fil-C pin contradiction: newer docs cite `d3f9f822…`, `CORE_SAFETY.md` and
+  `UPSTREAM_AUDIT.md` cite `d9041afd6…`. Both exist locally; no Fil-C code was
+  reused (ABI/GC declined). This must be reconciled before claiming a pin.
+- Correction to an earlier claim: `OwnershipAnalysis.cpp:562-609` still contains
+  the C+-specific definite-init worklist and `std::set_intersection` meet. The
+  earlier statement that it was removed is false; it was retained to compensate
+  for upstream's address-taken suppression and is documented as such.
+- SoftBoundCETS `propagateMetadata` (`softboundcets-llvm-clang34/lib/Transforms/
+  SoftBoundCETS/SoftBoundCETS.cpp:1469-1539`) remains the best *unported* design
+  for expression-keyed provenance; no code copied. Cake/Cyclone/GCC/CHERI were
+  research-only and are licence-restricted or unverifiable locally; no reuse.
+- Next adaptation target for array-decay bounds across calls: Checked C's
+  `Sema::AbstractForFunctionType`, `Sema::ConcretizeFromFunctionTypeWithArgs`
+  and `CheckBoundsDeclAtCallArg` (`checkedc/clang/lib/Sema/SemaBounds.cpp:129,
+  264, 2480`), plus `BoundsUtil::ArrayExprBounds` (`BoundsUtils.cpp:69`).
