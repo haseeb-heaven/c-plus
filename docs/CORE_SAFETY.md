@@ -495,3 +495,12 @@ benchmarks        35 measurements, 0 failures
   with exact diagnostics, and are not silently skipped.
 - No general race/provenance/C23/UB-free guarantee. No overall safety
   percentage is claimed: the 22-feature inventory above uses explicit counts.
+
+### Optimized-build trap proof
+
+`tests/compiler/optimized_traps/run_suite.py` compiles six unsafe programs
+(bounds, signed overflow, divide-by-zero, shift count, null dereference,
+managed double free) with `--sanitize=none` at `-O0/-O2/-O3` in DEFAULT and
+`-O2` in STRICT, then RUNS them: **24 checks, 0 failures**. A check passes
+only on a matching C+ runtime trap or a compile-time rejection with the
+expected diagnostic — compiling alone never counts.

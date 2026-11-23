@@ -71,3 +71,7 @@ tests/compiler/real_world_c/wave3/results/generated/
 tests/compiler/full_coverage/out/
 tests/compiler/full_coverage/logs/
 tests/compiler/safety_matrix/__pycache__/
+tests/compiler/optimized_traps/results/*.bin
+tests/compiler/full_coverage/out/
+tests/compiler/full_coverage/logs/
+tests/compiler/optimized_traps/results/*.bin
