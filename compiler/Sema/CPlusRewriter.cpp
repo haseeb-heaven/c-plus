@@ -3360,15 +3360,20 @@ std::string instrumentDynamicArrayBounds(
     // --- ++ / -- : add/sub one with a single-evaluation lvalue update ---
     if (kind == CheckedArithmeticSite::Op::Inc ||
         kind == CheckedArithmeticSite::Op::Dec) {
+      // A decrement must SUBTRACT one, not add it: using `add` with +1 for
+      // `j--` silently turned real programs (Boyer-Moore, shunting-yard)
+      // into infinite/overflowing loops.
+      const std::string op = kind == CheckedArithmeticSite::Op::Dec
+                                 ? "sub" : "add";
       const std::string tail = ", " + dst + ", " + bits + ", " + sgn +
                                ", 1, " + (postfix ? "1" : "0") + ")";
       if (postfix) {
         // `a++`: prefix before `a`, convert the operator into macro args.
-        insertions.push_back({site.begin, span, 0, "CPLUS_INC(", 0});
+        insertions.push_back({site.begin, span, 0, "CPLUS_INC(" + op + ", ", 0});
         insertions.push_back({site.op, span, 1, tail, site.opLength});
       } else {
         // `++a`: swallow the operator, append macro args after the operand.
-        insertions.push_back({site.begin, span, 0, "CPLUS_INC(", 0});
+        insertions.push_back({site.begin, span, 0, "CPLUS_INC(" + op + ", ", 0});
         insertions.push_back({site.op, span, 1, "", site.opLength});
         insertions.push_back({site.end, span, 2, tail, 0});
       }
@@ -3843,18 +3848,18 @@ std::string instrumentDynamicArrayBounds(
         "     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \\\n"
         "         (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \\\n"
         "     *__cplus_ap; })\n"
-        "#define CPLUS_INC(P, T, BT, SG, D, POST) \\\n"
+        "#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \\\n"
         "  ({ __typeof__(&(P)) __cplus_ap = &(P); \\\n"
         "     __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \\\n"
-        "     *__cplus_ap = (T)__cplus_inline_add_i64( \\\n"
+        "     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \\\n"
         "         (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \\\n"
         "     (POST) ? __cplus_ov : *__cplus_ap; })\n"
         "#else\n"
         "#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \\\n"
         "  ((P) = (T)__cplus_inline_##OP##_i64( \\\n"
         "      (int64_t)(P), (int64_t)(B), (BT), (SG)))\n"
-        "#define CPLUS_INC(P, T, BT, SG, D, POST) \\\n"
-        "  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \\\n"
+        "#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \\\n"
+        "  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \\\n"
         "      (int64_t)(D), (BT), (SG)))\n"
         "#endif\n"
         "#define CPLUS_NEG(X, T, BT, SG) \\\n"

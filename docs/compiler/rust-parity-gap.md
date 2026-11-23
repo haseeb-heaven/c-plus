@@ -81,3 +81,32 @@ exceeds Rust on several compile-time checks (unknown divisors, helper effect
 inference, raw `realloc` loss, VLA). It cannot honestly claim Rust's
 **guarantees** without type-system changes that would break the required C ABI
 and ordinary C compatibility.
+
+## Real unmodified C applications (measured)
+
+`tests/compiler/real_apps/run_suite.py`: 10 pinned permissively-licensed C
+apps/games, 120 configs (4 standards × LEGACY/DEFAULT/STRICT + clang + gcc-14):
+**87 PASS, 27 SAFE_MODE_RULE, 6 REFERENCE_REJECTED, 0 DEFECT, 0 mismatches**;
+source preservation 38/38, legacy symbols 38/38, safe-mode app symbols 49/49.
+
+Two genuine DEFAULT-mode defects were found and FIXED:
+- wrapped `free()` trapped 105 for allocations produced outside the tracked
+  paths (helper/strdup/realloc); unregistered pointers now keep ordinary C
+  behaviour while tracked double frees still trap 104;
+- `--` was emitted as `CPLUS_INC(..., +1, ...)`, turning `j--` into an
+  increment; decrements now use the `sub` helper.
+
+`tests/compiler/real_world_c/wave3`: 175 PASS / 5 MODE_REJECTED / 0 hard fail.
+`pc_avg` was a false positive and is now accepted in STRICT per call-site
+pointer/count facts. The remaining 5 (`g_bs`) are conservative STRICT
+rejections for a pointer bounded by `start`/`end` parameters with a computed
+`sizeof/sizeof - 1` length — safe-mode rules, not unsoundness.
+
+`tests/compiler/abi_mixed/run_suite.py`: 12/12 steps, 0 failures. Objects
+built by c+ and clang from a real C helper link in BOTH directions and print
+identical output — the previously unproven cross-compiler ABI claim.
+
+`tests/compiler/rust_proof/run_proof.py`: 14 paired C+/Rust scenarios,
+14/14 passed: AGREE_COMPILE 10, AGREE_TRAP 1, CPLUS_STRICTER 3, MISMATCH 0.
+The three "stricter" cases are raw-pointer UAF/double-free/null where Rust
+requires `unsafe` and accepts; C+ gives named compile-time diagnostics.

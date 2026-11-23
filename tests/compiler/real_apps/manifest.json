@@ -1,0 +1,203 @@
+{
+  "schema": 1,
+  "suite": "real_apps",
+  "description": "Pinned, unmodified real C applications and games downloaded at a full upstream commit and run through c+ LEGACY/DEFAULT/STRICT (--sanitize=none), clang -O2 and gcc-14 -O2 across -std=c89/c99/c11/c17. Every build, emitted-C byte comparison, exported-symbol comparison, stdout byte comparison and exit code is checked. No suppression, no silent skips.",
+  "upstream": {
+    "name": "TheAlgorithms/C",
+    "url": "https://github.com/TheAlgorithms/C",
+    "pinned_commit": "e5dad3fa8def3726ec850ca66a7f51521f8ad393",
+    "raw_base": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393",
+    "license": "GPL-3.0-or-later (LICENSE at pinned commit: 'GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007'); local build/test only, no redistribution of upstream source in this repository",
+    "license_url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/LICENSE",
+    "download": "curl -fsSL --max-time 45 -o <dest> <url>"
+  },
+  "standards": [
+    "c89",
+    "c99",
+    "c11",
+    "c17"
+  ],
+  "modes": [
+    "--legacy-c",
+    "--default",
+    "--strict"
+  ],
+  "sanitize": "none",
+  "timeout_sec": 45,
+  "reference_cc": "/usr/bin/clang",
+  "optional_reference_cc": "/opt/homebrew/bin/gcc-14",
+  "reference_flags": [
+    "-std=<std>",
+    "-O2"
+  ],
+  "cases": [
+    {
+      "name": "shunting_yard",
+      "project": "Shunting-yard infix to RPN converter",
+      "path": "misc/shunting_yard.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/misc/shunting_yard.c",
+      "sha256": "9bff2ae0e57132202f8a329b734bba59c28c30982db625c9d37f763e5fe87410",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "Infix: 3 + 4 * ( 2 - 1 )\nRPN: 3 4 2 1 - * +\nReturn code: 0\n\nInfix: 3 + 4 * 2 / ( 1 - 5 ) ^ 2 ^ 3\nRPN: 3 4 2 * 1 5 - 2 3 ^ ^ / +\nReturn code: 0\n\nTesting successfully completed!\n",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "hash_adler32",
+      "project": "Adler-32 checksum utility",
+      "path": "hash/hash_adler32.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/hash/hash_adler32.c",
+      "sha256": "a48bf21e3864f6b28b0a77c0aa32566f401cc16e9869e388bbb2bbdf7ec7f57c",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "Tests passed\n",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "hamming_distance",
+      "project": "Hamming distance calculator",
+      "path": "misc/hamming_distance.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/misc/hamming_distance.c",
+      "sha256": "4a918e0d6f833c75db0214ccf66280a122dd07418691699bd45d11b62d0a82e5",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "All tests have successfully passed!\n",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "boyer_moore_search",
+      "project": "Boyer-Moore string search tool",
+      "path": "searching/pattern_search/boyer_moore_search.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/searching/pattern_search/boyer_moore_search.c",
+      "sha256": "4f47404bf981e76f8956e491d2cf9fa51d58b975239ad3ec7e09028842a03fbd",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "String test: AABCAB12AFAABCABFFEGABCAB\nTest1: search pattern ABCAB\n--Pattern is found at: 1\n--Pattern is found at: 11\n--Pattern is found at: 20\nTest2: search pattern FFF\nTest3: search pattern CAB\n--Pattern is found at: 3\n--Pattern is found at: 13\n--Pattern is found at: 22\n",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "bisection_method",
+      "project": "Bisection root-finding solver",
+      "path": "numerical_methods/bisection_method.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/numerical_methods/bisection_method.c",
+      "sha256": "3b5a017ec17e779d1964df4770398da56e63f020bf5a85e7ffba3a5452d606d8",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "All tests have successfully passed!\n",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "prime_sieve",
+      "project": "Sieve of Eratosthenes prime counter",
+      "path": "math/prime_sieve.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/math/prime_sieve.c",
+      "sha256": "1a0d8b7063dc28613b8fcd0039cd5b7b346c42c2e1e2fef77421f622632c03fa",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "Test Case 1...Passed\n",
+      "standard_support": [
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "tower_of_hanoi",
+      "project": "Towers of Hanoi puzzle solver",
+      "path": "misc/tower_of_hanoi.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/misc/tower_of_hanoi.c",
+      "sha256": "eea0eaaa2922d4d4ebb53ce95d5c9a042bb3232c01f3cfb946c383052f7834d8",
+      "args": [],
+      "stdin": "3\n",
+      "expected_rc": 0,
+      "expected_stdout": "Number of disks: \nMove disk : 1 from A to B\nMove disk : 2 from A to C\nMove disk : 1 from B to C\nMove disk : 3 from A to B\nMove disk : 1 from C to A\nMove disk : 2 from C to B\nMove disk : 1 from A to B\n",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "merge_sort",
+      "project": "Interactive merge-sort utility",
+      "path": "sorting/merge_sort.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/sorting/merge_sort.c",
+      "sha256": "f2a3f91d649c8b9bb1bd44f149dfc36fe6aae0b052acaa12c08c72cdee9b7daf",
+      "args": [],
+      "stdin": "3\n3\n1\n2\n",
+      "expected_rc": 0,
+      "expected_stdout": "Enter Array size: Enter number[0]: Enter number[1]: Enter number[2]: Sorted Array: 1 2 3 \n",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "infix_to_postfix",
+      "project": "Interactive infix to postfix converter",
+      "path": "conversions/infix_to_postfix.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/conversions/infix_to_postfix.c",
+      "sha256": "fd0e166a17df66ae380a815131d04723e302fe13d4ca05d56129362e6c763d1e",
+      "args": [],
+      "stdin": "3+4*2\n",
+      "expected_rc": 0,
+      "expected_stdout": "Enter infix expression: Postfix expression is 342*+",
+      "standard_support": [
+        "c89",
+        "c99",
+        "c11",
+        "c17"
+      ]
+    },
+    {
+      "name": "decimal_to_any_base",
+      "project": "Arbitrary-base number conversion utility",
+      "path": "conversions/decimal_to_any_base.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/conversions/decimal_to_any_base.c",
+      "sha256": "c7e0bbb5a75275a2bbf52739974526bbb24a3d980b3e6e8739b54ff14ce6dfc0",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "[+] All tests have successfully passed!\n",
+      "standard_support": [
+        "c99",
+        "c11",
+        "c17"
+      ]
+    }
+  ]
+}

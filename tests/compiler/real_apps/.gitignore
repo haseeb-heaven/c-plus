@@ -1,0 +1,3 @@
+# Downloaded upstream sources and all generated artifacts (never committed).
+cache/
+results/

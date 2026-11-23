@@ -298,6 +298,34 @@ using IndirectSlotExtents = std::map<ArgSlotKey, SlotExtent>;
 using FieldSlotExtents =
     std::map<ArgSlotKey, std::map<const FieldDecl *, SlotExtent>>;
 
+/// A per-call-site fact pairing a pointer argument slot with the integer
+/// argument slot that supplies its element count.  Checked C's
+/// Sema::ConcretizeFromFunctionTypeWithArgs (clang/lib/Sema/SemaBounds.cpp)
+/// concretizes function-type bounds from each call's argument list instead of
+/// collapsing all callers to one unknown extent; we do the same here and keep
+/// every site's (pointer slot, count slot, actual extent) triple.  `count < 0`
+/// or `countSlot == UINT_MAX` marks a site where no companion count could be
+/// proven, which disables the pairing for that slot (fail closed).
+struct CallSiteExtentFact {
+  static constexpr unsigned kNoCountSlot = ~0u;
+  unsigned ptrSlot = 0;
+  unsigned countSlot = 0;
+  long long extentBytes = -1;
+  long long count = -1;
+  bool exceeds = false; // declared count * element size > actual extent
+  bool operator<(const CallSiteExtentFact &o) const {
+    if (ptrSlot != o.ptrSlot) return ptrSlot < o.ptrSlot;
+    if (countSlot != o.countSlot) return countSlot < o.countSlot;
+    if (extentBytes != o.extentBytes) return extentBytes < o.extentBytes;
+    if (count != o.count) return count < o.count;
+    return exceeds < o.exceeds;
+  }
+};
+using CallSiteFacts = std::map<std::string, std::set<CallSiteExtentFact>>;
+/// (callee, pointer slot) -> companion element-count slot, derived only when
+/// every recorded call site pairs the same slots and stays within its extent.
+using CountPairedParams = std::map<ArgSlotKey, unsigned>;
+
 class SafetyVisitor : public RecursiveASTVisitor<SafetyVisitor> {
 public:
   SafetyVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string filename,
@@ -426,6 +454,8 @@ public:
       const std::map<std::string, std::map<unsigned, ParamExtent>> &m) {
     callParamExtents_ = m;
   }
+  const CallSiteFacts &callSiteFacts() const { return callSiteFacts_; }
+  void setCallSiteFacts(const CallSiteFacts &m) { callSiteFacts_ = m; }
   const IndirectSlotExtents &indirectSlotExtents() const {
     return indirectSlotExtents_;
   }
@@ -912,6 +942,118 @@ public:
       return false;
     out = it->second;
     return true;
+  }
+
+  /// Byte size of the pointee of a pointer argument (0 when not statically
+  /// known).  Needed to relate an element count to an actual byte extent.
+  unsigned long long pointeeSizeOfArg(const Expr *arg) const {
+    if (!arg)
+      return 0;
+    QualType aq = arg->IgnoreParenImpCasts()->getType();
+    // At a call site an array argument still has ARRAY type (decay has not
+    // happened in the expression's type).  Handle both arrays and pointers.
+    QualType t;
+    if (const auto *at = aq->getAsArrayTypeUnsafe())
+      t = at->getElementType();
+    else if (const auto *pt = aq->getAs<PointerType>())
+      t = pt->getPointeeType();
+    else
+      return 0;
+    if (t.isNull() || t->isVoidType() || t->isIncompleteType() ||
+        t->isDependentType())
+      return 0;
+    return (unsigned long long)(ctx_.getTypeSize(t) / 8u);
+  }
+
+  /// An adjacent integer argument that supplies the pointer's element count.
+  /// `knownConst` also accepts locals folded to a constant in the collection
+  /// pass, so a passed length variable counts when its value is known.
+  bool companionCountArg(const CallExpr *call, unsigned ptrSlot,
+                         unsigned &countSlot, long long &count) const {
+    for (unsigned j = 0; j < call->getNumArgs(); ++j) {
+      if (j == ptrSlot || (j != ptrSlot + 1 && j + 1 != ptrSlot))
+        continue;
+      const Expr *a = call->getArg(j)->IgnoreParenImpCasts();
+      if (!a->getType()->isIntegerType())
+        continue;
+      llvm::APSInt v;
+      if (!knownConst(a, v) || !fits64(v))
+        continue;
+      count = v.isNegative() ? v.getSExtValue() : (long long)v.getZExtValue();
+      if (count < 0)
+        continue;
+      countSlot = j;
+      return true;
+    }
+    return false;
+  }
+
+  /// Condition of a NUL-terminated traversal: `s[i]` or `s[i] != '\0'`.
+  const ArraySubscriptExpr *nulCondSubscript(const Expr *cond) const {
+    if (!cond)
+      return nullptr;
+    const Expr *e = cond->IgnoreParenImpCasts();
+    if (const auto *bo = dyn_cast<BinaryOperator>(e)) {
+      if (bo->getOpcode() != BO_NE)
+        return nullptr;
+      const auto *ase =
+          dyn_cast<ArraySubscriptExpr>(bo->getLHS()->IgnoreParenImpCasts());
+      const Expr *other = bo->getRHS();
+      if (!ase) {
+        ase = dyn_cast<ArraySubscriptExpr>(bo->getRHS()->IgnoreParenImpCasts());
+        other = bo->getLHS();
+      }
+      if (!ase || !other)
+        return nullptr;
+      Expr::EvalResult r;
+      if (!(other->IgnoreParenImpCasts()->EvaluateAsInt(r, ctx_) &&
+            r.Val.isInt() && r.Val.getInt() == 0))
+        return nullptr;
+      return ase;
+    }
+    return dyn_cast<ArraySubscriptExpr>(e);
+  }
+
+  bool nulTraversalKey(const ArraySubscriptExpr *ase, const VarDecl *&base,
+                       const VarDecl *&idx) const {
+    if (!ase)
+      return false;
+    const auto *bref =
+        dyn_cast<DeclRefExpr>(ase->getBase()->IgnoreParenImpCasts());
+    const auto *iref =
+        dyn_cast<DeclRefExpr>(ase->getIdx()->IgnoreParenImpCasts());
+    base = bref ? dyn_cast<VarDecl>(bref->getDecl()) : nullptr;
+    idx = iref ? dyn_cast<VarDecl>(iref->getDecl()) : nullptr;
+    return base && idx;
+  }
+
+  static bool isConstCharParam(const VarDecl *vd) {
+    const auto *pvd = dyn_cast_or_null<ParmVarDecl>(vd);
+    if (!pvd || !pvd->getType()->isPointerType())
+      return false;
+    QualType pointee = pvd->getType()->getPointeeType();
+    return pointee->isCharType() && pointee.isConstQualified();
+  }
+
+  /// True when a pointer parameter access has one of the two proven
+  /// contracts: a companion count parameter that visibly bounds the index,
+  /// or a read-only NUL-terminator traversal of a `const char *`.
+  bool hasProvenParamExtent(const ParmVarDecl *pvd,
+                            const ArraySubscriptExpr *sub) const {
+    const ArgSlotKey key{currentFunction_, pvd->getFunctionScopeIndex()};
+    auto cit = countPairedParams_.find(key);
+    if (cit != countPairedParams_.end()) {
+      const auto *iref =
+          dyn_cast<DeclRefExpr>(sub->getIdx()->IgnoreParenImpCasts());
+      const auto *ivd = iref ? dyn_cast<VarDecl>(iref->getDecl()) : nullptr;
+      auto lit = ivd ? loopCountBound_.find(ivd) : loopCountBound_.end();
+      return lit != loopCountBound_.end() && lit->second == cit->second;
+    }
+    const auto *iref =
+        dyn_cast<DeclRefExpr>(sub->getIdx()->IgnoreParenImpCasts());
+    const VarDecl *ivd = iref ? dyn_cast<VarDecl>(iref->getDecl()) : nullptr;
+    return ivd && isConstCharParam(pvd) &&
+           nulTraversal_.count({pvd, ivd}) != 0;
   }
 
   /// Compile-time value of a variable at a compound update (`x += 1`, `x++`).
@@ -3141,6 +3283,26 @@ public:
     const VarDecl *induction = nullptr;
     long long worstIndex = 0;
     bool haveBound = report_ && parseLoopBound(s, induction, worstIndex);
+    // Guard proving a paired pointer's index is bounded by its companion
+    // length parameter (`for (i = 0; i < length; i++)`).
+    const VarDecl *countInduction = nullptr;
+    unsigned countSlot = 0;
+    bool haveCountBound =
+        report_ && countBoundLoop(s, countInduction, countSlot);
+    auto oldCountIt = loopCountBound_.find(countInduction);
+    bool hadOldCount = oldCountIt != loopCountBound_.end();
+    unsigned savedCount = hadOldCount ? oldCountIt->second : 0;
+    if (haveCountBound)
+      loopCountBound_[countInduction] = countSlot;
+    // A `const char *` traversed only up to its NUL terminator carries an
+    // implicit extent contract; scope it to this loop's body.
+    auto savedNul = nulTraversal_;
+    if (report_) {
+      const VarDecl *nb = nullptr, *ni = nullptr;
+      if (nulTraversalKey(nulCondSubscript(s->getCond()), nb, ni) &&
+          isConstCharParam(nb))
+        nulTraversal_.insert({nb, ni});
+    }
     // Record the loop counter's starting value so divisions by the counter
     // (or counter + positive offset) can be proved non-zero.
     long long savedLower = 0;
@@ -3161,6 +3323,15 @@ public:
     if (haveBound)
       loopIndexOverride_[induction] = worstIndex;
     bool r = RecursiveASTVisitor::TraverseForStmt(s);
+    if (report_) {
+      if (haveCountBound) {
+        if (hadOldCount)
+          loopCountBound_[countInduction] = savedCount;
+        else
+          loopCountBound_.erase(countInduction);
+      }
+      nulTraversal_ = savedNul;
+    }
     if (haveBound) {
       if (hadOld)
         loopIndexOverride_[induction] = saved;
@@ -3191,7 +3362,16 @@ public:
             nonZeroVars_.insert(vd);
             invalidatedNonZero_.erase(vd);
           }
+    auto savedNul = nulTraversal_;
+    if (report_) {
+      const VarDecl *nb = nullptr, *ni = nullptr;
+      if (nulTraversalKey(nulCondSubscript(s->getCond()), nb, ni) &&
+          isConstCharParam(nb))
+        nulTraversal_.insert({nb, ni});
+    }
     bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
+    if (report_)
+      nulTraversal_ = savedNul;
     if (guardVar)
       nonZeroVars_.erase(guardVar);
     --conditionalDepth_;
@@ -3210,6 +3390,87 @@ public:
     bool r = RecursiveASTVisitor::TraverseSwitchStmt(s);
     --conditionalDepth_;
     return r;
+  }
+
+  /// Recognise `for (T i = 0; i < countParam; i++)` where the bound is a
+  /// parameter (not a constant, so parseLoopBound cannot see it).  This is
+  /// the visible guard required to accept a paired pointer parameter.
+  bool countBoundLoop(const ForStmt *s, const VarDecl *&induction,
+                      unsigned &countSlot) const {
+    if (!s || !s->getInit() || !s->getCond() || !s->getInc())
+      return false;
+    const VarDecl *ivd = nullptr;
+    if (const auto *ds = dyn_cast<DeclStmt>(s->getInit()))
+      for (const Decl *d : ds->decls())
+        if (const auto *v = dyn_cast<VarDecl>(d)) {
+          ivd = v;
+          break;
+        }
+    if (!ivd || !ivd->getType()->isIntegerType() || !ivd->getInit())
+      return false;
+    Expr::EvalResult ir;
+    if (!ivd->getInit()->EvaluateAsInt(ir, ctx_) || !ir.Val.isInt() ||
+        ir.Val.getInt() != 0)
+      return false;
+    const auto *bo =
+        dyn_cast<BinaryOperator>(s->getCond()->IgnoreParenImpCasts());
+    if (!bo || bo->getOpcode() != BO_LT)
+      return false;
+    const auto *lref =
+        dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+    if (!lref || lref->getDecl() != ivd)
+      return false;
+    const auto *pref =
+        dyn_cast<DeclRefExpr>(bo->getRHS()->IgnoreParenImpCasts());
+    const auto *pvd = pref ? dyn_cast<ParmVarDecl>(pref->getDecl()) : nullptr;
+    if (!pvd || !pvd->getType()->isIntegerType())
+      return false;
+    // The AST is built from lowered C, where `i++` has become a
+    // CPLUS_INC statement-expression.  Do not require a specific increment
+    // spelling: the condition `i < length` by itself bounds every value of
+    // the induction variable used inside the loop body.
+    const Expr *ie = s->getInc()->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(ie)) {
+      if (uo->getOpcode() != UO_PostInc && uo->getOpcode() != UO_PreInc)
+        return false;
+    } else if (const auto *bio = dyn_cast<BinaryOperator>(ie)) {
+      Expr::EvalResult sr;
+      if (bio->getOpcode() != BO_AddAssign || !bio->getRHS() ||
+          !bio->getRHS()->EvaluateAsInt(sr, ctx_) || !sr.Val.isInt() ||
+          sr.Val.getInt() != 1)
+        return false;
+    }
+    // Any other increment form (including a lowered statement-expression)
+    // is accepted once the condition bounds the index by the count param.
+    induction = ivd;
+    countSlot = pvd->getFunctionScopeIndex();
+    return true;
+  }
+
+  /// Derive the safely count-paired slots from the facts gathered by the
+  /// collection pass. Called once on the reporting visitor.
+  void deriveCountPairedParams() {
+    countPairedParams_.clear();
+    for (const auto &fn : callSiteFacts_) {
+      std::map<unsigned, std::vector<const CallSiteExtentFact *>> bySlot;
+      for (const auto &f : fn.second)
+        bySlot[f.ptrSlot].push_back(&f);
+      for (const auto &kv : bySlot) {
+        if (kv.second.empty())
+          continue;
+        unsigned countSlot = kv.second.front()->countSlot;
+        bool ok = countSlot != CallSiteExtentFact::kNoCountSlot;
+        for (const auto *f : kv.second) {
+          if (f->countSlot != countSlot || f->count < 0 || f->extentBytes <= 0 ||
+              f->exceeds) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok)
+          countPairedParams_[{fn.first, kv.first}] = countSlot;
+      }
+    }
   }
 
   bool TraverseFunctionDecl(FunctionDecl *fd) {
@@ -5470,6 +5731,31 @@ public:
         }
         if (ext < 0)
           continue;
+        // Keep this call site's pointer/count pairing instead of collapsing
+        // differing extents into a single "unknown" marker.  Mirrors
+        // Checked C's ConcretizeFromFunctionTypeWithArgs: bounds are
+        // concretized per call, and only a site whose declared count exceeds
+        // its actual extent is a genuine conflict.
+        {
+          CallSiteExtentFact f;
+          f.ptrSlot = i;
+          f.extentBytes = ext;
+          unsigned long long es = pointeeSizeOfArg(call->getArg(i));
+          unsigned cslot = 0;
+          long long cnt = -1;
+          if (es && companionCountArg(call, i, cslot, cnt)) {
+            f.countSlot = cslot;
+            f.count = cnt;
+            f.exceeds = (unsigned long long)cnt * es > (unsigned long long)ext;
+            if (f.exceeds)
+              conflictedParams_.insert({name, i});
+          } else {
+            // A site with a known extent but no provable companion count
+            // disables pairing for this slot (sentinel count slot).
+            f.countSlot = CallSiteExtentFact::kNoCountSlot;
+          }
+          callSiteFacts_[name].insert(f);
+        }
         auto &slot = callParamExtents_[name][i];
         // A second, different extent makes the parameter unverifiable:
         // keep the "unknown" marker instead of last-writer-wins.
@@ -6372,7 +6658,8 @@ public:
     const Expr *subBase = subscript->getBase()->IgnoreParenCasts();
     if (const auto *pref = dyn_cast<DeclRefExpr>(subBase))
       if (const auto *pvd = dyn_cast<ParmVarDecl>(pref->getDecl()))
-        if (pvd->getType()->isPointerType() && !heapStateOf(subBase)) {
+        if (pvd->getType()->isPointerType() && !heapStateOf(subBase) &&
+            !hasProvenParamExtent(pvd, subscript)) {
           std::string msg = "pointer parameter '" +
                             pvd->getNameAsString() +
                             "' has unverifiable extent; subscript cannot be "
@@ -6751,6 +7038,16 @@ private:
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, ParamExtent>> callParamExtents_;
+  // Per-call-site pointer/count pairing facts (see CallSiteExtentFact).
+  CallSiteFacts callSiteFacts_;
+  CountPairedParams countPairedParams_;
+  // Loop induction variable -> companion count parameter slot, while the
+  // loop body is traversed.  Used to prove `array[i]` is bounded by `length`.
+  std::map<const VarDecl *, unsigned> loopCountBound_;
+  // (base parameter, index variable) pairs of active NUL-terminator
+  // traversals (`while (s[i] != '\0')` / `for (...; s[i]; ...)`), only for
+  // read-only `const char *` parameters.
+  std::set<std::pair<const VarDecl *, const VarDecl *>> nulTraversal_;
   // Argument-slot extents (function name, parameter slot).  These are keyed
   // by the callee slot, not by variable spelling, so an extent survives
   // casts and aliases at the use site.  See SlotExtent above.
@@ -7112,6 +7409,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setAddressTakenVars(collect.addressTakenVars());
   check.setStackArrayExtents(collect.stackArrayExtents());
   check.setCallParamExtents(collect.callParamExtents());
+  check.setCallSiteFacts(collect.callSiteFacts());
+  check.deriveCountPairedParams();
   check.setIndirectSlotExtents(collect.indirectSlotExtents());
   check.setFieldSlotExtents(collect.fieldSlotExtents());
   check.setConflictedParams(collect.conflictedParams());

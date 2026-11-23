@@ -872,11 +872,18 @@ void cplus_free_registered(void *p, const char *file, int line) {
     cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(p)];
     int recently_freed = recent->ptr == p;
     cplus_alloc_unlock();
-    if (retired_generation != 0u || recently_freed)
+    if (retired_generation != 0u || recently_freed) {
       cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", file, line,
                         "allocation released twice");
-    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", file, line,
-                      "pointer was not registered with the C+ runtime");
+    }
+    // A pointer whose allocation was produced OUTSIDE the tracked paths
+    // (a helper returning malloc/strdup/realloc, a third-party library) is
+    // ordinary C and must keep ordinary C behaviour. Aborting here broke
+    // real unmodified C applications: the rewriter wraps `free()` for ABI
+    // preservation but cannot see allocations made in another TU. Managed
+    // releases (cplus_release) and tracked double frees above still trap.
+    free(p);
+    return;
   }
   uint64_t generation = slot->generation;
   slot->ptr = CPLUS_TOMBSTONE;

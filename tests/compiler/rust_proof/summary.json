@@ -1,0 +1,1548 @@
+{
+  "generated_utc": "2026-11-23T20:58:34.945432+00:00",
+  "cplus_bin": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "cplus_version": "C+ 0.1.0\nLanguage: C+ (C with memory safety, deterministic RAII, lightweight classes)\nBackend: host Clang/LLVM",
+  "rustc_version": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+  "timeout_seconds": 45,
+  "commands": {
+    "c_check": "c+ check --strict --sanitize=none <c>",
+    "c_build": "c+ build --strict --sanitize=none <c> -o <bin>",
+    "c_runtime": "<c-bin>",
+    "rust_compile": "rustc --edition 2021 -C overflow-checks=on <rs> -o <bin>",
+    "rust_runtime": "<rs-bin>"
+  },
+  "counts": {
+    "scenarios": 14,
+    "passed": 14,
+    "failed": 0,
+    "by_classification": {
+      "AGREE_COMPILE": 10,
+      "AGREE_TRAP": 1,
+      "CPLUS_STRICTER": 3
+    }
+  },
+  "mismatch_paths": [],
+  "results": [
+    {
+      "scenario": "const_oob",
+      "operation": "constant out-of-bounds array read",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs",
+      "c_source": "#include <stdio.h>\nint main(void){int a[4]={0};return a[7];}\n",
+      "rust_source": "const A: [i32;4] = [0;4]; const X: i32 = A[7];\nfn main(){ println!(\"{}\", X); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-const_oob-7vajiktk/const_oob.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [
+          "E0080"
+        ],
+        "compile_error_message": "error[E0080]: index out of bounds: the length is 4 but the index is 7",
+        "compile_diagnostic": "error[E0080]: index out of bounds: the length is 4 but the index is 7\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs:1:42\n  |\n1 | const A: [i32;4] = [0;4]; const X: i32 = A[7];\n  |                                          ^^^^ evaluation of `X` failed here\n\nnote: erroneous constant encountered\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs:2:27\n  |\n2 | fn main(){ println!(\"{}\", X); }\n  |                           ^\n\nnote: erroneous constant encountered\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs:2:27\n  |\n2 | fn main(){ println!(\"{}\", X); }\n  |                           ^\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0080`.\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-const_oob-7vajiktk/const_oob.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error[E0080]: index out of bounds: the length is 4 but the index is 7\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs:1:42\n  |\n1 | const A: [i32;4] = [0;4]; const X: i32 = A[7];\n  |                                          ^^^^ evaluation of `X` failed here\n\nnote: erroneous constant encountered\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs:2:27\n  |\n2 | fn main(){ println!(\"{}\", X); }\n  |                           ^\n\nnote: erroneous constant encountered\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs:2:27\n  |\n2 | fn main(){ println!(\"{}\", X); }\n  |                           ^\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0080`.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: '[CPLUS-SAFE-BOUNDS] constant array index 7'",
+        "found rustc error code: 'E0080'",
+        "found rustc message: 'index out of bounds'"
+      ]
+    },
+    {
+      "scenario": "dyn_oob",
+      "operation": "runtime-determined out-of-bounds array read",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs",
+      "c_source": "#include <stdlib.h>\nint main(void){int a[4]={0};const char*s=getenv(\"PROOF_IDX\");\n               int i=s?atoi(s):100;return a[i];}\n",
+      "rust_source": "fn main(){ let a=[0i32;4];\n    let i:usize=std::env::args().count()+99;\n    println!(\"{}\",a[i]); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 0,
+        "check_diagnostic": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.c ok\n",
+        "build_rc": 0,
+        "build_diagnostic": "",
+        "runtime_rc": -6,
+        "runtime_diagnostic": "C+ error: index 100 is outside the bounds of 'a' (length 4)\n",
+        "runtime_stdout": "",
+        "runtime_stderr": "C+ error: index 100 is outside the bounds of 'a' (length 4)\n",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.c"
+            ],
+            "rc": 0,
+            "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.c ok\n",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.c.bin"
+            ],
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.c.bin"
+            ],
+            "rc": -6,
+            "stdout": "",
+            "stderr": "C+ error: index 100 is outside the bounds of 'a' (length 4)\n",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 0,
+        "compile_error_codes": [],
+        "compile_error_message": "",
+        "compile_diagnostic": "",
+        "runtime_rc": 101,
+        "runtime_panic": "thread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100",
+        "runtime_diagnostic": "\nthread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+        "runtime_stdout": "",
+        "runtime_stderr": "\nthread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.rs.bin"
+            ],
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.rs.bin"
+            ],
+            "rc": 101,
+            "stdout": "",
+            "stderr": "\nthread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_TRAP",
+      "expected_classification": "AGREE_TRAP",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_TRAP OK",
+        "found C+ runtime diagnostic: \"index 100 is outside the bounds of 'a' (length 4)\"",
+        "found Rust panic: 'index out of bounds'"
+      ]
+    },
+    {
+      "scenario": "uaf",
+      "operation": "use-after-free: dereference a released allocation",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.rs",
+      "c_source": "#include <stdlib.h>\nint main(void){int*p=malloc(4);if(!p)return 1;free(p);return *p;}\n",
+      "rust_source": "// Equivalent operation requires unsafe: Box dropped, raw ptr kept.\nfn main(){ let mut b=Box::new(1i32);\n    let p=&mut *b as *mut i32; drop(b);\n    let v=unsafe{*p}; println!(\"{}\",v); }\n",
+      "rust_requires_unsafe": true,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2:62: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){int*p=malloc(4);if(!p)return 1;free(p);return *p;}\n                                                               ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\nnote: owner released: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2:62: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){int*p=malloc(4);if(!p)return 1;free(p);return *p;}\n                                                               ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\nnote: owner released: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2:62: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){int*p=malloc(4);if(!p)return 1;free(p);return *p;}\n                                                               ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\nnote: owner released: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-a33xk6ts/uaf.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2:62: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){int*p=malloc(4);if(!p)return 1;free(p);return *p;}\n                                                               ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\nnote: owner released: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 0,
+        "compile_error_codes": [],
+        "compile_error_message": "",
+        "compile_diagnostic": "",
+        "runtime_rc": 0,
+        "runtime_panic": "",
+        "runtime_diagnostic": "3\n",
+        "runtime_stdout": "3\n",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-a33xk6ts/uaf.rs.bin"
+            ],
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-a33xk6ts/uaf.rs.bin"
+            ],
+            "rc": 0,
+            "stdout": "3\n",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "CPLUS_STRICTER",
+      "expected_classification": "CPLUS_STRICTER",
+      "documented_difference": true,
+      "why": "C+ emits the named [CPLUS-SAFE-LIFETIME] use-after-free diagnostic at compile time. Rust has no safe spelling for this operation: the equivalent needs `unsafe` raw pointers and is undefined behaviour with no guaranteed deterministic trap (observed here: rustc accepts and the binary ran to completion). This is an intentional difference in enforcement point, not an agreement.",
+      "pass": true,
+      "reasons": [
+        "classification CPLUS_STRICTER OK",
+        "found C+ compile diagnostic: '[CPLUS-SAFE-LIFETIME] use-after-free'",
+        "found Rust unsafe marker: 'unsafe'"
+      ]
+    },
+    {
+      "scenario": "double_free",
+      "operation": "double release of one owner",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.rs",
+      "c_source": "#include \"cplus/cplus.h\"\nint main(void){managed int *p=cplus_new(int);*p=1;\n               cplus_release(p);cplus_release(p);return 0;}\n",
+      "rust_source": "// Equivalent operation requires unsafe: double Box::from_raw.\nfn main(){ let p=Box::into_raw(Box::new(1i32));\n    unsafe{ drop(Box::from_raw(p)); drop(Box::from_raw(p)); } }\n",
+      "rust_requires_unsafe": true,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:33: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\n                                  ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:85: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:33: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\n                                  ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:85: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:33: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\n                                  ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:85: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-v8igkggq/double_free.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:33: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\n                                  ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:85: error: [CPLUS-OWNER] double free of 'p'\n                 cplus_release(p);cplus_release(p);return 0;}\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 0,
+        "compile_error_codes": [],
+        "compile_error_message": "",
+        "compile_diagnostic": "",
+        "runtime_rc": -5,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-v8igkggq/double_free.rs.bin"
+            ],
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-v8igkggq/double_free.rs.bin"
+            ],
+            "rc": -5,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "CPLUS_STRICTER",
+      "expected_classification": "CPLUS_STRICTER",
+      "documented_difference": true,
+      "why": "C+ emits the named [CPLUS-OWNER] double free diagnostic at compile time. The Rust equivalent of the same operation requires `unsafe` raw pointers (safe Rust rejects it as a move error, which would not be the same operation). rustc therefore accepts; the allocator traps at runtime instead. Intentional difference: compile-time named diagnostic vs runtime UB trap.",
+      "pass": true,
+      "reasons": [
+        "classification CPLUS_STRICTER OK",
+        "found C+ compile diagnostic: \"[CPLUS-OWNER] double free of 'p'\"",
+        "found Rust unsafe marker: 'unsafe'"
+      ]
+    },
+    {
+      "scenario": "null_deref",
+      "operation": "null pointer dereference",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs",
+      "c_source": "int main(void){int*p=0;return *p;}\n",
+      "rust_source": "// Equivalent operation requires unsafe: raw null pointer dereference.\nfn main(){ let p: *const i32 = std::ptr::null();\n    let v=unsafe{*p}; println!(\"{}\",v); }\n",
+      "rust_requires_unsafe": true,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c:1:31: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n  int main(void){int*p=0;return *p;}\n                                ^\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c:1:31: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n  int main(void){int*p=0;return *p;}\n                                ^\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c:1:31: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n  int main(void){int*p=0;return *p;}\n                                ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-axuf28c9/null_deref.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c:1:31: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n  int main(void){int*p=0;return *p;}\n                                ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 0,
+        "compile_error_codes": [],
+        "compile_error_message": "",
+        "compile_diagnostic": "",
+        "runtime_rc": -6,
+        "runtime_panic": "thread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred",
+        "runtime_diagnostic": "\nthread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+        "runtime_stdout": "",
+        "runtime_stderr": "\nthread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-axuf28c9/null_deref.rs.bin"
+            ],
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-axuf28c9/null_deref.rs.bin"
+            ],
+            "rc": -6,
+            "stdout": "",
+            "stderr": "\nthread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "CPLUS_STRICTER",
+      "expected_classification": "CPLUS_STRICTER",
+      "documented_difference": true,
+      "why": "C+ emits the named [CPLUS-SAFE-LIFETIME] null pointer dereference diagnostic at compile time. A literal null dereference has no safe Rust spelling; the equivalent needs `unsafe`, so rustc accepts and the trap happens at runtime (panic/abort). Intentional difference in enforcement point; not faked as agreement.",
+      "pass": true,
+      "reasons": [
+        "classification CPLUS_STRICTER OK",
+        "found C+ compile diagnostic: 'null pointer dereference'",
+        "found Rust unsafe marker: 'unsafe'"
+      ]
+    },
+    {
+      "scenario": "signed_overflow",
+      "operation": "signed integer overflow at i32::MAX + 1",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.rs",
+      "c_source": "int main(void){int x=2147483647;volatile int y=1;return x+y;}\n",
+      "rust_source": "fn main(){ let x=i32::MAX; let y=1i32; println!(\"{}\", x+y); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c:1:57: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){int x=2147483647;volatile int y=1;return x+y;}\n                                                          ^\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c:1:57: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){int x=2147483647;volatile int y=1;return x+y;}\n                                                          ^\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c:1:57: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){int x=2147483647;volatile int y=1;return x+y;}\n                                                          ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-signed_overflow-os7ij641/signed_overflow.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c:1:57: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){int x=2147483647;volatile int y=1;return x+y;}\n                                                          ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [],
+        "compile_error_message": "error: this arithmetic operation will overflow",
+        "compile_diagnostic": "error: this arithmetic operation will overflow\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.rs:1:55\n  |\n1 | fn main(){ let x=i32::MAX; let y=1i32; println!(\"{}\", x+y); }\n  |                                                       ^^^ attempt to compute `i32::MAX + 1_i32`, which would overflow\n  |\n  = note: `#[deny(arithmetic_overflow)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-signed_overflow-os7ij641/signed_overflow.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error: this arithmetic operation will overflow\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.rs:1:55\n  |\n1 | fn main(){ let x=i32::MAX; let y=1i32; println!(\"{}\", x+y); }\n  |                                                       ^^^ attempt to compute `i32::MAX + 1_i32`, which would overflow\n  |\n  = note: `#[deny(arithmetic_overflow)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: '[CPLUS-ARITH] signed integer overflow in addition'",
+        "found rustc message: 'this arithmetic operation will overflow'"
+      ]
+    },
+    {
+      "scenario": "div_zero",
+      "operation": "integer division by zero",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.rs",
+      "c_source": "int main(void){int z=0;volatile int x=10;return x/z;}\n",
+      "rust_source": "fn main(){ let z=0i32; let x=10i32; println!(\"{}\", x/z); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c:1:49: error: [CPLUS-ARITH] division by zero\n  int main(void){int z=0;volatile int x=10;return x/z;}\n                                                  ^\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c:1:49: error: [CPLUS-ARITH] division by zero\n  int main(void){int z=0;volatile int x=10;return x/z;}\n                                                  ^\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c:1:49: error: [CPLUS-ARITH] division by zero\n  int main(void){int z=0;volatile int x=10;return x/z;}\n                                                  ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-div_zero-ypsj0o88/div_zero.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c:1:49: error: [CPLUS-ARITH] division by zero\n  int main(void){int z=0;volatile int x=10;return x/z;}\n                                                  ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [],
+        "compile_error_message": "error: this operation will panic at runtime",
+        "compile_diagnostic": "error: this operation will panic at runtime\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.rs:1:52\n  |\n1 | fn main(){ let z=0i32; let x=10i32; println!(\"{}\", x/z); }\n  |                                                    ^^^ attempt to divide `10_i32` by zero\n  |\n  = note: `#[deny(unconditional_panic)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-div_zero-ypsj0o88/div_zero.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error: this operation will panic at runtime\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.rs:1:52\n  |\n1 | fn main(){ let z=0i32; let x=10i32; println!(\"{}\", x/z); }\n  |                                                    ^^^ attempt to divide `10_i32` by zero\n  |\n  = note: `#[deny(unconditional_panic)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: '[CPLUS-ARITH] division by zero'",
+        "found rustc message: 'attempt to divide'"
+      ]
+    },
+    {
+      "scenario": "invalid_shift",
+      "operation": "shift count greater than operand width",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.rs",
+      "c_source": "#include <stdint.h>\nint main(void){uint32_t x=1;uint32_t bad=x<<32;return (int)bad;}\n",
+      "rust_source": "fn main(){ let x=1u32; let bad = x << 32u32; println!(\"{}\",bad); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c:2:42: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand\n  int main(void){uint32_t x=1;uint32_t bad=x<<32;return (int)bad;}\n                                           ^\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c:2:42: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand\n  int main(void){uint32_t x=1;uint32_t bad=x<<32;return (int)bad;}\n                                           ^\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c:2:42: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand\n  int main(void){uint32_t x=1;uint32_t bad=x<<32;return (int)bad;}\n                                           ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-invalid_shift-oiu292xt/invalid_shift.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c:2:42: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand\n  int main(void){uint32_t x=1;uint32_t bad=x<<32;return (int)bad;}\n                                           ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [],
+        "compile_error_message": "error: this arithmetic operation will overflow",
+        "compile_diagnostic": "error: this arithmetic operation will overflow\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.rs:1:34\n  |\n1 | fn main(){ let x=1u32; let bad = x << 32u32; println!(\"{}\",bad); }\n  |                                  ^^^^^^^^^^ attempt to shift left by `32_u32`, which would overflow\n  |\n  = note: `#[deny(arithmetic_overflow)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-invalid_shift-oiu292xt/invalid_shift.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error: this arithmetic operation will overflow\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.rs:1:34\n  |\n1 | fn main(){ let x=1u32; let bad = x << 32u32; println!(\"{}\",bad); }\n  |                                  ^^^^^^^^^^ attempt to shift left by `32_u32`, which would overflow\n  |\n  = note: `#[deny(arithmetic_overflow)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: '[CPLUS-FFI] shift count 32 is not less than the width 32'",
+        "found rustc message: 'attempt to shift left by `32_u32`'"
+      ]
+    },
+    {
+      "scenario": "uninit_read",
+      "operation": "read of an uninitialised local",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.rs",
+      "c_source": "int main(void){int x;int y=x;return y;}\n",
+      "rust_source": "fn main(){ let x:i32; let y=x; println!(\"{}\",y); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:28: error: variable 'x' is uninitialized when used here [-Werror,-Wuninitialized]\n    1 | int main(void){int x;int y=x;return y;}\n      |                            ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:21: note: initialize the variable 'x' to silence this warning\n    1 | int main(void){int x;int y=x;return y;}\n      |                     ^\n      |                      = 0\n1 error generated.\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:28: error: variable 'x' is uninitialized when used here [-Werror,-Wuninitialized]\n    1 | int main(void){int x;int y=x;return y;}\n      |                            ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:21: note: initialize the variable 'x' to silence this warning\n    1 | int main(void){int x;int y=x;return y;}\n      |                     ^\n      |                      = 0\n1 error generated.\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:28: error: variable 'x' is uninitialized when used here [-Werror,-Wuninitialized]\n    1 | int main(void){int x;int y=x;return y;}\n      |                            ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:21: note: initialize the variable 'x' to silence this warning\n    1 | int main(void){int x;int y=x;return y;}\n      |                     ^\n      |                      = 0\n1 error generated.\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uninit_read-fnhkjt9n/uninit_read.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:28: error: variable 'x' is uninitialized when used here [-Werror,-Wuninitialized]\n    1 | int main(void){int x;int y=x;return y;}\n      |                            ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:21: note: initialize the variable 'x' to silence this warning\n    1 | int main(void){int x;int y=x;return y;}\n      |                     ^\n      |                      = 0\n1 error generated.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [
+          "E0381"
+        ],
+        "compile_error_message": "error[E0381]: used binding `x` isn't initialized",
+        "compile_diagnostic": "error[E0381]: used binding `x` isn't initialized\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.rs:1:29\n  |\n1 | fn main(){ let x:i32; let y=x; println!(\"{}\",y); }\n  |                -            ^ `x` used here but it isn't initialized\n  |                |\n  |                binding declared here but left uninitialized\n  |\nhelp: consider assigning a value\n  |\n1 | fn main(){ let x:i32 = 42; let y=x; println!(\"{}\",y); }\n  |                      ++++\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0381`.\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uninit_read-fnhkjt9n/uninit_read.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error[E0381]: used binding `x` isn't initialized\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.rs:1:29\n  |\n1 | fn main(){ let x:i32; let y=x; println!(\"{}\",y); }\n  |                -            ^ `x` used here but it isn't initialized\n  |                |\n  |                binding declared here but left uninitialized\n  |\nhelp: consider assigning a value\n  |\n1 | fn main(){ let x:i32 = 42; let y=x; println!(\"{}\",y); }\n  |                      ++++\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0381`.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: \"variable 'x' is uninitialized when used here\"",
+        "found rustc error code: 'E0381'"
+      ]
+    },
+    {
+      "scenario": "use_after_move",
+      "operation": "use of a moved-from owner",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.rs",
+      "c_source": "#include \"cplus/cplus.h\"\nint main(void){managed int*p=cplus_new(int);\n    managed int*q=cplus_move(p);(void)q;return *p;}\n",
+      "rust_source": "fn main(){ let s=String::from(\"x\"); let t=s;\n    println!(\"{}\", s); let _=t; }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c:4:58: error: use-after-move: use of moved-from resource 'p'\nhelp: the handle was zeroed by cplus_move\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c:4:58: error: use-after-move: use of moved-from resource 'p'\nhelp: the handle was zeroed by cplus_move\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c:4:58: error: use-after-move: use of moved-from resource 'p'\nhelp: the handle was zeroed by cplus_move\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-use_after_move-6dzon86p/use_after_move.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c:4:58: error: use-after-move: use of moved-from resource 'p'\nhelp: the handle was zeroed by cplus_move\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [
+          "E0382"
+        ],
+        "compile_error_message": "error[E0382]: borrow of moved value: `s`",
+        "compile_diagnostic": "error[E0382]: borrow of moved value: `s`\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.rs:2:20\n  |\n1 | fn main(){ let s=String::from(\"x\"); let t=s;\n  |                -                          - value moved here\n  |                |\n  |                move occurs because `s` has type `String`, which does not implement the `Copy` trait\n2 |     println!(\"{}\", s); let _=t; }\n  |                    ^ value borrowed here after move\n  |\nhelp: consider cloning the value if the performance cost is acceptable\n  |\n1 | fn main(){ let s=String::from(\"x\"); let t=s.clone();\n  |                                            ++++++++\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0382`.\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-use_after_move-6dzon86p/use_after_move.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error[E0382]: borrow of moved value: `s`\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.rs:2:20\n  |\n1 | fn main(){ let s=String::from(\"x\"); let t=s;\n  |                -                          - value moved here\n  |                |\n  |                move occurs because `s` has type `String`, which does not implement the `Copy` trait\n2 |     println!(\"{}\", s); let _=t; }\n  |                    ^ value borrowed here after move\n  |\nhelp: consider cloning the value if the performance cost is acceptable\n  |\n1 | fn main(){ let s=String::from(\"x\"); let t=s.clone();\n  |                                            ++++++++\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0382`.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: \"use-after-move: use of moved-from resource 'p'\"",
+        "found rustc error code: 'E0382'"
+      ]
+    },
+    {
+      "scenario": "exclusive_borrow",
+      "operation": "exclusive mutable borrow alias: f(&x,&x)",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.rs",
+      "c_source": "void f(int*a,int*b){*a=1;*b=2;}\nint main(void){int x=0;f(&x,&x);return x;}\n",
+      "rust_source": "fn f(a:&mut i32,b:&mut i32){*a=1;*b=2;}\nfn main(){ let mut x=0; f(&mut x,&mut x); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c:2:24: error: [CPLUS-BORROW] exclusive mutable borrow violated: arguments 0 and 1 both borrow '&x' passed to 'f'\n  int main(void){int x=0;f(&x,&x);return x;}\n                         ^\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c:2:24: error: [CPLUS-BORROW] exclusive mutable borrow violated: arguments 0 and 1 both borrow '&x' passed to 'f'\n  int main(void){int x=0;f(&x,&x);return x;}\n                         ^\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c:2:24: error: [CPLUS-BORROW] exclusive mutable borrow violated: arguments 0 and 1 both borrow '&x' passed to 'f'\n  int main(void){int x=0;f(&x,&x);return x;}\n                         ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-exclusive_borrow-3x8a27xk/exclusive_borrow.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c:2:24: error: [CPLUS-BORROW] exclusive mutable borrow violated: arguments 0 and 1 both borrow '&x' passed to 'f'\n  int main(void){int x=0;f(&x,&x);return x;}\n                         ^\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [
+          "E0499"
+        ],
+        "compile_error_message": "error[E0499]: cannot borrow `x` as mutable more than once at a time",
+        "compile_diagnostic": "error[E0499]: cannot borrow `x` as mutable more than once at a time\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.rs:2:34\n  |\n2 | fn main(){ let mut x=0; f(&mut x,&mut x); }\n  |                         - ------ ^^^^^^ second mutable borrow occurs here\n  |                         | |\n  |                         | first mutable borrow occurs here\n  |                         first borrow later used by call\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0499`.\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-exclusive_borrow-3x8a27xk/exclusive_borrow.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error[E0499]: cannot borrow `x` as mutable more than once at a time\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.rs:2:34\n  |\n2 | fn main(){ let mut x=0; f(&mut x,&mut x); }\n  |                         - ------ ^^^^^^ second mutable borrow occurs here\n  |                         | |\n  |                         | first mutable borrow occurs here\n  |                         first borrow later used by call\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0499`.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: '[CPLUS-BORROW] exclusive mutable borrow violated'",
+        "found rustc error code: 'E0499'"
+      ]
+    },
+    {
+      "scenario": "dangling_stack",
+      "operation": "return of a pointer/reference to a stack local",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.rs",
+      "c_source": "int *f(void){int x=1;return &x;}\nint main(void){int*p=f();return *p;}\n",
+      "rust_source": "fn f() -> &'static i32 { let x=1; &x }\nfn main(){ println!(\"{}\", *f()); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c:1:30: error: address of stack memory associated with local variable 'x' returned [-Werror,-Wreturn-stack-address]\n    1 | int *f(void){int x=1;return &x;}\n      |                              ^\n1 error generated.\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c:1:30: error: address of stack memory associated with local variable 'x' returned [-Werror,-Wreturn-stack-address]\n    1 | int *f(void){int x=1;return &x;}\n      |                              ^\n1 error generated.\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c:1:30: error: address of stack memory associated with local variable 'x' returned [-Werror,-Wreturn-stack-address]\n    1 | int *f(void){int x=1;return &x;}\n      |                              ^\n1 error generated.\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dangling_stack-ikhch_pj/dangling_stack.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c:1:30: error: address of stack memory associated with local variable 'x' returned [-Werror,-Wreturn-stack-address]\n    1 | int *f(void){int x=1;return &x;}\n      |                              ^\n1 error generated.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [
+          "E0515"
+        ],
+        "compile_error_message": "error[E0515]: cannot return reference to local variable `x`",
+        "compile_diagnostic": "error[E0515]: cannot return reference to local variable `x`\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.rs:1:35\n  |\n1 | fn f() -> &'static i32 { let x=1; &x }\n  |                                   ^^ returns a reference to data owned by the current function\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0515`.\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dangling_stack-ikhch_pj/dangling_stack.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error[E0515]: cannot return reference to local variable `x`\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.rs:1:35\n  |\n1 | fn f() -> &'static i32 { let x=1; &x }\n  |                                   ^^ returns a reference to data owned by the current function\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0515`.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: \"address of stack memory associated with local variable 'x' returned\"",
+        "found rustc error code: 'E0515'"
+      ]
+    },
+    {
+      "scenario": "format_string",
+      "operation": "non-literal format string passed to printf/println",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.rs",
+      "c_source": "#include <stdio.h>\nint main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n",
+      "rust_source": "fn main(){ let s=std::env::args().nth(1).unwrap_or_default();\n    println!(s); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:61: error: [CPLUS-FFI] format string is not a string literal (potentially insecure)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:54: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                       ^~~~~~\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:61: error: [CPLUS-FFI] format string is not a string literal (potentially insecure)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:54: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                       ^~~~~~\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:61: error: [CPLUS-FFI] format string is not a string literal (potentially insecure)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:54: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                       ^~~~~~\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-format_string-u_tgvu0r/format_string.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:61: error: [CPLUS-FFI] format string is not a string literal (potentially insecure)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:54: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n  int main(void){char s[16];if(fgets(s,sizeof s,stdin))printf(s);return 0;}\n                                                       ^~~~~~\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [],
+        "compile_error_message": "error: format argument must be a string literal",
+        "compile_diagnostic": "error: format argument must be a string literal\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.rs:2:14\n  |\n2 |     println!(s); }\n  |              ^\n  |\nhelp: you might be missing a string literal to format with\n  |\n2 |     println!(\"{}\", s); }\n  |              +++++\n\nerror: aborting due to 1 previous error\n\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-format_string-u_tgvu0r/format_string.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error: format argument must be a string literal\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.rs:2:14\n  |\n2 |     println!(s); }\n  |              ^\n  |\nhelp: you might be missing a string literal to format with\n  |\n2 |     println!(\"{}\", s); }\n  |              +++++\n\nerror: aborting due to 1 previous error\n\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: '[CPLUS-FFI] format string is not a string literal'",
+        "found rustc message: 'format argument must be a string literal'"
+      ]
+    },
+    {
+      "scenario": "enum_switch",
+      "operation": "non-exhaustive switch/match over an enum (C+ -Werror=switch)",
+      "c_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c",
+      "rust_source_path": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.rs",
+      "c_source": "enum E{A,B,C};\nint f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\nint main(void){return f(C);}\n",
+      "rust_source": "enum E { A, B, C }\nfn f(e: E) -> i32 { match e { E::A => 1, E::B => 2 } }\nfn main(){ println!(\"{}\", f(E::C)); }\n",
+      "rust_requires_unsafe": false,
+      "c": {
+        "check_rc": 1,
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: error: enumeration value 'C' not handled in switch [-Werror,-Wswitch]\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: note: add missing switch cases\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^                                  \n1 error generated.\n",
+        "build_rc": 1,
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: error: enumeration value 'C' not handled in switch [-Werror,-Wswitch]\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: note: add missing switch cases\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^                                  \n1 error generated.\n",
+        "runtime_rc": null,
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "check": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "check",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: error: enumeration value 'C' not handled in switch [-Werror,-Wswitch]\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: note: add missing switch cases\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^                                  \n1 error generated.\n",
+            "timeout": false,
+            "error": null
+          },
+          "build": {
+            "cmd": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "--strict",
+              "--sanitize=none",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-enum_switch-vc30ri36/enum_switch.c.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: error: enumeration value 'C' not handled in switch [-Werror,-Wswitch]\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: note: add missing switch cases\n    2 | int f(enum E e){switch(e){case A:return 1;case B:return 2;}return 0;}\n      |                        ^                                  \n1 error generated.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "rust": {
+        "compile_rc": 1,
+        "compile_error_codes": [
+          "E0004"
+        ],
+        "compile_error_message": "error[E0004]: non-exhaustive patterns: `E::C` not covered",
+        "compile_diagnostic": "error[E0004]: non-exhaustive patterns: `E::C` not covered\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.rs:2:27\n  |\n2 | fn f(e: E) -> i32 { match e { E::A => 1, E::B => 2 } }\n  |                           ^ pattern `E::C` not covered\n  |\nnote: `E` defined here\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.rs:1:6\n  |\n1 | enum E { A, B, C }\n  |      ^         - not covered\n  = note: the matched value is of type `E`\nhelp: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown\n  |\n2 | fn f(e: E) -> i32 { match e { E::A => 1, E::B => 2, E::C => todo!() } }\n  |                                                   +++++++++++++++++\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0004`.\n",
+        "runtime_rc": null,
+        "runtime_panic": "",
+        "runtime_diagnostic": "",
+        "runtime_stdout": "",
+        "runtime_stderr": "",
+        "raw": {
+          "compile": {
+            "cmd": [
+              "rustc",
+              "--edition",
+              "2021",
+              "-C",
+              "overflow-checks=on",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.rs",
+              "-o",
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-enum_switch-vc30ri36/enum_switch.rs.bin"
+            ],
+            "rc": 1,
+            "stdout": "",
+            "stderr": "error[E0004]: non-exhaustive patterns: `E::C` not covered\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.rs:2:27\n  |\n2 | fn f(e: E) -> i32 { match e { E::A => 1, E::B => 2 } }\n  |                           ^ pattern `E::C` not covered\n  |\nnote: `E` defined here\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.rs:1:6\n  |\n1 | enum E { A, B, C }\n  |      ^         - not covered\n  = note: the matched value is of type `E`\nhelp: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown\n  |\n2 | fn f(e: E) -> i32 { match e { E::A => 1, E::B => 2, E::C => todo!() } }\n  |                                                   +++++++++++++++++\n\nerror: aborting due to 1 previous error\n\nFor more information about this error, try `rustc --explain E0004`.\n",
+            "timeout": false,
+            "error": null
+          },
+          "runtime": {
+            "cmd": [],
+            "rc": null,
+            "stdout": "",
+            "stderr": "",
+            "timeout": false,
+            "error": null
+          }
+        }
+      },
+      "classification": "AGREE_COMPILE",
+      "expected_classification": "AGREE_COMPILE",
+      "documented_difference": false,
+      "why": "",
+      "pass": true,
+      "reasons": [
+        "classification AGREE_COMPILE OK",
+        "found C+ compile diagnostic: \"enumeration value 'C' not handled in switch [-Werror,-Wswitch]\"",
+        "found rustc error code: 'E0004'"
+      ]
+    }
+  ]
+}

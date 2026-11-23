@@ -826,7 +826,7 @@ static bool extraArgsWeakenSafetyWarnings(
       "array-bounds", "return-stack-address", "uninitialized",
       "sizeof-array-argument", "sizeof-pointer-div", "format-security",
       "unsequenced", "shift-count-overflow", "shift-negative-value",
-      "varargs", "all"};
+      "varargs", "switch", "all"};
   for (const auto &raw : extra) {
     llvm::StringRef a = normalizeFlag(raw);
     if (a == "-Wno-error" || a == "-w")
@@ -939,7 +939,7 @@ static std::vector<std::string> safetyWarningErrorFlags() {
           "-Werror=sizeof-array-argument", "-Werror=sizeof-pointer-div",
           "-Werror=format-security",     "-Werror=unsequenced",
           "-Werror=shift-count-overflow", "-Werror=shift-negative-value",
-          "-Werror=varargs"};
+          "-Werror=varargs",             "-Werror=switch"};
 }
 
 void printSanitizerInfo(llvm::raw_ostream &os) {
@@ -1080,6 +1080,9 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
       args.push_back("-Werror=shift-count-overflow");
       args.push_back("-Werror=shift-negative-value");
       args.push_back("-Werror=varargs");
+      // Rust-like enum exhaustiveness: a switch on an enum must handle every
+      // enumerator. Compile-time only; no ABI or emitted-code change.
+      args.push_back("-Werror=switch");
     } else {
       args.push_back("-w");
     }
