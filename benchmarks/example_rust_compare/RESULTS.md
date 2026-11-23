@@ -28,8 +28,10 @@ cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
 sh benchmarks/example_rust_compare/run_all.sh
 ```
 
-The aggregate runner dynamically discovers every `<group>/compare.sh`, then
-runs each from the repository root as:
+The aggregate runner dynamically discovers every `<group>/compare.sh` whose
+script speaks the `EXAMPLE_COMPARE` protocol (other comparison campaigns that
+may add `compare.sh` files with a different protocol are ignored), then runs
+each from the repository root as:
 
 ```sh
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:"$(dirname "$(command -v rustc)")" \
