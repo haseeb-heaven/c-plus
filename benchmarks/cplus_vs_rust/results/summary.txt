@@ -1,0 +1,108 @@
+C+ vs Rust paired benchmark summary
+========================================================================
+generated (UTC): 2026-11-23T08:04:02+00:00
+cplus binary:    /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+rustc:           /Users/haseeb-mir/.cargo/bin/rustc
+samples/run:     5 (warmups: 1)
+timeout/run:     60s
+
+pairs discovered: 4
+builds attempted: 16
+builds succeeded: 16
+runs measured:    16
+mismatches:       0
+failures:         0
+
+------------------------------------------------------------------------
+program: bounds_sum
+  stdout: 'bounds_sum 1200000000'
+  stdout identical across all measured builds: True
+
+  build                   best wall (s)  peak RSS (KiB)
+  c+ --release --sanitize=none         0.0783          1664.0
+  c+ --debug --sanitize=none         0.2197          1664.0
+  rustc -O                       0.0063          1824.0
+  rustc -C opt-level=0           1.0367          1824.0
+
+  time ratios (best wall):
+    c+ release / rust -O        : 12.34x
+    c+ debug  / rust -O         : 34.63x
+    c+ release / c+ debug       : 0.36x
+    rust -O   / rust no-opt     : 0.01x
+  peak RSS ratios:
+    c+ release / rust -O        : 0.91x
+    c+ debug  / rust -O         : 0.91x
+    c+ release / c+ debug       : 1.00x
+    rust -O   / rust no-opt     : 1.00x
+
+------------------------------------------------------------------------
+program: call_chain
+  stdout: 'call_chain 1867997231812350465'
+  stdout identical across all measured builds: True
+
+  build                   best wall (s)  peak RSS (KiB)
+  c+ --release --sanitize=none         0.2365          1632.0
+  c+ --debug --sanitize=none         0.7810          1632.0
+  rustc -O                       0.2261          1824.0
+  rustc -C opt-level=0           1.0650          1808.0
+
+  time ratios (best wall):
+    c+ release / rust -O        : 1.05x
+    c+ debug  / rust -O         : 3.45x
+    c+ release / c+ debug       : 0.30x
+    rust -O   / rust no-opt     : 0.21x
+  peak RSS ratios:
+    c+ release / rust -O        : 0.89x
+    c+ debug  / rust -O         : 0.89x
+    c+ release / c+ debug       : 1.00x
+    rust -O   / rust no-opt     : 1.01x
+
+------------------------------------------------------------------------
+program: lcg
+  stdout: 'lcg 1867997231812350465'
+  stdout identical across all measured builds: True
+
+  build                   best wall (s)  peak RSS (KiB)
+  c+ --release --sanitize=none         0.2362          1648.0
+  c+ --debug --sanitize=none         0.4530          1648.0
+  rustc -O                       0.2383          1824.0
+  rustc -C opt-level=0           1.1602          1824.0
+
+  time ratios (best wall):
+    c+ release / rust -O        : 0.99x
+    c+ debug  / rust -O         : 1.90x
+    c+ release / c+ debug       : 0.52x
+    rust -O   / rust no-opt     : 0.21x
+  peak RSS ratios:
+    c+ release / rust -O        : 0.90x
+    c+ debug  / rust -O         : 0.90x
+    c+ release / c+ debug       : 1.00x
+    rust -O   / rust no-opt     : 1.00x
+
+------------------------------------------------------------------------
+program: struct_sum
+  stdout: 'struct_sum 4410000000'
+  stdout identical across all measured builds: True
+
+  build                   best wall (s)  peak RSS (KiB)
+  c+ --release --sanitize=none         0.0387          1664.0
+  c+ --debug --sanitize=none         0.2391          1680.0
+  rustc -O                       0.0216          1824.0
+  rustc -C opt-level=0           0.2644          1840.0
+
+  time ratios (best wall):
+    c+ release / rust -O        : 1.79x
+    c+ debug  / rust -O         : 11.09x
+    c+ release / c+ debug       : 0.16x
+    rust -O   / rust no-opt     : 0.08x
+  peak RSS ratios:
+    c+ release / rust -O        : 0.91x
+    c+ debug  / rust -O         : 0.92x
+    c+ release / c+ debug       : 0.99x
+    rust -O   / rust no-opt     : 0.99x
+
+------------------------------------------------------------------------
+ratios > 1 mean the numerator (first build) used more of the metric.
+Wall time is the best of N high-resolution samples; peak RSS comes from
+`/usr/bin/time -l` on the same sample set. Rust `-O0` is expressed as
+`-C opt-level=0`, the flag rustc accepts for no optimization.

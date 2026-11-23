@@ -1,0 +1,7 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__rust.bin
+returncode: 101
+timed_out: False
+
+thread 'main' (24778957) panicked at <SRC>:4:21:
+index out of bounds: the len is 4 but the index is 7
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

@@ -1,0 +1,39 @@
+C+ vs Rust memory-safety violation comparison
+========================================================================
+c+ binary   : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+c+ version  : C+ 0.1.0
+rustc       : rustc
+rustc ver   : rustc 1.100.0 (0ef1bc386 2026-11-09)
+generated   : 2026-11-23T13:29:53
+c+ flags    : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none <SRC>
+              /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none <SRC> -o <BIN>
+rustc flags : rustc --edition 2021 -C overflow-checks=on <SRC> -o <BIN>
+sanitizers  : DISABLED (c+ --sanitize=none; rustc without -Zsanitizer)
+timeout     : 60s per subprocess
+
+SUMMARY
+------------------------------------------------------------------------
+categories        : 7
+cases             : 14 (1 C+ + 1 Rust per category)
+cases passed      : 14
+cases failed      : 0
+by outcome        : compile_reject=9, runtime_trap=5
+  cplus          : compile_reject=6, runtime_trap=1
+  rust           : compile_reject=3, runtime_trap=4
+
+PER CATEGORY (stage at which each language rejects)
+------------------------------------------------------------------------
+  category                 C+               Rust             result
+  out_of_bounds_index      runtime_trap     runtime_trap     PASS
+  use_after_free           compile_reject   compile_reject   PASS
+  double_free              compile_reject   compile_reject   PASS
+  invalid_free             compile_reject   compile_reject   PASS
+  null_deref               compile_reject   runtime_trap     PASS
+  integer_overflow         compile_reject   runtime_trap     PASS
+  invalid_shift            compile_reject   runtime_trap     PASS
+
+FAILURES (exact case names and reasons)
+------------------------------------------------------------------------
+  none
+
+Evidence: results/summary.json ; exact commands/outputs: results/logs/

@@ -46,3 +46,8 @@ tests/compiler/optimizer/results/bin/
 tests/compiler/fuzz/results/failures/
 tests/compiler/differential/results/mismatches/*/*.bin
 tests/compiler/differential/probe/cases/*.bin
+
+# Benchmark and comparison binaries
+tests/compiler/memory_safety_compare/cases/*.bin
+benchmarks/cplus_vs_rust/results/*.bin
+benchmarks/rust_vs_cplus/results/*.bin
