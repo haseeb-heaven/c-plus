@@ -86,8 +86,10 @@ public:
     // These run before the token loop so every subscript site can consult the
     // constant, recursion and out-param facts collected here.
     collectLocalConstants();
+    collectPhiConstants(); // folded `c ? a : b` index values
     collectCallGraph();
     collectRecursiveCallArgs();
+    collectRecursiveGuardBounds(); // weak early-return guard => reachable max arg
     collectOutParamAllocations();
     collectCallConstants();
     collectAllocations();
@@ -100,6 +102,7 @@ public:
     collectSizeConstants();
     collectNegativeNames();
     collectArrayPointers(); // constant-offset aliases of fixed arrays
+    collectPointerToPointerParams(); // `int **pp` bound to &array-alias
     collectTypePunnedPointers();
     checkMemcpyOverlap();
     // Targeted compile-time rejections for user-provided bug patterns.
@@ -124,11 +127,15 @@ public:
         checkTypePun(i);
         checkTypePunnedDeref(i); // bug 45
         checkPointerArithmetic(i);
+        if (isIdent(i, "while"))
+          checkWhileLoop(i); // induction bound past a known extent
         checkTrackedArrayPointer(i); // constant index / one-past / multi-dim
+        checkPointerToPointerSubscript(i); // (*pp)[k] through &array-alias
         checkRecursiveArraySubscript(i); // unbounded parameter in a cycle
         checkRecursivePointerParamSubscript(i); // derived index via pointer param
         checkOutParamHeapSubscript(i);   // extent learned from make(&p)
         checkStructFieldSubscript(i);    // field extent/index from call site
+        checkPhiIndexSubscript(i);       // ternary/phi index into known extent
         checkFoldedIndexSubscript(i);    // helper return / pointer-difference index
         checkDirectOnePastDeref(i);  // *(array + N) at the array extent
         checkUnrelatedPointerCompare(i);
@@ -326,6 +333,17 @@ private:
     d.column = at.column;
     d.help = "use C+ managed allocations and cplus_* helpers";
     diags_.report(std::move(d));
+  }
+
+  /// Report a *provable* out-of-bounds access with the same dual category tag
+  /// the AST safety pass emits for safe-bounds errors.  This pass runs before
+  /// lowering and is the only place that can see facts such as a call-site
+  /// array extent behind a pointer parameter or an `int **` alias.  Reusing
+  /// the dual tag keeps those diagnostics consistent with the AST pass and
+  /// with the interprocedural suite's exact-substring expectations.  `tagged`
+  /// passes a message that already starts with "[CPLUS-" through verbatim.
+  void errorAtSafeBounds(const Token &at, const std::string &message) {
+    errorAt(at, "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] " + message);
   }
 
   void warningAt(const Token &at, const std::string &message) {
@@ -786,6 +804,87 @@ private:
     }
   }
 
+  /// Integer locals whose value is chosen by a conditional expression.  The
+  /// ternary folds to the maximum of its constant branches (a phi value),
+  /// which the host AST checker cannot reproduce.  A subscript using such a
+  /// value is provably out of bounds when that maximum exceeds the base's
+  /// extent.  Facts are position-keyed and invalidated exactly like the
+  /// ordinary local constants, so a later write cannot leave a stale index.
+  std::map<std::string, std::vector<std::pair<size_t, long>>> phiConsts_;
+
+  bool phiConstAt(const std::string &name, size_t pos, long *out) const {
+    auto it = phiConsts_.find(name);
+    if (it == phiConsts_.end()) return false;
+    long value = kInvalidConst;
+    for (const auto &ev : it->second) {
+      if (ev.first > pos) break;
+      value = ev.second;
+    }
+    if (value == kInvalidConst) return false;
+    *out = value;
+    return true;
+  }
+
+  void collectPhiConstants() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier) continue;
+      size_t eq = nextSig(i);
+      if (!isPunct(eq, "=")) continue;
+      size_t end = stmtEnd(nextSig(eq));
+      size_t q = kNPos;
+      int paren = 0, bracket = 0;
+      for (size_t k = nextSig(eq); k < end; ++k) {
+        if (isPunct(k, "(")) ++paren;
+        else if (isPunct(k, ")")) --paren;
+        else if (isPunct(k, "[")) ++bracket;
+        else if (isPunct(k, "]")) --bracket;
+        else if (isPunct(k, "?") && paren == 0 && bracket == 0) { q = k; break; }
+      }
+      if (q == kNPos) continue;
+      long v = 0;
+      phiConsts_[toks_[i].text].push_back(
+          {i, indexExprValue(nextSig(eq), end, &v) ? v : kInvalidConst});
+    }
+  }
+
+  /// `int i = c ? 1 : 6; p[i] = 1;` — index chosen by a phi.  Only a single
+  /// identifier index with a folded phi value and a known base extent is
+  /// reported; a tight guard on that index suppresses the report.
+  void checkPhiIndexSubscript(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier) return;
+    size_t lb = nextSig(i);
+    if (!isPunct(lb, "[")) return;
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos) return;
+    size_t idx = nextSig(lb);
+    if (idx + 1 != rb || toks_[idx].kind != TokKind::Identifier) return;
+    long value = 0;
+    if (!phiConstAt(toks_[idx].text, idx, &value)) return;
+    const std::string *fn = enclosingFunction(i);
+    if (!fn) return;
+    long extent = 0;
+    const std::vector<size_t> *dims = nullptr;
+    if (findShape(toks_[i].text, i, &dims) && !dims->empty()) {
+      extent = dims->front();
+    } else {
+      auto eit = paramExtents_.find(*fn);
+      if (eit == paramExtents_.end()) return;
+      const auto &params = funcs_.at(*fn).params;
+      size_t pos = kNPos;
+      for (size_t p = 0; p < params.size(); ++p)
+        if (params[p] == toks_[i].text) { pos = p; break; }
+      if (pos == kNPos) return;
+      auto pit = eit->second.find(pos);
+      if (pit == eit->second.end() || pit->second == 0) return;
+      extent = pit->second;
+    }
+    if (hasUpperGuard(funcs_.at(*fn), toks_[idx].text, i, extent)) return;
+    if (value < 0 || value >= extent)
+      errorAtSafeBounds(toks_[lb], "array index " + std::to_string(value) +
+          " chosen by conditional expression is out of bounds of '" +
+          toks_[i].text + "' of length " + std::to_string(extent));
+  }
+
   /// Strip `(Type *)` casts and fully enclosing parentheses from an
   /// initialiser so `void *v = a; int *p = (int *)v;` stays one alias chain.
   size_t stripCast(size_t from, size_t end) const {
@@ -915,6 +1014,62 @@ private:
     }
   }
 
+  /// An early-return guard such as `if (i > 5) return;` bounds the values the
+  /// index parameter can take on the path that reaches the subscript, even
+  /// though the recursive call itself passes an expression (`i + 1`) that is
+  /// not a compile-time constant.  When that bound reaches the array extent
+  /// it is itself proof that the cycle walks out of bounds, so record it as
+  /// an effective maximum argument for the cycle check.  Tight guards are
+  /// already suppressed by hasUpperGuard and are harmless here.
+  std::map<std::string, std::vector<long>> recursiveGuardMax_;
+
+  void collectRecursiveGuardBounds() {
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (!isRecursive(entry.first) || sig.bodyClose == kNPos) continue;
+      size_t np = sig.params.size();
+      std::vector<long> slots(np, kInvalidConst);
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (!isIdent(k, "if")) continue;
+        size_t lp = nextSig(k);
+        if (!isPunct(lp, "(")) continue;
+        size_t rp = matchIn(lp, sig.bodyClose, "(", ")");
+        if (rp == kNPos) continue;
+        size_t var = kNPos, op = kNPos;
+        for (size_t q = lp + 1; q < rp; ++q) {
+          if (toks_[q].kind == TokKind::Identifier) {
+            var = q;
+            op = nextSig(q);
+            break;
+          }
+        }
+        if (var == kNPos || op >= rp) continue;
+        long n = 0;
+        size_t nv = nextSig(op);
+        if (nv >= rp || !number(toks_[nv], &n)) continue;
+        // Only an early-return guard bounds the path that continues to the
+        // subscript (a guard around the access itself is a different shape,
+        // handled by hasUpperGuard).
+        size_t body = nextSig(rp);
+        size_t end = isPunct(body, "{") ? matchIn(body, sig.bodyClose, "{", "}")
+                                        : stmtEnd(body);
+        if (end == kNPos) continue;
+        bool early = false;
+        for (size_t q = body; q <= end; ++q)
+          if (isIdent(q, "return")) { early = true; break; }
+        if (!early) continue;
+        for (size_t p = 0; p < np; ++p) {
+          if (sig.params[p] != toks_[var].text) continue;
+          // `i > N` allows i == N; `i >= N` allows at most N - 1.
+          long reach = isPunct(op, ">") ? n : n - 1;
+          if (reach > slots[p]) slots[p] = reach;
+          break;
+        }
+      }
+      recursiveGuardMax_[entry.first] = slots;
+    }
+  }
+
   /// An explicit upper guard (`if (i >= E) return;` or a surrounding
   /// `if (i < E)`) makes a parameter index provably bounded, so fail-closed
   /// recursion rules must stay silent there.
@@ -942,8 +1097,16 @@ private:
       size_t end = isPunct(body, "{") ? matchIn(body, at, "{", "}")
                                       : stmtEnd(body);
       bool early = false;
-      if ((isPunct(op, ">=") && n >= extent) ||
-          (isPunct(op, ">") && n >= extent - 1)) {
+      // Only a guard that keeps EVERY continuing index below the extent is a
+      // proof of safety.  `if (i >= N) return;` proceeds for i < N, so it
+      // suffices when N <= extent; `if (i > N) return;` proceeds for i <= N,
+      // so it needs N <= extent - 1.  The old `n >= extent` form wrongly
+      // accepted weak guards such as `i > 5` for a 4-element array and
+      // silently suppressed a real recursion overflow, so the comparison is
+      // reversed here.  Tight guards used by the existing safe corpus still
+      // suppress exactly as before.
+      if ((isPunct(op, ">=") && n <= extent) ||
+          (isPunct(op, ">") && n <= extent - 1)) {
         if (end != kNPos && end < at)
           for (size_t q = body; q <= end; ++q)
             if (isIdent(q, "return")) { early = true; break; }
@@ -1417,7 +1580,7 @@ private:
             return;
           }
           if (index < 0 || index >= extent) {
-            errorAt(toks_[after], "out-of-bounds access: index " +
+            errorAtSafeBounds(toks_[after], "out-of-bounds access: index " +
                                       std::to_string(index) +
                                       " reaches past array '" + objPath + "." +
                                       toks_[field].text + "' of length " +
@@ -1531,13 +1694,20 @@ private:
     for (const auto &entry : funcs_) {
       if (!sameCycle(*fn, entry.first)) continue;
       auto rit = recursiveMaxArg_.find(entry.first);
-      if (rit == recursiveMaxArg_.end() || argPos >= rit->second.size()) continue;
-      if (rit->second[argPos] > best) best = rit->second[argPos];
+      if (rit != recursiveMaxArg_.end() && argPos < rit->second.size() &&
+          rit->second[argPos] > best)
+        best = rit->second[argPos];
+      // A weak early-return guard proves the index grows to its bound even
+      // though the recursive call passes `i + 1` (not a constant).
+      auto git = recursiveGuardMax_.find(entry.first);
+      if (git != recursiveGuardMax_.end() && argPos < git->second.size() &&
+          git->second[argPos] > best)
+        best = git->second[argPos];
     }
     if (best == kInvalidConst) return;
     long index = best + delta;
     if (index < 0 || index >= extent)
-      errorAt(toks_[lb], "array index " + std::to_string(index) +
+      errorAtSafeBounds(toks_[lb], "array index " + std::to_string(index) +
                              " from recursive call is out of bounds of '" +
                              toks_[i].text + "' of extent " +
                              std::to_string(extent));
@@ -2411,6 +2581,65 @@ private:
     return false;
   }
 
+  /// `int **pp` parameters bound to `&p` at a call site, where `p` is a
+  /// tracked constant-offset alias of a fixed array.  Dereferencing `pp`
+  /// yields that array, so `(*pp)[k]` can be bounds-checked with the array's
+  /// extent.  Only call sites that pass the address of a *provable* array
+  /// alias are recorded, so an unknown inner pointer stays silent.
+  std::map<std::string, TrackedArrayPointer> ptr2Params_;
+
+  void collectPointerToPointerParams() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier) continue;
+      auto fit = funcs_.find(toks_[i].text);
+      if (fit == funcs_.end()) continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "(")) continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
+      auto args = splitArgs(lp + 1, rp);
+      const auto &params = fit->second.params;
+      for (size_t p = 0; p < params.size() && p < args.size(); ++p) {
+        size_t a = args[p].first;
+        if (!isPunct(a, "&")) continue; // only `wr(&p)` aliases are tracked
+        size_t name = nextSig(a);
+        if (name >= args[p].second || toks_[name].kind != TokKind::Identifier)
+          continue;
+        auto it = arrayPtrs_.find(toks_[name].text);
+        if (it == arrayPtrs_.end() || it->second.dims.empty()) continue;
+        TrackedArrayPointer tp = it->second;
+        tp.pos = 0; // a parameter fact is visible throughout the callee
+        auto prior = ptr2Params_.find(params[p]);
+        if (prior != ptr2Params_.end() &&
+            (prior->second.array != tp.array || prior->second.dims != tp.dims))
+          ptr2Params_.erase(prior); // conflicting extents: forget the fact
+        else
+          ptr2Params_[params[p]] = tp;
+      }
+    }
+  }
+
+  void checkPointerToPointerSubscript(size_t i) {
+    auto it = ptr2Params_.find(toks_[i].text);
+    if (it == ptr2Params_.end()) return;
+    // `(*pp)[k]`: the identifier is the operand of `*`, and the subscript
+    // follows the closing parenthesis of the dereference.
+    if (!isPunct(prevSig(i), "*") || !isPunct(nextSig(i), ")")) return;
+    size_t lb = nextSig(nextSig(i));
+    if (!isPunct(lb, "[")) return;
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos) return;
+    long idx = 0;
+    if (!constantIndexAt(lb + 1, rb, &idx)) return;
+    long absolute = it->second.offset + idx;
+    long long total = 1;
+    for (size_t d : it->second.dims) total *= static_cast<long long>(d);
+    if (absolute < 0 || absolute >= total)
+      errorAtSafeBounds(toks_[lb], "array index " + std::to_string(idx) +
+          " reaches past array '" + it->second.array +
+          "' via pointer-to-pointer parameter '" + toks_[i].text + "'");
+  }
+
   /// Rules (negative index, one-past pointer, multi-dimensional bounds):
   /// check a dereference or a subscript chain through a tracked alias.  Every
   /// index and every extent used here is a compile-time constant, so valid
@@ -3236,6 +3465,96 @@ private:
         allocated.name = toks_[name].text;
         allocated.dims.push_back(count);
         localArrays_.push_back(allocated);
+      }
+    }
+  }
+
+  /// While-loop analogue of checkLoop.  An induction variable initialised to
+  /// a constant, tested as `i < N` and stepped by `i++` reaches every value in
+  /// [start, N-1]; a subscript `p[i]` on a base whose extent is known at the
+  /// call site is therefore provably out of bounds when N-1 >= extent.  The
+  /// host AST checker sees only the lowered loop and cannot fold this chain.
+  /// Anything not understood (symbolic bound, no step, unrelated index)
+  /// bails out silently, so valid loops are never rejected.
+  void checkWhileLoop(size_t whileIdx) {
+    size_t open = nextSig(whileIdx);
+    if (!isPunct(open, "(")) return;
+    size_t close = match(open, "(", ")");
+    if (close == kNPos) return;
+
+    std::string var;
+    long bound = 0;
+    bool lessEqual = false;
+    for (size_t k = open + 1; k + 1 < close; ++k) {
+      if (toks_[k].kind != TokKind::Identifier) continue;
+      size_t op = nextSig(k);
+      if (op >= close || (!isPunct(op, "<") && !isPunct(op, "<="))) continue;
+      size_t nv = nextSig(op);
+      if (nv >= close || !number(toks_[nv], &bound)) continue;
+      var = toks_[k].text;
+      lessEqual = isPunct(op, "<=");
+      break;
+    }
+    if (var.empty() || bound <= 0) return;
+
+    // Most recent constant assignment to the induction variable before the
+    // loop (scanning backwards finds the last one, not a stale earlier one).
+    long start = 0;
+    bool haveStart = false;
+    for (size_t k = whileIdx; k > 0; --k) {
+      if (toks_[k].kind != TokKind::Identifier || toks_[k].text != var) continue;
+      size_t eq = nextSig(k);
+      if (eq >= whileIdx || !isPunct(eq, "=")) continue;
+      size_t nv = nextSig(eq);
+      if (nv < whileIdx && number(toks_[nv], &start)) { haveStart = true; break; }
+    }
+    if (!haveStart || start < 0) return;
+
+    size_t body = nextSig(close);
+    size_t bodyEnd;
+    if (isPunct(body, "{")) {
+      bodyEnd = match(body, "{", "}");
+      if (bodyEnd == kNPos) return;
+    } else {
+      bodyEnd = stmtEnd(body);
+    }
+    if (bodyEnd == kNPos || bodyEnd <= body) return;
+    long step = 0;
+    if (!parseStep(body, bodyEnd, var, &step) || step <= 0) return;
+    long maxIndex = lessEqual ? bound : bound - 1;
+    if (maxIndex < start) return;
+
+    for (size_t k = body; k < bodyEnd; ++k) {
+      if (toks_[k].kind != TokKind::Identifier) continue;
+      size_t lb = nextSig(k);
+      if (!isPunct(lb, "[")) continue;
+      size_t rb = match(lb, "[", "]");
+      if (rb == kNPos || rb >= bodyEnd) continue;
+      Interval iv = evalIndex(lb + 1, rb, var, start, maxIndex);
+      if (!iv.known || iv.hi < 0) continue;
+      long extent = 0;
+      const std::vector<size_t> *dims = nullptr;
+      if (findShape(toks_[k].text, k, &dims) && !dims->empty()) {
+        extent = dims->front();
+      } else {
+        const std::string *fn = enclosingFunction(k);
+        if (!fn) continue;
+        auto eit = paramExtents_.find(*fn);
+        if (eit == paramExtents_.end()) continue;
+        const auto &params = funcs_.at(*fn).params;
+        size_t pos = kNPos;
+        for (size_t p = 0; p < params.size(); ++p)
+          if (params[p] == toks_[k].text) { pos = p; break; }
+        if (pos == kNPos) continue;
+        auto pit = eit->second.find(pos);
+        if (pit == eit->second.end() || pit->second == 0) continue;
+        extent = pit->second;
+      }
+      if (iv.hi >= extent) {
+        errorAtSafeBounds(toks_[lb], "array index " + std::to_string(iv.hi) +
+            " from while-loop induction is out of bounds of '" +
+            toks_[k].text + "' of length " + std::to_string(extent));
+        break;
       }
     }
   }

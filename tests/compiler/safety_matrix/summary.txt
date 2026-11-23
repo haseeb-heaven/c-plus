@@ -1,0 +1,169 @@
+C+ SAFETY MATRIX -- summary
+generated: 2026-11-23T18:33:22.054256+00:00
+compiler:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+backend (none): /usr/bin/clang | backend (sanitizers): /opt/homebrew/opt/llvm/bin/clang | SDK: /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+timeout: 45s | sanitizers: address,undefined
+
+CONFIGS
+  DEFAULT_NONE DEFAULT --sanitize=none                mode=check san=none clang=/usr/bin/clang
+  STRICT_NONE  STRICT --sanitize=none                 mode=check san=none clang=/usr/bin/clang
+  DEFAULT_SAN  DEFAULT --sanitize=address,undefined   mode=run   san=address,undefined clang=/opt/homebrew/opt/llvm/bin/clang
+  STRICT_SAN   STRICT --sanitize=address,undefined    mode=run   san=address,undefined clang=/opt/homebrew/opt/llvm/bin/clang
+  DEBUG_NONE   --debug --sanitize=none                mode=run   san=none clang=/usr/bin/clang
+  RELEASE_NONE --release --sanitize=none              mode=run   san=none clang=/usr/bin/clang
+
+MATRIX (PASS / WARN=WARN_ONLY / OPEN=KNOWN_OPEN / STATIC=STATIC_ONLY_BY_DESIGN / FAIL)
+  case id                  DEFAULT_NONE STRICT_NONE  DEFAULT_SAN  STRICT_SAN   DEBUG_NONE   RELEASE_NONE
+  constant_oob             PASS         PASS         PASS         PASS         PASS         PASS        
+  dynamic_oob              PASS         PASS         PASS         PASS         PASS         PASS        
+  heap_oob                 PASS         PASS         PASS         PASS         PASS         PASS        
+  uaf                      PASS         PASS         PASS         PASS         PASS         PASS        
+  double_free              PASS         PASS         PASS         PASS         PASS         PASS        
+  null_deref               WARN         PASS         PASS         PASS         PASS         PASS        
+  signed_overflow          WARN         PASS         PASS         PASS         STATIC       STATIC      
+  div_zero                 WARN         PASS         PASS         PASS         STATIC       STATIC      
+  div_zero_runtime         WARN         PASS         PASS         PASS         PASS         PASS        
+  invalid_shift            PASS         PASS         PASS         PASS         PASS         PASS        
+  narrowing                OPEN         OPEN         OPEN         OPEN         PASS         PASS        
+  float_to_int             OPEN         OPEN         PASS         PASS         PASS         PASS        
+  uninitialized            PASS         PASS         PASS         PASS         PASS         PASS        
+  array_decay_call         PASS         PASS         PASS         PASS         PASS         PASS        
+  pointer_arithmetic       PASS         PASS         PASS         PASS         PASS         PASS        
+  function_pointer_free    PASS         PASS         PASS         PASS         PASS         PASS        
+  struct_field_alias       PASS         PASS         PASS         PASS         PASS         PASS        
+  recursion_oob            PASS         PASS         PASS         PASS         PASS         PASS        
+  while_loop_oob           PASS         PASS         PASS         PASS         PASS         PASS        
+  phi_index_oob            PASS         PASS         PASS         PASS         PASS         PASS        
+  use_after_move           PASS         PASS         PASS         PASS         PASS         PASS        
+  managed_escape           PASS         PASS         PASS         PASS         PASS         PASS        
+  double_release           PASS         PASS         PASS         PASS         PASS         PASS        
+  safe_constant_bounds     PASS         PASS         PASS         PASS         PASS         PASS        
+  safe_owner_transfer      PASS         PASS         PASS         PASS         PASS         PASS        
+  safe_null_checked        PASS         PASS         PASS         PASS         PASS         PASS        
+  safe_loop                PASS         PASS         PASS         PASS         PASS         PASS        
+  safe_cleanup             PASS         PASS         PASS         PASS         PASS         PASS        
+
+TOTALS: 168 checks, 154 PASS, 4 WARN_ONLY, 6 KNOWN_OPEN, 4 STATIC_ONLY_BY_DESIGN, 0 FAIL
+  DEFAULT_NONE 22 PASS / 4 WARN_ONLY / 2 KNOWN_OPEN / 0 STATIC / 0 FAIL (of 28)
+  STRICT_NONE  26 PASS / 0 WARN_ONLY / 2 KNOWN_OPEN / 0 STATIC / 0 FAIL (of 28)
+  DEFAULT_SAN  27 PASS / 0 WARN_ONLY / 1 KNOWN_OPEN / 0 STATIC / 0 FAIL (of 28)
+  STRICT_SAN   27 PASS / 0 WARN_ONLY / 1 KNOWN_OPEN / 0 STATIC / 0 FAIL (of 28)
+  DEBUG_NONE   26 PASS / 0 WARN_ONLY / 0 KNOWN_OPEN / 2 STATIC / 0 FAIL (of 28)
+  RELEASE_NONE 26 PASS / 0 WARN_ONLY / 0 KNOWN_OPEN / 2 STATIC / 0 FAIL (of 28)
+
+WARN_ONLY (4) -- non-failing statuses are explicit, never silently dropped
+  [null_deref / DEFAULT_NONE] tests/compiler/adversarial_campaign/case_CTRL_direct_null.c
+      expected: static rejection with diagnostic ([CPLUS-LIFETIME], [CPLUS-SAFE-LIFETIME]), or exact C+ warning -> WARN_ONLY
+      actual:   accepted (rc=0) with exact C+ warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c:4:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c:4:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'
+      compiler_stderr: "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c:4:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~\n"
+      runtime_stderr:  ''
+      why:      docs/LIMITATIONS.md bug 6 and docs/SAFE_MODE_SPEC.md: provable null is rejected; DEFAULT warning is WARN_ONLY, and unsanitized builds must trap with a diagnostic (a bare SIGSEGV is not evidence).
+      reason:   DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)
+  [signed_overflow / DEFAULT_NONE] tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c
+      expected: exact C+ warning diagnostic ([CPLUS-ARITH]) -> WARN_ONLY
+      actual:   accepted (rc=0) with exact C+ warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition
+      compiler_stderr: '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){ volatile int x=INT_MAX; return x+1; }\n                                                 ^\n'
+      runtime_stderr:  ''
+      why:      docs/ARITHMETIC_SAFETY.md section 1 and the pinned arith_shift_negative/arith_shift_wide native diagnostics: C+ deliberately treats a volatile local's initializer as a conservative compile-time fact, so STRICT rejects 'signed integer overflow in addition' and DEFAULT warns exactly. No native runtime guard is emitted for this provable constant (docs/LIMITATIONS.md bug 9); DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN, not a defect.
+      reason:   DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)
+  [div_zero / DEFAULT_NONE] tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c
+      expected: exact C+ warning diagnostic ([CPLUS-ARITH]) -> WARN_ONLY
+      actual:   accepted (rc=0) with exact C+ warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero
+      compiler_stderr: '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero\n  int main(void){ int z=0; int x=10/z; return x; }\n                                 ^~\n'
+      runtime_stderr:  ''
+      why:      docs/ARITHMETIC_SAFETY.md section 3: a provably zero divisor is a static finding (STRICT error / DEFAULT warning), and C+ deliberately emits no native guard for constants. DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN with the exact warning; runtime-variable division is covered by div_zero_runtime (rc 110).
+      reason:   DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)
+  [div_zero_runtime / DEFAULT_NONE] tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c
+      expected: static rejection with diagnostic ([CPLUS-ARITH]), or exact C+ warning -> WARN_ONLY
+      actual:   accepted (rc=0) with exact C+ warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c:6:13: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c:6:13: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      compiler_stderr: '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c:6:13: warning: [CPLUS-ARITH] division by zero cannot be excluded\n      int x = 10 / z;\n              ^~\n'
+      runtime_stderr:  ''
+      why:      docs/ARITHMETIC_SAFETY.md section 8 and docs/LIMITATIONS.md bug 25: a divisor that is not provably zero is rejected in STRICT / warned in DEFAULT and the native guard traps rc 110 ('C+ runtime error: division by zero: division by zero').
+      reason:   DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)
+
+KNOWN_OPEN (6) -- non-failing statuses are explicit, never silently dropped
+  [narrowing / DEFAULT_NONE] tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c
+      expected: KNOWN_OPEN: docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap. (runtime trap required in build configs)
+      actual:   accepted by static check (rc=0); runtime trap required in build configs
+      compiler_stderr: ''
+      runtime_stderr:  ''
+      why:      docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+      reason:   docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+  [narrowing / STRICT_NONE] tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c
+      expected: KNOWN_OPEN: docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap. (runtime trap required in build configs)
+      actual:   accepted by static check (rc=0); runtime trap required in build configs
+      compiler_stderr: ''
+      runtime_stderr:  ''
+      why:      docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+      reason:   docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+  [narrowing / DEFAULT_SAN] tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c
+      expected: runtime trap with matching diagnostic (runtime error:, C+ runtime error:, conversion, truncation)
+      actual:   ran without matching trap (rc=44), stdout='', stderr=''
+      compiler_stderr: ''
+      runtime_stderr:  ''
+      why:      docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+      reason:   docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+  [narrowing / STRICT_SAN] tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c
+      expected: runtime trap with matching diagnostic (runtime error:, C+ runtime error:, conversion, truncation)
+      actual:   ran without matching trap (rc=44), stdout='', stderr=''
+      compiler_stderr: ''
+      runtime_stderr:  ''
+      why:      docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+      reason:   docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap.
+  [float_to_int / DEFAULT_NONE] tests/compiler/adversarial_campaign/case_A1_float_to_int.c
+      expected: KNOWN_OPEN: docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs. (runtime trap required in build configs)
+      actual:   accepted by static check (rc=0); runtime trap required in build configs
+      compiler_stderr: ''
+      runtime_stderr:  ''
+      why:      docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs.
+      reason:   docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs.
+  [float_to_int / STRICT_NONE] tests/compiler/adversarial_campaign/case_A1_float_to_int.c
+      expected: KNOWN_OPEN: docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs. (runtime trap required in build configs)
+      actual:   accepted by static check (rc=0); runtime trap required in build configs
+      compiler_stderr: ''
+      runtime_stderr:  ''
+      why:      docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs.
+      reason:   docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs.
+
+STATIC_ONLY_BY_DESIGN (4) -- non-failing statuses are explicit, never silently dropped
+  [signed_overflow / DEBUG_NONE] tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c
+      expected: STATIC_ONLY_BY_DESIGN: exact C+ warning ([CPLUS-ARITH]), no native runtime guard for a provable constant
+      actual:   accepted (rc=0) with exact C+ warning (no native guard for a provable constant): /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition
+      compiler_stderr: '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){ volatile int x=INT_MAX; return x+1; }\n                                                 ^\n'
+      runtime_stderr:  ''
+      why:      docs/ARITHMETIC_SAFETY.md section 1 and the pinned arith_shift_negative/arith_shift_wide native diagnostics: C+ deliberately treats a volatile local's initializer as a conservative compile-time fact, so STRICT rejects 'signed integer overflow in addition' and DEFAULT warns exactly. No native runtime guard is emitted for this provable constant (docs/LIMITATIONS.md bug 9); DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN, not a defect.
+      reason:   docs/ARITHMETIC_SAFETY.md section 1 and the pinned arith_shift_negative/arith_shift_wide native diagnostics: C+ deliberately treats a volatile local's initializer as a conservative compile-time fact, so STRICT rejects 'signed integer overflow in addition' and DEFAULT warns exactly. No native runtime guard is emitted for this provable constant (docs/LIMITATIONS.md bug 9); DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN, not a defect.
+  [signed_overflow / RELEASE_NONE] tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c
+      expected: STATIC_ONLY_BY_DESIGN: exact C+ warning ([CPLUS-ARITH]), no native runtime guard for a provable constant
+      actual:   accepted (rc=0) with exact C+ warning (no native guard for a provable constant): /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition
+      compiler_stderr: '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: warning: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){ volatile int x=INT_MAX; return x+1; }\n                                                 ^\n'
+      runtime_stderr:  ''
+      why:      docs/ARITHMETIC_SAFETY.md section 1 and the pinned arith_shift_negative/arith_shift_wide native diagnostics: C+ deliberately treats a volatile local's initializer as a conservative compile-time fact, so STRICT rejects 'signed integer overflow in addition' and DEFAULT warns exactly. No native runtime guard is emitted for this provable constant (docs/LIMITATIONS.md bug 9); DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN, not a defect.
+      reason:   docs/ARITHMETIC_SAFETY.md section 1 and the pinned arith_shift_negative/arith_shift_wide native diagnostics: C+ deliberately treats a volatile local's initializer as a conservative compile-time fact, so STRICT rejects 'signed integer overflow in addition' and DEFAULT warns exactly. No native runtime guard is emitted for this provable constant (docs/LIMITATIONS.md bug 9); DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN, not a defect.
+  [div_zero / DEBUG_NONE] tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c
+      expected: STATIC_ONLY_BY_DESIGN: exact C+ warning ([CPLUS-ARITH]), no native runtime guard for a provable constant
+      actual:   accepted (rc=0) with exact C+ warning (no native guard for a provable constant): /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero
+      compiler_stderr: '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero\n  int main(void){ int z=0; int x=10/z; return x; }\n                                 ^~\n'
+      runtime_stderr:  ''
+      why:      docs/ARITHMETIC_SAFETY.md section 3: a provably zero divisor is a static finding (STRICT error / DEFAULT warning), and C+ deliberately emits no native guard for constants. DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN with the exact warning; runtime-variable division is covered by div_zero_runtime (rc 110).
+      reason:   docs/ARITHMETIC_SAFETY.md section 3: a provably zero divisor is a static finding (STRICT error / DEFAULT warning), and C+ deliberately emits no native guard for constants. DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN with the exact warning; runtime-variable division is covered by div_zero_runtime (rc 110).
+  [div_zero / RELEASE_NONE] tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c
+      expected: STATIC_ONLY_BY_DESIGN: exact C+ warning ([CPLUS-ARITH]), no native runtime guard for a provable constant
+      actual:   accepted (rc=0) with exact C+ warning (no native guard for a provable constant): /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero
+      warning:  /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero
+      compiler_stderr: '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c:1:32: warning: [CPLUS-ARITH] division by zero\n  int main(void){ int z=0; int x=10/z; return x; }\n                                 ^~\n'
+      runtime_stderr:  ''
+      why:      docs/ARITHMETIC_SAFETY.md section 3: a provably zero divisor is a static finding (STRICT error / DEFAULT warning), and C+ deliberately emits no native guard for constants. DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN with the exact warning; runtime-variable division is covered by div_zero_runtime (rc 110).
+      reason:   docs/ARITHMETIC_SAFETY.md section 3: a provably zero divisor is a static finding (STRICT error / DEFAULT warning), and C+ deliberately emits no native guard for constants. DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN with the exact warning; runtime-variable division is covered by div_zero_runtime (rc 110).
+
+FAILURES (0) -- non-failing statuses are explicit, never silently dropped
+
+timeouts: 0 (always FAIL and force exit 1)
+Full stdout/stderr/commands/exit codes for every check: summary.json

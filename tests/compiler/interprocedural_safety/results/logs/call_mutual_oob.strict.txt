@@ -1,5 +1,8 @@
 command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/call_mutual_oob.c
-returncode: 0
+returncode: 1
 timed_out: False
 
-check: <SRC> ok
+<SRC>:2:46: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 from recursive call is out of bounds of 'p' of extent 4
+  static void f(int *p,int i){ if(i>5)return; p[i]=1; g(p,i+1); }
+                                               ^
+help: use C+ managed allocations and cplus_* helpers

@@ -435,3 +435,63 @@ builds, 3 agent1 sanitizer configs; sanitizer-disabled runs dominate.
 2. F2 provenance under address reuse — ABI-bound.
 3. Three `check`-mode arithmetic/conversion cases (compound, implicit narrowing,
    float→int); `build` traps at 110/111/111.
+
+## Completion gate (2026-11-24, HEAD `agent/core-safety`)
+
+Final measured state after Phase 4–6 implementation. All commands were run on
+this host with `CPLUS_BIN=$PWD/build/c+` and `CPLUS_CLANG` unset unless a
+config explicitly selected the Homebrew clang for sanitizer runs.
+
+**Implemented fixes**
+- Interprocedural spatial: the six previously accepted OOB cases
+  (`call_recursive_oob`, `call_mutual_oob`, `ptr2_oob`, `struct_ptr_oob`,
+  `loop_while_oob`, `dataflow_phi_oob`) are now rejected with the exact
+  `[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]` tag. `interprocedural_safety`:
+  **61 cases, 183/183 mode checks, 24/24 runtime**.
+- Array decay across call boundaries: Checked-C-style argument-slot extents
+  (pointer-to-pointer and struct pointer+count fields) are concretized at call
+  sites and resolved by parameter slot, so extents survive casts and aliases.
+- Runtime null-deref checks: `cplus_check_nonnull` (declared in `cplus.h` but
+  previously never emitted) is now inserted at `*p`, `p->f` and genuine pointer
+  `p[i]` sites with single evaluation and obvious-guard suppression. Matrix
+  null-deref now traps rc 102 with a C+ diagnostic in DEBUG/RELEASE.
+- STRICT build now fails closed when the safety AST cannot be built (previously
+  only `check` did).
+- STRICT false positives fixed: fresh assignment clears release state
+  (`f = fopen(); fclose(f)`), and explicit unsigned casts (`(uint8_t)300u`)
+  are accepted because C defines modulo wrap.
+- RAII regressions pinned by four new core fixtures (cast drop, conditional
+  drop, conditional defer, switch-continue).
+
+**Final gate (all green)**
+```
+repo tests        109 passed / 0 failed
+core safety       158 passed / 0 failed
+agent1            159 total, 156 PASS / 0 FAIL / 3 SKIP
+CTest             2/2
+interprocedural   183 mode checks passed / 0 failed
+safety matrix     168 checks: 154 PASS, 4 WARN_ONLY, 6 KNOWN_OPEN,
+                  4 STATIC_ONLY_BY_DESIGN, 0 FAIL, 0 timeouts
+full coverage     220 fixtures executed / 220 discovered, 43 PASS, 0 FAIL,
+                  177 OBSERVED (explicitly listed), 0 toolchain unavailable
+metrics           90/90 safe corpus accepted, 0 false positives,
+                  STRICT detection 98/108
+runtime memory    28/28; UAF evidence 12/12; ABI 33/33; ABI real-world 36/36
+differential      125 comparisons, 0 mismatches; compatibility 21/21
+optimizer         11 cases, 0 failures; upstream ports 20/20
+memory compare    14/14; fuzz 200 cases, 0 mismatches
+source preserve   4/4; real-world C 6/6; real-world wave3 175 PASS / 0 hard fail
+C standards       48 pass / 0 fail / 8 unsupported (c23)
+benchmarks        35 measurements, 0 failures
+```
+
+**Remaining, explicitly not claimed as complete**
+- ABI-bound: F2 (stale free at a reused address) and unmanaged temporal safety
+  need a pointer-borne provenance token; declined to preserve ABI.
+- `check` mode accepts three runtime-value arithmetic/conversion cases whose
+  `build` counterparts trap (110/111/111); statically proving them would
+  create false positives.
+- WARN_ONLY / KNOWN_OPEN entries in the safety matrix are documented, recorded
+  with exact diagnostics, and are not silently skipped.
+- No general race/provenance/C23/UB-free guarantee. No overall safety
+  percentage is claimed: the 22-feature inventory above uses explicit counts.

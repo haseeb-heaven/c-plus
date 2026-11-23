@@ -2659,6 +2659,359 @@ collectTokenArithmeticSites(const std::string &source) {
   return sites;
 }
 
+// ---------------------------------------------------------------------------
+// Null-dereference site recovery.
+//
+// The runtime exposes cplus_check_nonnull() ("emitted by the compiler for
+// every checked pointer dereference"), but the AST pass does not record plain
+// `*p` / `p->f` / `p[i]` sites.  Recover the unambiguous identifier-base forms
+// directly from the lowered C tokens.  Restricting the base to a bare
+// identifier keeps evaluation single, avoids the array-vs-pointer ambiguity
+// for subscripts, and never injects a call into a declaration.  Forms we
+// cannot classify confidently are left untouched so the generated C stays
+// valid; a redundant check is harmless (it only traps on an actual null).
+// ---------------------------------------------------------------------------
+
+struct NonnullSite {
+  size_t baseBegin = 0; ///< first byte of the pointer expression's spelling
+  size_t baseEnd = 0;   ///< one past its last byte
+  std::string expr;     ///< spelling used in the runtime diagnostic
+};
+
+static bool isDeclTypeTok(const std::string &s) {
+  static const std::set<std::string> kTypes = {
+      "void", "char", "short", "int", "long", "float", "double", "signed",
+      "unsigned", "_Bool", "struct", "union", "enum", "const", "volatile",
+      "static", "extern", "register", "restrict", "auto", "typedef",
+      "inline", "_Atomic", "size_t", "ptrdiff_t", "uintptr_t", "intptr_t",
+      "uint64_t", "int64_t", "uint32_t", "int32_t", "uint16_t", "int16_t",
+      "uint8_t", "int8_t"};
+  return kTypes.count(s) != 0;
+}
+
+/// True when this `*` is a declarator star in a type such as `char **argv`,
+/// `int **q` or `struct S **p`.  Walk back over the whole run of stars: if
+/// the token before the run is a type keyword (or a struct/union/enum tag),
+/// the stars declare a name rather than dereference a value.  A run preceded
+/// by an expression token (`=`, `{`, `return`, ...) is a nested deref and is
+/// intentionally left to the normal expression path.
+static bool isDeclaratorStarRun(const std::vector<Token> &toks,
+                                const std::vector<size_t> &sig, size_t si) {
+  size_t r = si;
+  while (r > 0 && toks[sig[r - 1]].kind == TokKind::Punct &&
+         toks[sig[r - 1]].text == "*")
+    --r;
+  if (r == 0)
+    return false;
+  const Token &before = toks[sig[r - 1]];
+  if (isDeclTypeTok(before.text))
+    return true;
+  if (r >= 2 && before.kind == TokKind::Identifier) {
+    const Token &pre = toks[sig[r - 2]];
+    if (pre.kind == TokKind::Identifier &&
+        (pre.text == "struct" || pre.text == "union" || pre.text == "enum"))
+      return true;
+  }
+  return false;
+}
+
+/// True when an obvious local guard proves `name` non-null before baseSi.
+/// We keep this deliberately narrow (short-circuit RHS and `if(!p) return;`)
+/// and fall back to emitting a check whenever there is any doubt.
+static bool hasObviousNonnullGuard(const std::vector<Token> &toks,
+                                   const std::vector<size_t> &sig,
+                                   size_t baseSi, const std::string &name) {
+  size_t stmtStart = 0, blockStart = 0;
+  for (size_t k = baseSi; k > 0; --k) {
+    const Token &t = toks[sig[k]];
+    if (t.kind != TokKind::Punct)
+      continue;
+    if (stmtStart == 0 && (t.text == ";" || t.text == "}"))
+      stmtStart = k + 1;
+    if (blockStart == 0 && t.text == "{")
+      blockStart = k + 1;
+    if (stmtStart != 0 && blockStart != 0)
+      break;
+  }
+
+  // `p && ...<deref>` / `!p || ...<deref>` in the same expression.
+  for (size_t k = stmtStart; k < baseSi; ++k) {
+    const Token &t = toks[sig[k]];
+    if (t.kind != TokKind::Punct || k == 0)
+      continue;
+    const Token &prev = toks[sig[k - 1]];
+    if (t.text == "&&" && prev.kind == TokKind::Identifier &&
+        prev.text == name)
+      return true;
+    if (t.text == "||" && prev.kind == TokKind::Identifier &&
+        prev.text == name && k >= 2 &&
+        toks[sig[k - 2]].kind == TokKind::Punct &&
+        toks[sig[k - 2]].text == "!")
+      return true;
+  }
+
+  // `if (!p) return;` / `if (p == 0) return;` earlier in the same block,
+  // provided p is not reassigned between the guard and the dereference.
+  for (size_t k = blockStart; k + 3 < baseSi; ++k) {
+    if (!(toks[sig[k]].kind == TokKind::Identifier &&
+          toks[sig[k]].text == "if"))
+      continue;
+    if (!(toks[sig[k + 1]].kind == TokKind::Punct &&
+          toks[sig[k + 1]].text == "("))
+      continue;
+    size_t c = k + 2;
+    bool negated = false;
+    if (c + 1 < baseSi && toks[sig[c]].kind == TokKind::Punct &&
+        toks[sig[c]].text == "!") {
+      negated = true;
+      ++c;
+    }
+    if (c >= baseSi || !(toks[sig[c]].kind == TokKind::Identifier &&
+                         toks[sig[c]].text == name))
+      continue;
+    size_t close = c + 1;
+    if (!negated && close + 1 < baseSi &&
+        toks[sig[close]].kind == TokKind::Punct &&
+        toks[sig[close]].text == "==") {
+      const Token &z = toks[sig[close + 1]];
+      if (!((z.kind == TokKind::Number && z.text == "0") ||
+            (z.kind == TokKind::Identifier && z.text == "NULL")))
+        continue;
+      close += 2;
+    }
+    if (!(close + 1 < baseSi && toks[sig[close]].kind == TokKind::Punct &&
+          toks[sig[close]].text == ")" &&
+          toks[sig[close + 1]].kind == TokKind::Identifier &&
+          toks[sig[close + 1]].text == "return"))
+      continue;
+    bool reassigned = false;
+    for (size_t q = close + 2; q + 1 < baseSi; ++q)
+      if (toks[sig[q]].kind == TokKind::Identifier &&
+          toks[sig[q]].text == name &&
+          toks[sig[q + 1]].kind == TokKind::Punct &&
+          toks[sig[q + 1]].text == "=") {
+        reassigned = true;
+        break;
+      }
+    if (!reassigned)
+      return true;
+  }
+  return false;
+}
+
+/// Type names declared in this translation unit (typedef aliases plus
+/// struct/union/enum tags).  Derived from the same token stream the rewriter
+/// uses for its variable/type tables; no new persistent global registry.
+static std::set<std::string> collectDeclTypeNames(
+    const std::vector<Token> &toks, const std::vector<size_t> &sig) {
+  std::set<std::string> names;
+  for (size_t si = 0; si < sig.size(); ++si) {
+    const Token &t = toks[sig[si]];
+    if (t.kind != TokKind::Identifier)
+      continue;
+    if (t.text == "struct" || t.text == "union" || t.text == "enum") {
+      if (si + 1 < sig.size() &&
+          toks[sig[si + 1]].kind == TokKind::Identifier)
+        names.insert(toks[sig[si + 1]].text);
+    }
+    if (t.text != "typedef")
+      continue;
+    // Last identifier at declaration nesting depth zero before the `;`.
+    // Brace tracking skips identifiers inside a `typedef struct T {...} T;`
+    // body so the trailing alias name is the one recorded.
+    int par = 0, brk = 0, brc = 0;
+    size_t last = kNPos;
+    for (size_t k = si + 1; k < sig.size(); ++k) {
+      const Token &u = toks[sig[k]];
+      if (u.kind == TokKind::Punct) {
+        if (u.text == "(") ++par;
+        else if (u.text == ")") { if (par > 0) --par; }
+        else if (u.text == "[") ++brk;
+        else if (u.text == "]") { if (brk > 0) --brk; }
+        else if (u.text == "{") ++brc;
+        else if (u.text == "}") { if (brc > 0) --brc; }
+        else if (u.text == ";" && par == 0 && brk == 0 && brc == 0) break;
+      } else if (u.kind == TokKind::Identifier && par == 0 && brk == 0 &&
+                 brc == 0) {
+        last = k;
+      }
+    }
+    if (last != kNPos)
+      names.insert(toks[sig[last]].text);
+  }
+  return names;
+}
+
+/// True when the `[` at `si` follows the declared name of an array, e.g.
+/// `int buf[N];`, `char text[] = "...";`, `void *slots[N];` or a struct
+/// field declaration.  The name is NOT a pointer: array-to-pointer decay at
+/// a subscript site cannot produce NULL, and binding it with __typeof__
+/// would emit an invalid array initializer in the generated C.
+static bool isArrayDeclaratorBracket(const std::vector<Token> &toks,
+                                     const std::vector<size_t> &sig, size_t si,
+                                     const std::set<std::string> &typeNames) {
+  if (si < 2 || toks[sig[si - 1]].kind != TokKind::Identifier)
+    return false;
+  const Token &before = toks[sig[si - 2]];
+  const std::string &bt = before.text;
+  if (isDeclTypeTok(bt) || bt == "*" || bt == "typedef" ||
+      typeNames.count(bt) != 0)
+    return true;
+  if (si >= 3 && before.kind == TokKind::Identifier) {
+    const Token &pre = toks[sig[si - 3]];
+    if (pre.kind == TokKind::Identifier &&
+        (pre.text == "struct" || pre.text == "union" || pre.text == "enum"))
+      return true;
+  }
+  if (bt == ",") {
+    size_t stmtStart = 0;
+    for (size_t k = si - 2; k > 0; --k) {
+      const Token &u = toks[sig[k]];
+      if (u.kind == TokKind::Punct &&
+          (u.text == ";" || u.text == "{" || u.text == "}")) {
+        stmtStart = k + 1;
+        break;
+      }
+    }
+    if (stmtStart < si && isDeclTypeTok(toks[sig[stmtStart]].text))
+      return true;
+  }
+  return false;
+}
+
+static std::vector<NonnullSite>
+collectNonnullDerefSites(const std::string &source,
+                         const std::map<std::string, size_t> &arrayLengths) {
+  std::vector<NonnullSite> sites;
+  const std::vector<Token> toks = lexCPlus(source);
+  std::vector<size_t> sig;
+  for (size_t i = 0; i < toks.size(); ++i)
+    if (!isTriviaTok(toks[i]) && toks[i].kind != TokKind::EndOfFile)
+      sig.push_back(i);
+
+  // Collect declared array names syntactically.  `arrayLengths` only covers
+  // arrays whose extent the rewriter could evaluate; macro extents
+  // (`buf[BUFSIZE]`), inferred extents (`text[] = "..."`) and typedef element
+  // types (`Node nodes[NODES];`) are absent, yet wrapping them with
+  // __typeof__ is still invalid C.
+  const std::set<std::string> typeNames = collectDeclTypeNames(toks, sig);
+  std::set<std::string> declaredArrays;
+  for (size_t si = 1; si < sig.size(); ++si) {
+    if (!(toks[sig[si]].kind == TokKind::Punct &&
+          toks[sig[si]].text == "["))
+      continue;
+    if (toks[sig[si - 1]].kind != TokKind::Identifier)
+      continue;
+    if (isArrayDeclaratorBracket(toks, sig, si, typeNames))
+      declaredArrays.insert(toks[sig[si - 1]].text);
+  }
+
+  std::set<size_t> seen;
+  auto tryAdd = [&](size_t baseSi) {
+    const Token &b = toks[sig[baseSi]];
+    if (b.kind != TokKind::Identifier)
+      return;
+    // An array is never a NULL pointer at a dereference site; binding one
+    // with __typeof__ would emit an invalid array initializer in the C.
+    if (arrayLengths.count(b.text) != 0 || declaredArrays.count(b.text) != 0)
+      return;
+    if (seen.count(b.offset) != 0)
+      return;
+    if (hasObviousNonnullGuard(toks, sig, baseSi, b.text))
+      return;
+    seen.insert(b.offset);
+    sites.push_back(NonnullSite{b.offset, endOfToken(b), b.text});
+  };
+
+  for (size_t si = 0; si < sig.size(); ++si) {
+    const Token &t = toks[sig[si]];
+    if (t.kind != TokKind::Punct)
+      continue;
+
+    if (t.text == "->") {
+      if (si == 0)
+        continue;
+      const Token &base = toks[sig[si - 1]];
+      if (base.kind != TokKind::Identifier)
+        continue;
+      if (si >= 2) {
+        const std::string &bt = toks[sig[si - 2]].text;
+        if (bt == "." || bt == "->" || isDeclTypeTok(bt))
+          continue; // struct field / declarator, not a standalone pointer
+      }
+      tryAdd(si - 1);
+      continue;
+    }
+
+    if (t.text == "*") {
+      if (si == 0 || si + 1 >= sig.size())
+        continue;
+      const Token &prev = toks[sig[si - 1]];
+      // `int *p;` is a declaration; `a * b` is multiplication.  `canEndFactor`
+      // also treats unary operators (return, sizeof, ...) as non-factors.
+      if (canEndFactor(prev) || isDeclTypeTok(prev.text) ||
+          prev.text == "sizeof" || prev.text == "&")
+        continue;
+      if (isDeclaratorStarRun(toks, sig, si))
+        continue; // `char **argv`, `int **q`, `struct T **p`
+      const Token &base = toks[sig[si + 1]];
+      if (base.kind != TokKind::Identifier)
+        continue; // nested/parenthesised derefs: leave as-is
+      if (si + 2 < sig.size()) {
+        const Token &after = toks[sig[si + 2]];
+        if (after.kind == TokKind::Punct &&
+            (after.text == "." || after.text == "->" || after.text == "[" ||
+             after.text == "(" || after.text == ")" || after.text == "++" ||
+             after.text == "--"))
+          continue;
+      }
+      tryAdd(si + 1);
+      continue;
+    }
+
+    if (t.text == "[") {
+      if (si == 0 || si + 1 >= sig.size())
+        continue;
+      if (toks[sig[si + 1]].kind == TokKind::Punct &&
+          toks[sig[si + 1]].text == "]")
+        continue; // empty subscript: declaration / incomplete type
+      const Token &base = toks[sig[si - 1]];
+      if (base.kind != TokKind::Identifier)
+        continue;
+      if (si >= 2) {
+        const Token &before = toks[sig[si - 2]];
+        const std::string &bt = before.text;
+        if (isDeclTypeTok(bt) || bt == "typedef" || bt == "*" || bt == "." ||
+            bt == "->")
+          continue; // declarator or struct field, not a pointer variable
+        if (si >= 3 && before.kind == TokKind::Identifier) {
+          const Token &pre = toks[sig[si - 3]];
+          if (pre.kind == TokKind::Identifier &&
+              (pre.text == "struct" || pre.text == "union" ||
+               pre.text == "enum"))
+            continue; // `struct S arr[N];` declares an array
+        }
+        if (bt == ",") {
+          size_t stmtStart = 0;
+          for (size_t k = si - 2; k > 0; --k) {
+            const Token &u = toks[sig[k]];
+            if (u.kind == TokKind::Punct &&
+                (u.text == ";" || u.text == "{" || u.text == "}")) {
+              stmtStart = k + 1;
+              break;
+            }
+          }
+          if (stmtStart < si && isDeclTypeTok(toks[sig[stmtStart]].text))
+            continue; // declarator list: `int a[N], b[M];`
+        }
+      }
+      tryAdd(si - 1);
+      continue;
+    }
+  }
+  return sites;
+}
+
 } // namespace
 
 std::string instrumentDynamicArrayBounds(
@@ -2683,9 +3036,14 @@ std::string instrumentDynamicArrayBounds(
   // sites at all, so the declaration need must be part of the early-return
   // condition (LEGACY never calls this function, so its bytes are untouched).
   const bool needZeroDecl = source.find("cplus_zero") != std::string::npos;
+  // Plain pointer dereferences are recovered lexically (the AST pass does not
+  // record them).  This pass runs only in Safe mode, so LEGACY source bytes
+  // remain untouched.
+  const std::vector<NonnullSite> nonnullSites =
+      collectNonnullDerefSites(source, arrayLengths);
   if (arrayLengths.empty() && arith.empty() && bounds.empty() &&
       checkedPointerSites().empty() && checkedAllocSites().empty() &&
-      checkedFreeSites().empty() && !needZeroDecl)
+      checkedFreeSites().empty() && nonnullSites.empty() && !needZeroDecl)
     return source;
 
   // Enum initializers must be integer constant expressions.  A checked helper
@@ -2726,6 +3084,7 @@ std::string instrumentDynamicArrayBounds(
   std::set<size_t> guardedIndexOffsets;
   bool haveBounds = false;
   bool havePtrFormation = false;
+  bool haveNonnull = false;
   bool haveRuntimeRegistry = false;
   bool haveFloatToInt = false;
   bool haveSizeMul = false;
@@ -3145,6 +3504,17 @@ std::string instrumentDynamicArrayBounds(
     }
     havePtrFormation = true;
   }
+
+  // Plain pointer dereferences: wrap the base once so it is evaluated a
+  // single time.  CPLUS_NONNULL yields the original pointer value after the
+  // runtime check, so `*p`, `p->f` and `p[i]` keep their exact semantics.
+  for (const NonnullSite &site : nonnullSites) {
+    const size_t span = site.baseEnd - site.baseBegin;
+    insertions.push_back({site.baseBegin, span, 0, "CPLUS_NONNULL(", 0});
+    insertions.push_back({site.baseEnd, span, 2, ")", 0});
+    haveNonnull = true;
+  }
+
   if (insertions.empty())
     return source;
 
@@ -3257,6 +3627,23 @@ std::string instrumentDynamicArrayBounds(
                "       __FILE__, __LINE__, T), (B) + (I)))\n"
                "#define CPLUS_PTR_CHECK_ASSIGN(B, I, C, N, T, D) \\\n"
                "  ((B) = CPLUS_PTR_CHECK(B, I, C, N, T, D))\n"
+               "#endif\n";
+  if (haveNonnull)
+    // The signature must match runtime/include/cplus/cplus.h exactly.  Bind
+    // the pointer once (GNU statement expression where available; the
+    // portable fallback is safe here because the base is a bare identifier).
+    prelude += "extern void cplus_check_nonnull(const void *, const char *, "
+               "int, const char *);\n"
+               "#if defined(__GNUC__) || defined(__clang__)\n"
+               "#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = "
+               "(P); \\\n"
+               "  cplus_check_nonnull((const void *)__cplus_nn_p, "
+               "__FILE__, __LINE__, #P); \\\n"
+               "  __cplus_nn_p; })\n"
+               "#else\n"
+               "#define CPLUS_NONNULL(P) \\\n"
+               "  (cplus_check_nonnull((const void *)(P), __FILE__, "
+               "__LINE__, #P), (P))\n"
                "#endif\n";
   if (haveRuntimeRegistry)
     prelude += "#include <stddef.h>\n"

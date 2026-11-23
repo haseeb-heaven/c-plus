@@ -275,6 +275,29 @@ struct ParamExtent {
   ExtentOrigin origin = ExtentOrigin::Unknown;
 };
 
+/// An extent concretized at a call site and bound to the callee's *argument
+/// slot* rather than to a variable spelling.  This adapts the idea of
+/// Checked C function-type bounds (clang/lib/Sema/SemaBounds.cpp,
+/// Sema::AbstractForFunctionType / ConcretizeFromFunctionTypeWithArgs and the
+/// CheckBoundsDeclAtCallArg call loop) together with Apple's pointer/count
+/// pairing (clang/lib/Sema/DynamicCountPointerAssignmentAnalysis.cpp,
+/// computeMemberExprKey / TransformDynamicCountWithFunctionArgument): the
+/// object slot that carries the pointer also owns its extent, so an explicit
+/// cast or a local alias cannot erase it.  bytes < 0 means unknown or that
+/// different call sites supplied conflicting extents (fail closed).
+struct SlotExtent {
+  long long bytes = -1;
+  ExtentOrigin origin = ExtentOrigin::Unknown;
+};
+
+/// (callee function, parameter slot) identifies an argument slot.  The slot
+/// survives casts because the callee side is matched by expression shape and
+/// parameter index, never by the parameter's spelling.
+using ArgSlotKey = std::pair<std::string, unsigned>;
+using IndirectSlotExtents = std::map<ArgSlotKey, SlotExtent>;
+using FieldSlotExtents =
+    std::map<ArgSlotKey, std::map<const FieldDecl *, SlotExtent>>;
+
 class SafetyVisitor : public RecursiveASTVisitor<SafetyVisitor> {
 public:
   SafetyVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string filename,
@@ -397,6 +420,14 @@ public:
       const std::map<std::string, std::map<unsigned, ParamExtent>> &m) {
     callParamExtents_ = m;
   }
+  const IndirectSlotExtents &indirectSlotExtents() const {
+    return indirectSlotExtents_;
+  }
+  void setIndirectSlotExtents(const IndirectSlotExtents &m) {
+    indirectSlotExtents_ = m;
+  }
+  const FieldSlotExtents &fieldSlotExtents() const { return fieldSlotExtents_; }
+  void setFieldSlotExtents(const FieldSlotExtents &m) { fieldSlotExtents_ = m; }
   void setReturnedParams(const std::map<std::string, unsigned> &m) {
     returnedParam_ = m;
   }
@@ -1003,8 +1034,13 @@ public:
 
   /// STRICT: reject a conversion whose source is a provably out-of-range
   /// compile-time constant. Runtime-valued sources are left to the rewriter.
+  /// `explicitCast` marks a user-written C-style cast: that cast documents an
+  /// intentional value-changing conversion, which is well-defined wrap for an
+  /// unsigned integer target (see the exception below). Implicit narrowing
+  /// stays rejected.
   void checkProvableConversion(const Expr *value, QualType src, QualType dst,
-                               CheckedArithmeticSite::Op kind) {
+                               CheckedArithmeticSite::Op kind,
+                               bool explicitCast = false) {
     if (!strict_ || !value || !dst->isIntegerType())
       return;
     unsigned db = ctx_.getIntWidth(dst);
@@ -1026,12 +1062,25 @@ public:
         return;
       unsafe = !intFits(v, db, dst->isSignedIntegerType());
     }
-    if (unsafe)
+    if (unsafe) {
+      // An explicit C-style cast is the programmer's assertion that the
+      // value-changing conversion is intended. For an integer -> unsigned
+      // target the C standard defines modulo 2^N wrap, so the result is
+      // fully defined (e.g. `(uint8_t)300u` is 44, `(unsigned)0x1'0000'0005ULL`
+      // is 5); STRICT must not reject such a documented truncation. This
+      // exception deliberately does NOT cover implicit narrowing (`char c=300;`
+      // stays rejected, matrix case e_narrowing_conversion), float-to-int
+      // casts (out-of-range float-to-unsigned is undefined, not wrap), or
+      // value-changing conversions to a signed target (signed overflow).
+      if (explicitCast && kind == CheckedArithmeticSite::Op::Narrow &&
+          dst->isUnsignedIntegerType())
+        return;
       report(value->getBeginLoc(),
              std::string("provably unsafe constant conversion to '") +
                  dst.getCanonicalType().getAsString(
                      PrintingPolicy(ctx_.getLangOpts())) +
                  "' in STRICT mode");
+    }
   }
 
   /// A conversion whose operand is itself an instrumented conversion produces
@@ -1528,7 +1577,8 @@ public:
       checkProvableConversion(value, src, dst,
                               toFloatInt
                                   ? CheckedArithmeticSite::Op::FloatToInt
-                                  : CheckedArithmeticSite::Op::Narrow);
+                                  : CheckedArithmeticSite::Op::Narrow,
+                              /*explicitCast=*/true);
     }
     if (!recordArithmeticSites_ || !report_)
       return true;
@@ -1925,6 +1975,67 @@ public:
     heapAllocs_[vd->getNameAsString()] = st;
   }
 
+  /// Materialise a stable view of an argument-slot extent for the duration
+  /// of one query (mirrors the cached call-return extent above).
+  const HeapAllocState *cacheSlotExtent(const SlotExtent &se) const {
+    static thread_local HeapAllocState cached;
+    cached.bytes = se.bytes;
+    cached.origin = se.origin;
+    cached.decl = nullptr;
+    return &cached;
+  }
+
+  /// Resolve an extent that was concretized at a call site onto an argument
+  /// slot reached by the expression: `(*pp)[i]` for a `T **` parameter or
+  /// `b->p[i]` for a struct-pointer parameter.  The anchor is the parameter's
+  /// slot index and the expression shape, never its spelling, so casts and
+  /// local aliases at the use site cannot erase the fact.  Only the reporting
+  /// pass consults these facts; the collection pass must not let them alter
+  /// interprocedural effects.
+  const HeapAllocState *slotExtentOf(const Expr *e) const {
+    if (!report_ || currentFunction_.empty())
+      return nullptr;
+    const Expr *x = e->IgnoreParenImpCasts();
+    while (const auto *ce = dyn_cast<ExplicitCastExpr>(x))
+      x = ce->getSubExpr()->IgnoreParenImpCasts();
+
+    auto paramKey = [&](const Expr *base, ArgSlotKey &key) {
+      const auto *ref = dyn_cast<DeclRefExpr>(base);
+      const auto *pv = ref ? dyn_cast<ParmVarDecl>(ref->getDecl()) : nullptr;
+      if (!pv)
+        return false;
+      key = {currentFunction_, pv->getFunctionScopeIndex()};
+      return true;
+    };
+
+    // Peel one dereference: `pp` is `int **`, `*pp` is the sized `int *`.
+    if (const auto *uo = dyn_cast<UnaryOperator>(x))
+      if (uo->getOpcode() == UO_Deref) {
+        ArgSlotKey key;
+        if (paramKey(uo->getSubExpr(), key)) {
+          auto it = indirectSlotExtents_.find(key);
+          if (it != indirectSlotExtents_.end() && it->second.bytes > 0)
+            return cacheSlotExtent(it->second);
+        }
+      }
+
+    // `b->p`: pair the pointer field with the extent carried by the
+    // struct-pointer argument slot (Apple's pointer/count member keying).
+    if (const auto *me = dyn_cast<MemberExpr>(x)) {
+      ArgSlotKey key;
+      if (paramKey(me->getBase(), key)) {
+        auto fit = fieldSlotExtents_.find(key);
+        if (fit != fieldSlotExtents_.end()) {
+          const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl());
+          auto eit = fd ? fit->second.find(fd) : fit->second.end();
+          if (eit != fit->second.end() && eit->second.bytes > 0)
+            return cacheSlotExtent(eit->second);
+        }
+      }
+    }
+    return nullptr;
+  }
+
   /// True when `e` is a plain reference to a heap variable whose recorded
   /// extent still applies.
   const HeapAllocState *heapStateOf(const Expr *e) const {
@@ -1945,17 +2056,19 @@ public:
     std::string name = varNameOf(e);
     if (name.empty())
       name = castedVarName(e);
-    if (name.empty())
-      return nullptr;
-    auto it = heapAllocs_.find(name);
-    if (it == heapAllocs_.end() || !it->second.decl)
-      return nullptr;
-    const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenImpCasts());
-    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (vd && it->second.decl != vd &&
-        it->second.decl->getCanonicalDecl() != vd->getCanonicalDecl())
-      return nullptr;
-    return &it->second;
+    if (!name.empty()) {
+      auto it = heapAllocs_.find(name);
+      if (it != heapAllocs_.end() && it->second.decl) {
+        const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenImpCasts());
+        const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+        if (!vd || it->second.decl == vd ||
+            it->second.decl->getCanonicalDecl() == vd->getCanonicalDecl())
+          return &it->second;
+      }
+    }
+    // The extent may be bound to an argument slot the pointer merely reaches
+    // through (`*pp`, `b->p`) rather than to a variable name.
+    return slotExtentOf(e);
   }
 
   /// Resolve a subscript/offset index to a compile-time value.  The worst
@@ -2079,6 +2192,21 @@ public:
     if (!evalIndexValue(sub->getIdx(), idx))
       return;
     std::string name = varNameOf(sub->getBase());
+    if (name.empty()) {
+      // An argument-slot extent is reached through `*pp` or `b->p`, so there
+      // is no plain variable spelling to name; describe the slot instead.
+      const Expr *b = sub->getBase()->IgnoreParenImpCasts();
+      if (const auto *uo = dyn_cast<UnaryOperator>(b))
+        if (uo->getOpcode() == UO_Deref)
+          name = "*" + varNameOf(uo->getSubExpr());
+      if (name.empty()) {
+        std::string fk = lvalueKey(b);
+        if (!fk.empty())
+          name = "field '" + fk + "'";
+      }
+      if (name.empty())
+        name = "argument-derived pointer";
+    }
     if (idx < 0) {
       report(loc, std::string("negative array index on ") +
                       extentLabel(st->origin) + " '" + name + "'");
@@ -2515,6 +2643,40 @@ public:
           if (field.rfind(base + ".", 0) == 0)
             return true;
     }
+    return false;
+  }
+
+  /// True when `e` still denotes the object that was released, rather than a
+  /// fresh value.  At an assignment site this distinguishes "the released
+  /// pointer itself" (a plain reference, a cast, an integer-laundered view,
+  /// an alias field, or pointer arithmetic on any of those) from a genuinely
+  /// new value that makes the destination live again.
+  bool derivedFromReleasedPointer(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 6)
+      return false;
+    if (isReleased(e))
+      return true;
+    const Expr *canon = canonicalPointer(e);
+    if (canon && canon != e && isReleased(canon))
+      return true;
+    std::string src = pointerSourceOf(e);
+    if (!src.empty() && releasedVars_.count(src))
+      return true;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *ce = dyn_cast<CastExpr>(x))
+      return derivedFromReleasedPointer(ce->getSubExpr(), depth + 1);
+    if (const auto *uo = dyn_cast<UnaryOperator>(x)) {
+      // `&x` is a fresh pointer to x, never a view of a released value.
+      if (uo->getOpcode() == UO_AddrOf)
+        return false;
+      return derivedFromReleasedPointer(uo->getSubExpr(), depth + 1);
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(x))
+      return derivedFromReleasedPointer(bo->getLHS(), depth + 1) ||
+             derivedFromReleasedPointer(bo->getRHS(), depth + 1);
+    if (const auto *co = dyn_cast<ConditionalOperator>(x))
+      return derivedFromReleasedPointer(co->getTrueExpr(), depth + 1) ||
+             derivedFromReleasedPointer(co->getFalseExpr(), depth + 1);
     return false;
   }
 
@@ -4368,15 +4530,29 @@ public:
         nullVars_.erase(lhsVar->getNameAsString());
       }
       const Expr *rhsExpr = op->getRHS()->IgnoreParenImpCasts();
-      if (isNullConstant(rhsExpr) ||
-          (isa<UnaryOperator>(rhsExpr) &&
-           cast<UnaryOperator>(rhsExpr)->getOpcode() == UO_AddrOf)) {
-        // Resetting a released pointer to null or to a fresh object address
-        // makes it live again.
-        const Expr *lhsExpr = op->getLHS()->IgnoreParenImpCasts();
-        clearReleased(varNameOf(lhsExpr));
-        releasedFields_.erase(varNameOf(lhsExpr));
-        maybeReleasedVars_.erase(varNameOf(lhsExpr));
+      const Expr *lhsExpr = op->getLHS()->IgnoreParenImpCasts();
+      // A fresh value assigned to a released pointer makes it live again.
+      // Generalise the old null/`&object` special cases to any value that is
+      // not itself derived from a released pointer: `f = fopen(...)`,
+      // `p = malloc(n)`, `q = live_pointer`, ...  The RHS guard is essential:
+      // `p = p`, `p = (void *)p`, `p = q` with q dangling and integer-launder
+      // round-trips must keep the release state or they would launder a UAF.
+      // The verified realloc rebind (`p = tmp`) is handled earlier in this
+      // visitor and deliberately keeps stale aliases dead, so skip it here.
+      bool isReallocRebind = !reallocRebindOwner_.empty() &&
+                             varNameOf(lhsExpr) == reallocRebindOwner_ &&
+                             varNameOf(rhsExpr) == reallocRebindTemp_;
+      if (!derivedFromReleasedPointer(rhsExpr) && !isReallocRebind) {
+        std::string lhsVarName = varNameOf(lhsExpr);
+        clearReleased(lhsVarName);
+        maybeReleasedVars_.erase(lhsVarName);
+        // Field-sensitive release state (`s.p = fresh` after `free(s.p)`).
+        std::string lhsKey = lvalueKey(lhsExpr);
+        if (!lhsKey.empty()) {
+          clearReleased(lhsKey);
+          releasedFields_.erase(lhsKey);
+        }
+        releasedFields_.erase(lhsVarName);
       }
       if (handlers_.count(currentFunction_))
         reportGlobalWrite(op->getLHS(), op->getBeginLoc());
@@ -5216,6 +5392,82 @@ public:
         } else if (slot.bytes < 0 || !conflictedParams_.count({name, i})) {
           slot.bytes = ext;
           slot.origin = origin;
+        }
+      }
+      // Concretize extents that reach the callee through an argument *slot*
+      // instead of a variable name (`&p` into `T **pp`, or `&s` whose pointer
+      // field holds a sized object).  This is the call-side counterpart of
+      // Checked C's Sema::ConcretizeFromFunctionTypeWithArgs and Apple's
+      // pointer/count pairing keyed on the member expression; the callee side
+      // anchors on the parameter slot and expression shape, so casts and
+      // aliases at the use site cannot erase the extent.
+      auto namedExtent = [&](const std::string &n, ExtentOrigin &origin) {
+        if (n.empty())
+          return -1LL;
+        auto hit = heapAllocs_.find(n);
+        if (hit != heapAllocs_.end() && hit->second.decl &&
+            hit->second.bytes > 0) {
+          origin = hit->second.origin == ExtentOrigin::Unknown
+                       ? ExtentOrigin::Heap
+                       : hit->second.origin;
+          return hit->second.bytes;
+        }
+        auto sit = stackArrayExtents_.find(n);
+        if (sit != stackArrayExtents_.end() && sit->second > 0) {
+          origin = ExtentOrigin::Stack;
+          return sit->second;
+        }
+        return -1LL;
+      };
+      auto mergeSlot = [](SlotExtent &slot, long long ext, ExtentOrigin origin) {
+        if (slot.bytes >= 0 && slot.bytes != ext) {
+          slot.bytes = -1; // different call sites: no single valid extent
+          return;
+        }
+        if (slot.bytes < 0) {
+          slot.bytes = ext;
+          slot.origin = origin;
+        }
+      };
+      for (unsigned i = 0; i < call->getNumArgs(); ++i) {
+        const Expr *arg = call->getArg(i)->IgnoreParenImpCasts();
+        while (const auto *ce = dyn_cast<ExplicitCastExpr>(arg))
+          arg = ce->getSubExpr()->IgnoreParenImpCasts();
+        const auto *uo = dyn_cast<UnaryOperator>(arg);
+        if (!uo || uo->getOpcode() != UO_AddrOf)
+          continue;
+        const Expr *pointee = uo->getSubExpr()->IgnoreParenImpCasts();
+        ExtentOrigin origin = ExtentOrigin::Unknown;
+        long long ext = namedExtent(castedVarName(pointee), origin);
+        if (ext > 0) {
+          mergeSlot(indirectSlotExtents_[{name, i}], ext, origin);
+          continue;
+        }
+        // `&s`: pair each pointer field of s whose stored value is a sized
+        // object (tracked via fieldAliases_) with that object's extent.
+        const auto *ref = dyn_cast<DeclRefExpr>(pointee);
+        const auto *svd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+        if (!svd)
+          continue;
+        const auto *rd = svd->getType()->getAsRecordDecl();
+        if (!rd)
+          continue;
+        if (const RecordDecl *def = rd->getDefinition())
+          rd = def;
+        for (const FieldDecl *fd : rd->fields()) {
+          if (!fd->getType()->isPointerType())
+            continue;
+          std::string fk =
+              svd->getNameAsString() + "." + fd->getNameAsString();
+          auto fit = fieldAliases_.find(fk);
+          if (fit == fieldAliases_.end())
+            continue;
+          for (const auto &alias : fit->second) {
+            ExtentOrigin fo = ExtentOrigin::Unknown;
+            long long fext = namedExtent(alias, fo);
+            if (fext > 0)
+              mergeSlot(fieldSlotExtents_[{name, i}][fd], fext, fo);
+          }
         }
       }
       // Record the extent of a call that returns one of its pointer arguments
@@ -6409,6 +6661,11 @@ private:
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
   std::map<std::string, std::map<unsigned, ParamExtent>> callParamExtents_;
+  // Argument-slot extents (function name, parameter slot).  These are keyed
+  // by the callee slot, not by variable spelling, so an extent survives
+  // casts and aliases at the use site.  See SlotExtent above.
+  IndirectSlotExtents indirectSlotExtents_; // `T **` param <- `&sizedPointer`
+  FieldSlotExtents fieldSlotExtents_;       // struct pointer field <- extent
   // A callee parameter passed buffers of different sizes at different call
   // sites has no single valid extent; do not trust any of them.
   std::set<std::pair<std::string, unsigned>> conflictedParams_;
@@ -6764,6 +7021,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setAddressTakenVars(collect.addressTakenVars());
   check.setStackArrayExtents(collect.stackArrayExtents());
   check.setCallParamExtents(collect.callParamExtents());
+  check.setIndirectSlotExtents(collect.indirectSlotExtents());
+  check.setFieldSlotExtents(collect.fieldSlotExtents());
   check.setConflictedParams(collect.conflictedParams());
   check.setReturnedParams(collect.returnedParams());
   check.setReturnedFixedExtents(collect.returnedFixedExtents());

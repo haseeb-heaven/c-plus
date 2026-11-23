@@ -1,6 +1,6 @@
 {
   "suite": "interprocedural_safety",
-  "generated_at": "2026-11-23T11:55:59",
+  "generated_at": "2026-11-23T23:42:01",
   "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "binary_version": [
     "C+ 0.1.0"
@@ -14,23 +14,23 @@
   ],
   "totals": {
     "cases": 61,
-    "cases_passed": 55,
-    "cases_failed": 6,
+    "cases_passed": 61,
+    "cases_failed": 0,
     "mode_checks": 183,
-    "mode_checks_passed": 171,
-    "mode_checks_failed": 12,
+    "mode_checks_passed": 183,
+    "mode_checks_failed": 0,
     "runtime_cases": 24,
     "runtime_passed": 24,
     "runtime_failed": 0,
-    "failure_entries": 12,
+    "failure_entries": 0,
     "soundness_gap_cases": 6,
-    "soundness_gap_failures": 6
+    "soundness_gap_failures": 0
   },
   "by_family": {
     "alias": {
       "cases": 4,
-      "passed": 3,
-      "failed": 1
+      "passed": 4,
+      "failed": 0
     },
     "array_decay": {
       "cases": 4,
@@ -39,13 +39,13 @@
     },
     "call_shape": {
       "cases": 11,
-      "passed": 9,
-      "failed": 2
+      "passed": 11,
+      "failed": 0
     },
     "dataflow": {
       "cases": 6,
-      "passed": 4,
-      "failed": 2
+      "passed": 6,
+      "failed": 0
     },
     "effects": {
       "cases": 2,
@@ -89,180 +89,11 @@
     },
     "structs": {
       "cases": 4,
-      "passed": 3,
-      "failed": 1
+      "passed": 4,
+      "failed": 0
     }
   },
-  "failures": [
-    {
-      "case": "call_recursive_oob",
-      "family": "call_shape",
-      "mode": "--default",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "call_recursive_oob",
-      "family": "call_shape",
-      "mode": "--strict",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "call_mutual_oob",
-      "family": "call_shape",
-      "mode": "--default",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "call_mutual_oob",
-      "family": "call_shape",
-      "mode": "--strict",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "ptr2_oob",
-      "family": "alias",
-      "mode": "--default",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "ptr2_oob",
-      "family": "alias",
-      "mode": "--strict",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "struct_ptr_oob",
-      "family": "structs",
-      "mode": "--default",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "struct_ptr_oob",
-      "family": "structs",
-      "mode": "--strict",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "loop_while_oob",
-      "family": "dataflow",
-      "mode": "--default",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "loop_while_oob",
-      "family": "dataflow",
-      "mode": "--strict",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "dataflow_phi_oob",
-      "family": "dataflow",
-      "mode": "--default",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    },
-    {
-      "case": "dataflow_phi_oob",
-      "family": "dataflow",
-      "mode": "--strict",
-      "polarity": "soundness-gap",
-      "expected_reject": true,
-      "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-      "actual_reject": false,
-      "actual_diagnostic": "check: <SRC> ok",
-      "reasons": [
-        "expected reject but got accept",
-        "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-      ]
-    }
-  ],
+  "failures": [],
   "cases": [
     {
       "name": "call_direct_ok",
@@ -614,26 +445,20 @@
         "--default": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:49: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 from recursive call is out of bounds of 'p' of extent 4\n  static void rec(int *p,int i){ if(i>5) return; p[i]=1; rec(p,i+1); }\n                                                  ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--strict": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:49: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 from recursive call is out of bounds of 'p' of extent 4\n  static void rec(int *p,int i){ if(i>5) return; p[i]=1; rec(p,i+1); }\n                                                  ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--legacy-c": {
           "expected_reject": false,
@@ -646,23 +471,8 @@
         }
       },
       "runtime": null,
-      "passed": false,
-      "reasons": [
-        {
-          "mode": "--default",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        },
-        {
-          "mode": "--strict",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        }
-      ]
+      "passed": true,
+      "reasons": []
     },
     {
       "name": "call_mutual_ok",
@@ -720,26 +530,20 @@
         "--default": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:2:46: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 from recursive call is out of bounds of 'p' of extent 4\n  static void f(int *p,int i){ if(i>5)return; p[i]=1; g(p,i+1); }\n                                               ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--strict": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:2:46: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 from recursive call is out of bounds of 'p' of extent 4\n  static void f(int *p,int i){ if(i>5)return; p[i]=1; g(p,i+1); }\n                                               ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--legacy-c": {
           "expected_reject": false,
@@ -752,23 +556,8 @@
         }
       },
       "runtime": null,
-      "passed": false,
-      "reasons": [
-        {
-          "mode": "--default",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        },
-        {
-          "mode": "--strict",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        }
-      ]
+      "passed": true,
+      "reasons": []
     },
     {
       "name": "decay_stack_ok",
@@ -2135,26 +1924,20 @@
         "--default": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:32: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 reaches past array 'a' via pointer-to-pointer parameter 'pp'\n  static void wr(int **pp){ (*pp)[6]=1; }\n                                 ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--strict": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:32: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 reaches past array 'a' via pointer-to-pointer parameter 'pp'\n  static void wr(int **pp){ (*pp)[6]=1; }\n                                 ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--legacy-c": {
           "expected_reject": false,
@@ -2167,23 +1950,8 @@
         }
       },
       "runtime": null,
-      "passed": false,
-      "reasons": [
-        {
-          "mode": "--default",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        },
-        {
-          "mode": "--strict",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        }
-      ]
+      "passed": true,
+      "reasons": []
     },
     {
       "name": "struct_array_ok",
@@ -2243,7 +2011,7 @@
           "expected_substring": "[CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'b->a'",
           "actual_reject": true,
           "actual_returncode": 1,
-          "actual_diagnostic": "<SRC>:2:30: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'b->a'\n  static void wr(struct B *b){ b->a[7]=1; }\n                               ^\nhelp: array contains 4 elements; valid indices are 0..3",
+          "actual_diagnostic": "<SRC>:2:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] out-of-bounds access: index 7 reaches past array 'b.a' of length 4\n  static void wr(struct B *b){ b->a[7]=1; }\n                                   ^\nhelp: use C+ managed allocations and cplus_* helpers\n<SRC>:2:30: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'b->a'\n  static void wr(struct B *b){ b->a[7]=1; }\n                               ^\nhelp: array contains 4 elements; valid indices are 0..3",
           "passed": true,
           "reasons": []
         },
@@ -2252,7 +2020,7 @@
           "expected_substring": "[CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'b->a'",
           "actual_reject": true,
           "actual_returncode": 1,
-          "actual_diagnostic": "<SRC>:2:30: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'b->a'\n  static void wr(struct B *b){ b->a[7]=1; }\n                               ^\nhelp: array contains 4 elements; valid indices are 0..3",
+          "actual_diagnostic": "<SRC>:2:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] out-of-bounds access: index 7 reaches past array 'b.a' of length 4\n  static void wr(struct B *b){ b->a[7]=1; }\n                                   ^\nhelp: use C+ managed allocations and cplus_* helpers\n<SRC>:2:30: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'b->a'\n  static void wr(struct B *b){ b->a[7]=1; }\n                               ^\nhelp: array contains 4 elements; valid indices are 0..3",
           "passed": true,
           "reasons": []
         },
@@ -2326,26 +2094,20 @@
         "--default": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:2:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] out-of-bounds access: index 6 reaches past array 'b.p' of length 4\n  static void wr(struct B *b){ b->p[6]=1; }\n                                   ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--strict": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:2:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] out-of-bounds access: index 6 reaches past array 'b.p' of length 4\n  static void wr(struct B *b){ b->p[6]=1; }\n                                   ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--legacy-c": {
           "expected_reject": false,
@@ -2358,23 +2120,8 @@
         }
       },
       "runtime": null,
-      "passed": false,
-      "reasons": [
-        {
-          "mode": "--default",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        },
-        {
-          "mode": "--strict",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        }
-      ]
+      "passed": true,
+      "reasons": []
     },
     {
       "name": "ptr_reassign_oob",
@@ -2637,26 +2384,20 @@
         "--default": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:47: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 from while-loop induction is out of bounds of 'p' of length 4\n  static void wr(int *p){ int i=0; while(i<7){ p[i]=i; i++; } }\n                                                ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--strict": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:47: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 from while-loop induction is out of bounds of 'p' of length 4\n  static void wr(int *p){ int i=0; while(i<7){ p[i]=i; i++; } }\n                                                ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--legacy-c": {
           "expected_reject": false,
@@ -2669,23 +2410,8 @@
         }
       },
       "runtime": null,
-      "passed": false,
-      "reasons": [
-        {
-          "mode": "--default",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        },
-        {
-          "mode": "--strict",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        }
-      ]
+      "passed": true,
+      "reasons": []
     },
     {
       "name": "dataflow_phi_oob",
@@ -2697,26 +2423,20 @@
         "--default": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:45: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 chosen by conditional expression is out of bounds of 'p' of length 4\n  static void wr(int *p,int c){ int i=c?1:6; p[i]=1; }\n                                              ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--strict": {
           "expected_reject": true,
           "expected_substring": "[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]",
-          "actual_reject": false,
-          "actual_returncode": 0,
-          "actual_diagnostic": "check: <SRC> ok",
-          "passed": false,
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
+          "actual_reject": true,
+          "actual_returncode": 1,
+          "actual_diagnostic": "<SRC>:1:45: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 chosen by conditional expression is out of bounds of 'p' of length 4\n  static void wr(int *p,int c){ int i=c?1:6; p[i]=1; }\n                                              ^\nhelp: use C+ managed allocations and cplus_* helpers",
+          "passed": true,
+          "reasons": []
         },
         "--legacy-c": {
           "expected_reject": false,
@@ -2729,23 +2449,8 @@
         }
       },
       "runtime": null,
-      "passed": false,
-      "reasons": [
-        {
-          "mode": "--default",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        },
-        {
-          "mode": "--strict",
-          "reasons": [
-            "expected reject but got accept",
-            "missing exact substring '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]'"
-          ]
-        }
-      ]
+      "passed": true,
+      "reasons": []
     },
     {
       "name": "arith_ok",
