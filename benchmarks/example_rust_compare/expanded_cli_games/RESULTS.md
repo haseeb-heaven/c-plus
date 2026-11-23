@@ -40,8 +40,11 @@ sh benchmarks/example_rust_compare/expanded_cli_games/compare.sh
 ```
 
 `compare.sh` writes only `EXPANDED_COMPARE ...` lines to stdout; toolchain
-banners, build commands and hashes go to stderr. Build/run artifacts are kept
-in `benchmarks/example_rust_compare/expanded_cli_games/.build/`
+banners, build commands, hashes and one final `SUMMARY different=N
+inconclusive(BLOCKED+PENDING)=N` line go to stderr. The exact stdout/stderr of
+the final run are captured in `.build/stdout.txt` and `.build/stderr.txt`.
+Build/run artifacts are kept in
+`benchmarks/example_rust_compare/expanded_cli_games/.build/`
 (per-example `<name>.c.build.log`, `<name>.rs.build.log`,
 `<name>.cases.c.stdout`, `<name>.cases.r.stdout`,
 `<name>.cases.c.rc`, `<name>.cases.r.rc`).
@@ -103,7 +106,27 @@ EXPANDED_COMPARE snake_core MATCH stdout+exit identical for 1 fixed case(s)
 EXPANDED_COMPARE snake_cli MATCH stdout+exit identical for 3 fixed case(s)
 ```
 
-Script exit status: **0**.
+Script exit status: **0**. Final stderr summary line:
+`SUMMARY different=0 inconclusive(BLOCKED+PENDING)=0`.
+
+## Exit-status semantics (verified)
+
+`compare.sh` exits nonzero **only on a real `DIFFERENT`**. `BLOCKED` (a C+ or
+Rust build failure) and `PENDING` (a scoped source or Rust model not created
+yet) are reported as `EXPANDED_COMPARE ...` lines but are deliberately
+inconclusive and do **not** fail the script. This was verified with controlled
+runs using environment overrides (all isolated in temp dirs, no result files
+faked):
+
+| Scenario | Command override | Observed exit | As required |
+|---|---|---:|---|
+| All MATCH (final run) | none | 0 | yes |
+| All `BLOCKED` (`rustc` forced to fail) | `EC_RUSTC=false EC_OUT=/tmp/ec_blocked_test` | 0 | yes — inconclusive must not fail |
+| All `DIFFERENT` (stub `rustc` emits wrong stdout) | `EC_RUSTC=/tmp/fake_rustc EC_OUT=/tmp/ec_diff_test` | 9 (one per example) | yes — real DIFFERENT must fail |
+
+The final, real run produced nine `MATCH` lines, exit `0`, and
+`SUMMARY different=0 inconclusive(BLOCKED+PENDING)=0`. No `MATCH` was
+fabricated: every line came from an actual C+/Rust build and paired execution.
 
 ## Per-example table
 
