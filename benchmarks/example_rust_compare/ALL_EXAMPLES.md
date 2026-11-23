@@ -16,8 +16,8 @@ Result legend:
 - **DIFFERENT** — stdout, stderr or exit status differed for the tested inputs.
 - **BLOCKED** — the prescribed build could not produce a comparable binary,
   or the example cannot run in this environment.
-- **PENDING** — the group's `compare.sh` / Rust source was not present at the
-  time of the recorded run; see the exact reproduction commands below.
+- The final aggregate run recorded in `RESULTS.md` has **0 PENDING** rows:
+  43 MATCH, 5 DIFFERENT, 1 BLOCKED across all 49 examples.
 
 ## Index (49 examples)
 
@@ -65,29 +65,27 @@ Result legend:
 | 40 | `examples/crt/snprintf_s.c` | `crt_format` | `crt_format/snprintf_s.rs` | MATCH |
 | 41 | `examples/crt/sprintf_s.c` | `crt_format` | `crt_format/sprintf_s.rs` | MATCH |
 | 42 | `examples/crt/vsnprintf_s.c` | `crt_format` | `crt_format/vsnprintf_s.rs` | MATCH |
-| 43 | `examples/apps/cgame.c` | `apps_system` | `apps_system/cgame.rs` | PENDING |
-| 44 | `examples/apps/student.cp` | `apps_system` | `apps_system/student.rs` | PENDING |
-| 45 | `examples/system/macpulse.cp` | `apps_system` | `apps_system/macpulse.rs` | PENDING |
-| 46 | `examples/games/2048.c` | `games` | `games/2048.rs` | PENDING |
-| 47 | `examples/games/snake.c` | `games` | `games/snake.rs` | PENDING |
-| 48 | `examples/games/tetris.c` | `games` | `games/tetris.rs` | PENDING |
-| 49 | `examples/games/tiles.c` | `games` | `games/tiles.rs` | PENDING |
+| 43 | `examples/apps/cgame.c` | `apps_system` | `apps_system/cgame.rs` | MATCH |
+| 44 | `examples/apps/student.cp` | `apps_system` | `apps_system/student.rs` | MATCH |
+| 45 | `examples/system/macpulse.cp` | `apps_system` | `apps_system/macpulse.rs` | MATCH (non-interactive tty-guard path only) |
+| 46 | `examples/games/2048.c` | `games` | `games/2048.rs` | MATCH (deterministic core only) |
+| 47 | `examples/games/snake.c` | `games` | `games/snake.rs` | MATCH (deterministic core only) |
+| 48 | `examples/games/tetris.c` | `games` | `games/tetris.rs` | MATCH (deterministic core only) |
+| 49 | `examples/games/tiles.c` | `games` | `games/tiles.rs` | MATCH (deterministic core only) |
 
-## PENDING entries — exact reproduction commands
+## Reproduction and verification
 
-A PENDING row means the group runner (`compare.sh`) and/or the Rust source
-for that example was not present when the aggregate run recorded the table
-above. Re-run the aggregate command once those files land; it discovers every
-`<group>/compare.sh` automatically and refreshes every row:
+All 49 rows were produced by the final aggregate run; there are no PENDING
+entries. Re-run everything with this exact command (the runner discovers every
+`<group>/compare.sh` automatically and refreshes every row):
 
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
 sh benchmarks/example_rust_compare/run_all.sh
 ```
 
-To reproduce only the pending groups, run each group's runner from the
-repository root with the same restricted environment the aggregate runner
-uses:
+To reproduce a single group with the same restricted environment the aggregate
+runner uses, run its `compare.sh` from the repository root:
 
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
@@ -99,12 +97,10 @@ CPLUS_CLANG=/usr/bin/clang LC_ALL=C \
   timeout 300 sh benchmarks/example_rust_compare/games/compare.sh
 ```
 
-Per pending example, the group runner prints exactly one line of the form
-`EXAMPLE_COMPARE <name> MATCH|DIFFERENT|BLOCKED <reason>`, where `<name>` is
-`cgame`, `student`, `macpulse`, `2048`, `snake`, `tetris` or `tiles` respectively.
-The exact per-example build/run commands for each group are documented in that
-group's own `RESULTS.md` and implemented in its `compare.sh`; the aggregate
-runner does not rebuild examples itself.
+Each group runner prints one `EXAMPLE_COMPARE <name> MATCH|DIFFERENT|BLOCKED
+<reason>` line per example. The exact per-example build/run commands for each
+group are documented in that group's `RESULTS.md` and implemented in its
+`compare.sh`; the aggregate runner does not rebuild examples itself.
 
 ## Explicit non-equivalence statement
 

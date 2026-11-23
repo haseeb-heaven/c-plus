@@ -20,6 +20,7 @@ use std::path::PathBuf;
 const N_LEVELS: usize = 9;
 const N_LIBEX: usize = 10;
 
+#[derive(Clone, Copy)]
 struct Colors {
     reset: &'static str,
     bold: &'static str,
@@ -143,52 +144,54 @@ output: %d for int, %f for double, %s for strings, %c for chars.\n\
 Integer math truncates: 7/2 is 3. Operator precedence follows\n\
 school math: * and / before + and -.";
 
-const EX00_THEORY: &str = "Welcome! Before writing library functions, you need to know\n\
-what a C source file even looks like. Here is the anatomy of\n\
-a function — the basic building block of every C program:\n\
-\n\
-      int  my_answer (void)      <- the 'signature'\n\
-      ^    ^          ^\n\
-      |    |          +-- parameters: what goes IN.\n\
-      |    |              'void' means: nothing goes in.\n\
-      |    +-- the name. You call it by this name.\n\
-      +-- return type: what comes OUT. 'int' = a whole number.\n\
-\n\
-      {                          <- '{' opens the body\n\
-          return 42;             <- statements end with ';'\n\
-      }                          <- '}' closes the body\n\
-\n\
-'return' hands a value back to whoever called the function and\n\
-ends it immediately. That's it — that's a complete, valid piece\n\
-of C. The game compiles your file together with a hidden test\n\
-program that calls your function and checks the result.";
+const EX00_THEORY: &str = r#"Welcome! Before writing library functions, you need to know
+what a C source file even looks like. Here is the anatomy of
+a function — the basic building block of every C program:
+
+      int  my_answer (void)      <- the 'signature'
+      ^    ^          ^
+      |    |          +-- parameters: what goes IN.
+      |    |              'void' means: nothing goes in.
+      |    +-- the name. You call it by this name.
+      +-- return type: what comes OUT. 'int' = a whole number.
+
+      {                          <- '{' opens the body
+          return 42;             <- statements end with ';'
+      }                          <- '}' closes the body
+
+'return' hands a value back to whoever called the function and
+ends it immediately. That's it — that's a complete, valid piece
+of C. The game compiles your file together with a hidden test
+program that calls your function and checks the result."#;
 
 const EX01_TASK: &str =
     "The program must print the average of 9 and 4 as a decimal:\nexactly  6.5";
 const EX01_HINT: &str =
     "Integer division truncates! Make the division floating point\n(divide by 2.0), store it in a double, and print with %.1f.";
 
-const EX01_SOURCE: &str = "/* ex01: The broken average\n\
- * TASK: print the average of 9 and 4 as a decimal: 6.5\n\
- * Fix this file, then press Enter in the game to check it.\n\
- */\n\
-#include <stdio.h>\n\
-\n\
-int main(void) {\n\
-    int a = 9, b = 4;\n\
-    int avg = (a + b) / 2;   /* something truncates here...      */\n\
-    printf(\"%d\\n\", avg);    /* ...and this specifier can't do 6.5 */\n\
-    return 0;\n\
-}\n";
+const EX01_SOURCE: &str = r#"/* ex01: The broken average
+ * TASK: print the average of 9 and 4 as a decimal: 6.5
+ * Fix this file, then press Enter in the game to check it.
+ */
+#include <stdio.h>
 
-const EX00_STUB: &str = "/* Ex00: The Answer\n\
- * TASK: make my_answer give back the number 42.\n\
- * Do NOT add a main() — the game brings its own test program.\n\
- */\n\
-int my_answer(void)\n\
-{\n\
-    return 0;    /* <-- that is not the Answer. Fix me! */\n\
-}\n";
+int main(void) {
+    int a = 9, b = 4;
+    int avg = (a + b) / 2;   /* something truncates here...      */
+    printf("%d\n", avg);    /* ...and this specifier can't do 6.5 */
+    return 0;
+}
+"#;
+
+const EX00_STUB: &str = r#"/* Ex00: The Answer
+ * TASK: make my_answer give back the number 42.
+ * Do NOT add a main() — the game brings its own test program.
+ */
+int my_answer(void)
+{
+    return 0;    /* <-- that is not the Answer. Fix me! */
+}
+"#;
 
 struct Question {
     prompt: &'static str,
@@ -286,8 +289,8 @@ impl Game {
     }
 
     fn banner(&self) {
-        let c = &self.colors;
-        print!("{}{}", c.bold, c.cyan);
+        let c = self.colors;
+        print!("\n{}{}", c.bold, c.cyan);
         println!("   ██████╗ ██████╗  █████╗ ███╗   ███╗███████╗");
         println!("  ██╔════╝██╔════╝ ██╔══██╗████╗ ████║██╔════╝");
         println!("  ██║     ██║  ███╗███████║██╔████╔██║█████╗  ");
@@ -302,7 +305,7 @@ impl Game {
     }
 
     fn main_menu(&self) {
-        let c = &self.colors;
+        let c = self.colors;
         println!("\n{}Choose your path:{}", c.bold, c.reset);
         println!(
             "  {}1{}) Gotcha levels — quizzes + fix broken code  ({}/{})",
@@ -321,11 +324,11 @@ impl Game {
     }
 
     fn ask(&mut self, q: &Question, num: usize, total: usize) -> bool {
-        let c = &self.colors;
+        let c = self.colors;
         println!("\n{}Question {}/{}{}", c.bold, num, total, c.reset);
         println!("{}", q.prompt);
         if let Some(code) = q.code {
-            print_code(code, c);
+            print_code(code, &c);
         }
         for choice in q.choices {
             println!("  {}", choice);
@@ -352,7 +355,7 @@ impl Game {
         if idx >= 1 {
             return true; // no exercise modeled beyond ex01
         }
-        let c = &self.colors;
+        let c = self.colors;
         // write_exercise(ex, 0)
         let _ = fs::create_dir_all("exercises");
         let _ = fs::write("exercises/ex01_average.c", EX01_SOURCE);
@@ -366,8 +369,8 @@ impl Game {
         );
         println!("\nOpen it in your editor and fix it so that:\n{}{}{}\n", c.green, EX01_TASK, c.reset);
         println!(
-            "{}[Enter]{} check my fix   {}h{} hint   {}r{} reset file\n\
-             {}s{} skip exercise      {}q{} back to menu",
+            "{}[Enter]{} check my fix   {}[h]{} hint   {}[r]{} reset file\n\
+             {}[s]{} skip exercise      {}[q]{} back to menu",
             c.bold, c.reset, c.bold, c.reset, c.bold, c.reset,
             c.bold, c.reset, c.bold, c.reset
         );
@@ -401,7 +404,7 @@ impl Game {
     }
 
     fn play_level(&mut self, idx: usize) -> bool {
-        let c = &self.colors;
+        let c = self.colors;
         println!(
             "\n{}{}══════ Level {}: {} ══════{}",
             c.bold,
@@ -442,7 +445,7 @@ impl Game {
     }
 
     fn levels_menu(&self) {
-        let c = &self.colors;
+        let c = self.colors;
         println!("\n{}Gotcha levels:{}", c.bold, c.reset);
         for (i, title) in LEVEL_TITLES.iter().enumerate() {
             if i < self.lvl_done {
@@ -460,7 +463,7 @@ impl Game {
     }
 
     fn levels_path(&mut self) {
-        let c = &self.colors;
+        let c = self.colors;
         loop {
             self.levels_menu();
             print!("{}levels> {}", c.yellow, c.reset);
@@ -499,7 +502,7 @@ impl Game {
     }
 
     fn lib_menu(&self) {
-        let c = &self.colors;
+        let c = self.colors;
         println!("\n{}Build your own C library:{}", c.bold, c.reset);
         for (i, title) in LIBEX_TITLES.iter().enumerate() {
             if i < self.lib_done {
@@ -519,7 +522,7 @@ impl Game {
     }
 
     fn play_libex(&mut self, idx: usize) -> bool {
-        let c = &self.colors;
+        let c = self.colors;
         println!(
             "\n{}{}══════ {} ══════{}",
             c.bold, c.mag, LIBEX_TITLES[idx], c.reset
@@ -544,8 +547,8 @@ impl Game {
             );
         }
         println!(
-            "\n{}[Enter]{} check my code   {}t{} show theory again   {}h{} hint\n\
-             {}r{} reset file          {}s{} skip   {}q{} back to menu",
+            "\n{}[Enter]{} check my code   {}[t]{} show theory again   {}[h]{} hint\n\
+             {}[r]{} reset file          {}[s]{} skip   {}[q]{} back to menu",
             c.bold, c.reset, c.bold, c.reset, c.bold, c.reset,
             c.bold, c.reset, c.bold, c.reset, c.bold, c.reset
         );
@@ -579,7 +582,7 @@ impl Game {
     }
 
     fn library_path(&mut self) {
-        let c = &self.colors;
+        let c = self.colors;
         loop {
             self.lib_menu();
             print!("{}library> {}", c.yellow, c.reset);
@@ -621,7 +624,7 @@ impl Game {
 
     fn run(&mut self) {
         self.banner();
-        let c = &self.colors;
+        let c = self.colors;
         loop {
             self.main_menu();
             let line = self.input.read_line().unwrap_or_default();

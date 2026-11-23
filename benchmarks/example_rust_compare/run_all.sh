@@ -103,6 +103,12 @@ groups=
 group_count=0
 for _cs in "$HERE"/*/compare.sh; do
     [ -f "$_cs" ] || continue
+    # Only groups that speak the EXAMPLE_COMPARE protocol belong to this
+    # 49-example campaign.  Other comparison campaigns may add their own
+    # <group>/compare.sh with a different protocol; ignore them here.
+    if ! grep -q 'EXAMPLE_COMPARE' "$_cs" 2>/dev/null; then
+        continue
+    fi
     _dir=$(dirname "$_cs")
     _group=$(basename "$_dir")
     groups="$groups $_group"
