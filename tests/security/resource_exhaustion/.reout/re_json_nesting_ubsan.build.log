@@ -1,7 +1,0 @@
-clang: warning: -lyyjson: 'linker' input unused [-Wunused-command-line-argument]
-clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/ext' [-Wunused-command-line-argument]
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:129:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
-  129 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "signed integer overflow", NULL, 0,
-      |                       ^
-1 error generated.
-error: failed to compile instrumented C+ runtime

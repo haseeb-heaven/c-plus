@@ -1,9 +1,0 @@
-RE_JN_READER_DEPTH_LIMIT 0
-re_jn_limit_documented 1
-re_jn_balanced_reaped 1
-re_jn_balanced_no_watchdog 1
-re_jn_balanced_exited 1
-re_jn_unclosed_reaped 1
-re_jn_unclosed_no_watchdog 1
-re_jn_unclosed_exited 1
-RESOURCE_EXHAUSTION 7 0
