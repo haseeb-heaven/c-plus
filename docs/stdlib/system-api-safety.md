@@ -132,8 +132,20 @@ EXIT:1
 ```
 
 with `io_file_fd_exhaustion` and `io_file_lines` as `FAIL`, and
-`error_hub_multi_cb` / `thread_lifecycle` as `BUILD_FAILURE`. All observations
-are recorded; none of those harnesses was edited here.
+`error_hub_multi_cb` / `thread_lifecycle` as `BUILD_FAILURE`. One more run,
+after further concurrent edits (26 files), ended with the exact summary lines:
+
+```text
+MODE               PASS     FAIL    BUILD  TIMEOUT     SKIP  BLOCKED
+strict-none          24        0        2        0        0        0
+system_safety: 24 passed, 0 failed, 2 build-failures, 0 timeouts, 0 skipped, 0 blocked (26 file(s) x 1 mode(s))
+JSON summary: build/system-safety/summary.json
+system_safety suite: FAIL (required cases did not pass)
+EXIT:1
+```
+
+(`error_hub_multi_cb` and `error_hub_multi_main` had linker errors.) All
+observations are recorded; none of those harnesses was edited here.
 
 ### V3 — mode selection and the external blocker in the runner
 
@@ -287,6 +299,11 @@ no runtime header or core runtime file was edited. Consequences for evidence:
   `--only`, `--mode`, exit codes 0/1/2 exercised.
 - Blocker: external `CPLUS_EXIT_ARITHMETIC` mismatch — `default` and `ubsan`
   modes BLOCKED; `strict-none` builds succeed.
-- Final observed full-suite snapshot: 18 discovered files, 17 `PASS`,
-  0 `FAIL`, 1 `BUILD_FAILURE`, 0 `TIMEOUT`, 0 `SKIPPED`, 0 `BLOCKED`,
-  overall exit `1`.
+- Last observed full-suite snapshot (26 discovered files): 24 `PASS`,
+  0 `FAIL`, 2 `BUILD_FAILURE`, 0 `TIMEOUT`, 0 `SKIPPED`, 0 `BLOCKED`,
+  overall exit `1` (`error_hub_multi_cb` and `error_hub_multi_main` failed to
+  link). Earlier snapshots were 11 files (10 PASS / 1 FAIL), 18 files
+  (17 PASS / 1 BUILD_FAILURE) and 24 files (20 PASS / 2 FAIL /
+  2 BUILD_FAILURE); all are point-in-time observations of a concurrently
+  edited corpus. The runner's exit `1` in each case is the correct, honest
+  result for the state it observed.

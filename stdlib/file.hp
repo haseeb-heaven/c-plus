@@ -120,7 +120,7 @@ class file {
         if (n > 0 && n == size - 1) {
             char last;
             __builtin_memcpy(&last, buf + n - 1, sizeof(last));
-            if (last != '\n' && last != '\r' && !feof(this->stream)) {
+            if (last != '\n' && !feof(this->stream)) {
                 int c = fgetc(this->stream);
                 if (c == '\r') {
                     int next = fgetc(this->stream);

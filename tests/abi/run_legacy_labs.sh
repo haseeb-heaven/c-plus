@@ -84,6 +84,24 @@ ONLY=()
 GROUP_FILTER=()
 LIST_ONLY=0
 
+# add_filter <only|group> <comma-separated-names>
+add_filter() {
+    local which=$1 value=$2 old_ifs=$IFS part
+    old_ifs=$IFS
+    IFS=','
+    for part in $value; do
+        part=${part#"${part%%[! ]*}"}
+        part=${part%"${part##*[! ]}"}
+        [ -n "$part" ] || continue
+        if [ "$which" = "only" ]; then
+            ONLY+=("$part")
+        else
+            GROUP_FILTER+=("$part")
+        fi
+    done
+    IFS=$old_ifs
+}
+
 usage() {
     sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
 }
@@ -93,21 +111,21 @@ while [ "$#" -gt 0 ]; do
         --only)
             shift
             [ "$#" -gt 0 ] || { echo "error: --only needs a NAME" >&2; usage >&2; exit 2; }
-            ONLY+=("$1")
+            add_filter only "$1"
             shift
             ;;
         --only=*)
-            ONLY+=("${1#--only=}")
+            add_filter only "${1#--only=}"
             shift
             ;;
         --group)
             shift
             [ "$#" -gt 0 ] || { echo "error: --group needs a NAME" >&2; usage >&2; exit 2; }
-            GROUP_FILTER+=("$1")
+            add_filter group "$1"
             shift
             ;;
         --group=*)
-            GROUP_FILTER+=("${1#--group=}")
+            add_filter group "${1#--group=}"
             shift
             ;;
         --list)

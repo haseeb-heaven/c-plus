@@ -47,7 +47,9 @@
  * ---------
  * Counters are the atomic, in-process, off-by-default counters from
  * stdlib/error.hp.  Snapshots are point-in-time diagnostics; a concurrent
- * reset or a wrap makes a raw delta meaningless.  No counter proves safety.
+ * reset or a wrap makes a raw delta meaningless.  Counters never establish
+ * allocation identity (an address alone does not prove identity), liveness,
+ * or any safety property.
  */
 #ifndef CPLUS_STD_ALLOCATOR_HP
 #define CPLUS_STD_ALLOCATOR_HP

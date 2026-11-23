@@ -93,6 +93,7 @@ int main(void) {
 
     if (geteuid() == 0) {
         printf("SKIP FS_PERMISSIONS reason=euid=0-root-bypasses-DAC-nondeterministic\n");
+        printf("SKIP_REASON FS_PERMISSIONS reason=euid=0-root-bypasses-DAC-nondeterministic\n");
         fsp("FSP_ROOT_NO_FIXTURE", fsp_count_tmp(fsp_prefix) == 0);
     } else {
         fsp_ok = fs_mkdir(fsp_dir, &fsp_err) == STDLIB_OK &&

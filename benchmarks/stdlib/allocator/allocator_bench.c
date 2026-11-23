@@ -31,7 +31,7 @@
  *
  * Run (see run.sh for the full matrix):
  *   ./benchmarks/stdlib/allocator/allocator_bench \
- *     --workload small --runs 9 --warmup 2 --ops 200000 --seed 314159265
+ *     --workload small --runs 11 --warmup 2 --ops 200000 --seed 314159265
  */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
@@ -227,27 +227,34 @@ static void run_large(const allocator_api *a, size_t ops, size_t param) {
     }
 }
 
-/* ---- grow: push `ops` ints into a realloc-doubled buffer ---------- */
-/* Mirrors the growth strategy of the C+ vector (stdlib/vector.hp). */
+/* ---- grow: container growth, `ops` counts growth reallocations ---- */
+/* Repeatedly build a 2048-int vector by capacity doubling (the strategy
+ * used by the C+ vector, stdlib/vector.hp), then drop it.  A single vector
+ * would perform only log2(ops) reallocs; repeating the build makes this
+ * allocator-dominated.  `ops` = total number of growth realloc calls. */
 static void run_grow(const allocator_api *a, size_t ops, size_t param) {
-    size_t cap = 8u, n = 0, i;
-    int *buf;
+    const size_t target = 2048u; /* 8 -> 2048 => 8 growth reallocs per build */
+    size_t done = 0;
     (void)param;
-    buf = (int *)a->alloc_fn(cap * sizeof(int));
-    if (!buf) { fprintf(stderr, "grow alloc failed\n"); exit(3); }
-    for (i = 0; i < ops; ++i) {
-        if (n == cap) {
-            int *nb;
-            cap *= 2u;
-            nb = (int *)a->realloc_fn(buf, cap * sizeof(int));
-            if (!nb) { fprintf(stderr, "grow realloc failed at %zu\n", i); exit(3); }
-            buf = nb;
-            do_queries(a, buf);
+    while (done < ops) {
+        size_t cap = 8u, n = 0;
+        int *buf = (int *)a->alloc_fn(cap * sizeof(int));
+        if (!buf) { fprintf(stderr, "grow alloc failed\n"); exit(3); }
+        while (n < target) {
+            buf[n++] = (int)rng_next();
+            if (n == cap && done < ops) {
+                int *nb;
+                cap *= 2u;
+                nb = (int *)a->realloc_fn(buf, cap * sizeof(int));
+                if (!nb) { fprintf(stderr, "grow realloc failed\n"); exit(3); }
+                buf = nb;
+                do_queries(a, buf);
+                ++done;
+            }
         }
-        buf[n++] = (int)rng_next();
-        g_sink ^= (uint64_t)(uint32_t)buf[n - 1];
+        g_sink ^= (uint64_t)(uintptr_t)buf;
+        a->free_fn(buf);
     }
-    a->free_fn(buf);
 }
 
 typedef struct {
@@ -299,7 +306,7 @@ static void usage(const char *prog) {
         "[--warmup N] [--ops N] [--size N] [--seed N]\n"
         "  workloads: alloc free realloc small large grow (default: all)\n"
         "  variants:  raw tracked query (default: all, interleaved)\n"
-        "  defaults:  runs=9 warmup=2 ops=200000(size auto for large) "
+        "  defaults:  runs=11 warmup=2 ops=200000(size auto for large) "
         "seed=314159265\n",
         prog);
 }
@@ -307,7 +314,7 @@ static void usage(const char *prog) {
 int main(int argc, char **argv) {
     const char *workload = "all";
     const char *variant = "all";
-    int runs = 9, warmup = 2;
+    int runs = 11, warmup = 2;
     size_t ops = 200000, size_hint = 0;
     int ops_set = 0;
     uint32_t seed = 314159265u;

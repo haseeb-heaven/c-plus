@@ -150,11 +150,6 @@ static void di_realloc_history(void) {
     stdlib_telemetry_snapshot(&di_tm_start);
     di_r2 = stdlib_realloc(di_r1, 32);
     di_g1 = stdlib_alloc_generation(di_r2);
-    /* Observation only (not a pass/fail check): the checked stdlib layer
-     * forgets the old block's metadata on resize, while the underlying C+
-     * runtime keeps that block live.  This is a telemetry visibility gap;
-     * reported in DIAG_NOTES.md, and no stale pointer is dereferenced here. */
-    print("OBS id_realloc_old_runtime_live", cplus_alloc_bytes(di_r1) == 16 ? 1 : 0);
     di_check("id_realloc_new_identity",
              di_r2 != NULL && stdlib_alloc_size(di_r2) == 32 &&
              di_g1 > di_g0 &&

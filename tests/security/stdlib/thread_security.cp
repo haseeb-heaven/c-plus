@@ -51,7 +51,7 @@ static void ts_check(const char *tag, int cond) {
     print(tag, cond ? 1 : 0);
 }
 
-/* ---- bounded fork + alarm watchdog --------------------------------------- */
+/* ---- bounded process + alarm watchdog ------------------------------------ */
 struct ts_watchdog_result {
     int reaped;
     int timed_out;
@@ -80,6 +80,7 @@ static struct ts_watchdog_result ts_run_watchdog(void (*child_fn)(void),
     int reaped;
     int timed_out;
 
+    status = 0;
     r.reaped = 0;
     r.timed_out = 0;
     r.exited = 0;
@@ -261,26 +262,28 @@ static void *ts_inverted_second(void *arg) {
 }
 
 static void ts_child_lock_ordered(void) {
-    pthread_t co_t1;
-    pthread_t co_t2;
+    thread co_t1 = thread();
+    thread co_t2 = thread();
+    error co_err = error();
     pthread_mutex_init(&ts_dl_a, NULL);
     pthread_mutex_init(&ts_dl_b, NULL);
-    (void)!pthread_create(&co_t1, NULL, ts_ordered_worker, NULL);
-    (void)!pthread_create(&co_t2, NULL, ts_ordered_worker, NULL);
-    (void)!pthread_join(co_t1, NULL);
-    (void)!pthread_join(co_t2, NULL);
+    (void)!co_t1.start(ts_ordered_worker, NULL, &co_err);
+    (void)!co_t2.start(ts_ordered_worker, NULL, &co_err);
+    (void)!co_t1.join(NULL, &co_err);
+    (void)!co_t2.join(NULL, &co_err);
     _Exit(0);
 }
 
 static void ts_child_lock_inversion(void) {
-    pthread_t ci_t1;
-    pthread_t ci_t2;
+    thread ci_t1 = thread();
+    thread ci_t2 = thread();
+    error ci_err = error();
     pthread_mutex_init(&ts_dl_a, NULL);
     pthread_mutex_init(&ts_dl_b, NULL);
     ts_dl_a_taken = 0;
     ts_dl_b_taken = 0;
-    (void)!pthread_create(&ci_t1, NULL, ts_inverted_first, NULL);
-    (void)!pthread_create(&ci_t2, NULL, ts_inverted_second, NULL);
+    (void)!ci_t1.start(ts_inverted_first, NULL, &ci_err);
+    (void)!ci_t2.start(ts_inverted_second, NULL, &ci_err);
     /* Both flags become 1, then each thread waits for a mutex the other
      * holds.  The parent watchdog kills this child; the parent itself never
      * blocks on a contended lock. */
@@ -468,26 +471,41 @@ int main(void) {
     {
         mutex ts_s7_a = mutex();
         mutex ts_s7_b = mutex();
-        pthread_t ts_s7_raw[TS_WORKERS];
+        thread ts_s7_w0 = thread();
+        thread ts_s7_w1 = thread();
+        thread ts_s7_w2 = thread();
+        thread ts_s7_w3 = thread();
+        error ts_s7_err = error();
         int ts_s7_started = 0;
+        int ts_s7_rc0;
+        int ts_s7_rc1;
+        int ts_s7_rc2;
+        int ts_s7_rc3;
 
         g_ts.first = &ts_s7_a;
         g_ts.second = &ts_s7_b;
         g_ts.counter = 0;
         g_ts.checksum = 0;
-        for (i = 0; i < TS_WORKERS; i++) {
-            if (pthread_create(&ts_s7_raw[i], NULL, ts_count_worker, &g_ts) == 0)
-                ts_s7_started++;
-            else
-                break;
-        }
-        if (ts_s7_started == TS_WORKERS) {
-            for (i = 0; i < TS_WORKERS; i++)
-                (void)!pthread_join(ts_s7_raw[i], NULL);
-        } else {
-            for (i = 0; i < ts_s7_started; i++)
-                (void)!pthread_join(ts_s7_raw[i], NULL);
-        }
+        ts_s7_rc0 = ts_s7_w0.start(ts_count_worker, &g_ts, &ts_s7_err);
+        ts_s7_rc1 = ts_s7_w1.start(ts_count_worker, &g_ts, &ts_s7_err);
+        ts_s7_rc2 = ts_s7_w2.start(ts_count_worker, &g_ts, &ts_s7_err);
+        ts_s7_rc3 = ts_s7_w3.start(ts_count_worker, &g_ts, &ts_s7_err);
+        if (ts_s7_rc0 == STDLIB_OK)
+            ts_s7_started++;
+        if (ts_s7_rc1 == STDLIB_OK)
+            ts_s7_started++;
+        if (ts_s7_rc2 == STDLIB_OK)
+            ts_s7_started++;
+        if (ts_s7_rc3 == STDLIB_OK)
+            ts_s7_started++;
+        if (ts_s7_rc0 == STDLIB_OK)
+            (void)!ts_s7_w0.join(NULL, &ts_s7_err);
+        if (ts_s7_rc1 == STDLIB_OK)
+            (void)!ts_s7_w1.join(NULL, &ts_s7_err);
+        if (ts_s7_rc2 == STDLIB_OK)
+            (void)!ts_s7_w2.join(NULL, &ts_s7_err);
+        if (ts_s7_rc3 == STDLIB_OK)
+            (void)!ts_s7_w3.join(NULL, &ts_s7_err);
         expected_counter = (long)TS_WORKERS * (long)TS_ITERS;
         expected_checksum = 0;
         for (i = 1; i <= TS_ITERS; i++) {

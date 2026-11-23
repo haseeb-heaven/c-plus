@@ -467,8 +467,11 @@ bug-for-bug, no upstream-equivalent safety claims.
    detected without a captured token (§3.2 item 3).
 2. Exact-base-address lookup: no interior-pointer owner query (§3.2 item 2).
 3. Only tracked blocks are protected; uninstrumented C bypasses checks (§3.2 item 1).
-4. Host-`free` bypass leaves false-live slots; aligned allocations are untracked
-   in hardened libc (§3.2 item 6).
+4. Host-`free` bypass leaves false-live slots (§3.2 item 6). **DRIFT:** the older
+   "aligned allocations are untracked" wording is stale on POSIX — REPRO-2 shows
+   `cplus_aligned_alloc` *is* registered in `g_tab` and freeable via `cplus_free`,
+   contradicting `stdlib_c17.c:13-23`; the Windows `_aligned_malloc` branch still
+   carries a cross-platform hazard (`INFRASTRUCTURE_AUDIT.md:§4.2`).
 5. Generation wrap unguarded and **[UNTESTED]** (§5).
 6. Bounded, heuristic recently-free caches: 1024 direct-mapped slots in SafeCRT
    (§3.2 item 4).
@@ -502,6 +505,25 @@ bug-for-bug, no upstream-equivalent safety claims.
     NOT RUN**; no existing container adopts them (`INTERFACE_DESIGN.md:568-613`).
 17. All measurements are one macOS arm64 host; no Windows x86, Wine,
     DLL-injection, or live-game result exists.
+18. **Two independent metadata tables can diverge** (`meta_tab` vs `g_tab`):
+    a generation token from one is meaningless to the other, and a block
+    registered via `cplus_alloc_meta_register` exists only in `g_tab`, so
+    `stdlib_realloc` refuses it even though `cplus_realloc` accepts it
+    (`INFRASTRUCTURE_AUDIT.md:§5.1`).
+19. **No destructors and no copy control** on any owning `.hp` class despite
+    "RAII" wording in headers; cleanup is manual `drop()`, and a value copy of
+    an owning class would shallow-copy the pointer **[STATIC, not reproduced]**
+    (`INFRASTRUCTURE_AUDIT.md:§5.3`).
+20. **32-bit UB in both hash functions:** `x >> 33` on `uintptr_t` in
+    `error.hp:267` and `alloc.c:53,55,57` exceeds a 32-bit type width; not
+    reproduced on this 64-bit host but relevant to the supported `_WIN32` branch
+    (`INFRASTRUCTURE_AUDIT.md:§5.4`).
+21. **Inconsistent failure reporting:** several capacity-rejection paths return
+    `-1`/`NULL` without `stdlib_note`, so they are absent from
+    `STDLIB_TM_API_FAIL` and the callback; `stdlib_realloc` reports over-limit as
+    `RANGE/BOUNDS` while `stdlib_alloc` uses `MEMORY/RESOURCE`
+    (`INFRASTRUCTURE_AUDIT.md:§5.5`). `cplus_free_checked` also nulls `*inout`
+    even on refusal (F-11, §5.8).
 
 ---
 
@@ -571,6 +593,10 @@ timeout 30 /tmp/abi_safety_injection_mem   # expect: ABI_SAFETY 32 0
 sh benchmarks/safety_compare/run_bench.sh
 ```
 
+The `INFRASTRUCTURE_AUDIT.md:§4` REPRO-1/REPRO-2/REPRO-3 probes used temporary
+sources outside the repository and are **cited, not re-executed** here; their
+recorded outputs are quoted in §4.3 and §9.
+
 ### 10.7 Not run / blocked (do not claim)
 
 `STDLIB_ALLOCATOR_ALIGN` probe, arena/pool/custom allocation fixtures,
@@ -614,17 +640,18 @@ and the `-Werror` ABI-fingerprint probe build (source `-Wcomment` defect).
 
 | Metric | Count | Source / method |
 | --- | ---: | --- |
-| Named sibling docs present / PENDING | 3 / 2 | §0 (`INTERFACE_DESIGN`, `ABI_EVIDENCE`, `UPSTREAM_RESEARCH` present; `INFRASTRUCTURE_AUDIT`, `ALLOCATOR_HP_CONTRACT` PENDING) |
-| Test note dirs present / `*_NOTES.md` files | 2 / 0 | §0, §4.3 |
+| Named sibling docs present / PENDING | 4 / 1 | §0 (`INTERFACE_DESIGN`, `ABI_EVIDENCE`, `UPSTREAM_RESEARCH`, `INFRASTRUCTURE_AUDIT` present; `ALLOCATOR_HP_CONTRACT` PENDING) |
+| Test note dirs present / `*_NOTES.md` files | 2 / 0 | §0, §4.4 |
 | Architecture layers (+ independent domains) | 4 (+2) | §1.1–§1.5 |
 | Public API entries by layer | 11 / 19 / 12 / 17 / 21 / 21 | §2 enumeration (runtime / HP / memory / diagnostics / libc / SafeCRT) |
 | Failure-injection C matrix | 294 / 294, 0 fail | §4.2 |
 | Failure-injection `.cp` suites | 270 checks (65+59+32+58+30+26), 0 fail | §4.2 |
 | Combined injection checks (labelled sum) | 564 | §4.2 |
-| New diagnostic checks (strict-none) | 48 (18+14+16), 0 fail | §4.3 |
+| New diagnostic checks (strict-none) | 48 (18+14+16), 0 fail | §4.4 |
 | `alloc_churn` | 0.1877 s safe / 0.1834 s legacy / 0.0532 s plain; 3.53x / 3.45x | §6.1 |
 | Modern workload | 0.0140 s vs 0.0061 s = 2.31x | §6.2 |
 | ABI layouts / compat | 70/70 × 2; 69 passed, 0 failed | §7.1 |
 | Fingerprint records / SHA-256 prefix | 101 / `b9aff0a0…acc6d4f` | §7.1 |
-| Known limitations | 17 | §9 (not a defect count) |
+| Known limitations | 21 | §9 (not a defect count) |
+| New reproduced injection blind spots | 3 (REPRO-1, REPRO-3, metadata `calloc`) | §4.3, `INFRASTRUCTURE_AUDIT.md:§4` |
 | Explicit non-claims | 7 | §11 |

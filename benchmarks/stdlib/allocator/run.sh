@@ -21,7 +21,7 @@ LIBC="$ROOT/build/libc/libcplus_hardened.a"
 BIN="$HERE/allocator_bench"
 RESULTS="$HERE/results"
 
-RUNS=${CPLUS_BENCH_RUNS:-9}
+RUNS=${CPLUS_BENCH_RUNS:-11}
 WARMUP=${CPLUS_BENCH_WARMUP:-2}
 SEED=${CPLUS_BENCH_SEED:-314159265}
 

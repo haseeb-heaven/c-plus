@@ -149,8 +149,9 @@ read_reason() {
 
 # --- preconditions ---------------------------------------------------------
 
+TIMEOUT_BIN=$(command -v timeout 2>/dev/null)
 GLOBAL_BLOCK=""
-if ! command -v timeout >/dev/null 2>&1; then
+if [ -z "$TIMEOUT_BIN" ]; then
   GLOBAL_BLOCK="'timeout' utility not found"
 fi
 if [ ! -x "$CPLUS" ]; then
@@ -282,16 +283,18 @@ while IFS="$(printf '\t')" read -r grp nm safe src srel; do
         tailtxt=$(tail -n 3 "$blog" | tr '\n\t' '  ' | cut -c1-160)
         detail="compiler exit $brc: $tailtxt"
       else
+        # The brace group suppresses the *shell's* "Abort trap"/"Segmentation
+        # fault" job notice for signal-killed children; the child's own stderr
+        # still goes to $se verbatim.
         if [ -n "$stdin_file" ]; then
           rcmd="timeout -k $KILL_AFTER $RUN_TIMEOUT $bin < $stdin_file"
-          timeout -k "$KILL_AFTER" "$RUN_TIMEOUT" "$bin" \
-            < "$stdin_file" > "$so" 2> "$se"
+          { timeout -k "$KILL_AFTER" "$RUN_TIMEOUT" "$bin" \
+              < "$stdin_file" > "$so" 2> "$se"; erc=$?; } 2>/dev/null
         else
           rcmd="timeout -k $KILL_AFTER $RUN_TIMEOUT $bin < /dev/null"
-          timeout -k "$KILL_AFTER" "$RUN_TIMEOUT" "$bin" \
-            </dev/null > "$so" 2> "$se"
+          { timeout -k "$KILL_AFTER" "$RUN_TIMEOUT" "$bin" \
+              </dev/null > "$so" 2> "$se"; erc=$?; } 2>/dev/null
         fi
-        erc=$?
         printf '%s\n' "$erc" > "$rf"
 
         if [ "$erc" -eq 124 ] || [ "$erc" -eq 137 ]; then
@@ -363,7 +366,7 @@ JSON_REL=$JSON; case "$JSON_REL" in "$ROOT"/*) JSON_REL=${JSON_REL#"$ROOT"/} ;; 
   printf '],\n'
   printf '  "toolchain": {"cplus": "%s", "timeout": "%s", "path": "%s"},\n' \
     "$(printf '%s' "$CPLUS" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')" \
-    "$(command -v timeout 2>/dev/null || printf '')" \
+    "$TIMEOUT_BIN" \
     "$(printf '%s' "$PATH" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
   printf '  "limits": {"build_timeout_s": %s, "run_timeout_s": %s, "kill_after_s": %s},\n' \
     "$BUILD_TIMEOUT" "$RUN_TIMEOUT" "$KILL_AFTER"

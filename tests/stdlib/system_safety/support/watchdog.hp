@@ -78,6 +78,7 @@ static inline struct ss_watchdog_result ss_run_watchdog(ss_child_fn child_fn,
     struct sigaction backstop;
     pid_t child_pid;
     pid_t wait_rc;
+    unsigned int outer_alarm_left;
     int status;
     int reaped;
     int timed_out;
@@ -132,7 +133,10 @@ static inline struct ss_watchdog_result ss_run_watchdog(ss_child_fn child_fn,
     }
 
     ss_watchdog_alarm_seen = 0;
-    (void)!alarm(hard_secs);
+    /* Arm our backstop; alarm() returns any outer test alarm's remaining
+     * seconds, which we re-arm on exit so callers with a global watchdog keep
+     * one (best-effort; the elapsed time is not deducted). */
+    outer_alarm_left = alarm(hard_secs);
 
     for (;;) {
         wait_rc = waitpid(child_pid, &status, 0);
@@ -152,6 +156,8 @@ static inline struct ss_watchdog_result ss_run_watchdog(ss_child_fn child_fn,
     }
 
     (void)!alarm(0);
+    if (outer_alarm_left > 0)
+        (void)!alarm(outer_alarm_left);
     (void)!sigaction(SIGALRM, &old_alarm_action, (struct sigaction *)0);
 
     if (!reaped) {

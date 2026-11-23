@@ -80,6 +80,19 @@ for _src in "$DIR"/af_*.cp; do
     # shellcheck disable=SC2086
     timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$_src" $_fl $_extra -o "$_bin" >"$_blog" 2>&1
     _brc=$?
+    # Environment workaround (not a test change): the UBSan backend compiles
+    # c-plus-core/runtime/cplus_runtime.c against THIS repo's runtime/include,
+    # whose cplus.h predates CPLUS_EXIT_ARITHMETIC (=110 in the core header).
+    # Reproduced with an unrelated existing test. Supplying the missing value on
+    # the command line lets UBSan builds proceed; no source/header is edited.
+    if [ "$_brc" -ne 0 ] && [ "$_k" = ubsan ] &&
+       grep -q 'CPLUS_EXIT_ARITHMETIC' "$_blog" 2>/dev/null; then
+      printf 'TOOLCHAIN-FALLBACK %s (ubsan): -DCPLUS_EXIT_ARITHMETIC=110 (external core/runtime header mismatch)\n' "$_name"
+      # shellcheck disable=SC2086
+      timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$_src" $_fl $_extra \
+        -DCPLUS_EXIT_ARITHMETIC=110 -o "$_bin" >"$_blog" 2>&1
+      _brc=$?
+    fi
     if [ "$_brc" -ne 0 ]; then
       if [ "$_brc" -eq 124 ] || [ "$_brc" -ge 128 ]; then
         printf 'TIMEOUT  %s (%s): build exceeded %ss (rc=%s)\n' "$_name" "$_lab" "$BUILD_TIMEOUT" "$_brc"
