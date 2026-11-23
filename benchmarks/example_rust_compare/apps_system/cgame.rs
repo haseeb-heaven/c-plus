@@ -361,7 +361,7 @@ impl Game {
             c.bold, c.mag, c.reset
         );
         println!(
-            "A broken C file has been written to:\n  {}{}exercises/{}{}\n",
+            "A broken C file has been written to:\n  {}{}exercises/{}{}",
             c.bold, c.cyan, "ex01_average.c", c.reset
         );
         println!("\nOpen it in your editor and fix it so that:\n{}{}{}\n", c.green, EX01_TASK, c.reset);
@@ -453,7 +453,7 @@ impl Game {
                 println!("  {}🔒 {:2}) {}{}", c.dim, i + 1, title, c.reset);
             }
         }
-        println!(
+        print!(
             "\n  Type a level number to play (unlocked/current only),\n  or {}b{} to go back to the main menu.\n",
             c.bold, c.reset
         );
@@ -510,7 +510,7 @@ impl Game {
                 println!("  {}🔒 {:2}) {}{}", c.dim, i, title, c.reset);
             }
         }
-        println!(
+        print!(
             "\n  Type an exercise number (0-{}, unlocked/current only),\n  or {}b{} to go back to the main menu.\n",
             N_LIBEX - 1,
             c.bold,
@@ -535,10 +535,14 @@ impl Game {
         let _ = fs::write("library/ex00_answer.c", EX00_STUB);
         println!("\nYour file is waiting at:\n  {}{}library/{}{}", c.bold, c.cyan, "ex00_answer.c", c.reset);
         println!("Open it in your editor, write the function, come back.");
-        println!(
-            "{}(Calling the real {}() is detected and rejected!){}",
-            c.dim, "-", c.reset
-        );
+        if idx != 0 {
+            // Only Ex00 is modeled; later exercises each have a `forbidden`
+            // stdlib name and print this extra warning line.
+            println!(
+                "{}(Calling the real {}() is detected and rejected!){}",
+                c.dim, "library_function", c.reset
+            );
+        }
         println!(
             "\n{}[Enter]{} check my code   {}t{} show theory again   {}h{} hint\n\
              {}r{} reset file          {}s{} skip   {}q{} back to menu",

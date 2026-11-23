@@ -12,9 +12,6 @@ impl DetRng {
     fn fresh() -> Self {
         Self { state: DET_SEED }
     }
-    fn reseed(&mut self, _seed: u32) {
-        self.state = DET_SEED;
-    }
     fn next(&mut self) -> i32 {
         self.state = self
             .state

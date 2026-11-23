@@ -169,8 +169,11 @@ for _group in $groups; do
             *) continue ;;
         esac
         # Keep the canonical record starting at the first EXAMPLE_COMPARE.
+        # Disable globbing so '*' or '?' inside a reason is never expanded.
         _rec="EXAMPLE_COMPARE${_line##*EXAMPLE_COMPARE}"
+        set -f
         set -- $_rec
+        set +f
         if [ "$#" -lt 3 ]; then
             echo "example-compare-agg: $_group: malformed line: $_line" >&2
             hard_fail=1
