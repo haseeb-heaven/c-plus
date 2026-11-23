@@ -1606,7 +1606,14 @@ RewrittenSource rewriteCPlusSource(const std::string &source,
                                    bool headerMode) {
   std::vector<Token> toks = lexCPlus(source);
   Lowerer lowerer(toks, diags, filename, headerMode);
-  return lowerer.run();
+  RewrittenSource result = lowerer.run();
+  // Preserve the original source's final newline.  Token reconstruction drops
+  // trailing trivia; keeping the newline makes lowered plain C byte-identical
+  // to the input after the mandatory leading #line directive.
+  if (!source.empty() && source.back() == '\n' && !result.text.empty() &&
+      result.text.back() != '\n')
+    result.text += '\n';
+  return result;
 }
 
 void registerExternalClass(const std::string &name, bool hasConstructor) {

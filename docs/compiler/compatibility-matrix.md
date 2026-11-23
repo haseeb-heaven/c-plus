@@ -52,3 +52,21 @@ uses GNU extensions (statement expressions, `__typeof__`, `_Static_assert`).
 
 See `docs/compiler/differential-testing.md` for the harness contract and
 exclusions.
+
+## LEGACY C source and ABI preservation (verified)
+
+`--legacy-c` must not change ordinary C source or its ABI. Added guarantee:
+- `preprocessModernHeaders()` restores the source's final newline (previously
+  dropped by `std::getline`), and `rewriteCPlusSource()` also preserves it.
+- For plain C, generated C is now byte-identical to the input after removing
+  the single mandatory leading `#line` directive (needed for diagnostics).
+  No C+ rewriting is applied to ordinary C declarations or expressions.
+
+Evidence: `CPLUS_BIN=$PWD/build/c+ python3
+tests/compiler/source_preservation/run.py` → 4 fixtures, 0 failures:
+`source=True stdout=True symbols=True` for each. It compares generated C bytes
+(after the `#line` line), runtime stdout, and exported global symbols against
+`/usr/bin/clang -std=gnu17 -O2`. `tests/compiler/abi_safety/run_suite.py`
+separately reports 33/33 checks for pointer sizes, struct offsets, signatures,
+callbacks, symbol names and precompiled-library interop across DEFAULT,
+STRICT and LEGACY modes.

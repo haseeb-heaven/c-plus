@@ -526,6 +526,11 @@ std::string preprocessModernHeaders(
     }
     result += line;
   }
+  // std::getline strips the final newline; restore it so the lowered C keeps
+  // the original source's trailing newline byte-for-byte.
+  if (!source.empty() && source.back() == '\n' && !result.empty() &&
+      result.back() != '\n')
+    result += '\n';
   return result;
 }
 
