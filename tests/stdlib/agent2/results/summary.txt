@@ -1,4 +1,4 @@
-Agent 2 aggregate regression summary (0261270)
+Agent 2 aggregate regression summary (1df837f)
 compiler=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build_timeout=90s run_timeout=30s
 
 TEST                                     GROUP     MODULE      CLASS          BUILD RUN DETAIL
@@ -21,6 +21,7 @@ deep_json_stress                         deep      json        PASS             
 deep_json_task5                          deep      json        PASS               0 0   
 deep_json_types                          deep      json        PASS               0 0   
 deep_log_task5                           deep      log         PASS               0 0   
+deep_memory_bounds                       deep      other       PASS               0 0   
 deep_net                                 deep      net         PASS               0 0   
 deep_net_task5                           deep      net         PASS               0 0   
 deep_string_append                       deep      string      PASS               0 0   
@@ -30,6 +31,11 @@ deep_thread_guard                        deep      thread      PASS             
 deep_thread_nested                       deep      thread      PASS               0 0   
 deep_thread_task5                        deep      thread      PASS               0 0   
 deep_vector_task4                        deep      vector      PASS               0 0   
+abi_safety_alloc_lifecycle               agent2    agent2      PASS               0 0   
+abi_safety_containers_borrow             agent2    agent2      PASS               0 0   
+abi_safety_injection_mem                 agent2    agent2      PASS               0 0   
+abi_safety_meta_integrity                agent2    agent2      PASS               0 0   
+abi_safety_safecrt                       agent2    agent2      PASS               0 0   
 cross_module                             agent2    agent2      PASS               0 0   
 extra_collections_clear                  agent2    agent2      PASS               0 0   
 extra_error_metadata                     agent2    agent2      PASS               0 0   
@@ -53,4 +59,4 @@ negative                                 existing  existing    PASS             
 net_test                                 existing  existing    PASS               0 0   
 stdlib_hardening_test                    existing  existing    PASS               0 0   
 
-SUMMARY PASS=50 FAIL=0 BUILD_FAILURE=0 TIMEOUT=0 SKIPPED=0 BLOCKED=0 TOTAL=50
+SUMMARY PASS=56 FAIL=0 BUILD_FAILURE=0 TIMEOUT=0 SKIPPED=0 BLOCKED=0 TOTAL=56
