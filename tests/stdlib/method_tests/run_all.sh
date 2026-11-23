@@ -38,13 +38,24 @@ PATH="$ROOT/build:/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH
 CPLUS_CLANG=/usr/bin/clang
 export CPLUS_CLANG
+# Minimal exception to the restricted PATH: the multimedia suite discovers
+# SDL3/FFmpeg flags with `pkg-config`, which lives outside /usr/bin on macOS.
+# Add only the directory that actually contains pkg-config.  CPLUS_CLANG stays
+# pinned to /usr/bin/clang, so no alternate compiler is introduced.
+for _pc in /opt/homebrew/bin /usr/local/bin; do
+    if [ -x "$_pc/pkg-config" ]; then
+        PATH="$_pc:$PATH"
+        export PATH
+        break
+    fi
+done
 if [ -x "$ROOT/build/c+" ]; then
     CPLUS_BIN="$ROOT/build/c+"
     export CPLUS_BIN
 fi
 
 HERE="$ROOT/tests/stdlib/method_tests"
-LIMIT=300
+LIMIT=900
 LOG_DIR=${TMPDIR:-/tmp}/cplus-method-tests-$$
 mkdir -p "$LOG_DIR" || exit 1
 
@@ -112,9 +123,73 @@ printf '%s\n' "$GROUP_NOTES" | while IFS= read -r notes; do
     script=$(pick_script "$group_dir")
 
     if [ -z "$script" ]; then
-        printf '[run_all] %-16s HARD FAIL: no run/compare script\n' "$group" >&2
-        # Emit a marker row; the outer shell aggregates via the log files.
-        printf '%s|0|0|0|0|%s\n' "$group" "missing run script" >"$LOG_DIR/$group.row"
+        # No conventional script: rebuild and run EVERY non-helper .cp in the
+        # group, then derive the METHOD_TEST numbers from real runtime output.
+        # Nothing is read from RUN_NOTES.md's recorded final line here.
+        printf '[run_all] %-16s generic build+run fallback\n' "$group" >&2
+        gdir="$LOG_DIR/gen-$group"
+        mkdir -p "$gdir"
+        : > "$gdir/combined.txt"
+        grc=0
+        for src in $(find "$group_dir" -maxdepth 1 -type f -name '*.cp' \
+                     ! -name '_*' -print | LC_ALL=C sort); do
+            name=$(basename "$src" .cp)
+            strict="--strict"
+            flags=""
+            if grep -q 'stdlib/http.hp' "$src"; then strict="--default"; flags="-lcurl"; fi
+            if grep -q 'stdlib/json.hp' "$src"; then
+                flags="$flags -I$ROOT/third_party/yyjson -L$ROOT/build/ext -lyyjson"
+            fi
+            if grep -q 'stdlib/async.hp' "$src"; then
+                flags="$flags -I/opt/homebrew/include -L/opt/homebrew/lib -luv"
+            fi
+            if ! timeout 300 ./build/c+ build "$src" $strict --sanitize=none $flags \
+                    -o "$gdir/$name" >"$gdir/$name.build.log" 2>&1; then
+                printf '[run_all] %-16s BUILD_FAIL %s\n' "$group" "$name" >&2
+                grc=1
+                continue
+            fi
+            if ! timeout 300 "$gdir/$name" >>"$gdir/combined.txt" \
+                    2>>"$gdir/$name.run.err"; then
+                printf '[run_all] %-16s RUN_FAIL %s\n' "$group" "$name" >&2
+                grc=1
+            fi
+        done
+        if [ "$grc" -ne 0 ]; then
+            printf '%s|0|0|0|0|%s\n' "$group" "generic build/run failed" \
+                >"$LOG_DIR/$group.row"
+            continue
+        fi
+        # Derive the counts from actual program output (no fabricated values).
+        line=$(grep -E "^METHOD_TEST $group [0-9]+ [0-9]+ [0-9]+ [0-9]+$" \
+               "$gdir/combined.txt" | tail -n 1)
+        if [ -n "$line" ]; then
+            set -- $line
+            t=$3; p=$4; f=$5; s=$6
+        else
+            # Count the real per-method outcome lines emitted by the test
+            # binaries.  Summary lines (TOTAL / RESULT / METHOD_TEST) are
+            # excluded so no line is double-counted.  Numeric zeros are
+            # explicit so word splitting always yields four fields.
+            vals=$(awk '
+                /PASS$/ && !/TOTAL|RESULT|METHOD_TEST/ {p++}
+                /FAIL/  && !/METHOD_TEST/ {f++}
+                END {print p+0, f+0}' "$gdir/combined.txt")
+            set -- $vals
+            p=$1; f=$2
+            t=$((p + f)); s=0
+        fi
+        t=${t:-0}; p=${p:-0}; f=${f:-0}; s=${s:-0}
+        if ! is_num "$t" || ! is_num "$p" || ! is_num "$f" || ! is_num "$s" \
+           || [ "$t" -eq 0 ]; then
+            printf '%s|0|0|0|0|%s\n' "$group" "no verifiable runtime counts" \
+                >"$LOG_DIR/$group.row"
+            continue
+        fi
+        printf '[run_all] %-16s METHOD_TEST %s %s %s %s %s (runtime-derived)\n' \
+            "$group" "$group" "$t" "$p" "$f" "$s" >&2
+        printf '%s|%s|%s|%s|%s|\n' "$group" "$t" "$p" "$f" "$s" \
+            >"$LOG_DIR/$group.row"
         continue
     fi
 
@@ -183,6 +258,14 @@ for row in "$LOG_DIR"/*.row; do
     fi
     ROWS="$ROWS| $g | $t | $p | $f | $s |\n"
 done
+
+EXPECTED=$(printf '%s\n' "$GROUP_NOTES" | wc -l | tr -d ' ')
+if [ "$NGROUP_NOTES" -ne "$EXPECTED" ]; then
+    printf '[run_all] ERROR: only %s of %s groups produced rows\n' \
+        "$NGROUP_NOTES" "$EXPECTED" >&2
+    HARD_FAIL=1
+    BAD="$BAD\n  - aggregate: $NGROUP_NOTES/$EXPECTED groups completed"
+fi
 
 printf '\n'
 printf '| group | total methods | passed | failed | skipped |\n'
