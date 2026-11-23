@@ -14,7 +14,12 @@ test -f "$INST/include/cplus-libc/cplus_libc.h"
 test -f "$INST/share/cplus-libc/contracts/contracts.json"
 test -f "$INST/share/cplus-libc/contracts/symbol_map.json"
 test -f "$INST/lib/cmake/cplus_hardened_libc/cplus_hardened_libcConfig.cmake"
-sh "$ROOT/tests/libc/run_validate_contracts.sh" >/tmp/libc_contracts_check.log 2>&1
+CPLUS_CHECK=${CPLUS_BIN:-"$ROOT/build/c+"}
+if [ -x "$CPLUS_CHECK" ] || command -v "$CPLUS_CHECK" >/dev/null 2>&1; then
+    sh "$ROOT/tests/libc/run_validate_contracts.sh" >/tmp/libc_contracts_check.log 2>&1
+else
+    echo "install smoke: skipping native C+ contract validator (c+ not available)"
+fi
 
 # Compile and run a standalone C program against the clean install prefix
 SMOKE_SRC="$BLD/smoke_sdk.c"

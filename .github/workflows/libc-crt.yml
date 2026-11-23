@@ -143,6 +143,7 @@ jobs:
         run: |
           LLVM_VER="$(llvm-config --version | cut -d. -f1)"
           cmake -S .cplus-core-compiler -B .cplus-core-compiler/build -G Ninja \
+            -DCMAKE_CXX_FLAGS="-include cstring" \
             -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
             -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang"
           cmake --build .cplus-core-compiler/build --target c+ --parallel

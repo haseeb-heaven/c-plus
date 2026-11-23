@@ -3,6 +3,10 @@
 #ifndef CPLUS_LIBC_H
 #define CPLUS_LIBC_H
 
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 /* C++ compatibility: C99 `restrict` and `double complex` spellings are not
  * valid C++.  Use the ABI-identical spellings __restrict / _Complex double
  * in C++ translation units; C translation units keep the ISO C spellings.
@@ -184,13 +188,20 @@ long cplus_time(long*); double cplus_difftime(long,long); long cplus_clock(void)
 struct tm; struct tm *cplus_gmtime(const long*); struct tm *cplus_localtime(const long*); long cplus_mktime(struct tm*);
 size_t cplus_strftime(char*,size_t,const char*,const struct tm*);
 /* POSIX/C11 time extras (platform-backed) */
-int cplus_clock_gettime(clockid_t,struct timespec*); int cplus_nanosleep(const struct timespec*,struct timespec*); int cplus_timespec_get(struct timespec*,int);
+#if !defined(__GLIBC__) || defined(__USE_POSIX199309) || defined(__USE_ISOC11)
+int cplus_timespec_get(struct timespec*,int);
+#endif
+#if !defined(__GLIBC__) || defined(__USE_POSIX199309)
+int cplus_clock_gettime(clockid_t,struct timespec*); int cplus_nanosleep(const struct timespec*,struct timespec*);
+#endif
 char *cplus_setlocale(int,const char*); struct lconv; struct lconv *cplus_localeconv(void);
 void (*cplus_signal(int, void(*)(int)))(int); int cplus_raise(int);
 /* POSIX signal-set / signal-control extras (platform-backed) */
+#if !defined(__GLIBC__) || defined(__USE_POSIX)
 int cplus_sigemptyset(sigset_t*); int cplus_sigfillset(sigset_t*); int cplus_sigaddset(sigset_t*,int); int cplus_sigdelset(sigset_t*,int); int cplus_sigismember(const sigset_t*,int);
 int cplus_sigaction(int,const struct sigaction*,struct sigaction*); int cplus_sigprocmask(int,const sigset_t*,sigset_t*); int cplus_sigsuspend(const sigset_t*);
 int cplus_kill(pid_t,int); int cplus_sigwait(const sigset_t*,int*);
+#endif
 /* stdio position/stream extras (platform-backed) */
 int cplus_setvbuf(FILE*,char*,int,size_t); void cplus_setbuf(FILE*,char*);
 int cplus_fgetpos(FILE*,fpos_t*); int cplus_fsetpos(FILE*,const fpos_t*);
