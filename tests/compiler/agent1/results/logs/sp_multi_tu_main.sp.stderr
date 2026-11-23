@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/core/positive/multi_tu_main.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_core_helper' have no definition in this TU; cross-TU control/data flow is not safety-checked here

@@ -2,7 +2,41 @@
 extern size_t __cplus_bounds_check(size_t, size_t, const char *);
 #include <stdint.h>
 extern void cplus_check_ptr_formation(const void *, size_t, int64_t, const char *, int, const char *);
+extern void cplus_check_bounds(const void *, size_t, size_t, const char *, int, const char *);
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_PTR_BODY(B, I, C, N, T, D) \
+  __typeof__(&(B)) __cplus_bp = &(B); \
+  __typeof__(I) __cplus_ip = (I); \
+  if (D) cplus_check_bounds((const void *)(*__cplus_bp), \
+      (size_t)(C), (size_t)(__cplus_ip), __FILE__, __LINE__, T); \
+  else cplus_check_ptr_formation((const void *)(*__cplus_bp), \
+      (size_t)(C), (int64_t)(__cplus_ip) * ((N) ? -1 : 1), \
+      __FILE__, __LINE__, T);
+#define CPLUS_PTR_CHECK(B, I, C, N, T, D) \
+  ({ CPLUS_PTR_BODY(B, I, C, N, T, D) \
+     ((N) ? (*__cplus_bp - __cplus_ip) \
+          : (*__cplus_bp + __cplus_ip)); })
+#define CPLUS_PTR_CHECK_ASSIGN(B, I, C, N, T, D) \
+  ({ CPLUS_PTR_BODY(B, I, C, N, T, D) \
+     *__cplus_bp = ((N) ? (*__cplus_bp - __cplus_ip) \
+                       : (*__cplus_bp + __cplus_ip)); \
+     *__cplus_bp; })
+#else
+#define CPLUS_PTR_CHECK(B, I, C, N, T, D) \
+  ((D) ? (cplus_check_bounds((const void *)(B), (size_t)(C), \
+       (size_t)(I), __FILE__, __LINE__, T), (B) + (I)) \
+       : (cplus_check_ptr_formation((const void *)(B), \
+       (size_t)(C), (int64_t)(I) * ((N) ? -1 : 1), \
+       __FILE__, __LINE__, T), (B) + (I)))
+#define CPLUS_PTR_CHECK_ASSIGN(B, I, C, N, T, D) \
+  ((B) = CPLUS_PTR_CHECK(B, I, C, N, T, D))
+#endif
 #include <stdint.h>
+#if defined(__GNUC__) || defined(__clang__)
+#  define CPLUS_STATIC_INLINE __attribute__((unused)) static
+#else
+#  define CPLUS_STATIC_INLINE static
+#endif
 extern int64_t __cplus_checked_add_i64(int64_t, int64_t, unsigned, unsigned);
 extern int64_t __cplus_checked_sub_i64(int64_t, int64_t, unsigned, unsigned);
 extern int64_t __cplus_checked_mul_i64(int64_t, int64_t, unsigned, unsigned);
@@ -17,7 +51,7 @@ extern int64_t __cplus_checked_narrow_i64(uint64_t, unsigned, unsigned, unsigned
 #  endif
 #endif
 #ifdef CPLUS_HAVE_INLINE_ARITH
-#define CPLUS_ARITH_INLINE __attribute__((unused)) static inline
+#define CPLUS_ARITH_INLINE CPLUS_STATIC_INLINE
 CPLUS_ARITH_INLINE int64_t __cplus_inline_add_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
   int64_t r; int32_t r32;
   if (bits == 32) {
@@ -117,12 +151,34 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 #define __cplus_inline_shr_i64 __cplus_checked_shr_i64
 #define __cplus_inline_narrow_i64 __cplus_checked_narrow_i64
 #endif
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
+  ({ __typeof__(&(P)) __cplus_ap = &(P); \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
+         (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
+     *__cplus_ap; })
+#define CPLUS_INC(P, T, BT, SG, D, POST) \
+  ({ __typeof__(&(P)) __cplus_ap = &(P); \
+     __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
+     *__cplus_ap = (T)__cplus_inline_add_i64( \
+         (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
+     (POST) ? __cplus_ov : *__cplus_ap; })
+#else
+#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
+  ((P) = (T)__cplus_inline_##OP##_i64( \
+      (int64_t)(P), (int64_t)(B), (BT), (SG)))
+#define CPLUS_INC(P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+      (int64_t)(D), (BT), (SG)))
+#endif
+#define CPLUS_NEG(X, T, BT, SG) \
+  ((T)__cplus_inline_sub_i64(0, (int64_t)(X), (BT), (SG)))
 #line 1 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/core/positive/checked_copy_overlap.c"
 #include "cplus/cplus.h"
 #include <string.h>
 int main(void) {
   char b[16];
-  for (int i = 0; i < 16; i++) b[__cplus_bounds_check((size_t)(i), 16, "b")] = (char)(((char)__cplus_inline_narrow_i64((uint64_t)('a' + i), 32, 1, 8, 1)));
-  cplus_memmove((cplus_check_ptr_formation((const void *)(b), (size_t)(16), (int64_t)(2), __FILE__, __LINE__, "b + 2"), (b + 2)), b, 10);
+  for (int i = 0; i < 16; CPLUS_INC(i, int, 32, 1, 1, 1)) b[__cplus_bounds_check((size_t)(i), 16, "b")] = (char)(((char)__cplus_inline_narrow_i64((uint64_t)('a' + i), 32, 1, 8, 1)));
+  cplus_memmove(CPLUS_PTR_CHECK(b ,  2, 16, 0, "b + 2", 0), b, 10);
   return b[0] == 'a' && b[1] == 'b' && b[2] == 'a' ? 0 : 1;
 }

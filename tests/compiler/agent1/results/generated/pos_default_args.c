@@ -1,4 +1,9 @@
 #include <stdint.h>
+#if defined(__GNUC__) || defined(__clang__)
+#  define CPLUS_STATIC_INLINE __attribute__((unused)) static
+#else
+#  define CPLUS_STATIC_INLINE static
+#endif
 extern int64_t __cplus_checked_add_i64(int64_t, int64_t, unsigned, unsigned);
 extern int64_t __cplus_checked_sub_i64(int64_t, int64_t, unsigned, unsigned);
 extern int64_t __cplus_checked_mul_i64(int64_t, int64_t, unsigned, unsigned);
@@ -13,7 +18,7 @@ extern int64_t __cplus_checked_narrow_i64(uint64_t, unsigned, unsigned, unsigned
 #  endif
 #endif
 #ifdef CPLUS_HAVE_INLINE_ARITH
-#define CPLUS_ARITH_INLINE __attribute__((unused)) static inline
+#define CPLUS_ARITH_INLINE CPLUS_STATIC_INLINE
 CPLUS_ARITH_INLINE int64_t __cplus_inline_add_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
   int64_t r; int32_t r32;
   if (bits == 32) {
@@ -113,6 +118,28 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 #define __cplus_inline_shr_i64 __cplus_checked_shr_i64
 #define __cplus_inline_narrow_i64 __cplus_checked_narrow_i64
 #endif
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
+  ({ __typeof__(&(P)) __cplus_ap = &(P); \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
+         (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
+     *__cplus_ap; })
+#define CPLUS_INC(P, T, BT, SG, D, POST) \
+  ({ __typeof__(&(P)) __cplus_ap = &(P); \
+     __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
+     *__cplus_ap = (T)__cplus_inline_add_i64( \
+         (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
+     (POST) ? __cplus_ov : *__cplus_ap; })
+#else
+#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
+  ((P) = (T)__cplus_inline_##OP##_i64( \
+      (int64_t)(P), (int64_t)(B), (BT), (SG)))
+#define CPLUS_INC(P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+      (int64_t)(D), (BT), (SG)))
+#endif
+#define CPLUS_NEG(X, T, BT, SG) \
+  ((T)__cplus_inline_sub_i64(0, (int64_t)(X), (BT), (SG)))
 #line 1 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/default_args.c"
 #include "cplus/cplus.h"
 
