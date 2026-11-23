@@ -76,3 +76,4 @@ tests/compiler/full_coverage/out/
 tests/compiler/full_coverage/logs/
 tests/compiler/optimized_traps/results/*.bin
 tests/compiler/abi_mixed/results/abi_mixed_*/
+tests/compiler/c_apps/results/*.bin
