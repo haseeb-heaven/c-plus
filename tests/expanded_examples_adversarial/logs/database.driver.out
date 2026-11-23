@@ -19,4 +19,8 @@ ADV_EXPANDED table_query out_of_range_index REFUSED 0
 ADV_EXPANDED table_query null_like_operand REFUSED 0
 ADV_EXPANDED table_query invalid_utf8_field REFUSED 0
 ADV_EXPANDED table_query post_hostile_integrity REFUSED 0
-ADV_EXPANDED_SUBTOTAL database cases=21 refused=21 crashed=0 unexpected_ok=0 blocked=0
+ADV_EXPANDED safety_demo oversized_argv REFUSED 0
+ADV_EXPANDED safety_demo size_max_argv REFUSED 0
+ADV_EXPANDED safety_demo empty_argv REFUSED 0
+ADV_EXPANDED safety_demo null_like_argv REFUSED 0
+ADV_EXPANDED_SUBTOTAL database cases=25 refused=25 crashed=0 unexpected_ok=0 blocked=0

@@ -45,6 +45,10 @@ PY
     printf '1|0|alpha\n2|0\n3|0|gam' > "$FIX/truncated.db"
     # Binary-ish hostile bytes (invalid UTF-8, no NUL).
     printf '\377\376\375' > "$FIX/invalid_utf8.txt"
+    # Fixed-size file fixtures for file_tools (FT_CAP = 1024).
+    python3 -c 'import sys; sys.stdout.write("A" * 1024)' > "$FIX/exact_1k.bin"
+    python3 -c 'import sys; sys.stdout.write("A" * 1025)' > "$FIX/one_over_1k.bin"
+    printf 'alpha beta\ngamma delta\n' > "$FIX/sample.txt"
 }
 
 # ---------------------------------------------------------------------------

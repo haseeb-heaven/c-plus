@@ -3,21 +3,22 @@
 #
 # Build and run each NEW expanded database / engine / safety example and its
 # safe-Rust equivalent, then compare captured stdout and exit status under a
-# hard 30 s timeout with identical deterministic stdin.
+# hard 30 s timeout with identical deterministic stdin/argv.
 #
 # One line is printed on stdout per example:
 #   EXPANDED_COMPARE <name> MATCH|DIFFERENT|BLOCKED|PENDING <reason>
+# All other output (toolchain versions, diff context) goes to stderr.
 #
-# All other output (toolchain versions, diff context) goes to stderr so the
-# stdout stream stays machine-readable.
-#
-# Original build paths:
+# Original build paths (invoked from the repository root):
 #   .cp -> build/c+ build --strict --sanitize=none -I. <source> -o <bin>
-#          (invoked from the repository root so stdlib/*.hp resolve)
-#   .c  -> /usr/bin/clang -std=gnu17 -I. <source> <runtime archives> -o <bin>
+#          (memcpy_s_demo additionally needs -- <safecrt> <hardened> archives)
+#   .c  -> /usr/bin/clang -std=c99 -D_POSIX_C_SOURCE=200809L
+#          -I. -Ilibc/install-include <source> build/libc/libcplus_hardened.a
+#          -pthread -o <bin>
 # Rust build path:
-#   rustc -O <name>.rs -o <bin>            (safe Rust: no unsafe, no FFI)
-# Run:  timeout 30 <binary> < <name>.stdin (empty unless overridden)
+#   rustc -O <name>.rs -o <bin>              (safe Rust: no unsafe, no FFI)
+# Run:  timeout 30 <binary> < <name>.stdin   (empty by default)
+#       argv is read from <name>.args when present (whitespace-separated).
 #
 # Every artifact is written under out/. No repository source is modified.
 
@@ -45,17 +46,18 @@ echo "compare: clang=$CLANG" >&2
 echo "compare: rustc=$RUSTC ($( "$RUSTC" --version 2>&1 ))" >&2
 echo "compare: timeout=$TIMEOUT (build/run limit 30s)" >&2
 
-# Restricted, reproducible environment.
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$RUSTDIR"
 export LC_ALL=C
 export CPLUS_CLANG="$CLANG"
 
 RUN_LIMIT=30
 BUILD_LIMIT=30
+: > "$HERE/empty.stdin"
 
-# Runtime archives used to link a plain-.c example (discovered once).
-RT_CORE="$REPO/build/libcplus_core.a"
-RT_RUN="$REPO/build/libcplus_runtime.a"
+# Only a real DIFFERENT contributes to the exit status. BLOCKED/PENDING are
+# reported but never make the script fail (scoped sources are produced by
+# sibling agents and may not exist yet at any given run).
+fails=0
 
 # run_bounded <out> <err> <exitfile> <secs> <cmd...>
 run_bounded() {
@@ -74,15 +76,21 @@ compare_one() {
     name=$1; dir=$2; ext=$3
     src="$REPO/examples/expanded/$dir/$name.$ext"
     rust="$HERE/$name.rs"
-    stdin="$HERE/$name.stdin"
-    [ -f "$stdin" ] || stdin="$HERE/empty.stdin"
+    stdin="$HERE/empty.stdin"
+    [ -f "$HERE/$name.stdin" ] && stdin="$HERE/$name.stdin"
+    argv=()
+    if [ -f "$HERE/$name.args" ]; then
+        read -r -a argv < "$HERE/$name.args" || true
+    fi
 
     if [ ! -f "$src" ]; then
-        printf 'EXPANDED_COMPARE %s PENDING missing original source %s\n' "$name" "${src#$REPO/}"
+        printf 'EXPANDED_COMPARE %s PENDING missing original source %s\n' \
+            "$name" "${src#$REPO/}"
         return
     fi
     if [ ! -f "$rust" ]; then
-        printf 'EXPANDED_COMPARE %s PENDING missing Rust model %s\n' "$name" "${rust#$HERE/}"
+        printf 'EXPANDED_COMPARE %s PENDING missing Rust model %s\n' \
+            "$name" "${rust#$HERE/}"
         return
     fi
 
@@ -97,17 +105,29 @@ compare_one() {
         return
     fi
 
-    # --- build the original C+ source ---
+    # --- build the original C+ / C source ---
     if [ "$ext" = "cp" ]; then
-        run_bounded "$OUT/$name.orig.build.out" "$OUT/$name.orig.build.err" \
-            "$OUT/$name.orig.build.exit" "$BUILD_LIMIT" \
-            bash -c 'cd "$1" && exec "$2" build --strict --sanitize=none -I. "$3" -o "$4"' \
-            _ "$REPO" "$CPLUS" "$src" "$OUT/orig_$name"
+        if [ "$name" = "memcpy_s_demo" ]; then
+            # Needs the safe-CRT and hardened archives on the link line.
+            run_bounded "$OUT/$name.orig.build.out" "$OUT/$name.orig.build.err" \
+                "$OUT/$name.orig.build.exit" "$BUILD_LIMIT" \
+                bash -c 'cd "$1" && exec "$2" build --strict --sanitize=none -I. \
+                    "$3" -o "$4" -- build/safe/libcplus_safecrt.a \
+                    build/libc/libcplus_hardened.a' \
+                _ "$REPO" "$CPLUS" "$src" "$OUT/orig_$name"
+        else
+            run_bounded "$OUT/$name.orig.build.out" "$OUT/$name.orig.build.err" \
+                "$OUT/$name.orig.build.exit" "$BUILD_LIMIT" \
+                bash -c 'cd "$1" && exec "$2" build --strict --sanitize=none -I. "$3" -o "$4"' \
+                _ "$REPO" "$CPLUS" "$src" "$OUT/orig_$name"
+        fi
     else
         run_bounded "$OUT/$name.orig.build.out" "$OUT/$name.orig.build.err" \
             "$OUT/$name.orig.build.exit" "$BUILD_LIMIT" \
-            "$CLANG" -std=gnu17 -O2 -I"$REPO" "$src" "$RT_CORE" "$RT_RUN" \
-            -lpthread -lm -o "$OUT/orig_$name"
+            bash -c 'cd "$1" && exec "$2" -std=c99 -D_POSIX_C_SOURCE=200809L \
+                -I. -Ilibc/install-include "$3" build/libc/libcplus_hardened.a \
+                -pthread -o "$4"' \
+            _ "$REPO" "$CLANG" "$src" "$OUT/orig_$name"
     fi
     cr=$(cat "$OUT/$name.orig.build.exit")
     if [ "$cr" -ne 0 ]; then
@@ -116,11 +136,13 @@ compare_one() {
         return
     fi
 
-    # --- run both with identical deterministic stdin, bounded ---
+    # --- run both with identical deterministic stdin/argv, bounded ---
     run_bounded "$OUT/$name.orig.stdout" "$OUT/$name.orig.stderr" \
-        "$OUT/$name.orig.exit" "$RUN_LIMIT" "$OUT/orig_$name" < "$stdin"
+        "$OUT/$name.orig.exit" "$RUN_LIMIT" \
+        "$OUT/orig_$name" "${argv[@]}" < "$stdin"
     run_bounded "$OUT/$name.rust.stdout" "$OUT/$name.rust.stderr" \
-        "$OUT/$name.rust.exit" "$RUN_LIMIT" "$OUT/rust_$name" < "$stdin"
+        "$OUT/$name.rust.exit" "$RUN_LIMIT" \
+        "$OUT/rust_$name" "${argv[@]}" < "$stdin"
     orc=$(cat "$OUT/$name.orig.exit")
     rrc=$(cat "$OUT/$name.rust.exit")
 
@@ -131,28 +153,31 @@ compare_one() {
     fi
 
     if cmp -s "$OUT/$name.orig.stdout" "$OUT/$name.rust.stdout" && [ "$orc" -eq "$rrc" ]; then
-        printf 'EXPANDED_COMPARE %s MATCH stdout byte-identical, exit=%s (both)\n' "$name" "$orc"
+        printf 'EXPANDED_COMPARE %s MATCH stdout byte-identical, exit=%s (both)\n' \
+            "$name" "$orc"
     else
         printf 'EXPANDED_COMPARE %s DIFFERENT exit orig=%s rust=%s; stdout orig=[%s] rust=[%s]\n' \
             "$name" "$orc" "$rrc" \
             "$(tr '\n' '|' < "$OUT/$name.orig.stdout")" \
             "$(tr '\n' '|' < "$OUT/$name.rust.stdout")"
         diff -u "$OUT/$name.orig.stdout" "$OUT/$name.rust.stdout" >&2 || true
+        fails=$((fails + 1))
     fi
 }
 
-: > "$HERE/empty.stdin"
-
 # database
-compare_one kv_store      database kv_store      cp
-compare_one table_query   database table_query   cp
-compare_one safety_demo   database safety_demo   cp
+compare_one kv_store       database cp
+compare_one table_query    database cp
+compare_one safety_demo    database cp
 # engine
-compare_one ecs           engine   ecs           cp
-compare_one engine_loop   engine   engine_loop   cp
-compare_one resource_cache engine  resource_cache cp
+compare_one ecs            engine   cp
+compare_one engine_loop    engine   cp
+compare_one resource_cache engine   cp
 # safety
-compare_one memcpy_s_demo safety  memcpy_s_demo  cp
-compare_one bounds_demo   safety  bounds_demo    cp
-compare_one lifetime_demo safety  lifetime_demo  cp
-compare_one sync_demo     safety  sync_demo      c
+compare_one memcpy_s_demo  safety   cp
+compare_one bounds_demo    safety   cp
+compare_one lifetime_demo  safety   cp
+compare_one sync_demo      safety   c
+
+# Nonzero only when at least one real stdout/exit DIFFERENT was observed.
+exit "$fails"

@@ -7,8 +7,9 @@ make_fixtures
 BIG=$(cat "$FIX/oversized_10k.txt")
 SIZEMAX=18446744073709551615
 
-build_one engine_loop examples/expanded/engine/engine_loop.cp || true
-build_one ecs          examples/expanded/engine/ecs.cp          || true
+build_one engine_loop    examples/expanded/engine/engine_loop.cp    || true
+build_one ecs            examples/expanded/engine/ecs.cp            || true
+build_one resource_cache examples/expanded/engine/resource_cache.cp || true
 
 if [ -x "$BIN/engine_loop" ]; then
     # Bad token -> "ERROR ... code=" on stdout and exit 2.
@@ -31,6 +32,23 @@ if [ -x "$BIN/ecs" ]; then
         run_case ecs size_max_argv SURVIVE "$BIN/ecs" "$SIZEMAX"
     ADV_SURVIVE_TOKEN='REFUSE unknown-entity' ADV_REQUIRE_TOKEN='SUMMARY survivors=' \
         run_case ecs null_like_argv SURVIVE "$BIN/ecs" ""
+fi
+
+if [ -x "$BIN/resource_cache" ]; then
+    # Self-contained refcounting demo: double-release and use-after-release
+    # must be refused. Hostile argv is ignored; assert state sentinels.
+    ADV_SURVIVE_TOKEN='REFUSE double-release' \
+    ADV_REQUIRE_TOKEN='REFUSE use-after-release' \
+        run_case resource_cache oversized_argv SURVIVE "$BIN/resource_cache" "$BIG"
+    ADV_SURVIVE_TOKEN='REFUSE double-release' \
+    ADV_REQUIRE_TOKEN='SUMMARY used=' \
+        run_case resource_cache size_max_argv SURVIVE "$BIN/resource_cache" "$SIZEMAX"
+    ADV_SURVIVE_TOKEN='REFUSE stale-handle' \
+    ADV_REQUIRE_TOKEN='REFUSE not-loaded' \
+        run_case resource_cache empty_argv SURVIVE "$BIN/resource_cache" ""
+    ADV_SURVIVE_TOKEN='REFUSE use-after-release' \
+    ADV_REQUIRE_TOKEN='SUMMARY used=' \
+        run_case resource_cache null_like_argv SURVIVE "$BIN/resource_cache" "NULL"
 fi
 
 subtotal engine

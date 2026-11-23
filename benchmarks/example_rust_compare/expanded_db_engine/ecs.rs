@@ -263,7 +263,9 @@ fn main() {
         w.print_world(tick);
     }
 
-    let first_removed = if w.health.get(&101).is_none() { 101 } else { -1 };
+    let first_removed = (101..=106)
+        .find(|id| w.health.get(&id).is_none())
+        .unwrap_or(-1);
 
     if let Err(e) = w.component_get(999, "posx") {
         report_refusal("unknown-entity", e);

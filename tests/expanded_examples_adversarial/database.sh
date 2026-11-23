@@ -8,8 +8,9 @@ BIG=$(cat "$FIX/oversized_10k.txt")
 BADUTF=$(cat "$FIX/invalid_utf8.txt")
 SIZEMAX=18446744073709551615
 
-build_one kv_store    examples/expanded/database/kv_store.cp    || true
-build_one table_query examples/expanded/database/table_query.cp || true
+build_one kv_store     examples/expanded/database/kv_store.cp     || true
+build_one table_query  examples/expanded/database/table_query.cp  || true
+build_one safety_demo  examples/expanded/database/safety_demo.cp  || true
 
 # These two examples deliberately return 0 on a handled refusal; their
 # contract is the explicit "REFUSED" token (KV_SUMMARY / TQ_SUMMARY counters).
@@ -47,6 +48,24 @@ if [ -x "$BIN/table_query" ]; then
     ADV_REQUIRE_TOKEN='TQ count grp 10 1' \
         run_case table_query post_hostile_integrity REFUSE "$BIN/table_query" \
             row 1 10 100 row 1 10 100 count grp 10
+fi
+
+if [ -x "$BIN/safety_demo" ]; then
+    # Self-contained: 5 hostile operations, each must be REFUSED with the
+    # 32-byte canary intact. Hostile argv is ignored; assert the canary and
+    # the full summary as sentinels.
+    ADV_SURVIVE_TOKEN='SAFETY oversized_key REFUSED' \
+    ADV_REQUIRE_TOKEN='SAFETY FINAL_CANARY ok' \
+        run_case safety_demo oversized_argv SURVIVE "$BIN/safety_demo" "$BIG"
+    ADV_SURVIVE_TOKEN='SAFETY overflowing_sum REFUSED' \
+    ADV_REQUIRE_TOKEN='SAFETY_SUMMARY 5 5 5 0' \
+        run_case safety_demo size_max_argv SURVIVE "$BIN/safety_demo" "$SIZEMAX"
+    ADV_SURVIVE_TOKEN='SAFETY duplicate_key REFUSED' \
+    ADV_REQUIRE_TOKEN='SAFETY FINAL_CANARY ok' \
+        run_case safety_demo empty_argv SURVIVE "$BIN/safety_demo" ""
+    ADV_SURVIVE_TOKEN='SAFETY delete_missing REFUSED' \
+    ADV_REQUIRE_TOKEN='SAFETY_SUMMARY 5 5 5 0' \
+        run_case safety_demo null_like_argv SURVIVE "$BIN/safety_demo" "NULL"
 fi
 
 subtotal database

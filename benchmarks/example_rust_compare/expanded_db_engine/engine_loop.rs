@@ -111,7 +111,13 @@ fn main() {
     );
     for tick in 0..n {
         let cmd = inputs[tick];
-        g.x += cmd;
+        /* Only the movement tokens change position (FIRE does not). */
+        if cmd == IN_LEFT {
+            g.x -= 1;
+        }
+        if cmd == IN_RIGHT {
+            g.x += 1;
+        }
         if g.x < LANE_MIN {
             g.x = LANE_MIN;
         }

@@ -18,4 +18,18 @@ ADV_EXPANDED todo invalid_command REFUSED 1
 ADV_EXPANDED todo null_like_args REFUSED 1
 ADV_EXPANDED todo truncated_path REFUSED 1
 ADV_EXPANDED todo post_hostile_integrity REFUSED 1
-ADV_EXPANDED_SUBTOTAL cli cases=20 refused=20 crashed=0 unexpected_ok=0 blocked=0
+ADV_EXPANDED file_tools one_over_file REFUSED 1
+ADV_EXPANDED file_tools copy_one_over REFUSED 1
+ADV_EXPANDED file_tools cmp_one_over REFUSED 1
+ADV_EXPANDED file_tools truncated_path REFUSED 1
+ADV_EXPANDED file_tools oversized_command REFUSED 1
+ADV_EXPANDED file_tools size_max_path REFUSED 1
+ADV_EXPANDED file_tools invalid_command REFUSED 1
+ADV_EXPANDED file_tools null_like_args REFUSED 2
+ADV_EXPANDED text_tools missing_file REFUSED 1
+ADV_EXPANDED text_tools oversized_path REFUSED 1
+ADV_EXPANDED text_tools size_max_path REFUSED 1
+ADV_EXPANDED text_tools invalid_command REFUSED 1
+ADV_EXPANDED text_tools bad_operand_count REFUSED 1
+ADV_EXPANDED text_tools null_like_args REFUSED 2
+ADV_EXPANDED_SUBTOTAL cli cases=34 refused=34 crashed=0 unexpected_ok=0 blocked=0
