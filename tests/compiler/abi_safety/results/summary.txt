@@ -1,0 +1,43 @@
+C+ native ABI regression suite
+====================================================================
+binary       : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+version      : C+ 0.1.0
+platform     : Darwin/arm64 (symbol prefix '_')
+generated    : 2026-11-23T12:32:27
+modes        : --legacy-c, --default, --strict
+backend flags: --sanitize=none (no sanitizer instrumentation; ABI only)
+timeout      : 90s build/nm, 30s execution
+
+SUMMARY
+--------------------------------------------------------------------
+cases                : 11
+checks (case x mode) : 33
+passed               : 33
+failed               : 0
+skipped              : 0
+
+BY MODE
+--------------------------------------------------------------------
+  --legacy-c checks=11 passed=11 failed= 0 skipped= 0
+  --default  checks=11 passed=11 failed= 0 skipped= 0
+  --strict   checks=11 passed=11 failed= 0 skipped= 0
+
+BY FAMILY
+--------------------------------------------------------------------
+  calling_convention   checks= 3 passed= 3 failed= 0 skipped= 0
+  function_pointer     checks= 3 passed= 3 failed= 0 skipped= 0
+  library_interop      checks= 6 passed= 6 failed= 0 skipped= 0
+  pointer_size         checks= 6 passed= 6 failed= 0 skipped= 0
+  signature            checks= 6 passed= 6 failed= 0 skipped= 0
+  struct_layout        checks= 6 passed= 6 failed= 0 skipped= 0
+  symbol_names         checks= 3 passed= 3 failed= 0 skipped= 0
+
+FAILURES (exact case names and modes)
+--------------------------------------------------------------------
+  none
+
+SKIPS
+--------------------------------------------------------------------
+  none
+
+Full records: results/summary.json

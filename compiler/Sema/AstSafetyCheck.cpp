@@ -252,6 +252,12 @@ public:
   std::vector<CheckedPointerSite> takePointerSites() {
     return std::move(pointerSites_);
   }
+  std::vector<CheckedAllocSite> takeAllocSites() {
+    return std::move(allocSites_);
+  }
+  std::vector<CheckedAllocSite> takeFreeSites() {
+    return std::move(freeSites_);
+  }
   const std::map<std::string, std::set<std::string>> &fieldAliases() const {
     return fieldAliases_;
   }
@@ -788,6 +794,80 @@ public:
     pointerSites_.push_back(std::move(site));
   }
 
+  /// Record an allocator call for runtime side-table registration.  The
+  /// pointer ABI is unchanged: the generated C wraps the call in an ordinary
+  /// function that returns the same pointer.
+  void recordAllocSite(const CallExpr *call, long long bytes) {
+    if (!recordArithmeticSites_ || !report_ || !call || bytes <= 0)
+      return;
+    SourceLocation b = call->getBeginLoc(), e = call->getEndLoc();
+    if (b.isInvalid() || e.isInvalid() || b.isMacroID() || e.isMacroID() ||
+        isHeaderLocation(b))
+      return;
+    SourceManager &sm = ctx_.getSourceManager();
+    FileID main = sm.getMainFileID();
+    if (sm.getFileID(b) != main || sm.getFileID(e) != main)
+      return;
+    SourceLocation after =
+        Lexer::getLocForEndOfToken(e, 0, sm, ctx_.getLangOpts());
+    if (after.isInvalid() || sm.getFileOffset(b) >= sm.getFileOffset(after))
+      return;
+    CheckedAllocSite site;
+    site.begin = sm.getFileOffset(b);
+    site.end = sm.getFileOffset(after);
+    site.bytes = static_cast<unsigned long long>(bytes);
+    if (const FunctionDecl *callee = call->getDirectCallee()) {
+      std::string cn = callee->getNameAsString();
+      site.isRealloc = (cn == "realloc");
+      if (site.isRealloc && call->getNumArgs() >= 1) {
+        SourceLocation ob = call->getArg(0)->getBeginLoc();
+        SourceLocation oe = call->getArg(0)->getEndLoc();
+        SourceLocation oa =
+            Lexer::getLocForEndOfToken(oe, 0, sm, ctx_.getLangOpts());
+        if (ob.isValid() && oa.isValid() && !ob.isMacroID() && !oe.isMacroID())
+          site.argText = Lexer::getSourceText(
+                             CharSourceRange::getCharRange(ob, oa), sm,
+                             ctx_.getLangOpts())
+                             .str();
+      }
+    }
+    allocSites_.push_back(std::move(site));
+  }
+
+  /// Record a raw `free(p)` call so the instrumenter can route it through the
+  /// runtime side table before the real deallocation.
+  void recordFreeSite(const CallExpr *call) {
+    if (!recordArithmeticSites_ || !report_ || !call ||
+        call->getNumArgs() < 1)
+      return;
+    SourceLocation b = call->getBeginLoc(), e = call->getEndLoc();
+    if (b.isInvalid() || e.isInvalid() || b.isMacroID() || e.isMacroID() ||
+        isHeaderLocation(b))
+      return;
+    SourceManager &sm = ctx_.getSourceManager();
+    FileID main = sm.getMainFileID();
+    if (sm.getFileID(b) != main || sm.getFileID(e) != main)
+      return;
+    SourceLocation argB = call->getArg(0)->getBeginLoc();
+    SourceLocation argE = call->getArg(0)->getEndLoc();
+    SourceLocation afterArg =
+        Lexer::getLocForEndOfToken(argE, 0, sm, ctx_.getLangOpts());
+    SourceLocation after =
+        Lexer::getLocForEndOfToken(e, 0, sm, ctx_.getLangOpts());
+    if (argB.isInvalid() || afterArg.isInvalid() || after.isInvalid() ||
+        sm.getFileOffset(b) >= sm.getFileOffset(after))
+      return;
+    CheckedAllocSite site;
+    site.begin = sm.getFileOffset(b);
+    site.end = sm.getFileOffset(after);
+    site.argText = Lexer::getSourceText(
+        CharSourceRange::getCharRange(argB, afterArg), sm, ctx_.getLangOpts())
+                       .str();
+    if (site.argText.empty())
+      return;
+    freeSites_.push_back(std::move(site));
+  }
+
   /// A divisor is provably non-zero when it is a known constant, a variable
   /// known non-zero on the current guarded path, or a loop counter whose
   /// lower bound (plus a positive offset) keeps it away from zero.
@@ -833,9 +913,9 @@ public:
     std::string callee = call->getDirectCallee()->getNameAsString();
     if (callee != "malloc" && callee != "calloc" && callee != "realloc")
       return;
-    // realloc(NULL, n) is malloc(n): the extent comes from argument 1.
-    if (callee == "realloc" && call->getNumArgs() >= 2 &&
-        isNullConstant(call->getArg(0)->IgnoreParenCasts())) {
+    // realloc(ptr, n): the new extent is argument 1, regardless of whether
+    // ptr was null.  The runtime transfer helper unregisters the old block.
+    if (callee == "realloc" && call->getNumArgs() >= 2) {
       const Expr *sizeArg = call->getArg(1)->IgnoreParenImpCasts();
       long long n = 0;
       if (evalByteCount(sizeArg, n) && n > 0) {
@@ -3159,6 +3239,26 @@ public:
       else if (rawName.find("printf_chk") != std::string::npos) // printf
         fmtShift = 1;
     }
+    // Register every constant-sized allocator call, including allocations
+    // assigned through out-parameters rather than a simple initializer.
+    if (name == "malloc" || name == "calloc" || name == "realloc") {
+      unsigned argIdx = name == "realloc" ? 1 : 0;
+      if (call->getNumArgs() > argIdx) {
+        long long n = -1;
+        if (evalByteCount(call->getArg(argIdx)->IgnoreParenImpCasts(), n) &&
+            n > 0) {
+          if (name == "calloc" && call->getNumArgs() >= 2) {
+            long long es = 1;
+            if (evalByteCount(call->getArg(1)->IgnoreParenImpCasts(), es) &&
+                es > 0 && n <= LLONG_MAX / es)
+              n *= es;
+          }
+          recordAllocSite(call, n);
+        }
+      }
+    }
+    if (name == "free")
+      recordFreeSite(call);
     // A released pointer must not cross a function boundary: the callee may
     // dereference it and no single-TU summary is needed to see the risk.
     // free/realloc are handled by their own release/double-free checks.
@@ -4353,6 +4453,8 @@ private:
   bool recordArithmeticSites_ = false;
   std::vector<CheckedArithmeticSite> arithmeticSites_;
   std::vector<CheckedPointerSite> pointerSites_;
+  std::vector<CheckedAllocSite> allocSites_;
+  std::vector<CheckedAllocSite> freeSites_;
   std::set<unsigned> handledReallocs_;
   std::map<std::string, SourceLocation> allocLocs_;
   std::map<std::string, SourceLocation> aliasLocs_;
@@ -4562,6 +4664,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   if (needNativeArithmetic)
     setCheckedArithmeticSites(check.takeArithmeticSites());
     setCheckedPointerSites(check.takePointerSites());
+  setCheckedAllocSites(check.takeAllocSites());
+  setCheckedFreeSites(check.takeFreeSites());
 
   // Thread-race heuristic: the same entry function passed to more than one
   // pthread_create that writes a global has unsynchronised shared mutable

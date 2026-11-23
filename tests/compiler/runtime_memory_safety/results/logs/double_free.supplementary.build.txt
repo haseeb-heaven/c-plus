@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/double_free.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/double_free.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+returncode: 1
+timed_out: False
+
+<SRC>:3:61: error: [CPLUS-OWNER] double free of 'p'
+  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); free(p); return 0; }
+                                                              ^~~~
+help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership

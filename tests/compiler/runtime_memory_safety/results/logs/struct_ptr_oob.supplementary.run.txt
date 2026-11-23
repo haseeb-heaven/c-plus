@@ -1,0 +1,50 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_oob.supplementary.bin
+returncode: -6
+timed_out: False
+
+=================================================================
+==25517==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000960 at pc 0x000100abcbac bp 0x00016f34a160 sp 0x00016f34a158
+WRITE of size 4 at 0x602000000960 thread T0
+    #0 0x000100abcba8 in wr struct_ptr_oob.c:6
+    #1 0x000100abc9c0 in main struct_ptr_oob.c:8
+    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)
+
+0x602000000960 is located 0 bytes after 16-byte region [0x602000000950,0x602000000960)
+allocated by thread T0 here:
+    #0 0x00010126d40c in malloc+0x70 (libclang_rt.asan_osx_dynamic.dylib:arm64+0x5540c)
+    #1 0x000100abc8b8 in main struct_ptr_oob.c:7
+    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow struct_ptr_oob.c:6 in wr
+Shadow bytes around the buggy address:
+  0x602000000680: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00
+  0x602000000700: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00
+  0x602000000780: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00
+  0x602000000800: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 00
+  0x602000000880: fa fa 00 00 fa fa 00 00 fa fa 00 00 fa fa 00 06
+=>0x602000000900: fa fa 00 fa fa fa 00 00 fa fa 00 00[fa]fa fa fa
+  0x602000000980: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x602000000a00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x602000000a80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x602000000b00: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x602000000b80: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==25517==ABORTING

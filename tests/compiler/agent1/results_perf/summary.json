@@ -2,7 +2,7 @@
   "meta": {
     "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
     "compiler_version": "C+ 0.1.0",
-    "date_utc": "2026-11-23T06:00:19Z",
+    "date_utc": "2026-11-23T07:05:19Z",
     "host": "Darwin 27.2.0 arm64",
     "timer": "/usr/bin/time -l",
     "runs_per_config": 3,
@@ -27,16 +27,16 @@
       "expected_stdout": "array_sum=19353600000",
       "configs": {
         "safe_release": {
-          "real_s": 0.03,
+          "real_s": 0.02,
           "user_s": 0.02,
           "sys_s": 0.0,
-          "rss_bytes": 1654784,
+          "rss_bytes": 1638400,
           "exit_code": 0,
           "stdout": "array_sum=19353600000"
         },
         "safe_debug": {
-          "real_s": 0.58,
-          "user_s": 0.57,
+          "real_s": 0.59,
+          "user_s": 0.58,
           "sys_s": 0.0,
           "rss_bytes": 1638400,
           "exit_code": 0,
@@ -52,8 +52,8 @@
         }
       },
       "ratios": {
-        "safe_release_over_legacy_c_release": 1.5,
-        "safe_debug_over_safe_release": 19.333
+        "safe_release_over_legacy_c_release": 1.0,
+        "safe_debug_over_safe_release": 29.5
       },
       "regressed_over_2x": false
     },
@@ -71,10 +71,10 @@
           "stdout": "ptr_sum=19353600000"
         },
         "safe_debug": {
-          "real_s": 0.62,
-          "user_s": 0.61,
+          "real_s": 0.58,
+          "user_s": 0.58,
           "sys_s": 0.0,
-          "rss_bytes": 1638400,
+          "rss_bytes": 1654784,
           "exit_code": 0,
           "stdout": "ptr_sum=19353600000"
         },
@@ -89,7 +89,7 @@
       },
       "ratios": {
         "safe_release_over_legacy_c_release": 1.0,
-        "safe_debug_over_safe_release": 31.0
+        "safe_debug_over_safe_release": 29.0
       },
       "regressed_over_2x": false
     },
@@ -99,7 +99,7 @@
       "expected_stdout": "arith=25499988126",
       "configs": {
         "safe_release": {
-          "real_s": 0.21,
+          "real_s": 0.2,
           "user_s": 0.2,
           "sys_s": 0.0,
           "rss_bytes": 1638400,
@@ -107,7 +107,7 @@
           "stdout": "arith=25499988126"
         },
         "safe_debug": {
-          "real_s": 0.62,
+          "real_s": 0.61,
           "user_s": 0.61,
           "sys_s": 0.0,
           "rss_bytes": 1638400,
@@ -124,8 +124,8 @@
         }
       },
       "ratios": {
-        "safe_release_over_legacy_c_release": 1.05,
-        "safe_debug_over_safe_release": 2.952
+        "safe_release_over_legacy_c_release": 1.0,
+        "safe_debug_over_safe_release": 3.05
       },
       "regressed_over_2x": false
     },
@@ -143,10 +143,10 @@
           "stdout": "nested=56250000000"
         },
         "safe_debug": {
-          "real_s": 2.72,
-          "user_s": 2.7,
+          "real_s": 2.91,
+          "user_s": 2.9,
           "sys_s": 0.0,
-          "rss_bytes": 1671168,
+          "rss_bytes": 1654784,
           "exit_code": 0,
           "stdout": "nested=56250000000"
         },
@@ -161,7 +161,7 @@
       },
       "ratios": {
         "safe_release_over_legacy_c_release": 1.0,
-        "safe_debug_over_safe_release": 17.0
+        "safe_debug_over_safe_release": 18.188
       },
       "regressed_over_2x": false
     },
@@ -174,15 +174,15 @@
           "real_s": 0.07,
           "user_s": 0.07,
           "sys_s": 0.0,
-          "rss_bytes": 1671168,
+          "rss_bytes": 1736704,
           "exit_code": 0,
           "stdout": "alloc=51609600000"
         },
         "safe_debug": {
-          "real_s": 1.57,
-          "user_s": 1.56,
+          "real_s": 1.56,
+          "user_s": 1.55,
           "sys_s": 0.0,
-          "rss_bytes": 1671168,
+          "rss_bytes": 1736704,
           "exit_code": 0,
           "stdout": "alloc=51609600000"
         },
@@ -197,7 +197,7 @@
       },
       "ratios": {
         "safe_release_over_legacy_c_release": 1.0,
-        "safe_debug_over_safe_release": 22.429
+        "safe_debug_over_safe_release": 22.286
       },
       "regressed_over_2x": false
     }

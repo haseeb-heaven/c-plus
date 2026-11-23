@@ -105,6 +105,14 @@ void cplus_check_nonnull(const void *ptr, const char *file, int line,
 void cplus_check_ptr_formation(const void *base, size_t count, int64_t index,
                                const char *file, int line, const char *expr);
 
+/* ABI-preserving registration of ordinary C allocations.  These helpers
+ * return/accept plain pointers; no pointer representation is changed. */
+void *cplus_register_allocation(void *p, size_t bytes, const char *file,
+                                int line);
+void cplus_free_registered(void *p, const char *file, int line);
+void *cplus_realloc_registered(void *oldp, void *newp, size_t bytes,
+                               const char *file, int line);
+
 /* -------------------------------------------------------------------------
  * Native checked signed arithmetic (not UBSan)
  *

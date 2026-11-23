@@ -1,6 +1,6 @@
 {
   "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-  "compiler_mtime_start": "2026-11-23 11:43:56 (epoch 1795414436)",
+  "compiler_mtime_start": "2026-11-23 12:23:06 (epoch 1795416786)",
   "results": [
     {"case":"a_array_decay_bounds","config":"check_default","status":"PASS","compile_rc":"1","run_rc1":"NA","run_rc2":"NA","reason":"PASS: rejected with asserted diagnostic [CPLUS-BOUNDS|array index 4]; proven OOB p[4] on decayed pointer with recorded extent 4 must be rejected statically"},
     {"case":"a_array_decay_bounds","config":"check_strict","status":"PASS","compile_rc":"1","run_rc1":"NA","run_rc2":"NA","reason":"PASS: rejected with asserted diagnostic [CPLUS-BOUNDS|array index 4]; proven OOB p[4] on decayed pointer with recorded extent 4 must be rejected statically"},

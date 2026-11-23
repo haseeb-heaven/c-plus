@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+size=24 a=0 b=4 c=8 d=16
+
+--- stderr ---
+

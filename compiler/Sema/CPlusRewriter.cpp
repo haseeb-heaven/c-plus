@@ -1655,6 +1655,25 @@ const std::vector<CheckedPointerSite> &checkedPointerSites() {
   return checkedPointerSiteRegistry();
 }
 
+std::vector<CheckedAllocSite> &checkedAllocSiteRegistry(bool freeSite) {
+  static std::vector<CheckedAllocSite> allocs;
+  static std::vector<CheckedAllocSite> frees;
+  return freeSite ? frees : allocs;
+}
+
+void setCheckedAllocSites(std::vector<CheckedAllocSite> sites) {
+  checkedAllocSiteRegistry(false) = std::move(sites);
+}
+const std::vector<CheckedAllocSite> &checkedAllocSites() {
+  return checkedAllocSiteRegistry(false);
+}
+void setCheckedFreeSites(std::vector<CheckedAllocSite> sites) {
+  checkedAllocSiteRegistry(true) = std::move(sites);
+}
+const std::vector<CheckedAllocSite> &checkedFreeSites() {
+  return checkedAllocSiteRegistry(true);
+}
+
 namespace {
 
 /// One text edit applied to the lowered C. `priority` orders nested edits at
@@ -1689,12 +1708,15 @@ std::string instrumentDynamicArrayBounds(
     const std::string &source,
     const std::map<std::string, size_t> &arrayLengths) {
   const std::vector<CheckedArithmeticSite> &arith = checkedArithmeticSites();
-  if (arrayLengths.empty() && arith.empty())
+  if (arrayLengths.empty() && arith.empty() &&
+      checkedPointerSites().empty() && checkedAllocSites().empty() &&
+      checkedFreeSites().empty())
     return source;
 
   std::vector<SafetyInsertion> insertions;
   bool haveBounds = false;
   bool havePtrFormation = false;
+  bool haveRuntimeRegistry = false;
 
   if (!arrayLengths.empty()) {
     std::vector<Token> toks = lexCPlus(source);
@@ -1778,6 +1800,39 @@ std::string instrumentDynamicArrayBounds(
                           "), " + std::to_string(site.bits) + ", " +
                               (site.isSigned ? "1" : "0") + "))", 0});
   }
+  // Route ABI-visible malloc/free calls through the runtime side table.  The
+  // helper returns the same pointer value, so no source semantics change.
+  const auto &allocSites = checkedAllocSites();
+  for (const CheckedAllocSite &site : allocSites) {
+    size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    if (!span)
+      continue;
+    if (site.isRealloc && !site.argText.empty()) {
+      insertions.push_back({site.begin, span, 0,
+                            "cplus_realloc_registered((" + site.argText +
+                                "), (", 0});
+      insertions.push_back({site.end, span, 2,
+                            "), " + std::to_string(site.bytes) +
+                                ", __FILE__, __LINE__)", 0});
+    } else {
+      insertions.push_back({site.begin, span, 0,
+                            "cplus_register_allocation((", 0});
+      insertions.push_back({site.end, span, 2,
+                            "), " + std::to_string(site.bytes) +
+                                ", __FILE__, __LINE__)", 0});
+    }
+    haveRuntimeRegistry = true;
+  }
+  const auto &freeSites = checkedFreeSites();
+  for (const CheckedAllocSite &site : freeSites) {
+    size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    if (!span)
+      continue;
+    std::string repl = "cplus_free_registered(" + site.argText +
+                       ", __FILE__, __LINE__)";
+    insertions.push_back({site.begin, span, 0, repl, span});
+    haveRuntimeRegistry = true;
+  }
   const auto &ptrSites = checkedPointerSites();
   for (const CheckedPointerSite &site : ptrSites) {
     size_t span = site.end > site.begin ? site.end - site.begin : 0;
@@ -1835,6 +1890,14 @@ std::string instrumentDynamicArrayBounds(
     prelude += "#include <stdint.h>\n"
                "extern void cplus_check_ptr_formation(const void *, size_t, "
                "int64_t, const char *, int, const char *);\n";
+  if (haveRuntimeRegistry)
+    prelude += "#include <stddef.h>\n"
+               "extern void *cplus_register_allocation(void *, size_t, "
+               "const char *, int);\n"
+               "extern void cplus_free_registered(void *, const char *, "
+               "int);\n"
+               "extern void *cplus_realloc_registered(void *, void *, "
+               "size_t, const char *, int);\n";
   if (!arith.empty()) {
     // The runtime helpers produce the deterministic trap, but an ordinary
     // cross-TU call on every operation is far too expensive in hot loops.

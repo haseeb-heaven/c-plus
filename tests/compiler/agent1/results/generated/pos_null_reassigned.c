@@ -1,10 +1,14 @@
+#include <stddef.h>
+extern void *cplus_register_allocation(void *, size_t, const char *, int);
+extern void cplus_free_registered(void *, const char *, int);
+extern void *cplus_realloc_registered(void *, void *, size_t, const char *, int);
 #line 1 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/null_reassigned.c"
 #include <stdlib.h>
 int main(void) {
     int *p = NULL;
-    p = malloc(sizeof(int));
+    p = cplus_register_allocation((malloc(sizeof(int))), 4, __FILE__, __LINE__);
     if (!p) return 1;
     *p = 7;
-    free(p);
+    cplus_free_registered(p, __FILE__, __LINE__);
     return 0;
 }

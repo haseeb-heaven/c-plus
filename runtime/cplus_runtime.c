@@ -95,6 +95,7 @@ void cplus_check_bounds(const void *base, size_t count, size_t index,
   cplus_print_fatal(CPLUS_EXIT_BOUNDS, "out-of-bounds access", file, line, buf);
 }
 
+
 void cplus_check_ptr_formation(const void *base, size_t count, int64_t index,
                                const char *file, int line, const char *expr) {
   (void)base;
@@ -388,6 +389,67 @@ static void cplus_live_grow(void) {
   cplus_live = fresh;
   cplus_live_cap = cap;
   cplus_live_deleted = 0;
+}
+
+void *cplus_register_allocation(void *p, size_t bytes, const char *file,
+                                int line) {
+  if (!p)
+    return p;
+  cplus_alloc_lock();
+  cplus_live_slot *existing = cplus_find_live(p);
+  if (existing) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", file,
+                      line, "pointer is already a live C+ allocation");
+  }
+  if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
+    cplus_live_grow();
+  cplus_live_insert(p, bytes);
+  cplus_alloc_unlock();
+  return p;
+}
+
+void *cplus_realloc_registered(void *oldp, void *newp, size_t bytes,
+                               const char *file, int line) {
+  if (!newp)
+    return newp; /* realloc failed: the old block is still live */
+  cplus_alloc_lock();
+  if (oldp) {
+    cplus_live_slot *old = cplus_find_live(oldp);
+    if (old) {
+      old->ptr = CPLUS_TOMBSTONE;
+      --cplus_live_count;
+      ++cplus_live_deleted;
+      cplus_recent[cplus_recent_index(oldp)] = oldp;
+    }
+  }
+  if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
+    cplus_live_grow();
+  cplus_live_insert(newp, bytes);
+  cplus_alloc_unlock();
+  return newp;
+}
+
+void cplus_free_registered(void *p, const char *file, int line) {
+  if (!p)
+    return;
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_find_live(p);
+  if (!slot) {
+    int recently_freed = cplus_recent[cplus_recent_index(p)] == p;
+    cplus_alloc_unlock();
+    if (recently_freed)
+      cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", file, line,
+                        "allocation released twice");
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", file, line,
+                      "pointer was not registered with the C+ runtime");
+  }
+  slot->ptr = CPLUS_TOMBSTONE;
+  --cplus_live_count;
+  ++cplus_live_deleted;
+  cplus_recent[cplus_recent_index(p)] = p;
+  cplus_alloc_unlock();
+  free(p);
 }
 
 void *cplus_alloc(size_t size) {

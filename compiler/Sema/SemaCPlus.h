@@ -105,6 +105,20 @@ struct CheckedPointerSite {
 void setCheckedPointerSites(std::vector<CheckedPointerSite> sites);
 const std::vector<CheckedPointerSite> &checkedPointerSites();
 
+/// An allocator/free call that the source instrumenter should route through
+/// the C+ runtime side table.  Pointer representation is never changed.
+struct CheckedAllocSite {
+  size_t begin = 0;
+  size_t end = 0;
+  unsigned long long bytes = 0;
+  std::string argText;
+  bool isRealloc = false;
+};
+void setCheckedAllocSites(std::vector<CheckedAllocSite> sites);
+const std::vector<CheckedAllocSite> &checkedAllocSites();
+void setCheckedFreeSites(std::vector<CheckedAllocSite> sites);
+const std::vector<CheckedAllocSite> &checkedFreeSites();
+
 /// Hand the sites found by checkAstSafety() to the source instrumenter.  The
 /// driver calls checkAstSafety() before instrumentDynamicArrayBounds() for
 /// every translation unit, so the registry is replaced for each TU.
