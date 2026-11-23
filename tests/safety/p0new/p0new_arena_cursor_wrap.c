@@ -1,6 +1,6 @@
 // scenario: p0new_arena_cursor_wrap
 // EXPECT: reject
-// DIAG: integer overflow in addition
+// DIAG: outside the bounds
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

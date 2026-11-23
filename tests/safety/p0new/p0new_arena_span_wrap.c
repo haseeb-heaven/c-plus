@@ -1,6 +1,6 @@
 // scenario: p0new_arena_span_wrap
-// EXPECT: reject
-// DIAG: integer overflow in multiplication
+// EXPECT: accept
+// DIAG: 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

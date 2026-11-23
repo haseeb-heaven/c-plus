@@ -300,6 +300,13 @@ else
   bad p0_correctness_suite "$(head -1 "$OUT/p0_correctness.log")"
 fi
 
+# Compile-time arithmetic safety (signed overflow, divide by zero), no UBSan.
+if python3 "$ROOT/tests/core/arithmetic_safety_suite.py" >"$OUT/arithmetic.log" 2>&1; then
+  ok arithmetic_suite
+else
+  bad arithmetic_suite "$(head -3 "$OUT/arithmetic.log")"
+fi
+
 # Paired negative/positive regressions for closed pointer/bounds/lifetime gaps.
 if python3 "$ROOT/tests/core/gap_close_suite.py" >"$OUT/gap_close.log" 2>&1; then
   ok gap_close_suite

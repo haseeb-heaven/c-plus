@@ -414,6 +414,60 @@ public:
     return true;
   }
 
+  /// Signed arithmetic result check with a wider intermediate type so the
+  /// overflow is seen before wrapping.
+  bool arithmeticOverflow(const Expr *op, long long a, long long b,
+                          bool &overflow) const {
+    unsigned w = ctx_.getIntWidth(op->getType());
+    if (w == 0 || w > 64)
+      return false;
+    __int128 lo = -((__int128)1 << (w - 1));
+    __int128 hi = ((__int128)1 << (w - 1)) - 1;
+    __int128 r = 0;
+    const auto *bo = dyn_cast<BinaryOperator>(op);
+    if (!bo) return false;
+    switch (bo->getOpcode()) {
+    case BO_Add: r = (__int128)a + b; break;
+    case BO_Sub: r = (__int128)a - b; break;
+    case BO_Mul: r = (__int128)a * b; break;
+    default: return false;
+    }
+    overflow = r < lo || r > hi;
+    return true;
+  }
+
+  /// A divisor is provably non-zero when it is a known constant, a variable
+  /// known non-zero on the current guarded path, or a loop counter whose
+  /// lower bound (plus a positive offset) keeps it away from zero.
+  bool provablyNonZero(const Expr *e) const {
+    llvm::APSInt v;
+    if (knownConst(e, v))
+      return !v.isZero();
+    const Expr *x = e->IgnoreParenCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+        if (nonZeroVars_.count(vd))
+          return true;
+        auto it = loopLowerBound_.find(vd);
+        if (it != loopLowerBound_.end() && it->second > 0)
+          return true;
+      }
+    if (const auto *bo = dyn_cast<BinaryOperator>(x)) {
+      llvm::APSInt off;
+      if (bo->getOpcode() == BO_Add &&
+          knownConst(bo->getRHS(), off) && !off.isNegative()) {
+        if (const auto *ref = dyn_cast<DeclRefExpr>(
+                bo->getLHS()->IgnoreParenCasts()))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+            auto it = loopLowerBound_.find(vd);
+            if (it != loopLowerBound_.end() && it->second >= 0)
+              return true;
+          }
+      }
+    }
+    return false;
+  }
+
   /// Record the byte extent of a heap allocation performed in a variable's
   /// initializer.  Called in both passes so the checking pass sees the same
   /// facts as the collection pass.
@@ -1324,7 +1378,18 @@ public:
         }
       }
     }
+    const VarDecl *ifGuardVar = nullptr;
+    if (report_ && s->getCond())
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              s->getCond()->IgnoreParenCasts()))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (vd->getType()->isIntegerType()) {
+            ifGuardVar = vd;
+            nonZeroVars_.insert(vd);
+          }
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
+    if (ifGuardVar)
+      nonZeroVars_.erase(ifGuardVar);
     guardedSnprintf_ = savedGuarded;
     if (keepErase) {
       // The branch we kept may itself assign `p = NULL` (RAII lowering does
@@ -1346,6 +1411,19 @@ public:
     const VarDecl *induction = nullptr;
     long long worstIndex = 0;
     bool haveBound = report_ && parseLoopBound(s, induction, worstIndex);
+    // Record the loop counter's starting value so divisions by the counter
+    // (or counter + positive offset) can be proved non-zero.
+    long long savedLower = 0;
+    bool hadLower = false;
+    if (report_ && induction && induction->getInit()) {
+      Expr::EvalResult lr;
+      if (induction->getInit()->EvaluateAsInt(lr, ctx_) && lr.Val.isInt()) {
+        auto it = loopLowerBound_.find(induction);
+        hadLower = it != loopLowerBound_.end();
+        if (hadLower) savedLower = it->second;
+        loopLowerBound_[induction] = lr.Val.getInt().getSExtValue();
+      }
+    }
     auto oldIt = loopIndexOverride_.find(induction);
     bool hadOld = oldIt != loopIndexOverride_.end();
     long long saved = hadOld ? oldIt->second : 0;
@@ -1358,6 +1436,13 @@ public:
       else
         loopIndexOverride_.erase(induction);
     }
+    if (report_ && induction && induction->getInit()) {
+      Expr::EvalResult lr;
+      if (induction->getInit()->EvaluateAsInt(lr, ctx_) && lr.Val.isInt()) {
+        if (hadLower) loopLowerBound_[induction] = savedLower;
+        else loopLowerBound_.erase(induction);
+      }
+    }
     --conditionalDepth_;
     return r;
   }
@@ -1365,7 +1450,18 @@ public:
     ++conditionalDepth_;
     if (!report_)
       collectMayRelease(s->getBody());
+    const VarDecl *guardVar = nullptr;
+    if (report_ && s->getCond())
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              s->getCond()->IgnoreParenCasts()))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (vd->getType()->isIntegerType()) {
+            guardVar = vd;
+            nonZeroVars_.insert(vd);
+          }
     bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
+    if (guardVar)
+      nonZeroVars_.erase(guardVar);
     --conditionalDepth_;
     return r;
   }
@@ -1598,13 +1694,7 @@ public:
                           ? (a != 0 && b > max / a)
                           : (a > max - b);
           if (over)
-            report(vd->getBeginLoc(),
-                   "integer overflow in " +
-                       std::string(bo->getOpcode() == BO_Mul ? "multiplication"
-                                                              : "addition") +
-                       " assigned to '" + vd->getNameAsString() +
-                       "'; the " + std::to_string(w) +
-                       "-bit result wraps before it is widened");
+            overflowingConstVars_.insert(vd->getNameAsString());
         }
       }
     }
@@ -1754,6 +1844,52 @@ public:
             }
       }
       return true;
+    }
+    // Compile-time arithmetic safety (STRICT fails closed; DEFAULT warns).
+    // This is C+ analysis, not UBSan instrumentation.
+    if (op->getType()->isIntegerType()) {
+      const auto opc = op->getOpcode();
+      auto asLL = [&](const Expr *e, long long &out) -> bool {
+        llvm::APSInt v;
+        if (!knownConst(e, v))
+          return false;
+        // For signed expressions interpret the stored bit pattern as signed
+        // even when Clang folded it into an unsigned APSInt.
+        out = op->getType()->isSignedIntegerType()
+                  ? v.getSExtValue()
+                  : (v.isNegative() ? v.getSExtValue() : v.getZExtValue());
+        return true;
+      };
+      if (op->getType()->isSignedIntegerType() &&
+          (opc == BO_Add || opc == BO_Sub || opc == BO_Mul)) {
+        long long a = 0, b = 0;
+        if (asLL(op->getLHS(), a) && asLL(op->getRHS(), b)) {
+          bool overflow = false;
+          if (arithmeticOverflow(op, a, b, overflow) && overflow) {
+            std::string msg = "signed integer overflow in ";
+            msg += (opc == BO_Add ? "addition" :
+                    opc == BO_Sub ? "subtraction" : "multiplication");
+            if (strict_) report(op->getBeginLoc(), msg);
+            else warnAt(op->getBeginLoc(), msg);
+          }
+        }
+      }
+      if (opc == BO_Div || opc == BO_Rem) {
+        llvm::APSInt dv;
+        bool known = knownConst(op->getRHS(), dv);
+        if (known && dv.isZero()) {
+          std::string msg = opc == BO_Div ? "division by zero"
+                                          : "remainder by zero";
+          if (strict_) report(op->getBeginLoc(), msg);
+          else warnAt(op->getBeginLoc(), msg);
+        } else if (!known && !provablyNonZero(op->getRHS())) {
+          std::string msg = opc == BO_Div
+                                ? "division by zero cannot be excluded"
+                                : "remainder by zero cannot be excluded";
+          if (strict_) report(op->getBeginLoc(), msg);
+          else warnAt(op->getBeginLoc(), msg);
+        }
+      }
     }
     // `p = reallocTemp` rebinds only the owner name; stale aliases stay dead.
     if (!reallocRebindOwner_.empty() && op->isAssignmentOp() &&
@@ -2595,6 +2731,15 @@ public:
                      "before allocating");
         }
       }
+      if ((baseName == "malloc" || baseName == "calloc" ||
+           baseName == "realloc") && call->getNumArgs() >= 1) {
+        unsigned sizeIdx = (baseName == "realloc") ? 1 : 0;
+        std::string n = varNameOf(call->getArg(sizeIdx)->IgnoreParenCasts());
+        if (overflowingConstVars_.count(n))
+          report(call->getBeginLoc(),
+                 "allocation size wraps size_t: '" + n +
+                     "' was computed with an overflowing constant expression");
+      }
       // fread/fwrite multiply size * count in size_t; a constant product that
       // wraps is a buffer-overflow / truncated-transfer bug.
       if (baseName == "fread" && call->getNumArgs() >= 1) {
@@ -3132,7 +3277,11 @@ public:
 private:
   static std::string diagnosticCategory(const std::string &message) {
     std::string category = "CPLUS-FFI";
-    if (message.find("double free") != std::string::npos ||
+    if (message.find("overflow") != std::string::npos ||
+        message.find("division by zero") != std::string::npos ||
+        message.find("remainder by zero") != std::string::npos)
+      category = "CPLUS-ARITH";
+    else if (message.find("double free") != std::string::npos ||
         message.find("invalid free") != std::string::npos)
       category = "CPLUS-OWNER";
     else if (message.find("use-after-move") != std::string::npos)
@@ -3265,6 +3414,9 @@ private:
   std::map<std::string, SourceLocation> releaseLocs_;
   std::set<const VarDecl *> stringPtrs_;
   std::map<const VarDecl *, unsigned long long> compoundLiteralVars_;
+  std::set<const VarDecl *> nonZeroVars_;
+  std::map<const VarDecl *, long long> loopLowerBound_;
+  std::set<std::string> overflowingConstVars_;
   std::map<std::string, HeapAllocState> heapAllocs_;
   std::set<const VarDecl *> heapWritten_;
   std::set<const VarDecl *> heapInterior_;

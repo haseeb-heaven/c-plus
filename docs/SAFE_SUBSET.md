@@ -32,6 +32,10 @@ see `docs/ISSUE21_EVIDENCE.md` for the base/version evidence.
   plain `goto`/`longjmp` with no cleanup obligation only warns;
 - safe-subset restrictions: raw `realloc(p,n)`, zero-size raw allocation.
 
+- signed integer overflow and division/remainder by zero are diagnosed at
+  compile time by C+ analysis (CPLUS-ARITH): STRICT rejects when safety cannot
+  be established, DEFAULT warns; unsigned modulo arithmetic is accepted.
+
 ## Dynamically enforced
 - managed double/invalid release (exit 104/105);
 - explicit `cplus_check_live` for stale managed aliases;

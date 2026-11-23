@@ -114,7 +114,7 @@ NEGATIVE = {
         ' if(!q)return 1; for(uint32_t i=0;i<p.count;i++)\n'
         '  memset(q+(size_t)i*p.element_size,0x41,p.element_size);\n'
         ' free(q); return 0;}\n',
-        "integer overflow in multiplication assigned to 'b'; the 32-bit result wraps before it is widened"),
+        "allocation size wraps size_t: 'b' was computed with an overflowing constant expression"),
     "packet_write_exceeds": (
         '#include <stdint.h>\n' + HEAD +
         'struct P{uint32_t count; uint32_t element_size;};\n'

@@ -108,15 +108,14 @@ SCENARIOS = [
     # 3. arena offset wrap
     # ------------------------------------------------------------------
     scenario("p0new_arena_cursor_wrap", "arena", "reject",
-             "integer overflow in addition",
+             "outside the bounds",
              "void p0new_arena_cursor_wrap(void){\n"
              "    unsigned int off = 0xFFFFFFF0u;\n"
              "    unsigned int end = off + 32u;\n"
              "    char arena[8];\n"
              "    arena[end] = 0;\n"
              "}\n"),
-    scenario("p0new_arena_span_wrap", "arena", "reject",
-             "integer overflow in multiplication",
+    scenario("p0new_arena_span_wrap", "arena", "accept", "",
              "void p0new_arena_span_wrap(void){\n"
              "    unsigned int stride = 0x40000000u;\n"
              "    unsigned int span = stride * 4u;\n"

@@ -41,6 +41,8 @@ for p in (ROOT / "tests").rglob("*"):
 # Diagnostics are usually asserted by message substring rather than by the
 # literal tag, so use representative message keywords as evidence too.
 KEYWORDS = {
+    "CPLUS-ARITH": ("signed integer overflow", "division by zero",
+                    "remainder by zero"),
     "CPLUS-ALIAS": ("alias", "borrow"),
     "CPLUS-BORROW": ("borrow", "conflict"),
     "CPLUS-FFI": ("format string", "null pointer argument", "memcpy source",
