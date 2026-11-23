@@ -32,4 +32,36 @@ Opt-in Annex K name aliases: define `CPLUS_SAFE_USE_ANNEX_K_NAMES` before includ
 ## Limits
 
 - Runtime checks do not prove raw pointer provenance, alias lifetimes, or unknown-capacity raw pointers; those belong to Agent 1 static analysis.
-- ASan, TSan, and libFuzzer require Linux CI (`.github/workflows/libc-crt.yml`) on this macOS arm64 host.
+- ASan, TSan, and libFuzzer require Linux CI (`.github/workflows/libc-crt.yml`) on this macOS arm64 host. In the final Agent 2 sanitizer matrix (`tests/stdlib/agent2/SANITIZER_MATRIX.md`) ASan, Leak, Thread, Memory and CFI are UNSUPPORTED by the driver probe on the selected backend (`/usr/bin/clang`, Apple clang 16 / arm64): 45 of 72 builds rejected, 0 of 9 selected tests executed under ASan. No ASan result is claimed here.
+
+## Integration inventory (2026-11-23)
+
+Source: `docs/stdlib/upstream-reuse.md` §4 and `docs/libc/AUDIT_FINDINGS_TRACKER.md`.
+Branch `agent/modern-stdlib`, PR #17 open (nothing pushed or merged).
+
+| Category | Count (of 437 vendored safeclib public APIs) |
+| --- | --- |
+| Integrated | 40 of 437 |
+| Adapter-only | 10 of 437 |
+| Not integrated | 387 of 437 |
+
+The 40 integrated APIs are the compiled checked backend built by
+`scripts/build_safecrt.sh` from rurban/safeclib; the 10 adapter-only entries
+are thin shims (e.g. checked-format adapters in `stdlib/safe/src/safe_format.c`).
+The 387 not-integrated entries remain vendored/provenance only and are **not**
+shipped as callable SafeCRT APIs. Intel SafeStringLib stays unlinked to avoid
+two competing implementations. No new upstream source was added in this cycle.
+
+Scope honesty:
+
+- SafeCRT is a checked slice, not a full ISO C replacement: 27 of 948 ISO C
+  APIs are MISSING and 49 of 948 UNSUPPORTED in `docs/libc/iso_c_inventory.json`.
+- 127 wrapper-safety findings exist: 17 of 127 FIXED, 46 of 127 OPEN, 7 of 127
+  GAP-COMPILER, 4 of 127 BLOCKED, 53 of 127 DOCUMENTED-CONTRACT.
+- Recorded verification: 50 of 50 Agent 2 runner tests PASS; 23 of 23 evidence
+  suites PASS; 23 of 27 executed sanitizer builds PASS, 4 of 27 FAIL under
+  `--sanitize=integer` (runtime hashing, outside Agent 2 scope).
+- Remote Linux CI, SonarCloud, Windows x86 and live-game results are
+  **UNVERIFIED**. Passing local tests are observed behaviour, not a memory-safety
+  proof. Agent 2 has stopped adding new stdlib surface; compiler-enforced
+  safety (P0/P1/P2) is Agent 1 work.

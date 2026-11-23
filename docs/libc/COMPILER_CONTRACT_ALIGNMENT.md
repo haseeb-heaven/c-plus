@@ -32,8 +32,8 @@ or runtime code.
 
 | File | Purpose |
 | --- | --- |
-| `libc/contracts/compiler_libc_contracts.json` | `schema_version: 1`, `source: "Agent 2 hardened libc"`, explanatory `note`, and 32 `apis` entries (the 29 required names plus `memcpy_s`, `strcpy_s`, `snprintf_s`). |
-| `tests/libc/test_compiler_contract_alignment.py` | Standalone schema/name/diagnostic/dynamic check; prints `compiler contract alignment: ok`. |
+| `libc/contracts/compiler_libc_contracts.json` | `schema_version: 1`, `source: "Agent 2 hardened libc"`, explanatory `note`, two additive top-level fields (`contract_semantics`, `implementation_symbols`), and 38 `apis` entries (the 29 required names plus `memcpy_s`, `strcpy_s`, `snprintf_s`, `vsnprintf`, and the checked allocators `malloc_s`, `calloc_s`, `realloc_s`, `free_s`, `aligned_alloc_s`). |
+| `tests/libc/test_compiler_contract_alignment.py` | Standalone schema/name/diagnostic/dynamic check plus P0 coverage, semantic-aspect and implementation-symbol checks; prints `compiler contract alignment: ok`. |
 | `docs/libc/COMPILER_CONTRACT_ALIGNMENT.md` | This document. |
 
 No existing contract file, compiler source, runtime source, or test was modified.
@@ -57,6 +57,59 @@ Each entry in `apis` has **exactly** the nine required keys (no omissions, no ex
 | `failure` | `{result_code, conditions:[...]}` | `NULL`/`-1`/`EOF`/short-count/`errno_t` sentinels plus the real errno/constraint paths: `ENOMEM`, `EINVAL`, `EOVERFLOW`, `EBADF`, `ERANGE`, `ESNOSPC 406`, UAF refusal (400), injected allocation failure. Sources: `libc/src/stdlib/alloc.c`, `libc/src/stdio/stdio.c`, `stdlib/safe/src/safe_memory.c`, `stdlib/safe/src/safe_string.c`, `stdlib/safe/src/safe_format.c`. |
 | `diagnostics` | Array of the five exact Agent 1 category strings | `free`: FREE/LIFETIME; `realloc`: REALLOC/LIFETIME; `memcpy`/`memmove`/`memset`/`memcmp`: BOUNDS; `strcpy`/`strncpy`/`strcat`/`strncat`: CRT; checked `_s` variants add LIFETIME. Read-only and format/file APIs carry an empty array — the library does not emit those categories for them. |
 | `dynamic` | `{checks:[...], limitations:[...]}` | Actual runtime guards only: `cplus_safe_reject_uaf` / `cplus_safe_ptr_was_freed`, bounded 1024-entry recent-free caches (open-addressed in `libc/src/stdlib/alloc.c`, direct-mapped in `stdlib/safe/src/safe_alloc.c`), `cplus_alloc_remaining_capacity` for live/interior heap pointers, `__builtin_object_size(p,1)`, unknown-capacity strict/default mode, ABA generation guard in `cplus_realloc`, allocation-failure injection, `size*nmemb` overflow guard in `fread`/`fwrite`, bounded 256-entry stdio live/closed tables, `%n`/non-literal-format checks in `cplus_*_s_checked`. |
+
+## P0 extension (Agent 1 integration, 2026-11-23)
+
+The 32-entry baseline was extended to **38 entries**. The six new entries are `vsnprintf`
+(ordinary, implemented by `cplus_vsnprintf`, `libc/src/stdio/stdio.c:191`) and the checked
+allocators `malloc_s`, `calloc_s`, `realloc_s`, `free_s`, `aligned_alloc_s`
+(`stdlib/safe/src/safe_alloc.c:158/183/217/241/319/352`). Every name in the user's P0
+list — `memcpy`, `memmove`, `memset`, `memcmp`, `strlen`, `strnlen`, `strcpy`, `strncpy`,
+`strcat`, `strncat`, `strcmp`, `strncmp`, `snprintf`, `vsnprintf`, `malloc_s`, `calloc_s`,
+`realloc_s`, `free_s`, `aligned_alloc_s` — is now present.
+
+Each entry encodes the eleven requested semantic aspects through the existing nine keys:
+argument types (`params[].type`), read/write behavior (`effects`), buffer sizes
+(`params[].extent`, `extent`), source/dest relationships (`effects`, `extent`), nullability
+(`params[].nullable`), ownership acquisition/release (`ownership`, `transfer`), borrowed
+arguments (`params[]` when `ownership` is `borrow`), returned pointer lifetime (`extent`,
+`failure`), allocation behavior (`effects`, `dynamic.checks`), error behavior (`failure`)
+and reallocation semantics (`transfer`, `effects`, `failure` on `realloc`/`realloc_s`).
+The ordinary allocator entries (`malloc`, `calloc`, `realloc`) were additionally given an
+explicit returned-pointer-lifetime clause in `extent`.
+
+Two **additive top-level fields** were introduced; neither changes the nine-key per-entry
+schema, so existing consumers that read only the original keys are unaffected:
+
+| Additive field | Purpose |
+| --- | --- |
+| `contract_semantics` | Machine-readable map from each of the eleven semantic aspects to the field(s) that encode it. `additive: true`; `per_api_keys` restates the unchanged nine-key schema. |
+| `implementation_symbols` | Maps every contract name to its concrete bundled implementation symbol. Ordinary C spellings map to distinct `cplus_*` symbols (the "cplus_* ordinary names where distinct"); the five checked allocators keep their own names because the safe layer defines `malloc_s`/`calloc_s`/`realloc_s`/`free_s`/`aligned_alloc_s` without a `cplus_` prefix (`stdlib/safe/safe_alloc.h:51-61`). |
+
+The six new entries state allocation/reallocation behavior, returned-pointer lifetime and
+error behavior explicitly, and each records in `dynamic.limitations` that it is
+schema-aligned only with no proof of compiler consumption.
+
+## Compiler-consumption evidence (honesty)
+
+This is the explicit split requested for the integration. **No contract in this file has a
+test proving that Agent 1's compiler consumes it.** The reason is concrete: Agent 1's
+`compiler/Analysis/libc_contracts.json` is absent on `agent/modern-stdlib` (only
+`BoundsAnalysis.cpp` and `OwnershipAnalysis.cpp` exist), so there is no compiler contract
+file to load and no compiler-side test to run here. The contents of that file were not
+fabricated.
+
+| Contracts | Test proving compiler consumption | Test present on this branch |
+| --- | --- | --- |
+| All 38 entries (`malloc` ... `aligned_alloc_s`) | **NONE** | Schema/name/aspect alignment only — `tests/libc/test_compiler_contract_alignment.py` (prints `compiler contract alignment: ok`). This test parses only `libc/contracts/compiler_libc_contracts.json`; it never opens or exercises the compiler. |
+
+Consequently all 38 entries are in the **schema-alignment-only** category. In particular:
+- The six P0 extension entries (`vsnprintf`, `malloc_s`, `calloc_s`, `realloc_s`, `free_s`,
+  `aligned_alloc_s`) are schema-aligned only.
+- The five `CPLUS-SAFE-*` diagnostic strings are referenceable from the alignment test's
+  `ALLOWED_DIAGNOSTICS` set; this does **not** prove Agent 1's checker emits them.
+- `validate_contracts.py` validates the five original contract files and does not include
+  this alignment file in `REQUIRED_FILES`.
 
 ## Honesty notes
 
@@ -88,7 +141,7 @@ $ echo $?
 0
 
 $ python3 tests/libc/validate_contracts.py
-contract validation: ok (5 files validated, 202 C17 APIs)
+contract validation: ok (5 files validated, 203 C17 APIs)
 $ echo $?
 0
 
@@ -109,18 +162,26 @@ compiler contract alignment: ok          # exit 0; contract path resolves from _
 
 `validate_contracts.py` was not edited. Its `REQUIRED_FILES` list still contains the
 original five files, so the new alignment file is deliberately outside that validator's
-scope; the standalone test above is the machine check for the new file.
+scope; the standalone test above is the machine check for the new file. The observed
+C17-API count (203) reflects the current branch state during parallel agent work; this
+integration changed none of those five files.
 
 ## Re-validation checklist for PR #16 merge
 
-1. Diff `compiler/Analysis/libc_contracts.json` against `apis` here; confirm the 29 names
-   and any extra checked names match.
+1. Diff `compiler/Analysis/libc_contracts.json` against `apis` here; confirm the 29 baseline
+   names, the P0 extension names and the extra checked names match.
 2. Confirm the checker's expected key spellings and value domains (especially `ownership`,
    `transfer`, `failure` and `dynamic`) match this file.
 3. Confirm the five `CPLUS-SAFE-*` strings are the exact text Agent 1 emits; adjust both
    the JSON and `ALLOWED_DIAGNOSTICS` in the test if the final text differs.
 4. Confirm whether the checker expects ordinary (`malloc`) or bundled (`cplus_malloc`)
-   names, and add a name alias field only if Agent 1 requires it (the current nine-key
-   contract forbids extra keys).
-5. Re-run all three verification commands above, then run the compiler-side contract
-   loading test from Agent 1's side.
+   names. If Agent 1 needs the symbol spelling, consume the additive top-level
+   `implementation_symbols` map; do not add a per-API key (the nine-key schema is exact and
+   the alignment test enforces it). If Agent 1 needs the eleven-aspect documentation,
+   consume the additive `contract_semantics` map.
+5. Confirm the six P0 extension entries (`vsnprintf` and the five checked allocators) match
+   the checked-function contracts on Agent 1's side, including `vsnprintf`'s `va_list`
+   parameter and the checked allocators' `RSIZE_MAX_MEM`/`EOVERFLOW` failure behavior.
+6. Re-run the three verification commands above, then run the compiler-side contract
+   loading test from Agent 1's side. Only after that test exists may any contract be
+   described as compiler-consumed rather than schema-aligned.

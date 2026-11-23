@@ -276,3 +276,56 @@ How to read these numbers:
 - data-race detection or a verified lock discipline;
 - constructors and destructors as first-class class members;
 - multi-TU resource type registration.
+
+## Agent 2 stdlib hardening status (2026-11-23)
+
+The following is the current, honest state of the stdlib safety-hardening
+work, recorded from `tests/stdlib/agent2/FINAL_AUDIT.md`,
+`docs/stdlib/TASK6_FINAL_REPORT.md`, `docs/stdlib/REGRESSION_INVENTORY.md`,
+`docs/libc/AUDIT_FINDINGS_TRACKER.md` and
+`tests/stdlib/agent2/SANITIZER_MATRIX.md`. Branch `agent/modern-stdlib`,
+**PR #17 open**, nothing pushed or merged. Agent 2 has stopped adding new
+stdlib surface; the priority has moved to compiler-enforced safety (P0/P1/P2,
+see `docs/STATUS.md` and `docs/libc/AGENT1_PRIORITY_HANDOFF.md`), which is
+Agent 1 work.
+
+What the recorded results actually cover (counts with denominators):
+
+- 50 of 50 runner tests PASS (`tests/stdlib/agent2/run_all.sh --clean`):
+  28 `deep_*.cp`, 11 `agent2/*.cp`, 11 curated existing tests, built
+  `--strict --sanitize=none` with timeouts and byte-exact fixtures.
+- 28 deep tests x 3 modes = 84 of 84 invocations PASS; 23 of 23 aggregate
+  evidence suites PASS.
+- Compile-time suite: 52 cases across 8 manifests — 6 of 9 REJECT as expected,
+  19 of 19 ACCEPT, 24 of 24 RUNTIME; **27 of 52** cases are compiler
+  capability/tagging gaps and are not counted as passes. An untagged rejection
+  is PARTIAL, not enforcement, and `ACCEPT` is not a proof of safety.
+- Sanitizer matrix: 72 builds attempted (9 tests x 8 configurations), 27 of
+  72 executed, 23 of 27 PASS, 4 of 27 FAIL under `--sanitize=integer`
+  (a genuine unsigned-overflow report in runtime hashing, outside Agent 2's
+  scope), 45 of 72 rejected at build as UNSUPPORTED. ASan, Leak, Thread,
+  Memory and CFI were rejected by the driver probe on `/usr/bin/clang`
+  (Apple clang 16 / arm64); 0 of 9 selected tests ran under ASan. UBSan
+  passing is not a memory-safety proof.
+
+What remains limited or unproven:
+
+- **stdlib API reachability is static, not executed**: 21 `stdlib/*.hp`
+  headers, 381 public callable entries; 255 of 381 have a static deep-test
+  call-site reference and 126 of 381 do not. Platform modules (async, audio,
+  graphics, gui, http, image, input, video, window) are static source
+  inspection only; no deep test includes them and no runtime safety claim is
+  made. Function-level runtime attribution for `.hp` headers is unavailable
+  on this host.
+- **127 audit findings**: 17 of 127 FIXED, 46 of 127 OPEN, 7 of 127
+  GAP-COMPILER, 4 of 127 BLOCKED, 53 of 127 DOCUMENTED-CONTRACT. A documented
+  contract is an inherent/caller-owned limit, not a code fix or a safety
+  claim. The 27 compile-time gaps and the RAII name-dedup defect need Agent 1.
+- **Safe CRT is a checked slice, not a full ISO C replacement**: 40 of 437
+  APIs integrated, 10 of 437 adapter-only, 387 of 437 not integrated.
+  ISO C inventory: 27 of 948 APIs MISSING, 49 of 948 UNSUPPORTED.
+- **ABI evidence**: 2 of 714 declared matrix rows; a 70-layout agreement test
+  measures layout only — no calling-convention or Windows x86 evidence.
+- **UNVERIFIED**: remote Linux CI, SonarCloud, Windows x86/live-game
+  (injected-DLL) results. Local green runs and emulator results are not
+  remote or live-game success, and no Rust-equivalence claim is made.

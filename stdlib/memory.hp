@@ -1,0 +1,227 @@
+/* C+ standard library: thin, additive bounds-aware memory helpers.
+ *
+ * This module does NOT redefine pointers and does NOT change any ABI.  A raw
+ * pointer stays a raw pointer: every helper below takes the allocation base
+ * plus an EXPLICIT byte offset and length, and reads the block's capacity from
+ * the metadata that stdlib_alloc / stdlib_calloc already record in
+ * stdlib/error.hp (stdlib_alloc_size, stdlib_alloc_query_length,
+ * stdlib_alloc_generation, stdlib_alloc_check_generation).  There is no fat
+ * pointer, no side table of our own, and no runtime change.
+ *
+ * What IS protected
+ * -----------------
+ *   - Blocks returned by stdlib_alloc / stdlib_calloc (and containers built on
+ *     them), because those are the blocks registered in the metadata table.
+ *   - Generation tokens handed back by stdlib_mem_token(); a stale token is
+ *     refused before the guarded operation touches memory.  Ownership
+ *     transfers invalidate tokens by design (the underlying
+ *     stdlib_transfer_ownership bumps the generation).
+ *
+ * What is NOT protected (documented, not a bug)
+ * ---------------------------------------------
+ *   - Arbitrary raw malloc()/stack/static pointers: they have no metadata, so
+ *     stdlib_alloc_size() returns 0 and every guarded helper refuses them.
+ *   - Uninstrumented precompiled C libraries: a library that writes through a
+ *     raw pointer never calls these helpers, so it bypasses the checks.  Only
+ *     writes issued through the stdlib_mem_* wrappers are checked.
+ *   - Interior pointers supplied WITHOUT their allocation base: metadata is
+ *     keyed by the exact base address, so callers must pass (base, offset)
+ *     rather than (base + offset) alone.
+ *
+ * All guarded operations are fail-closed: on any validation problem they set
+ * the supplied `error` object through error*() and return STDLIB_FAIL without
+ * performing the copy/move/set.  A successful call returns STDLIB_OK.
+ * Passing a NULL `error*` is allowed (the failure is still reported to the
+ * error callback / telemetry via stdlib_note).
+ */
+#ifndef CPLUS_STD_MEMORY_HP
+#define CPLUS_STD_MEMORY_HP
+
+#include <string.h>
+#include "stdlib/error.hp"
+
+/* ---- capacity / length queries (pure; never fail, never write) ---------- */
+
+/* Byte capacity of a tracked block, or 0 for NULL / untracked pointers.
+ * This is exactly stdlib_alloc_size(); it is exposed here so callers can size
+ * a buffer before a memcpy/memmove/memset without reaching into internals. */
+static inline size_t stdlib_mem_capacity(const void *ptr) {
+    return stdlib_alloc_size(ptr);
+}
+
+/* Element count for a tracked block. elem_size 0 means "use the allocation's
+ * recorded element size". Returns 0 on success (mirroring
+ * stdlib_alloc_query_length) and -1 for NULL/untracked; *out_count is set to 0
+ * on failure and is never left stale. */
+static inline int stdlib_mem_count(const void *ptr, size_t elem_size,
+                                   size_t *out_count) {
+    return stdlib_alloc_query_length(ptr, elem_size, out_count);
+}
+
+/* ---- generation tokens -------------------------------------------------- */
+
+/* Opaque generation stamp for a tracked block (0 for NULL/untracked).  Capture
+ * it once and pass it to a guarded helper to detect release/reallocation or an
+ * intervening ownership transfer. */
+static inline unsigned long long stdlib_mem_token(const void *ptr) {
+    return stdlib_alloc_generation(ptr);
+}
+
+/* Check ONLY the generation.  token == 0 opts out; otherwise the block must
+ * still exist with that exact generation.  Callers normally call the range
+ * check first so the pointer is known to be tracked. */
+static inline int stdlib_mem_check_token(const void *ptr,
+                                         unsigned long long token,
+                                         error *err) {
+    if (token != 0 && !stdlib_alloc_check_generation(ptr, token))
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "stdlib_mem_check: stale generation token"),
+               STDLIB_FAIL;
+    return STDLIB_OK;
+}
+
+/* Validate that `ptr` is still tracked AND, when `token` is non-zero, that its
+ * generation still matches.  token == 0 opts out of the generation check. */
+static inline int stdlib_mem_check(const void *ptr, unsigned long long token,
+                                   error *err) {
+    if (ptr == NULL || stdlib_alloc_size(ptr) == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_TYPE_CONFUSION,
+                              "stdlib_mem_check: pointer is not a tracked stdlib block"),
+               STDLIB_FAIL;
+    return stdlib_mem_check_token(ptr, token, err);
+}
+
+/* ---- internal range validation ----------------------------------------- */
+
+/* Check [off, off+n) against the tracked capacity of `ptr`.  Uses subtraction
+ * so offset+length can never overflow size_t.  is_dest selects the messages
+ * (destination vs source). */
+static inline int stdlib_mem_check_range(const void *ptr, size_t off, size_t n,
+                                         int is_dest, error *err) {
+    size_t cap;
+    if (ptr == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              is_dest ? "stdlib_mem: NULL destination pointer"
+                                      : "stdlib_mem: NULL source pointer"),
+               STDLIB_FAIL;
+    cap = stdlib_alloc_size(ptr);
+    if (cap == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_TYPE_CONFUSION,
+                              is_dest ? "stdlib_mem: destination is not a tracked stdlib block"
+                                      : "stdlib_mem: source is not a tracked stdlib block"),
+               STDLIB_FAIL;
+    if (off > cap)
+        return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                              is_dest ? "stdlib_mem: destination offset exceeds capacity"
+                                      : "stdlib_mem: source offset exceeds capacity"),
+               STDLIB_FAIL;
+    if (n > cap - off)
+        return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                              is_dest ? "stdlib_mem: write exceeds destination capacity"
+                                      : "stdlib_mem: read exceeds source capacity"),
+               STDLIB_FAIL;
+    return STDLIB_OK;
+}
+
+/* ---- guarded byte operations ------------------------------------------- */
+
+/* Copy n bytes from (src + src_off) to (dst + dst_off).  Both blocks must be
+ * tracked, both ranges must fit, and dst_token (when non-zero) must still be
+ * current.  Nothing is written unless every check passes.  n == 0 is a valid
+ * no-op AFTER validation.  Overlapping ranges are the caller's responsibility
+ * (use stdlib_mem_move for those). */
+static inline int stdlib_mem_copy(void *dst, size_t dst_off, const void *src,
+                                  size_t src_off, size_t n,
+                                  unsigned long long dst_token, error *err) {
+    if (stdlib_mem_check_range(dst, dst_off, n, 1, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (stdlib_mem_check_range(src, src_off, n, 0, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (stdlib_mem_check_token(dst, dst_token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (n == 0)
+        return STDLIB_OK;
+    memcpy((char *)dst + dst_off, (const char *)src + src_off, n);
+    return STDLIB_OK;
+}
+
+/* Like stdlib_mem_copy but uses memmove, so overlapping ranges are defined. */
+static inline int stdlib_mem_move(void *dst, size_t dst_off, const void *src,
+                                  size_t src_off, size_t n,
+                                  unsigned long long dst_token, error *err) {
+    if (stdlib_mem_check_range(dst, dst_off, n, 1, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (stdlib_mem_check_range(src, src_off, n, 0, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (stdlib_mem_check_token(dst, dst_token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (n == 0)
+        return STDLIB_OK;
+    memmove((char *)dst + dst_off, (const char *)src + src_off, n);
+    return STDLIB_OK;
+}
+
+/* Fill (dst + dst_off .. dst + dst_off + n) with `value`. */
+static inline int stdlib_mem_set(void *dst, size_t dst_off, int value, size_t n,
+                                 unsigned long long dst_token, error *err) {
+    if (stdlib_mem_check_range(dst, dst_off, n, 1, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (stdlib_mem_check_token(dst, dst_token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (n == 0)
+        return STDLIB_OK;
+    memset((char *)dst + dst_off, value, n);
+    return STDLIB_OK;
+}
+
+/* ---- borrow / own helpers ---------------------------------------------- */
+
+/* BORROW: non-owning validation of an interior sub-range.  Confirms `ptr` is a
+ * tracked block, that [off, off+n) fits, and (when token != 0) that the
+ * generation is current.  It does NOT transfer, release, or change any
+ * generation; the caller keeps ownership and must not free while the borrow is
+ * in use.  Returns STDLIB_OK / STDLIB_FAIL. */
+static inline int stdlib_mem_borrow(const void *ptr, size_t off, size_t n,
+                                    unsigned long long token, error *err) {
+    if (stdlib_mem_check_range(ptr, off, n, 1, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (stdlib_mem_check_token(ptr, token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    return STDLIB_OK;
+}
+
+/* OWN (transfer): thin, error-reporting wrapper over
+ * stdlib_transfer_ownership().  On success *dst receives the block, *src is
+ * set to NULL, and the block's generation is bumped (so any token captured
+ * before the transfer becomes stale).  On failure both handles are unchanged
+ * and `err` is set with the ownership category.  Requires *dst == NULL and
+ * *src to be a live stdlib block. */
+static inline int stdlib_mem_transfer(void **dst, void **src, error *err) {
+    if (dst == NULL || src == NULL || *dst != NULL || *src == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP,
+                              "stdlib_mem_transfer: invalid handles"),
+               STDLIB_FAIL;
+    if (stdlib_transfer_ownership(dst, src) != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP,
+                              "stdlib_mem_transfer: source is not a live stdlib block"),
+               STDLIB_FAIL;
+    return STDLIB_OK;
+}
+
+/* Release a stdlib block through `*ptr` and then NULL the handle, making
+ * repeated cleanup safe (a second call is a no-op).  Never call this on a raw
+ * malloc() pointer: use stdlib_alloc / stdlib_calloc for tracked blocks. */
+static inline void stdlib_mem_release(void **ptr) {
+    if (ptr == NULL || *ptr == NULL)
+        return;
+    stdlib_release(*ptr);
+    *ptr = NULL;
+}
+
+#endif /* CPLUS_STD_MEMORY_HP */

@@ -59,10 +59,21 @@ static int check_capacity(const char *api, const void *p, size_t need,
     return 0;
 }
 
+/* Guard (#2, AUDIT_memory_string.md): unknown capacity in default mode leaves
+ * n unchecked above check_capacity(), so still reject absurd lengths here -
+ * SIZE_MAX must never reach the raw copy/fill/compare loops. Known-capacity
+ * overflow was already refused (ERANGE) by check_capacity, so error precedence
+ * is unchanged. Same invariant as cplus_strncpy_bounded. */
+static int cplus_refuse_absurd_length(size_t n) {
+    if (n > RSIZE_MAX_MEM) { errno = EOVERFLOW; return 1; }
+    return 0;
+}
+
 void *cplus_memset_bounded(void *d, int v, size_t n, size_t known) {
     size_t cap = 0;
     if (!d) { errno = EINVAL; return NULL; }
     if (check_capacity("memset", d, n, known, &cap)) return NULL;
+    if (cplus_refuse_absurd_length(n)) return NULL;
     return cplus_memset(d, v, n);
 }
 
@@ -70,6 +81,7 @@ void *cplus_memcpy_bounded(void *d, const void *s, size_t n, size_t known) {
     size_t cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (check_capacity("memcpy", d, n, known, &cap)) return NULL;
+    if (cplus_refuse_absurd_length(n)) return NULL;
     return cplus_memcpy(d, s, n);
 }
 
@@ -77,6 +89,7 @@ void *cplus_memmove_bounded(void *d, const void *s, size_t n, size_t known) {
     size_t cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (check_capacity("memmove", d, n, known, &cap)) return NULL;
+    if (cplus_refuse_absurd_length(n)) return NULL;
     return cplus_memmove(d, s, n);
 }
 
@@ -86,6 +99,7 @@ int cplus_memcmp_bounded(const void *a, const void *b, size_t n,
     if (!a || !b) { errno = EINVAL; return 0; }
     if (check_capacity("memcmp(a)", a, n, known_a, &cap)) return 0;
     if (check_capacity("memcmp(b)", b, n, known_b, &cap)) return 0;
+    if (cplus_refuse_absurd_length(n)) return 0;
     return cplus_memcmp(a, b, n);
 }
 

@@ -411,6 +411,48 @@ static inline void *stdlib_calloc(size_t count, size_t element_size) {
     return p;
 }
 
+/* Resize a stdlib_alloc block while keeping the checked side table in sync.
+ * Unlike a raw cplus_realloc() call, a successful resize retires the OLD
+ * allocation identity and records the new address/size; a failed resize
+ * leaves the original block and its metadata completely untouched.
+ * Failure-atomic: on -1/NULL nothing in the table or the caller's state
+ * changes.  Zero-size requests map to one backing byte, like stdlib_alloc. */
+static inline void *stdlib_realloc(void *ptr, size_t bytes) {
+    size_t actual = bytes == 0 ? 1u : bytes;
+    size_t elem = 1u;
+    void *fresh;
+    if (actual > STDLIB_ALLOC_LIMIT) {
+        stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                    "stdlib_realloc: request exceeds STDLIB_ALLOC_LIMIT");
+        return NULL;
+    }
+    if (ptr == NULL)
+        return stdlib_alloc(bytes);
+    {
+        stdlib_meta_slot *s;
+        stdlib_meta_acquire();
+        s = stdlib_meta_find(ptr);
+        if (s == NULL) {
+            stdlib_meta_release_lock();
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "stdlib_realloc: pointer is not a live stdlib block");
+            return NULL;
+        }
+        elem = s->elem_size ? s->elem_size : 1u;
+        stdlib_meta_release_lock();
+    }
+    fresh = cplus_realloc(ptr, actual);
+    if (fresh == NULL)
+        return NULL;
+    if (fresh != ptr)
+        stdlib_meta_forget(ptr);
+    /* stdlib_meta_record bumps the generation even for an in-place resize,
+     * so stale generation tokens are refused after a successful call. */
+    stdlib_meta_record(fresh, actual, elem);
+    stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+    return fresh;
+}
+
 /* Safe length-query and ownership-transfer helpers for stdlib_alloc blocks. */
 static inline size_t stdlib_alloc_size(const void *ptr) {
     size_t n = 0;

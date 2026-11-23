@@ -1,7 +1,10 @@
 # Modern C+ standard library
 
-Owner: Agent 2 (branch `agent/modern-stdlib`).  Companion to
-[`STDLIB.md`](STDLIB.md), which is the API reference.
+Owner: Agent 2 (branch `agent/modern-stdlib`, **PR #17 open**; nothing pushed or
+merged). Companion to [`STDLIB.md`](STDLIB.md), which is the API reference.
+Agent 2 has stopped adding new stdlib surface; the current priority is
+compiler-enforced safety (P0/P1/P2), which is Agent 1 work — see
+[`STATUS.md`](STATUS.md) and `docs/libc/AGENT1_PRIORITY_HANDOFF.md`.
 
 Scope: `stdlib/`, the vendored upstream C libraries in `third_party/`, their
 tests and examples in `tests/stdlib/`, and the interfaces this layer needs from
@@ -211,6 +214,16 @@ calls them).  Gate: **>= 80% per library** — current worst is 88.9%.
 | string | 95.0% |
 | video | 92.0% |
 
+The table above is the older `coverage.py` test-and-example surface measure.
+The authoritative deep-test snapshot
+(`docs/stdlib/REGRESSION_INVENTORY.md`) is a **static call-site inventory** with
+denominators: 21 `stdlib/*.hp` headers, 381 public callable entries, 255 of
+381 with a static deep-test call-site reference (234 literal calls + 21
+compiler-inserted `drop()` credits) and 126 of 381 without. It is not execution
+coverage, branch coverage or a safety proof; function-level runtime attribution
+for `.hp` headers is unavailable on this host. No new coverage percentage is
+claimed here.
+
 Suite state on this branch:
 
 ```
@@ -220,6 +233,15 @@ tests/stress/cplus_breaker_v3      -> 25 passed, 0 failed
 tests/stress/cplus_stress_10       -> 10 passed, 0 failed
 tests/cp_breaker.sh                -> 24 passed, 0 failed
 ```
+
+> **Current status note (2026-11-23).** The figures above are an earlier
+> point-in-time snapshot. For current status, §10 records the authoritative
+> final results from `tests/stdlib/agent2/FINAL_AUDIT.md` and
+> `docs/stdlib/TASK6_FINAL_REPORT.md`: 50 of 50 Agent 2 runner tests PASS,
+> 28 deep tests x 3 modes = 84 of 84 invocations PASS, 23 of 23 evidence suites
+> PASS, and compiler tests recorded at 150 of 150. The older 109/1 compiler
+> snapshot and the `classic_bug34_longjmp` discussion below are historical and
+> concern Agent 1's compiler area, not the stdlib contents of this document.
 
 `classic_bug34_longjmp` is a **baseline** failure, verified unchanged here:
 `git diff origin/develop...HEAD -- compiler/` is empty (the compiler is
@@ -269,5 +291,45 @@ runtime - not in the library.
 
 The build recipe does help where it can: vendored libraries are compiled once
 (`third_party/*_impl.c`), so no test or application re-lowers yyjson,
-miniaudio, stb, Nuklear or SDL3.  The stdlib itself is header-only apart from
+miniaudio, stb, Nuklear or SDL3.
+
+## 10. Final hardening status (2026-11-23)
+
+Branch `agent/modern-stdlib`, **PR #17 open**, nothing pushed or merged. Agent 2
+has stopped adding new stdlib surface. The user's current priority order is
+compiler-enforced safety — P0 (UAF/double-free, CFG ownership, pointer bounds,
+alias analysis, cross-function lifetime), P1 (cross-TU analysis, definite
+initialization, strict-safe mode, thread-safety), P2 (fuzzing/differential
+testing, Linux/macOS/Windows verification, performance vs Clang and Fil-C) —
+which is Agent 1 work. See `docs/STATUS.md` and
+`docs/libc/AGENT1_PRIORITY_HANDOFF.md` for the full mapping and reproducers.
+
+Recorded results (counts with denominators):
+
+| Area | Count with denominator | Recorded result |
+| --- | --- | --- |
+| Agent 2 aggregate runner | 50 of 50 tests (28 deep + 11 `agent2/*.cp` + 11 curated existing) | 50 PASS, 0 FAIL/BUILD_FAILURE/TIMEOUT/SKIPPED/BLOCKED |
+| Deep stdlib runner | 28 tests x 3 modes = 84 of 84 invocations | 84 passed, 0 failed, 0 skipped |
+| Aggregate evidence | 23 of 23 suites | 23 passed, 0 failed |
+| Compile-time suite | 52 cases / 8 manifests: 6 of 9 REJECT, 19 of 19 ACCEPT, 24 of 24 RUNTIME | 27 of 52 capability/tagging gaps not counted as passes |
+| Sanitizer matrix | 72 builds attempted (9 tests x 8 configurations); 27 of 72 executed | 23 of 27 PASS, 4 of 27 FAIL under `--sanitize=integer`; 45 of 72 UNSUPPORTED |
+
+Inventory and gaps: 21 stdlib headers / 381 callable entries / 255 of 381
+statically referenced / 126 of 381 not; 127 audit findings (17 of 127 FIXED,
+46 of 127 OPEN, 7 of 127 GAP-COMPILER, 4 of 127 BLOCKED, 53 of 127
+DOCUMENTED-CONTRACT); SafeCRT 40 of 437 integrated, 10 of 437 adapter-only,
+387 of 437 not integrated; ISO C 27 of 948 MISSING and 49 of 948 UNSUPPORTED;
+sanitizers ASan/Leak/Thread/Memory/CFI UNSUPPORTED on the selected backend
+(0 of 9 tests ran under ASan).
+
+**UNVERIFIED**: remote Linux CI, SonarCloud, Windows x86 ABI/DLL behaviour and
+live-game (injected-DLL) results. Overall verdict remains **PARTIALLY COMPLETE**
+— all runnable library tests pass and every fix has a regression, but compiler
+gaps, 46 open findings, untested platform modules, unsupported sanitizers and
+unverified remote gates remain. Source of truth:
+`tests/stdlib/agent2/FINAL_AUDIT.md`, `docs/stdlib/TASK6_FINAL_REPORT.md`,
+`docs/stdlib/REGRESSION_INVENTORY.md`, `docs/stdlib/upstream-reuse.md`,
+`docs/libc/AUDIT_FINDINGS_TRACKER.md`,
+`tests/stdlib/agent2/results/summary.txt` and
+`tests/stdlib/agent2/SANITIZER_MATRIX.md`.  The stdlib itself is header-only apart from
 the compiled-once upstream units.

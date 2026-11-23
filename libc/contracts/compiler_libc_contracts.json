@@ -1,7 +1,64 @@
 {
   "schema_version": 1,
   "source": "Agent 2 hardened libc",
-  "note": "Additive alignment file for Agent 1's compiler schema (issue #22 comment, agent/modern-stdlib branch). Agent 1 added compiler/Analysis/libc_contracts.json (29 ordinary + checked APIs) and asked Agent 2 to emit libc/contracts with the keys params, ownership, transfer, extent, effects, failure, diagnostics and dynamic. This file mirrors those names/signatures for the ordinary C spellings implemented by the bundled cplus_* symbols; it does not replace the existing v1/v2 contract files. Names and parameter order match the standard C headers so Agent 1 can map format argument indices. 'dynamic' records checks this library actually performs at runtime (bounded recent-free caches, tracked remaining capacity, __builtin_object_size, unknown-capacity mode); it is NOT a claim of compile-time enforcement. Diagnostic strings are the CPLUS-SAFE-* categories requested by Agent 1. Agent 1's compiler file is not present on this branch, so this schema must be re-validated when PR #16 merges.",
+  "note": "Additive alignment file for Agent 1's compiler schema (issue #22 comment, agent/modern-stdlib branch). Agent 1 added compiler/Analysis/libc_contracts.json (29 ordinary + checked APIs) and asked Agent 2 to emit libc/contracts with the keys params, ownership, transfer, extent, effects, failure, diagnostics and dynamic. This file mirrors those names/signatures for the ordinary C spellings implemented by the bundled cplus_* symbols; it does not replace the existing v1/v2 contract files. Names and parameter order match the standard C headers so Agent 1 can map format argument indices. 'dynamic' records checks this library actually performs at runtime (bounded recent-free caches, tracked remaining capacity, __builtin_object_size, unknown-capacity mode); it is NOT a claim of compile-time enforcement. Diagnostic strings are the CPLUS-SAFE-* categories requested by Agent 1. Agent 1's compiler file is not present on this branch, so this schema must be re-validated when PR #16 merges. Additive extension (2026-11-23, Agent 1 P0 integration): added vsnprintf and the checked allocators malloc_s/calloc_s/realloc_s/free_s/aligned_alloc_s (38 entries total). Two additive top-level keys, contract_semantics and implementation_symbols, document how the required semantic aspects map to the nine per-API keys and which concrete bundled symbol implements each contract; no per-API key was added or removed, so the nine-key schema is unchanged. Compiler consumption of this file CANNOT be proven on this branch: compiler/Analysis/libc_contracts.json is absent and the only machine check is tests/libc/test_compiler_contract_alignment.py (schema/name alignment), which does not load or exercise the compiler.",
+  "contract_semantics": {
+    "additive": true,
+    "per_api_keys": "unchanged: name, params, ownership, transfer, extent, effects, failure, diagnostics, dynamic",
+    "aspects": {
+      "argument_types": "params[].type (standard C spelling; variadic tail uses name/type '...')",
+      "read_write_behavior": "effects[] (writes/reads/no-allocation markers)",
+      "buffer_sizes": "params[].extent and top-level extent",
+      "source_dest_relationships": "effects[] and extent (dest/src, overlap policy, src NUL termination)",
+      "nullability": "params[].nullable",
+      "ownership_acquisition_release": "ownership (returns_owned/consumes/borrow) and transfer",
+      "borrowed_args": "params[] of entries whose ownership is 'borrow'",
+      "returned_pointer_lifetime": "extent and failure for owning APIs: caller owns the returned block until free/free_s; invalidated by a successful realloc/realloc_s",
+      "allocation_behavior": "effects[] (allocates/zero-init/frees-on-success) and dynamic.checks",
+      "error_behavior": "failure.result_code and failure.conditions[]",
+      "reallocation_semantics": "transfer, effects[] and failure.conditions[] on realloc and realloc_s"
+    }
+  },
+  "implementation_symbols": {
+    "malloc": "cplus_malloc",
+    "calloc": "cplus_calloc",
+    "realloc": "cplus_realloc",
+    "free": "cplus_free",
+    "memcpy": "cplus_memcpy",
+    "memmove": "cplus_memmove",
+    "memset": "cplus_memset",
+    "memcmp": "cplus_memcmp",
+    "strcpy": "cplus_strcpy",
+    "strncpy": "cplus_strncpy",
+    "strcat": "cplus_strcat",
+    "strncat": "cplus_strncat",
+    "strlen": "cplus_strlen",
+    "strnlen": "cplus_strnlen",
+    "strcmp": "cplus_strcmp",
+    "strncmp": "cplus_strncmp",
+    "strchr": "cplus_strchr",
+    "strstr": "cplus_strstr",
+    "printf": "cplus_printf",
+    "fprintf": "cplus_fprintf",
+    "snprintf": "cplus_snprintf",
+    "vsnprintf": "cplus_vsnprintf",
+    "sprintf": "cplus_sprintf",
+    "scanf": "cplus_scanf",
+    "fscanf": "cplus_fscanf",
+    "sscanf": "cplus_sscanf",
+    "fopen": "cplus_fopen",
+    "fclose": "cplus_fclose",
+    "fread": "cplus_fread",
+    "fwrite": "cplus_fwrite",
+    "memcpy_s": "cplus_memcpy_s",
+    "strcpy_s": "cplus_strcpy_s",
+    "snprintf_s": "cplus_snprintf_s",
+    "malloc_s": "malloc_s",
+    "calloc_s": "calloc_s",
+    "realloc_s": "realloc_s",
+    "free_s": "free_s",
+    "aligned_alloc_s": "aligned_alloc_s"
+  },
   "apis": [
     {
       "name": "malloc",
@@ -15,7 +72,7 @@
       ],
       "ownership": "returns_owned",
       "transfer": "return",
-      "extent": "size bytes of writable storage",
+      "extent": "size bytes of writable storage; returned pointer is owned by the caller until free/free_s and is invalidated by a successful realloc/realloc_s",
       "effects": [
         "allocates",
         "records live metadata (byte_size, elem_size, generation)"
@@ -60,7 +117,7 @@
       ],
       "ownership": "returns_owned",
       "transfer": "return",
-      "extent": "nmemb*size bytes (overflow-checked), zero-initialised",
+      "extent": "nmemb*size bytes (overflow-checked), zero-initialised; returned pointer is owned by the caller until free/free_s and is invalidated by a successful realloc/realloc_s",
       "effects": [
         "allocates",
         "zero-init",
@@ -107,7 +164,7 @@
       ],
       "ownership": "returns_owned",
       "transfer": "success-only old alias invalid",
-      "extent": "size bytes; old payload preserved up to min(old,new)",
+      "extent": "size bytes; old payload preserved up to min(old,new); new pointer owned by the caller until free/free_s, old alias invalid only on success and untouched on failure",
       "effects": [
         "allocates",
         "frees-on-success",
@@ -1588,6 +1645,308 @@
           "Double/invalid-free classification uses a bounded 1024-entry recent-free cache (open-addressed in alloc.c, direct-mapped in safe_alloc.c); collisions or address recycling can misclassify it.",
           "Format-specifier/argument type agreement is not proven by the runtime checks.",
           "The plain snprintf entry point has no dmax-vs-capacity or literal-format check; only the _s/checked macro path does."
+        ]
+      }
+    },
+    {
+      "name": "vsnprintf",
+      "params": [
+        {
+          "name": "str",
+          "type": "char*",
+          "nullable": true,
+          "extent": "size writable bytes; NULL allowed iff size == 0 (destination)"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "destination capacity in bytes (buffer size)"
+        },
+        {
+          "name": "fmt",
+          "type": "const char*",
+          "nullable": false,
+          "extent": "NUL-terminated format string (source)"
+        },
+        {
+          "name": "ap",
+          "type": "va_list",
+          "nullable": false,
+          "extent": "argument list already started by the caller (source)"
+        }
+      ],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size bytes at str; native vsnprintf truncation and NUL termination; str stays caller-owned (return is int, not a pointer)",
+      "effects": [
+        "writes up to size bytes of str (destination)",
+        "reads fmt and ap arguments (sources)",
+        "no allocation and no reallocation are performed"
+      ],
+      "failure": {
+        "result_code": "int (characters that would have been written; negative on error, errno=EINVAL)",
+        "conditions": [
+          "NULL fmt or (size > 0 && str == NULL) sets errno=EINVAL and returns -1",
+          "native vsnprintf truncation is reported by its return value, not as an error",
+          "native format errors return a negative value; ap validity is a caller obligation"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "null-format and dest/size guards in cplus_vsnprintf (libc/src/stdio/stdio.c:191) before delegating to the host vsnprintf",
+          "host vsnprintf enforces the size bound and writes the terminating NUL",
+          "checked cplus_vsnprintf_s (stdlib/safe/src/safe_format.c:136) adds UAF refusal, dmax-vs-capacity checks and %n rejection"
+        ],
+        "limitations": [
+          "Plain cplus_* implementations are selectively linked and do not interpose the host CRT; unless the opt-in macros are enabled, standard C undefined behaviour (overlap, unterminated input, stale pointers) stays a caller obligation.",
+          "No allocation, reallocation or returned-pointer lifetime applies: the function returns an int and str remains owned by the caller.",
+          "The plain vsnprintf does not verify that size matches the real destination capacity; va_list validity and argument/format agreement are caller obligations.",
+          "Format-string validity beyond null/freedom, literal-format and %n is not proven; the compiler-side non-literal format diagnostic (CPLUS-FFI, CWE-134) is Agent 1's control.",
+          "This contract is schema-aligned only; no test on this branch proves Agent 1's compiler consumes it."
+        ]
+      }
+    },
+    {
+      "name": "malloc_s",
+      "params": [
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "size bytes (0 maps to one backing byte); must not exceed RSIZE_MAX_MEM"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "size bytes of writable storage (0 -> 1 byte); returned pointer is owned by the caller until free/free_s and is invalidated by a successful realloc/realloc_s",
+      "effects": [
+        "allocates",
+        "records live metadata (byte_size, elem_size=1, generation) in the safe allocator table",
+        "no source/destination argument is borrowed"
+      ],
+      "failure": {
+        "result_code": "NULL (errno=EINVAL or ENOMEM)",
+        "conditions": [
+          "size > RSIZE_MAX_MEM: EINVAL, no allocation",
+          "injected failure (cplus_safe allocation injection) or host malloc NULL: ENOMEM, no allocation",
+          "no metadata is recorded on failure"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "size > RSIZE_MAX_MEM is refused before allocating (cplus_safe/src/safe_alloc.c:158), errno=EINVAL",
+          "should_fail() injection path and host malloc NULL result are checked, errno=ENOMEM",
+          "finish_alloc records byte_size, elem_size=1 and a generation in the bounded safe allocator table",
+          "stdlib/safe/safe_c.h maps the opt-in macro malloc(sz) to malloc_s(sz)"
+        ],
+        "limitations": [
+          "The safe allocator table is bounded and metadata checks are heuristic (live table, generation counters, bounded recent-free cache); they do not prove pointer provenance or arbitrary-alias safety.",
+          "size==0 is mapped to one backing byte, not a zero-byte allocation.",
+          "The returned block must be released with free_s (or the opt-in free macro); host free of a malloc_s pointer bypasses the table and can leave a stale live record.",
+          "Plain cplus_* ordinary implementations are selectively linked and do not interpose the host CRT; malloc_s is the checked counterpart, not a compile-time proof.",
+          "This contract is schema-aligned only; no test on this branch proves Agent 1's compiler consumes it."
+        ]
+      }
+    },
+    {
+      "name": "calloc_s",
+      "params": [
+        {
+          "name": "count",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "number of elements"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "bytes per element"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "count*size bytes (overflow-checked), zero-initialised; returned pointer is owned by the caller until free/free_s and is invalidated by a successful realloc/realloc_s",
+      "effects": [
+        "allocates",
+        "zero-init via the host calloc",
+        "records elem_size for length queries in the safe allocator table",
+        "no source/destination argument is borrowed"
+      ],
+      "failure": {
+        "result_code": "NULL (errno=EOVERFLOW or ENOMEM)",
+        "conditions": [
+          "count*size overflows SIZE_MAX or exceeds RSIZE_MAX_MEM: EOVERFLOW, no allocation",
+          "injected failure or host calloc NULL: ENOMEM, no allocation",
+          "zero count or size maps to one backing byte with elem_size=1"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "count > SIZE_MAX/size and product > RSIZE_MAX_MEM are refused before multiplication (cplus_safe/src/safe_alloc.c:183), errno=EOVERFLOW",
+          "should_fail() injection path and host calloc NULL result are checked, errno=ENOMEM",
+          "finish_alloc records total bytes, elem_size=size and a generation",
+          "stdlib/safe/safe_c.h maps the opt-in macro calloc(n,sz) to calloc_s(n,sz)"
+        ],
+        "limitations": [
+          "Overflow is reported as EOVERFLOW here, unlike the plain cplus_calloc which reports ENOMEM.",
+          "The safe allocator table is bounded and metadata checks are heuristic (live table, generation counters, bounded recent-free cache); they do not prove pointer provenance or arbitrary-alias safety.",
+          "The returned block must be released with free_s; host free bypasses the table and can leave a stale live record.",
+          "Plain cplus_* ordinary implementations are selectively linked and do not interpose the host CRT; calloc_s is the checked counterpart, not a compile-time proof.",
+          "This contract is schema-aligned only; no test on this branch proves Agent 1's compiler consumes it."
+        ]
+      }
+    },
+    {
+      "name": "realloc_s",
+      "params": [
+        {
+          "name": "ptr",
+          "type": "void*",
+          "nullable": true,
+          "extent": "block from malloc_s/calloc_s/realloc_s or NULL; borrowed as the ownership-transfer source"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "new size in bytes (0 -> 1); must not exceed RSIZE_MAX_MEM"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "success-only old alias invalid",
+      "extent": "size bytes (0 -> 1); old payload preserved up to min(old,new); new pointer owned by caller until free_s, old pointer invalid only on success and untouched on failure",
+      "effects": [
+        "allocates",
+        "frees-on-success",
+        "preserves the old block, metadata and payload on failure",
+        "preserves elem_size and uses an ABA generation guard on metadata update"
+      ],
+      "failure": {
+        "result_code": "NULL (errno=EINVAL or ENOMEM), old block untouched",
+        "conditions": [
+          "size > RSIZE_MAX_MEM: EINVAL, owner preserved",
+          "ptr not owned by this allocator: EINVAL, owner untouched",
+          "injected failure, metadata-table reservation failure or host realloc failure: ENOMEM, owner preserved",
+          "ptr==NULL delegates to malloc_s"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-REALLOC] realloc warnings",
+        "[CPLUS-SAFE-LIFETIME] use-after-free"
+      ],
+      "dynamic": {
+        "checks": [
+          "tab_find_addr refuses stale/unowned pointers with EINVAL before calling host realloc (cplus_safe/src/safe_alloc.c:241)",
+          "injection and tab_reserve_one failure leave the owner untouched; host realloc failure leaves the original pointer, metadata and payload intact",
+          "ABA generation guard: only the slot with the original generation may be updated after the lock is released",
+          "stdlib/safe/safe_c.h maps the opt-in macro realloc(p,sz) to realloc_s(p,sz)"
+        ],
+        "limitations": [
+          "The ABA guard protects metadata updates only, not the unlocked host realloc call; cross-allocator use is undefined behaviour.",
+          "Generation-based alias invalidation is not pointer-provenance invalidation.",
+          "Metadata checks are heuristic (bounded live table, generation counters, bounded recent-free cache); they do not prove arbitrary-alias safety.",
+          "The returned/new pointer is owned by the caller until free_s; the old alias is valid only until a successful realloc_s.",
+          "Plain cplus_* ordinary implementations are selectively linked and do not interpose the host CRT; realloc_s is the checked counterpart, not a compile-time proof.",
+          "This contract is schema-aligned only; no test on this branch proves Agent 1's compiler consumes it."
+        ]
+      }
+    },
+    {
+      "name": "free_s",
+      "params": [
+        {
+          "name": "ptr",
+          "type": "void*",
+          "nullable": true,
+          "extent": "block from malloc_s/calloc_s/realloc_s or NULL; ownership is released on success"
+        }
+      ],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": "n/a (releases the returned-pointer lifetime of an owned block)",
+      "effects": [
+        "frees",
+        "invalidates live metadata",
+        "NULL pointer is a no-op",
+        "no allocation and no reallocation are performed"
+      ],
+      "failure": {
+        "result_code": "void (no return status); free_checked_s returns CPLUS_SAFE_EINVAL",
+        "conditions": [
+          "NULL is accepted as a no-op",
+          "double free or invalid pointer: free_checked_s refuses, errno=EINVAL, host free not called",
+          "free_s discards the free_checked_s status; use free_checked_s(void*) to observe refusal"
+        ]
+      },
+      "diagnostics": [
+        "[CPLUS-SAFE-FREE] double free of <var>",
+        "[CPLUS-SAFE-LIFETIME] use-after-free"
+      ],
+      "dynamic": {
+        "checks": [
+          "free_s delegates to free_checked_s: tab_find must locate a live slot before host free is called (cplus_safe/src/safe_alloc.c:319)",
+          "g_recent recent-free cache distinguishes recent double frees from invalid frees and increments the matching counter",
+          "stdlib/safe/safe_c.h maps the opt-in macro free(p) to free_s(p)"
+        ],
+        "limitations": [
+          "Double/invalid-free classification uses a bounded recent-free cache; collisions or address recycling can misclassify it.",
+          "free_s discards the EINVAL status; the checked free_checked_s returns it, whereas cplus_free_checked(void**) also nulls the caller pointer.",
+          "Host free of a malloc_s/calloc_s/realloc_s pointer bypasses the table and can leave a stale live record.",
+          "Plain cplus_* ordinary implementations are selectively linked and do not interpose the host CRT; free_s is the checked counterpart, not a compile-time proof.",
+          "This contract is schema-aligned only; no test on this branch proves Agent 1's compiler consumes it."
+        ]
+      }
+    },
+    {
+      "name": "aligned_alloc_s",
+      "params": [
+        {
+          "name": "alignment",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "power of two and at least sizeof(void*)"
+        },
+        {
+          "name": "size",
+          "type": "size_t",
+          "nullable": false,
+          "extent": "size bytes (0 -> 1); must not exceed RSIZE_MAX_MEM"
+        }
+      ],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "size bytes (0 -> 1) aligned to alignment; returned pointer is owned by the caller until free/free_s and is invalidated by a successful realloc/realloc_s",
+      "effects": [
+        "allocates via posix_memalign",
+        "records live metadata (byte_size, elem_size=1, generation) in the safe allocator table",
+        "no source/destination argument is borrowed"
+      ],
+      "failure": {
+        "result_code": "NULL (errno=EINVAL or ENOMEM)",
+        "conditions": [
+          "alignment < sizeof(void*), non-power-of-two alignment, or size > RSIZE_MAX_MEM: EINVAL, no allocation",
+          "injected failure or posix_memalign failure / NULL result: ENOMEM, no allocation"
+        ]
+      },
+      "diagnostics": [],
+      "dynamic": {
+        "checks": [
+          "alignment < sizeof(void*) || (alignment & (alignment-1)) != 0 || size > RSIZE_MAX_MEM is refused (cplus_safe/src/safe_alloc.c:217), errno=EINVAL",
+          "should_fail() injection path and posix_memalign result are checked, errno=ENOMEM",
+          "finish_alloc records the aligned block, byte_size, elem_size=1 and a generation"
+        ],
+        "limitations": [
+          "posix_memalign is a platform-backed primitive; alignment and errno behaviour are platform-dependent.",
+          "size==0 is mapped to one backing byte, not a zero-byte allocation.",
+          "The safe allocator table is bounded and metadata checks are heuristic; they do not prove pointer provenance or arbitrary-alias safety.",
+          "The returned block must be released with free_s; host free bypasses the table and can leave a stale live record.",
+          "Plain cplus_* ordinary implementations are selectively linked and do not interpose the host CRT; aligned_alloc_s is the checked counterpart, not a compile-time proof.",
+          "This contract is schema-aligned only; no test on this branch proves Agent 1's compiler consumes it."
         ]
       }
     }

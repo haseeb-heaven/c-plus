@@ -15,3 +15,35 @@ Evidence-based matrix for the shipped SafeCRT and hardened libc slice. Not a ful
 | `cplus_fread_s` / `cplus_fwrite_s` | CHECKED ADAPTER (Annex K `bmax`) | `stdlib/safe/safe_io.h` | `stdlib/safe/src/safe_io.c` | `test_iofam_stream.c`, `test_io50_clamp_bmax.c` | `fuzz_stdio.c` | Clamps `count` to `bmax / size` |
 | `cplus_snprintf_s` / `vsnprintf_s` / `sprintf_s` / `vsprintf_s` | CHECKED BOUNDED ADAPTER | `stdlib/safe/safe_format.h` | `stdlib/safe/src/safe_format.c` | `test_safe_format.c`, `test_allocfmt_roundtrip.c` | `fuzz_format.c` | C99 bounded NUL-terminated formatting |
 | `cplus_runtime_guard` / `cplus_runtime_push_cleanup` | RUNTIME RECOVERY + CLEANUP | `stdlib/safe/safe_runtime.h` | `stdlib/safe/src/safe_runtime.c` | `test_runtime_recover.c`, `test_runtime_cleanup.c` | — | LIFO cleanup stack; fail-stop mode supported |
+
+## Integration and verification inventory (2026-11-23)
+
+Branch `agent/modern-stdlib`, PR #17 open (nothing pushed or merged). The table
+above lists the shipped slice only; counts below give the full denominator so
+the slice is not mistaken for a complete CRT.
+
+| Category | Count (of 437 vendored safeclib public APIs) |
+| --- | --- |
+| Integrated | 40 of 437 |
+| Adapter-only | 10 of 437 |
+| Not integrated | 387 of 437 |
+
+- This is **not** a full ISO C replacement: 27 of 948 APIs MISSING and 49 of
+  948 UNSUPPORTED in `docs/libc/iso_c_inventory.json`.
+- Wrapper-safety findings: 127 total — 17 of 127 FIXED, 46 of 127 OPEN, 7 of
+  127 GAP-COMPILER, 4 of 127 BLOCKED, 53 of 127 DOCUMENTED-CONTRACT
+  (`docs/libc/AUDIT_FINDINGS_TRACKER.md`).
+- Recorded verification: 50 of 50 Agent 2 runner tests PASS (28 deep + 11
+  `agent2/*.cp` + 11 curated existing); 28 deep tests x 3 modes = 84 of 84
+  invocations PASS; 23 of 23 evidence suites PASS. Compile-time suite: 52
+  cases across 8 manifests with 27 of 52 capability/tagging gaps not counted
+  as passes.
+- Sanitizer matrix (`tests/stdlib/agent2/SANITIZER_MATRIX.md`): 72 builds
+  attempted (9 tests x 8 configurations), 27 of 72 executed, 23 of 27 PASS,
+  4 of 27 FAIL under `--sanitize=integer` (runtime hashing, outside Agent 2
+  scope), 45 of 72 rejected at build as UNSUPPORTED. ASan is UNSUPPORTED on
+  this backend: 0 of 9 selected tests executed under it.
+- Remote Linux CI, SonarCloud, Windows x86 and live-game results are
+  **UNVERIFIED**; a local pass is not a remote result or a memory-safety proof.
+  Agent 2 has stopped adding new stdlib surface; compiler-enforced safety
+  (P0/P1/P2) is Agent 1 work (`docs/libc/AGENT1_PRIORITY_HANDOFF.md`).

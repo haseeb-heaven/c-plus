@@ -1,0 +1,7 @@
+abi_cplus_add
+abi_cplus_record_by_value
+abi_cplus_record_by_ptr
+abi_cplus_meta_write
+abi_c_mul
+abi_c_record_by_value
+abi_c_record_by_ptr
