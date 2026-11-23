@@ -1,0 +1,1 @@
+[CPLUS-SAFE] memcpy_s: use-after-free detected (pointer 0x103145090 was already freed)

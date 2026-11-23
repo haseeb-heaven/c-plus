@@ -24,6 +24,64 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 
+/* ---- Upstream-derived growth / invariant helpers (Microsoft STL) ---------
+ *
+ * Both helpers below are adaptations of two concrete Microsoft STL algorithms
+ * (see tests/stdlib/upstream_reuse/vector_stl_NOTES.md for exact URLs, revision
+ * and license).  They are re-expressed in strict C+ with size_t arithmetic: no
+ * templates, no exceptions, no allocator_traits and no raw-game offsets.
+ *
+ *  - vector_allocation_bytes  <- <xmemory> _Get_size_of_n<sizeof(int)>
+ *  - vector_calculate_growth  <- <vector> vector::_Calculate_growth
+ *
+ * The multiplication check is the division form of the upstream
+ * `_Count > static_cast<size_t>(-1) / _Ty_size` predicate, with
+ * STDLIB_ALLOC_LIMIT substituting for SIZE_MAX.  The growth guard is the same
+ * subtraction form used upstream: compare the current capacity against
+ * (ceiling - step) before adding, so the test itself cannot overflow.
+ */
+
+/* Checked byte count for `count` ints (the _Get_size_of_n adaptation).
+ * 0 on success (bytes written to *out_bytes), -1 when the product would exceed
+ * STDLIB_ALLOC_LIMIT.  The caller performs no arithmetic before this guard. */
+static inline int vector_allocation_bytes(size_t count, size_t *out_bytes) {
+    size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+    if (count > max_count) {
+        stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                    "vector: element count exceeds allocation limit");
+        return -1;
+    }
+    *out_bytes = sizeof(int) * count;
+    return 0;
+}
+
+/* Geometric growth with a subtraction-form overflow guard, a demand floor and
+ * saturation at the ceiling (the _Calculate_growth adaptation).
+ *
+ * Upstream shape:
+ *   if (_Oldcapacity > _Max - _Oldcapacity / 2) return _Max;
+ *   _Geometric = _Oldcapacity + _Oldcapacity / 2;
+ *   if (_Geometric < _Newsize) return _Newsize;
+ *   return _Geometric;
+ *
+ * C+ keeps its documented 2x step (oldcapacity + oldcapacity) rather than the
+ * upstream 1.5x step; the guard, demand floor and saturation structure is the
+ * ported invariant.  `newsize` is expected to be <= the ceiling (reserve()
+ * re-checks it); the result is therefore always a usable capacity. */
+static inline size_t vector_calculate_growth(size_t oldcapacity, size_t newsize) {
+    size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+    size_t geometric;
+    if (oldcapacity >= max_count)
+        return max_count; /* already at the ceiling */
+    /* Subtraction form: would oldcapacity + oldcapacity exceed max_count? */
+    if (oldcapacity > max_count - oldcapacity)
+        return max_count; /* geometric growth would overflow -> saturate */
+    geometric = oldcapacity + oldcapacity;
+    if (geometric < newsize)
+        return newsize; /* geometric growth insufficient -> demand floor */
+    return geometric; /* geometric growth sufficient */
+}
+
 /* Borrowed, bounds-checked window over ints.  It never owns storage and is
  * invalidated by the owner's growth or destruction. */
 class slice {
@@ -110,19 +168,21 @@ class vector {
      * overflow or allocation failure with the vector untouched. */
     int reserve(size_t want) {
         int *fresh;
+        size_t bytes = 0;
         size_t i;
         if (want <= this->space)
             return 0;
-        if (want > STDLIB_ALLOC_LIMIT / sizeof(int)) {
-            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
-                        "vector::reserve: capacity too large");
+        /* Commit-last guard: validate the product and allocate/copy FIRST; the
+         * owning fields are published only after every fallible step succeeds
+         * (upstream _Allocation_guard / _Reallocation_guard2 discipline). */
+        if (vector_allocation_bytes(want, &bytes) != 0)
             return -1;
-        }
-        fresh = (int *)stdlib_alloc(sizeof(int) * want);
+        fresh = (int *)stdlib_alloc(bytes);
         if (fresh == NULL)
             return -1;
         for (i = 0; i < this->used; i++)
             fresh[i] = this->items[i];
+        /* ---- commit point: nothing above can leave the vector modified ---- */
         if (this->items != NULL)
             stdlib_release(this->items);
         this->items = fresh;
@@ -134,15 +194,20 @@ class vector {
 
     int push_back(int value) {
         if (this->used == this->space) {
-            size_t want = 4;
-            if (this->space > 0) {
-                if (this->space > (STDLIB_ALLOC_LIMIT / sizeof(int)) / 2) {
-                    stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
-                                "vector::push_back: capacity overflow");
-                    return -1;
-                }
-                want = this->space * 2;
+            size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+            size_t newsize;
+            size_t want;
+            /* Upstream equivalent of the `_Oldsize == max_size()` -> `_Xlength()`
+             * guard, plus C+'s documented conservative half-limit policy. */
+            if (this->used >= max_count || this->space > max_count / 2) {
+                stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                            "vector::push_back: capacity overflow");
+                return -1;
             }
+            newsize = this->used + 1;
+            if (newsize < 4)
+                newsize = 4; /* C+ minimum initial capacity */
+            want = vector_calculate_growth(this->space, newsize);
             if (vector_reserve(this, want) != 0)
                 return -1;
         }
@@ -192,12 +257,17 @@ class vector {
         if (index > this->used)
             return -1;
         if (this->used == this->space) {
-            size_t want = 4;
-            if (this->space > 0) {
-                if (this->space > (STDLIB_ALLOC_LIMIT / sizeof(int)) / 2)
-                    return -1;
-                want = this->space * 2;
-            }
+            size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+            size_t newsize;
+            size_t want;
+            /* Same _Xlength() + half-limit guards as push_back (no note here,
+             * matching this method's historical silent-refusal behaviour). */
+            if (this->used >= max_count || this->space > max_count / 2)
+                return -1;
+            newsize = this->used + 1;
+            if (newsize < 4)
+                newsize = 4; /* C+ minimum initial capacity */
+            want = vector_calculate_growth(this->space, newsize);
             if (vector_reserve(this, want) != 0)
                 return -1;
         }
@@ -241,9 +311,10 @@ class vector {
         if (other == this)
             return 0;
         if (other->used > 0) {
-            if (other->used > STDLIB_ALLOC_LIMIT / sizeof(int))
+            size_t bytes = 0;
+            if (vector_allocation_bytes(other->used, &bytes) != 0)
                 return -1;
-            fresh = (int *)stdlib_alloc(sizeof(int) * other->used);
+            fresh = (int *)stdlib_alloc(bytes);
             if (fresh == NULL)
                 return -1;
             for (i = 0; i < other->used; i++)
@@ -262,6 +333,7 @@ class vector {
      * valid when the smaller allocation fails). */
     int shrink_to_fit(void) {
         int *fresh;
+        size_t bytes = 0;
         size_t i;
         if (this->space == this->used)
             return 0;
@@ -273,7 +345,9 @@ class vector {
             this->generation++;
             return 0;
         }
-        fresh = (int *)stdlib_alloc(sizeof(int) * this->used);
+        if (vector_allocation_bytes(this->used, &bytes) != 0)
+            return -1;
+        fresh = (int *)stdlib_alloc(bytes);
         if (fresh == NULL)
             return -1;
         for (i = 0; i < this->used; i++)

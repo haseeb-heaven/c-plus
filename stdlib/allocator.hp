@@ -228,6 +228,114 @@ static inline int stdlib_alloc_view_transfer_ok(void **dst, void **src) {
     return stdlib_alloc_view_live(*src) ? 1 : 0;
 }
 
+/* ---- Fil-C-style capability / liveness queries (read-only) --------------- */
+
+/* UPSTREAM TECHNIQUE PORTED HERE
+ * -------------------------------
+ * Fil-C's stable introspection API (github.com/pizlonator/fil-c, branch
+ * `deluge`, filc/include/stdfil.h, filc/src/runtime.c) answers liveness and
+ * bounds QUESTIONS from capability metadata without dereferencing the pointer:
+ *
+ *     filc_bool zhasvalidcap(void* ptr);
+ *       "Tells if the pointer has a capability and that capability is not free."
+ *     static inline filc_bool zvalinbounds(void* ptr, size_t size);
+ *       lower <= ptr, ptr < upper, and size <= (upper - ptr).
+ *     static inline filc_bool zinbounds(void* ptr);
+ *       ptr >= zgetlower(ptr) && ptr < zgetupper(ptr).
+ *
+ * `zgc_free` documents the corresponding FREE BIT/state change: free does not
+ * reclaim memory immediately, it collapses upper==lower and sets the free flag
+ * so every later access traps; the GC may then repoint dangling pointers at the
+ * "free singleton" capability.  Thus "freed" is a queryable metadata state,
+ * not a property of the pointer's integer value, and the query never reads the
+ * freed bytes.
+ *
+ * C+ has no invisible capabilities, but stdlib/error.hp already keeps the
+ * exact-base side table (`stdlib_meta_slot`) with precisely this state: a live
+ * slot has `generation != 0`; `stdlib_meta_forget` (called by `stdlib_release`)
+ * tombstones it with `STDLIB_META_TOMB`, zeroes byte_size/elem_size/generation
+ * and decrements `meta_live`.  That tombstone-plus-zero-generation is C+'s free
+ * bit.  The functions below port the SAME contract onto that existing table:
+ * they classify an address from side metadata, NEVER dereference `ptr`, never
+ * change the pointer representation or ABI, and add no allocation state of
+ * their own.  Like every other view here they are fail-closed diagnostic
+ * hints, not a safety proof, and do not guard raw memory writes.
+ *
+ * Because the side table is keyed by the EXACT base, an interior pointer (or a
+ * raw malloc/stack/static address) has no slot and is indistinguishable from
+ * a never-allocated address -- exactly as zhasvalidcap() reports false for a
+ * capability-less value.  Pass (base, offset), never (base + offset). */
+
+/* Result of a metadata capability query.  `NONE` covers NULL, untracked,
+ * interior, freed, reallocated and transferred pointers; `LIVE` is the exact
+ * analogue of "has a non-free capability". */
+#define STDLIB_ALLOC_CAP_NONE 0
+#define STDLIB_ALLOC_CAP_LIVE 1
+
+/* Classify `ptr` from the side table without dereferencing it.  LIVE iff an
+ * exact-base live slot exists (the C+ analogue of a valid, non-free
+ * capability); NONE otherwise.  A single lock acquisition keeps the answer a
+ * consistent point-in-time diagnostic. */
+static inline int stdlib_alloc_cap_state(const void *ptr) {
+    int state = STDLIB_ALLOC_CAP_NONE;
+    stdlib_meta_slot *s;
+    if (ptr == NULL)
+        return STDLIB_ALLOC_CAP_NONE;
+    stdlib_meta_acquire();
+    s = stdlib_meta_find(ptr);
+    if (s != NULL)
+        state = STDLIB_ALLOC_CAP_LIVE;
+    stdlib_meta_release_lock();
+    return state;
+}
+
+/* Faithful C+ port of Fil-C `zhasvalidcap()`: 1 only if `ptr` currently has a
+ * live, non-free allocation state in the side table.  0 for NULL, an
+ * interior/untracked address, or a pointer that was freed, reallocated or
+ * transferred (all of which clear or change the slot's generation).  Never
+ * dereferences `ptr`, so querying a stale pointer is itself safe. */
+static inline int stdlib_alloc_hasvalidcap(const void *ptr) {
+    return stdlib_alloc_cap_state(ptr) == STDLIB_ALLOC_CAP_LIVE ? 1 : 0;
+}
+
+/* C+ port of Fil-C `zvalinbounds()`, expressed as (base, offset, size) so no
+ * pointer arithmetic or cast is needed: 1 only if `ptr` is a live tracked base
+ * and [offset, offset + size) lies inside its recorded byte capacity.  The
+ * test is `offset <= cap && size <= cap - offset`, so the sum cannot overflow
+ * (the same overflow-safe form as zvalinbounds' `size <= upper - ptr`).
+ * 0 for NULL/untracked/interior/freed bases, for offset > capacity, and for a
+ * range that runs past the end.  Zero-length probes still require a live base,
+ * which is deliberate: this is an allocation-STATE diagnostic, not merely an
+ * arithmetic bounds check. */
+static inline int stdlib_alloc_cap_covers(const void *ptr, size_t offset,
+                                          size_t size) {
+    size_t cap;
+    if (ptr == NULL)
+        return 0;
+    cap = stdlib_alloc_size(ptr);
+    if (cap == 0 || offset > cap)
+        return 0;
+    return size <= cap - offset ? 1 : 0;
+}
+
+/* Non-fatal analogue of Fil-C's guarantee that any access through a stale or
+ * free-singleton capability traps: 1 only if `ptr` STILL has the same live,
+ * non-free capability that was captured as `gen`, covering [offset, offset +
+ * size).  That means: a non-NULL base, a non-zero captured generation, a live
+ * exact-base slot whose generation still equals `gen`, and an in-range access.
+ * 0 for NULL/gen == 0, untracked/interior pointers, and any pointer freed,
+ * reallocated or transferred since the generation was captured -- including a
+ * recycled address whose new generation no longer matches.  Never dereferences
+ * `ptr`.  This is a check-before-use protocol aid, not a safety proof. */
+static inline int stdlib_alloc_cap_check(const void *ptr, unsigned long long gen,
+                                         size_t offset, size_t size) {
+    if (ptr == NULL || gen == 0)
+        return 0;
+    if (stdlib_alloc_check_generation(ptr, gen) != 1)
+        return 0;
+    return stdlib_alloc_cap_covers(ptr, offset, size);
+}
+
 /* ---- telemetry snapshot helpers ----------------------------------------- */
 
 /* All-zero template for clearing a stats snapshot without pointer subscripts. */

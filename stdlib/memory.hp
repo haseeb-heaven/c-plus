@@ -62,6 +62,7 @@
 #ifndef CPLUS_STD_MEMORY_HP
 #define CPLUS_STD_MEMORY_HP
 
+#include <stdint.h>
 #include <string.h>
 #include "stdlib/error.hp"
 
@@ -116,6 +117,135 @@ static inline int stdlib_mem_check(const void *ptr, unsigned long long token,
                               "stdlib_mem_check: pointer is not a tracked stdlib block"),
                STDLIB_FAIL;
     return stdlib_mem_check_token(ptr, token, err);
+}
+
+/* ---- SoftBoundCETS-style bounded queries (explicit base/size) ----------- */
+/* Technique ported from santoshn/softboundcets-34, master
+ * 9a9c09f04e16f2d1ef3a906fd138a7b89df44996, softboundcets-lib/softboundcets.h:
+ *
+ *   L539/L555:  if ((ptr < base) || ((char*)ptr + size_of_type) > bound) abort();
+ *   L576/L620:  if (dest < dest_base || dest > ((char*)dest_bound - size) ||
+ *                   (size > (size_t)dest_bound)) abort();
+ *   L1004/L1037: if (*lock != key) abort();          // temporal CETS check
+ *   L1078:      *lock = 0;                            // on free: invalidate
+ *   L1182/L1193: key = ++key_id_counter; *lock = key; // on allocation
+ *
+ * Only the CHECK PREDICATES are ported, not the mechanism.  Upstream keeps
+ * {base,bound,key,lock} in an mmap'd trie, uses a shadow-stack calling
+ * convention and aborts on violation.  C+ keeps a one-word raw pointer and
+ * its existing stdlib/error.hp side table: callers pass an explicit base and
+ * size (or the (base, offset) pair), and a captured generation plays the role
+ * of the CETS key while the live metadata generation is the lock.
+ *
+ * Strict-safety differences from the literal upstream expressions:
+ *   - No relational comparison between unrelated pointers: addresses are
+ *     converted to uintptr_t first, so `ptr < base` is well defined for
+ *     pointers into distinct objects.  (In strict C/C++ the raw comparison is
+ *     unspecified; the subtract form below never computes base+size either.)
+ *   - The upper test uses subtraction (`off > size` then `n > size - off`),
+ *     so offset+length cannot wrap around size_t.
+ *   - No abort/backtrace: queries are pure 1/0 predicates, and the err-taking
+ *     wrapper reports through error*()/stdlib_note like every other helper.
+ */
+
+/* Pure spatial predicate over an EXPLICIT (base, size).  Returns 1 iff the
+ * half-open subrange [off, off+n) fits in [0, size).  A NULL base or size 0
+ * is an empty/untracked span and fails closed (mirrors upstream's zeroed
+ * metadata miss on a trie lookup). */
+static inline int stdlib_mem_span_ok(const void *base, size_t size,
+                                     size_t off, size_t n) {
+    if (base == NULL || size == 0)
+        return 0;
+    if (off > size)
+        return 0;
+    if (n > size - off)
+        return 0;
+    return 1;
+}
+
+/* Pure containment query for an INTERIOR pointer, again over an explicit
+ * (base, size).  Returns 1 iff [ptr, ptr+n) lies inside [base, base+size).
+ * `ptr` is only compared as an integer address; it is never dereferenced.
+ * A one-past-end pointer with n == 0 is accepted (upstream's `p + size >
+ * bound` also admits exactly one-past for a zero-sized access). */
+static inline int stdlib_mem_span_contains(const void *base, size_t size,
+                                           const void *ptr, size_t n) {
+    uintptr_t b;
+    uintptr_t p;
+    uintptr_t delta;
+    if (base == NULL || ptr == NULL || size == 0)
+        return 0;
+    b = (uintptr_t)base;
+    p = (uintptr_t)ptr;
+    if (p < b)
+        return 0;
+    delta = p - b;
+    if (delta > (uintptr_t)size)
+        return 0;
+    return stdlib_mem_span_ok(base, size, (size_t)delta, n);
+}
+
+/* Pure spatial query over EXISTING metadata: recover the tracked block's
+ * explicit (base, size).  base == ptr and size == recorded byte capacity, the
+ * local equivalent of upstream metadata_load(base, bound).  Returns 0 on
+ * success and -1 for NULL/untracked pointers, zeroing both outputs so a
+ * failed query can never leave a caller with a stale base/size. */
+static inline int stdlib_mem_bounds(const void *ptr, const void **base,
+                                    size_t *size) {
+    size_t cap;
+    if (base != NULL)
+        *base = NULL;
+    if (size != NULL)
+        *size = 0;
+    if (ptr == NULL || base == NULL || size == NULL)
+        return -1;
+    cap = stdlib_alloc_size(ptr);
+    if (cap == 0)
+        return -1;
+    *base = ptr;
+    *size = cap;
+    return 0;
+}
+
+/* Pure temporal (CETS) query: `key` is a generation captured earlier, the
+ * live metadata generation is the "lock".  Returns 1 iff the key still
+ * matches the block's lock.  key == 0 opts out, exactly as for
+ * stdlib_mem_check_token().  Confirmed stale generations report
+ * STDLIB_CATEGORY_LIFECYCLE through the wrapper below; this predicate stays
+ * side-effect free. */
+static inline int stdlib_mem_key_current(const void *ptr,
+                                         unsigned long long key) {
+    if (key == 0)
+        return 1;
+    return stdlib_alloc_check_generation(ptr, key) != 0;
+}
+
+/* Combined bounded query -- the C+ counterpart of upstream's
+ * spatial+temporal dereference check.  It derives the explicit (base, size)
+ * from the side table, applies the ported spatial predicate to [off, off+n),
+ * then applies the ported key/lock check.  Nothing is read or written; on
+ * failure the error object is set (NULL err is allowed -- stdlib_note still
+ * reports it) and STDLIB_FAIL is returned. */
+static inline int stdlib_mem_query(const void *ptr, size_t off, size_t n,
+                                   unsigned long long key, error *err) {
+    const void *base = NULL;
+    size_t size = 0;
+
+    if (stdlib_mem_bounds(ptr, &base, &size) != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_TYPE_CONFUSION,
+                              "stdlib_mem_query: pointer is not a tracked stdlib block"),
+               STDLIB_FAIL;
+    if (!stdlib_mem_span_ok(base, size, off, n))
+        return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                              "stdlib_mem_query: range exceeds tracked bounds"),
+               STDLIB_FAIL;
+    if (!stdlib_mem_key_current(ptr, key))
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "stdlib_mem_query: stale generation key"),
+               STDLIB_FAIL;
+    return STDLIB_OK;
 }
 
 /* ---- internal range validation ----------------------------------------- */
