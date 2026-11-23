@@ -24,15 +24,22 @@ Pin caveat: `docs/CORE_SAFETY.md` pins LLVM at `14fee62eb543…` (LLVM
 that is reconciled. Corrections to the earlier audit: the Apple transform
 `TransformDynamicCountWithFunctionArgument` is implemented at the bottom of
 `DynamicCountPointerAssignmentAnalysis.cpp` (`:3693`, `:3698`), not in a
-separate file; a separate `DynamicCountPointerAssignmentAnalysisExported.{h,cpp}`
-pair does exist at both Apple pins. 3C's solver entry is `graphBasedSolve` at
+separate file. At both Apple pins the header lives in `clang/lib/Sema/` (not
+`clang/include/clang/Sema/`); a separate
+`DynamicCountPointerAssignmentAnalysisExported.h` does live in
+`clang/include/clang/Sema/` with its `.cpp` in `clang/lib/Sema/`. 3C's solver entry is `graphBasedSolve` at
 `clang/lib/3C/Constraints.cpp:307` with the worklist `doSolve` at `:160`.
 The Apple pin `f63645674df40e2ffa4e30a4b49110ace071c1a3` is a real
-`swiftlang/llvm-project` commit whose tree does carry the full bounds-safety
-implementation (confirmed by first-hand tree listing); the design docs are
-`.rst` files there, whereas at local pin `ca74e488…` they are `.md`. All line
-numbers in this document were read at `ca74e488…` and should be re-verified if
-the project standardises on `f6364567…`.
+`swiftlang/llvm-project` commit; `git ls-tree -r --name-only f6364567…`
+confirms its tree carries the full bounds-safety implementation. The design
+docs there are `clang/docs/BoundsSafety.rst`, `BoundsSafetyAdoptionGuide.rst`
+and `BoundsSafetyImplPlans.rst`, whereas at local pin `ca74e488…` the design
+doc is `clang/docs/BoundsSafety/BoundsSafety.md`. All line numbers in this
+document were read at `ca74e488…` and should be re-verified if the project
+standardises on `f6364567…`. Method note: on blobless partial clones use
+`git ls-tree -r --name-only <pin>` for path existence — `git cat-file -e
+<pin>:<path>` can report a false MISS when a promisor fetch disconnects;
+re-issue a failed read rather than concluding the path is absent.
 
 ## Source evidence actually inspected
 
