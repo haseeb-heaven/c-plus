@@ -53,6 +53,26 @@ int main(void){unsigned v=UINT_MAX;unsigned r=v+1;return r==0?0:1;}
 #include <limits.h>
 int main(void){unsigned a=65536u;unsigned r=a*a;return r==0?0:1;}
 """),
+("helper_add_overflow", "reject", "signed integer overflow in call to 'safe_add'", """
+#include <limits.h>
+static int safe_add(int left,int right){return left+right;}
+int main(void){volatile int a=INT_MAX;volatile int b=1;return safe_add(a,b);}
+"""),
+("helper_sub_overflow", "reject", "signed integer overflow in call to 'safe_subtract'", """
+#include <limits.h>
+static int safe_subtract(int left,int right){return left-right;}
+int main(void){volatile int a=INT_MIN;volatile int b=1;return safe_subtract(a,b);}
+"""),
+("helper_mul_overflow", "reject", "signed integer overflow in call to 'safe_multiply'", """
+#include <limits.h>
+static int safe_multiply(int left,int right){return left*right;}
+int main(void){volatile int a=INT_MAX;volatile int b=2;return safe_multiply(a,b);}
+"""),
+("helper_safe_add", "accept", "", """
+#include <limits.h>
+static int safe_add(int left,int right){return left+right;}
+int main(void){volatile int a=INT_MAX-1;volatile int b=1;int r=safe_add(a,b);return r==INT_MAX?0:1;}
+"""),
 ]
 
 results = []

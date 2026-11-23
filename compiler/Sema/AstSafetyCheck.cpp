@@ -189,6 +189,14 @@ struct ReleaseCollector : RecursiveASTVisitor<ReleaseCollector> {
   }
 };
 
+/// Inferred arithmetic effect of a tiny helper returning a binary operation
+/// on two parameters (e.g. `int add(int a,int b){ return a+b; }`).
+struct ArithEffect {
+  BinaryOperator::Opcode op = BO_Add;
+  int lhs = -1, rhs = -1;
+  unsigned width = 0;
+};
+
 class SafetyVisitor : public RecursiveASTVisitor<SafetyVisitor> {
 public:
   SafetyVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string filename,
@@ -205,6 +213,11 @@ public:
   const std::set<std::string> &handlers() const { return handlers_; }
   const std::set<std::string> &destructors() const { return destructors_; }
   void setDestructors(const std::set<std::string> &d) { destructors_ = d; }
+  void setArithEffects(
+      const std::map<std::string, ArithEffect> &e) { arithEffects_ = e; }
+  const std::map<std::string, ArithEffect> &arithEffects() const {
+    return arithEffects_;
+  }
   void setStrict(bool strict) { strict_ = strict; }
   const std::map<std::string, std::set<std::string>> &fieldAliases() const {
     return fieldAliases_;
@@ -418,15 +431,18 @@ public:
   /// overflow is seen before wrapping.
   bool arithmeticOverflow(const Expr *op, long long a, long long b,
                           bool &overflow) const {
-    unsigned w = ctx_.getIntWidth(op->getType());
+    return arithmeticOverflow(ctx_.getIntWidth(op->getType()),
+                              dyn_cast<BinaryOperator>(op)->getOpcode(),
+                              a, b, overflow);
+  }
+  bool arithmeticOverflow(unsigned w, BinaryOperator::Opcode opc,
+                          long long a, long long b, bool &overflow) const {
     if (w == 0 || w > 64)
       return false;
     __int128 lo = -((__int128)1 << (w - 1));
     __int128 hi = ((__int128)1 << (w - 1)) - 1;
     __int128 r = 0;
-    const auto *bo = dyn_cast<BinaryOperator>(op);
-    if (!bo) return false;
-    switch (bo->getOpcode()) {
+    switch (opc) {
     case BO_Add: r = (__int128)a + b; break;
     case BO_Sub: r = (__int128)a - b; break;
     case BO_Mul: r = (__int128)a * b; break;
@@ -1512,6 +1528,44 @@ public:
           heapAllocs_[pv->getNameAsString()] = st;
         }
     }
+    // Infer a tiny arithmetic effect for helpers like `int add(int a,int b)
+    // { return a + b; }` so callers with constant arguments can be checked
+    // without requiring new annotations or interprocedural machinery.
+    if (!report_ && fd->getBody() && fd->getNumParams() >= 2) {
+      auto paramIndex = [&](const Expr *e) -> int {
+        const auto *ref = dyn_cast_or_null<DeclRefExpr>(
+            e ? e->IgnoreParenCasts() : nullptr);
+        const auto *pvd = ref ? dyn_cast<ParmVarDecl>(ref->getDecl()) : nullptr;
+        if (!pvd) return -1;
+        for (unsigned i = 0; i < fd->getNumParams(); ++i)
+          if (fd->parameters()[i] == pvd) return static_cast<int>(i);
+        return -1;
+      };
+      std::function<void(const Stmt *)> scan = [&](const Stmt *n) {
+        if (!n) return;
+        if (const auto *ret = dyn_cast<ReturnStmt>(n))
+          if (const Expr *rv = ret->getRetValue()) {
+            const auto *bo = dyn_cast<BinaryOperator>(rv->IgnoreParenCasts());
+            if (bo && (bo->getOpcode() == BO_Add ||
+                       bo->getOpcode() == BO_Sub ||
+                       bo->getOpcode() == BO_Mul) &&
+                bo->getType()->isSignedIntegerType()) {
+              int li = paramIndex(bo->getLHS());
+              int ri = paramIndex(bo->getRHS());
+              if (li >= 0 && ri >= 0 && li != ri) {
+                ArithEffect eff;
+                eff.op = bo->getOpcode();
+                eff.lhs = li;
+                eff.rhs = ri;
+                eff.width = ctx_.getIntWidth(bo->getType());
+                arithEffects_[fd->getNameAsString()] = eff;
+              }
+            }
+          }
+        for (const Stmt *c : n->children()) scan(c);
+      };
+      scan(fd->getBody());
+    }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
     currentFunction_ = previousFunction;
     nullVars_ = previousNulls;
@@ -1636,7 +1690,7 @@ public:
     if (!report_) {
       // Record local integer constants for constant-propagated bounds checks.
       if (vd->hasLocalStorage() && vd->getType()->isIntegerType() &&
-          vd->getInit() && !vd->getType().isVolatileQualified()) {
+          vd->getInit()) {
         Expr::EvalResult r;
         llvm::APSInt folded;
         if (vd->getInit()->EvaluateAsInt(r, ctx_) && r.Val.isInt()) {
@@ -2637,6 +2691,36 @@ public:
           markReleased(pname);
         }
       }
+    // Constant arguments to an inferred arithmetic helper (e.g.
+    // `safe_add(INT_MAX, 1)`) are checked at the call site.
+    if (const FunctionDecl *callee = call->getDirectCallee()) {
+      auto eit = arithEffects_.find(callee->getNameAsString());
+      if (eit != arithEffects_.end()) {
+        const ArithEffect &eff = eit->second;
+        if (call->getNumArgs() > static_cast<unsigned>(std::max(eff.lhs, eff.rhs))) {
+          auto argLL = [&](unsigned idx, long long &out) -> bool {
+            llvm::APSInt v;
+            if (idx >= call->getNumArgs() ||
+                !knownConst(call->getArg(idx), v))
+              return false;
+            out = call->getArg(idx)->getType()->isSignedIntegerType()
+                      ? v.getSExtValue()
+                      : (v.isNegative() ? v.getSExtValue() : v.getZExtValue());
+            return true;
+          };
+          long long a = 0, b = 0;
+          bool overflow = false;
+          if (argLL(eff.lhs, a) && argLL(eff.rhs, b) &&
+              arithmeticOverflow(eff.width, eff.op, a, b, overflow) &&
+              overflow) {
+            std::string msg = "signed integer overflow in call to '" +
+                              callee->getNameAsString() + "'";
+            if (strict_) report(call->getBeginLoc(), msg);
+            else warnAt(call->getBeginLoc(), msg);
+          }
+        }
+      }
+    }
       // Provably-null arguments to libc APIs that dereference them are
       // contract violations even when the JSON contract has no nullableArgs.
       {
@@ -3417,6 +3501,7 @@ private:
   std::set<const VarDecl *> nonZeroVars_;
   std::map<const VarDecl *, long long> loopLowerBound_;
   std::set<std::string> overflowingConstVars_;
+  std::map<std::string, ArithEffect> arithEffects_;
   std::map<std::string, HeapAllocState> heapAllocs_;
   std::set<const VarDecl *> heapWritten_;
   std::set<const VarDecl *> heapInterior_;
@@ -3538,6 +3623,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setGlobals(collect.nonVolatileGlobals());
   check.setDestructors(collect.destructors());
   check.setFieldAliases(collect.fieldAliases());
+  check.setArithEffects(collect.arithEffects());
   check.setFormatFnAliases(collect.formatFnAliases());
   check.setHandledReallocs(collect.handledReallocs());
   check.setConstLocals(collect.constLocals());

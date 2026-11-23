@@ -31,7 +31,7 @@ EXPECT = {
     "const_oob": ("constant array index 7", "Rust: const eval index check"),
     "dyn_oob": ("", "both: runtime bounds check (C+ check, Rust panic)"),
     "uninit": ("uninitialized", "Rust: definite initialization"),
-    "signed_overflow": ("", "C+: UBSan runtime; Rust: const-eval error only in const context"),
+    "signed_overflow": ("signed integer overflow", "C+: compile-time CPLUS-ARITH; Rust: const-eval error"),
     "unsigned_overflow": ("", "both: wrapping is defined"),
     "data_race": ("unsynchronized write", "Rust: closure borrow in thread rejected"),
     "mutable_alias": ("", "C+ accepts aliased ints; Rust rejects two &mut borrows"),

@@ -28,8 +28,9 @@ def asan_works(clang, extra):
     env["CPLUS_CLANG"] = clang
     probe = OUT / "probe.c"
     probe.write_text("#include <stdlib.h>\n"
-                     "int main(void){int*p=malloc(4);if(!p)return 1;"
-                     "volatile int i=4;p[i]=1;free(p);return 0;}\n")
+                     "int main(int argc,char**argv){(void)argv;"
+                     "int*p=malloc(4);if(!p)return 2;volatile int i=argc+4;"
+                     "p[i]=1;free(p);return 0;}\n")
     exe = OUT / "probe.bin"
     b = subprocess.run([CC, "build", "--sanitize=address", str(probe),
                         "-o", str(exe), "--"] + extra, capture_output=True,
