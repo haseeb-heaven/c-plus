@@ -1,0 +1,9 @@
+re_sg_child_reaped 1
+re_sg_child_no_watchdog 1
+re_sg_child_exited 1
+re_sg_injected_refused 1
+re_sg_injected_state 1
+re_sg_injected_one_attempt 1
+re_sg_injected_recovers 1
+re_sg_injected_balanced 1
+RESOURCE_EXHAUSTION 8 0

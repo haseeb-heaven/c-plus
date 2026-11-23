@@ -1,0 +1,6 @@
+re_fe_child_reaped 1
+re_fe_child_no_watchdog 1
+re_fe_child_exited 1
+re_fe_exhaust_refusal 1
+re_fd_cycles_stable 1
+RESOURCE_EXHAUSTION 5 0
