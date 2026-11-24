@@ -171,3 +171,7 @@ tests/c_standards/c89/probe.*
 tests/crt/adversarial/out/
 tests/cross_platform_apps/out-macos/
 tests/cross_platform_apps/out-win/
+tests/redblue20/**/out/
+tests/redblue20/**/results/
+tests/redblue20/**/artifacts/
+tests/redblue20/**/bin/
