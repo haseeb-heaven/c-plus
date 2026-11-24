@@ -533,6 +533,20 @@ public:
   const std::map<std::string, SourceLocation> &threadEntryLocs() const {
     return threadEntryLocs_;
   }
+  const std::map<std::string, int> &threadSharedArgCounts() const {
+    return threadSharedArgCounts_;
+  }
+  const std::map<std::string, SourceLocation> &threadSharedArgLocs() const {
+    return threadSharedArgLocs_;
+  }
+  bool hasLockCalls() const { return tuHasLockCalls_; }
+  void setThreadSharedArgFacts(const std::map<std::string, int> &counts,
+                               const std::map<std::string, SourceLocation> &locs,
+                               bool locks) {
+    threadSharedArgCounts_ = counts;
+    threadSharedArgLocs_ = locs;
+    tuHasLockCalls_ = locks;
+  }
   const std::set<std::string> &nonVolatileGlobals() const {
     return nonVolatileGlobals_;
   }
@@ -4239,7 +4253,8 @@ public:
             reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
                         "struct result contains address of local",
                         "suggested correction: copy the pointed-to data into "
-                        "the result or heap-allocate it before returning");
+                        "the result or heap-allocate it before returning",
+                        true);
     }
     if (report_ || !s->getRetValue() || !currentFnDecl_ ||
         !currentFnDecl_->getBody())
@@ -4798,7 +4813,8 @@ public:
                         "address of local escapes through out-parameter",
                         "suggested correction: do not store the address of a "
                         "frame-local through an out-parameter; heap-allocate "
-                        "the object or return it by value");
+                        "the object or return it by value",
+                        true);
       // Writing a non-pointer-derived integer constant into a union integer
       // member forges the provenance of every pointer view of those bytes.
       const std::string uv = unionNonPointerMemberVar(op->getLHS());
@@ -5261,7 +5277,8 @@ public:
                     "provenance",
                     "suggested correction: store a real pointer into the "
                     "union's pointer member instead of fabricating one from "
-                    "an integer constant");
+                    "an integer constant",
+                    true);
       if (isReleased(sub))
         reportUaf(op->getBeginLoc(), varNameOf(sub),
                   "dereference of released pointer '" +
@@ -5340,7 +5357,9 @@ public:
       return;
     PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
     Diag d;
-    d.level = strict_ ? DiagLevel::Error : DiagLevel::Warning;
+    // Freeing through a laundered integer address is UB in every C mode; a
+    // tagged handle passed to free is not a legitimate use of the cast.
+    d.level = DiagLevel::Error;
     d.message = "[CPLUS-LIFETIME] stale integer-laundered alias passed to free";
     d.help = "suggested correction: keep the owning pointer and release it "
              "exactly once; an integer address may name a different object "
@@ -5363,10 +5382,14 @@ public:
   /// unsanitized builds keep their historical behaviour. No runtime change.
   void reportNamed(SourceLocation loc, const std::string &category,
                    const std::string &message,
-                   const std::string &help = std::string()) {
+                   const std::string &help = std::string(),
+                   bool alwaysError = false) {
     PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
     Diag d;
-    d.level = strict_ ? DiagLevel::Error : DiagLevel::Warning;
+    // A few source shapes are UB in every C mode (address of a frame local
+    // escaping, forged union pointers, laundered stale aliases). They are
+    // errors even in DEFAULT; STRICT still promotes all named diagnostics.
+    d.level = (strict_ || alwaysError) ? DiagLevel::Error : DiagLevel::Warning;
     d.message = "[" + category + "] " + message;
     d.help = help;
     d.file = filename_;
@@ -5954,8 +5977,10 @@ public:
             name == "sprintf_s" || name == "cplus_sprintf_s")
           fmtIdx = 1;
         else if (name == "snprintf" || name == "snprintf_s" ||
-                 name == "cplus_snprintf_s")
+                 name == "cplus_snprintf_s" || name == "vsnprintf")
           fmtIdx = 2;
+        else if (name == "vsprintf" || name == "vfprintf")
+          fmtIdx = 1;
         // scanf(fmt, ...), fscanf(stream, fmt, ...), sscanf(src, fmt, ...):
         // scanf has format at 0; fscanf/sscanf have it at 1.
         if (name == "fscanf" || name == "fscanf_s" || name == "sscanf" ||
@@ -5968,10 +5993,23 @@ public:
             std::string msg = "format string in " + name +
                               " is not a string literal (CWE-134; attacker-"
                               "controlled format)";
-            if (strict_)
-              report(call->getBeginLoc(), msg);
-            else
+            // A non-literal format from a local/global buffer is CWE-134 in
+            // every C mode; an fnptr alias to printf is not a way around it.
+            // A wrapper that forwards its own FORMAT PARAMETER (e.g. a
+            // logging helper calling vsnprintf) is the legitimate exception.
+            const Expr *bare = fmt->IgnoreParenImpCasts();
+            bool forwarded = false;
+            if (const auto *ref = dyn_cast<DeclRefExpr>(bare))
+              if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+                std::string vn = vd->getNameAsString();
+                forwarded = isa<ParmVarDecl>(vd) ||
+                            vn.find("format") != std::string::npos ||
+                            vn.find("fmt") != std::string::npos;
+              }
+            if (forwarded)
               warnAt(call->getBeginLoc(), msg);
+            else
+              report(call->getBeginLoc(), msg);
           } else if (const auto *lit = dyn_cast<StringLiteral>(fmt)) {
             // %n writes through a vararg pointer with no way for the compiler
             // to prove the target is valid; it is banned in safe C+.
@@ -6940,6 +6978,9 @@ public:
           }
       }
     }
+    if (!report_ && (name.find("lock") != std::string::npos ||
+                     name.find("mutex") != std::string::npos))
+      tuHasLockCalls_ = true;
     if (!report_ && name == "pthread_create" && call->getNumArgs() >= 3) {
       std::string entry;
       if (const auto *ref = dyn_cast<DeclRefExpr>(
@@ -6957,12 +6998,39 @@ public:
       if (const auto *uo = dyn_cast<UnaryOperator>(arg))
         if (uo->getOpcode() == UO_AddrOf)
           borrowed = uo->getSubExpr()->IgnoreParenImpCasts();
-      if (const auto *ref = dyn_cast<DeclRefExpr>(borrowed))
-        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
-          if (vd->hasLocalStorage())
+      // Only a literal `&local` is a stack object.  A local POINTER VARIABLE
+      // holding a heap address is not a stack borrow; flagging it broke
+      // valid pthread programs.
+      const bool literalAddressOfLocal =
+          isa<UnaryOperator>(arg) &&
+          cast<UnaryOperator>(arg)->getOpcode() == UO_AddrOf;
+      if (const auto *ref = dyn_cast<DeclRefExpr>(borrowed)) {
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+          if (vd->hasLocalStorage() && literalAddressOfLocal)
             warnAt(call->getBeginLoc(),
                    "stack borrow passed to thread: '" +
                        vd->getNameAsString() + "'");
+          // Two threads receiving the same shared heap object without any
+          // lock in the translation unit is a real data race. This checker
+          // is deliberately conservative: a lock anywhere suppresses it.
+          std::string argName = vd->getNameAsString();
+          if (name == "pthread_create" && !report_ &&
+              !literalAddressOfLocal) {
+            ++threadSharedArgCounts_[argName];
+            threadSharedArgLocs_[argName] = call->getBeginLoc();
+          } else if (name == "pthread_create" && report_ &&
+                     !literalAddressOfLocal &&
+                     threadSharedArgCounts_[argName] >= 2 &&
+                     !tuHasLockCalls_) {
+            reportNamed(call->getBeginLoc(), "CPLUS-BORROW",
+                        "unsynchronized shared state passed to multiple "
+                        "threads: '" + argName + "'",
+                        "suggested correction: guard the shared object with "
+                        "a mutex or give each thread its own object",
+                        true);
+          }
+        }
+      }
     }
     return true;
   }
@@ -7424,6 +7492,9 @@ private:
   std::set<std::string> allGlobals_;
   std::map<std::string, int> threadEntryCounts_;
   std::map<std::string, SourceLocation> threadEntryLocs_;
+  std::map<std::string, int> threadSharedArgCounts_;
+  std::map<std::string, SourceLocation> threadSharedArgLocs_;
+  bool tuHasLockCalls_ = false;
   const FunctionDecl *currentFnDecl_ = nullptr;
   std::string currentFunction_;
 
@@ -7748,6 +7819,9 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFunctionsReturningFreed(collect.functionsReturningFreed());
   check.setNullReturningFunctions(collect.nullReturningFunctions());
   check.setDerefParams(collect.derefParams());
+  check.setThreadSharedArgFacts(
+      collect.threadSharedArgCounts(), collect.threadSharedArgLocs(),
+      collect.hasLockCalls());
   check.setParamWriteSlots(collect.paramWriteSlots());
   check.userFrees_ = collect.userFrees_;
   check.setGlobalPointsTo(collect.globalPointsTo());
