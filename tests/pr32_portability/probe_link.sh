@@ -32,6 +32,11 @@ log "os: $OS"
 log "archive: $ARCHIVE"
 
 cat > "$OUT/consumer.c" <<'SRC'
+/* glibc: feature macros must precede ALL system headers; assert.h pulls in
+ * features.h and would otherwise hide the POSIX types cplus_libc.h declares. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
 #include <assert.h>
 #include <string.h>
 #include "cplus_libc.h"
