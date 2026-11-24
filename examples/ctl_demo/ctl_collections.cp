@@ -212,6 +212,17 @@ int main(void) {
         }
         printf("%s\n", ctl_line.text());
 
+        /* Edge: repeated ids (players[] contains 7, 2 and 9 twice) already
+         * hit CtlBoard.accumulate's update branch during the loop; call it
+         * explicitly once more to keep that branch covered. */
+        ctl_board.accumulate(players[1], 1);
+        printf("CTL_EDGE duplicate_accumulate ok\n");
+
+        /* Edge: double release of the same CtlBoard is a no-op (the zero-safe
+         * guard in drop() keeps the second call from freeing twice). */
+        ctl_board.drop();
+        printf("CTL_EDGE double_drop ok\n");
+
         /* Explicit early release: C+ zeroes the object, then the compiler's
          * scope-exit drop runs again; the zero-safe guard makes it a no-op. */
         ctl_seen.drop();

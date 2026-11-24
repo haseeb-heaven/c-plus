@@ -102,6 +102,18 @@ int main(void) {
     }
     baseline = (size_t)(ds->top - ds->base);
 
+    /* Edge: allocator-aware containers that stay empty before the scope are
+     * a legal state; size()/c_str() must be callable on them. */
+    {
+        stdlib_allocator A0 = stdlib_scratch_allocator();
+        vector w0 = vector_in(&A0);
+        string s0 = string_in(&A0, "");
+        printf("HYBRID edge_empty_window=%zu edge_empty_label_len=%zu\n",
+               w0.size(), s0.size());
+        if (w0.size() != 0 || s0.size() != 0)
+            scratch_ok = 0;
+    }
+
     {
         CtlBoard ctl_board = CtlBoard();
         size_t i;
@@ -134,6 +146,15 @@ int main(void) {
             for (i = 0; i < scratch_window.size(); ++i)
                 if (scratch_window.at(i) == bonus_id)
                     bonus++;
+
+            /* Edge: bump on an id with no row in the board is a no-op; the
+             * board size must be unchanged by it. */
+            size_t size_before_bump = ctl_board.size();
+            ctl_board.bump(999, 5);
+            printf("HYBRID edge_bump_missing size_before=%zu size_after=%zu\n",
+                   size_before_bump, ctl_board.size());
+            if (ctl_board.size() != size_before_bump)
+                scratch_ok = 0;
 
             ctl_board.bump(bonus_id, bonus);
 

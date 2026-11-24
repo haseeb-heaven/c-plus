@@ -1,3 +1,5 @@
+HYBRID edge_empty_window=0 edge_empty_label_len=0
+HYBRID edge_bump_missing size_before=4 size_after=4
 HYBRID scratch_ok=1 window=5 bonus_id=2 bonus=2
 HYBRID scratch_label=W2,3,1,4,2
 HYBRID top_grew=1

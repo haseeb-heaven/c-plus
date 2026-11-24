@@ -110,6 +110,38 @@ int main(void) {
         check(anchor_after == anchor_offset && *anchor == 4242,
               "anchor_stable_across_container_growth");
 
+        /* Edge: a scope with no allocations restores top to the point it was
+         * at when the scope was created; its drop is a no-op, not an error. */
+        {
+            size_t top_before_empty = (size_t)(ds->top - ds->base);
+            stdlib_scratch_scope empty = stdlib_scratch_scope(ds);
+            empty.drop();
+            print("GOOSE_STACK empty_scope_top_ok",
+                  (size_t)(ds->top - ds->base) == top_before_empty ? 1 : 0);
+            check((size_t)(ds->top - ds->base) == top_before_empty,
+                  "empty_scope_restores");
+        }
+
+        /* Edge: nested scopes -- inner allocations die at the inner drop,
+         * leaving the outer frame's allocations untouched. */
+        {
+            stdlib_scratch_scope nested = stdlib_scratch_scope(ds);
+            size_t top_before_nested = (size_t)(ds->top - ds->base);
+            int *inner = (int *)stdlib_datastack_alloc(ds, sizeof(int), 4u, &e);
+            if (inner == (int *)0) {
+                print("GOOSE_STACK FATAL nested");
+                return 1;
+            }
+            *inner = 77;
+            print("GOOSE_STACK nested_grew",
+                  (size_t)(ds->top - ds->base) > top_before_nested ? 1 : 0);
+            nested.drop();
+            print("GOOSE_STACK nested_drop_restored",
+                  (size_t)(ds->top - ds->base) == top_before_nested ? 1 : 0);
+            check((size_t)(ds->top - ds->base) == top_before_nested,
+                  "nested_scope_drop_restores");
+        }
+
         /* One-store free: show the live top, drop the frame, show it rewound. */
         size_t top_before = (size_t)(ds->top - ds->base);
         print("GOOSE_STACK frame_top_before", top_before);

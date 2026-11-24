@@ -141,3 +141,12 @@ scope and is released once by `CtlBoard::drop()` (`CTL_FREE board`,
   run; it is not a memory-safety result and says nothing about the C+ wrappers.
 - No game assets, raw game-memory offsets, live injection or Windows binaries
   are involved.
+
+## Edge-case coverage (added 2026-11-24)
+
+Both runners diff byte-for-byte against `expected/`. New edge cases:
+`ctl_collections` adds `CTL_EDGE duplicate_accumulate` and `CTL_EDGE
+double_drop`; `ctl_goose_hybrid` adds `HYBRID edge_empty_window` and
+`HYBRID edge_bump_missing` (a `bump` on a missing id is a no-op). Verdict:
+`CTL_DEMO 2 2 0`. Run `sh tests/ctl/run_ctl_demo_coverage.sh` for an
+aggregate end-to-end coverage pass.

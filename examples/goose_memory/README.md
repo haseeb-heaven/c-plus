@@ -119,3 +119,12 @@ behaviour.
   uses generation tokens that *refuse* stale handles at runtime, and offers
   none of Goose's compiler analysis. Different implementation, different
   guarantees; only the design motif is shared.
+
+## Edge-case coverage (added 2026-11-24)
+
+`goose_stack.cp` additionally covers: an empty scope with no allocations
+(`empty_scope_restores`), a nested scope whose drop restores the outer frame
+(`nested_scope_drop_restores`), and `SUMMARY 10 10 0` in the expected output.
+
+`sh tests/ctl/run_ctl_demo_coverage.sh` runs all new runners plus
+`examples/ctl_demo`; printed verdict is `COVERAGE_RUNNER 4 4 0` on 2026-11-24.
