@@ -1,0 +1,132 @@
+name: libc-portability
+
+# PR32 libc+ / SafeCRT portability evidence.
+# Every platform records exact toolchain versions and runs the same bounded
+# probes. A compile-only Windows PE job is included; NO Windows runtime claim
+# is made (Highball/Wine stalls in this repository's workflow).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop, agent/modern-stdlib, agent/core-safety]
+  pull_request:
+    branches: [develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  linux-x86-64:
+    name: Linux x86-64 (CI-ONLY evidence)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CPLUS_CLANG: clang
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build binutils
+      - name: Record toolchain versions
+        run: |
+          set -eu
+          echo "uname_a: $(uname -a)"
+          echo "clang_path: $(command -v clang)"
+          clang --version
+          echo "nm_path: $(command -v nm)"
+          nm --version | head -1
+          echo "ar_path: $(command -v ar)"
+          ar --version 2>&1 | head -1
+          cmake --version | head -1
+          if command -v c+ >/dev/null 2>&1; then c+ --version; else echo "c+: NOT FOUND"; fi
+      - name: Build libc+ static archive
+        run: sh tests/libc/build_libc.sh
+      - name: PR32 libc+ portability probes (bounded, 60s global)
+        run: sh tests/pr32_portability/run.sh
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr32-libc-linux-x86-64
+          path: tests/pr32_portability/out/
+          if-no-files-found: warn
+
+  macos-arm64:
+    name: macOS arm64 (CI evidence; macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 12
+    env:
+      CPLUS_CLANG: clang
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record toolchain versions
+        run: |
+          set -eu
+          echo "uname_a: $(uname -a)"
+          sw_vers
+          echo "clang_path: $(command -v clang)"
+          clang --version
+          echo "clang_target: $(clang -print-target-triple)"
+          echo "sdk_root: $(xcrun --show-sdk-path)"
+          echo "sdk_version: $(xcrun --show-sdk-version)"
+          echo "nm_path: $(command -v nm)"
+          nm --version 2>&1 | head -3
+          echo "ar_path: $(command -v ar)"
+          ar --version 2>&1 | head -3
+          cmake --version | head -1
+          if command -v c+ >/dev/null 2>&1; then c+ --version; else echo "c+: NOT FOUND"; fi
+      - name: Build libc+ static archive
+        run: sh tests/libc/build_libc.sh
+      - name: PR32 libc+ portability probes (bounded, 60s global)
+        run: sh tests/pr32_portability/run.sh
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr32-libc-macos-arm64
+          path: tests/pr32_portability/out/
+          if-no-files-found: warn
+
+  windows-compile-only:
+    name: Windows PE compile-only (EXPERIMENTAL; no runtime claim)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record Windows toolchain versions
+        run: |
+          echo "uname_a: $(uname -a)"
+          echo "OS: $OS / $PROCESSOR_ARCHITECTURE"
+          if command -v clang >/dev/null 2>&1; then clang --version; else echo "clang: NOT FOUND"; fi
+          for c in x86_64-w64-mingw32-gcc gcc; do
+            if command -v "$c" >/dev/null 2>&1; then echo "candidate: $(command -v "$c")"; "$c" --version | head -1; fi
+          done
+          if [ -x /c/mingw64/bin/gcc.exe ]; then /c/mingw64/bin/gcc.exe --version | head -1; else echo "C:/mingw64/bin/gcc.exe: NOT FOUND"; fi
+      - name: Compile-only PE probe (NO runtime)
+        run: |
+          set -eu
+          MINGW=
+          for c in x86_64-w64-mingw32-gcc /c/mingw64/bin/gcc.exe; do
+            if command -v "$c" >/dev/null 2>&1 || [ -x "$c" ]; then MINGW=$c; break; fi
+          done
+          if [ -z "$MINGW" ]; then
+            echo "PR32_WINDOWS mingw NOT FOUND: Windows PE compile probe NOT TESTED (EXPERIMENTAL target)"
+            exit 0
+          fi
+          mkdir -p tests/pr32_portability/out
+          printf 'int main(void) { return 0; }\n' > tests/pr32_portability/out/windows_probe.c
+          echo "\$ $MINGW -O2 -std=c99 windows_probe.c -o windows_probe.exe"
+          "$MINGW" -O2 -std=c99 tests/pr32_portability/out/windows_probe.c -o tests/pr32_portability/out/windows_probe.exe
+          test -f tests/pr32_portability/out/windows_probe.exe
+          echo "PR32_WINDOWS COMPILE_ONLY ok: $MINGW produced a PE executable"
+          echo "PR32_WINDOWS RUNTIME NOT TESTED: Highball/Wine stalls; target remains EXPERIMENTAL/UNSUPPORTED"
+      - name: Upload compile-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr32-libc-windows-compile-only
+          path: tests/pr32_portability/out/
+          if-no-files-found: warn

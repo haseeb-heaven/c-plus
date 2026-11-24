@@ -187,3 +187,8 @@ tests/redblue20/red_safecrt/*.dSYM/
 /pwdcheck
 /safe_copy
 tests/edge100/safecrt/harness
+tests/pr31_abi/out/
+tests/pr32_portability/out/
+tests/pr33_integration/out/
+/__EDGE_BAD_COMMAND_
+/18446744073709551615

@@ -1,0 +1,16 @@
+# PR #33 agent report -- INVALID EXAMPLE.
+# Intentionally missing COMMIT_SHA, with placeholder paths/commands/output
+# and a missing KNOWN_FAILURES field. Expected check_report.sh exit: 1.
+SCOPE: libc C23 gaps (PR AGENT 2 / agent/modern-stdlib)
+DEPENDENCIES: none
+CHANGED_PATHS_BEGIN
+TODO: list the changed paths
+CHANGED_PATHS_END
+EXACT_COMMANDS_BEGIN
+TBD
+EXACT_COMMANDS_END
+TEST_ARTIFACT: TBD
+# KNOWN_FAILURES deliberately absent
+CLAIMS_BEGIN
+api:cplus_nextup
+CLAIMS_END

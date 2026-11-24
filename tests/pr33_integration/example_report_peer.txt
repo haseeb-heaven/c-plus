@@ -1,0 +1,21 @@
+# PR #33 agent report -- valid DISJOINT peer fixture for check_overlap.sh.
+# Paths and claims do not intersect example_valid_report.txt.
+# Expected check_report.sh exit: 0; check_overlap.sh exit: 0.
+SCOPE: libc C23 math gaps (PR AGENT 2 / agent/modern-stdlib)
+DEPENDENCIES: none
+COMMIT_SHA: a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4
+CHANGED_PATHS_BEGIN
+libc/src/math/math_c23_next.c
+tests/libc/test_c23_nextup.c
+CHANGED_PATHS_END
+EXACT_COMMANDS_BEGIN
+sh tests/libc/run_libc_tests.sh
+sh tools/abi_compare/run.sh compare tests/abi/fingerprints/baseline.txt
+EXACT_COMMANDS_END
+TEST_ARTIFACT: build/pr33/evidence/libc-c23-nextup.log
+KNOWN_FAILURES: none
+INDEPENDENT_REVIEW: PENDING
+CLAIMS_BEGIN
+test:tests/libc/test_c23_nextup.c
+api:cplus_nextup
+CLAIMS_END

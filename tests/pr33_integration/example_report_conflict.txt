@@ -1,0 +1,23 @@
+# PR #33 agent report -- valid-but-CONFLICTING fixture for check_overlap.sh.
+# It passes check_report.sh, then collides with example_valid_report.txt on
+# the path runtime/cplus_runtime.c and duplicates the claim
+# api:cplus_runtime_recover. Expected check_overlap.sh exit: 1.
+SCOPE: runtime telemetry follow-up (competing claim)
+DEPENDENCIES: none
+COMMIT_SHA: b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5
+CHANGED_PATHS_BEGIN
+runtime/cplus_runtime.c
+runtime/include/cplus/clog.h
+CHANGED_PATHS_END
+EXACT_COMMANDS_BEGIN
+sh tests/runtime/run_runtime_tests.sh
+EXACT_COMMANDS_END
+TEST_OUTPUT_BEGIN
+runtime tests: 2 passed, 0 failed
+TEST_OUTPUT_END
+KNOWN_FAILURES: none
+INDEPENDENT_REVIEW: PENDING
+CLAIMS_BEGIN
+test:tests/runtime/test_runtime_recover.c
+api:cplus_runtime_recover
+CLAIMS_END
