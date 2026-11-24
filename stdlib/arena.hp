@@ -223,6 +223,14 @@ static inline void *stdlib_arena_realloc(stdlib_arena *a, void *ptr,
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "arena: invalid realloc"),
                (void *)0;
+    /* Reject implausible old_size before subtracting it from the cursor: a
+     * forged size (RED-20 1/3/4) caused a huge memcpy or wrapped top math. */
+    if (old_size > a->block->capacity ||
+        ptr < (void *)a->block->base || ptr > (void *)a->cursor) {
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS, "arena: implausible realloc size/ptr"),
+               (void *)0;
+    }
     top = a->cursor - old_size;
     if (ptr != (void *)top || old_size > (size_t)(a->cursor - a->block->base)) {
         fresh = stdlib_arena_alloc(a, new_size, align, err);

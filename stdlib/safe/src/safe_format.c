@@ -68,6 +68,19 @@ static int parse_pos_dollar(const unsigned char **pp) {
 static int cplus_fmt_has_percent_n(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
     if (!p) return 0;
+    /* C+ SECURITY PATCH: reject ANY positional-specifier marker ('$') up
+     * front.  libc accepts '$' in many positions (after length modifiers,
+     * inside width/precision, repeated), and every missed placement can turn
+     * a later 'n' into a real %n write.  Literal '$' in ordinary text is
+     * unaffected because we only scan conversions after '%'.  A stricter,
+     * simpler policy (refuse all positional formats) is safe here. */
+    {
+        const unsigned char *s = (const unsigned char *)fmt;
+        while (*s) {
+            if (*s == '$') return 1;
+            ++s;
+        }
+    }
     while (*p) {
         int pr;
         if (*p != '%') { ++p; continue; }

@@ -1,0 +1,17 @@
+{
+  "summary": "RED20 apps 1272 0 0 0 1272",
+  "invocations": 1272,
+  "counts": {
+    "crash": 0,
+    "corrupt": 0,
+    "unexpected_ok": 0,
+    "refused": 1272
+  },
+  "detail_counts": {
+    "refused:hostile_input_ignored_cleanly": 1272
+  },
+  "findings": [],
+  "apps": 106,
+  "scenarios": 12,
+  "timeout_seconds": 30
+}

@@ -1,3 +1,154 @@
+extern void cplus_check_nonnull(const void *, const char *, int, const char *);
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
+  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
+  __cplus_nn_p; })
+#else
+#define CPLUS_NONNULL(P) \
+  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#endif
+#include <stdint.h>
+#if defined(__GNUC__) || defined(__clang__)
+#  define CPLUS_STATIC_INLINE __attribute__((unused)) static
+#else
+#  define CPLUS_STATIC_INLINE static
+#endif
+extern int64_t __cplus_checked_add_i64(int64_t, int64_t, unsigned, unsigned);
+extern int64_t __cplus_checked_sub_i64(int64_t, int64_t, unsigned, unsigned);
+extern int64_t __cplus_checked_mul_i64(int64_t, int64_t, unsigned, unsigned);
+extern int64_t __cplus_checked_div_i64(int64_t, int64_t, unsigned, unsigned);
+extern int64_t __cplus_checked_rem_i64(int64_t, int64_t, unsigned, unsigned);
+extern int64_t __cplus_checked_shl_i64(int64_t, int64_t, unsigned, unsigned);
+extern int64_t __cplus_checked_shr_i64(int64_t, int64_t, unsigned, unsigned);
+extern int64_t __cplus_checked_narrow_i64(uint64_t, unsigned, unsigned, unsigned, unsigned);
+#if defined(__has_builtin)
+#  if __has_builtin(__builtin_add_overflow) && __has_builtin(__builtin_sub_overflow) && __has_builtin(__builtin_mul_overflow)
+#    define CPLUS_HAVE_INLINE_ARITH 1
+#  endif
+#endif
+#ifdef CPLUS_HAVE_INLINE_ARITH
+#define CPLUS_ARITH_INLINE CPLUS_STATIC_INLINE
+CPLUS_ARITH_INLINE int64_t __cplus_inline_add_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
+  int64_t r; int32_t r32;
+  if (bits == 32) {
+    if (__builtin_add_overflow((int32_t)a, (int32_t)b, &r32))
+      return __cplus_checked_add_i64(a, b, bits, sgn);
+    return (int64_t)r32;
+  }
+  if (bits == 64 && sgn) {
+    if (__builtin_add_overflow(a, b, &r))
+      return __cplus_checked_add_i64(a, b, bits, sgn);
+    return r;
+  }
+  return __cplus_checked_add_i64(a, b, bits, sgn);
+}
+CPLUS_ARITH_INLINE int64_t __cplus_inline_sub_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
+  int64_t r; int32_t r32;
+  if (bits == 32) {
+    if (__builtin_sub_overflow((int32_t)a, (int32_t)b, &r32))
+      return __cplus_checked_sub_i64(a, b, bits, sgn);
+    return (int64_t)r32;
+  }
+  if (bits == 64 && sgn) {
+    if (__builtin_sub_overflow(a, b, &r))
+      return __cplus_checked_sub_i64(a, b, bits, sgn);
+    return r;
+  }
+  return __cplus_checked_sub_i64(a, b, bits, sgn);
+}
+CPLUS_ARITH_INLINE int64_t __cplus_inline_mul_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
+  int64_t r; int32_t r32;
+  if (bits == 32) {
+    if (__builtin_mul_overflow((int32_t)a, (int32_t)b, &r32))
+      return __cplus_checked_mul_i64(a, b, bits, sgn);
+    return (int64_t)r32;
+  }
+  if (bits == 64 && sgn) {
+    if (__builtin_mul_overflow(a, b, &r))
+      return __cplus_checked_mul_i64(a, b, bits, sgn);
+    return r;
+  }
+  return __cplus_checked_mul_i64(a, b, bits, sgn);
+}
+CPLUS_ARITH_INLINE int64_t __cplus_inline_div_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
+  if (b == 0)
+    return __cplus_checked_div_i64(a, b, bits, sgn);
+  if (sgn && bits > 1 && bits <= 64 && b == -1 &&
+      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))
+    return __cplus_checked_div_i64(a, b, bits, sgn);
+  return a / b;
+}
+CPLUS_ARITH_INLINE int64_t __cplus_inline_rem_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
+  if (b == 0)
+    return __cplus_checked_rem_i64(a, b, bits, sgn);
+  if (sgn && bits > 1 && bits <= 64 && b == -1 &&
+      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))
+    return __cplus_checked_rem_i64(a, b, bits, sgn);
+  return a % b;
+}
+CPLUS_ARITH_INLINE int64_t __cplus_inline_shl_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
+  if (b < 0 || (unsigned long long)b >= bits)
+    return __cplus_checked_shl_i64(a, b, bits, sgn);
+  if (sgn) {
+    uint64_t ua = (uint64_t)a; unsigned c = (unsigned)b;
+    uint64_t limit = (~(uint64_t)0) >> (64 - bits);
+    if (a < 0 || ((ua << c) & ~limit))
+      return __cplus_checked_shl_i64(a, b, bits, sgn);
+  }
+  return (int64_t)((uint64_t)a << (uint64_t)b);
+}
+CPLUS_ARITH_INLINE int64_t __cplus_inline_shr_i64(int64_t a, int64_t b, unsigned bits, unsigned sgn) {
+  if (b < 0 || (unsigned long long)b >= bits)
+    return __cplus_checked_shr_i64(a, b, bits, sgn);
+  return (int64_t)(a >> (uint64_t)b);
+}
+CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
+    uint64_t v, unsigned sb, unsigned ss, unsigned db, unsigned ds) {
+  uint64_t sv = v;
+  if (ss && sb > 0 && sb < 64 && ((v >> (sb - 1)) & 1u))
+    sv = v | (~((uint64_t)0) << sb);
+  if (db < 64) {
+    uint64_t m = (((uint64_t)1) << db) - 1;
+    uint64_t t = sv & m;
+    if (ds && ((t >> (db - 1)) & 1u)) t |= ~m;
+    if (t == sv) return (int64_t)t;
+  } else if (sv == v) {
+    return (int64_t)v;
+  }
+  return __cplus_checked_narrow_i64(v, sb, ss, db, ds);
+}
+#else
+#define __cplus_inline_add_i64 __cplus_checked_add_i64
+#define __cplus_inline_sub_i64 __cplus_checked_sub_i64
+#define __cplus_inline_mul_i64 __cplus_checked_mul_i64
+#define __cplus_inline_div_i64 __cplus_checked_div_i64
+#define __cplus_inline_rem_i64 __cplus_checked_rem_i64
+#define __cplus_inline_shl_i64 __cplus_checked_shl_i64
+#define __cplus_inline_shr_i64 __cplus_checked_shr_i64
+#define __cplus_inline_narrow_i64 __cplus_checked_narrow_i64
+#endif
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
+  ({ __typeof__(&(P)) __cplus_ap = &(P); \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
+         (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
+     *__cplus_ap; })
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ({ __typeof__(&(P)) __cplus_ap = &(P); \
+     __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
+         (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
+     (POST) ? __cplus_ov : *__cplus_ap; })
+#else
+#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
+  ((P) = (T)__cplus_inline_##OP##_i64( \
+      (int64_t)(P), (int64_t)(B), (BT), (SG)))
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
+      (int64_t)(D), (BT), (SG)))
+#endif
+#define CPLUS_NEG(X, T, BT, SG) \
+  ((T)__cplus_inline_sub_i64(0, (int64_t)(X), (BT), (SG)))
 #line 1 "tests/abi/cp_to_c/cp_to_c_lib.cp"
 /* C+ implementation lowered by ./build/c+ (STRICT mode) to plain C symbols,
  * archived with /usr/bin/ar, then called from an ordinary C translation unit
@@ -32,7 +183,7 @@ typedef struct CpAdder CpAdder;
 int32_t CpAdder_apply(CpAdder *self, int32_t x)
 #line 28 "tests/abi/cp_to_c/cp_to_c_lib.cp"
 {
-        return self->base + x;
+        return ((int)__cplus_inline_add_i64((int64_t)(CPLUS_NONNULL(self)->base ), (int64_t)( x), 32, 1));
     }
 #line 33 "tests/abi/cp_to_c/cp_to_c_lib.cp"
 
@@ -46,13 +197,13 @@ typedef struct CpRecordValidator CpRecordValidator;
 int CpRecordValidator_check(CpRecordValidator *self, const cp_to_c_record * r)
 #line 36 "tests/abi/cp_to_c/cp_to_c_lib.cp"
 {
-        if (r->i != self->want_i)   return CP_TO_C_ERR_RECORD_I;
-        if (r->u != self->want_u)   return CP_TO_C_ERR_RECORD_U;
-        if (r->d != 3.5)            return CP_TO_C_ERR_RECORD_D;
-        if (r->p == (void *)0)      return CP_TO_C_ERR_RECORD_P;
-        if (r->n != 7u)             return CP_TO_C_ERR_RECORD_N;
-        if (r->q != 0x0102030405060708LL) return CP_TO_C_ERR_RECORD_Q;
-        if (__builtin_memcmp(r->tag, cp_to_c_expected_tag, 3u) != 0)
+        if (CPLUS_NONNULL(r)->i != CPLUS_NONNULL(self)->want_i)   return CP_TO_C_ERR_RECORD_I;
+        if (CPLUS_NONNULL(r)->u != CPLUS_NONNULL(self)->want_u)   return CP_TO_C_ERR_RECORD_U;
+        if (CPLUS_NONNULL(r)->d != 3.5)            return CP_TO_C_ERR_RECORD_D;
+        if (CPLUS_NONNULL(r)->p == (void *)0)      return CP_TO_C_ERR_RECORD_P;
+        if (CPLUS_NONNULL(r)->n != 7u)             return CP_TO_C_ERR_RECORD_N;
+        if (CPLUS_NONNULL(r)->q != 0x0102030405060708LL) return CP_TO_C_ERR_RECORD_Q;
+        if (__builtin_memcmp(CPLUS_NONNULL(r)->tag, cp_to_c_expected_tag, 3u) != 0)
             return CP_TO_C_ERR_RECORD_TAG;
         return CP_TO_C_OK;
     }
@@ -69,12 +220,12 @@ double CpScaler_apply(CpScaler *self, const double * p , size_t n)
 {
         double acc = 0.0;
         size_t i;
-        for (i = 0u; i < n; ++i) {
+        for (i = 0u; i < n; CPLUS_INC(add, i, unsigned long, 64, 0, 1, 0)) {
             double elem = 0.0;
             __builtin_memcpy(&elem, p + i, sizeof(elem));
             acc += elem;
         }
-        return acc * self->factor;
+        return acc * CPLUS_NONNULL(self)->factor;
     }
 #line 63 "tests/abi/cp_to_c/cp_to_c_lib.cp"
 
@@ -89,9 +240,9 @@ int CpBuffer_write(CpBuffer *self, size_t idx , int32_t value)
 #line 66 "tests/abi/cp_to_c/cp_to_c_lib.cp"
 {
         int32_t cell = 0;
-        if (idx >= self->count) return CP_TO_C_ERR_RANGE;
+        if (idx >= CPLUS_NONNULL(self)->count) return CP_TO_C_ERR_RANGE;
         cell = value;
-        __builtin_memcpy(self->data + idx, &cell, sizeof(cell));
+        __builtin_memcpy(CPLUS_NONNULL(self)->data + idx, &cell, sizeof(cell));
         return CP_TO_C_OK;
     }
 #line 73 "tests/abi/cp_to_c/cp_to_c_lib.cp"
@@ -100,8 +251,8 @@ int CpBuffer_read(CpBuffer *self, size_t idx , int32_t * out)
 {
         int32_t cell = 0;
         if (out == (int32_t *)0) return CP_TO_C_ERR_NULL;
-        if (idx >= self->count) return CP_TO_C_ERR_RANGE;
-        __builtin_memcpy(&cell, self->data + idx, sizeof(cell));
+        if (idx >= CPLUS_NONNULL(self)->count) return CP_TO_C_ERR_RANGE;
+        __builtin_memcpy(&cell, CPLUS_NONNULL(self)->data + idx, sizeof(cell));
         __builtin_memcpy(out, &cell, sizeof(cell));
         return CP_TO_C_OK;
     }
@@ -140,7 +291,7 @@ static int cp_to_c_handle_meta(const void *h, cplus_alloc_meta *out)
 {
     if (h == (void *)0) return CP_TO_C_ERR_NULL;
     if (out == (cplus_alloc_meta *)0) return CP_TO_C_ERR_NULL;
-    if (cplus_alloc_get_meta(h, out) != 0 || !out->is_live)
+    if (cplus_alloc_get_meta(h, out) != 0 || !CPLUS_NONNULL(out)->is_live)
         return CP_TO_C_ERR_META;
     return CP_TO_C_OK;
 }
@@ -221,9 +372,9 @@ void *cp_to_c_buffer_create(size_t elem_count)
      * so the C side can query element granularity, not just raw byte count. */
     raw = cplus_calloc(elem_count, sizeof(int32_t));
     if (raw == (void *)0) return (void *)0;
-    for (i = 0u; i < elem_count; ++i) {
+    for (i = 0u; i < elem_count; CPLUS_INC(add, i, unsigned long, 64, 0, 1, 0)) {
         __builtin_memcpy((int32_t *)raw + i, &seed, sizeof(seed));
-        seed = seed + 1;
+        seed = ((int)__cplus_inline_add_i64((int64_t)(seed ), (int64_t)( 1), 32, 1));
     }
     handle = (void *)0;
     cplus_transfer_ownership(&handle, &raw);
@@ -276,7 +427,7 @@ int cp_to_c_buffer_meta(const void *h, size_t *out_byte_size,
 int cp_to_c_buffer_destroy(void **h_inout)
 {
     if (h_inout == (void **)0) return CP_TO_C_ERR_NULL;
-    if (*h_inout == (void *)0) return CP_TO_C_ERR_NULL;
+    if (*CPLUS_NONNULL(h_inout) == (void *)0) return CP_TO_C_ERR_NULL;
     if (cplus_free_checked(h_inout) != 0) return CP_TO_C_ERR_FREE;
     return CP_TO_C_OK;
 }

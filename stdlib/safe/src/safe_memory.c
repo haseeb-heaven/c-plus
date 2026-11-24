@@ -361,10 +361,8 @@ int cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s
     errno_t r;
     if (cplus_safe_reject_uaf(s1, "memcmp_s") || cplus_safe_reject_uaf(s2, "memcmp_s"))
         return -1;
-    if (n == 0) {
-        cplus_safe_stat_record("memcmp_s", 1);
-        return 0;
-    }
+    /* NULL operands are constraint violations even at n == 0 (RED-20 E1):
+     * check them BEFORE the zero-length success path. */
     if (!s1 || !s2) {
         errno = EINVAL;
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memcmp_s", "null pointer");
@@ -373,6 +371,10 @@ int cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s
          * Return -1 (the error sentinel) for the both-NULL case too; the
          * one-NULL ordering sentinels are kept for compatibility. */
         return (s1 == s2) ? -1 : (s1 ? 1 : -1);
+    }
+    if (n == 0) {
+        cplus_safe_stat_record("memcmp_s", 1);
+        return 0;
     }
     if (cplus_safe_check_capacity("memcmp_s", s1, n, known_s1, &d1)) return -1;
     if (cplus_safe_check_capacity("memcmp_s", s2, n, known_s2, &d2)) return -1;

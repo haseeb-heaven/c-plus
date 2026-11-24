@@ -242,6 +242,12 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
     if (ds == 0 || new_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "datastack: invalid realloc"), (void *)0;
+    /* Reject forged old_size before subtracting from top (RED-20 8). */
+    if (old_size > ds->capacity ||
+        ptr < (void *)ds->base || ptr > (void *)ds->top)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS, "datastack: implausible realloc"),
+               (void *)0;
     top = ds->top - old_size;
     if (ptr != (void *)top) {
         fresh = stdlib_datastack_alloc(ds, new_size, align, err);

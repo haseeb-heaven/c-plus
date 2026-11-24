@@ -92,6 +92,12 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "pool: slab size overflow"), STDLIB_FAIL;
     {
+        /* RED-20 5: check every addition for overflow before allocating. */
+        if (sizeof(*s) > (size_t)-1 - STDLIB_ALIGN_DEFAULT - p->slots_per_slab ||
+            stride * p->slots_per_slab > (size_t)-1 - sizeof(*s) -
+                                        STDLIB_ALIGN_DEFAULT - p->slots_per_slab)
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS, "pool: slab raw overflow"), STDLIB_FAIL;
         raw = sizeof(*s) + stride * p->slots_per_slab + p->slots_per_slab +
               STDLIB_ALIGN_DEFAULT;
         uintptr_t sp;
@@ -163,16 +169,23 @@ static inline void stdlib_mem_pool_release(stdlib_mem_pool *p, void *ptr,
         return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                     CPLUS_EXIT_NULL_POINTER, "pool: NULL argument");
     slot = (unsigned char *)ptr;
-    h = (stdlib_pool_slot_header *)(void *)(slot - STDLIB_POOL_HEADER_SIZE);
-    /* Foreign pointer: header slab not in our list. */
+    /* RED-20 7: verify the pointer lies inside a slab's slot region BEFORE
+     * reading its header; a wild pointer must not be dereferenced. */
     {
         stdlib_pool_slab *s;
-        for (s = p->slabs; s != (stdlib_pool_slab *)0; s = s->next)
-            if (s == h->slab) { found = 1; break; }
+        for (s = p->slabs; s != (stdlib_pool_slab *)0; s = s->next) {
+            size_t stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
+            if (slot >= s->slots + STDLIB_POOL_HEADER_SIZE &&
+                slot < s->slots + STDLIB_POOL_HEADER_SIZE +
+                       stride * p->slots_per_slab &&
+                (((size_t)(slot - (s->slots + STDLIB_POOL_HEADER_SIZE)) %
+                  stride) == 0)) { found = 1; break; }
+        }
     }
     if (!found)
         return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                     CPLUS_EXIT_OWNERSHIP, "pool: foreign pointer refused");
+    h = (stdlib_pool_slot_header *)(void *)(slot - STDLIB_POOL_HEADER_SIZE);
     i = (size_t)(slot - (h->slab->slots + STDLIB_POOL_HEADER_SIZE)) /
         (STDLIB_POOL_HEADER_SIZE + p->slot_size);
     if (i >= p->slots_per_slab || i != h->index)
@@ -281,6 +294,11 @@ static inline int stdlib_slot_pool_init(stdlib_slot_pool *p, size_t slot_size,
     if (p == 0 || slot_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "slot_pool: invalid config"), STDLIB_FAIL;
+    /* RED-20 6: guard slot_size * cap and cap * sizeof(size_t). */
+    if (cap > (size_t)-1 / slot_size || cap > (size_t)-1 / sizeof(size_t) ||
+        cap > (size_t)-1 / sizeof(uint64_t))
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
     p->items = (unsigned char *)cplus_alloc(slot_size * cap);
     p->free_list = (size_t *)cplus_alloc(sizeof(size_t) * cap);
     p->generations = (uint64_t *)cplus_alloc(sizeof(uint64_t) * cap);

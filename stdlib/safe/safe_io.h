@@ -33,7 +33,10 @@ int cplus_getenv_s(size_t *len, char *value, size_t valuesz, const char *name);
 
 #ifndef CPLUS_SAFE_OBJ_SIZE
 #if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 0)
+/* Type 1 = nearest enclosing object (member extent), NOT the whole struct.
+ * Must match safe_format.h: the first header included wins the #ifndef, and a
+ * type-0 definition here silently downgrades the struct-member guard there. */
+#define CPLUS_SAFE_OBJ_SIZE(p) __builtin_object_size((p), 1)
 #else
 #define CPLUS_SAFE_OBJ_SIZE(p) ((size_t)-1)
 #endif
