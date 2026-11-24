@@ -58,7 +58,8 @@ static void test_timespec_getres(void) {
     CHECK(base == TIME_UTC);
     CHECK(errno == 0);
     CHECK(ts.tv_sec == 0);
-    CHECK(ts.tv_nsec == 1000L); /* probe-verified on this host */
+    /* Resolution is host-dependent (macOS reports 1000 ns, Linux differs);
+     * assert the contract, not one platform's value (#32 portability). */
     CHECK(ts.tv_nsec > 0 && ts.tv_nsec < 1000000000L);
 
     errno = 0;

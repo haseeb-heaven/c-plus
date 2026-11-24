@@ -139,7 +139,10 @@ _Float16 cplus_logb16(_Float16 x) {
  * to f16, which is at least as accurate. */
 _Float16 cplus_exp16(_Float16 x) {
     cplus_libc_log("exp16", "enter");
-#if CPLUS_H3F16_HAS_BUILTIN(__builtin_expf16)
+/* On glibc the clang builtin lowers to an external `expf16` symbol that the
+ * system libm does not provide, so prefer the double-precision fallback there
+ * (#32 Linux portability). */
+#if CPLUS_H3F16_HAS_BUILTIN(__builtin_expf16) && !defined(__linux__)
     return __builtin_expf16(x);
 #else
     return (_Float16)exp((double)x);
