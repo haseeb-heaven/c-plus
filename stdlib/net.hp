@@ -33,7 +33,10 @@ class connection {
     }
 
     int descriptor(void) {
-        return this->fd;
+        /* Never expose process stdio descriptors 0/1/2.  After a C+ drop()
+         * the compiler zero-initialises the consumed object, so fd can be 0;
+         * reporting -1 keeps a consumed handle clearly invalid. */
+        return this->fd >= 3 ? this->fd : -1;
     }
 
     /* Reads at most size bytes: byte count, STDLIB_EOF at end of stream,
@@ -134,7 +137,10 @@ class listener {
     }
 
     int descriptor(void) {
-        return this->fd;
+        /* Never expose process stdio descriptors 0/1/2.  After a C+ drop()
+         * the object is zero-initialised, so fd can be 0; reporting -1 keeps a
+         * consumed handle clearly invalid. */
+        return this->fd >= 3 ? this->fd : -1;
     }
 
     int bound_port(void) {
