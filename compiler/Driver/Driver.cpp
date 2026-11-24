@@ -198,20 +198,26 @@ std::vector<std::string> cplusIncludeArgs() {
 /// compiled-in and installed locations (shipped with the compiler) are trusted.
 /// DEFAULT/LEGACY keep the env override because they make no soundness claim.
 std::string runtimeLibArg(bool trustEnvOverride) {
-  if (trustEnvOverride)
-    return findCPlusRuntimeLib();
+  std::string result;
+  if (trustEnvOverride) {
+    result = findCPlusRuntimeLib();
+  } else {
 #ifdef CPLUS_RUNTIME_LIB
-  if (fileExists(CPLUS_RUNTIME_LIB))
-    return CPLUS_RUNTIME_LIB;
+    if (fileExists(CPLUS_RUNTIME_LIB))
+      result = CPLUS_RUNTIME_LIB;
 #endif
-  for (const char *relative :
-       {"build/libcplus_runtime.a", "lib/libcplus_runtime.a",
-        "libcplus_runtime.a"}) {
-    std::string found = findByLayout(relative);
-    if (!found.empty())
-      return found;
+    if (result.empty())
+      for (const char *relative :
+           {"build/libcplus_runtime.a", "lib/libcplus_runtime.a",
+            "libcplus_runtime.a"}) {
+        std::string found = findByLayout(relative);
+        if (!found.empty()) {
+          result = found;
+          break;
+        }
+      }
   }
-  return std::string();
+  return result;
 }
 
 } // namespace

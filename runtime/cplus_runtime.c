@@ -14,6 +14,7 @@
 
 #include "cplus/cplus.h"
 #include <errno.h>
+#include <math.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -338,7 +339,7 @@ int64_t __cplus_checked_f2i_i64(double value, unsigned bits, unsigned isSigned) 
     }
   }
 
-  if (value == value && value >= lo && value < hi) {
+  if (!isnan(value) && value >= lo && value < hi) {
     if (!isSigned && bits == 64)
       return (int64_t)(uint64_t)value; /* preserve the 64-bit bit pattern */
     return (int64_t)value;

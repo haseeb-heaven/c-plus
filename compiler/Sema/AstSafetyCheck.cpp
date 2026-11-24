@@ -24,6 +24,7 @@
 
 #include <cstdlib>
 #include <cmath>
+#include <cmath>
 #include <map>
 #include <set>
 #include <string>
@@ -1417,7 +1418,7 @@ public:
     double d = 0;
     if (!floatConstValue(e, d))
       return false;
-    if (d != d)
+    if (std::isnan(d))
       return true; // NaN is never a valid integer conversion
     unsigned db = ctx_.getIntWidth(dst);
     if (db == 0 || db > 64)
@@ -5550,7 +5551,7 @@ public:
     const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
     if (!vd)
       return;
-    unsigned long long used = heapWritten_.count(vd) ? 1 : 1; // d[0]=0 idiom
+    unsigned long long used = 1; // d[0]=0 idiom reserves one byte
     unsigned long long need = used + str->getLength();
     if (need > static_cast<unsigned long long>(hs->bytes))
       report(call->getBeginLoc(),
