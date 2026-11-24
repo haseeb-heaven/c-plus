@@ -60,3 +60,28 @@ validation, no cross-platform (Windows/Linux untested), no live-game success.
 ASan unsupported on Apple clang 16; external Agent 1 runtime skew blocks
 canonical ubsan/default instrumented builds. This document is a coverage and
 outcome-parity record, not a formal verification certificate.
+
+## 100-variant allocator fuzz (final)
+
+`tests/fuzz100_variants/` generates 100 distinct deterministic C+ programs
+(`generate.sh`) combining allocator kind (heap / Arena / MemoryPool / DataStack),
+container (string / vector), hostile-input class (SIZE_MAX / zero / bad-align /
+null-handle / scratch-scope) and a fixed seed 0..99. `run_all.sh` builds each
+with a 60 s bound, runs each under a 30 s bound, and requires both exit 0 and an
+exact `VARIANT <i> 0` line.
+
+First run: 95 PASS / 5 FAIL (variants 14/34/54/74/94). Investigation showed a
+**genuine pool-alignment defect**: slab slot arrays inherited the 8-byte
+alignment of `cplus_alloc`, so a 16-byte-aligned request returned an 8-mod-16
+pointer. Fixed `stdlib_mem_pool_add_slab` to align the slot array to
+`STDLIB_ALIGN_DEFAULT` (now 16, matching `max_align_t`) inside the slab, with an
+explicit overflow check. Final run:
+
+```
+FUZZ100_VARIANTS built=100 build_fail=0 pass=100 fail=0 timeout_signal=0
+```
+
+Post-fix regressions: API coverage 416/416 (100%); libc 109/109; CRT 86/86;
+ABI fingerprint MATCH; `GOOSE_MEMORY 0`; `MODERN_ALLOC 0`; deep default
+28 PASS / 0 FAIL; methods 518/518. This is evidence for the 100 generated
+inputs, not a proof of all input classes.

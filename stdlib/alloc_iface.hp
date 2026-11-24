@@ -22,7 +22,9 @@
 #include "stdlib/error.hp"
 
 #ifndef STDLIB_ALIGN_DEFAULT
-#define STDLIB_ALIGN_DEFAULT (sizeof(void *) > 8 ? sizeof(void *) : 8u)
+/* 16 bytes matches max_align_t on the supported ABIs and makes pool slots
+ * and arena block bases safely usable for wider scalar/vector types. */
+#define STDLIB_ALIGN_DEFAULT 16u
 #endif
 
 typedef struct stdlib_allocator {

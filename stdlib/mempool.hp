@@ -81,6 +81,7 @@ static inline int stdlib_mem_pool_init(stdlib_mem_pool *p, size_t slot_size,
 static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
     stdlib_pool_slab *s;
     size_t stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
+    size_t raw;
     size_t i;
     unsigned char *slot;
     error_reset(err);
@@ -90,13 +91,26 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
     if (p->slots_per_slab > (size_t)-1 / stride)
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "pool: slab size overflow"), STDLIB_FAIL;
-    s = (stdlib_pool_slab *)cplus_alloc(sizeof(*s) + stride * p->slots_per_slab +
-                                        p->slots_per_slab);
-    if (s == (stdlib_pool_slab *)0)
-        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
-                              CPLUS_EXIT_RESOURCE, "pool: slab allocation refused"), STDLIB_FAIL;
+    {
+        raw = sizeof(*s) + stride * p->slots_per_slab + p->slots_per_slab +
+              STDLIB_ALIGN_DEFAULT;
+        uintptr_t sp;
+        s = (stdlib_pool_slab *)cplus_alloc(raw);
+        if (s == (stdlib_pool_slab *)0)
+            return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                                  CPLUS_EXIT_RESOURCE, "pool: slab allocation refused"), STDLIB_FAIL;
+        /* Align the slot array to STDLIB_ALIGN_DEFAULT so every slot is
+         * correctly aligned for the requested allocator alignment. */
+        sp = (uintptr_t)(s + 1);
+        sp = (sp + (uintptr_t)STDLIB_ALIGN_DEFAULT - 1u) &
+             ~((uintptr_t)STDLIB_ALIGN_DEFAULT - 1u);
+        s->slots = (unsigned char *)sp;
+    }
+    if (s->slots + stride * p->slots_per_slab + p->slots_per_slab >
+        (unsigned char *)s + raw)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "pool: slab alignment overflow"), STDLIB_FAIL;
     s->next = p->slabs;
-    s->slots = (unsigned char *)(s + 1);
     s->bitmap = s->slots + stride * p->slots_per_slab;
     memset(s->bitmap, 0, p->slots_per_slab);
     p->slabs = s;
