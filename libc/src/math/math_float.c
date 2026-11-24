@@ -70,7 +70,7 @@ float cplus_tgammaf(float x){ cplus_libc_log("tgammaf","enter"); return tgammaf(
 float cplus_lgammaf(float x){ cplus_libc_log("lgammaf","enter"); return lgammaf(x); }
 float cplus_nextafterf(float x,float y){ cplus_libc_log("nextafterf","enter"); return nextafterf(x,y); }
 float cplus_nexttowardf(float x,long double y){ cplus_libc_log("nexttowardf","enter"); return nexttowardf(x,y); }
-float cplus_nanf(const char *tagp){ cplus_libc_log("nanf","enter"); return nanf(tagp); }
+float cplus_nanf(const char *tagp){ cplus_libc_log("nanf","enter"); return nanf(tagp ? tagp : ""); }
 
 /* Hardened pointer-out-parameter paths: NULL would be undefined behavior. */
 float cplus_frexpf(float x,int *e){

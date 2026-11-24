@@ -139,11 +139,7 @@ _Float16 cplus_c23_logb16(_Float16 x) {
  * f16-specific external dependency is introduced. Fallback: exp in double
  * rounded once to f16. */
 _Float16 cplus_c23_exp16(_Float16 x) {
-#if C23H16_HAS_BUILTIN(__builtin_expf16)
-    return __builtin_expf16(x);
-#else
     return (_Float16)exp((double)x);
-#endif
 }
 
 #endif /* __FLT16_MANT_DIG__ */

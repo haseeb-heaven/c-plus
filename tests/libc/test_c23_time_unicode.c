@@ -20,8 +20,12 @@
  * A UTF-8 locale is required for the multibyte cases; setlocale is verified
  * and a clear note is printed (and those cases skipped) if it is unavailable.
  */
-/* No feature macros: on this SDK <time.h> exposes TIME_UTC under plain
- * -std=c99, and defining _POSIX_C_SOURCE would hide it. */
+/* No feature macros on Apple: on Apple SDK <time.h> exposes TIME_UTC under
+ * plain -std=c99, and defining _POSIX_C_SOURCE would hide it. On non-Apple
+ * hosts (e.g. glibc), enable _ISOC11_SOURCE so TIME_UTC is declared. */
+#if !defined(__APPLE__) && !defined(_ISOC11_SOURCE)
+#define _ISOC11_SOURCE
+#endif
 
 #include "cplus_c23_time_unicode.h"
 #include <errno.h>

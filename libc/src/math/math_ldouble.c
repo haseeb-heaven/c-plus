@@ -109,4 +109,4 @@ int cplus_ilogbl(long double x){ cplus_libc_log("ilogbl","enter"); return ilogbl
 long double cplus_logbl(long double x){ cplus_libc_log("logbl","enter"); return logbl(x); }
 long double cplus_nextafterl(long double x, long double y){ cplus_libc_log("nextafterl","enter"); return nextafterl(x,y); }
 long double cplus_nexttowardl(long double x, long double y){ cplus_libc_log("nexttowardl","enter"); return nexttowardl(x,y); }
-long double cplus_nanl(const char *tagp){ cplus_libc_log("nanl","enter"); return nanl(tagp); }
+long double cplus_nanl(const char *tagp){ cplus_libc_log("nanl","enter"); return nanl(tagp ? tagp : ""); }

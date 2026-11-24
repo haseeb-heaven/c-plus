@@ -3,7 +3,7 @@
 #include "../../log/log.h"
 #include <math.h>
 
-double cplus_nan(const char *tagp){ cplus_libc_log("nan","enter"); return nan(tagp); }
+double cplus_nan(const char *tagp){ cplus_libc_log("nan","enter"); return nan(tagp ? tagp : ""); }
 double cplus_nextafter(double x,double y){ cplus_libc_log("nextafter","enter"); return nextafter(x,y); }
 double cplus_fdim(double x,double y){ cplus_libc_log("fdim","enter"); return fdim(x,y); }
 double cplus_remainder(double x,double y){ cplus_libc_log("remainder","enter"); return remainder(x,y); }

@@ -86,11 +86,17 @@ extern uintmax_t cplus_wcstoumax(const wchar_t *, wchar_t **, int);
 static void crash_handler(int sig) {
     static const char pfx[] = "FINDING: crash signal ";
     char num[16];
-    int n;
+    size_t pos = sizeof(num);
+    unsigned int v = (sig < 0) ? (unsigned int)(-(long)sig) : (unsigned int)sig;
+    num[--pos] = '\n';
+    do {
+        num[--pos] = (char)('0' + (v % 10u));
+        v /= 10u;
+    } while (v != 0u && pos > 1u);
+    if (sig < 0 && pos > 0u)
+        num[--pos] = '-';
     (void)write(STDERR_FILENO, pfx, sizeof(pfx) - 1);
-    n = snprintf(num, sizeof(num), "%d\n", sig);
-    if (n > 0)
-        (void)write(STDERR_FILENO, num, (size_t)n);
+    (void)write(STDERR_FILENO, num + pos, sizeof(num) - pos);
     _exit(70);
 }
 
@@ -340,14 +346,28 @@ static void run_fe(const case_t *c) {
 
     assert(cplus_fegetenv(&clean) == 0);
 
-    for (k = 0; k < sizeof env; ++k) {
-        s = mix32(s);
-        p[k] = (c->variant == 0) ? 0x00u :
-               (c->variant == 1) ? 0xFFu : (unsigned char)s;
-    }
     for (k = 0; k < sizeof fl; ++k) {
         s = mix32(s);
         q[k] = (c->variant == 0) ? 0x00u :
+               (c->variant == 1) ? 0xFFu : (unsigned char)s;
+    }
+
+#if defined(__x86_64__) || defined(__i386__)
+    /* On x86, ldmxcsr raises #GP on reserved MXCSR bits, so loading arbitrary
+     * bit-patterns as fenv_t traps; use a valid fenv_t and keep hostile fl. */
+    (void)p;
+    env = clean;
+    fn = c->idx % 4;
+    switch (fn) {
+    case 0:  r = cplus_fesetenv(&env); break;
+    case 1:  r = cplus_feupdateenv(&env); break;
+    case 2:  r = cplus_fesetenv(FE_DFL_ENV); break;
+    default: r = cplus_fesetexceptflag(&fl, FE_ALL_EXCEPT); break;
+    }
+#else
+    for (k = 0; k < sizeof env; ++k) {
+        s = mix32(s);
+        p[k] = (c->variant == 0) ? 0x00u :
                (c->variant == 1) ? 0xFFu : (unsigned char)s;
     }
 
@@ -357,6 +377,7 @@ static void run_fe(const case_t *c) {
     case 1:  r = cplus_feupdateenv(&env); break;
     default: r = cplus_fesetexceptflag(&fl, FE_ALL_EXCEPT); break;
     }
+#endif
     (void)r;
     (void)cplus_fetestexcept(FE_ALL_EXCEPT);
 

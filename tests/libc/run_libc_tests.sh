@@ -15,7 +15,11 @@ for t in tests/libc/test_*.c; do
     *test_alloc_fault_matrix*) EXTRA_INC="-I."; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
     *test_vendor_*) EXTRA_INC="-I. -Ithird_party/safeclib/include"; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
   esac
-  if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC "$t" "$LIB" $EXTRA_LIB -lm -pthread -o "$b" && "$b" >/tmp/libc_test.out 2>&1; then
+  RUN_CMD="$b"
+  if command -v timeout >/dev/null 2>&1; then
+    RUN_CMD="timeout 60 $b"
+  fi
+  if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC "$t" "$LIB" $EXTRA_LIB -lm -pthread -o "$b" && $RUN_CMD >/tmp/libc_test.out 2>&1; then
     echo "ok $(basename "$t")"; pass=$((pass+1))
   else
     echo "FAIL $(basename "$t")"; tail -20 /tmp/libc_test.out || true; fail=$((fail+1))

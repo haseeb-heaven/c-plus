@@ -157,7 +157,7 @@ static void test_logging_parity(void){
 
     assert(memcmp(&d_off, &d_on, sizeof d_off) == 0);
     assert(memcmp(&f_off, &f_on, sizeof f_off) == 0);
-    assert(memcmp(&l_off, &l_on, sizeof l_off) == 0);
+    assert(creall(l_off) == creall(l_on) && cimagl(l_off) == cimagl(l_on));
 }
 
 int main(void){
