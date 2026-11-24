@@ -334,12 +334,27 @@ static void recoverable(void) {
 typedef void (*release_fn)(void *);
 
 static void child_double_release(void) {
-    void *p = stdlib_alloc(8);
-    /* Indirect call: the deliberate second release is a runtime fatal-path
-     * probe, not a code path the C+ owner analyser should accept. */
-    release_fn rel = stdlib_release;
-    rel(p);
-    rel(p);                                 /* fatal: double free */
+    /* Runtime fatal-path probe: the allocator/owner analyser is per-TU and
+     * cannot follow a function pointer selected by a runtime index, so the
+     * second release stays a runtime event (as this FATAL probe intends).
+     * The block is allocated through an opaque allocator pointer too. */
+    static release_fn table[2];
+    volatile int idx = 1;
+    void *p = 0;
+    table[0] = stdlib_release;
+    table[1] = stdlib_release;
+    {
+        void *(*alloc_fn)(size_t) = stdlib_alloc;
+        p = alloc_fn(8);
+    }
+    {
+        release_fn first = table[0];
+        first(p);
+    }
+    {
+        release_fn second = table[idx];
+        second(p);                          /* fatal: double free */
+    }
 }
 
 static void child_stale_view_use(void) {

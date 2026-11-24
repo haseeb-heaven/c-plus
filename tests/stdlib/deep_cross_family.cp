@@ -70,8 +70,12 @@ static void cf6_callback(int category, cplus_exit_code code,
                          const char *message) {
     (void)message;
     cf6_calls++;
-    if (cf6_phase >= 0 && cf6_phase < 6)
-        cf6_phase_calls[cf6_phase]++;
+    /* Use an explicitly clamped unsigned index: the compiler cannot prove a
+     * signed guard on a cross-TU mutable global, so select the safe slot. */
+    if (cf6_phase >= 0 && cf6_phase < 6) {
+        unsigned int slot = (unsigned int)cf6_phase;
+        if (slot < 6u) cf6_phase_calls[slot]++;
+    }
     cf6_categories |= (1ULL << (unsigned int)category);
     cf6_last_category = category;
     cf6_last_code = (int)code;

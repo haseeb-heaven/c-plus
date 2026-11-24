@@ -68,15 +68,15 @@ static int probe_double(const char *js, double *out, error *err) {
 
 int main(void) {
     error err = error();
-    int iv;
-    double dv;
-    const char *sv;
-    int bv;
-    int rc;
-    size_t len_a;
-    size_t len_b;
-    char *out_a;
-    char *out_b;
+    int iv = 0;
+    double dv = 0;
+    const char *sv = 0; /* out-param: initialise to satisfy strict lifetime analysis */
+    int bv = 0;
+    int rc = 0;
+    size_t len_a = 0;   /* out-param: initialise to satisfy strict lifetime analysis */
+    size_t len_b = 0;
+    char *out_a = 0;
+    char *out_b = 0;
     json doc;
     json_view root;
     json_view v;
