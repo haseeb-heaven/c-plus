@@ -1,0 +1,5 @@
+WEB_APP listening 127.0.0.1:18099
+WEB_APP request path=/health
+WEB_APP request path=/other
+WEB_APP request path=/
+WEB_APP served=3 done

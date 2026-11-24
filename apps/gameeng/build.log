@@ -1,0 +1,1 @@
+clang: warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

@@ -1,0 +1,99 @@
+/* C+ modern standard library: game engine core (gameeng.hp).
+ *
+ * Additive, C-style header.  No classes, no templates, no exported symbols,
+ * no ABI change.  Deterministic headless game world: entity slots with
+ * positions and health, a step() with simple movement toward the origin,
+ * and spawn/kill bookkeeping for the host app to print.
+ *
+ * Contract:
+ *   game_world_init()        zero a world (max 32 entities)
+ *   game_add_entity()        returns slot index >= 0, or -1 when full
+ *   game_entity_pos()        0 when slot is alive; else x/y written
+ *   game_step(dt)            advances the world clock and moves alive
+ *                            entities toward the origin
+ *   game_kill()              mark an entity dead; 0 when found
+ */
+#ifndef CPLUS_STD_GAMEENG_HP
+#define CPLUS_STD_GAMEENG_HP
+
+#include <stdint.h>
+#include "cplus/cplus.h"
+
+#define GAMEENG_MAX_ENTS 32
+
+typedef struct {
+    int alive;
+    int x;
+    int y;
+    int hp;
+} gent_entity;
+
+typedef struct {
+    gent_entity ents[GAMEENG_MAX_ENTS];
+    int count;
+    float t;
+} game_world;
+
+static void game_world_init(game_world *w) {
+    int i;
+    if (w == (game_world *)0)
+        return;
+    for (i = 0; i < GAMEENG_MAX_ENTS; i++)
+        w->ents[i].alive = 0;
+    w->count = 0;
+    w->t = 0.0f;
+}
+
+static int game_add_entity(game_world *w, int x, int y, int hp) {
+    int i;
+    if (w == (game_world *)0 || hp <= 0)
+        return -1;
+    for (i = 0; i < GAMEENG_MAX_ENTS; i++)
+        if (!w->ents[i].alive) {
+            w->ents[i].alive = 1;
+            w->ents[i].x = x;
+            w->ents[i].y = y;
+            w->ents[i].hp = hp;
+            if (i + 1 > w->count)
+                w->count = i + 1;
+            return i;
+        }
+    return -1;
+}
+
+static int game_entity_pos(game_world *w, int idx, int *x, int *y) {
+    if (w == (game_world *)0 || idx < 0 || idx >= GAMEENG_MAX_ENTS ||
+        !w->ents[idx].alive)
+        return -1;
+    if (x != (int *)0)
+        *x = w->ents[idx].x;
+    if (y != (int *)0)
+        *y = w->ents[idx].y;
+    return 0;
+}
+
+static void game_step(game_world *w, float dt) {
+    int i;
+    if (w == (game_world *)0)
+        return;
+    for (i = 0; i < GAMEENG_MAX_ENTS; i++) {
+        if (!w->ents[i].alive)
+            continue;
+        /* Simple deterministic movement toward the origin. */
+        if (w->ents[i].x > 0) w->ents[i].x -= 1;
+        else if (w->ents[i].x < 0) w->ents[i].x += 1;
+        if (w->ents[i].y > 0) w->ents[i].y -= 1;
+        else if (w->ents[i].y < 0) w->ents[i].y += 1;
+    }
+    w->t = w->t + dt;
+}
+
+static int game_kill(game_world *w, int idx) {
+    if (w == (game_world *)0 || idx < 0 || idx >= GAMEENG_MAX_ENTS ||
+        !w->ents[idx].alive)
+        return -1;
+    w->ents[idx].alive = 0;
+    return 0;
+}
+
+#endif /* CPLUS_STD_GAMEENG_HP */

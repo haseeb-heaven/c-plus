@@ -46,7 +46,7 @@ run_sweep() {   # run_sweep <src> <summary-marker> <library>
 run_sweep tests/edge1000/test_modern_edge.cp EDGE1000_MODERN build/libc/libcplus_hardened.a
 run_sweep tests/edge1000/test_safer_edge.cp EDGE1000_SAFER build/safe/libcplus_safecrt.a
 
-for s in math3d scene3d mesh3d widgets cli; do
+for s in math3d scene3d mesh3d widgets cli web sqldb gameeng; do
     cases=$((cases + 1))
     if timeout 900 sh "tests/stdlib/$s/run.sh" >/dev/null 2>&1; then
         pass=$((pass + 1))
