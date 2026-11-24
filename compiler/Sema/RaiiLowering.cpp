@@ -347,6 +347,50 @@ private:
     return false;
   }
 
+  /// Find the compound statement controlled by the `if`/`switch`/`while`
+  /// whose condition contains the `setjmp` call at `i`.  kNPos when the
+  /// guarded statement is not a compound block (the live-owner half of
+  /// `setjmpSkipsOwner()` still covers that spelling).
+  size_t setjmpProtectedBlock(size_t i) const {
+    size_t kw = kNPos;
+    for (size_t k = prevSig(i); k != kNPos; k = prevSig(k)) {
+      if (isIdent(k, "if") || isIdent(k, "switch") || isIdent(k, "while")) {
+        kw = k;
+        break;
+      }
+      if (isPunct(k, "{") || isPunct(k, "}") || isPunct(k, ";"))
+        break;
+    }
+    if (kw == kNPos)
+      return kNPos;
+    size_t lp = nextSig(kw);
+    if (!isPunct(lp, "("))
+      return kNPos;
+    size_t rp = matchingParen(lp);
+    if (rp == kNPos || rp <= i)
+      return kNPos;
+    size_t body = nextSig(rp);
+    return isPunct(body, "{") && matchingBrace(body) != kNPos ? body : kNPos;
+  }
+
+  /// A `setjmp` environment saves the current stack frame: a later `longjmp`
+  /// resumes there *without* running the scope-exit drop of any C+ owner
+  /// declared in the protected block, or already live when the environment
+  /// was saved.  STRICT rejects that case from the setjmp side as well as the
+  /// longjmp side (a jumping helper may live in another TU/function, where no
+  /// owner is live at the jump token itself).  Plain-C setjmp/longjmp with no
+  /// owners stays accepted.  The rewrite's ownership markers and resource
+  /// types are still visible in this token stream, so the block scan reuses
+  /// the same owner-detection predicate as the forward-`goto` check.
+  bool setjmpSkipsOwner(size_t i) const {
+    if (hasLiveOwners())
+      return true;
+    size_t body = setjmpProtectedBlock(i);
+    if (body == kNPos)
+      return false;
+    return jumpSkipsOwnerInit(body + 1, matchingBrace(body));
+  }
+
   void handleDefer(size_t i) {
     size_t semi = statementEnd(i + 1);
     if (semi == kNPos || semi == i + 1) {
@@ -827,9 +871,25 @@ private:
       // Match the goto rule: STRICT rejects a non-local jump while a C+ owner
       // is live.  Plain-C longjmp is untouched -- analyzePlainC keeps its own
       // live-allocation rule, so no new diagnostic is emitted without owners.
+      // A helper that contains the jump (e.g. `escape()`) is collected by
+      // collectControlFlowHelpers(), so it is rejected at its call site when
+      // an owner is live there, even though no owner is live inside the helper.
       if (strict_ && mode_ != Mode::LegacyC && hasLiveOwners())
         errorAt("longjmp bypasses C+ cleanup; destructors may not run", t,
                 "use structured control flow or an explicit cleanup call");
+      atStmtStart_ = false;
+      return;
+    }
+    if (t.text == "setjmp") {
+      // The setjmp half of the non-local-jump rule: a protected block that
+      // declares (or protects an already live) C+ owner would have its
+      // scope-exit drop skipped by any longjmp to this environment.  No owner
+      // means ordinary C compatibility, and LegacyC/DEFAULT stay permissive.
+      if (strict_ && mode_ != Mode::LegacyC && setjmpSkipsOwner(i))
+        errorAt("'setjmp' protects a C+ owner whose destructor would be "
+                "skipped by a longjmp",
+                t, "declare owners outside the protected region, or use "
+                   "structured control flow");
       atStmtStart_ = false;
       return;
     }

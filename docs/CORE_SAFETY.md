@@ -504,3 +504,15 @@ managed double free) with `--sanitize=none` at `-O0/-O2/-O3` in DEFAULT and
 `-O2` in STRICT, then RUNS them: **24 checks, 0 failures**. A check passes
 only on a matching C+ runtime trap or a compile-time rejection with the
 expected diagnostic — compiling alone never counts.
+
+## Compile-time-first scope decision (user-confirmed)
+
+The remaining Rust-soundness features (true `&`/`&mut` exclusivity, region/NLL
+lifetimes, `Send`/`Sync` marker traits, `Option`/`Result`, expression-level
+`unsafe`, UTF-8 `str`, and provenance-bearing pointers) require new types and
+an ABI change. The explicit decision is to KEEP plain original C and its ABI,
+and to maximize compile-time checks within that constraint. F2 is therefore
+closed at SOURCE level (integer-laundered stale aliases are rejected in
+STRICT) rather than by fat pointers; the runtime side table remains
+ABI-neutral. VLA and setjmp/longjmp gaps are being closed by compile-time
+lowering and STRICT diagnostics respectively.

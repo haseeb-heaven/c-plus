@@ -86,6 +86,7 @@ public:
     // These run before the token loop so every subscript site can consult the
     // constant, recursion and out-param facts collected here.
     collectLocalConstants();
+    collectConstantVlaExtents(); // foldable VLA counts become static extents
     collectPhiConstants(); // folded `c ? a : b` index values
     collectCallGraph();
     collectRecursiveCallArgs();
@@ -142,9 +143,10 @@ public:
         checkEmptyInfiniteLoop(i);
         checkNanCompare(i);
         checkVlaSizeof(i);
+        checkConstantVlaSubscript(i);
         checkZeroAlloc(i);
         checkFflushStdin(i);
-        checkVla(i);
+        checkVla(i); // no-op: Safe mode lowers VLAs instead of rejecting them
         // Ignore tokens that are part of a preprocessor directive such as
         // `#include <alloca.h>` — merely including the header is not a call.
         bool inDirective = false;
@@ -477,6 +479,7 @@ private:
     const std::vector<size_t> *dims = nullptr;
     if (!findShape(name, pos, &dims))
       return false;
+
     *extent = dims->front();
     return true;
   }
@@ -755,6 +758,96 @@ private:
       }
     }
     return false;
+  }
+
+  /// A VLA extent that folds to a compile-time constant is a static extent.
+  /// Register it as an array shape so a provably out-of-bounds constant
+  /// subscript (`int n = 4; int a[n]; a[9];`) is rejected by the same constant
+  /// index check used for fixed arrays, independently of the runtime guard the
+  /// rewriter emits.  This runs after collectLocalConstants() so `n` is known.
+  /// Non-constant extents are skipped: the runtime guard handles those.
+  void collectConstantVlaExtents() {
+    static const char *const kTypes[] = {
+        "int", "char", "short", "long", "float", "double", "void",
+        "unsigned", "signed", "struct", "union", "enum", "size_t",
+        "uint8_t", "uint16_t", "uint32_t", "uint64_t"};
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      size_t open = nextSig(i);
+      if (!isPunct(open, "["))
+        continue;
+      size_t prev = prevSig(i);
+      if (prev == kNPos)
+        continue;
+      bool declaration = false;
+      for (const char *t : kTypes)
+        if (toks_[prev].text == t) { declaration = true; break; }
+      if (!declaration && isPunct(prev, ",")) {
+        // A comma can separate declarators (`int a[4], b[N]`) but is also
+        // the separator in a call argument list (`printf("...", b[3])`).
+        // Walk back to a type keyword only through declarator tokens; if a
+        // '(' or ';' is reached first this is an expression, not a VLA.
+        size_t k = prev;
+        while (k != kNPos) {
+          if (isPunct(k, "(") || isPunct(k, ";") || isPunct(k, "{") ||
+              isPunct(k, "}"))
+            break;
+          bool typeTok = false;
+          for (const char *t : kTypes)
+            if (toks_[k].text == t) { typeTok = true; break; }
+          if (typeTok) { declaration = true; break; }
+          k = prevSig(k);
+        }
+      }
+      if (!declaration)
+        continue;
+      size_t close = match(open, "[", "]");
+      if (close == kNPos || close == nextSig(open))
+        continue;
+      if (isPunct(nextSig(close), "[")) // multi-dimensional: not lowered
+        continue;
+      long value = 0;
+      if (!indexExprValue(open + 1, close, &value) || value <= 0)
+        continue;
+      localArrays_.push_back(
+          {i, toks_[i].text, {static_cast<size_t>(value)}});
+      constantVlaNames_.insert(toks_[i].text);
+    }
+  }
+
+  /// Constant subscript into a VLA whose extent folded to a compile-time
+  /// value.  The runtime guard emitted by the rewriter still handles the
+  /// general case; this gives `check --strict` a diagnostic for the provable
+  /// case without waiting for execution.
+  void checkConstantVlaSubscript(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier ||
+        !constantVlaNames_.count(toks_[i].text))
+      return;
+    size_t lb = nextSig(i);
+    if (!isPunct(lb, "["))
+      return;
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos)
+      return;
+    const std::vector<size_t> *dims = nullptr;
+    if (!findShape(toks_[i].text, i, &dims) || dims->empty())
+      return;
+    // Skip the declaration itself: its bracket holds the count, not an index.
+    size_t prev = prevSig(i);
+    if (prev != kNPos &&
+        (toks_[prev].kind == TokKind::Identifier || isPunct(prev, ",")))
+      return;
+    long index = 0;
+    if (!indexExprValue(lb + 1, rb, &index))
+      return;
+    long extent = static_cast<long>(dims->front());
+    if (index < 0)
+      errorAt(toks_[lb], "negative array index " + std::to_string(index) +
+                             " on '" + toks_[i].text + "'");
+    else if (index >= extent)
+      reportConstantIndex(toks_[lb], index, toks_[i].text,
+                          static_cast<size_t>(extent));
   }
 
   /// Record every write to a name with the value (or "invalid").  A fact is
@@ -1978,40 +2071,21 @@ private:
       errorAt(toks_[i], "fflush(stdin) is undefined; discard input explicitly");
   }
 
-  void checkVla(size_t i) {
-    static const char *const kTypes[] = {
-        "int", "char", "short", "long", "float", "double", "void",
-        "unsigned", "signed", "struct", "union", "enum", "size_t",
-        "uint8_t", "uint16_t", "uint32_t", "uint64_t"};
-    if (toks_[i].kind != TokKind::Identifier) return;
-    bool isType = false;
-    for (const char *type : kTypes)
-      if (toks_[i].text == type) { isType = true; break; }
-    if (!isType) return;
-    size_t name = nextSig(i);
-    size_t lb = nextSig(name);
-    if (name >= toks_.size() || toks_[name].kind != TokKind::Identifier ||
-        !isPunct(lb, "["))
-      return;
-    size_t inner = nextSig(lb);
-    size_t rb = match(lb, "[", "]");
-    if (rb == kNPos || inner >= rb) return;
-    if (toks_[inner].kind != TokKind::Number) {
-      // A function-like expression such as offsetof(...) or sizeof(...) may
-      // still be a compile-time constant; do not misreport it as a VLA.
-      if (toks_[inner].kind == TokKind::Identifier &&
-          isPunct(nextSig(inner), "("))
-        return;
-      // Uppercase names are the convention for preprocessor constants; the
-      // lexer cannot expand macros, so do not misreport them as VLAs.
-      bool macroLike = toks_[inner].kind == TokKind::Identifier;
-      for (char c : toks_[inner].text)
-        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
-          macroLike = false;
-      if (!macroLike)
-        errorAt(toks_[inner], "variable-length stack allocation has no bounds "
-                              "check; use cplus_alloc");
-    }
+  /// C99 variable-length arrays used to be rejected outright here.  They are
+  /// now *lowered* by the Safe-mode rewriter (instrumentDynamicArrayBounds in
+  /// CPlusRewriter.cpp) to a `cplus_alloc_array`/`cplus_release` pair with the
+  /// same identifier, so the stack allocation is bounded and deterministically
+  /// released.  This pass runs only in Safe mode (see lowerUnit), i.e. exactly
+  /// where that lowering is active; LEGACY mode never calls it and therefore
+  /// keeps emitting the original plain-C VLA verbatim.  Keep the recognition
+  /// former recognition logic (constant-expression exclusions) lived here; it
+  /// is intentionally gone because there is nothing left to diagnose.
+  /// Rejecting here would undo the lowering and break ordinary C99 code for no
+  /// safety benefit.  VLA-*derived* misuse is still caught by the
+  /// other checks -- in particular checkVlaSizeof() below rejects a side
+  /// effect evaluated by `sizeof` on a VLA type.
+  void checkVla(size_t) {
+    return;
   }
 
   /// Only reject `p = realloc(p, ...)` (and bare calls).  Wrappers such as
@@ -4459,6 +4533,7 @@ private:
   std::set<std::string> typePunned_;     // bug 45
   std::map<std::string, TrackedArrayPointer> arrayPtrs_; // constant array aliases
   std::set<std::string> arrayPtrInvalid_;
+  std::set<std::string> constantVlaNames_;
   std::map<std::string, std::vector<std::pair<size_t, long>>> localConsts_;
   std::map<std::string, long> returnConstants_;
   DiagnosticEngine &diags_;

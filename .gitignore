@@ -79,3 +79,13 @@ tests/compiler/abi_mixed/results/abi_mixed_*/
 tests/compiler/c_apps/results/*.bin
 tests/compiler/c_apps/results/*.clang
 tests/compiler/c_apps/results/*.bin
+
+tests/compiler/cross_compiler/results/*.bin
+tests/compiler/cross_compiler/results/*.rs
+tests/compiler/cross_compiler/results/*.c
+tests/compiler/cross_compiler/results/filc.tar.xz
+tests/compiler/cross_compiler/results/filc/
+tests/compiler/cross_compiler/results/*.out
+tests/compiler/cross_compiler/results/*.err
+tests/compiler/cross_compiler/results/*.bench
+tests/compiler/cross_compiler/results/core

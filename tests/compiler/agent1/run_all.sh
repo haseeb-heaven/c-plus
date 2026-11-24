@@ -189,7 +189,7 @@ if want_category native; then
     bin="$OUT/$harness"
     if $CPLUS build --legacy-c "$ROOT/tests/native/$harness.c" -o "$bin" >"$RES/logs/$harness.build.stdout" 2>"$RES/logs/$harness.build.stderr"; then
       if [ "$harness" = strict40_runner ]; then
-        args="$ROOT/scratch/cplus_safety_suite/tests"
+        args="$ROOT/tests/fixtures/strict40"
       else
         args=""
       fi

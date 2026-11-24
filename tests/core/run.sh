@@ -95,6 +95,8 @@ build_run init_all_branches "$ROOT/tests/core/positive/init_all_branches.c"
 build_run pointer_one_past "$ROOT/tests/core/positive/pointer_one_past.c"
 build_run explicit_drop_once "$ROOT/tests/core/positive/explicit_drop_once.cp"
 build_run raii_cast_drop "$ROOT/tests/core/positive/raii_cast_drop.cp"
+build_run vla_managed_ok "$ROOT/tests/core/positive/vla_managed_ok.c"
+build_run classic_bug53_vla_stack "$ROOT/tests/core/positive/classic_bug53_vla_stack.c"
 build_run raii_conditional_drop "$ROOT/tests/core/positive/raii_conditional_drop.cp"
 build_run raii_defer_cond "$ROOT/tests/core/positive/raii_defer_cond.cp"
 build_run raii_switch_continue "$ROOT/tests/core/positive/raii_switch_continue.cp"
@@ -199,6 +201,8 @@ expect_reject heap_extent_libc_overflow "$ROOT/tests/safety/heap_extent_libc_ove
 expect_reject libccontract_free_interior_offset "$ROOT/tests/safety/libccontract_free_interior_offset.c"
 expect_strict_reject libccontract_genuine_leak "$ROOT/tests/safety/libccontract_genuine_leak.c"
 expect_strict_reject mutable_borrow_alias "$ROOT/tests/safety/mutable_borrow_alias.c"
+expect_strict_reject stale_int_alias_free "$ROOT/tests/safety/stale_int_alias_free.c"
+expect_strict_reject longjmp_owner_reject "$ROOT/tests/safety/longjmp_owner_reject.cp"
 expect_reject realloc_failure "$ROOT/tests/safety/realloc_failure.c"
 expect_reject realloc_success_alias_uaf "$ROOT/tests/safety/realloc_success_alias_uaf.c"
 expect_reject memcpy_overflow "$ROOT/tests/safety/memcpy_overflow.c"
@@ -308,7 +312,7 @@ fi
 if "$CPLUS" build --legacy-c "$ROOT/tests/native/strict40_runner.c" \
    -o "$OUT/strict40_runner" >"$OUT/strict40_build.log" 2>&1 && \
    CPLUS_BIN="$CPLUS" "$OUT/strict40_runner" \
-     "$ROOT/scratch/cplus_safety_suite/tests" >"$OUT/strict40.log" 2>&1; then
+     "$ROOT/tests/fixtures/strict40" >"$OUT/strict40.log" 2>&1; then
   ok strict40_suite
 else
   bad strict40_suite "$(tail -1 "$OUT/strict40.log")"

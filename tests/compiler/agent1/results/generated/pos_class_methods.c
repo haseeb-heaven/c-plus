@@ -1,3 +1,12 @@
+extern void cplus_check_nonnull(const void *, const char *, int, const char *);
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
+  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
+  __cplus_nn_p; })
+#else
+#define CPLUS_NONNULL(P) \
+  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
 #  define CPLUS_STATIC_INLINE __attribute__((unused)) static
@@ -124,18 +133,18 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
@@ -152,19 +161,19 @@ typedef struct Player Player;
 void Player_damage(Player *self, int amount)
 #line 7 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/class_methods.c"
 {
-        CPLUS_CMPD_BIN(sub, self->health , int,  amount, 32, 1);
+        CPLUS_CMPD_BIN(sub, CPLUS_NONNULL(self)->health , int,  amount, 32, 1);
     }
 #line 11 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/class_methods.c"
 int Player_get_health(Player *self)
 #line 11 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/class_methods.c"
 {
-        return self->health;
+        return CPLUS_NONNULL(self)->health;
     }
 #line 15 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/class_methods.c"
 void Player_add_score(Player *self, int points)
 #line 15 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/class_methods.c"
 {
-        CPLUS_CMPD_BIN(add, self->score , int,  points, 32, 1);
+        CPLUS_CMPD_BIN(add, CPLUS_NONNULL(self)->score , int,  points, 32, 1);
     }
 #line 20 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/class_methods.c"
 

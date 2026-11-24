@@ -126,18 +126,18 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
@@ -149,7 +149,7 @@ int main(void) {
     int arr[] = {10, 20, 30};
     __typeof__( (3)) n = (3);
     __typeof__( 0) total = 0;
-    for (__typeof__( 0) i = 0; i < n; CPLUS_INC(i, int, 32, 1, 1, 1))
+    for (__typeof__( 0) i = 0; i < n; CPLUS_INC(add, i, int, 32, 1, 1, 1))
         CPLUS_CMPD_BIN(add, total , int,  arr[__cplus_bounds_check((size_t)(i), 3, "arr")], 32, 1);
     __typeof__( &total) p = &total;
     printf("n=%d total=%d p=%d\n", n, total, *p);

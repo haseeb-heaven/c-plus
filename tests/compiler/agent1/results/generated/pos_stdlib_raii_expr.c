@@ -124,29 +124,29 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
   ((T)__cplus_inline_sub_i64(0, (int64_t)(X), (BT), (SG)))
 #line 1 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/stdlib_raii_expr.cp"
-#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-3095-0.h"
-#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-3095-1.h"
+#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-58510-0.h"
+#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-58510-1.h"
 int main(void) {
   String s = String_ctor("hello");
   IntVec v = IntVec_ctor();
-  for (__typeof__( 0) i = 0; i < 20; CPLUS_INC(i, int, 32, 1, 1, 1)) IntVec_push(&v, ((int)__cplus_inline_mul_i64((int64_t)(i ), (int64_t)( i), 32, 1)));
+  for (__typeof__( 0) i = 0; i < 20; CPLUS_INC(add, i, int, 32, 1, 1, 1)) IntVec_push(&v, ((int)__cplus_inline_mul_i64((int64_t)(i ), (int64_t)( i), 32, 1)));
   { __typeof__(String_len ( & s ) == 5 && String_at ( & s , 1 ) == 'e' && IntVec_len ( & v ) == 20 && IntVec_at ( & v , 19 ) == 361 ? 0 : 1) __cplus_ret = (String_len ( & s ) == 5 && String_at ( & s , 1 ) == 'e' && IntVec_len ( & v ) == 20 && IntVec_at ( & v , 19 ) == 361 ? 0 : 1); IntVec_drop(&v); String_drop(&s);  return __cplus_ret;; }
 IntVec_drop(&v); String_drop(&s); 
 #line 9 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/stdlib_raii_expr.cp"

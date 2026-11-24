@@ -1,5 +1,14 @@
 #include <stddef.h>
 extern size_t __cplus_bounds_check(size_t, size_t, const char *);
+extern void cplus_check_nonnull(const void *, const char *, int, const char *);
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
+  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
+  __cplus_nn_p; })
+#else
+#define CPLUS_NONNULL(P) \
+  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
 #  define CPLUS_STATIC_INLINE __attribute__((unused)) static
@@ -126,18 +135,18 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
@@ -148,19 +157,19 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 int main(void) {
     int values[] = {10, 20, 30};
     int total = 0;
-    for (size_t __cplus_range_i0 = 0; __cplus_range_i0 < (3); CPLUS_INC(__cplus_range_i0, unsigned long, 64, 0, 1, 1)) { __typeof__(values[__cplus_bounds_check((size_t)(__cplus_range_i0), 3, "values")]) v = values[__cplus_bounds_check((size_t)(__cplus_range_i0), 3, "values")]; {
+    for (size_t __cplus_range_i0 = 0; __cplus_range_i0 < (3); CPLUS_INC(add, __cplus_range_i0, unsigned long, 64, 0, 1, 1)) { __typeof__(values[__cplus_bounds_check((size_t)(__cplus_range_i0), 3, "values")]) v = values[__cplus_bounds_check((size_t)(__cplus_range_i0), 3, "values")]; {
         CPLUS_CMPD_BIN(add, total , int,  v, 32, 1);
     }}
     print("total", total);
 
      int *heap = cplus_new_array(int, 3); 
     int i = 0;
-    for (size_t __cplus_range_i1 = 0; __cplus_range_i1 < ((3)); CPLUS_INC(__cplus_range_i1, unsigned long, 64, 0, 1, 1)) { __typeof__(heap[__cplus_range_i1]) x = heap[__cplus_range_i1]; {
-        heap[i] = i + 1;
+    for (size_t __cplus_range_i1 = 0; __cplus_range_i1 < ((3)); CPLUS_INC(add, __cplus_range_i1, unsigned long, 64, 0, 1, 1)) { __typeof__(CPLUS_NONNULL(heap)[__cplus_range_i1]) x = CPLUS_NONNULL(heap)[__cplus_range_i1]; {
+        CPLUS_NONNULL(heap)[i] = i + 1;
         (void)x;
-        CPLUS_INC(i, int, 32, 1, 1, 1);
+        CPLUS_INC(add, i, int, 32, 1, 1, 1);
     }}
-    print("heap", heap[0], heap[1], heap[2], "len", ((3)));
+    print("heap", CPLUS_NONNULL(heap)[0], CPLUS_NONNULL(heap)[1], CPLUS_NONNULL(heap)[2], "len", ((3)));
     { __typeof__(0) __cplus_ret = (0); cplus_release(heap); heap = NULL;  return __cplus_ret;; }
 cplus_release(heap); heap = NULL; 
 #line 21 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/range_for.c"

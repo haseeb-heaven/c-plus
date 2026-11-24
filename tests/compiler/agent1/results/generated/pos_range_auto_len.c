@@ -126,18 +126,18 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
@@ -147,7 +147,7 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 int main(void) {
   int v[] = {1,2,3,4,5};
   __typeof__( 0) sum = 0;
-  for (size_t __cplus_range_i0 = 0; __cplus_range_i0 < (5); CPLUS_INC(__cplus_range_i0, unsigned long, 64, 0, 1, 1)) { __typeof__(v[__cplus_bounds_check((size_t)(__cplus_range_i0), 5, "v")]) x = v[__cplus_bounds_check((size_t)(__cplus_range_i0), 5, "v")]; CPLUS_CMPD_BIN(add, sum , int,  x, 32, 1);}
+  for (size_t __cplus_range_i0 = 0; __cplus_range_i0 < (5); CPLUS_INC(add, __cplus_range_i0, unsigned long, 64, 0, 1, 1)) { __typeof__(v[__cplus_bounds_check((size_t)(__cplus_range_i0), 5, "v")]) x = v[__cplus_bounds_check((size_t)(__cplus_range_i0), 5, "v")]; CPLUS_CMPD_BIN(add, sum , int,  x, 32, 1);}
   if ((5) != 5 || countof(v) != 5) return 1;
   return sum == 15 ? 0 : 2;
 }

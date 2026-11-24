@@ -13,6 +13,8 @@
  *===----------------------------------------------------------------------===*/
 
 #include "cplus/cplus.h"
+#include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1321,33 +1323,172 @@ void cplus_print_end(void) {
   cplus_print_line.first = 1;
 }
 
-void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
+static const char *cplus_scan_type_name(size_t size, int is_unsigned) {
+  if (size == 1)
+    return is_unsigned ? "unsigned char" : "signed char";
+  if (size == sizeof(short))
+    return is_unsigned ? "unsigned short" : "short";
+  if (size == sizeof(int))
+    return is_unsigned ? "unsigned int" : "int";
+  if (size == sizeof(long))
+    return is_unsigned ? "unsigned long" : "long";
+  if (size == sizeof(long long))
+    return is_unsigned ? "unsigned long long" : "long long";
+  return is_unsigned ? "unsigned integer" : "integer";
+}
+
+static void cplus_scan_signed_checked(void *dest, size_t size,
+                                      const char *expr, const char *file,
+                                      int line) {
+  char token[128];
+  char detail[384];
+  int rc = scanf("%127s", token);
+  char *end = NULL;
+  long long v;
+  long long minv = LLONG_MIN;
+  long long maxv = LLONG_MAX;
+  const char *target = (expr && *expr) ? expr : "variable";
+  const char *tname = cplus_scan_type_name(size, 0);
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "could not read input for '%s' (%s) - input ended unexpectedly",
+             target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  errno = 0;
+  v = strtoll(token, &end, 0);
+  if (end == token || *end != '\0') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s) - expected a valid integer, not text/extra characters",
+             token, target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (size == 1) {
+    minv = SCHAR_MIN;
+    maxv = SCHAR_MAX;
+  } else if (size == sizeof(short)) {
+    minv = SHRT_MIN;
+    maxv = SHRT_MAX;
+  } else if (size == sizeof(int)) {
+    minv = INT_MIN;
+    maxv = INT_MAX;
+  } else if (size == sizeof(long)) {
+    minv = LONG_MIN;
+    maxv = LONG_MAX;
+  } else if (size != sizeof(long long)) {
+    snprintf(detail, sizeof(detail),
+             "unsupported destination size (%zu bytes) for '%s'", size, target);
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line, detail);
+  }
+  if (errno == ERANGE || v < minv || v > maxv) {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s, valid range %lld..%lld) - the number is too large/small for this variable type and would overflow memory",
+             token, target, tname, minv, maxv);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  if (size == 1) {
+    *(signed char *)dest = (signed char)v;
+  } else if (size == sizeof(short)) {
+    *(short *)dest = (short)v;
+  } else if (size == sizeof(int)) {
+    *(int *)dest = (int)v;
+  } else if (size == sizeof(long)) {
+    *(long *)dest = (long)v;
+  } else {
+    *(long long *)dest = v;
+  }
+}
+
+static void cplus_scan_unsigned_checked(void *dest, size_t size,
+                                        const char *expr, const char *file,
+                                        int line) {
+  char token[128];
+  char detail[384];
+  int rc = scanf("%127s", token);
+  char *end = NULL;
+  unsigned long long v;
+  unsigned long long maxv = ULLONG_MAX;
+  const char *target = (expr && *expr) ? expr : "variable";
+  const char *tname = cplus_scan_type_name(size, 1);
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "could not read input for '%s' (%s) - input ended unexpectedly",
+             target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (token[0] == '-') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s) - negative numbers are not allowed in an unsigned variable",
+             token, target, tname);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  errno = 0;
+  v = strtoull(token, &end, 0);
+  if (end == token || *end != '\0') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s) - expected a valid unsigned integer, not text/extra characters",
+             token, target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (size == 1) {
+    maxv = UCHAR_MAX;
+  } else if (size == sizeof(unsigned short)) {
+    maxv = USHRT_MAX;
+  } else if (size == sizeof(unsigned int)) {
+    maxv = UINT_MAX;
+  } else if (size == sizeof(unsigned long)) {
+    maxv = ULONG_MAX;
+  } else if (size != sizeof(unsigned long long)) {
+    snprintf(detail, sizeof(detail),
+             "unsupported destination size (%zu bytes) for '%s'", size, target);
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line, detail);
+  }
+  if (errno == ERANGE || v > maxv) {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s, valid range 0..%llu) - the number is too large for this variable type and would overflow memory",
+             token, target, tname, maxv);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  if (size == 1) {
+    *(unsigned char *)dest = (unsigned char)v;
+  } else if (size == sizeof(unsigned short)) {
+    *(unsigned short *)dest = (unsigned short)v;
+  } else if (size == sizeof(unsigned int)) {
+    *(unsigned int *)dest = (unsigned int)v;
+  } else if (size == sizeof(unsigned long)) {
+    *(unsigned long *)dest = (unsigned long)v;
+  } else {
+    *(unsigned long long *)dest = v;
+  }
+}
+
+void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
+                         const char *expr, const char *file, int line) {
   int rc = 0;
+  char detail[256];
+  const char *target = (expr && *expr) ? expr : "variable";
   cplus_log(CPLUS_LOG_DEBUG, "cplus_scan_value dest=%p size=%zu kind=%d", dest,
             size, (int)kind);
-  if (!dest)
-    cplus_print_fatal(CPLUS_EXIT_IO, "input error", NULL, 0,
-                      "scan destination is null");
+  if (!dest) {
+    snprintf(detail, sizeof(detail),
+             "scan destination '%s' is null (would dereference NULL)", target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
 
   switch (kind) {
   case CPLUS_SCAN_INT:
-    rc = scanf("%d", (int *)dest);
-    break;
-  case CPLUS_SCAN_UINT:
-    rc = scanf("%u", (unsigned int *)dest);
-    break;
   case CPLUS_SCAN_LONG:
-    rc = scanf("%ld", (long *)dest);
-    break;
-  case CPLUS_SCAN_ULONG:
-    rc = scanf("%lu", (unsigned long *)dest);
-    break;
   case CPLUS_SCAN_LLONG:
-    rc = scanf("%lld", (long long *)dest);
-    break;
+    cplus_scan_signed_checked(dest, size, target, file, line);
+    return;
+  case CPLUS_SCAN_UINT:
+  case CPLUS_SCAN_ULONG:
   case CPLUS_SCAN_ULLONG:
-    rc = scanf("%llu", (unsigned long long *)dest);
-    break;
+    cplus_scan_unsigned_checked(dest, size, target, file, line);
+    return;
   case CPLUS_SCAN_FLOAT:
     rc = scanf("%f", (float *)dest);
     break;
@@ -1370,11 +1511,17 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
     break;
   }
   default:
-    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", NULL, 0,
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line,
                       "unsupported scan type");
   }
 
-  if (rc != 1)
-    cplus_print_fatal(CPLUS_EXIT_IO, "input error", NULL, 0,
-                      "failed to read a value from stdin");
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "failed to read a valid value for '%s' from stdin", target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+}
+
+void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
+  cplus_scan_value_at(dest, size, kind, NULL, NULL, 0);
 }

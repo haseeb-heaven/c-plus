@@ -19,6 +19,8 @@
 
 #include "Sema/CPlusRewriter.h"
 
+#include <cstring> // std::strcmp (used by helper-name reservation checks)
+
 #include "LangFeatures.h"
 #include "Sema/CPlusLexer.h"
 #include "Sema/SemaCPlus.h"
@@ -3012,6 +3014,301 @@ collectNonnullDerefSites(const std::string &source,
   return sites;
 }
 
+// ---------------------------------------------------------------------------
+// Safe-mode lowering of C99 variable-length arrays.
+//
+// Rationale: Safe mode promises that an allocation whose element count is only
+// known at run time is bounded and deterministically released.  Rejecting a
+// plain `T a[n];` out of hand forbids ordinary C99 code for no safety benefit:
+// the runtime already exposes cplus_alloc_array (overflow-checked count *
+// element-size) and cplus_release.  We therefore lower the VLA declaration in
+// the *final* lowered C to a managed allocation with the same element type and
+// count, preserving the identifier so bounds instrumentation and all later
+// uses keep working.  An explicit `cplus_release(name);` is emitted at every
+// scope exit that ends the array's lifetime, plus before each `return`.
+//
+// This helper is called only from instrumentDynamicArrayBounds(), which the
+// driver invokes exclusively in Safe mode.  LEGACY mode never reaches it, so
+// its byte-for-byte source preservation is untouched.  No C99 inline, no VLA
+// and no new subsystem are introduced -- only declarations of the existing
+// runtime helpers in the generated prelude.
+// ---------------------------------------------------------------------------
+
+static bool isVlaTypeWord(const Token &t) {
+  if (t.kind != TokKind::Identifier)
+    return false;
+  static const std::set<std::string> kWords = {
+      "int",      "char",     "short",    "long",     "float",
+      "double",   "void",     "unsigned", "signed",   "struct",
+      "union",    "enum",     "size_t",   "ptrdiff_t", "_Bool",
+      "int8_t",   "uint8_t",  "int16_t",  "uint16_t", "int32_t",
+      "uint32_t", "int64_t",  "uint64_t", "intptr_t", "uintptr_t"};
+  return kWords.count(t.text) != 0;
+}
+
+static bool isVlaQualifier(const Token &t) {
+  return t.kind == TokKind::Identifier &&
+         (t.text == "const" || t.text == "volatile" || t.text == "_Atomic");
+}
+
+/// Constant-expression exclusions mirror the old static check: numeric
+/// extents, function-like constants (offsetof/sizeof/...) and ALL-CAPS macro
+/// names are not VLAs and must stay as ordinary arrays.
+static bool isDynamicVlaExtent(const TokenStream &ts, size_t inner, size_t rb) {
+  if (inner >= rb)
+    return false;
+  if (ts[inner].kind == TokKind::Number)
+    return false;
+  if (ts[inner].kind == TokKind::Identifier &&
+      ts.isPunct(ts.nextSig(inner), "("))
+    return false;
+  if (ts[inner].kind == TokKind::Identifier) {
+    bool macroLike = true;
+    for (char c : ts[inner].text)
+      if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+        macroLike = false;
+    if (macroLike)
+      return false;
+  }
+  return true;
+}
+
+/// The token immediately before a declarator name must belong to a
+/// declaration specifier (type word, qualifier, '*' or comma).  This rejects
+/// ordinary subscripts such as `f(a[n])`, `return a[n]` and `x = a[n]` while
+/// accepting `int a[n]`, `int *p[n]` and `int a[n], b[m]`.
+static bool hasDeclarationPrefix(const TokenStream &ts, size_t name) {
+  size_t p = ts.prevSig(name);
+  if (p == kNPos)
+    return false;
+  if (isVlaTypeWord(ts[p]) || isVlaQualifier(ts[p]) || ts.isPunct(p, "*"))
+    return true;
+  if (ts.isPunct(p, ",")) {
+    // A comma separates declarators only at file/block scope.  Inside `(` it
+    // is a call-argument separator (`f(x, a[i])`), i.e. a real subscript.
+    int depth = 0;
+    for (size_t k = 0; k < p; ++k) {
+      if (ts.isPunct(k, "(")) ++depth;
+      else if (ts.isPunct(k, ")")) --depth;
+    }
+    return depth == 0;
+  }
+  if (ts[p].kind == TokKind::Identifier) {
+    size_t pp = ts.prevSig(p);
+    if (pp != kNPos && (ts.isIdent(pp, "struct") || ts.isIdent(pp, "union") ||
+                        ts.isIdent(pp, "enum")))
+      return true; // struct/union/enum tag before the declarator
+  }
+  return false;
+}
+
+/// Lower every single-dimensional VLA declaration in `source`, appending text
+/// edits to `out`.  Returns true when at least one VLA was lowered.  `source`
+/// is already the fully lowered C (post-RAII), so the edits operate on final
+/// tokens and cannot disturb earlier passes.
+static bool lowerVariableLengthArrays(
+    const std::string &source, std::vector<SafetyInsertion> &out,
+    std::map<std::string, std::string> &vlaCounts) {
+  std::vector<Token> toks = lexCPlus(source);
+  TokenStream ts(toks);
+  struct LiveVla {
+    size_t scope;
+    std::string release;
+  };
+  std::vector<LiveVla> live;
+  std::set<std::string> loweredNames;
+  std::vector<SafetyInsertion> edits;
+  std::vector<SafetyInsertion> sizeofEdits;
+  size_t brace = 0, paren = 0;
+  bool haveVla = false;
+
+  for (size_t i = 0; i < ts.size(); ++i) {
+    const Token &t = ts[i];
+    if (t.kind == TokKind::Whitespace || t.kind == TokKind::Comment)
+      continue;
+    // Preprocessor directives may hold unbalanced braces in conditional
+    // compilation; the token stream cannot resolve them, so skip the line.
+    if (ts.isPunct(i, "#")) {
+      size_t e = i;
+      while (e < ts.size() && toks[e].line == t.line)
+        ++e;
+      i = e > i ? e - 1 : i;
+      continue;
+    }
+    if (ts.isPunct(i, "{")) { ++brace; continue; }
+    if (ts.isPunct(i, "}")) {
+      // Reverse declaration order, innermost scopes first.
+      for (size_t k = live.size(); k > 0; --k)
+        if (live[k - 1].scope == brace)
+          edits.push_back({t.offset, 0, 0, live[k - 1].release, 0});
+      std::vector<LiveVla> kept;
+      for (const auto &v : live)
+        if (v.scope != brace)
+          kept.push_back(v);
+      live.swap(kept);
+      if (brace)
+        --brace;
+      continue;
+    }
+    if (ts.isPunct(i, "(")) { ++paren; continue; }
+    if (ts.isPunct(i, ")")) { if (paren) --paren; continue; }
+    if (ts.isIdent(i, "return") && !live.empty()) {
+      // A GNU statement expression keeps the release inside the single
+      // `return` statement (so an unbraced `if (c) return x;` stays intact),
+      // and captures the value BEFORE releasing: releasing first would make
+      // `return a[i];` read freed memory.  __typeof__ mirrors the existing
+      // RAII lowering's __cplus_ret pattern.  The original expression tokens
+      // stay in place, so bounds-check insertions inside it are preserved.
+      size_t semi = ts.statementEnd(i);
+      if (semi != kNPos && semi < ts.size()) {
+        size_t exprStart = ts.nextSig(i);
+        if (exprStart < semi) {
+          std::string expr =
+              sourceSlice(source, toks[exprStart].offset, toks[semi].offset);
+          size_t b = expr.find_first_not_of(" \t\n\r");
+          size_t e = expr.find_last_not_of(" \t\n\r");
+          expr = b == std::string::npos ? std::string()
+                                        : expr.substr(b, e - b + 1);
+          edits.push_back({toks[exprStart].offset, 0, 0,
+                           "({ __typeof__(" + expr +
+                               ") __cplus_vla_ret = (",
+                           0});
+        } else {
+          edits.push_back({toks[semi].offset, 0, 0, "({ ", 0});
+        }
+        std::string tail = exprStart < semi ? "); " : "";
+        for (size_t k = live.size(); k > 0; --k)
+          tail += live[k - 1].release;
+        tail += exprStart < semi ? " __cplus_vla_ret; });"
+                                 : " });";
+        edits.push_back({toks[semi].offset, 0, 0, tail, 0});
+      }
+      continue;
+    }
+    if (t.kind != TokKind::Identifier || brace == 0 || paren != 0)
+      continue;
+    if (!hasDeclarationPrefix(ts, i))
+      continue;
+    size_t lb = ts.nextSig(i);
+    if (!ts.isPunct(lb, "["))
+      continue;
+    size_t rb = ts.matchBracket(lb);
+    if (rb == kNPos || rb == ts.nextSig(lb))
+      continue;
+    // Multi-dimensional VLAs need pointer-to-row types and a VLA element size
+    // in sizeof; leave them to the STRICT policy rather than lower them wrong.
+    if (ts.isPunct(ts.nextSig(rb), "["))
+      continue;
+    size_t inner = ts.nextSig(lb);
+    if (!isDynamicVlaExtent(ts, inner, rb))
+      continue;
+
+    // Recover the declaration specifiers from the start of the statement.
+    size_t start = i;
+    while (start > 0) {
+      size_t p = ts.prevSig(start);
+      if (p == kNPos)
+        break;
+      if (ts.isPunct(p, ";") || ts.isPunct(p, "{") || ts.isPunct(p, "}")) {
+        start = ts.nextSig(p);
+        break;
+      }
+      start = p;
+    }
+    size_t lastComma = kNPos;
+    for (size_t k = start; k < i; ++k)
+      if (ts.isPunct(k, ","))
+        lastComma = k;
+    std::string base;
+    int stars = 0;
+    for (size_t k = start; k < i;) {
+      if (ts.isPunct(k, ",") || ts.isPunct(k, "[") || ts.isPunct(k, "]")) {
+        ++k;
+        continue;
+      }
+      if (k > lastComma && ts.isPunct(k, "*")) {
+        ++stars;
+        ++k;
+        continue;
+      }
+      if (isVlaQualifier(ts[k])) { ++k; continue; } // strip from the cast
+      if (isVlaTypeWord(ts[k])) {
+        base += ts[k].text + " ";
+        if (ts.isIdent(k, "struct") || ts.isIdent(k, "union") ||
+            ts.isIdent(k, "enum")) {
+          size_t tag = ts.nextSig(k);
+          if (tag < i && toks[tag].kind == TokKind::Identifier) {
+            base += toks[tag].text + " ";
+            k = tag;
+          }
+        }
+        ++k;
+        continue;
+      }
+      ++k;
+    }
+    if (base.empty())
+      continue; // not a real declaration after all
+
+    std::string count = sourceSlice(source, endOfToken(toks[lb]),
+                                    toks[rb].offset);
+    size_t b = count.find_first_not_of(" \t\n\r");
+    size_t e = count.find_last_not_of(" \t\n\r");
+    count = b == std::string::npos ? std::string()
+                                   : count.substr(b, e - b + 1);
+    if (count.empty())
+      continue;
+
+    const std::string name = t.text;
+    // Bind the extent exactly once.  The temporary is declared immediately
+    // before the VLA declaration (still a declaration, so C89-valid) and the
+    // allocation reads the temporary rather than re-evaluating the original
+    // expression.  Reusing `n` directly would be wrong when it changes value
+    // later, and would double-evaluate side effects such as `n++`.
+    const std::string countVar =
+        "__cplus_vla_count_" + std::to_string(vlaCounts.size()) + "_" + name;
+    edits.push_back({toks[start].offset, 0, 0,
+                     "size_t " + countVar + " = (size_t)(" + count + "); ", 0});
+    const std::string elem = base + std::string(stars, '*');
+    const std::string cast = base + std::string(stars + 1, '*');
+    // `T a[n];` -> `size_t tmp = (size_t)(n); T *a = (T *)cplus_alloc_array(tmp, sizeof(T));`
+    edits.push_back({t.offset, 0, 0, " *", 0});
+    edits.push_back({toks[lb].offset, 0, 0,
+                     " = (" + cast + ")cplus_alloc_array(" + countVar +
+                         ", sizeof(" + elem + "))",
+                     endOfToken(toks[rb]) - toks[lb].offset});
+    // Export the runtime extent so instrumentDynamicArrayBounds() can guard
+    // every `a[index]` with the very same count the allocation used.
+    vlaCounts[name] = countVar;
+    live.push_back({brace,
+                    "cplus_release((void *)" + name + "); "});
+    loweredNames.insert(name);
+    haveVla = true;
+  }
+
+  // `sizeof(a)` on a lowered VLA must report the allocation's byte count, not
+  // sizeof(pointer).  cplus_alloc_bytes() is the existing introspection helper
+  // for exactly this; it aborts if the pointer is not a live C+ allocation.
+  for (size_t i = 0; i + 3 < ts.size(); ++i) {
+    if (!ts.isIdent(i, "sizeof") || !ts.isPunct(ts.nextSig(i), "("))
+      continue;
+    size_t nm = ts.nextSig(ts.nextSig(i));
+    if (nm >= ts.size() || toks[nm].kind != TokKind::Identifier ||
+        !loweredNames.count(toks[nm].text))
+      continue;
+    size_t rp = ts.nextSig(nm);
+    if (!ts.isPunct(rp, ")"))
+      continue;
+    sizeofEdits.push_back(
+        {ts[i].offset, 0, 0, "cplus_alloc_bytes(" + toks[nm].text + ")",
+         endOfToken(toks[rp]) - ts[i].offset});
+  }
+
+  edits.insert(edits.end(), sizeofEdits.begin(), sizeofEdits.end());
+  out.insert(out.end(), edits.begin(), edits.end());
+  return haveVla;
+}
+
 } // namespace
 
 std::string instrumentDynamicArrayBounds(
@@ -3041,9 +3338,17 @@ std::string instrumentDynamicArrayBounds(
   // remain untouched.
   const std::vector<NonnullSite> nonnullSites =
       collectNonnullDerefSites(source, arrayLengths);
+  // Safe-mode C99 VLA lowering (see rationale above).  This runs here, and
+  // only here, because the driver calls this function exclusively in Safe
+  // mode; LEGACY byte preservation therefore remains exact.
+  std::vector<SafetyInsertion> vlaEdits;
+  std::map<std::string, std::string> vlaCounts; // VLA name -> runtime count temp
+  const bool haveVla =
+      lowerVariableLengthArrays(source, vlaEdits, vlaCounts);
   if (arrayLengths.empty() && arith.empty() && bounds.empty() &&
       checkedPointerSites().empty() && checkedAllocSites().empty() &&
-      checkedFreeSites().empty() && nonnullSites.empty() && !needZeroDecl)
+      checkedFreeSites().empty() && nonnullSites.empty() && !needZeroDecl &&
+      !haveVla)
     return source;
 
   // Enum initializers must be integer constant expressions.  A checked helper
@@ -3145,6 +3450,54 @@ std::string instrumentDynamicArrayBounds(
       insertions.push_back({toks[close].offset, outer, 2,
                             "), " + std::to_string(ai->second) + ", \"" +
                                 toks[i].text + "\")", 0});
+    }
+  }
+
+  // VLA subscripts have a *runtime* extent, so a constant index such as
+  // `a[9]` is NOT statically provable in bounds and must be checked too.
+  // The extent is the single-evaluation temporary emitted by the lowering
+  // above, which keeps the check consistent with the allocation even when the
+  // original count expression has side effects or is later reassigned.
+  if (!vlaCounts.empty()) {
+    std::vector<Token> toks = lexCPlus(source);
+    TokenStream ts(toks);
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind != TokKind::Identifier)
+        continue;
+      auto vi = vlaCounts.find(toks[i].text);
+      if (vi == vlaCounts.end())
+        continue;
+      // Skip the now-lowered declaration itself (`int a[n];` in the source).
+      if (hasDeclarationPrefix(ts, i))
+        continue;
+      size_t open = ts.nextSig(i);
+      if (open >= toks.size() || !ts.isPunct(open, "["))
+        continue;
+      size_t close = ts.matchBracket(open);
+      if (close == kNPos || close == ts.nextSig(open))
+        continue;
+      // nextSig() pre-increments, so nextSig(open) is the first token inside
+      // the brackets; nextSig(open+1) would skip a single-token index.
+      size_t first = ts.nextSig(open);
+      if (first >= close || first >= toks.size())
+        continue;
+      size_t idxBegin = toks[first].offset;
+      if (guardedIndexOffsets.count(idxBegin))
+        continue; // already guarded by the fixed-array or AST pass
+      haveBounds = true;
+      guardedIndexOffsets.insert(idxBegin);
+      // Match the fixed-array bounds pass: span kNPos makes this the OUTERMOST
+      // prefix (sorted first at a shared offset) and the OUTERMOST suffix
+      // (sorted last).  A span of 0 let an arithmetic site's prefix sort ahead
+      // of ours, splicing the bounds macro into its argument list and
+      // producing calls with the wrong arity.
+      const size_t outer = kNPos;
+      insertions.push_back({idxBegin, outer, 0, "__cplus_bounds_check((size_t)(",
+                            0});
+      insertions.push_back({toks[close].offset, outer, 2,
+                            "), (size_t)(" + vi->second + "), \"" +
+                                toks[i].text + "\")",
+                            0});
     }
   }
 
@@ -3520,6 +3873,10 @@ std::string instrumentDynamicArrayBounds(
     haveNonnull = true;
   }
 
+  // VLA lowering edits are already in final lowered-C coordinates; merge them
+  // with the instrumentation edits so one sorted pass emits everything.
+  insertions.insert(insertions.end(), vlaEdits.begin(), vlaEdits.end());
+
   if (insertions.empty())
     return source;
 
@@ -3590,8 +3947,16 @@ std::string instrumentDynamicArrayBounds(
   if (needZeroDecl)
     prelude += "#include <stddef.h>\n"
                "extern void cplus_zero(void *, size_t);\n";
-  if (haveBounds || havePtrFormation)
-    prelude += "#include <stddef.h>\n";
+  if (haveVla)
+    // Signatures mirror runtime/include/cplus/cplus.h.  Declared before the
+    // first #line so original source line numbers are preserved, and reused
+    // from the existing runtime instead of adding a new subsystem.
+    prelude += "#include <stddef.h>\n"
+               "extern void *cplus_alloc_array(size_t, size_t);\n"
+               "extern void cplus_release(void *);\n"
+               "extern size_t cplus_alloc_bytes(const void *);\n";
+  if ((haveBounds && !haveVla) || havePtrFormation)
+    prelude += "#include <stddef.h>\n"; // haveVla already included it
   if (haveBounds)
     prelude += "extern size_t __cplus_bounds_check(size_t, size_t, "
                "const char *);\n";

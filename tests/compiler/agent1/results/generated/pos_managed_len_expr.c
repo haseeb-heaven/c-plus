@@ -1,3 +1,12 @@
+extern void cplus_check_nonnull(const void *, const char *, int, const char *);
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
+  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
+  __cplus_nn_p; })
+#else
+#define CPLUS_NONNULL(P) \
+  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
 #  define CPLUS_STATIC_INLINE __attribute__((unused)) static
@@ -124,18 +133,18 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
@@ -145,8 +154,8 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 int main(void) {
    int *xs = cplus_new_array(int, 7); 
   if (((7)) != 7) { __typeof__(1) __cplus_ret = (1); cplus_release(xs); xs = NULL;  return __cplus_ret;; }
-  for (__typeof__( 0) i = 0; i < ((7)); CPLUS_INC(i, int, 32, 1, 1, 1)) xs[i] = i + 1;
-  { __typeof__(xs [ 6 ] == 7 ? 0 : 2) __cplus_ret = (xs [ 6 ] == 7 ? 0 : 2); cplus_release(xs); xs = NULL;  return __cplus_ret;; }
+  for (__typeof__( 0) i = 0; i < ((7)); CPLUS_INC(add, i, int, 32, 1, 1, 1)) CPLUS_NONNULL(xs)[i] = i + 1;
+  { __typeof__(CPLUS_NONNULL(xs) [ 6 ] == 7 ? 0 : 2) __cplus_ret = (CPLUS_NONNULL(xs) [ 6 ] == 7 ? 0 : 2); cplus_release(xs); xs = NULL;  return __cplus_ret;; }
 cplus_release(xs); xs = NULL; 
 #line 8 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/managed_len_expr.cp"
 }

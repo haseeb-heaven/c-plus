@@ -1,3 +1,12 @@
+extern void cplus_check_nonnull(const void *, const char *, int, const char *);
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
+  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
+  __cplus_nn_p; })
+#else
+#define CPLUS_NONNULL(P) \
+  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
 #  define CPLUS_STATIC_INLINE __attribute__((unused)) static
@@ -124,18 +133,18 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
@@ -156,6 +165,6 @@ int add(int a,  int b ,  int c ) {
 
 int main(void) {
     int *p = get_data(0);
-    print("first", p[0], "add", add(1, 2, 3), add(1, 5, 3), add(1, 5, 9));
+    print("first", CPLUS_NONNULL(p)[0], "add", add(1, 2, 3), add(1, 5, 3), add(1, 5, 9));
     return 0;
 }

@@ -601,6 +601,244 @@ public:
     return std::string();
   }
 
+  /// True when `e` is an integer expression that carries pointer provenance:
+  /// `(uintptr_t)p`, a tracked integer variable (`u` from
+  /// `uintptr_t u = (uintptr_t)p`), or a tagged/offset form (`u | 2`,
+  /// `u & ~1`, `u + 8`) built from one.  Only the expression *shape* is
+  /// decided here; liveness is answered by isReleased()/releasedVars_ at the
+  /// release call site, so `(uintptr_t)` comparisons/hashing are unaffected.
+  bool isIntegerProvenanceExpr(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 8)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *ce = dyn_cast<CastExpr>(x)) {
+      if (ce->getType()->isIntegerType()) {
+        const Expr *sub = ce->getSubExpr()->IgnoreParenImpCasts();
+        if (sub && sub->getType()->isPointerType())
+          return true; // (uintptr_t)p / (intptr_t)p
+        return isIntegerProvenanceExpr(sub, depth + 1);
+      }
+      if (ce->getType()->isPointerType())
+        return isIntegerLaunderedPointer(x, depth + 1);
+      return false;
+    }
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x)) {
+      const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+      if (vd) {
+        const std::string &n = vd->getNameAsString();
+        return provenanceInts_.count(n) != 0 || provenanceSource_.count(n) != 0;
+      }
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(x))
+      return isIntegerProvenanceExpr(bo->getLHS(), depth + 1) ||
+             isIntegerProvenanceExpr(bo->getRHS(), depth + 1);
+    if (const auto *uo = dyn_cast<UnaryOperator>(x))
+      return isIntegerProvenanceExpr(uo->getSubExpr(), depth + 1);
+    if (const auto *co = dyn_cast<ConditionalOperator>(x))
+      return isIntegerProvenanceExpr(co->getTrueExpr(), depth + 1) ||
+             isIntegerProvenanceExpr(co->getFalseExpr(), depth + 1);
+    return false;
+  }
+
+  /// True when `e` is a pointer produced by casting a provenance integer back
+  /// to a pointer: `(int *)u`, `(int *)((uintptr_t)p | 1)`,
+  /// `(int *)(void *)(uintptr_t)p`, etc. Casts and parens are stripped in any
+  /// order. Combined with isReleased() this catches the F2 stale-alias pattern
+  /// where the integer address can be reused for a different allocation.
+  bool isIntegerLaunderedPointer(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 8)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *ce = dyn_cast<CastExpr>(x)) {
+      if (ce->getType()->isPointerType())
+        return isIntegerLaunderedPointer(ce->getSubExpr(), depth + 1);
+      if (ce->getType()->isIntegerType())
+        return isIntegerProvenanceExpr(x, depth + 1);
+      return false;
+    }
+    if (x->getType()->isIntegerType())
+      return isIntegerProvenanceExpr(x, depth + 1);
+    return false;
+  }
+
+  /// Resolve the *released* pointer source behind an integer-laundered
+  /// pointer argument. isReleased() only looks through casts to a variable
+  /// name, so an inline tagged form (`(int *)((uintptr_t)p | 1)`) needs this
+  /// recursive walk. An empty result means the integer did not come from a
+  /// pointer released earlier in this TU.
+  std::string staleIntegerAliasSource(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 8)
+      return std::string();
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *ce = dyn_cast<CastExpr>(x)) {
+      if (ce->getType()->isIntegerType()) {
+        std::string src = pointerSourceOf(x); // (uintptr_t)p -> p
+        if (!src.empty())
+          return releasedVars_.count(src) ? src : std::string();
+        // Offset/tagged pointer operand, e.g. `(uintptr_t)(p + 1)`.
+        return staleIntegerAliasSource(ce->getSubExpr(), depth + 1);
+      }
+      if (ce->getType()->isPointerType())
+        return staleIntegerAliasSource(ce->getSubExpr(), depth + 1);
+      return std::string();
+    }
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x)) {
+      const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+      if (!vd)
+        return std::string();
+      const std::string &n = vd->getNameAsString();
+      // markReleased() propagates the taint to provenance integers as well.
+      if (releasedVars_.count(n))
+        return n;
+      auto it = provenanceSource_.find(n);
+      if (it != provenanceSource_.end() && releasedVars_.count(it->second))
+        return it->second;
+      return std::string();
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(x)) {
+      std::string a = staleIntegerAliasSource(bo->getLHS(), depth + 1);
+      if (!a.empty())
+        return a;
+      return staleIntegerAliasSource(bo->getRHS(), depth + 1);
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(x))
+      return staleIntegerAliasSource(uo->getSubExpr(), depth + 1);
+    if (const auto *co = dyn_cast<ConditionalOperator>(x)) {
+      std::string a = staleIntegerAliasSource(co->getTrueExpr(), depth + 1);
+      return a.empty() ? staleIntegerAliasSource(co->getFalseExpr(), depth + 1)
+                       : a;
+    }
+    return std::string();
+  }
+
+  /// ABI constraint rationale: plain C pointers must stay bare addresses so
+  /// they keep their size/layout across the C ABI, the retail executable and
+  /// libc. A pointer-borne liveness token (fat pointer) would change that ABI
+  /// and cannot be used here. The stale free therefore cannot be caught at
+  /// runtime; checkStaleIntegerAliasArgs() rejects its source pattern at
+  /// compile time instead.
+  void checkStaleIntegerAliasArgs(const CallExpr *call,
+                                  const std::string &name,
+                                  const FunctionDecl *callee) {
+    if (!report_ || !call)
+      return;
+    std::set<unsigned> slots;
+    auto addReleaseApi = [&](const std::string &n) {
+      if (n == "free" || n == "cplus_release" ||
+          n == "cplus_free_registered" || n == "free_s")
+        slots.insert(0);
+    };
+    addReleaseApi(name);
+    for (const auto &target : calleeNames(call, callee)) {
+      addReleaseApi(target);
+      auto uit = userFrees_.find(target); // wrappers that release a parameter
+      if (uit != userFrees_.end())
+        for (int idx : uit->second)
+          if (idx >= 0)
+            slots.insert((unsigned)idx);
+    }
+    FunctionEffect contract = libcEffect(name);
+    for (int idx : contract.freeArgs)
+      if (idx >= 0)
+        slots.insert((unsigned)idx);
+    for (unsigned idx : slots) {
+      if (idx >= call->getNumArgs())
+        continue;
+      const Expr *arg = call->getArg(idx);
+      if (!isIntegerLaunderedPointer(arg) ||
+          (!isReleased(arg) && staleIntegerAliasSource(arg).empty()))
+        continue;
+      reportStaleIntegerAlias(call->getBeginLoc());
+    }
+  }
+
+  /// `&local` where `local` is an automatic variable of the current function
+  /// (a static local, global, parameter or `&local.field` does not qualify).
+  /// Returning/storing such an address outlives the variable's frame.
+  const VarDecl *automaticLocalOfAddress(const Expr *e) const {
+    if (!e)
+      return nullptr;
+    const Expr *x = e->IgnoreParenImpCasts();
+    const auto *uo = dyn_cast<UnaryOperator>(x);
+    if (!uo || uo->getOpcode() != UO_AddrOf)
+      return nullptr;
+    const Expr *sub = uo->getSubExpr()->IgnoreParenCasts();
+    const auto *ref = dyn_cast<DeclRefExpr>(sub);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd || isa<ParmVarDecl>(vd) || !vd->hasLocalStorage())
+      return nullptr;
+    return vd;
+  }
+
+  /// True when an aggregate initializer contains an `&local` element (also
+  /// looks into nested init lists such as `struct S s = { { &x } };`).
+  bool exprContainsLocalAddress(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 6)
+      return false;
+    if (automaticLocalOfAddress(e))
+      return true;
+    if (const auto *il = dyn_cast<InitListExpr>(e))
+      for (unsigned i = 0; i < il->getNumInits(); ++i)
+        if (exprContainsLocalAddress(il->getInit(i), depth + 1))
+          return true;
+    return false;
+  }
+
+  /// True when `e` is a plain integer constant with no pointer provenance,
+  /// e.g. `0xdeadbeefULL` / `(uintptr_t)0xdeadbeefULL`.  Pointer-derived
+  /// integers such as `(uintptr_t)p` are excluded so legitimate pointer stores
+  /// into a union are not mistaken for a forged address.
+  bool isPlainIntegerConstantExpr(const Expr *e) const {
+    if (!e || isIntegerProvenanceExpr(e))
+      return false;
+    Expr::EvalResult r;
+    return e->EvaluateAsInt(r, ctx_) && r.Val.isInt();
+  }
+
+  /// If `e` is `u.f` where `u` is a union and `f` is a non-pointer member,
+  /// return the union variable name; otherwise empty.
+  std::string unionNonPointerMemberVar(const Expr *e) const {
+    const Expr *x = e ? e->IgnoreParenImpCasts() : nullptr;
+    const auto *me = x ? dyn_cast<MemberExpr>(x) : nullptr;
+    if (!me || me->getMemberDecl()->getType()->isPointerType())
+      return std::string();
+    const Expr *base = me->getBase()->IgnoreParenCasts();
+    const auto *ref = dyn_cast<DeclRefExpr>(base);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd || !vd->getType()->isUnionType())
+      return std::string();
+    return vd->getNameAsString();
+  }
+
+  /// If `e` is `u.ptr` where `u` is a union whose integer member was forged
+  /// with a plain constant, return the member expression for diagnosis.
+  const MemberExpr *forgedUnionPointerMember(const Expr *e) const {
+    const Expr *x = e ? e->IgnoreParenImpCasts() : nullptr;
+    const auto *me = x ? dyn_cast<MemberExpr>(x) : nullptr;
+    if (!me || !me->getMemberDecl()->getType()->isPointerType())
+      return nullptr;
+    const Expr *base = me->getBase()->IgnoreParenCasts();
+    const auto *ref = dyn_cast<DeclRefExpr>(base);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd || !forgedUnionVars_.count(vd->getNameAsString()))
+      return nullptr;
+    return me;
+  }
+
+  /// Direct union-member deref (`*u.ptr`) or a local pointer copied from such
+  /// a member (`int *q = u.ptr; *q`).  Comparisons/hashing of `u.ptr` are
+  /// deliberately not matched.
+  const Expr *forgedUnionPointerSource(const Expr *e) const {
+    if (const MemberExpr *me = forgedUnionPointerMember(e))
+      return me;
+    const Expr *x = e ? e->IgnoreParenImpCasts() : nullptr;
+    if (const auto *ref = x ? dyn_cast<DeclRefExpr>(x) : nullptr)
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (forgedPointerVars_.count(vd->getNameAsString()))
+          return x;
+    return nullptr;
+  }
+
   /// Name of the variable addressed by an out-parameter argument (`&q` -> q).
   std::string varNameOfAddressArg(const Expr *e) const {
     if (!e)
@@ -3480,6 +3718,9 @@ public:
     currentFnDecl_ = fd;
     stringPtrs_.clear(); // names are function-scoped, not TU-scoped
     localParamAliases_.clear(); // per-function alias -> parameter slot map
+    forgedUnionVars_.clear();    // compile-time union-punning provenance
+    forgedPointerVars_.clear();  // locals copied from a forged union pointer
+    structLocalAddrVars_.clear(); // structs initialized with `&local`
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
@@ -3989,6 +4230,17 @@ public:
   }
 
   bool VisitReturnStmt(ReturnStmt *s) {
+    if (report_ && s->getRetValue()) {
+      const Expr *value = s->getRetValue()->IgnoreParenImpCasts();
+      if (const auto *ref = dyn_cast<DeclRefExpr>(value))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (vd->hasLocalStorage() &&
+              structLocalAddrVars_.count(vd->getNameAsString()))
+            reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
+                        "struct result contains address of local",
+                        "suggested correction: copy the pointed-to data into "
+                        "the result or heap-allocate it before returning");
+    }
     if (report_ || !s->getRetValue() || !currentFnDecl_ ||
         !currentFnDecl_->getBody())
       return true;
@@ -4061,6 +4313,12 @@ public:
     }
     if (!report_ && vd->getType()->isUnionType())
       unionVars_.insert(vd->getNameAsString());
+    // A local struct whose aggregate initializer holds `&local` carries a
+    // dangling address: returning it from this function escapes the frame.
+    if (vd->hasLocalStorage() && vd->getInit() &&
+        vd->getType()->isRecordType() &&
+        exprContainsLocalAddress(vd->getInit()))
+      structLocalAddrVars_.insert(vd->getNameAsString());
     if (!report_ && vd->hasGlobalStorage()) {
       allGlobals_.insert(vd->getNameAsString());
       if (!vd->getType().isVolatileQualified())
@@ -4253,8 +4511,20 @@ public:
       const Expr *init = vd->getInit()->IgnoreParenCasts();
       const std::string fkey = lvalueKey(init);
       if (!fkey.empty() && fkey.find('.') != std::string::npos &&
-          vd->getType()->isPointerType())
+          vd->getType()->isPointerType()) {
         linkAlias(vd->getNameAsString(), fkey);
+        // Read side of a struct-pointer-field alias: `int *d = b.p;` makes
+        // d another view of the field's extent. free(b.p) records the field
+        // in releasedFields_, and isReleased(d) must see it here.
+        fieldAliases_[fkey].insert(vd->getNameAsString());
+        fieldAliases_[vd->getNameAsString()].insert(fkey);
+        if (releasedFields_.count(fkey) || releasedVars_.count(fkey))
+          releasedVars_.insert(vd->getNameAsString());
+      }
+      // A pointer copied out of a forged union member stays forged so a
+      // later dereference of the local is diagnosed too.
+      if (vd->getType()->isPointerType() && forgedUnionPointerMember(init))
+        forgedPointerVars_.insert(vd->getNameAsString());
       if (const auto *ref = dyn_cast<DeclRefExpr>(init))
         if (const auto *ivd = dyn_cast_or_null<VarDecl>(ref->getDecl()))
           if (vd->getType()->isRecordType() && ivd->getType()->isRecordType()) {
@@ -4515,6 +4785,25 @@ public:
         }
       }
       return true;
+    }
+    // Compile-time-only lifetime / provenance facts for the breaker patterns.
+    if (op->isAssignmentOp()) {
+      // `*out = &local`: the address of a frame-local escapes through a
+      // pointer out-parameter of the current function.
+      const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
+      if (const auto *uo = dyn_cast<UnaryOperator>(lhs))
+        if (uo->getOpcode() == UO_Deref && paramIndexOf(uo->getSubExpr()) >= 0)
+          if (const VarDecl *local = automaticLocalOfAddress(op->getRHS()))
+            reportNamed(local->getBeginLoc(), "CPLUS-LIFETIME",
+                        "address of local escapes through out-parameter",
+                        "suggested correction: do not store the address of a "
+                        "frame-local through an out-parameter; heap-allocate "
+                        "the object or return it by value");
+      // Writing a non-pointer-derived integer constant into a union integer
+      // member forges the provenance of every pointer view of those bytes.
+      const std::string uv = unionNonPointerMemberVar(op->getLHS());
+      if (!uv.empty() && isPlainIntegerConstantExpr(op->getRHS()))
+        forgedUnionVars_.insert(uv);
     }
     // Compile-time arithmetic safety (STRICT fails closed; DEFAULT warns).
     // This is C+ analysis, not UBSan instrumentation.
@@ -4966,6 +5255,13 @@ public:
     }
     if (op->getOpcode() == UO_Deref) {
       const Expr *sub = op->getSubExpr();
+      if (const Expr *forged = forgedUnionPointerSource(sub))
+        reportNamed(forged->getBeginLoc(), "CPLUS-FFI",
+                    "forged pointer from union type punning has unverifiable "
+                    "provenance",
+                    "suggested correction: store a real pointer into the "
+                    "union's pointer member instead of fabricating one from "
+                    "an integer constant");
       if (isReleased(sub))
         reportUaf(op->getBeginLoc(), varNameOf(sub),
                   "dereference of released pointer '" +
@@ -5028,6 +5324,56 @@ public:
       d.column = ploc.getColumn();
       std::string diagFile = ploc.getFilename();
       // Tooling analyses a synthetic "<file>.c" buffer; map it back.
+      if (diagFile == filename_ + ".c")
+        diagFile = filename_;
+      if (diagFile != filename_)
+        d.file = diagFile;
+    }
+    diags_.report(std::move(d));
+  }
+
+  /// Named diagnostic for the F2 integer-laundered stale alias. STRICT makes
+  /// this an error; DEFAULT only warns because the cast may be intentional
+  /// (e.g. a tagged handle whose provenance the checker cannot prove).
+  void reportStaleIntegerAlias(SourceLocation loc) {
+    if (!staleIntegerAliasReported_.insert(loc.getRawEncoding()).second)
+      return;
+    PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
+    Diag d;
+    d.level = strict_ ? DiagLevel::Error : DiagLevel::Warning;
+    d.message = "[CPLUS-LIFETIME] stale integer-laundered alias passed to free";
+    d.help = "suggested correction: keep the owning pointer and release it "
+             "exactly once; an integer address may name a different object "
+             "after allocation reuse";
+    d.file = filename_;
+    if (ploc.isValid()) {
+      d.line = ploc.getLine();
+      d.column = ploc.getColumn();
+      std::string diagFile = ploc.getFilename();
+      if (diagFile == filename_ + ".c")
+        diagFile = filename_;
+      if (diagFile != filename_)
+        d.file = diagFile;
+    }
+    diags_.report(std::move(d));
+  }
+
+  /// Emit a compile-time-only diagnostic with an explicit category prefix.
+  /// STRICT makes the new rejections errors; DEFAULT downgrades to warnings so
+  /// unsanitized builds keep their historical behaviour. No runtime change.
+  void reportNamed(SourceLocation loc, const std::string &category,
+                   const std::string &message,
+                   const std::string &help = std::string()) {
+    PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
+    Diag d;
+    d.level = strict_ ? DiagLevel::Error : DiagLevel::Warning;
+    d.message = "[" + category + "] " + message;
+    d.help = help;
+    d.file = filename_;
+    if (ploc.isValid()) {
+      d.line = ploc.getLine();
+      d.column = ploc.getColumn();
+      std::string diagFile = ploc.getFilename();
       if (diagFile == filename_ + ".c")
         diagFile = filename_;
       if (diagFile != filename_)
@@ -5343,6 +5689,10 @@ public:
     const FunctionDecl *callee = call->getDirectCallee();
     std::string rawName = callee ? callee->getNameAsString() : std::string();
     std::string name = normalizeFortifyName(rawName);
+
+    // F2: a stale integer-laundered alias must not reach a release. Checked
+    // before any early return so indirect releases and wrappers are covered.
+    checkStaleIntegerAliasArgs(call, name, callee);
 
     // ---- Interprocedural effect fixpoint ---------------------------------
     // Summaries are built in the collector so the STRICT pass sees forward
@@ -7004,6 +7354,13 @@ private:
   // Union-typed variables: all field views alias the same storage, so
   // `free(u.p); return *u.i;` is a UAF even though the field names differ.
   std::set<std::string> unionVars_;
+  // Compile-time-only breaker facts (function-scoped, no runtime effect):
+  // union variables whose integer member was forged from a plain constant,
+  // locals copied from a forged union pointer member, and local structs whose
+  // aggregate initializer holds the address of a local.
+  std::set<std::string> forgedUnionVars_;
+  std::set<std::string> forgedPointerVars_;
+  std::set<std::string> structLocalAddrVars_;
   // Global pointer -> names it may point at, and per-function records of a
   // global assigned from a parameter (`void store(int *p){ g = p; }`).
   std::map<std::string, std::set<std::string>> globalPointsTo_;
@@ -7084,6 +7441,8 @@ public:
   std::map<std::string, std::string> snprintfResults_;
   std::map<std::string, std::string> freadResults_;
   std::set<std::string> contractIssuesReported_;
+  // Call sites already diagnosed with the F2 stale-alias error/warning.
+  std::set<unsigned> staleIntegerAliasReported_;
   std::set<std::string> guardedSnprintf_;
   std::string reallocRebindOwner_, reallocRebindTemp_;
   std::map<std::string, std::set<std::string>> aliasGroups_;

@@ -157,18 +157,18 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
      *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \
      *__cplus_ap; })
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
   ({ __typeof__(&(P)) __cplus_ap = &(P); \
      __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \
-     *__cplus_ap = (T)__cplus_inline_add_i64( \
+     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \
          (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \
      (POST) ? __cplus_ov : *__cplus_ap; })
 #else
 #define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \
   ((P) = (T)__cplus_inline_##OP##_i64( \
       (int64_t)(P), (int64_t)(B), (BT), (SG)))
-#define CPLUS_INC(P, T, BT, SG, D, POST) \
-  ((P) = (T)__cplus_inline_add_i64((int64_t)(P), \
+#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \
+  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \
       (int64_t)(D), (BT), (SG)))
 #endif
 #define CPLUS_NEG(X, T, BT, SG) \
@@ -178,7 +178,7 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 #include <string.h>
 int main(void) {
   char b[16];
-  for (int i = 0; i < 16; CPLUS_INC(i, int, 32, 1, 1, 1)) b[__cplus_bounds_check((size_t)(i), 16, "b")] = (char)(((char)__cplus_inline_narrow_i64((uint64_t)('a' + i), 32, 1, 8, 1)));
+  for (int i = 0; i < 16; CPLUS_INC(add, i, int, 32, 1, 1, 1)) b[__cplus_bounds_check((size_t)(i), 16, "b")] = (char)(((char)__cplus_inline_narrow_i64((uint64_t)('a' + i), 32, 1, 8, 1)));
   cplus_memmove(CPLUS_PTR_CHECK(b ,  2, 16, 0, "b + 2", 0), b, 10);
   return b[0] == 'a' && b[1] == 'b' && b[2] == 'a' ? 0 : 1;
 }

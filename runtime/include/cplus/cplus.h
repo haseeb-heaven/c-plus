@@ -448,6 +448,8 @@ typedef enum {
 void cplus_print_value(cplus_print_kind kind, ...);
 void cplus_print_end(void);
 void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
+void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
+                         const char *expr, const char *file, int line);
 
 #define cplus_print_arg(x)                                                    \
   cplus_print_value(                                                          \
@@ -470,24 +472,25 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
       (x))
 
 #define cplus_scan_one(x)                                                     \
-  cplus_scan_value((void *)&(x),                                              \
-                   __builtin_types_compatible_p(__typeof__(x), char *)        \
-                       ? 256u                                                 \
-                       : sizeof(x),                                           \
-                   (__builtin_types_compatible_p(__typeof__(x), char)         \
-                        ? CPLUS_SCAN_CHAR                                      \
-                        : _Generic((x) + 0,                                    \
-                            char *: CPLUS_SCAN_STR,                            \
-                            const char *: CPLUS_SCAN_STR,                      \
-                            int: CPLUS_SCAN_INT,                               \
-                            unsigned int: CPLUS_SCAN_UINT,                     \
-                            long: CPLUS_SCAN_LONG,                             \
-                            unsigned long: CPLUS_SCAN_ULONG,                   \
-                            long long: CPLUS_SCAN_LLONG,                       \
-                            unsigned long long: CPLUS_SCAN_ULLONG,             \
-                            float: CPLUS_SCAN_FLOAT,                           \
-                            double: CPLUS_SCAN_DOUBLE,                         \
-                            default: CPLUS_SCAN_INT)))
+  cplus_scan_value_at((void *)&(x),                                           \
+                      __builtin_types_compatible_p(__typeof__(x), char *)     \
+                          ? 256u                                              \
+                          : sizeof(x),                                        \
+                      (__builtin_types_compatible_p(__typeof__(x), char)      \
+                           ? CPLUS_SCAN_CHAR                                  \
+                           : _Generic((x) + 0,                                \
+                               char *: CPLUS_SCAN_STR,                        \
+                               const char *: CPLUS_SCAN_STR,                  \
+                               int: CPLUS_SCAN_INT,                           \
+                               unsigned int: CPLUS_SCAN_UINT,                 \
+                               long: CPLUS_SCAN_LONG,                         \
+                               unsigned long: CPLUS_SCAN_ULONG,               \
+                               long long: CPLUS_SCAN_LLONG,                   \
+                               unsigned long long: CPLUS_SCAN_ULLONG,         \
+                               float: CPLUS_SCAN_FLOAT,                       \
+                               double: CPLUS_SCAN_DOUBLE,                     \
+                               default: CPLUS_SCAN_INT)),                     \
+                      #x, __FILE__, __LINE__)
 
 /* Fixed-width argument dispatch (up to 16 values). */
 #define CPLUS_PICK16(_1, _2, _3, _4, _5, _6, _7, _8,                          \
