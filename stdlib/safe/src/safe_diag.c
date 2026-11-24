@@ -5,6 +5,11 @@
  * opt-in via CPLUS_DIAG=rich|plain or cplus_diag_set_mode(). No exported symbol
  * changes signature; this file only adds new ones.
  */
+/* Required for isatty()/fileno() under glibc with -std=c99 -pedantic; without
+ * this feature macro the Linux "Build safe CRT" CI step fails to compile. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "../safe_diag.h"
 
 #include <errno.h>
