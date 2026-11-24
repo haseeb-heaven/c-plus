@@ -10,6 +10,9 @@ OUT="$HERE/out"
 mkdir -p "$OUT"
 F="$OUT/link.txt"
 : > "$F"
+# Linux: libc+ atomic wrappers reference __atomic_is_lock_free from libatomic.
+PLATFORM_LIBS=""
+if [ "$(uname -s)" = Linux ]; then PLATFORM_LIBS="-latomic"; fi
 log() { printf '%s\n' "$*" >> "$F"; }
 status() { printf '%s\n' "$2" > "$OUT/$1.status"; }
 
@@ -77,7 +80,7 @@ if [ -f "$ARCHIVE" ]; then
     log "--- static attempt 1: plain \$CC (no -isysroot) ---"
     log "\$ $CC -std=c99 -Wall -Wextra -I$ROOT/libc/install-include $OUT/consumer.c $ARCHIVE -lm -pthread -o $PLAIN_BIN"
     $CC -std=c99 -Wall -Wextra -I"$ROOT/libc/install-include" \
-        "$OUT/consumer.c" "$ARCHIVE" -lm -pthread -o "$PLAIN_BIN" >> "$F" 2>&1
+        "$OUT/consumer.c" "$ARCHIVE" -lm -pthread $PLATFORM_LIBS -o "$PLAIN_BIN" >> "$F" 2>&1
     prc=$?
     log "build_exit: $prc"
     if [ "$prc" -eq 0 ]; then
@@ -93,7 +96,7 @@ if [ -f "$ARCHIVE" ]; then
         log "--- static attempt 2: \$CC with detected SDK sysroot ---"
         log "\$ $CC -std=c99 -Wall -Wextra $EXTRA -I$ROOT/libc/install-include $OUT/consumer.c $ARCHIVE -lm -pthread -o $FIX_BIN"
         $CC -std=c99 -Wall -Wextra $EXTRA -I"$ROOT/libc/install-include" \
-            "$OUT/consumer.c" "$ARCHIVE" -lm -pthread -o "$FIX_BIN" >> "$F" 2>&1
+            "$OUT/consumer.c" "$ARCHIVE" -lm -pthread $PLATFORM_LIBS -o "$FIX_BIN" >> "$F" 2>&1
         frc=$?
         log "build_exit: $frc"
         if [ "$frc" -eq 0 ]; then
@@ -185,11 +188,11 @@ if [ -n "$SHARED_BUILT" ] && [ -f "$SHARED_BUILT" ]; then
     if [ -n "$EXTRA" ]; then
         $CC -std=c99 -Wall -Wextra $EXTRA -I"$ROOT/libc/install-include" \
             "$OUT/consumer.c" "$SHARED_BUILT" -Wl,-rpath,"$SHARED_DIR" \
-            -lm -pthread -o "$SHARED_BIN" >> "$F" 2>&1
+            -lm -pthread $PLATFORM_LIBS -o "$SHARED_BIN" >> "$F" 2>&1
     else
         $CC -std=c99 -Wall -Wextra -I"$ROOT/libc/install-include" \
             "$OUT/consumer.c" "$SHARED_BUILT" -Wl,-rpath,"$SHARED_DIR" \
-            -lm -pthread -o "$SHARED_BIN" >> "$F" 2>&1
+            -lm -pthread $PLATFORM_LIBS -o "$SHARED_BIN" >> "$F" 2>&1
     fi
     clrc=$?
     log "build_exit: $clrc"
