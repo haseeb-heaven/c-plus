@@ -41,7 +41,7 @@ jobs:
           if command -v c+ >/dev/null 2>&1; then c+ --version; else echo "c+: NOT FOUND"; fi
       - name: Build libc+ static archive
         run: sh tests/libc/build_libc.sh
-      - name: PR32 libc+ portability probes (bounded, 60s global)
+      - name: PR32 libc+ portability probes (bounded, 120s global)
         run: sh tests/pr32_portability/run.sh
       - name: Upload evidence
         if: always()
@@ -77,7 +77,7 @@ jobs:
           if command -v c+ >/dev/null 2>&1; then c+ --version; else echo "c+: NOT FOUND"; fi
       - name: Build libc+ static archive
         run: sh tests/libc/build_libc.sh
-      - name: PR32 libc+ portability probes (bounded, 60s global)
+      - name: PR32 libc+ portability probes (bounded, 120s global)
         run: sh tests/pr32_portability/run.sh
       - name: Upload evidence
         if: always()
