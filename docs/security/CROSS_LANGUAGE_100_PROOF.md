@@ -85,3 +85,21 @@ Post-fix regressions: API coverage 416/416 (100%); libc 109/109; CRT 86/86;
 ABI fingerprint MATCH; `GOOSE_MEMORY 0`; `MODERN_ALLOC 0`; deep default
 28 PASS / 0 FAIL; methods 518/518. This is evidence for the 100 generated
 inputs, not a proof of all input classes.
+
+## 10,000-variant end-to-end fuzz (final)
+
+`tests/fuzz10k_e2e/fuzz10k_e2e.cp` + `run.sh`: 10,000 deterministic scenarios
+in ONE bounded process (fork per case, 5 s watchdog, canary guards). Each id
+derives allocator kind (4), container (4), operation count (1..64), hostile
+class (8), and alignment (1..16 = `STDLIB_ALIGN_DEFAULT`) via splitmix64.
+
+```
+FUZZ10K_E2E 10000 10000 0 0 0 0
+```
+
+First instrumented run exposed a **test-side expectation error**: alignments up
+to 32 were requested from allocators that document a 16-byte guarantee; capped
+at 16, all 10,000 pass. No library change was needed. Post-run regressions:
+coverage 416/416 (100%), libc 109/109, CRT 86/86, ABI fingerprint MATCH,
+deep default 28 PASS/0 FAIL, methods 518/518. Evidence for these 10,000
+seeded inputs, not a proof of every input class.
