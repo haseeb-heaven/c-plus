@@ -9,7 +9,10 @@ typedef struct stdlib_datastack_tls {
     unsigned char *base;
     unsigned char *top;
     size_t capacity;
+    size_t committed;
     uint64_t generation;
+    int backing;
+    size_t page;
 } stdlib_datastack_tls;
 
 __thread stdlib_datastack_tls stdlib_tls_datastack;
