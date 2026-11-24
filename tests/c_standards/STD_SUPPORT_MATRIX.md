@@ -72,7 +72,7 @@ Safe mode rejects all three unmodified sources before `-std` matters).
 | `c2y` | real project | **UNRECOGNIZED** — no flag exists; not tested | `tests/c_standards/latest/RESULTS.md` §7 |
 | `c26` | minimal | **UNRECOGNIZED** — draft-only, `error: invalid value 'c26' in '-std=c26'` | `tests/c_standards/latest/.work/probe/c26.err` |
 | `c26` | real project | **UNRECOGNIZED** — no flag exists; not tested | `tests/c_standards/latest/RESULTS.md` §7 |
-| `iso9899:2024` | minimal | **UNRECOGNIZED** — clang 16 aliases stop at 2018; `error: invalid value 'iso9899:2024' in '-std=iso9899:2024'` | `tests/c_standards/latest/.work/probe/iso9899:2024.err` |
+| `iso9899:2024` | minimal | **UNRECOGNIZED** — clang 16 aliases stop at 2018; `error: invalid value 'iso9899:2024' in '-std=iso9899:2024'` | `tests/c_standards/latest/.work/probe/iso9899-2024.err` |
 | `iso9899:2024` | real project | **UNRECOGNIZED** — no flag exists; not tested | `tests/c_standards/latest/RESULTS.md` §7 |
 | `gnu2y` (extra guess) | minimal | **UNRECOGNIZED** — rejected by clang | `tests/c_standards/latest/RESULTS.md` §2 |
 | `gnu2y` (extra guess) | real project | **UNRECOGNIZED** — not tested | `tests/c_standards/latest/RESULTS.md` §2 |

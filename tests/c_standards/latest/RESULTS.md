@@ -109,7 +109,7 @@ note: use 'c2x' for 'Working Draft for ISO C2x' standard
 note: use 'gnu2x' for 'Working Draft for ISO C2x with GNU extensions' standard
 ```
 
-#### `iso9899:2024` — file `.work/probe/iso9899:2024.err` (verbatim)
+#### `iso9899:2024` — file `.work/probe/iso9899-2024.err` (verbatim)
 
 ```text
 error: invalid value 'iso9899:2024' in '-std=iso9899:2024'

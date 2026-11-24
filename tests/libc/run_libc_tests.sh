@@ -24,16 +24,30 @@ for t in tests/libc/test_*.c; do
   esac
   RUN_CMD="$b"
   if command -v timeout >/dev/null 2>&1; then
-    RUN_CMD="timeout 60 $b"
+    # Large deterministic corpora can exceed 60s on a loaded CI runner.
+    LIMIT=60
+    case "$t" in *test_corpus_*) LIMIT=180 ;; esac
+    RUN_CMD="timeout $LIMIT $b"
   fi
   # safecrt archive before libc+ so undefined refs resolve in one pass on GNU ld.
-  if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 $PLATFORM_CFLAGS \
+  "$CC" -O2 -Wall -Wextra -pedantic -std=c99 $PLATFORM_CFLAGS \
         -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC "$t" \
         $EXTRA_LIB "$LIB" -lm -pthread $PLATFORM_LIBS -o "$b" \
-        && $RUN_CMD >/tmp/libc_test.out 2>&1; then
+        >/tmp/libc_build.out 2>&1
+  brc=$?
+  if [ "$brc" -eq 0 ]; then
+    $RUN_CMD >/tmp/libc_test.out 2>&1
+    rc=$?
+  else
+    rc=99
+  fi
+  if [ "$rc" -eq 0 ]; then
     echo "ok $(basename "$t")"; pass=$((pass+1))
   else
-    echo "FAIL $(basename "$t")"; tail -20 /tmp/libc_test.out || true; fail=$((fail+1))
+    echo "FAIL $(basename "$t") (build=$brc run=$rc limit=${LIMIT:-n/a})"
+    tail -20 /tmp/libc_test.out 2>/dev/null || true
+    tail -10 /tmp/libc_build.out 2>/dev/null || true
+    fail=$((fail+1))
   fi
 done
 echo "libc tests: $pass passed, $fail failed"

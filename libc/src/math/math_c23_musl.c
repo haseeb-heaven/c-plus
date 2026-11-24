@@ -12,6 +12,18 @@
 #include <math.h>
 #include <stdint.h>
 
+/* math_c23.c defines the same symbols from compiler builtins when available.
+ * Guard this vendored musl implementation with the identical feature test so
+ * exactly one translation unit defines each symbol. Without this, clang 21+
+ * pulls both archive members and the link fails with duplicate cplus_exp10*
+ * symbols (#32 portability). */
+#if defined(__has_builtin)
+#define CPLUS_MUSL_HAS_BUILTIN(x) __has_builtin(x)
+#else
+#define CPLUS_MUSL_HAS_BUILTIN(x) 0
+#endif
+
+#if !CPLUS_MUSL_HAS_BUILTIN(__builtin_exp10)
 double cplus_exp10(double x) {
     cplus_libc_log("exp10", "enter");
     static const double p10[] = {
@@ -29,7 +41,9 @@ double cplus_exp10(double x) {
     }
     return cplus_pow(10.0, x);
 }
+#endif /* !CPLUS_MUSL_HAS_BUILTIN(__builtin_exp10) */
 
+#if !CPLUS_MUSL_HAS_BUILTIN(__builtin_exp10f)
 float cplus_exp10f(float x) {
     cplus_libc_log("exp10f", "enter");
     static const float p10[] = {
@@ -45,7 +59,9 @@ float cplus_exp10f(float x) {
     }
     return cplus_exp2(3.32192809488736234787031942948939 * x);
 }
+#endif /* !CPLUS_MUSL_HAS_BUILTIN(__builtin_exp10f) */
 
+#if !CPLUS_MUSL_HAS_BUILTIN(__builtin_exp10l)
 long double cplus_exp10l(long double x) {
     cplus_libc_log("exp10l", "enter");
 #if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
@@ -58,3 +74,4 @@ long double cplus_exp10l(long double x) {
     return 0.0L;
 #endif
 }
+#endif /* !CPLUS_MUSL_HAS_BUILTIN(__builtin_exp10l) */
