@@ -24,9 +24,10 @@ for t in tests/libc/test_*.c; do
   esac
   RUN_CMD="$b"
   if command -v timeout >/dev/null 2>&1; then
-    # Large deterministic corpora can exceed 60s on a loaded CI runner.
+    # Large deterministic corpora can exceed 180s on a loaded CI runner
+    # (observed: 760-case uninit corpus hit the 180s bound on ubuntu-latest).
     LIMIT=60
-    case "$t" in *test_corpus_*) LIMIT=180 ;; esac
+    case "$t" in *test_corpus_uninit*) LIMIT=600 ;; *test_corpus_*) LIMIT=180 ;; esac
     RUN_CMD="timeout $LIMIT $b"
   fi
   # safecrt archive before libc+ so undefined refs resolve in one pass on GNU ld.
