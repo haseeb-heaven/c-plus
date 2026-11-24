@@ -72,8 +72,8 @@ re-checked after the sibling's edit and found fixed.
 
 1. **Hardcoded machine path in PR31 doc.** At 12:35–13:08,
    `docs/abi/PR31_LIBC_CROSS_MODULE.md` §6 said
-   `cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib`. Finding at 12:45:
-   `grep -rn '/Users/haseeb-mir' docs/abi/PR3*.md` matched line 202. Resolved at
+   `cd <repository-root>`. Finding at 12:45:
+   `grep -rn '<home-path>' docs/abi/PR3*.md` matched line 202. Resolved at
    13:08:42; it now says `cd <repository-root>`. Re-checked: no machine-specific
    absolute path remains in any sibling doc or runner.
 2. **False "committed evidence" claim in PR32 doc.** At 12:46 the doc said
