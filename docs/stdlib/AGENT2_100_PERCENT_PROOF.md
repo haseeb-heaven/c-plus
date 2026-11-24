@@ -96,3 +96,17 @@ sh tests/libc/run_libc_tests.sh
 sh tests/crt/unit/run_unit_tests.sh
 sh tools/abi_compare/run.sh compare tests/abi/fingerprints/baseline.txt
 ```
+
+## 8. 100% API coverage closure (final)
+
+Added `tests/stdlib/coverage_closure.cp`, which directly invokes every API the
+native coverage tool previously flagged as having no static call-site:
+`gsl_adapt_refuse_null/range/bounds`, `gsl_span_i32_make/view/size/size_bytes/
+empty/data`, `gsl_not_null_i32_make/swap`, `json_close_stream`,
+`lifetime_owner_is_live` (plus owner init/release to establish live state).
+The program self-verifies all calls (`COVERAGE_CLOSURE 0`, exit 0).
+
+Final `sh tests/stdlib/run_coverage.sh`: **all 24 headers 100.0%**, worst
+100.0%, 416/416 callable APIs reached (up from 411/416). This is API
+*reachability*, not a claim that every input class or branch was exercised;
+the runtime evidence is in §2 and in the deep/method/fuzz suites.
