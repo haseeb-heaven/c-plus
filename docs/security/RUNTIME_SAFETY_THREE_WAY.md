@@ -143,3 +143,23 @@ capture reports `PENDING`, restore the missing doc before relying on that row's 
   exists to produce one.
 
 No other assigned artifact is missing. This document adds no new experimental result.
+
+## FINAL UPDATE (2026-11-24) — modern allocators, 100% coverage, honest toolchain status
+
+New evidence added after the consolidation above:
+
+| Check | Command | Result |
+|---|---|---|
+| Rust vs C+ modern allocators | `sh benchmarks/rust_examples/compare_modern.sh` | `MODERN_COMPARE MATCH` (`cpp_failures=0 rust_ok=1 vm_tokens=1 slot_tokens=1`) |
+| C+ Goose-inspired model | `tests/stdlib/goose_memory.cp` | `GOOSE_MEMORY 0` (VM on-demand commit, RAII scope free, stable slot handles, stale 103 / double-free 104 refusal) |
+| Fil-C technique (adapted side-table liveness/bounds only) | `tests/stdlib/upstream_reuse/filc_diag.cp` | `ALLOC_DIAG 26 0` — 26/26 pass |
+| Fil-C full runtime | — | **NOT TESTABLE**: `filc`/`filc-cc` toolchain not installed; no Fil-C source/runtime vendored; only the contract-level technique was adapted |
+| Trap-C | — | **NOT TESTABLE**: no source, repo, license, or `trapc`/`itrapc` toolchain (`which` found none); design-intent docs only |
+| Full stdlib API coverage | `sh tests/stdlib/run_coverage.sh` | 416/416 callable APIs, all 24 headers 100.0% |
+| Deep / methods / libc / CRT / ABI | runners | 28 PASS/0 FAIL (default), 518/518, 109/109, 86/86, fingerprint MATCH |
+
+The comparison remains **outcome-token parity only**: C+ enforces at runtime with
+`error*`/generation/side tables; Rust models the same observations with safe
+`Vec`/`VecDeque` and ownership — no Rust-equivalence, no full memory-safety,
+and no Fil-C/Trap-C runtime claim. `docs/stdlib/GOOSE_MEMORY_INSPIRATION.md`
+records that Goose (Apache-2.0) contributed design ideas only, no code.
