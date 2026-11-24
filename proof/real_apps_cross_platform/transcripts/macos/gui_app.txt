@@ -1,0 +1,17 @@
+# COMMAND: env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin SDL_VIDEODRIVER=dummy timeout 30 ./gui_app describe 0
+# EXIT: 0
+# --- STDOUT ---
+GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90
+GUI_LAYOUT cell=80x45 origin=0,0
+WIDGETS 6
+W 1 4 1 1 78 43 3 root
+W 2 2 81 1 78 43 3 user
+W 3 3 161 1 78 43 3 name
+W 4 2 1 46 78 43 3 pass
+W 5 3 81 46 78 43 3 secret
+W 6 1 161 46 78 43 3 OK
+GUI_SERIAL bytes=157 crc32=a52b03af
+GUI_HIT p=5,5 index=0 id=1 label=root
+GUI_HIT p=85,5 index=1 id=2 label=user
+GUI_RESULT describe:0,0,0 OK
+# --- STDERR ---

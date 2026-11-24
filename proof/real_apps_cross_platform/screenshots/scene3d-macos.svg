@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="2300" viewBox="0 0 1160 2300">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">scene3d (macos)</text>
+  <text class="sub" x="84" y="48">3D scene / mesh / math demo  |  exit=0</text>
+  <text class="sub" x="84" y="68">run: env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin timeout 30 ./scene3d</text>
+  <rect y="84" width="100%" height="2158" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">a_init 1</text>
+  <text class="body" xml:space="preserve" x="20" y="134">a_root 1</text>
+  <text class="body" xml:space="preserve" x="20" y="156">a_root_name 1</text>
+  <text class="body" xml:space="preserve" x="20" y="178">a_root_parent 1</text>
+  <text class="body" xml:space="preserve" x="20" y="200">a_root_visible 1</text>
+  <text class="body" xml:space="preserve" x="20" y="222">a_count 1</text>
+  <text class="body" xml:space="preserve" x="20" y="244">a_find_root 1</text>
+  <text class="body" xml:space="preserve" x="20" y="266">a_identity_scale 1</text>
+  <text class="body" xml:space="preserve" x="20" y="288">b_idx_a 1</text>
+  <text class="body" xml:space="preserve" x="20" y="310">b_idx_b 1</text>
+  <text class="body" xml:space="preserve" x="20" y="332">b_idx_a1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="354">b_idx_a2 1</text>
+  <text class="body" xml:space="preserve" x="20" y="376">b_idx_b1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="398">b_parent_a1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="420">b_name_b1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="442">b_depth_b1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="464">b_children_root 1</text>
+  <text class="body" xml:space="preserve" x="20" y="486">b_children_a 1</text>
+  <text class="body" xml:space="preserve" x="20" y="508">b_child_at_root_1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="530">c_traverse_ok 1</text>
+  <text class="body" xml:space="preserve" x="20" y="552">c_traverse_count 1</text>
+  <text class="body" xml:space="preserve" x="20" y="574">traverse 0</text>
+  <text class="body" xml:space="preserve" x="20" y="596">traverse 1</text>
+  <text class="body" xml:space="preserve" x="20" y="618">traverse 3</text>
+  <text class="body" xml:space="preserve" x="20" y="640">traverse 4</text>
+  <text class="body" xml:space="preserve" x="20" y="662">traverse 2</text>
+  <text class="body" xml:space="preserve" x="20" y="684">traverse 5</text>
+  <text class="body" xml:space="preserve" x="20" y="706">c_traverse_order 1</text>
+  <text class="body" xml:space="preserve" x="20" y="728">c_subtree_ok 1</text>
+  <text class="body" xml:space="preserve" x="20" y="750">c_subtree_count 1</text>
+  <text class="body" xml:space="preserve" x="20" y="772">subtree 1</text>
+  <text class="body" xml:space="preserve" x="20" y="794">subtree 3</text>
+  <text class="body" xml:space="preserve" x="20" y="816">subtree 4</text>
+  <text class="body" xml:space="preserve" x="20" y="838">c_subtree_order 1</text>
+  <text class="body" xml:space="preserve" x="20" y="860">d_transform_set 1</text>
+  <text class="body" xml:space="preserve" x="20" y="882">d_transform_get 1</text>
+  <text class="body" xml:space="preserve" x="20" y="904">d_transform_roundtrip 1</text>
+  <text class="body" xml:space="preserve" x="20" y="926">d_visible_off 1</text>
+  <text class="body" xml:space="preserve" x="20" y="948">d_visible_on 1</text>
+  <text class="body" xml:space="preserve" x="20" y="970">d_bad_transform_get 1</text>
+  <text class="body" xml:space="preserve" x="20" y="992">d_bad_visible 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1014">e_duplicate 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1036">e_oversized_name 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1058">e_invalid_parent 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1080">e_self_cycle 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1102">e_descendant_cycle 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1124">e_remove_root 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1146">e_small_buffer 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1168">e_bad_find 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1190">e_sc2_init 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1212">e_chain_depth 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1234">e_depth_refusal 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1256">f_reparent 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1278">f_new_parent 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1300">f_old_parent_children 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1322">f_new_parent_children 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1344">f_traverse_ok 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1366">f_traverse_count 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1388">reparent 0</text>
+  <text class="body" xml:space="preserve" x="20" y="1410">reparent 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1432">reparent 3</text>
+  <text class="body" xml:space="preserve" x="20" y="1454">reparent 4</text>
+  <text class="body" xml:space="preserve" x="20" y="1476">reparent 5</text>
+  <text class="body" xml:space="preserve" x="20" y="1498">reparent 2</text>
+  <text class="body" xml:space="preserve" x="20" y="1520">f_traverse_order 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1542">f_root_fixed 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1564">g_remove_leaf 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1586">g_leaf_gone 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1608">g_live_count 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1630">g_parent_children 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1652">g_tombstone_transform 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1674">g_remove_subtree 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1696">g_subtree_gone 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1718">g_count_after 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1740">g_traverse_ok 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1762">after_remove 0</text>
+  <text class="body" xml:space="preserve" x="20" y="1784">after_remove 2</text>
+  <text class="body" xml:space="preserve" x="20" y="1806">g_traverse_order 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1828">h_bad_init 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1850">h_bad_init_clean 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1872">h_si_init 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1894">h_add_alloc 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1916">h_add_state 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1938">h_kid_added 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1960">h_remove_alloc1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="1982">h_remove_still_alive 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2004">h_remove_alloc2 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2026">h_remove_alloc2_state 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2048">i_box_init 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2070">i_box_add 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2092">i_box_transform 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2114">i_box_remove 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2136">i_canary_head 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2158">i_canary_tail 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2180">i_canary_after_drop 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2202">z_meta_balance 1</text>
+  <text class="body" xml:space="preserve" x="20" y="2224">SCENE3D 79 0</text>
+  <rect y="2242" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="2264">Verbatim captured terminal output for scene3d on macos — evidence for the recorded host/toolchain only; not a memory-safety proof.</text>
+  <text class="disclaimer" x="20" y="2284">rendered terminal output from a real captured run — not a fabricated GUI capture</text>
+  <desc>Verbatim captured output:
+    a_init 1
+    a_root 1
+    a_root_name 1
+    a_root_parent 1
+    a_root_visible 1
+    a_count 1
+    a_find_root 1
+    a_identity_scale 1
+    b_idx_a 1
+    b_idx_b 1
+    b_idx_a1 1
+    b_idx_a2 1
+    b_idx_b1 1
+    b_parent_a1 1
+    b_name_b1 1
+    b_depth_b1 1
+    b_children_root 1
+    b_children_a 1
+    b_child_at_root_1 1
+    c_traverse_ok 1
+    c_traverse_count 1
+    traverse 0
+    traverse 1
+    traverse 3
+    traverse 4
+    traverse 2
+    traverse 5
+    c_traverse_order 1
+    c_subtree_ok 1
+    c_subtree_count 1
+    subtree 1
+    subtree 3
+    subtree 4
+    c_subtree_order 1
+    d_transform_set 1
+    d_transform_get 1
+    d_transform_roundtrip 1
+    d_visible_off 1
+    d_visible_on 1
+    d_bad_transform_get 1
+    d_bad_visible 1
+    e_duplicate 1
+    e_oversized_name 1
+    e_invalid_parent 1
+    e_self_cycle 1
+    e_descendant_cycle 1
+    e_remove_root 1
+    e_small_buffer 1
+    e_bad_find 1
+    e_sc2_init 1
+    e_chain_depth 1
+    e_depth_refusal 1
+    f_reparent 1
+    f_new_parent 1
+    f_old_parent_children 1
+    f_new_parent_children 1
+    f_traverse_ok 1
+    f_traverse_count 1
+    reparent 0
+    reparent 1
+    reparent 3
+    reparent 4
+    reparent 5
+    reparent 2
+    f_traverse_order 1
+    f_root_fixed 1
+    g_remove_leaf 1
+    g_leaf_gone 1
+    g_live_count 1
+    g_parent_children 1
+    g_tombstone_transform 1
+    g_remove_subtree 1
+    g_subtree_gone 1
+    g_count_after 1
+    g_traverse_ok 1
+    after_remove 0
+    after_remove 2
+    g_traverse_order 1
+    h_bad_init 1
+    h_bad_init_clean 1
+    h_si_init 1
+    h_add_alloc 1
+    h_add_state 1
+    h_kid_added 1
+    h_remove_alloc1 1
+    h_remove_still_alive 1
+    h_remove_alloc2 1
+    h_remove_alloc2_state 1
+    i_box_init 1
+    i_box_add 1
+    i_box_transform 1
+    i_box_remove 1
+    i_canary_head 1
+    i_canary_tail 1
+    i_canary_after_drop 1
+    z_meta_balance 1
+    SCENE3D 79 0
+  </desc>
+</svg>

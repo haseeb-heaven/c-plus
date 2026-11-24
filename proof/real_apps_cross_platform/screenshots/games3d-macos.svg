@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1177" height="1090" viewBox="0 0 1177 1090">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">games3d (macos)</text>
+  <text class="sub" x="84" y="48">3D scene / mesh / math demo  |  exit=0</text>
+  <text class="sub" x="84" y="68">run: env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin SDL_VIDEODRIVER=dummy timeout 30 ./games3d</text>
+  <rect y="84" width="100%" height="948" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">SCENE3D demo mesh=cube vertices=8 triangles=12</text>
+  <text class="body" xml:space="preserve" x="20" y="134">MESH cube aabb_min=(-1.000,-1.000,-1.000) aabb_max=(1.000,1.000,1.000)</text>
+  <text class="body" xml:space="preserve" x="20" y="156">VALIDATE nonfinite=0 bad_index=0 degenerate=0</text>
+  <text class="body" xml:space="preserve" x="20" y="178">CAMERA eye=(8.000,6.000,8.000) center=(0.000,0.000,0.000) fov=1.047 aspect=1.600 near=0.100 far=100.000</text>
+  <text class="body" xml:space="preserve" x="20" y="200">PROJ m0=0.360844 m5=0.577350 m10=-1.002002 m11=-1.000000 m14=-0.200200</text>
+  <text class="body" xml:space="preserve" x="20" y="222">NODES total=7 visible=7 meshes=3</text>
+  <text class="body" xml:space="preserve" x="20" y="244">NODE 0 name=root depth=0 children=2 visible=1 mesh=0</text>
+  <text class="body" xml:space="preserve" x="20" y="266">NODE 1 name=platform depth=1 children=3 visible=1 mesh=0</text>
+  <text class="body" xml:space="preserve" x="20" y="288">NODE 2 name=cube_A depth=2 children=0 visible=1 mesh=1</text>
+  <text class="body" xml:space="preserve" x="20" y="310">WORLD 2 t=(-3.000,0.000,0.000)</text>
+  <text class="body" xml:space="preserve" x="20" y="332">AABB 2 min=(-4.000,-1.000,-1.000) max=(-2.000,1.000,1.000) center=(-3.000,0.000,0.000)</text>
+  <text class="body" xml:space="preserve" x="20" y="354">SCREEN 2 ndc=(-0.072,0.000) depth=0.983</text>
+  <text class="body" xml:space="preserve" x="20" y="376">NODE 3 name=cube_B depth=2 children=0 visible=1 mesh=1</text>
+  <text class="body" xml:space="preserve" x="20" y="398">WORLD 3 t=(0.000,0.000,0.000)</text>
+  <text class="body" xml:space="preserve" x="20" y="420">AABB 3 min=(-0.500,-0.500,-0.500) max=(0.500,0.500,0.500) center=(0.000,0.000,0.000)</text>
+  <text class="body" xml:space="preserve" x="20" y="442">SCREEN 3 ndc=(0.000,0.000) depth=0.986</text>
+  <text class="body" xml:space="preserve" x="20" y="464">NODE 4 name=cube_C depth=2 children=0 visible=1 mesh=1</text>
+  <text class="body" xml:space="preserve" x="20" y="486">WORLD 4 t=(3.000,0.000,0.000)</text>
+  <text class="body" xml:space="preserve" x="20" y="508">AABB 4 min=(2.250,-1.061,-1.061) max=(3.750,1.061,1.061) center=(3.000,0.000,0.000)</text>
+  <text class="body" xml:space="preserve" x="20" y="530">SCREEN 4 ndc=(0.051,0.000) depth=0.989</text>
+  <text class="body" xml:space="preserve" x="20" y="552">NODE 5 name=lights depth=1 children=1 visible=1 mesh=0</text>
+  <text class="body" xml:space="preserve" x="20" y="574">NODE 6 name=sun depth=2 children=0 visible=1 mesh=0</text>
+  <text class="body" xml:space="preserve" x="20" y="596">GRID xz cols=32 rows=16 range=[-8.000,8.000]</text>
+  <text class="body" xml:space="preserve" x="20" y="618">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="640">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="662">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="684">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="706">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="728">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="750">....................CCCC........</text>
+  <text class="body" xml:space="preserve" x="20" y="772">........AAAAA..BBB..CCCC........</text>
+  <text class="body" xml:space="preserve" x="20" y="794">........AAAAA..BBB..CCCC........</text>
+  <text class="body" xml:space="preserve" x="20" y="816">........AAAAA.......CCCC........</text>
+  <text class="body" xml:space="preserve" x="20" y="838">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="860">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="882">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="904">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="926">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="948">................................</text>
+  <text class="body" xml:space="preserve" x="20" y="970">GRID_END</text>
+  <text class="body" xml:space="preserve" x="20" y="992">CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40</text>
+  <text class="body" xml:space="preserve" x="20" y="1014">SCENE_DONE status=OK nodes=7 meshes=3</text>
+  <rect y="1032" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="1054">Verbatim captured terminal output for games3d on macos — evidence for the recorded host/toolchain only; not a memory-safety proof.</text>
+  <text class="disclaimer" x="20" y="1074">rendered terminal output from a real captured run — not a fabricated GUI capture</text>
+  <desc>Verbatim captured output:
+    SCENE3D demo mesh=cube vertices=8 triangles=12
+    MESH cube aabb_min=(-1.000,-1.000,-1.000) aabb_max=(1.000,1.000,1.000)
+    VALIDATE nonfinite=0 bad_index=0 degenerate=0
+    CAMERA eye=(8.000,6.000,8.000) center=(0.000,0.000,0.000) fov=1.047 aspect=1.600 near=0.100 far=100.000
+    PROJ m0=0.360844 m5=0.577350 m10=-1.002002 m11=-1.000000 m14=-0.200200
+    NODES total=7 visible=7 meshes=3
+    NODE 0 name=root depth=0 children=2 visible=1 mesh=0
+    NODE 1 name=platform depth=1 children=3 visible=1 mesh=0
+    NODE 2 name=cube_A depth=2 children=0 visible=1 mesh=1
+      WORLD 2 t=(-3.000,0.000,0.000)
+      AABB 2 min=(-4.000,-1.000,-1.000) max=(-2.000,1.000,1.000) center=(-3.000,0.000,0.000)
+      SCREEN 2 ndc=(-0.072,0.000) depth=0.983
+    NODE 3 name=cube_B depth=2 children=0 visible=1 mesh=1
+      WORLD 3 t=(0.000,0.000,0.000)
+      AABB 3 min=(-0.500,-0.500,-0.500) max=(0.500,0.500,0.500) center=(0.000,0.000,0.000)
+      SCREEN 3 ndc=(0.000,0.000) depth=0.986
+    NODE 4 name=cube_C depth=2 children=0 visible=1 mesh=1
+      WORLD 4 t=(3.000,0.000,0.000)
+      AABB 4 min=(2.250,-1.061,-1.061) max=(3.750,1.061,1.061) center=(3.000,0.000,0.000)
+      SCREEN 4 ndc=(0.051,0.000) depth=0.989
+    NODE 5 name=lights depth=1 children=1 visible=1 mesh=0
+    NODE 6 name=sun depth=2 children=0 visible=1 mesh=0
+    GRID xz cols=32 rows=16 range=[-8.000,8.000]
+    ................................
+    ................................
+    ................................
+    ................................
+    ................................
+    ................................
+    ....................CCCC........
+    ........AAAAA..BBB..CCCC........
+    ........AAAAA..BBB..CCCC........
+    ........AAAAA.......CCCC........
+    ................................
+    ................................
+    ................................
+    ................................
+    ................................
+    ................................
+    GRID_END
+    CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40
+    SCENE_DONE status=OK nodes=7 meshes=3
+  </desc>
+</svg>
