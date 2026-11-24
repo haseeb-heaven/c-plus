@@ -22,6 +22,7 @@
 #include <string.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
 
 /* Strict UTF-8 (RFC 3629) validation of exactly `len` bytes: rejects overlong
  * forms, UTF-16 surrogates, code points above U+10FFFF, stray continuation
@@ -156,9 +157,12 @@ class string {
     char *chars;
     size_t count;
     size_t space;
+    const stdlib_allocator *alloc; /* NULL = checked heap (default) */
 
+    /* Default constructor: checked heap allocator. */
     string(const char *text) {
         size_t n = text == NULL ? 0 : strlen(text);
+        this->alloc = (const stdlib_allocator *)0;
         this->chars = NULL;
         this->count = 0;
         this->space = 0;
@@ -172,6 +176,17 @@ class string {
                 this->space = n + 1;
             }
         }
+    }
+
+    /* Allocator-aware constructor: binds this string to `a` (Arena, Pool,
+     * DataStack, or HeapAllocator).  The allocator must outlive the string. */
+    /* Internal allocator dispatch: default NULL means checked heap. */
+    char *salloc(size_t n) {
+        error e = error();
+        return (char *)stdlib_allocate(this->alloc, n, 1u, &e);
+    }
+    void sfree(char *p) {
+        stdlib_deallocate(this->alloc, (void *)p, this->space);
     }
 
     size_t size(void) {
@@ -257,7 +272,7 @@ class string {
                         "string::reserve: capacity too large");
             return -1;
         }
-        fresh = (char *)stdlib_alloc(want);
+        fresh = this->salloc(want);
         if (fresh == NULL)
             return -1;
         if (this->chars != NULL)
@@ -265,7 +280,7 @@ class string {
         else
             fresh[0] = '\0';
         if (this->chars != NULL)
-            stdlib_release(this->chars);
+            this->sfree(this->chars);
         this->chars = fresh;
         this->space = want;
         stdlib_tm_add(STDLIB_TM_GROWTH, 1);
@@ -327,7 +342,7 @@ class string {
                         "string::append: result too large");
             return -1;
         }
-        fresh = (char *)stdlib_alloc(want);
+        fresh = this->salloc(want);
         if (fresh == NULL)
             return -1;
         if (this->count > 0 && this->chars != NULL)
@@ -336,7 +351,7 @@ class string {
         __builtin_memmove(fresh + this->count, text, extra);
         fresh[need - 1] = '\0';
         if (this->chars != NULL)
-            stdlib_release(this->chars);
+            this->sfree(this->chars);
         this->chars = fresh;
         this->count += extra;
         this->space = want;
@@ -364,14 +379,14 @@ class string {
         n = other->count;
         if (n >= STDLIB_ALLOC_LIMIT)
             return -1;
-        fresh = (char *)stdlib_alloc(n + 1);
+        fresh = this->salloc(n + 1);
         if (fresh == NULL)
             return -1;
         if (n > 0 && other->chars != NULL)
             memcpy(fresh, other->chars, n);
         fresh[n] = '\0';
         if (this->chars != NULL)
-            stdlib_release(this->chars);
+            this->sfree(this->chars);
         this->chars = fresh;
         this->count = n;
         this->space = n + 1;
@@ -447,12 +462,33 @@ class string {
 
     void drop(void) {
         if (this->chars != NULL) {
-            stdlib_release(this->chars);
+            this->sfree(this->chars);
             this->chars = NULL;
             this->count = 0;
             this->space = 0;
         }
     }
 };
+
+/* Allocator-aware factory. C+ has no constructor overloading; callers write
+ *   string s = string_in(&A, "hello");
+ * where A is any stdlib_allocator (arena/pool/scratch/heap).  A must outlive s.
+ */
+static inline string string_in(const stdlib_allocator *a, const char *text) {
+    string s = string("");
+    error e = error();
+    size_t n = text == 0 ? 0 : strlen(text);
+    s.alloc = a;
+    if (n < STDLIB_ALLOC_LIMIT && n + 1u > n) {
+        s.chars = (char *)stdlib_allocate(a, n + 1u, 1u, &e);
+        if (s.chars != 0) {
+            if (n > 0) memcpy(s.chars, text, n);
+            s.chars[n] = '\0';
+            s.count = n;
+            s.space = n + 1u;
+        }
+    }
+    return s;
+}
 
 #endif

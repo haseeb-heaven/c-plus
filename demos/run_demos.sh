@@ -40,6 +40,14 @@ build() {
   if [ ! -f "$src" ]; then
     src="$ROOT/demos/$name.cp"
   fi
+  # The modern allocator demo binds the thread-local DataStack symbol from
+  # the hardened libc archive; other demos need no extra link input.
+  if [ "$name" = "modern_allocators" ]; then
+    "$CPLUS" build "$src" --default --sanitize=none -I"$ROOT" -o "$OUT/$name" \
+      -- "$ROOT/build/libc/libcplus_hardened.a" \
+      >"$OUT/$name.build.log" 2>&1
+    return $?
+  fi
   "$CPLUS" build "$src" -o "$OUT/$name" \
     >"$OUT/$name.build.log" 2>&1
 }
@@ -90,7 +98,7 @@ else
   rc=$(cat "$OUT/B_bounds.exit")
   if [ "$rc" -eq 0 ]; then
     fail B_bounds "out-of-bounds read did not abort"
-  elif ! grep -q "out of bounds" "$OUT/B_bounds.stderr"; then
+  elif ! grep -qE "out of bounds|outside the bounds" "$OUT/B_bounds.stderr"; then
     fail B_bounds "no bounds diagnostic; see demos/out/B_bounds.stderr"
   fi
   pass B_bounds
@@ -188,6 +196,7 @@ expect_ok O_extensions "$OUT/O_extensions.expected"
 # P: standard library provided as .hp headers.
 printf 'language C+ scores 2 20\n\n' >"$OUT/P_std_library.expected"
 expect_ok P_std_library "$OUT/P_std_library.expected"
+expect_ok modern_allocators "$OUT/modern_allocators.expected"
 
 echo
 echo "C+ demos: $PASS passed, $FAIL failed"

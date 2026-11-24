@@ -1,0 +1,180 @@
+/* C+ modern standard library: scoped thread-local DataStack (scratch bump stack).
+ *
+ * MODERN LAYER ONLY.  Each thread gets one scratch stack (a single __thread
+ * variable defined in libc/src/stdlib/datastack_tls.c).  Entering a scope
+ * records saved_top; leaving restores it in one store.  Containers using the
+ * scratch allocator skip individual frees.  `realloc` detects a top-of-stack
+ * block and grows in place with zero copying.
+ *
+ * Backing storage is a configurable large buffer reserved from the checked
+ * heap (one allocation per thread, grown on demand).  A future port can swap
+ * this for mmap/VirtualAlloc reservations without changing the API.
+ */
+#ifndef CPLUS_STD_DATASTACK_HP
+#define CPLUS_STD_DATASTACK_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+
+typedef struct stdlib_datastack {
+    unsigned char *base;
+    unsigned char *top;
+    size_t capacity;
+    uint64_t generation;
+} stdlib_datastack;
+
+/* Defined once in libc/src/stdlib/datastack_tls.c. */
+extern __thread stdlib_datastack stdlib_tls_datastack;
+
+typedef struct stdlib_scratch_mark {
+    unsigned char *saved_top;
+    uint64_t generation;
+} stdlib_scratch_mark;
+
+static inline uint64_t stdlib_datastack_next_gen(void) {
+    static uint64_t g = 1;
+    uint64_t v = g++;
+    return v == 0 ? 1 : v;
+}
+
+static inline int stdlib_datastack_init(stdlib_datastack *ds, size_t capacity,
+                                        error *err) {
+    error_reset(err);
+    if (ds == 0 || capacity == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid config"), STDLIB_FAIL;
+    ds->base = (unsigned char *)cplus_alloc(capacity);
+    if (ds->base == (unsigned char *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE, "datastack: reserve refused"), STDLIB_FAIL;
+    ds->top = ds->base;
+    ds->capacity = capacity;
+    ds->generation = stdlib_datastack_next_gen();
+    return STDLIB_OK;
+}
+
+/* Return the calling thread's scratch stack, lazily initialised. */
+static inline stdlib_datastack *stdlib_thread_datastack(error *err) {
+    if (stdlib_tls_datastack.base == (unsigned char *)0) {
+        if (stdlib_datastack_init(&stdlib_tls_datastack, 1u << 20u, err) != STDLIB_OK)
+            return (stdlib_datastack *)0;
+    }
+    return &stdlib_tls_datastack;
+}
+
+static inline stdlib_scratch_mark stdlib_scratch_enter(stdlib_datastack *ds) {
+    stdlib_scratch_mark m;
+    m.saved_top = ds->top;
+    m.generation = ds->generation;
+    return m;
+}
+
+static inline void stdlib_scratch_leave(stdlib_datastack *ds,
+                                        stdlib_scratch_mark m) {
+    if (m.generation != ds->generation) return; /* stale generation: refuse */
+    ds->top = m.saved_top;
+    /* Do NOT bump generation here: nested scopes must remain valid.  The
+     * generation changes on reset/destroy, which is what invalidates marks. */
+}
+
+static inline void *stdlib_datastack_alloc(stdlib_datastack *ds, size_t n,
+                                           size_t align, error *err) {
+    uintptr_t p, mask;
+    size_t pad;
+    error_reset(err);
+    if (ds == 0 || ds->base == 0 || n == 0 || align == 0 ||
+        (align & (align - 1u)) != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid request"), (void *)0;
+    mask = (uintptr_t)align - 1u;
+    p = (uintptr_t)ds->top;
+    pad = (size_t)((align - (p & mask)) & mask);
+    if (pad > (size_t)(ds->base + ds->capacity - ds->top) ||
+        n > (size_t)(ds->base + ds->capacity - ds->top) - pad)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "datastack: exhausted"), (void *)0;
+    {
+        void *out = (void *)(ds->top + pad);
+        ds->top += pad + n;
+        memset(out, 0, n);
+        return out;
+    }
+}
+
+static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
+                                             size_t old_size, size_t new_size,
+                                             size_t align, error *err) {
+    unsigned char *top;
+    void *fresh;
+    error_reset(err);
+    if (ds == 0 || new_size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid realloc"), (void *)0;
+    top = ds->top - old_size;
+    if (ptr != (void *)top) {
+        fresh = stdlib_datastack_alloc(ds, new_size, align, err);
+        if (fresh == (void *)0) return (void *)0;
+        if (ptr != 0 && old_size != 0) memcpy(fresh, ptr, old_size);
+        return fresh;
+    }
+    if (new_size > old_size) {
+        size_t extra = new_size - old_size;
+        if (extra > (size_t)(ds->base + ds->capacity - ds->top)) {
+            fresh = stdlib_datastack_alloc(ds, new_size, align, err);
+            if (fresh == 0) return 0;
+            memcpy(fresh, ptr, old_size);
+            return fresh;
+        }
+        ds->top += extra;
+    } else {
+        ds->top -= (old_size - new_size);
+    }
+    return ptr;
+}
+
+static inline void stdlib_datastack_release(stdlib_datastack *ds, void *ptr,
+                                            size_t size, error *err) {
+    error_reset(err);
+    if (ds != 0 && ptr != 0 && ptr == (void *)(ds->top - size))
+        ds->top -= size; /* top-of-stack free is a single subtract */
+    /* non-top frees are no-ops; the checkpoint restores the whole region */
+}
+
+/* Vtable adapters bound to the calling thread's scratch stack. */
+static inline void *stdlib_scratch_op_alloc(void *ctx, size_t size, size_t align) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    return ds == 0 ? (void *)0 : stdlib_datastack_alloc(ds, size, align, &e);
+}
+static inline void *stdlib_scratch_op_realloc(void *ctx, void *ptr,
+                                              size_t old_size, size_t new_size,
+                                              size_t align) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    return ds == 0 ? (void *)0 : stdlib_datastack_realloc(ds, ptr, old_size, new_size, align, &e);
+}
+static inline void stdlib_scratch_op_release(void *ctx, void *ptr, size_t size) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    if (ds != 0) stdlib_datastack_release(ds, ptr, size, &e);
+}
+static inline void stdlib_scratch_op_reset(void *ctx) {
+    error e = error(); (void)ctx;
+    stdlib_datastack *ds = stdlib_thread_datastack(&e);
+    if (ds != 0) ds->top = ds->base;
+}
+static inline stdlib_allocator stdlib_scratch_allocator(void) {
+    stdlib_allocator v;
+    v.ctx = (void *)0;
+    v.alloc = stdlib_scratch_op_alloc;
+    v.realloc = stdlib_scratch_op_realloc;
+    v.release = stdlib_scratch_op_release;
+    v.reset = stdlib_scratch_op_reset;
+    return v;
+}
+
+#endif /* CPLUS_STD_DATASTACK_HP */

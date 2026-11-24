@@ -42,6 +42,7 @@ set(LIBC_SOURCES
   src/thread/sync_checked.c
   src/stdlib/alloc_hardened.c
   src/runtime/violation_log.c
+  src/stdlib/datastack_tls.c
   src/stdio/stdio.c
   src/stdio/stdio2.c
   src/stdio/stdio3.c

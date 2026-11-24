@@ -23,6 +23,7 @@
 
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
 
 /* ---- Upstream-derived growth / invariant helpers (Microsoft STL) ---------
  *
@@ -148,12 +149,22 @@ class vector {
     size_t used;
     size_t space;
     size_t generation;
+    const stdlib_allocator *alloc; /* NULL = checked heap */
 
     vector(void) {
+        this->alloc = (const stdlib_allocator *)0;
         this->items = NULL;
         this->used = 0;
         this->space = 0;
         this->generation = 0;
+    }
+
+    int *valloc(size_t bytes) {
+        error e = error();
+        return (int *)stdlib_allocate(this->alloc, bytes, STDLIB_ALIGN_DEFAULT, &e);
+    }
+    void vfree(int *p, size_t bytes) {
+        stdlib_deallocate(this->alloc, (void *)p, bytes);
     }
 
     size_t size(void) {
@@ -177,14 +188,14 @@ class vector {
          * (upstream _Allocation_guard / _Reallocation_guard2 discipline). */
         if (vector_allocation_bytes(want, &bytes) != 0)
             return -1;
-        fresh = (int *)stdlib_alloc(bytes);
+        fresh = this->valloc(bytes);
         if (fresh == NULL)
             return -1;
         for (i = 0; i < this->used; i++)
             fresh[i] = this->items[i];
         /* ---- commit point: nothing above can leave the vector modified ---- */
         if (this->items != NULL)
-            stdlib_release(this->items);
+            this->vfree(this->items, this->space * sizeof(int));
         this->items = fresh;
         this->space = want;
         this->generation++;
@@ -314,14 +325,14 @@ class vector {
             size_t bytes = 0;
             if (vector_allocation_bytes(other->used, &bytes) != 0)
                 return -1;
-            fresh = (int *)stdlib_alloc(bytes);
+            fresh = this->valloc(bytes);
             if (fresh == NULL)
                 return -1;
             for (i = 0; i < other->used; i++)
                 fresh[i] = other->items[i];
         }
         if (this->items != NULL)
-            stdlib_release(this->items);
+            this->vfree(this->items, this->space * sizeof(int));
         this->items = fresh;
         this->used = other->used;
         this->space = other->used;
@@ -339,7 +350,7 @@ class vector {
             return 0;
         if (this->used == 0) {
             if (this->items != NULL)
-                stdlib_release(this->items);
+                this->vfree(this->items, this->space * sizeof(int));
             this->items = NULL;
             this->space = 0;
             this->generation++;
@@ -347,12 +358,12 @@ class vector {
         }
         if (vector_allocation_bytes(this->used, &bytes) != 0)
             return -1;
-        fresh = (int *)stdlib_alloc(bytes);
+        fresh = this->valloc(bytes);
         if (fresh == NULL)
             return -1;
         for (i = 0; i < this->used; i++)
             fresh[i] = this->items[i];
-        stdlib_release(this->items);
+        this->vfree(this->items, this->space * sizeof(int));
         this->items = fresh;
         this->space = this->used;
         this->generation++;
@@ -370,7 +381,7 @@ class vector {
 
     void drop(void) {
         if (this->items != NULL) {
-            stdlib_release(this->items);
+            this->vfree(this->items, this->space * sizeof(int));
             this->items = NULL;
             this->used = 0;
             this->space = 0;
@@ -378,5 +389,13 @@ class vector {
         }
     }
 };
+
+/* Allocator-aware vector factory.  The vector is bound to `a`, which must
+ * outlive it; a monotonic Arena/DataStack makes individual frees no-ops. */
+static inline vector vector_in(const stdlib_allocator *a) {
+    vector v = vector();
+    v.alloc = a;
+    return v;
+}
 
 #endif

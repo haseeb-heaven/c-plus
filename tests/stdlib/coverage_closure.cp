@@ -9,6 +9,8 @@
 #include "stdlib/gsl_adapt.hp"
 #include "stdlib/json.hp"
 #include "stdlib/lifetime_adapt.hp"
+#include "stdlib/string.hp"
+#include "stdlib/vector.hp"
 
 static int fails = 0;
 static void ck(int cond, const char *label) {
@@ -72,6 +74,19 @@ int main(void) {
         ck(lifetime_owner_is_live(&o) == 1, "lifetime_owner_is_live(live)");
         ck(lifetime_owner_release(&o, &err) == STDLIB_OK, "lifetime_owner_release");
         ck(lifetime_owner_is_live(&o) == 0, "lifetime_owner_is_live(released)");
+    }
+
+    /* Modern allocator-aware helper methods (coverage closure). */
+    {
+        string s = string("cov");
+        vector v = vector();
+        char *sb = s.salloc(8);
+        ck(sb != 0, "string.salloc");
+        s.sfree(sb);             /* internal free helper */
+        int *vb = v.valloc(32);
+        ck(vb != 0, "vector.valloc");
+        v.vfree(vb, 32);         /* internal free helper */
+        s.drop(); v.drop();
     }
 
     print("COVERAGE_CLOSURE", fails);

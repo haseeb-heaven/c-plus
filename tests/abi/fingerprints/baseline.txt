@@ -133,7 +133,7 @@ C	define __arm64__	1
 C	define __clang__	1
 C	define __clang_major__	16
 C	define __clang_minor__	0
-S	archive build/libc/libcplus_hardened.a	count=812
+S	archive build/libc/libcplus_hardened.a	count=813
 S	symbol build/libc/libcplus_hardened.a::___cplus_errno_location	1
 S	symbol build/libc/libcplus_hardened.a::_cplus__Exit	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_abort	1
@@ -946,6 +946,7 @@ S	symbol build/libc/libcplus_hardened.a::_nextdownl	1
 S	symbol build/libc/libcplus_hardened.a::_nextup	1
 S	symbol build/libc/libcplus_hardened.a::_nextupf	1
 S	symbol build/libc/libcplus_hardened.a::_nextupl	1
+S	symbol build/libc/libcplus_hardened.a::_stdlib_tls_datastack	1
 S	archive build/safe/libcplus_safecrt.a	count=299
 S	symbol build/safe/libcplus_safecrt.a::___ubsan_on_report	1
 S	symbol build/safe/libcplus_safecrt.a::__memccpy_s_uchk	1
