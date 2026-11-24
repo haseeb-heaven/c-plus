@@ -137,6 +137,7 @@ public:
         checkOutParamHeapSubscript(i);   // extent learned from make(&p)
         checkStructFieldSubscript(i);    // field extent/index from call site
         checkPhiIndexSubscript(i);       // ternary/phi index into known extent
+        checkTernaryIndexSubscript(i);   // arr[c ? -1 : i] with an OOB branch
         checkFoldedIndexSubscript(i);    // helper return / pointer-difference index
         checkDirectOnePastDeref(i);  // *(array + N) at the array extent
         checkUnrelatedPointerCompare(i);
@@ -937,6 +938,72 @@ private:
       long v = 0;
       phiConsts_[toks_[i].text].push_back(
           {i, indexExprValue(nextSig(eq), end, &v) ? v : kInvalidConst});
+    }
+  }
+
+  /// `arr[cond ? -1 : i]`: an inline conditional index where any constant
+  /// branch is outside the object's extent.  Even when the other branch is
+  /// guarded by a loop condition, the OOB branch is reachable at compile time
+  /// and must be rejected rather than trapped at runtime by the bounds guard.
+  void checkTernaryIndexSubscript(size_t i) {
+    if (toks_[i].kind != TokKind::Identifier) return;
+    size_t lb = nextSig(i);
+    if (!isPunct(lb, "[")) return;
+    size_t rb = match(lb, "[", "]");
+    if (rb == kNPos) return;
+    size_t from = nextSig(lb), to = rb;
+    size_t q = kNPos, colon = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t k = from; k < to; ++k) {
+      if (isPunct(k, "(")) ++paren;
+      else if (isPunct(k, ")")) --paren;
+      else if (isPunct(k, "[")) ++bracket;
+      else if (isPunct(k, "]")) --bracket;
+      else if (paren == 0 && bracket == 0) {
+        if (q == kNPos && isPunct(k, "?")) q = k;
+        else if (q != kNPos && colon == kNPos && isPunct(k, ":")) colon = k;
+      }
+    }
+    if (q == kNPos || colon == kNPos) return;
+    const std::vector<size_t> *dims = nullptr;
+    if (!findShape(toks_[i].text, i, &dims) || dims->empty()) return;
+    long extent = (long)dims->front();
+    std::vector<std::pair<size_t, size_t>> branches = {
+        {q + 1, colon}, {colon + 1, to}};
+    for (const auto &br : branches) {
+      long value = 0;
+      bool found = indexExprValue(br.first, br.second, &value);
+      if (!found) {
+        // `-1 - i`: a negative constant followed only by subtraction of a
+        // nonnegative loop induction is provably negative as well.
+        size_t k = br.first;
+        if (isPunct(k, "-")) {
+          long neg = 0;
+          ++k;
+          if (k < br.second && number(toks_[k], &neg)) {
+            ++k;
+            bool onlyMinusVar = neg > 0;
+            while (k < br.second) {
+              if (!isPunct(k, "-")) { onlyMinusVar = false; break; }
+              ++k;
+              if (k >= br.second || toks_[k].kind != TokKind::Identifier) {
+                onlyMinusVar = false; break;
+              }
+              ++k;
+            }
+            if (onlyMinusVar) {
+              value = -neg;
+              found = true;
+            }
+          }
+        }
+      }
+      if (!found) continue;
+      if (value < 0 || value >= extent) {
+        reportConstantIndex(toks_[q], value, toks_[i].text,
+                            static_cast<size_t>(extent));
+        return;
+      }
     }
   }
 
