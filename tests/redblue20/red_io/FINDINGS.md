@@ -147,3 +147,12 @@ cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
 sh tests/redblue20/red_io/run.sh
 # prints: RED20 io 3600 0 78 101 3421
 ```
+
+`run.sh` uses `$ROOT/build/c+` by default and honours `CPLUS_BIN` to select a
+different compiler binary. During this campaign a sibling agent rebuilt the
+C+ compiler concurrently; that new build reports false
+`[CPLUS-LIFETIME] field '__u' ... uninitialized` errors inside the SDK's
+`math.h` for every translation unit including `stdlib/json.hp`. The final
+numbers above were reproduced from this exact harness source with a known-good
+compiler via `CPLUS_BIN=... sh tests/redblue20/red_io/run.sh`; no header or
+source file in the repository was changed to work around it.

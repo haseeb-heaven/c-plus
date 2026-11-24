@@ -1,0 +1,407 @@
+/* C+ standard library: small bounded command-line interface framework.
+ *
+ * ADDITIVE, PLAIN C SURFACE.  This header introduces a new facility and
+ * changes no existing API: structs plus free functions, all `static inline`,
+ * so there are no exported symbols and no ABI impact.
+ *
+ * Model:
+ *   - A registry maps a command name to one-line help and an integer
+ *     callback id (`cli_add_command`).
+ *   - The set of accepted options is registered too (`cli_add_option`), so
+ *     an unrecognised switch is a recoverable refusal, never a silent guess.
+ *   - `cli_parse` turns argv into fixed-capacity descriptors (one command,
+ *     bounded options and positional arguments).  It never allocates.
+ *   - `cli_run` dispatches the parsed command by id through a caller supplied
+ *     function; the library itself never calls application code implicitly.
+ *   - `cli_help` renders stable, locale-independent text into a caller buffer.
+ *   - Every refusal has a stable code and a human string from `cli_error`.
+ *
+ * Conventions:
+ *   - argv[0] is the program name and is skipped.
+ *   - The first non-option token is the command name; later ones are args.
+ *   - An option is "-x"/"--long" (flag) or "-x=v"/"--long=v" (with value).
+ *   - Option names, command names and tokens are compared byte-for-byte.
+ */
+#ifndef CPLUS_STD_CLI_HP
+#define CPLUS_STD_CLI_HP
+
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include "cplus/cplus.h"
+
+/* Fixed capacities.  Override at compile time only if a caller needs more;
+ * the parse path is bounded by these in all cases. */
+#ifndef CLI_MAX_COMMANDS
+#define CLI_MAX_COMMANDS 16
+#endif
+#ifndef CLI_MAX_OPTIONS
+#define CLI_MAX_OPTIONS 8
+#endif
+#ifndef CLI_MAX_ARGS
+#define CLI_MAX_ARGS 16
+#endif
+#ifndef CLI_MAX_PARSED_OPTIONS
+#define CLI_MAX_PARSED_OPTIONS 8
+#endif
+#ifndef CLI_MAX_NAME
+#define CLI_MAX_NAME 32
+#endif
+#ifndef CLI_MAX_HELP
+#define CLI_MAX_HELP 128
+#endif
+#ifndef CLI_MAX_VALUE
+#define CLI_MAX_VALUE 64
+#endif
+
+/* Stable status codes (values are part of the API). */
+typedef enum cli_status {
+    CLI_OK = 0,
+    CLI_ERR_NULL = 1,            /* null pointer argument                  */
+    CLI_ERR_INVALID = 2,         /* malformed token or negative argc       */
+    CLI_ERR_TOO_LONG = 3,        /* name/help/token exceeds its capacity   */
+    CLI_ERR_DUPLICATE = 4,       /* command or option already registered   */
+    CLI_ERR_FULL = 5,            /* registry/descriptor/output capacity    */
+    CLI_ERR_UNKNOWN_OPTION = 6,  /* option was never registered            */
+    CLI_ERR_UNKNOWN_COMMAND = 7, /* command absent or not first positional  */
+    CLI_ERR_TOO_MANY_ARGS = 8,   /* positional argument capacity exhausted  */
+    CLI_ERR_NOT_INITIALIZED = 9, /* cli_init was not called                 */
+    CLI_ERR_DISPATCH = 10        /* no handler supplied to cli_run          */
+} cli_status;
+
+/* Sentinel written by cli_init; catches use of an uninitialised registry. */
+#define CLI_MAGIC 0x434C4931u /* "CLI1" */
+
+typedef struct cli_command {
+    char name[CLI_MAX_NAME];
+    char help[CLI_MAX_HELP];
+    int id;
+} cli_command;
+
+typedef struct cli_option_spec {
+    char name[CLI_MAX_NAME];
+    int takes_value;
+} cli_option_spec;
+
+typedef struct cli_option {
+    char name[CLI_MAX_NAME];
+    char value[CLI_MAX_VALUE];
+    int has_value;
+} cli_option;
+
+typedef struct cli_arg {
+    char value[CLI_MAX_VALUE];
+} cli_arg;
+
+typedef struct cli_parse_result {
+    char command[CLI_MAX_NAME];
+    int command_id;
+    int found;                              /* 1 once a command matched */
+    cli_option options[CLI_MAX_PARSED_OPTIONS];
+    int option_count;
+    cli_arg args[CLI_MAX_ARGS];
+    int arg_count;
+} cli_parse_result;
+
+typedef struct cli {
+    unsigned int magic;
+    cli_command commands[CLI_MAX_COMMANDS];
+    int command_count;
+    cli_option_spec options[CLI_MAX_OPTIONS];
+    int option_count;
+} cli;
+
+/* A handler receives the callback id, the full parse result and ctx, and
+ * returns an application-defined int (propagated unchanged by cli_run). */
+typedef int (*cli_dispatch)(int id, const cli_parse_result *parsed, void *ctx);
+
+/* ---- stable error strings ---------------------------------------------- */
+
+static inline const char *cli_error(int code) {
+    switch (code) {
+    case CLI_OK:                  return "ok";
+    case CLI_ERR_NULL:            return "null argument";
+    case CLI_ERR_INVALID:         return "invalid argument";
+    case CLI_ERR_TOO_LONG:        return "name or token too long";
+    case CLI_ERR_DUPLICATE:       return "duplicate entry";
+    case CLI_ERR_FULL:            return "capacity exceeded";
+    case CLI_ERR_UNKNOWN_OPTION:  return "unknown option";
+    case CLI_ERR_UNKNOWN_COMMAND: return "unknown command";
+    case CLI_ERR_TOO_MANY_ARGS:   return "too many arguments";
+    case CLI_ERR_NOT_INITIALIZED: return "cli not initialized";
+    case CLI_ERR_DISPATCH:        return "no dispatch handler";
+    default:                      return "unknown cli error";
+    }
+}
+
+/* ---- internal helpers --------------------------------------------------- */
+
+static inline int cli_check(const cli *c) {
+    if (c == NULL)
+        return CLI_ERR_NULL;
+    if (c->magic != CLI_MAGIC)
+        return CLI_ERR_NOT_INITIALIZED;
+    return CLI_OK;
+}
+
+static inline int cli_find_command(const cli *c, const char *name) {
+    int i;
+    for (i = 0; i < c->command_count; i++)
+        if (strcmp(c->commands[i].name, name) == 0)
+            return i;
+    return -1;
+}
+
+static inline int cli_find_option(const cli *c, const char *name) {
+    int i;
+    for (i = 0; i < c->option_count; i++)
+        if (strcmp(c->options[i].name, name) == 0)
+            return i;
+    return -1;
+}
+
+/* ---- construction ------------------------------------------------------- */
+
+static inline void cli_init(cli *c) {
+    if (c == NULL)
+        return;
+    c->command_count = 0;
+    c->option_count = 0;
+    c->magic = CLI_MAGIC;
+}
+
+static inline int cli_add_command(cli *c, const char *name, const char *help,
+                                  int id) {
+    size_t nl, hl;
+    cli_command *slot;
+    int st = cli_check(c);
+    if (st != CLI_OK)
+        return st;
+    if (name == NULL || help == NULL)
+        return CLI_ERR_NULL;
+    nl = strlen(name);
+    hl = strlen(help);
+    if (nl == 0 || hl == 0)
+        return CLI_ERR_INVALID;
+    if (nl >= CLI_MAX_NAME || hl >= CLI_MAX_HELP)
+        return CLI_ERR_TOO_LONG;
+    if (cli_find_command(c, name) >= 0)
+        return CLI_ERR_DUPLICATE;
+    if (c->command_count >= CLI_MAX_COMMANDS)
+        return CLI_ERR_FULL;
+    slot = &c->commands[c->command_count];
+    memcpy(slot->name, name, nl + 1);
+    memcpy(slot->help, help, hl + 1);
+    slot->id = id;
+    c->command_count++;
+    return CLI_OK;
+}
+
+static inline int cli_add_option(cli *c, const char *name, int takes_value) {
+    size_t nl;
+    cli_option_spec *slot;
+    int st = cli_check(c);
+    if (st != CLI_OK)
+        return st;
+    if (name == NULL)
+        return CLI_ERR_NULL;
+    nl = strlen(name);
+    if (nl < 2 || name[0] != '-' || name[1] == '\0')
+        return CLI_ERR_INVALID;
+    if (nl >= CLI_MAX_NAME)
+        return CLI_ERR_TOO_LONG;
+    if (cli_find_option(c, name) >= 0)
+        return CLI_ERR_DUPLICATE;
+    if (c->option_count >= CLI_MAX_OPTIONS)
+        return CLI_ERR_FULL;
+    slot = &c->options[c->option_count];
+    memcpy(slot->name, name, nl + 1);
+    slot->takes_value = takes_value ? 1 : 0;
+    c->option_count++;
+    return CLI_OK;
+}
+
+/* ---- parsing ------------------------------------------------------------ */
+
+static inline void cli_result_reset(cli_parse_result *out) {
+    if (out == NULL)
+        return;
+    out->command[0] = '\0';
+    out->command_id = 0;
+    out->found = 0;
+    out->option_count = 0;
+    out->arg_count = 0;
+}
+
+static inline int cli_parse(cli *c, int argc, const char **argv,
+                            cli_parse_result *out) {
+    int i, st = cli_check(c);
+    if (st != CLI_OK)
+        return st;
+    if (argv == NULL || out == NULL)
+        return CLI_ERR_NULL;
+    if (argc < 0)
+        return CLI_ERR_INVALID;
+    cli_result_reset(out);
+
+    for (i = 1; i < argc; i++) {
+        const char *token = argv[i];
+        size_t len, name_len, eq = 0, vlen;
+        int has_eq = 0, spec;
+        char key[CLI_MAX_NAME];
+        cli_option *dst;
+
+        if (token == NULL)
+            return CLI_ERR_NULL;
+        len = strlen(token);
+        if (len == 0)
+            return CLI_ERR_INVALID;
+        if (len >= CLI_MAX_VALUE)
+            return CLI_ERR_TOO_LONG;
+
+        if (token[0] == '-') {
+            size_t k;
+            if (len < 2)
+                return CLI_ERR_INVALID;
+            for (k = 1; k < len; k++) {
+                if (token[k] == '=') {
+                    has_eq = 1;
+                    eq = k;
+                    break;
+                }
+            }
+            name_len = has_eq ? eq : len;
+            vlen = has_eq ? len - eq - 1 : 0;
+            if (name_len < 2 || name_len >= CLI_MAX_NAME)
+                return CLI_ERR_INVALID;
+            memcpy(key, token, name_len);
+            key[name_len] = '\0';
+            spec = cli_find_option(c, key);
+            if (spec < 0)
+                return CLI_ERR_UNKNOWN_OPTION;
+            if (c->options[spec].takes_value) {
+                if (!has_eq || vlen == 0)
+                    return CLI_ERR_INVALID;
+            } else if (has_eq) {
+                return CLI_ERR_INVALID;
+            }
+            if (out->option_count >= CLI_MAX_PARSED_OPTIONS)
+                return CLI_ERR_FULL;
+            dst = &out->options[out->option_count];
+            memcpy(dst->name, key, name_len + 1);
+            if (has_eq) {
+                memcpy(dst->value, token + eq + 1, vlen + 1);
+                dst->has_value = 1;
+            } else {
+                dst->value[0] = '\0';
+                dst->has_value = 0;
+            }
+            out->option_count++;
+            continue;
+        }
+
+        if (!out->found) {
+            int found = cli_find_command(c, token);
+            size_t n;
+            if (found < 0)
+                return CLI_ERR_UNKNOWN_COMMAND;
+            n = strlen(c->commands[found].name);
+            memcpy(out->command, c->commands[found].name, n + 1);
+            out->command_id = c->commands[found].id;
+            out->found = 1;
+        } else {
+            if (out->arg_count >= CLI_MAX_ARGS)
+                return CLI_ERR_TOO_MANY_ARGS;
+            memcpy(out->args[out->arg_count].value, token, len + 1);
+            out->arg_count++;
+        }
+    }
+
+    if (!out->found)
+        return CLI_ERR_UNKNOWN_COMMAND;
+    return CLI_OK;
+}
+
+/* ---- help --------------------------------------------------------------- */
+
+static inline int cli_append(char *buf, size_t size, size_t *used,
+                             const char *text) {
+    size_t n = strlen(text);
+    if (*used >= size || n >= size - *used)
+        return CLI_ERR_FULL;
+    memcpy(buf + *used, text, n + 1);
+    *used += n;
+    return CLI_OK;
+}
+
+/* Renders a deterministic, newline-terminated description:
+ *
+ *   Commands:
+ *     <name> - <help> (id=<id>)
+ *   Options:
+ *     <name>=value        (value-taking option)
+ *     <name>              (flag)
+ *
+ * Registration order is preserved.  Returns CLI_ERR_FULL if buf is too
+ * small; the partial text is left NUL-terminated in that case. */
+static inline int cli_help(const cli *c, char *buf, size_t size) {
+    size_t used = 0;
+    int i, rc, st = cli_check(c);
+    if (st != CLI_OK)
+        return st;
+    if (buf == NULL || size == 0)
+        return CLI_ERR_NULL;
+    buf[0] = '\0';
+
+#define CLI_HELP_ADD(s)                                                        \
+    do {                                                                       \
+        rc = cli_append(buf, size, &used, (s));                                \
+        if (rc != CLI_OK)                                                      \
+            return rc;                                                         \
+    } while (0)
+
+    CLI_HELP_ADD("Commands:\n");
+    for (i = 0; i < c->command_count; i++) {
+        char ids[32];
+        int n = snprintf(ids, sizeof(ids), "%d", c->commands[i].id);
+        if (n < 0 || (size_t)n >= sizeof(ids))
+            return CLI_ERR_INVALID;
+        CLI_HELP_ADD("  ");
+        CLI_HELP_ADD(c->commands[i].name);
+        CLI_HELP_ADD(" - ");
+        CLI_HELP_ADD(c->commands[i].help);
+        CLI_HELP_ADD(" (id=");
+        CLI_HELP_ADD(ids);
+        CLI_HELP_ADD(")\n");
+    }
+    CLI_HELP_ADD("Options:\n");
+    for (i = 0; i < c->option_count; i++) {
+        CLI_HELP_ADD("  ");
+        CLI_HELP_ADD(c->options[i].name);
+        if (c->options[i].takes_value)
+            CLI_HELP_ADD("=value\n");
+        else
+            CLI_HELP_ADD("\n");
+    }
+
+#undef CLI_HELP_ADD
+    return CLI_OK;
+}
+
+/* ---- dispatch ----------------------------------------------------------- */
+
+static inline int cli_run(const cli *c, const cli_parse_result *parsed,
+                          cli_dispatch fn, void *ctx) {
+    int st = cli_check(c);
+    if (st != CLI_OK)
+        return st;
+    if (parsed == NULL)
+        return CLI_ERR_NULL;
+    if (!parsed->found)
+        return CLI_ERR_UNKNOWN_COMMAND;
+    if (fn == NULL)
+        return CLI_ERR_DISPATCH;
+    return fn(parsed->command_id, parsed, ctx);
+}
+
+#endif /* CPLUS_STD_CLI_HP */

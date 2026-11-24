@@ -108,7 +108,9 @@ int main(void) {
     assert(memmove_s(buf, buf, 0) == buf);
     errno = 0; assert(memset_s(NULL, 0, 1) == NULL && errno == EINVAL);
     assert(memset_s(buf, 0, 0) == buf);
-    assert(memcmp_s(NULL, NULL, 0) == 0);
+    /* RED-20 fix: NULL operands are constraint violations even at n == 0;
+     * cplus_memcmp_s_auto now refuses with -1 (documented error sentinel). */
+    assert(memcmp_s(NULL, NULL, 0) == -1);
     errno = 0; assert(memcmp_s(NULL, buf, 1) < 0 && errno == EINVAL);
     errno = 0; assert(memcmp_s(buf, NULL, 1) > 0 && errno == EINVAL);
     assert(memcmp_s(buf, "ok", 100) == -1 && errno == ERANGE);

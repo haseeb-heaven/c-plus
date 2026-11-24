@@ -346,7 +346,10 @@ void cplus_scope_cleanup(cplus_scope *scope) {
   scope->head = NULL;
   while (c) {
     cplus_cleanup *next = c->next;
-    if (c->ptr && c->drop) {
+    /* MANAGED cleanups release via cplus_release() and legitimately carry a
+     * NULL drop callback; requiring c->drop skipped them entirely, hiding a
+     * double-managed release (EDGE100 runtime finding). */
+    if (c->ptr && (c->drop || c->kind == CPLUS_CLEANUP_MANAGED)) {
       if (c->kind == CPLUS_CLEANUP_MANAGED)
         cplus_release(c->ptr);
       else

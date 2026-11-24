@@ -4,6 +4,7 @@ set(CMAKE_C_STANDARD 99)
 
 add_library(cplus_safecrt STATIC
   src/safe_alloc.c
+  src/safe_diag.c
   src/safe_error.c
   src/safe_format.c
   src/safe_io.c

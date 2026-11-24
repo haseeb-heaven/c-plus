@@ -180,3 +180,10 @@ tests/redblue20/red_abi/app_safe
 tests/redblue20/red_safecrt/harness
 tests/redblue20/red_safecrt/repro
 tests/redblue20/red_safecrt/*.dSYM/
+**/.run/
+**/*.dSYM/
+/checksum
+/memcpy_s_demo
+/pwdcheck
+/safe_copy
+tests/edge100/safecrt/harness

@@ -1,5 +1,9 @@
 #define _POSIX_C_SOURCE 200112L
+/* Keep the exported ABI definitions below intact; the header's rich-diagnostic
+ * macros are for callers, not for the definitions themselves. */
+#define CPLUS_SAFE_DIAG_NO_MACROS
 #include "../safe_runtime.h"
+#include "../safe_diag.h"
 #include "../safe_log.h"
 #include "../safe_stats.h"
 #include <setjmp.h>
@@ -46,11 +50,14 @@ int cplus_runtime_get_failstop(void) { return g_failstop; }
 void cplus_runtime_set_violation_trap(int enabled) { g_violation_trap = enabled ? 1 : 0; }
 int cplus_runtime_get_violation_trap(void) { return g_violation_trap; }
 
-void cplus_runtime_violation(const char *api, const char *detail) {
+void cplus_runtime_violation_at(const char *api, const char *detail,
+                                const char *file, int line, const char *func) {
     const char *a = api ? api : "runtime";
     const char *d = detail ? detail : "memory safety violation";
-    fprintf(stderr, "[CPLUS-SAFE] %s: %s\n", a, d);
-    fflush(stderr);
+    /* Emit the diagnostic (LEGACY keeps the exact historical line; rich mode
+     * adds color/code/location/explanation), then apply the SAME trap policy
+     * as before: unwind to a guard or fail stop with exit 70. */
+    cplus_diag_violation_at(a, d, file, line, func);
     if (g_violation_trap) {
         if (g_top && !g_failstop) {
             longjmp(g_top->jb, 1);
@@ -60,15 +67,27 @@ void cplus_runtime_violation(const char *api, const char *detail) {
     }
 }
 
-void cplus_runtime_report(const char *message) {
+void cplus_runtime_violation(const char *api, const char *detail) {
+    /* ABI entry point: full behaviour, unknown source location. */
+    cplus_runtime_violation_at(api, detail, "(cplus_runtime_violation)", 0,
+                               "(external caller)");
+}
+
+void cplus_runtime_report_at(const char *message, const char *file, int line,
+                             const char *func) {
     if (!message) message = "runtime error";
     cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "runtime", message);
     cplus_safe_stat_record("runtime_report", 0);
     if (g_handler) g_handler(message);
     /* Always emit a diagnostic so the error is never silent. The message is
      * written verbatim and never interpreted as a format string. */
-    fprintf(stderr, "[CPLUS-RUNTIME] runtime error: %s\n", message);
-    fflush(stderr);
+    cplus_diag_report_at(message, file, line, func);
+}
+
+void cplus_runtime_report(const char *message) {
+    /* ABI entry point: full behaviour, unknown source location. */
+    cplus_runtime_report_at(message, "(cplus_runtime_report)", 0,
+                            "(external caller)");
 }
 
 int cplus_runtime_push_cleanup(void (*drop)(void *), void *self) {

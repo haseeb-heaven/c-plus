@@ -1,5 +1,0 @@
----
-triple:          'arm64-apple-darwin'
-binary-path:     '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/redteam/format_io/redteam_format_io.bin'
-relocations:     []
-...

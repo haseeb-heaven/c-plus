@@ -56,6 +56,25 @@ void cplus_runtime_violation(const char *api, const char *detail);
 /* Report a runtime error (called by the UBSan hook and by library code). */
 void cplus_runtime_report(const char *message);
 
+/*
+ * Rich-diagnostics integration: the two exported symbols above keep their
+ * signatures and default one-line output, but in-tree callers use these macros
+ * so rich mode can print the raising file, line and function. Opt out with
+ * CPLUS_SAFE_DIAG_NO_MACROS before including this header.
+ */
+#ifndef CPLUS_SAFE_DIAG_NO_MACROS
+/* _at variants keep the FULL historical behaviour (diagnostic + trap) while
+ * additionally carrying the raising source location into rich mode. */
+void cplus_runtime_violation_at(const char *api, const char *detail,
+                                const char *file, int line, const char *func);
+void cplus_runtime_report_at(const char *message,
+                             const char *file, int line, const char *func);
+#define cplus_runtime_violation(api, detail)                                   \
+  cplus_runtime_violation_at((api), (detail), __FILE__, __LINE__, __func__)
+#define cplus_runtime_report(message)                                          \
+  cplus_runtime_report_at((message), __FILE__, __LINE__, __func__)
+#endif
+
 /* Run `body(ctx)` under a recovery guard. Returns CPLUS_RUNTIME_OK if the body
  * completed, or CPLUS_RUNTIME_ERROR if a runtime error was detected and the
  * body was unwound. The error is always reported; it is never silent.

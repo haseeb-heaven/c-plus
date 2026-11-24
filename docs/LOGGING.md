@@ -80,3 +80,25 @@ are **not** async-signal-safe.
 
 The `cplus_libc_log` errno-preservation and short-write-delivery regressions
 live in `tests/libc/test_logging_telemetry.c` (sections 8 and 9).
+
+## Rich diagnostics (`safe_diag.h`) — opt-in
+
+Safety violations and checked-API refusals keep their exact one-line legacy
+format by default (`[CPLUS-SAFE]`, `[SAFECRT][N]`, `[CPLUS-RUNTIME]`), because
+downstream consumers match it byte-for-byte. Rich mode is additive:
+
+```sh
+CPLUS_DIAG=rich ./app          # color + source location + code explanation
+CPLUS_DIAG=plain ./app         # same detail, no ANSI escapes
+CPLUS_COLOR=never ./app        # disable color (NO_COLOR=1 also works)
+```
+
+Rich output carries the severity and error code, the raising `file:line in
+function`, the concrete detail, and a plain-language explanation with a
+remediation hint. Codes covered include the SafeCRT constraint codes
+(400/401/403/406/409), common errno values (12/22/34/70/75/95) and all
+`CPLUS_EXIT_*` codes (101–109). Programmatic control is available through
+`cplus_diag_set_mode()` / `cplus_diag_set_color()`.
+
+`sh tests/stdlib/diag/run.sh` runs 23 edge cases (legacy byte-exactness, color
+policies, NULL records, unknown codes, every documented code).

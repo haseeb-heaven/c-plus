@@ -140,7 +140,7 @@ static inline int stdlib_datastack_commit(stdlib_datastack *ds, size_t need,
 static inline int stdlib_datastack_init(stdlib_datastack *ds, size_t capacity,
                                         error *err) {
     error_reset(err);
-    if (ds == 0 || capacity == 0)
+    if (ds == 0 || capacity == 0 || capacity > (size_t)-1 / 2u)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "datastack: invalid config"), STDLIB_FAIL;
     ds->base = (unsigned char *)cplus_alloc(capacity);
@@ -193,6 +193,9 @@ static inline stdlib_datastack *stdlib_thread_datastack(error *err) {
 
 static inline stdlib_scratch_mark stdlib_scratch_enter(stdlib_datastack *ds) {
     stdlib_scratch_mark m;
+    m.saved_top = (unsigned char *)0;
+    m.generation = 0;
+    if (ds == 0) return m;
     m.saved_top = ds->top;
     m.generation = ds->generation;
     return m;
@@ -200,7 +203,7 @@ static inline stdlib_scratch_mark stdlib_scratch_enter(stdlib_datastack *ds) {
 
 static inline void stdlib_scratch_leave(stdlib_datastack *ds,
                                         stdlib_scratch_mark m) {
-    if (m.generation != ds->generation) return; /* stale generation: refuse */
+    if (ds == 0 || m.generation != ds->generation) return; /* stale/NULL: refuse */
     ds->top = m.saved_top;
     /* Do NOT bump generation here: nested scopes must remain valid.  The
      * generation changes on reset/destroy, which is what invalidates marks. */

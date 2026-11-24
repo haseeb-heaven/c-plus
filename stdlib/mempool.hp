@@ -80,7 +80,12 @@ static inline int stdlib_mem_pool_init(stdlib_mem_pool *p, size_t slot_size,
 
 static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
     stdlib_pool_slab *s;
-    size_t stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
+    size_t stride;
+    error_reset(err);
+    if (p == 0 || p->slot_size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "pool: NULL/invalid pool"), STDLIB_FAIL;
+    stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
     size_t raw;
     size_t i;
     unsigned char *slot;
@@ -223,6 +228,8 @@ static inline void *stdlib_pool_op_alloc(void *ctx, size_t size, size_t align) {
     stdlib_mem_pool *p = (stdlib_mem_pool *)ctx;
     error e = error();
     (void)align;
+    if (p == 0) { error_fail_cat(&e, STDLIB_CATEGORY_INVALID,
+                                 CPLUS_EXIT_NULL_POINTER, "pool: NULL pool"); return (void *)0; }
     if (size > p->slot_size) { error_fail_cat(&e, STDLIB_CATEGORY_RANGE,
                                               CPLUS_EXIT_BOUNDS, "pool: size exceeds slot"); return (void *)0; }
     return stdlib_mem_pool_alloc(p, &e);
@@ -233,6 +240,7 @@ static inline void *stdlib_pool_op_realloc(void *ctx, void *ptr, size_t old_size
     error e = error();
     void *fresh;
     (void)align;
+    if (p == 0) return (void *)0;
     if (new_size > p->slot_size) return (void *)0;
     fresh = stdlib_mem_pool_alloc(p, &e);
     if (fresh == (void *)0) return (void *)0;
@@ -315,7 +323,12 @@ static inline int stdlib_slot_pool_init(stdlib_slot_pool *p, size_t slot_size,
 }
 
 static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
-    size_t ncap = p->capacity * 2u;
+    size_t ncap;
+    error_reset(err);
+    if (p == 0 || p->slot_size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "slot_pool: NULL/invalid pool"), STDLIB_FAIL;
+    ncap = p->capacity * 2u;
     unsigned char *items;
     size_t *fl;
     uint64_t *gen;

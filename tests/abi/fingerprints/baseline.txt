@@ -947,7 +947,7 @@ S	symbol build/libc/libcplus_hardened.a::_nextup	1
 S	symbol build/libc/libcplus_hardened.a::_nextupf	1
 S	symbol build/libc/libcplus_hardened.a::_nextupl	1
 S	symbol build/libc/libcplus_hardened.a::_stdlib_tls_datastack	1
-S	archive build/safe/libcplus_safecrt.a	count=299
+S	archive build/safe/libcplus_safecrt.a	count=316
 S	symbol build/safe/libcplus_safecrt.a::___ubsan_on_report	1
 S	symbol build/safe/libcplus_safecrt.a::__memccpy_s_uchk	1
 S	symbol build/safe/libcplus_safecrt.a::__memchr_s_uchk	1
@@ -981,6 +981,20 @@ S	symbol build/safe/libcplus_safecrt.a::_abort_handler_s	1
 S	symbol build/safe/libcplus_safecrt.a::_aligned_alloc_s	1
 S	symbol build/safe/libcplus_safecrt.a::_calloc_s	1
 S	symbol build/safe/libcplus_safecrt.a::_check_integer_format	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_code_name	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_color_enabled	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_emit	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_explain	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_get_color	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_get_mode	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_hint	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_init_from_env	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_log_at	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_report_at	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_set_color	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_set_mode	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_severity	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_diag_violation_at	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_except_init	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fclose_s	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_fgets_s	1
@@ -1021,6 +1035,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_leaked_cleanups	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_pop_cleanup	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_push_cleanup	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_report	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_report_at	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_reset_counters	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_set_failstop	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_set_handler	1
@@ -1028,6 +1043,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_set_violation_trap	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_unwind_cleanups	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_unwound_cleanups	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_violation	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_runtime_violation_at	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_alloc_fail_after	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_alloc_fail_reset	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_alloc_get_meta	1
@@ -1036,6 +1052,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_alloc_live_count	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_alloc_seq	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_get_constraint_mode	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_log	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_log_at	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_log_get_level	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_log_set_level	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_open_stream_count	1

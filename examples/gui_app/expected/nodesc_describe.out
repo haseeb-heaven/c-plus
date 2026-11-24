@@ -1,0 +1,11 @@
+GUI_WIDGETS scenario=2 title=dialog count=4 columns=2 grid=200x80
+GUI_LAYOUT cell=100x40 origin=0,0
+WIDGETS 4
+W 20 4 1 1 98 38 3 dlg
+W 21 2 101 1 98 38 3 sure
+W 22 1 1 41 98 38 2 YES
+W 23 1 101 41 98 38 3 NO
+GUI_SERIAL bytes=108 crc32=2c0b4ec2
+GUI_HIT p=5,5 index=0 id=20 label=dlg
+GUI_HIT p=5,45 miss=1
+GUI_RESULT describe:2,0,0 OK

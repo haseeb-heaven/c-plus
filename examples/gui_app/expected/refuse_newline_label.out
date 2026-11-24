@@ -1,0 +1,2 @@
+GUI_REFUSED tag=newline-label category=1 code=108 message=widgets: NULL, oversized or control-character label
+GUI_RESULT refuse newline-label REFUSED 108

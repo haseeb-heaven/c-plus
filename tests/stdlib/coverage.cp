@@ -188,6 +188,9 @@ static int gather_sources(void) {
         read_list("find tests/stdlib/allocator -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
                   g_sources, &g_nsources, tmp) != 0 ||
         read_list("find tests/stdlib/system_safety/support -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
+                  g_sources, &g_nsources, tmp) != 0 ||
+        /* Optional modern libraries: their suites live one level down. */
+        read_list("find tests/stdlib/math3d tests/stdlib/scene3d tests/stdlib/mesh3d tests/stdlib/widgets tests/stdlib/cli -maxdepth 1 -type f -name '*.cp' -print | LC_ALL=C sort",
                   g_sources, &g_nsources, tmp) != 0) {
         remove(tmp);
         return -1;
@@ -333,6 +336,10 @@ static int is_skipped(const char *name) {
     for (i = 0; i < 7; i++)
         if (strcmp(name, skip[i]) == 0) return 1;
     if (strcmp(name, "main") == 0) return 1;
+    /* Optional modern libraries expose public stdlib_widget_ and stdlib_window_
+     * prefixed APIs; they are real call-site targets, not internal helpers. */
+    if (strncmp(name, "stdlib_widget_", 14) == 0) return 0;
+    if (strncmp(name, "stdlib_window_", 14) == 0) return 0;
     if (strncmp(name, "stdlib_", 7) == 0) return 1;
     return 0;
 }
