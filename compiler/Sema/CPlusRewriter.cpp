@@ -4398,7 +4398,9 @@ std::string lowerExceptions(const std::string &source) {
       pos = close + 1;
     }
   }
-  return out;
+  // Throws outside a try block are lowered too: they become deterministic
+  // "unhandled C+ exception" fatals at runtime rather than compile errors.
+  return lowerThrows(out);
 }
 
 } // namespace cplus

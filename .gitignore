@@ -91,3 +91,4 @@ tests/compiler/cross_compiler/results/*.bench
 tests/compiler/cross_compiler/results/core
 tests/compiler/input_safety/*.bin
 tests/compiler/exceptions/*.bin
+tests/compiler/exceptions/fuzz_work/

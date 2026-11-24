@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_utc": "2026-11-23T18:33:22.054256+00:00",
+    "generated_utc": "2026-11-24T03:25:41.735160+00:00",
     "compiler_binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
     "timeout_seconds": 45,
     "repository_root": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core",
@@ -398,7 +398,7 @@
       "category": "constant OOB",
       "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
       "expected_result": "static rejection with diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]), or exact C+ warning -> WARN_ONLY",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-SAFE-BOUNDS]",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
       "status": "PASS",
       "check_evidence": "reject_required",
       "runtime_evidence": "trap_required",
@@ -413,7 +413,7 @@
       "cplus_clang": "/usr/bin/clang",
       "sysroot": "",
       "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:24: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
       "compiler_exit_code": 1,
       "runtime_stdout": "",
       "runtime_stderr": "",
@@ -427,7 +427,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.139,
+      "duration_s": 0.106,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -437,7 +437,7 @@
       "category": "constant OOB",
       "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
       "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS])",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-SAFE-BOUNDS]",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
       "status": "PASS",
       "check_evidence": "reject_required",
       "runtime_evidence": "trap_required",
@@ -452,7 +452,7 @@
       "cplus_clang": "/usr/bin/clang",
       "sysroot": "",
       "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:24: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
       "compiler_exit_code": 1,
       "runtime_stdout": "",
       "runtime_stderr": "",
@@ -464,675 +464,675 @@
         "--strict",
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.108,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "constant_oob",
+      "category": "constant OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
+      "warning_diagnostic": "",
+      "config_id": "DEFAULT_SAN",
+      "config_label": "DEFAULT --sanitize=address,undefined",
+      "sanitizer_config": "address,undefined",
+      "sanitizer_flags": "--sanitize=address,undefined",
+      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
+      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:24: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--default",
+        "--sanitize=address,undefined",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/constant_oob__DEFAULT_SAN",
+        "--",
+        "-isysroot",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+      ],
+      "runtime_command": null,
+      "duration_s": 1.717,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "constant_oob",
+      "category": "constant OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
+      "warning_diagnostic": "",
+      "config_id": "STRICT_SAN",
+      "config_label": "STRICT --sanitize=address,undefined",
+      "sanitizer_config": "address,undefined",
+      "sanitizer_flags": "--sanitize=address,undefined",
+      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
+      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:24: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--strict",
+        "--sanitize=address,undefined",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/constant_oob__STRICT_SAN",
+        "--",
+        "-isysroot",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+      ],
+      "runtime_command": null,
+      "duration_s": 1.526,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "constant_oob",
+      "category": "constant OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
+      "warning_diagnostic": "",
+      "config_id": "DEBUG_NONE",
+      "config_label": "--debug --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:24: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--debug",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/constant_oob__DEBUG_NONE"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.11,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "constant_oob",
+      "category": "constant OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
+      "warning_diagnostic": "",
+      "config_id": "RELEASE_NONE",
+      "config_label": "--release --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:24: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--release",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/constant_oob__RELEASE_NONE"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.106,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "dynamic_oob",
+      "category": "dynamic OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
+      "expected_result": "static rejection with diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]), or exact C+ warning -> WARN_ONLY",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "DEFAULT_NONE",
+      "config_label": "DEFAULT --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "check",
+        "--default",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.108,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "dynamic_oob",
+      "category": "dynamic OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS])",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "STRICT_NONE",
+      "config_label": "STRICT --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "check",
+        "--strict",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.108,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "dynamic_oob",
+      "category": "dynamic OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "DEFAULT_SAN",
+      "config_label": "DEFAULT --sanitize=address,undefined",
+      "sanitizer_config": "address,undefined",
+      "sanitizer_flags": "--sanitize=address,undefined",
+      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
+      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--default",
+        "--sanitize=address,undefined",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/dynamic_oob__DEFAULT_SAN",
+        "--",
+        "-isysroot",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+      ],
+      "runtime_command": null,
+      "duration_s": 1.626,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "dynamic_oob",
+      "category": "dynamic OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "STRICT_SAN",
+      "config_label": "STRICT --sanitize=address,undefined",
+      "sanitizer_config": "address,undefined",
+      "sanitizer_flags": "--sanitize=address,undefined",
+      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
+      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--strict",
+        "--sanitize=address,undefined",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/dynamic_oob__STRICT_SAN",
+        "--",
+        "-isysroot",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+      ],
+      "runtime_command": null,
+      "duration_s": 1.535,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "dynamic_oob",
+      "category": "dynamic OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "DEBUG_NONE",
+      "config_label": "--debug --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--debug",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/dynamic_oob__DEBUG_NONE"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.107,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "dynamic_oob",
+      "category": "dynamic OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "RELEASE_NONE",
+      "config_label": "--release --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--release",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/dynamic_oob__RELEASE_NONE"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.104,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "heap_oob",
+      "category": "heap OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+      "expected_result": "static rejection with diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]), or exact C+ warning -> WARN_ONLY",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "DEFAULT_NONE",
+      "config_label": "DEFAULT --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "check",
+        "--default",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.136,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "heap_oob",
+      "category": "heap OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS])",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "STRICT_NONE",
+      "config_label": "STRICT --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "check",
+        "--strict",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.155,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "heap_oob",
+      "category": "heap OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "DEFAULT_SAN",
+      "config_label": "DEFAULT --sanitize=address,undefined",
+      "sanitizer_config": "address,undefined",
+      "sanitizer_flags": "--sanitize=address,undefined",
+      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
+      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--default",
+        "--sanitize=address,undefined",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/heap_oob__DEFAULT_SAN",
+        "--",
+        "-isysroot",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+      ],
+      "runtime_command": null,
+      "duration_s": 1.679,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "heap_oob",
+      "category": "heap OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "STRICT_SAN",
+      "config_label": "STRICT --sanitize=address,undefined",
+      "sanitizer_config": "address,undefined",
+      "sanitizer_flags": "--sanitize=address,undefined",
+      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
+      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--strict",
+        "--sanitize=address,undefined",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/heap_oob__STRICT_SAN",
+        "--",
+        "-isysroot",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+      ],
+      "runtime_command": null,
+      "duration_s": 1.652,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "heap_oob",
+      "category": "heap OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "DEBUG_NONE",
+      "config_label": "--debug --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--debug",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/heap_oob__DEBUG_NONE"
+      ],
+      "runtime_command": null,
+      "duration_s": 0.14,
+      "pass_": true,
+      "fail_reason": "",
+      "non_failing_reason": ""
+    },
+    {
+      "test_id": "heap_oob",
+      "category": "heap OOB",
+      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
+      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
+      "status": "PASS",
+      "check_evidence": "reject_required",
+      "runtime_evidence": "trap_required",
+      "known_static_gap": false,
+      "static_only_by_design": false,
+      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
+      "warning_diagnostic": "",
+      "config_id": "RELEASE_NONE",
+      "config_label": "--release --sanitize=none",
+      "sanitizer_config": "none",
+      "sanitizer_flags": "--sanitize=none",
+      "cplus_clang": "/usr/bin/clang",
+      "sysroot": "",
+      "compiler_stdout": "",
+      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
+      "compiler_exit_code": 1,
+      "runtime_stdout": "",
+      "runtime_stderr": "",
+      "runtime_exit_code": null,
+      "timed_out": false,
+      "compile_command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--release",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
+        "-o",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/heap_oob__RELEASE_NONE"
       ],
       "runtime_command": null,
       "duration_s": 0.135,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "constant_oob",
-      "category": "constant OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
-      "warning_diagnostic": "",
-      "config_id": "DEFAULT_SAN",
-      "config_label": "DEFAULT --sanitize=address,undefined",
-      "sanitizer_config": "address,undefined",
-      "sanitizer_flags": "--sanitize=address,undefined",
-      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
-      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--default",
-        "--sanitize=address,undefined",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/constant_oob__DEFAULT_SAN",
-        "--",
-        "-isysroot",
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-      ],
-      "runtime_command": null,
-      "duration_s": 4.072,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "constant_oob",
-      "category": "constant OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
-      "warning_diagnostic": "",
-      "config_id": "STRICT_SAN",
-      "config_label": "STRICT --sanitize=address,undefined",
-      "sanitizer_config": "address,undefined",
-      "sanitizer_flags": "--sanitize=address,undefined",
-      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
-      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--strict",
-        "--sanitize=address,undefined",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/constant_oob__STRICT_SAN",
-        "--",
-        "-isysroot",
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-      ],
-      "runtime_command": null,
-      "duration_s": 3.636,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "constant_oob",
-      "category": "constant OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
-      "warning_diagnostic": "",
-      "config_id": "DEBUG_NONE",
-      "config_label": "--debug --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--debug",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/constant_oob__DEBUG_NONE"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.159,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "constant_oob",
-      "category": "constant OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: a provable constant subscript is a static error; dynamic cases must trap via __cplus_bounds_check/ASan.",
-      "warning_diagnostic": "",
-      "config_id": "RELEASE_NONE",
-      "config_label": "--release --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'\n  static void wr(void){ g[7]=3; }\n                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--release",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/constant_oob__RELEASE_NONE"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.13,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "dynamic_oob",
-      "category": "dynamic OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
-      "expected_result": "static rejection with diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]), or exact C+ warning -> WARN_ONLY",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "DEFAULT_NONE",
-      "config_label": "DEFAULT --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "check",
-        "--default",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.142,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "dynamic_oob",
-      "category": "dynamic OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS])",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "STRICT_NONE",
-      "config_label": "STRICT --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "check",
-        "--strict",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.152,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "dynamic_oob",
-      "category": "dynamic OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "DEFAULT_SAN",
-      "config_label": "DEFAULT --sanitize=address,undefined",
-      "sanitizer_config": "address,undefined",
-      "sanitizer_flags": "--sanitize=address,undefined",
-      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
-      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--default",
-        "--sanitize=address,undefined",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/dynamic_oob__DEFAULT_SAN",
-        "--",
-        "-isysroot",
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-      ],
-      "runtime_command": null,
-      "duration_s": 3.338,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "dynamic_oob",
-      "category": "dynamic OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "STRICT_SAN",
-      "config_label": "STRICT --sanitize=address,undefined",
-      "sanitizer_config": "address,undefined",
-      "sanitizer_flags": "--sanitize=address,undefined",
-      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
-      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--strict",
-        "--sanitize=address,undefined",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/dynamic_oob__STRICT_SAN",
-        "--",
-        "-isysroot",
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-      ],
-      "runtime_command": null,
-      "duration_s": 3.674,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "dynamic_oob",
-      "category": "dynamic OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "DEBUG_NONE",
-      "config_label": "--debug --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--debug",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/dynamic_oob__DEBUG_NONE"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.145,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "dynamic_oob",
-      "category": "dynamic OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/branch_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: flow-sensitive branch index is provable in check; otherwise the runtime bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "RELEASE_NONE",
-      "config_label": "--release --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c:1:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds stack array 'p' of 16 bytes\n  static void wr(int *p,int c){ if(c) p[8]=1; else p[0]=2; }\n                                      ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--release",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/branch_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/dynamic_oob__RELEASE_NONE"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.138,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "heap_oob",
-      "category": "heap OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-      "expected_result": "static rejection with diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]), or exact C+ warning -> WARN_ONLY",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "DEFAULT_NONE",
-      "config_label": "DEFAULT --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "check",
-        "--default",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.218,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "heap_oob",
-      "category": "heap OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS])",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "STRICT_NONE",
-      "config_label": "STRICT --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "check",
-        "--strict",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.202,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "heap_oob",
-      "category": "heap OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "DEFAULT_SAN",
-      "config_label": "DEFAULT --sanitize=address,undefined",
-      "sanitizer_config": "address,undefined",
-      "sanitizer_flags": "--sanitize=address,undefined",
-      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
-      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--default",
-        "--sanitize=address,undefined",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/heap_oob__DEFAULT_SAN",
-        "--",
-        "-isysroot",
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-      ],
-      "runtime_command": null,
-      "duration_s": 3.397,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "heap_oob",
-      "category": "heap OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "STRICT_SAN",
-      "config_label": "STRICT --sanitize=address,undefined",
-      "sanitizer_config": "address,undefined",
-      "sanitizer_flags": "--sanitize=address,undefined",
-      "cplus_clang": "/opt/homebrew/opt/llvm/bin/clang",
-      "sysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--strict",
-        "--sanitize=address,undefined",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/heap_oob__STRICT_SAN",
-        "--",
-        "-isysroot",
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-      ],
-      "runtime_command": null,
-      "duration_s": 3.693,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "heap_oob",
-      "category": "heap OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "DEBUG_NONE",
-      "config_label": "--debug --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--debug",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/heap_oob__DEBUG_NONE"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.178,
-      "pass_": true,
-      "fail_reason": "",
-      "non_failing_reason": ""
-    },
-    {
-      "test_id": "heap_oob",
-      "category": "heap OOB",
-      "source_path": "tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-      "expected_result": "static rejection with expected diagnostic ([CPLUS-BOUNDS], [CPLUS-SAFE-BOUNDS]) OR runtime trap with message (AddressSanitizer, out-of-bounds, C+ runtime error:, runtime error:)",
-      "actual_result": "rejected (rc=1), diagnostic=[CPLUS-BOUNDS],[CPLUS-SAFE-BOUNDS]",
-      "status": "PASS",
-      "check_evidence": "reject_required",
-      "runtime_evidence": "trap_required",
-      "known_static_gap": false,
-      "static_only_by_design": false,
-      "why": "docs/LIMITATIONS.md bug 1: known allocation extent is checked statically; otherwise ASan/bounds check must trap.",
-      "warning_diagnostic": "",
-      "config_id": "RELEASE_NONE",
-      "config_label": "--release --sanitize=none",
-      "sanitizer_config": "none",
-      "sanitizer_flags": "--sanitize=none",
-      "cplus_clang": "/usr/bin/clang",
-      "sysroot": "",
-      "compiler_stdout": "",
-      "compiler_stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c:3:34: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p){ return p[4]; }\n                                   ^\n",
-      "compiler_exit_code": 1,
-      "runtime_stdout": "",
-      "runtime_stderr": "",
-      "runtime_exit_code": null,
-      "timed_out": false,
-      "compile_command": [
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
-        "build",
-        "--release",
-        "--sanitize=none",
-        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_heap_oob.c",
-        "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/heap_oob__RELEASE_NONE"
-      ],
-      "runtime_command": null,
-      "duration_s": 0.189,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1171,7 +1171,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_freed_uaf.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.211,
+      "duration_s": 0.137,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1210,7 +1210,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_freed_uaf.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.215,
+      "duration_s": 0.153,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1248,13 +1248,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_freed_uaf.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uaf__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uaf__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.311,
+      "duration_s": 1.564,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1292,13 +1292,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_freed_uaf.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uaf__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uaf__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.694,
+      "duration_s": 1.662,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1336,10 +1336,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_freed_uaf.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uaf__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uaf__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.175,
+      "duration_s": 0.132,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1377,10 +1377,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_freed_uaf.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uaf__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uaf__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.19,
+      "duration_s": 0.134,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1419,7 +1419,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.175,
+      "duration_s": 0.135,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1458,7 +1458,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.209,
+      "duration_s": 0.149,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1496,13 +1496,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_free__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_free__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.244,
+      "duration_s": 1.681,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1540,13 +1540,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_free__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_free__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.99,
+      "duration_s": 1.52,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1584,10 +1584,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_free__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_free__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.161,
+      "duration_s": 0.139,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1625,10 +1625,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_free__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_free__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.172,
+      "duration_s": 0.136,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1667,7 +1667,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.165,
+      "duration_s": 0.127,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)"
@@ -1706,7 +1706,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.14,
+      "duration_s": 0.11,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1744,15 +1744,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/null_deref__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/null_deref__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/null_deref__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/null_deref__DEFAULT_SAN"
       ],
-      "duration_s": 4.095000000000001,
+      "duration_s": 2.0300000000000002,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1790,13 +1790,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/null_deref__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/null_deref__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.344,
+      "duration_s": 1.663,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1834,12 +1834,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/null_deref__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/null_deref__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/null_deref__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/null_deref__DEBUG_NONE"
       ],
-      "duration_s": 0.525,
+      "duration_s": 0.45699999999999996,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1877,12 +1877,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/null_deref__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/null_deref__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/null_deref__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/null_deref__RELEASE_NONE"
       ],
-      "duration_s": 0.579,
+      "duration_s": 0.44899999999999995,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1921,7 +1921,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.179,
+      "duration_s": 0.158,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)"
@@ -1960,7 +1960,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.136,
+      "duration_s": 0.108,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -1998,15 +1998,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/signed_overflow__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/signed_overflow__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/signed_overflow__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/signed_overflow__DEFAULT_SAN"
       ],
-      "duration_s": 3.9050000000000002,
+      "duration_s": 2.059,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2044,13 +2044,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/signed_overflow__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/signed_overflow__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.307,
+      "duration_s": 1.704,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2088,12 +2088,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/signed_overflow__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/signed_overflow__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/signed_overflow__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/signed_overflow__DEBUG_NONE"
       ],
-      "duration_s": 0.603,
+      "duration_s": 0.541,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/ARITHMETIC_SAFETY.md section 1 and the pinned arith_shift_negative/arith_shift_wide native diagnostics: C+ deliberately treats a volatile local's initializer as a conservative compile-time fact, so STRICT rejects 'signed integer overflow in addition' and DEFAULT warns exactly. No native runtime guard is emitted for this provable constant (docs/LIMITATIONS.md bug 9); DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN, not a defect."
@@ -2131,12 +2131,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/signed_overflow__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/signed_overflow__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/signed_overflow__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/signed_overflow__RELEASE_NONE"
       ],
-      "duration_s": 0.59,
+      "duration_s": 0.481,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/ARITHMETIC_SAFETY.md section 1 and the pinned arith_shift_negative/arith_shift_wide native diagnostics: C+ deliberately treats a volatile local's initializer as a conservative compile-time fact, so STRICT rejects 'signed integer overflow in addition' and DEFAULT warns exactly. No native runtime guard is emitted for this provable constant (docs/LIMITATIONS.md bug 9); DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN, not a defect."
@@ -2175,7 +2175,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.179,
+      "duration_s": 0.142,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)"
@@ -2214,7 +2214,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.135,
+      "duration_s": 0.106,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2252,15 +2252,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero__DEFAULT_SAN"
       ],
-      "duration_s": 3.785,
+      "duration_s": 2.07,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2298,13 +2298,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.362,
+      "duration_s": 1.418,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2342,12 +2342,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero__DEBUG_NONE"
       ],
-      "duration_s": 0.588,
+      "duration_s": 0.44599999999999995,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/ARITHMETIC_SAFETY.md section 3: a provably zero divisor is a static finding (STRICT error / DEFAULT warning), and C+ deliberately emits no native guard for constants. DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN with the exact warning; runtime-variable division is covered by div_zero_runtime (rc 110)."
@@ -2385,12 +2385,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/arith_divzero_strict.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero__RELEASE_NONE"
       ],
-      "duration_s": 0.6799999999999999,
+      "duration_s": 0.45199999999999996,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/ARITHMETIC_SAFETY.md section 3: a provably zero divisor is a static finding (STRICT error / DEFAULT warning), and C+ deliberately emits no native guard for constants. DEBUG/RELEASE record STATIC_ONLY_BY_DESIGN with the exact warning; runtime-variable division is covered by div_zero_runtime (rc 110)."
@@ -2429,7 +2429,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.208,
+      "duration_s": 0.148,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "DEFAULT --sanitize=none is WARN-only by design (docs/SAFE_MODE_SPEC.md, docs/ARITHMETIC_SAFETY.md section 3)"
@@ -2468,7 +2468,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.169,
+      "duration_s": 0.134,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2506,15 +2506,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero_runtime__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero_runtime__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero_runtime__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero_runtime__DEFAULT_SAN"
       ],
-      "duration_s": 4.066,
+      "duration_s": 2.233,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2552,13 +2552,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero_runtime__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero_runtime__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.365,
+      "duration_s": 1.446,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2596,12 +2596,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero_runtime__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero_runtime__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero_runtime__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero_runtime__DEBUG_NONE"
       ],
-      "duration_s": 0.5980000000000001,
+      "duration_s": 0.476,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2639,12 +2639,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero_runtime__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero_runtime__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/div_zero_runtime__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/div_zero_runtime__RELEASE_NONE"
       ],
-      "duration_s": 0.591,
+      "duration_s": 0.56,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2683,7 +2683,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.171,
+      "duration_s": 0.139,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2722,7 +2722,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.142,
+      "duration_s": 0.108,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2760,13 +2760,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/invalid_shift__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/invalid_shift__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.363,
+      "duration_s": 1.593,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2804,13 +2804,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/invalid_shift__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/invalid_shift__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.55,
+      "duration_s": 1.523,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2848,10 +2848,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/invalid_shift__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/invalid_shift__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.196,
+      "duration_s": 0.131,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2889,10 +2889,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/invalid_shift__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/invalid_shift__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.167,
+      "duration_s": 0.126,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -2931,7 +2931,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.172,
+      "duration_s": 0.125,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap."
@@ -2970,7 +2970,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.17,
+      "duration_s": 0.127,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap."
@@ -3008,15 +3008,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__DEFAULT_SAN"
       ],
-      "duration_s": 3.875,
+      "duration_s": 2.442,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap."
@@ -3054,15 +3054,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__STRICT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__STRICT_SAN"
       ],
-      "duration_s": 3.9459999999999997,
+      "duration_s": 2.335,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_implicit_narrow is accepted by check but build --strict --sanitize=none traps rc 111. This toolchain's --sanitize=address,undefined has no implicit-truncation check (observed rc 44), so sanitizer configs are KNOWN_OPEN; native build configs still require the trap."
@@ -3100,12 +3100,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__DEBUG_NONE"
       ],
-      "duration_s": 0.652,
+      "duration_s": 0.589,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3143,12 +3143,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/narrowing__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/narrowing__RELEASE_NONE"
       ],
-      "duration_s": 0.6,
+      "duration_s": 0.499,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3187,7 +3187,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.179,
+      "duration_s": 0.135,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs."
@@ -3226,7 +3226,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.178,
+      "duration_s": 0.127,
       "pass_": false,
       "fail_reason": "",
       "non_failing_reason": "docs/compiler/adversarial-wave2.md section 'The three still accepted by check': A1_float_to_int is accepted by check but the build traps rc 111; UBSan float-cast-overflow also proves it in sanitizer configs."
@@ -3264,15 +3264,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__DEFAULT_SAN"
       ],
-      "duration_s": 3.9490000000000003,
+      "duration_s": 2.046,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3310,15 +3310,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__STRICT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__STRICT_SAN"
       ],
-      "duration_s": 3.925,
+      "duration_s": 2.051,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3356,12 +3356,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__DEBUG_NONE"
       ],
-      "duration_s": 0.591,
+      "duration_s": 0.488,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3399,12 +3399,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/float_to_int__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/float_to_int__RELEASE_NONE"
       ],
-      "duration_s": 0.6060000000000001,
+      "duration_s": 0.498,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3443,7 +3443,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/uninitialized_read.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.182,
+      "duration_s": 0.125,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3482,7 +3482,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/uninitialized_read.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.19,
+      "duration_s": 0.134,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3520,13 +3520,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/uninitialized_read.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uninitialized__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uninitialized__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.35,
+      "duration_s": 1.649,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3564,13 +3564,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/uninitialized_read.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uninitialized__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uninitialized__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.745,
+      "duration_s": 1.752,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3608,10 +3608,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/uninitialized_read.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uninitialized__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uninitialized__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.166,
+      "duration_s": 0.125,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3649,10 +3649,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/uninitialized_read.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/uninitialized__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/uninitialized__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.212,
+      "duration_s": 0.128,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3691,7 +3691,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_stack_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.144,
+      "duration_s": 0.106,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3730,7 +3730,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_stack_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.15,
+      "duration_s": 0.107,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3768,13 +3768,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_stack_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/array_decay_call__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/array_decay_call__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.38,
+      "duration_s": 1.626,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3812,13 +3812,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_stack_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/array_decay_call__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/array_decay_call__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.778,
+      "duration_s": 1.581,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3856,10 +3856,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_stack_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/array_decay_call__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/array_decay_call__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.142,
+      "duration_s": 0.109,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3897,10 +3897,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/decay_stack_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/array_decay_call__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/array_decay_call__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.129,
+      "duration_s": 0.105,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3939,7 +3939,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug26_ptr_arith.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.16,
+      "duration_s": 0.124,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -3978,7 +3978,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug26_ptr_arith.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.185,
+      "duration_s": 0.133,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4016,13 +4016,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug26_ptr_arith.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/pointer_arithmetic__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/pointer_arithmetic__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.41,
+      "duration_s": 1.654,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4060,13 +4060,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug26_ptr_arith.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/pointer_arithmetic__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/pointer_arithmetic__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.702,
+      "duration_s": 1.77,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4104,10 +4104,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug26_ptr_arith.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/pointer_arithmetic__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/pointer_arithmetic__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.159,
+      "duration_s": 0.126,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4145,10 +4145,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug26_ptr_arith.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/pointer_arithmetic__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/pointer_arithmetic__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.171,
+      "duration_s": 0.125,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4187,7 +4187,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.173,
+      "duration_s": 0.136,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4226,7 +4226,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.221,
+      "duration_s": 0.148,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4264,13 +4264,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/function_pointer_free__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/function_pointer_free__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.275,
+      "duration_s": 1.597,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4308,13 +4308,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/function_pointer_free__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/function_pointer_free__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.673,
+      "duration_s": 1.596,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4352,10 +4352,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/function_pointer_free__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/function_pointer_free__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.191,
+      "duration_s": 0.137,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4393,10 +4393,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/function_pointer_free__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/function_pointer_free__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.184,
+      "duration_s": 0.139,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4435,7 +4435,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_ptr_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.125,
+      "duration_s": 0.111,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4474,7 +4474,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_ptr_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.146,
+      "duration_s": 0.108,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4512,13 +4512,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_ptr_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/struct_field_alias__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/struct_field_alias__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.323,
+      "duration_s": 1.663,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4556,13 +4556,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_ptr_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/struct_field_alias__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/struct_field_alias__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.791,
+      "duration_s": 3.11,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4600,10 +4600,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_ptr_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/struct_field_alias__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/struct_field_alias__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.131,
+      "duration_s": 0.11,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4641,10 +4641,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/struct_ptr_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/struct_field_alias__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/struct_field_alias__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.156,
+      "duration_s": 0.106,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4683,7 +4683,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.15,
+      "duration_s": 0.108,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4722,7 +4722,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.148,
+      "duration_s": 0.108,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4760,13 +4760,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/recursion_oob__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/recursion_oob__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.317,
+      "duration_s": 1.687,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4804,13 +4804,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/recursion_oob__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/recursion_oob__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.914,
+      "duration_s": 1.59,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4848,10 +4848,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/recursion_oob__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/recursion_oob__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.121,
+      "duration_s": 0.11,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4889,10 +4889,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/recursion_oob__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/recursion_oob__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.116,
+      "duration_s": 0.111,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4931,7 +4931,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_while_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.161,
+      "duration_s": 0.11,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -4970,7 +4970,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_while_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.146,
+      "duration_s": 0.108,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5008,13 +5008,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_while_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/while_loop_oob__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/while_loop_oob__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.235,
+      "duration_s": 1.659,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5052,13 +5052,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_while_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/while_loop_oob__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/while_loop_oob__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.767,
+      "duration_s": 1.576,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5096,10 +5096,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_while_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/while_loop_oob__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/while_loop_oob__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.14,
+      "duration_s": 0.11,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5137,10 +5137,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_while_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/while_loop_oob__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/while_loop_oob__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.14,
+      "duration_s": 0.106,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5179,7 +5179,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/dataflow_phi_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.136,
+      "duration_s": 0.107,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5218,7 +5218,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/dataflow_phi_oob.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.135,
+      "duration_s": 0.108,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5256,13 +5256,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/dataflow_phi_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/phi_index_oob__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/phi_index_oob__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.391,
+      "duration_s": 1.673,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5300,13 +5300,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/dataflow_phi_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/phi_index_oob__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/phi_index_oob__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.688,
+      "duration_s": 1.52,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5344,10 +5344,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/dataflow_phi_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/phi_index_oob__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/phi_index_oob__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.121,
+      "duration_s": 0.112,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5385,10 +5385,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/dataflow_phi_oob.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/phi_index_oob__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/phi_index_oob__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.138,
+      "duration_s": 0.106,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5427,7 +5427,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/use_after_move.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.186,
+      "duration_s": 0.147,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5466,7 +5466,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/use_after_move.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.238,
+      "duration_s": 0.172,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5504,13 +5504,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/use_after_move.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/use_after_move__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/use_after_move__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.383,
+      "duration_s": 1.669,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5548,13 +5548,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/use_after_move.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/use_after_move__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/use_after_move__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.798,
+      "duration_s": 1.703,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5592,10 +5592,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/use_after_move.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/use_after_move__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/use_after_move__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.191,
+      "duration_s": 0.153,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5633,10 +5633,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/use_after_move.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/use_after_move__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/use_after_move__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.226,
+      "duration_s": 0.147,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5675,7 +5675,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/managed_escape.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.187,
+      "duration_s": 0.144,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5714,7 +5714,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/managed_escape.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.244,
+      "duration_s": 0.172,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5752,13 +5752,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/managed_escape.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/managed_escape__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/managed_escape__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.305,
+      "duration_s": 1.528,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5796,13 +5796,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/managed_escape.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/managed_escape__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/managed_escape__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.927,
+      "duration_s": 6.317,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5840,10 +5840,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/managed_escape.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/managed_escape__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/managed_escape__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.178,
+      "duration_s": 0.146,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5881,10 +5881,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/managed_escape.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/managed_escape__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/managed_escape__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.232,
+      "duration_s": 0.146,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5923,7 +5923,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/double_release.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.183,
+      "duration_s": 0.143,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -5962,7 +5962,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/double_release.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.235,
+      "duration_s": 0.17,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6000,13 +6000,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/double_release.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_release__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_release__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.462,
+      "duration_s": 1.716,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6044,13 +6044,13 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/double_release.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_release__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_release__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": null,
-      "duration_s": 3.633,
+      "duration_s": 1.67,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6088,10 +6088,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/double_release.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_release__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_release__DEBUG_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.194,
+      "duration_s": 0.141,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6129,10 +6129,10 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/double_release.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/double_release__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/double_release__RELEASE_NONE"
       ],
       "runtime_command": null,
-      "duration_s": 0.225,
+      "duration_s": 0.146,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6171,7 +6171,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.234,
+      "duration_s": 0.148,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6210,7 +6210,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.205,
+      "duration_s": 0.158,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6248,15 +6248,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__DEFAULT_SAN"
       ],
-      "duration_s": 3.907,
+      "duration_s": 2.715,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6294,15 +6294,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__STRICT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__STRICT_SAN"
       ],
-      "duration_s": 4.18,
+      "duration_s": 1.966,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6340,12 +6340,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__DEBUG_NONE"
       ],
-      "duration_s": 0.5980000000000001,
+      "duration_s": 0.5660000000000001,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6383,12 +6383,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_constant_bounds__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_constant_bounds__RELEASE_NONE"
       ],
-      "duration_s": 0.583,
+      "duration_s": 0.48,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6427,7 +6427,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_transfer_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.219,
+      "duration_s": 0.211,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6466,7 +6466,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_transfer_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.281,
+      "duration_s": 0.197,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6504,15 +6504,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_transfer_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__DEFAULT_SAN"
       ],
-      "duration_s": 4.037,
+      "duration_s": 2.023,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6550,15 +6550,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_transfer_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__STRICT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__STRICT_SAN"
       ],
-      "duration_s": 3.9459999999999997,
+      "duration_s": 2.056,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6596,12 +6596,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_transfer_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__DEBUG_NONE"
       ],
-      "duration_s": 0.655,
+      "duration_s": 0.496,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6639,12 +6639,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_transfer_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_owner_transfer__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_owner_transfer__RELEASE_NONE"
       ],
-      "duration_s": 0.634,
+      "duration_s": 0.6819999999999999,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6683,7 +6683,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_checked_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.185,
+      "duration_s": 0.149,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6722,7 +6722,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_checked_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.213,
+      "duration_s": 0.157,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6760,15 +6760,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_checked_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__DEFAULT_SAN"
       ],
-      "duration_s": 3.891,
+      "duration_s": 2.19,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6806,15 +6806,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_checked_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__STRICT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__STRICT_SAN"
       ],
-      "duration_s": 3.9290000000000003,
+      "duration_s": 2.199,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6852,12 +6852,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_checked_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__DEBUG_NONE"
       ],
-      "duration_s": 0.762,
+      "duration_s": 0.5449999999999999,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6895,12 +6895,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_checked_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_null_checked__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_null_checked__RELEASE_NONE"
       ],
-      "duration_s": 0.5920000000000001,
+      "duration_s": 0.5489999999999999,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6939,7 +6939,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.193,
+      "duration_s": 0.149,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -6978,7 +6978,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_ok.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.21,
+      "duration_s": 0.159,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7016,15 +7016,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__DEFAULT_SAN"
       ],
-      "duration_s": 3.958,
+      "duration_s": 2.171,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7062,15 +7062,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__STRICT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__STRICT_SAN"
       ],
-      "duration_s": 4.044,
+      "duration_s": 2.882,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7108,12 +7108,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__DEBUG_NONE"
       ],
-      "duration_s": 0.624,
+      "duration_s": 0.626,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7151,12 +7151,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_ok.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_loop__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_loop__RELEASE_NONE"
       ],
-      "duration_s": 0.658,
+      "duration_s": 0.72,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7195,7 +7195,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/cleanup_drop_check.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.237,
+      "duration_s": 0.198,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7234,7 +7234,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/cleanup_drop_check.c"
       ],
       "runtime_command": null,
-      "duration_s": 0.226,
+      "duration_s": 0.182,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7272,15 +7272,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/cleanup_drop_check.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__DEFAULT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__DEFAULT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__DEFAULT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__DEFAULT_SAN"
       ],
-      "duration_s": 3.977,
+      "duration_s": 2.167,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7318,15 +7318,15 @@
         "--sanitize=address,undefined",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/cleanup_drop_check.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__STRICT_SAN",
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__STRICT_SAN",
         "--",
         "-isysroot",
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__STRICT_SAN"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__STRICT_SAN"
       ],
-      "duration_s": 3.9339999999999997,
+      "duration_s": 2.351,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7364,12 +7364,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/cleanup_drop_check.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__DEBUG_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__DEBUG_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__DEBUG_NONE"
       ],
-      "duration_s": 0.643,
+      "duration_s": 0.63,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
@@ -7407,12 +7407,12 @@
         "--sanitize=none",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_matrix/cases/cleanup_drop_check.c",
         "-o",
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__RELEASE_NONE"
       ],
       "runtime_command": [
-        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_8vu1dy8q/safe_cleanup__RELEASE_NONE"
+        "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_safety_matrix_veha77sy/safe_cleanup__RELEASE_NONE"
       ],
-      "duration_s": 0.696,
+      "duration_s": 0.5349999999999999,
       "pass_": true,
       "fail_reason": "",
       "non_failing_reason": ""
