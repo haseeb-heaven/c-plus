@@ -169,3 +169,5 @@ tests/c_standards/**/artifacts/
 tests/c_standards/c89/hello89.*
 tests/c_standards/c89/probe.*
 tests/crt/adversarial/out/
+tests/cross_platform_apps/out-macos/
+tests/cross_platform_apps/out-win/
