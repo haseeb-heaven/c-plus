@@ -433,6 +433,10 @@ std::string lowerUnit(const std::string &text, const std::string &name,
   LoweredSource lowered =
       lowerRaii(rewritten.text, rewritten.resourceTypes, diags, name, mode,
                 strict);
+  // Exception lowering runs after RAII so cleanup inserted into a `try`
+  // block is preserved. It is Safe-mode only: LEGACY keeps original bytes.
+  lowered.text = mode == Mode::Safe ? lowerExceptions(lowered.text)
+                                    : lowered.text;
   if (outRewritten)
     *outRewritten = rewritten;
   *ok = !diags.hasErrors();

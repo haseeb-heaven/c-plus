@@ -4233,4 +4233,172 @@ std::string instrumentDynamicArrayBounds(
   return prelude + out;
 }
 
+//===----------------------------------------------------------------------===//
+// C+ exception lowering (Safe mode only)
+//
+// `try { body } catch (Exception e) { handler }` becomes a setjmp/longjmp
+// frame using additive runtime helpers. This keeps plain C pointers and the
+// existing ABI: no C++ unwinding tables, no fat pointers, no new object file
+// format. LEGACY source is never passed through this pass.
+//===----------------------------------------------------------------------===//
+namespace {
+
+bool isWordAt(const std::string &s, size_t i, const char *word) {
+  size_t n = std::strlen(word);
+  if (i + n > s.size() || s.compare(i, n, word) != 0)
+    return false;
+  auto ident = [](char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_';
+  };
+  if (i > 0 && ident(s[i - 1]))
+    return false;
+  if (i + n < s.size() && ident(s[i + n]))
+    return false;
+  return true;
+}
+
+size_t skipSpace(const std::string &s, size_t i) {
+  while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                          s[i] == '\r'))
+    ++i;
+  return i;
+}
+
+size_t matchBrace(const std::string &s, size_t open) {
+  int depth = 0;
+  bool str = false, chr = false;
+  for (size_t i = open; i < s.size(); ++i) {
+    char c = s[i];
+    if (str) {
+      if (c == '\\') { ++i; continue; }
+      if (c == '"') str = false;
+      continue;
+    }
+    if (chr) {
+      if (c == '\\') { ++i; continue; }
+      if (c == '\'') chr = false;
+      continue;
+    }
+    if (c == '"') { str = true; continue; }
+    if (c == '\'') { chr = true; continue; }
+    if (c == '{') ++depth;
+    else if (c == '}') {
+      if (--depth == 0)
+        return i;
+    }
+  }
+  return std::string::npos;
+}
+
+std::string lowerThrows(const std::string &s) {
+  std::string out;
+  size_t pos = 0;
+  while (pos < s.size()) {
+    size_t t = pos;
+    bool found = false;
+    while (t < s.size()) {
+      if (isWordAt(s, t, "throw")) { found = true; break; }
+      ++t;
+    }
+    if (!found) {
+      out += s.substr(pos);
+      break;
+    }
+    out += s.substr(pos, t - pos);
+    size_t semi = s.find(';', t);
+    if (semi == std::string::npos) {
+      out += s.substr(t);
+      break;
+    }
+    std::string expr = s.substr(t + 5, semi - (t + 5));
+    expr = s.substr(skipSpace(s, t + 5),
+                    semi > skipSpace(s, t + 5) ? semi - skipSpace(s, t + 5) : 0);
+    std::string code = "1", msg = "0";
+    if (!expr.empty() && expr[0] == '"')
+      msg = expr;
+    else if (!expr.empty() && (expr[0] >= '0' && expr[0] <= '9'))
+      code = expr;
+    out += "cplus_exception_raise(" + code + ", " + msg +
+           ", __FILE__, __LINE__);";
+    pos = semi + 1;
+  }
+  return out;
+}
+
+} // namespace
+
+std::string lowerExceptions(const std::string &source) {
+  std::string out;
+  size_t pos = 0;
+  unsigned counter = 0;
+  while (pos < source.size()) {
+    size_t t = pos;
+    bool found = false;
+    while (t < source.size()) {
+      if (isWordAt(source, t, "try")) { found = true; break; }
+      ++t;
+    }
+    if (!found) {
+      out += source.substr(pos);
+      break;
+    }
+    size_t open = skipSpace(source, t + 3);
+    if (open >= source.size() || source[open] != '{') {
+      out += source.substr(pos, (t - pos) + 3);
+      pos = t + 3;
+      continue;
+    }
+    size_t close = matchBrace(source, open);
+    if (close == std::string::npos) {
+      out += source.substr(pos);
+      break;
+    }
+    size_t after = skipSpace(source, close + 1);
+    bool hasCatch = isWordAt(source, after, "catch");
+    size_t handlerOpen = std::string::npos, handlerClose = std::string::npos;
+    std::string catchName = "ex";
+    if (hasCatch) {
+      size_t lp = skipSpace(source, after + 5);
+      size_t rp = lp == std::string::npos ? std::string::npos
+                                          : source.find(')', lp);
+      if (rp != std::string::npos) {
+        std::string decl = source.substr(lp, rp - lp);
+        size_t sp = decl.find_last_of(" \t");
+        if (sp != std::string::npos)
+          catchName = decl.substr(sp + 1);
+        handlerOpen = skipSpace(source, rp + 1);
+        if (handlerOpen < source.size() && source[handlerOpen] == '{')
+          handlerClose = matchBrace(source, handlerOpen);
+      }
+    }
+    out += source.substr(pos, t - pos);
+    std::string frame = "__cplus_exc_" + std::to_string(counter++);
+    std::string body = lowerExceptions(lowerThrows(
+        source.substr(open + 1, close > open ? close - open - 1 : 0)));
+    std::string handler = handlerOpen != std::string::npos &&
+                                  handlerClose > handlerOpen
+                              ? lowerExceptions(lowerThrows(source.substr(
+                                    handlerOpen + 1,
+                                    handlerClose - handlerOpen - 1)))
+                              : std::string();
+    if (hasCatch && handlerOpen != std::string::npos &&
+        handlerClose != std::string::npos) {
+      out += "do { CPlusExceptionFrame " + frame + "; "
+             "if (setjmp(" + frame + ".env) == 0) { cplus_exception_enter(&" +
+             frame + "); " + body +
+             " cplus_exception_pop(); } else { Exception " + catchName +
+             " = " + frame + ".exc; " + handler + " } } while (0);";
+      pos = handlerClose + 1;
+    } else {
+      out += "do { CPlusExceptionFrame " + frame + "; "
+             "if (setjmp(" + frame + ".env) == 0) { cplus_exception_enter(&" +
+             frame + "); " + body +
+             " cplus_exception_pop(); } } while (0);";
+      pos = close + 1;
+    }
+  }
+  return out;
+}
+
 } // namespace cplus

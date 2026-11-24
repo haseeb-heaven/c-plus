@@ -15,11 +15,43 @@
 #include "cplus/cplus.h"
 #include <errno.h>
 #include <math.h>
+#include <setjmp.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+/* C+ exception frames. The stack is thread-local and holds only ordinary C
+ * pointers; raising with no active try is a deterministic fatal error. */
+static void cplus_print_fatal(cplus_exit_code code, const char *kind,
+                              const char *file, int line, const char *msg);
+static __thread CPlusExceptionFrame *cplus_exception_current = NULL;
+
+void cplus_exception_enter(CPlusExceptionFrame *frame) {
+  if (!frame)
+    return;
+  frame->prev = cplus_exception_current;
+  cplus_exception_current = frame;
+}
+
+void cplus_exception_pop(void) {
+  if (cplus_exception_current)
+    cplus_exception_current = cplus_exception_current->prev;
+}
+
+void cplus_exception_raise(int code, const char *message, const char *file,
+                           int line) {
+  if (!cplus_exception_current)
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unhandled C+ exception", file,
+                      line, "throw outside a try block");
+  CPlusExceptionFrame *active = cplus_exception_current;
+  cplus_exception_current = active->prev;
+  active->exc.code = code;
+  active->exc.message = message;
+  active->exc.file = file;
+  active->exc.line = line;
+  longjmp(active->env, 1);
+}
 
 size_t __cplus_bounds_check(size_t index, size_t length, const char *name) {
   if (index < length)

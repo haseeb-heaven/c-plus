@@ -547,6 +547,30 @@ void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
                  CPLUS_S2, CPLUS_S1)(__VA_ARGS__);                            \
   } while (0)
 
+/* C+ exception support: ABI-neutral setjmp/longjmp frames. No C++ unwinding
+ * tables and no pointer representation change are used. */
+#ifndef CPLUS_EXCEPTION_DEFINED
+#define CPLUS_EXCEPTION_DEFINED
+#include <setjmp.h>
+typedef struct Exception {
+  int code;
+  const char *message;
+  const char *file;
+  int line;
+} Exception;
+
+typedef struct CPlusExceptionFrame {
+  jmp_buf env;
+  struct CPlusExceptionFrame *prev;
+  Exception exc;
+} CPlusExceptionFrame;
+#endif
+
+void cplus_exception_enter(CPlusExceptionFrame *frame);
+void cplus_exception_pop(void);
+void cplus_exception_raise(int code, const char *message, const char *file,
+                           int line);
+
 #ifdef __cplusplus
 }
 #endif

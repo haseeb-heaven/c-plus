@@ -21,6 +21,11 @@ RewrittenSource rewriteCPlusSource(const std::string &source,
 /// translation unit can resolve method calls and constructor sugar for it.
 void registerExternalClass(const std::string &name, bool hasConstructor);
 
+/// Lower C+ `try { ... } catch (Exception e) { ... }` and `throw expr;` to
+/// plain C using the ABI-neutral runtime exception helpers. Safe mode only;
+/// LEGACY source is left byte-identical.
+std::string lowerExceptions(const std::string &source);
+
 /// Register an owning type declared in a lowered `.hp` header.
 void registerExternalResource(const std::string &name);
 
