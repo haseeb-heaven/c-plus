@@ -65,7 +65,7 @@ int main(void) {
     const bool *keys = keyboard_state();
     ck("input", "keyboard_state", keys != NULL);
 
-    bool local_keys[SDL_SCANCODE_COUNT];
+    _Bool local_keys[SDL_SCANCODE_COUNT];
     int i;
     for (i = 0; i < (int)SDL_SCANCODE_COUNT; i++)
         local_keys[i] = false;

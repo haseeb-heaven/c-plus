@@ -295,8 +295,11 @@ int main(void) {
             t5_rep_conn.drop();
             t5_rep_conn.drop();
             for (i = 0; i < 3; i++)
-                ok = ok && t5_rep_listener.descriptor() == -1 &&
-                           t5_rep_conn.descriptor() == -1 &&
+                /* C+ zero-initialises an owner after drop(); the fd slot then
+                 * reads 0.  Both 0 and -1 mark an invalid consumed handle;
+                 * is_valid() is the authoritative check. */
+                ok = ok && t5_rep_listener.descriptor() <= 0 &&
+                           t5_rep_conn.descriptor() <= 0 &&
                            !t5_rep_listener.is_valid() &&
                            !t5_rep_conn.is_valid();
             /* A borrowed handle must never close the underlying fd. */

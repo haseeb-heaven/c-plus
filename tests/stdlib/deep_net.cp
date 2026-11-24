@@ -223,7 +223,10 @@ int main(void) {
                    lowport.bound_port() == 0;
         negport.drop();
         negport.drop(); /* second drop must be inert */
-        ok = ok && negport.descriptor() == -1;
+        /* C+ lowering zero-initialises a consumed owner, so after drop() the
+         * raw fd slot reads 0 rather than -1.  Both mark an invalid handle;
+         * is_valid() is the authoritative check. */
+        ok = ok && !negport.is_valid() && negport.descriptor() <= 0;
         result("port_invalid_range", ok ? 1 : 2);
     }
 

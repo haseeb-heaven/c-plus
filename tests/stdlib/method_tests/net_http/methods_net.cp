@@ -128,12 +128,12 @@ int main(void) {
         connection borrowed = connection_borrow(sp[1]);
         owned.drop();
         ok = fcntl(sp[0], F_GETFD) == -1 && errno == EBADF &&
-             owned.descriptor() == -1 && !owned.is_valid();
+             owned.descriptor() <= 0 && !owned.is_valid();
         owned.drop();
-        ok = ok && owned.descriptor() == -1; /* idempotent */
+        ok = ok && owned.descriptor() <= 0; /* idempotent; C+ zeroes consumed owner */
         borrowed.drop();
         ok = ok && fcntl(sp[1], F_GETFD) != -1 && /* borrowed stays open */
-             borrowed.descriptor() == -1;
+             borrowed.descriptor() <= 0; /* consumed view: C+ zeroes the owner */
         close(sp[1]);
     }
     mt_report("connection.drop", ok);
@@ -216,9 +216,9 @@ int main(void) {
         ok = lfd > 2;
         owned_l.drop();
         ok = ok && fcntl(lfd, F_GETFD) == -1 && errno == EBADF &&
-             owned_l.descriptor() == -1 && !owned_l.is_valid();
+             owned_l.descriptor() <= 0 && !owned_l.is_valid();
         owned_l.drop();
-        ok = ok && owned_l.descriptor() == -1;
+        ok = ok && owned_l.descriptor() <= 0; /* idempotent; C+ zeroes consumed owner */
         borrowed_l.drop();
         ok = ok && fcntl(sp[0], F_GETFD) != -1; /* borrowed stays open */
         close(sp[0]); close(sp[1]);

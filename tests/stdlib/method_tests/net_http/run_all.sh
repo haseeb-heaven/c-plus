@@ -43,9 +43,13 @@ run_suite() {
     TOTAL=$((TOTAL + _p + _f + _s))
 }
 
-run_suite net      tests/stdlib/method_tests/net_http/methods_net.cp            --strict  ''
-run_suite gsl      tests/stdlib/method_tests/net_http/methods_gsl_adapt.cp      --strict  ''
-run_suite lifetime tests/stdlib/method_tests/net_http/methods_lifetime_adapt.cp --strict  ''
+# These suites deliberately exercise unsafe runtime paths (double drop, null
+# handles, stale views) that the STRICT compile-time checker now rejects at
+# build time.  Run them in --default (the mode that actually reaches the runtime
+# refusals under test); STRICT remains the mode for safe production code.
+run_suite net      tests/stdlib/method_tests/net_http/methods_net.cp            --default ''
+run_suite gsl      tests/stdlib/method_tests/net_http/methods_gsl_adapt.cp      --default ''
+run_suite lifetime tests/stdlib/method_tests/net_http/methods_lifetime_adapt.cp --default ''
 # http.hp cannot be lowered under --strict (CPLUS-ARITH at http.hp:106:30);
 # the repository's own run_stdlib_tests.sh builds it with the default checker.
 run_suite http     tests/stdlib/method_tests/net_http/methods_http.cp           --default '-lcurl'
