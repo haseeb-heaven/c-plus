@@ -68,3 +68,14 @@ source, use the exact commands in `transcripts/*.build.log` (or the owning
   headless GUI logic proof, not an interactive rendering benchmark.
 - A binary existing and printing a marker is not a proof of memory safety.
   Safety evidence is in `docs/security/` and the red/blue, fuzz and edge suites.
+
+## UPDATE — Windows runtime now verified on this host
+
+Earlier notes in this document recorded Windows runtime as BLOCKED. That is
+superseded: Highball/Wine engine `x64-crossover26.3-r27` now runs genuine PE32+
+apps here when the two MinGW runtime DLLs (`libwinpthread-1.dll`,
+`libgcc_s_seh-1.dll`) are beside the exe and a clean bottle state is used
+(`highball run -v`). Eight real C+ apps were executed on both macOS arm64 and
+Windows PE32+ with identical marker lines. Evidence, binaries, transcripts and
+screenshots: `proof/real_apps_cross_platform/` (`CROSS_PROOF 58 58 0`). This is
+host/engine-specific evidence, not a claim for all Windows configurations.
