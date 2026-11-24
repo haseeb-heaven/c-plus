@@ -18,6 +18,9 @@ to this repository during the modern-stdlib work.
 | `transcripts/*.build.log` | Full build output for each binary |
 | `transcripts/*.run.txt` | Exact stdout/stderr and exit codes from running each binary |
 | `run.sh` | Reproducible verifier: checks hashes, re-runs binaries, checks markers |
+| `games3d.md` | Per-app proof: source, libraries, exact output, refusals, reproduce |
+| `gui_app.md` | Per-app proof: source, libraries, exact output, refusals, reproduce |
+| `cli_app.md` | Per-app proof: source, libraries, exact output, refusals, reproduce |
 
 ## Host and toolchain
 
