@@ -16,6 +16,8 @@ unset CPLUS_CLANG
 export LC_ALL=C
 D=tests/edge1000
 cases=0; pass=0; fail=0
+abi_diff_empty=0
+mkdir -p build/edge1000
 
 run_sweep() {   # run_sweep <src> <summary-marker> <library>
     src=$1; marker=$2; lib=$3
@@ -60,5 +62,25 @@ else
     fail=$((fail + 1))
 fi
 
+# Safer core + ABI preservation: the safety layer must be ABI-neutral.
+# (1) stdc_abi: ordinary C symbol sets are byte-identical in plain/safe builds.
+cases=$((cases + 1))
+if timeout 900 sh tests/abi/stdc_abi/run.sh >"build/edge1000/abi_stdc.log" 2>&1; then
+    pass=$((pass + 1))
+else
+    fail=$((fail + 1)); tail -8 "build/edge1000/abi_stdc.log" 2>/dev/null || true
+fi
+
+# (2) abi_fp: fresh fingerprint diffed against the committed baseline.
+cases=$((cases + 1))
+if timeout 900 sh tools/abi_compare/run.sh compare tests/abi/fingerprints/baseline.txt \
+        >"build/edge1000/abi_fp.log" 2>&1; then
+    pass=$((pass + 1)); abi_diff_empty=1
+else
+    fail=$((fail + 1)); tail -8 "build/edge1000/abi_fp.log" 2>/dev/null || true
+fi
+echo "EDGE1000_ABI diff_empty=$abi_diff_empty"
+
 echo "EDGE1000 $cases $pass $fail"
 [ "$fail" -eq 0 ]
+
