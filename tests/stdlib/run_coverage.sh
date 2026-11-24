@@ -22,4 +22,21 @@ if ! "$CPLUS" build tests/stdlib/coverage.cp --strict --sanitize=none \
     exit 1
 fi
 
+# Maintain 100% API coverage: build and run the closure test that directly
+# invokes every API the static scanner cannot see a call-site for.  A failure
+# here is a real coverage regression, not a soft warning.
+CLOSURE=build/native-tools/coverage_closure
+if ! "$CPLUS" build tests/stdlib/coverage_closure.cp --default --sanitize=none \
+        -I. -Ithird_party/yyjson -Lbuild/ext -lyyjson -o "$CLOSURE" \
+        >"$CLOSURE.build.log" 2>&1; then
+    echo "error: coverage-closure test build failed; see $CLOSURE.build.log" >&2
+    cat "$CLOSURE.build.log" >&2
+    exit 1
+fi
+if ! "$CLOSURE" >"$CLOSURE.out" 2>"$CLOSURE.err"; then
+    echo "error: coverage-closure test failed; see $CLOSURE.out" >&2
+    cat "$CLOSURE.out" >&2
+    exit 1
+fi
+
 exec "$OUT" "$ROOT"
