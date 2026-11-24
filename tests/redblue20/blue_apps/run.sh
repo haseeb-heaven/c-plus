@@ -51,4 +51,4 @@ echo "BUILD_FAILURES=$build_fail"
 [ "$build_fail" -eq 0 ] || exit 3
 
 # --- Bounded hostile-input proof driver ------------------------------------
-exec python3 "$BLUE/fuzz.py" "$ROOT"
+exec sh "$BLUE/fuzz.sh" "$ROOT"

@@ -1,8 +1,8 @@
 === caller builds + run against the SAME saved archive ===
-date_utc=2026-11-24T05:13:04Z
+date_utc=2026-11-24T05:18:34Z
 baseline_sha256(libsafe_layer.a)=2be1e47b9d227fd045d7453b9b2e12d7a840992bba2c11adfd37a2291be1bf58
-safecrt=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a sha256=a20e3b3c6096abb877bcbf88495cd7b820230b489cac0a2b0083b228c3449298
-hardened=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a sha256=fb25b182a8bdc268f6c82395a38591f32c2eda44082a3e0d6c899d9ae727cb02
+safecrt=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a sha256=c801bdace1c96cec53ba4283e9e2873df01e04168a1cf2c3c7cc4281a1c6b150
+hardened=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a sha256=db82ff337dab1930058c4e50df101458d47b9aa6eadeb3f20ede4e075b07bd7c
 =========================================
 PRE-BUILD sha256(libsafe_layer.a)=2be1e47b9d227fd045d7453b9b2e12d7a840992bba2c11adfd37a2291be1bf58
 CMD[build_plain]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/safe_layer_app.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/libsafe_layer.a -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/precompiled_safe_layer/artifacts/app_plain
