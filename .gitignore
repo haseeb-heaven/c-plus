@@ -175,3 +175,8 @@ tests/redblue20/**/out/
 tests/redblue20/**/results/
 tests/redblue20/**/artifacts/
 tests/redblue20/**/bin/
+tests/redblue20/red_abi/app_plain
+tests/redblue20/red_abi/app_safe
+tests/redblue20/red_safecrt/harness
+tests/redblue20/red_safecrt/repro
+tests/redblue20/red_safecrt/*.dSYM/
