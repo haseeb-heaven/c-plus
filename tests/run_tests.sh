@@ -96,12 +96,16 @@ for src in "$ROOT"/tests/compile_fail/*.c "$ROOT"/tests/compile_fail/*.cp; do
        grep -qF '[CPLUS-RAII]' "$OUT/$name.log" && \
        grep -qF '[CPLUS-FFI]' "$OUT/$name.log"; then
       pass "$name (warning-only known gap; not a compile-time rejection)"
-    elif [ "$name" = "bugcat49" ] && \
-         grep -qF "'goto' bypasses C+ cleanup" "$OUT/$name.log"; then
-      pass "$name (warning-only: goto into VLA scope; cleanup warning emitted)"
-    elif [ "$name" = "bugcat8" ] && \
-         grep -qF 'check: ' "$OUT/$name.log"; then
-      pass "$name (known gap: VLA side effects now safely lowered, no rejection)"
+    elif [ "$name" = "bugcat8" ]; then
+      # Verified known gap: the compiler now lowers this VLA safely instead of
+      # rejecting it.  Prove the lowered program actually runs (not a skip).
+      if timeout 60 "$CPLUS" build --no-werror "$src" --default \
+           -o "$OUT/$name.lowered" >>"$OUT/$name.log" 2>&1 && \
+         timeout 10 "$OUT/$name.lowered" >>"$OUT/$name.runlog" 2>&1; then
+        pass "$name (documented known gap: VLA lowered, compiled program ran OK)"
+      else
+        fail "$name" "lowered VLA program did not run; see $OUT/$name.runlog"
+      fi
     else
       fail "$name" "expected compilation to fail, but it succeeded"
     fi

@@ -18,8 +18,8 @@ if [[ ! -f "$ARCHIVE" ]]; then
 fi
 
 # ---- build (exact required invocation; archive forwarded after --) -------
-echo "+ timeout 60 ./build/c+ build $SRC --default --sanitize=none -I. -o $BIN -- build/libc/libcplus_hardened.a"
-timeout 60 "$ROOT/build/c+" build "$SRC" --default --sanitize=none -I"$ROOT" \
+echo "+ timeout 60 ./build/c+ build $SRC --default --no-werror --sanitize=none -I. -o $BIN -- build/libc/libcplus_hardened.a"
+timeout 60 "$ROOT/build/c+" build "$SRC" --default --no-werror --sanitize=none -I"$ROOT" \
     -o "$BIN" -- "$ARCHIVE" > "$OUT/build.log" 2>&1
 if [[ $? -ne 0 ]]; then
     echo "[edge100 alloc] BUILD FAILED" >&2

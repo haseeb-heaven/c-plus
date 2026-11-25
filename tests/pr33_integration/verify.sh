@@ -164,7 +164,7 @@ fi
 claim32=$(grep -Eo 'PR32_LIBC [0-9]+ [0-9]+ [0-9]+ [0-9]+' \
     docs/abi/PR32_LIBC_PORTABILITY.md | tail -1)
 claim32_fail=$(printf '%s\n' "$claim32" | awk '{ print $4 }')
-table_fails=$(grep -c '| FAIL |' docs/abi/PR32_LIBC_PORTABILITY.md 2>/dev/null || echo 0)
+table_fails=$(awk '/\| FAIL \|/ {n++} END {print n+0}' docs/abi/PR32_LIBC_PORTABILITY.md 2>/dev/null)
 if [ -n "$claim32_fail" ] && [ "$claim32_fail" -eq 0 ] && [ "$table_fails" -gt 0 ]; then
     printf 'VERIFY CONTRADICTION pr32 doc final line fail=%s but table has %s FAIL rows\n' \
         "$claim32_fail" "$table_fails"

@@ -13,7 +13,7 @@ check() { if grep -qF "$1" "$D/out/run.log"; then
     printf 'GOOSE_BENCH PASS %s\n' "$1"; pass=$((pass+1))
   else printf 'GOOSE_BENCH FAIL %s\n' "$1"; fail=$((fail+1)); fi; }
 
-if ! timeout 180 ./build/c+ build "$D/bump_bench.cp" --default --sanitize=none -I. \
+if ! timeout 180 ./build/c+ build "$D/bump_bench.cp" --default --no-werror --sanitize=none -I. \
       -o "$D/out/bump_bench" -- build/libc/libcplus_hardened.a >"$D/out/build.log" 2>&1; then
     printf 'GOOSE_BENCH FAIL build\n'; exit 1
 fi

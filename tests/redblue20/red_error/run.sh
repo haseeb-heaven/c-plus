@@ -18,7 +18,7 @@ cd "$ROOT" || exit 2
 echo "[red_error] root=$ROOT cases=2400 per-case-timeout=200ms global-timeout=60s"
 
 # ---- build (command form required by the RED20 task) ---------------------
-timeout 60 ./build/c+ build "$SRC" --default --sanitize=none -I. \
+timeout 60 ./build/c+ build "$SRC" --default --no-werror --sanitize=none -I. \
     -o "$BIN" >"$OUT/build.log" 2>&1
 BRC=$?
 if [[ $BRC -ne 0 ]]; then

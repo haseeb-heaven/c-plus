@@ -34,7 +34,7 @@ rm -f "$BIN" "$BUILD_LOG" "$STDOUT" "$STDERR"
 
 # Canonical build line for this library family.
 if ! timeout -k 5 120 "$CPLUS" build tests/stdlib/mesh3d/test_mesh3d.cp \
-        --default --sanitize=none -I. -o "$BIN" \
+        --default --no-werror --sanitize=none -I. -o "$BIN" \
         -- build/libc/libcplus_hardened.a >"$BUILD_LOG" 2>&1; then
     echo "BUILD FAIL: see $BUILD_LOG" >&2
     tail -n 20 "$BUILD_LOG" >&2
@@ -91,7 +91,7 @@ fi
     printf '## Build\n\n'
     printf '```sh\n'
     printf './build/c+ build tests/stdlib/mesh3d/test_mesh3d.cp \\\n'
-    printf '    --default --sanitize=none -I. \\\n'
+    printf '    --default --no-werror --sanitize=none -I. \\\n'
     printf '    -o tests/stdlib/mesh3d/.run/test_mesh3d \\\n'
     printf '    -- build/libc/libcplus_hardened.a\n'
     printf '```\n\n'

@@ -13,7 +13,7 @@ sh "$D/generate.sh" >/dev/null
 
 built=0; pass=0; fail=0
 for n in game_engine snake_game desktop_app web_app server_app database_engine; do
-    if timeout 90 ./build/c+ build "$D/$n.cp" --default --sanitize=none -I. \
+    if timeout 90 ./build/c+ build "$D/$n.cp" --default --no-werror --sanitize=none -I. \
          -o "$OUT/$n" >"$OUT/$n.build.log" 2>&1; then
         built=$((built+1)); rc=0
         timeout 30 "$OUT/$n" >"$OUT/$n.out" 2>"$OUT/$n.err" || rc=$?

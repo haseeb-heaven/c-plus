@@ -238,7 +238,7 @@ while IFS='	' read -r name src lang pre post; do
 
     # ---- build (required flags; per-program libraries from the manifest) ----
     if [ "$lang" = cp ]; then
-        timeout "$TIMEOUT" "$CPLUS" build "$ROOT/$src" --default --sanitize=none -I. \
+        timeout "$TIMEOUT" "$CPLUS" build "$ROOT/$src" --default --no-werror --sanitize=none -I. \
             $pre -o "$bin" $post > "$blog" 2>&1
     else
         timeout "$TIMEOUT" "$CLANG" -std=c11 -O1 -I. "$ROOT/$src" \

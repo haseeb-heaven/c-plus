@@ -1,0 +1,79 @@
+./stdlib/error.hp:452:13: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      fresh = cplus_realloc(ptr, actual);
+              ^~~~~~~~~~~~~
+./stdlib/widgets.hp:374:12: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      rows = (win->count + (size_t)cols - 1u) / (size_t)cols;
+             ^
+./stdlib/widgets.hp:379:14: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      cell_w = win->w / cols;
+               ^~~
+./stdlib/widgets.hp:390:30: warning: [CPLUS-ARITH] remainder by zero cannot be excluded
+          int last_col = (int)((win->count - 1u) % (size_t)cols);
+                               ^
+./stdlib/widgets.hp:391:30: warning: [CPLUS-ARITH] division by zero cannot be excluded
+          int last_row = (int)((win->count - 1u) / (size_t)cols);
+                               ^
+./stdlib/widgets.hp:406:25: warning: [CPLUS-ARITH] remainder by zero cannot be excluded
+          int col = (int)(i % (size_t)cols);
+                          ^
+./stdlib/widgets.hp:407:25: warning: [CPLUS-ARITH] division by zero cannot be excluded
+          int row = (int)(i / (size_t)cols);
+                          ^
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:85:12: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      return realloc(ptr, new_size);
+             ^~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:119:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init(&g.win, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:216:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_widget_add'
+          ck(stdlib_widget_add((stdlib_window *)0, 1, 1, "x", 0, 0, 1, 1, &e) ==
+             ^~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:218:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_widget_label'
+          ck(stdlib_widget_label((stdlib_window *)0, 0u, "x", &e) == STDLIB_FAIL,
+             ^~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:220:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_widget_set_bounds'
+          ck(stdlib_widget_set_bounds((stdlib_window *)0, 0u, 0, 0, 1, 1, &e) ==
+             ^~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:222:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_widget_enable'
+          ck(stdlib_widget_enable((stdlib_window *)0, 0u, 1, &e) == STDLIB_FAIL,
+             ^~~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:224:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_widget_visible'
+          ck(stdlib_widget_visible((stdlib_window *)0, 0u, 1, &e) == STDLIB_FAIL,
+             ^~~~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:226:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_widget_find_by_id'
+          ck(stdlib_widget_find_by_id((stdlib_window *)0, 1, &e) ==
+             ^~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:229:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_window_count'
+          ck(stdlib_window_count((stdlib_window *)0, &e) == 0u,
+             ^~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:231:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_window_layout'
+          ck(stdlib_window_layout((stdlib_window *)0, &e) == STDLIB_FAIL,
+             ^~~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:233:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_window_hit_test'
+          ck(stdlib_window_hit_test((stdlib_window *)0, 0, 0, &out_index, &e) ==
+             ^~~~~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:235:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'stdlib_window_serialize'
+          ck(stdlib_window_serialize((stdlib_window *)0, serial, sizeof(serial),
+             ^~~~~~~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:237:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init((stdlib_window *)0, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:254:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init(&w, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:410:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init(&w, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:413:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init(&w, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:418:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init(&w, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:429:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init(&w, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+/tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:447:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
+          ck(stdlib_window_init(&w, (const stdlib_allocator *)0,
+             ^~~~~~~~~~~~~~~~~~
+error: 26 C+ warning(s) treated as errors (default warning policy)

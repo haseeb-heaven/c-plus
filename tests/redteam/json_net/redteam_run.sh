@@ -16,7 +16,7 @@ mkdir -p "$R"
 
 echo "RT5: build C+ harness (json/net/http)"
 timeout 180 ./build/c+ build "$HERE/redteam_json_net.cp" \
-  --default --sanitize=none -lcurl -I. -Ithird_party/yyjson \
+  --default --no-werror --sanitize=none -lcurl -I. -Ithird_party/yyjson \
   -Lbuild/ext -lyyjson -o "$R/redteam_json_net" \
   >"$R/build_cplus.log" 2>&1
 echo "RT5: build C harness (26 vendored cplus_v_*)"

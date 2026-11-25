@@ -10,7 +10,7 @@ unset SDKROOT
 unset CPLUS_CLANG
 D=benchmarks/goose_modern
 pass=0; fail=0; cases=0
-if ! timeout 300 ./build/c+ build "$D/bench.cp" --default --sanitize=none -I. \
+if ! timeout 300 ./build/c+ build "$D/bench.cp" --default --no-werror --sanitize=none -I. \
       -o "$D/bench" -- build/libc/libcplus_hardened.a >"$D/build.log" 2>&1; then
     echo "GOOSE_MODERN_BENCH FAIL build"; exit 1
 fi

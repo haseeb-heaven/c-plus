@@ -1,0 +1,1 @@
+clang: error: build/safe/libcplus_safecrt.a: 'linker' input unused [-Werror,-Wunused-command-line-argument]

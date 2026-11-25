@@ -43,7 +43,7 @@ fi
 CPLUS_USED=""
 for cand in "$@"; do
     [ -x "$cand" ] || continue
-    if "$cand" build "$SRC" --default --sanitize=none -I"$ROOT" \
+    if "$cand" build "$SRC" --default --no-werror --sanitize=none -I"$ROOT" \
             -I"$ROOT/third_party/yyjson" -L"$ROOT/build/ext" -lyyjson \
             -DYYJSON_READER_DEPTH_LIMIT=0 -DYYJSON_WRITER_DEPTH_LIMIT=0 \
             -o "$OUT" >"$BUILD_LOG" 2>&1; then

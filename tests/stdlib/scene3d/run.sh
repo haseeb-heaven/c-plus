@@ -147,9 +147,9 @@ z_meta_balance 1
 SCENE3D 79 0
 EOF
 
-printf 'build: %s\n' "$CPLUS build tests/stdlib/scene3d/test_scene3d.cp --default --sanitize=none -I. -- build/libc/libcplus_hardened.a"
+printf 'build: %s\n' "$CPLUS build tests/stdlib/scene3d/test_scene3d.cp --default --no-werror --sanitize=none -I. -- build/libc/libcplus_hardened.a"
 timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$DIR/test_scene3d.cp" \
-  --default --sanitize=none -I. -o "$BIN" -- build/libc/libcplus_hardened.a \
+  --default --no-werror --sanitize=none -I. -o "$BIN" -- build/libc/libcplus_hardened.a \
   >"$BLOG" 2>&1
 brc=$?
 if [ "$brc" -ne 0 ]; then

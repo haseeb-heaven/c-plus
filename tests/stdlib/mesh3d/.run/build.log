@@ -1,0 +1,16 @@
+./stdlib/error.hp:452:13: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      fresh = cplus_realloc(ptr, actual);
+              ^~~~~~~~~~~~~
+tests/stdlib/mesh3d/test_mesh3d.cp:66:13: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 2 passed to 'mesh3d_add_vertex'
+          if (mesh3d_add_vertex(m, &v, (size_t *)0, err) != STDLIB_OK)
+              ^~~~~~~~~~~~~~~~~
+tests/stdlib/mesh3d/test_mesh3d.cp:105:12: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      return cplus_realloc(ptr, new_size);
+             ^~~~~~~~~~~~~
+tests/stdlib/mesh3d/test_mesh3d.cp:225:9: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 2 passed to 'mesh3d_add_vertex'
+          print("refuse-nan-vertex",
+          ^~~~~
+tests/stdlib/mesh3d/test_mesh3d.cp:229:9: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 2 passed to 'mesh3d_add_vertex'
+          print("refuse-inf-vertex",
+          ^~~~~
+error: 5 C+ warning(s) treated as errors (default warning policy)

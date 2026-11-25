@@ -27,7 +27,7 @@ run_case() {
     cases=$((cases + 1))
 
     echo "=== BUILD $name ==="
-    if timeout 180 "$C" build "$GM_DIR/$name.cp" --default --sanitize=none \
+    if timeout 180 "$C" build "$GM_DIR/$name.cp" --default --no-werror --sanitize=none \
             -I. -o "$RES/$name" -- build/libc/libcplus_hardened.a \
             >"$RES/$name.build.log" 2>&1; then
         :

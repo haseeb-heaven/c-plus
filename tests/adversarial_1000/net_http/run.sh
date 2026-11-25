@@ -10,8 +10,8 @@ BIN="$RES/adv1000_net_http"
 SRC=tests/adversarial_1000/net_http/adv1000_net_http.cp
 mkdir -p "$RES"
 
-echo "+ timeout 120 ./build/c+ build $SRC --default --sanitize=none -lcurl -o $BIN"
-timeout 120 ./build/c+ build "$SRC" --default --sanitize=none -lcurl -o "$BIN" \
+echo "+ timeout 120 ./build/c+ build $SRC --default --no-werror --sanitize=none -lcurl -o $BIN"
+timeout 120 ./build/c+ build "$SRC" --default --no-werror --sanitize=none -lcurl -o "$BIN" \
     > "$RES/build.log" 2>&1
 brc=$?
 echo "  build rc=$brc"

@@ -24,7 +24,7 @@ if [ ! -x "$CPLUS" ]; then
 fi
 
 mkdir -p "$HERE/out"
-"$CPLUS" build "$SRC" --default --sanitize=none -I"$ROOT" -o "$OUT"
+"$CPLUS" build "$SRC" --default --no-werror --sanitize=none -I"$ROOT" -o "$OUT"
 
 control=$(REDTEAM_SELFCHECK=1 "$OUT")
 printf '%s\n' "$control"

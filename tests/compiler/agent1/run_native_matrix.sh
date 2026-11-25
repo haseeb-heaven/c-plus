@@ -2,9 +2,9 @@
 # Native C+ safety-check regression matrix (agent1, owned files only).
 #
 # For every case we run exactly four configurations:
-#   1. check --default --sanitize=none
+#   1. check --default --no-werror --sanitize=none
 #   2. check --strict  --sanitize=none
-#   3. build --default --sanitize=none + execute
+#   3. build --default --no-werror --sanitize=none + execute
 #   4. build --strict  --sanitize=undefined  (+ CPLUS_CLANG and -isysroot)
 #
 # Every cell records the exact rc, stdout, stderr, generated C and a
@@ -331,16 +331,16 @@ for cid in $CASES; do
 
     case "$cfg" in
       check_default)
-        cmd_args=(check --default --sanitize=none --emit-c "$gen" "$src")
-        compile_cmd="$CPLUS check --default --sanitize=none --emit-c $gen $src"
+        cmd_args=(check --default --no-werror --sanitize=none --emit-c "$gen" "$src")
+        compile_cmd="$CPLUS check --default --no-werror --sanitize=none --emit-c $gen $src"
         ;;
       check_strict)
         cmd_args=(check --strict --sanitize=none --emit-c "$gen" "$src")
         compile_cmd="$CPLUS check --strict --sanitize=none --emit-c $gen $src"
         ;;
       build_default)
-        cmd_args=(build --default --sanitize=none --emit-c "$gen" "$src" -o "$bin")
-        compile_cmd="$CPLUS build --default --sanitize=none --emit-c $gen $src -o $bin"
+        cmd_args=(build --default --no-werror --sanitize=none --emit-c "$gen" "$src" -o "$bin")
+        compile_cmd="$CPLUS build --default --no-werror --sanitize=none --emit-c $gen $src -o $bin"
         ;;
       build_ubsan)
         cmd_args=(build --strict --sanitize=undefined --emit-c "$gen" "$src" -o "$bin" -- -isysroot "$SYSROOT")

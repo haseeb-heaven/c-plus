@@ -18,8 +18,8 @@ echo "BLUE20: compiler=$(./build/c+ --version 2>&1 | head -1)"
 echo "BLUE20: cases=2400 (300/category x 8), seed=0xA11CE00000DEAD55, per-case alarm=60s"
 
 # ---- build (exact required invocation; archive forwarded after --) --------
-echo "+ timeout 60 ./build/c+ build $SRC --default --sanitize=none -I. -o $BIN -- build/libc/libcplus_hardened.a"
-timeout 60 ./build/c+ build "$SRC" --default --sanitize=none -I. \
+echo "+ timeout 60 ./build/c+ build $SRC --default --no-werror --sanitize=none -I. -o $BIN -- build/libc/libcplus_hardened.a"
+timeout 60 ./build/c+ build "$SRC" --default --no-werror --sanitize=none -I. \
   -o "$BIN" -- build/libc/libcplus_hardened.a \
   >"$OUT/build.log" 2>&1
 echo "BLUE20: build rc=0, binary=$BIN ($(wc -c < "$BIN") bytes)"

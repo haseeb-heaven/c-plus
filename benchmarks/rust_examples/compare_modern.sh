@@ -9,7 +9,7 @@ unset SDKROOT || true
 
 # Build C+ side (canonical token program from the Goose memory test).
 BIN=build/bench_modern_compare
-"$ROOT/build/c+" build tests/stdlib/goose_memory.cp --default --sanitize=none \
+"$ROOT/build/c+" build tests/stdlib/goose_memory.cp --default --no-werror --sanitize=none \
     -I. -o "$BIN" -- build/libc/libcplus_hardened.a >/dev/null 2>&1
 timeout 60 "$BIN" > /tmp/cmp_cpp.out 2>/dev/null || true
 

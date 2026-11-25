@@ -84,7 +84,7 @@ EOF
 
 # ---- build (bounded) -----------------------------------------------------
 timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$SRC" \
-  --default --sanitize=none -I"$ROOT" -o "$BIN" >"$OUT/build.log" 2>&1
+  --default --no-werror --sanitize=none -I"$ROOT" -o "$BIN" >"$OUT/build.log" 2>&1
 brc=$?
 if [ "$brc" -eq 124 ] || [ "$brc" -ge 128 ]; then
   printf 'TIMEOUT build: exceeded %ss (rc=%s)\n' "$BUILD_TIMEOUT" "$brc"

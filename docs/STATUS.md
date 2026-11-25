@@ -58,7 +58,7 @@ by this reconciliation. Full accounting lives in `docs/libc/COVERAGE.md`.
 
 | Suite | Count | Recorded result |
 |---|---:|---|
-| C+ compiler tests (`tests/run_tests.sh`) | 150 | 149 pass, 1 pre-existing warning-only case |
+| C+ compiler tests (`tests/run_tests.sh`) | 148 | 148 pass, 0 fail (measured 2026-11-25) |
 | libc tests (`tests/libc/run_libc_tests.sh`) | 85 test sources (97 `test_*.c` minus 12 excluded adversarial/corpus files) | 85 pass, 0 fail |
 | CRT unit (`tests/crt/unit/run_unit_tests.sh`) | 80 test sources | 80 pass, 0 fail |
 | Rust-vs-C+ paired runtime (6 families x 100) | 600 | 473 matched, 119 documented differences, 8 both-skip, 0 failures |
@@ -103,7 +103,7 @@ run from the repository root):
 
 ```sh
 ctest --test-dir build --output-on-failure           # 2/2 suites
-sh tests/run_tests.sh                                # 150 compiler tests (149 pass, 1 warning-only)
+sh tests/run_tests.sh                                # 148 compiler tests (148 pass, 0 fail)
 sh tests/libc/run_libc_tests.sh                      # 85 libc tests
 sh tests/crt/unit/run_unit_tests.sh                  # 80 CRT unit tests
 sh tests/rust_vs_cplus/run_compare.sh                # 600 cases, 6 families

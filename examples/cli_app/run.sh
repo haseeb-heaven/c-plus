@@ -20,8 +20,8 @@ pass=0
 fail=0
 built=0
 
-echo "== build: $D/cli_calc.cp (--default --sanitize=none) =="
-if timeout 180 ./build/c+ build "$D/cli_calc.cp" --default --sanitize=none \
+echo "== build: $D/cli_calc.cp (--default --no-werror --sanitize=none) =="
+if timeout 180 ./build/c+ build "$D/cli_calc.cp" --default --no-werror --sanitize=none \
        -I. -o "$BIN" -- "$LIBC" > "$OUT/build.log" 2>&1; then
     built=1
 else

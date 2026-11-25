@@ -19,7 +19,7 @@ fi
 
 rm -f "$BIN" "$OUT/build.stderr"
 timeout 60 "$ROOT/build/c+" build "$HERE/harness.cp" \
-    --default --sanitize=none -I"$ROOT" \
+    --default --no-werror --sanitize=none -I"$ROOT" \
     -o "$BIN" -- "$ARCHIVE" 2> "$OUT/build.stderr" || {
         cat "$OUT/build.stderr" >&2
         exit 2

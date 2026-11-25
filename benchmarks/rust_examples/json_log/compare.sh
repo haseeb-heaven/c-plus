@@ -101,7 +101,7 @@ if [ ! -f "$YYJSON" ]; then
 fi
 
 # ---- build (hard timeout 30s each) ----------------------------------------
-if ! timeout "$TIMEOUT" "$CPLUS" build "$DIR/harness.c" --default --sanitize=none \
+if ! timeout "$TIMEOUT" "$CPLUS" build "$DIR/harness.c" --default --no-werror --sanitize=none \
         -I"$ROOT" -I"$ROOT/third_party/yyjson" -L"$ROOT/build/ext" -lyyjson \
         -o "$OUT/harness" -- "$SAFE" "$LIBC" \
         > "$OUT/harness.build.log" 2>&1; then

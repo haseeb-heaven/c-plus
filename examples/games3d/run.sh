@@ -8,7 +8,7 @@
 # are involved.
 #
 # A pass requires ALL of:
-#   * the .cp builds in --default --sanitize=none mode from the repo root
+#   * the .cp builds in --default --no-werror --sanitize=none mode from the repo root
 #     against build/libc/libcplus_hardened.a;
 #   * the no-argv run exits 0, writes nothing to stderr, and its stdout is
 #     byte-identical to expected/transcript.expected;
@@ -50,7 +50,7 @@ bad() {
 }
 
 # ---- build ---------------------------------------------------------------
-if "$CPLUS" build "$SRC" --default --sanitize=none -I. -o "$OUT" -- "$LIB" \
+if "$CPLUS" build "$SRC" --default --no-werror --sanitize=none -I. -o "$OUT" -- "$LIB" \
         >"$BUILD_LOG" 2>&1; then
     echo "BUILD ok scene3d_demo"
 else

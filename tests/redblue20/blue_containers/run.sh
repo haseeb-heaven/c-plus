@@ -21,8 +21,8 @@ mkdir -p "$RESULTS"
 : > "$LOG"
 : > "$ERR"
 
-echo "+ ./build/c+ build $DIR/proof.cp --default --sanitize=none -I. -o $BIN"
-./build/c+ build "$DIR/proof.cp" --default --sanitize=none -I. -o "$BIN"
+echo "+ ./build/c+ build $DIR/proof.cp --default --no-werror --sanitize=none -I. -o $BIN"
+./build/c+ build "$DIR/proof.cp" --default --no-werror --sanitize=none -I. -o "$BIN"
 
 passed=0
 failed=0

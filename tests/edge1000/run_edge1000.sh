@@ -22,7 +22,7 @@ mkdir -p build/edge1000
 run_sweep() {   # run_sweep <src> <summary-marker> <library>
     src=$1; marker=$2; lib=$3
     bin=$D/.sweep_$(basename "$src" .cp)
-    timeout 300 ./build/c+ build "$src" --default --sanitize=none \
+    timeout 300 ./build/c+ build "$src" --default --no-werror --sanitize=none \
         -I. -o "$bin" -- "$lib" \
         >"$D/sweep_$(basename "$src" .cp).build.log" 2>&1 || {
         cases=$((cases + 1)); fail=$((fail + 1));

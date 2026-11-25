@@ -1,0 +1,2 @@
+clang: error: no such file or directory: 'build/ext/libnuklear.a'
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

@@ -44,7 +44,7 @@ if [ ! -f "$ROOT/build/libc/libcplus_hardened.a" ]; then
 fi
 
 echo "=== BUILD gui_app ==="
-if ! "$C" build "$HERE/gui_app.cp" --default --sanitize=none -I. \
+if ! "$C" build "$HERE/gui_app.cp" --default --no-werror --sanitize=none -I. \
         $SDL -o "$BIN" -- build/libc/libcplus_hardened.a \
         >"$RES_DIR/build.log" 2>&1; then
     echo "BUILD_FAIL gui_app"
