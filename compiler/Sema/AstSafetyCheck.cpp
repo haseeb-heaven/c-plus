@@ -3660,6 +3660,108 @@ public:
     return localStackOwner(e);
   }
 
+  // --- Issue #36/#37: stack addresses carried through helpers/fields ------
+
+  /// Identity key of a struct field lvalue. A pointer local holding `&s` is
+  /// resolved to `s` so `hp->f` and `s.f` share one provenance key.
+  std::string fieldLvalueKey(const Expr *base, const FieldDecl *fd) const {
+    if (!base || !fd)
+      return std::string();
+    std::string key = identityKey(base);
+    auto it = identityAliases_.find(key);
+    if (it != identityAliases_.end())
+      key = it->second;
+    if (key.empty())
+      return std::string();
+    return key + ".F" +
+           std::to_string(reinterpret_cast<uintptr_t>(fd->getCanonicalDecl()));
+  }
+
+  std::string fieldKeyOfVar(const VarDecl *vd, const FieldDecl *fd) const {
+    if (!vd || !fd)
+      return std::string();
+    return fieldKeyFromBaseKey(identityKeyForDecl(vd), fd);
+  }
+
+  std::string fieldKeyFromBaseKey(const std::string &base,
+                                  const FieldDecl *fd) const {
+    if (base.empty() || !fd)
+      return std::string();
+    return base + ".F" +
+           std::to_string(reinterpret_cast<uintptr_t>(fd->getCanonicalDecl()));
+  }
+
+  struct StackEscape {
+    const VarDecl *owner = nullptr;
+    std::string name;
+    explicit operator bool() const { return owner != nullptr; }
+  };
+
+  /// The automatic local whose address a returned pointer carries through a
+  /// helper (`returnedParam_`) or a struct field (`return helper(&s)` where
+  /// the helper returns `s.field`).  A bare DeclRefExpr is deliberately NOT
+  /// consulted: the existing borrow check already diagnoses those and this
+  /// check must not widen its reach.
+  StackEscape stackEscapeOf(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 12)
+      return {};
+    e = e->IgnoreParenCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
+      // Only in a nested position: a top-level `return &x;` is already
+      // rejected by the backend's return-stack-address diagnostic.
+      if (depth > 0 && uo->getOpcode() == UO_AddrOf)
+        if (const VarDecl *o = automaticLocalOfAddress(e))
+          return {o, o->getNameAsString()};
+      return {};
+    }
+    if (const auto *me = dyn_cast<MemberExpr>(e)) {
+      auto it = stackFieldOwner_.find(fieldLvalueKey(
+          me->getBase(), dyn_cast<FieldDecl>(me->getMemberDecl())));
+      if (it != stackFieldOwner_.end() && it->second)
+        return {it->second, it->second->getNameAsString()};
+      return {};
+    }
+    if (const auto *co = dyn_cast<ConditionalOperator>(e)) {
+      StackEscape a = stackEscapeOf(co->getTrueExpr(), depth + 1);
+      if (a)
+        return a;
+      return stackEscapeOf(co->getFalseExpr(), depth + 1);
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(e))
+      if (bo->getOpcode() == BO_Comma)
+        return stackEscapeOf(bo->getRHS(), depth + 1);
+    if (const auto *call = dyn_cast<CallExpr>(e)) {
+      for (const auto &name : calleeNames(call, call->getDirectCallee())) {
+        // Issue #36: `this` is lowered to a pointer parameter, so a method
+        // returning `this` is a helper returning its first parameter.
+        auto rp = returnedParam_.find(name);
+        if (rp != returnedParam_.end() && rp->second < call->getNumArgs())
+          if (StackEscape s =
+                  stackEscapeOf(call->getArg(rp->second), depth + 1))
+            return s;
+        // Issue #37: the helper returns a field of the object it is given.
+        auto of = returnsObjectField_.find(name);
+        if (of != returnsObjectField_.end() && call->getNumArgs() > 0) {
+          const Expr *obj = call->getArg(0)->IgnoreParenCasts();
+          if (const auto *uo = dyn_cast<UnaryOperator>(obj))
+            if (uo->getOpcode() == UO_AddrOf)
+              obj = uo->getSubExpr()->IgnoreParenCasts();
+          std::string key = identityKey(obj);
+          auto ai = identityAliases_.find(key);
+          if (ai != identityAliases_.end())
+            key = ai->second;
+          if (!key.empty()) {
+            auto fi = stackFieldOwner_.find(
+                fieldKeyFromBaseKey(key, of->second));
+            if (fi != stackFieldOwner_.end() && fi->second)
+              return {fi->second, fi->second->getNameAsString()};
+          }
+        }
+      }
+    }
+    return {};
+  }
+
   bool containsAssignFrom(const Stmt *node, const std::string &lhs,
                           const std::string &rhs) const {
     if (!node)
@@ -4295,6 +4397,8 @@ public:
     forgedUnionVars_.clear();    // compile-time union-punning provenance
     forgedPointerVars_.clear();  // locals copied from a forged union pointer
     structLocalAddrVars_.clear(); // structs initialized with `&local`
+    stackFieldOwner_.clear();     // issue #37: field provenance is frame-scoped
+    identityAliases_.clear();     // `T *p = &local_struct` aliases
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
@@ -4495,6 +4599,48 @@ public:
         if (hasAlloc)
           returnedAllocExtent_[fd->getNameAsString()] = allocExtent;
       }
+    }
+    // Issue #36/#37: summarise helpers that hand back a field of their
+    // object parameter (`return self->p;`) and makers that store a parameter
+    // into a field of the struct they return (`_cplus_self.p = q;`). These
+    // are the shapes C+ method/getter lowering produces.
+    if (!report_ && fd->getBody()) {
+      std::function<void(const Stmt *)> scanEscapeSummary = [&](const Stmt *n) {
+        if (!n)
+          return;
+        if (const auto *ret = dyn_cast<ReturnStmt>(n))
+          if (const Expr *rv = ret->getRetValue())
+            if (const auto *me = dyn_cast<MemberExpr>(
+                    rv->IgnoreParenCasts()))
+              if (const auto *member =
+                      dyn_cast<FieldDecl>(me->getMemberDecl()))
+                if (const auto *ref = dyn_cast<DeclRefExpr>(
+                        me->getBase()->IgnoreParenCasts()))
+                  if (isa<ParmVarDecl>(ref->getDecl()))
+                    returnsObjectField_[fd->getNameAsString()] =
+                        member->getCanonicalDecl();
+        if (const auto *bo = dyn_cast<BinaryOperator>(n))
+          if (bo->isAssignmentOp())
+            if (const auto *me = dyn_cast<MemberExpr>(
+                    bo->getLHS()->IgnoreParenCasts()))
+              if (const auto *member =
+                      dyn_cast<FieldDecl>(me->getMemberDecl()))
+                if (const auto *ref = dyn_cast<DeclRefExpr>(
+                        bo->getRHS()->IgnoreParenCasts()))
+                  if (const auto *pv = dyn_cast<ParmVarDecl>(ref->getDecl()))
+                    if (const auto *baseRef = dyn_cast<DeclRefExpr>(
+                            me->getBase()->IgnoreParenCasts()))
+                      if (const auto *bvd =
+                              dyn_cast<VarDecl>(baseRef->getDecl()))
+                        if (bvd->hasLocalStorage() &&
+                            fd->getReturnType()->isRecordType())
+                          ctorFieldParams_[fd->getNameAsString()]
+                                          [pv->getFunctionScopeIndex()] =
+                              member->getCanonicalDecl();
+        for (const Stmt *c : n->children())
+          scanEscapeSummary(c);
+      };
+      scanEscapeSummary(fd->getBody());
     }
     // Infer a tiny arithmetic effect for helpers like `int add(int a,int b)
     // { return a + b; }` so callers with constant arguments can be checked
@@ -4852,6 +4998,17 @@ public:
                       "return the owner instead, or copy the borrowed data",
                       true);
         }
+        // Issue #36/#37: the address may also travel through a helper's
+        // returned parameter (lowered `this`) or through a struct field;
+        // neither shape is a bare borrow variable, so the check above misses
+        // it. Report it as a lifetime escape at the return that leaks it.
+        if (StackEscape esc = stackEscapeOf(s->getRetValue()))
+          reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
+                      "address of local '" + esc.name +
+                          "' escapes the function in the returned pointer",
+                      "copy the pointed-to data or heap-allocate it before "
+                      "returning",
+                      true);
       }
     }
     if (report_ || !s->getRetValue() || !currentFnDecl_ ||
@@ -4934,6 +5091,53 @@ public:
         vd->getType()->isRecordType() &&
         exprContainsLocalAddress(vd->getInit()))
       structLocalAddrVars_.insert(vd->getNameAsString());
+    // Issue #37: remember which fields of a local struct hold `&automatic`.
+    // Both aggregate initializers and lowered constructors (`Box b =
+    // Box_ctor(&x)`) are covered; the latter uses the ctor field/param summary.
+    if (report_ && vd->hasLocalStorage() && vd->getInit() &&
+        vd->getType()->isRecordType()) {
+      const Expr *init = vd->getInit()->IgnoreParenCasts();
+      const RecordDecl *rd = vd->getType()->getAsRecordDecl();
+      if (rd) {
+        if (const auto *il = dyn_cast<InitListExpr>(init)) {
+          unsigned i = 0;
+          for (const FieldDecl *field : rd->fields()) {
+            if (i >= il->getNumInits())
+              break;
+            if (const VarDecl *o = automaticLocalOfAddress(il->getInit(i)))
+              stackFieldOwner_[fieldKeyOfVar(vd, field)] = o;
+            ++i;
+          }
+        } else if (const auto *call = dyn_cast<CallExpr>(init)) {
+          for (const auto &name : calleeNames(call, call->getDirectCallee())) {
+            auto cp = ctorFieldParams_.find(name);
+            if (cp == ctorFieldParams_.end())
+              continue;
+            for (const auto &kv : cp->second) {
+              if (kv.first >= call->getNumArgs())
+                continue;
+              if (const VarDecl *o =
+                      automaticLocalOfAddress(call->getArg(kv.first)))
+                stackFieldOwner_[fieldKeyOfVar(vd, kv.second)] = o;
+            }
+          }
+        }
+      }
+    }
+    if (report_ && vd->hasLocalStorage() && vd->getType()->isPointerType() &&
+        vd->getInit()) {
+      if (const auto *uo = dyn_cast<UnaryOperator>(
+              vd->getInit()->IgnoreParenCasts())) {
+        if (uo->getOpcode() == UO_AddrOf) {
+          if (const auto *ref = dyn_cast<DeclRefExpr>(
+                  uo->getSubExpr()->IgnoreParenCasts()))
+            if (const auto *obj = dyn_cast<VarDecl>(ref->getDecl()))
+              if (obj->hasLocalStorage() && obj->getType()->isRecordType())
+                identityAliases_[identityKeyForDecl(vd)] =
+                    identityKeyForDecl(obj);
+        }
+      }
+    }
     // Thread-local storage has one instance per thread, so it is never a
     // shared global and must not be reported as a data race.
     if (!report_ && vd->hasGlobalStorage() &&
@@ -5453,6 +5657,32 @@ public:
   bool VisitBinaryOperator(BinaryOperator *op) {
     noteAssignedValueSource(op);
     if (report_ && op->isAssignmentOp()) {
+      // Issue #37: `s.p = &x;` and `T *p = &s;` (assignment form) record the
+      // same field/alias facts as their initializer forms above.
+      if (const VarDecl *o = automaticLocalOfAddress(op->getRHS())) {
+        if (const auto *me = dyn_cast<MemberExpr>(
+                op->getLHS()->IgnoreParenCasts())) {
+          std::string key = fieldLvalueKey(
+              me->getBase(), dyn_cast<FieldDecl>(me->getMemberDecl()));
+          if (!key.empty())
+            stackFieldOwner_[key] = o;
+        }
+        if (const auto *ref = dyn_cast<DeclRefExpr>(
+                op->getLHS()->IgnoreParenCasts()))
+          if (const auto *pvd = dyn_cast<VarDecl>(ref->getDecl()))
+            if (pvd->hasLocalStorage() && pvd->getType()->isPointerType()) {
+              const auto *uo = dyn_cast<UnaryOperator>(
+                  op->getRHS()->IgnoreParenCasts());
+              if (uo && uo->getOpcode() == UO_AddrOf)
+                if (const auto *oref = dyn_cast<DeclRefExpr>(
+                        uo->getSubExpr()->IgnoreParenCasts()))
+                  if (const auto *obj = dyn_cast<VarDecl>(oref->getDecl()))
+                    if (obj->hasLocalStorage() &&
+                        obj->getType()->isRecordType())
+                      identityAliases_[identityKeyForDecl(pvd)] =
+                          identityKeyForDecl(obj);
+            }
+      }
       // `q = realloc(...)` (as opposed to an initializer) also makes q a
       // realloc-result variable, so a later `p = q` can transfer its extent.
       const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
@@ -8502,6 +8732,19 @@ public:
   // with a generated `__cplus_ret` temporary.
   std::map<const VarDecl *, std::pair<const VarDecl *, std::string>>
       returnBorrowOwner_;
+  // Issue #36/#37: summaries and per-function facts for stacks addresses that
+  // leave the frame through a helper return or a struct field. Summaries are
+  // built in the collection pass; the field/alias facts are function-scoped
+  // and therefore rebuilt by the reporting pass as it visits each body.
+  /// Callee -> field it returns from its (first) object-pointer parameter.
+  std::map<std::string, const FieldDecl *> returnsObjectField_;
+  /// Constructor/maker -> (parameter slot -> field of the returned struct).
+  std::map<std::string, std::map<unsigned, const FieldDecl *>> ctorFieldParams_;
+  /// Identity key of a field lvalue -> automatic local whose address it holds.
+  std::map<std::string, const VarDecl *> stackFieldOwner_;
+  /// Identity key of a pointer local -> identity key of the local struct it
+  /// points at (`Holder *hp = &h`), so `hp->f` resolves to `h.f`.
+  std::map<std::string, std::string> identityAliases_;
   std::map<std::string, std::set<std::string>> writeBorrows_;
   std::set<std::string> movedVars_;
   std::set<std::string> destructors_;
@@ -8822,6 +9065,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setFieldSlotExtents(collect.fieldSlotExtents());
   check.setConflictedParams(collect.conflictedParams());
   check.setReturnedParams(collect.returnedParams());
+  check.returnsObjectField_ = collect.returnsObjectField_;
+  check.ctorFieldParams_ = collect.ctorFieldParams_;
   check.setReturnedFixedExtents(collect.returnedFixedExtents());
   check.setReturnedAllocExtents(collect.returnedAllocExtents());
   check.setCallReturnExtent(collect.callReturnExtent());
