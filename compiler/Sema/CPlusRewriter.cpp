@@ -19,6 +19,7 @@
 
 #include "Sema/CPlusRewriter.h"
 
+#include <climits> // ULLONG_MAX (lexical pointer-safety diagnostics)
 #include <cstring> // std::strcmp (used by helper-name reservation checks)
 
 #include "LangFeatures.h"
@@ -1705,11 +1706,19 @@ private:
 
 } // namespace
 
+// Lexical pointer-soundness diagnostics (issues #39 and #40).  Defined after
+// the token helpers below; run during source rewriting so `check` sees the
+// same rejection as `build`.
+void checkLexicalPointerSafety(const std::vector<Token> &toks,
+                               DiagnosticEngine &diags,
+                               const std::string &filename);
+
 RewrittenSource rewriteCPlusSource(const std::string &source,
                                    DiagnosticEngine &diags,
                                    const std::string &filename,
                                    bool headerMode) {
   std::vector<Token> toks = lexCPlus(source);
+  checkLexicalPointerSafety(toks, diags, filename);
   Lowerer lowerer(toks, diags, filename, headerMode);
   RewrittenSource result = lowerer.run();
   // Preserve the original source's trailing newlines exactly.  Token
@@ -3901,6 +3910,464 @@ static void collectAliasBoundsSites(
 }
 
 } // namespace
+
+namespace {
+
+// --- Lexical pointer-soundness diagnostics (issues #39 and #40) ------------
+//
+// The runtime instrumentation only guards array subscripts and direct
+// `*(p + i)` forms, and the AST pointer-formation guard is suppressed when a
+// backend sanitizer is selected (UBSan does not check raw pointer
+// arithmetic).  Two patterns therefore escape every guard:
+//   #39 a small heap allocation is cast to a larger struct type and its
+//       fields are written past the allocation;
+//   #40 a tracked pointer is advanced by an unproven offset, then
+//       dereferenced in a separate statement.
+// Both are rejected here, at rewrite time, so `check` and `build` agree.
+
+/// Conservative byte size of a scalar type word.  0 means "unknown".
+static size_t scalarSizeBytes(const std::string &word) {
+  if (word == "char" || word == "_Bool")
+    return 1;
+  if (word == "short")
+    return 2;
+  if (word == "int" || word == "float")
+    return 4;
+  if (word == "long" || word == "double" || word == "longlong")
+    return 8;
+  return 0;
+}
+
+/// Record a conservative (under-estimated) byte size for every struct tag
+/// whose body is visible in this TU.  Fields are summed without padding, so a
+/// reported size is a lower bound: if it already exceeds the allocation size,
+/// the cast is definitely out of bounds.
+static void collectStructSizes(const TokenStream &ts,
+                               std::map<std::string, size_t> &sizes) {
+  for (size_t i = 0; i + 1 < ts.size(); ++i) {
+    if (!ts.isIdent(i, "struct"))
+      continue;
+    size_t name = ts.nextSig(i);
+    if (name >= ts.size() || ts[name].kind != TokKind::Identifier)
+      continue;
+    size_t open = ts.nextSig(name);
+    if (open >= ts.size() || !ts.isPunct(open, "{"))
+      continue; // forward declaration
+    size_t close = ts.matchBrace(open);
+    if (close == kNPos || close <= open)
+      continue;
+
+    size_t total = 0;
+    size_t k = ts.nextSig(open);
+    while (k < close) {
+      size_t semi = kNPos, brackets = 0;
+      for (size_t j = k; j < close; ++j) {
+        if (ts.isPunct(j, "["))
+          ++brackets;
+        else if (ts.isPunct(j, "]")) {
+          if (brackets)
+            --brackets;
+        } else if (ts.isPunct(j, ";") && brackets == 0) {
+          semi = j;
+          break;
+        }
+      }
+      if (semi == kNPos || semi <= k)
+        break;
+
+      size_t sz = 0;
+      bool pointerField = false;
+      for (size_t j = k; j < semi; ++j) {
+        if (ts.isIdent(j, "struct")) {
+          size_t tn = ts.nextSig(j);
+          if (tn < semi && ts[tn].kind == TokKind::Identifier) {
+            auto known = sizes.find(ts[tn].text);
+            if (known != sizes.end())
+              sz = known->second;
+          }
+          break;
+        }
+        if (ts.isPunct(j, "*"))
+          pointerField = true;
+        size_t s = scalarSizeBytes(ts[j].text);
+        if (s)
+          sz = s;
+      }
+      if (pointerField)
+        sz = 8;
+      // Array fields: `int payload[4]` contributes 4 * sizeof(int).
+      for (size_t j = k; j < semi; ++j) {
+        if (!ts.isPunct(j, "["))
+          continue;
+        size_t rb = ts.matchBracket(j);
+        if (rb == kNPos || rb >= semi)
+          continue;
+        size_t n = ts.nextSig(j);
+        if (n < rb && ts[n].kind == TokKind::Number) {
+          try {
+            unsigned long long count = std::stoull(ts[n].text);
+            if (count)
+              sz *= static_cast<size_t>(count);
+          } catch (...) {
+          }
+        }
+        j = rb;
+      }
+      total += sz;
+      k = ts.nextSig(semi);
+    }
+    if (total)
+      sizes[ts[name].text] = total;
+    i = close;
+  }
+}
+
+/// Byte size of a type expression such as `int`, `struct Header` or the
+/// operand of `sizeof(...)`.
+static size_t typeBytes(const TokenStream &ts, size_t from, size_t to,
+                        const std::map<std::string, size_t> &structSizes) {
+  from = skipAliasCasts(ts, from, to);
+  size_t sz = 0;
+  for (size_t i = from; i < to; ++i) {
+    if (ts.isIdent(i, "struct")) {
+      size_t nm = ts.nextSig(i);
+      if (nm < to && ts[nm].kind == TokKind::Identifier) {
+        auto known = structSizes.find(ts[nm].text);
+        if (known != structSizes.end())
+          sz = known->second;
+      }
+      break;
+    }
+    size_t s = scalarSizeBytes(ts[i].text);
+    if (s)
+      sz = s;
+  }
+  return sz;
+}
+
+/// First decimal/hex integer literal in [from, to), or `fallback` if none.
+static unsigned long long firstNumber(const TokenStream &ts, size_t from,
+                                      size_t to,
+                                      unsigned long long fallback = 1) {
+  for (size_t i = from; i < to; ++i)
+    if (ts[i].kind == TokKind::Number) {
+      try {
+        return std::stoull(ts[i].text, nullptr, 0);
+      } catch (...) {
+        return fallback;
+      }
+    }
+  return fallback;
+}
+
+/// Byte extent of an allocation call expression, or 0 when not provable.
+static size_t allocationBytes(const TokenStream &ts, size_t from, size_t to,
+                              const std::map<std::string, size_t> &structSizes) {
+  for (size_t i = from; i < to; ++i) {
+    const bool isMalloc = ts.isIdent(i, "malloc") ||
+                          ts.isIdent(i, "realloc") ||
+                          ts.isIdent(i, "cplus_alloc");
+    const bool isCalloc = ts.isIdent(i, "calloc") ||
+                          ts.isIdent(i, "cplus_alloc_array");
+    const bool isNew = ts.isIdent(i, "cplus_new");
+    const bool isNewArray = ts.isIdent(i, "cplus_new_array");
+    if (!isMalloc && !isCalloc && !isNew && !isNewArray)
+      continue;
+    size_t lp = ts.nextSig(i);
+    if (lp >= to || !ts.isPunct(lp, "("))
+      continue;
+    size_t rp = ts.matchParen(lp);
+    if (rp == kNPos || rp > to)
+      continue;
+
+    std::vector<std::pair<size_t, size_t>> args;
+    size_t a = ts.nextSig(lp);
+    int par = 0, brackets = 0;
+    for (size_t j = a; j < rp; ++j) {
+      if (ts.isPunct(j, "("))
+        ++par;
+      else if (ts.isPunct(j, ")"))
+        --par;
+      else if (ts.isPunct(j, "["))
+        ++brackets;
+      else if (ts.isPunct(j, "]")) {
+        if (brackets)
+          --brackets;
+      } else if (ts.isPunct(j, ",") && par == 0 && brackets == 0) {
+        args.emplace_back(a, j);
+        a = ts.nextSig(j);
+      }
+    }
+    if (a < rp)
+      args.emplace_back(a, rp);
+
+    if (isNew && !args.empty())
+      return typeBytes(ts, args[0].first, args[0].second, structSizes);
+    if (isNewArray && args.size() >= 2) {
+      size_t elem = typeBytes(ts, args[0].first, args[0].second, structSizes);
+      return elem * firstNumber(ts, args[1].first, args[1].second);
+    }
+    if (isCalloc && args.size() >= 2) {
+      size_t elem = typeBytes(ts, args[1].first, args[1].second, structSizes);
+      return elem * firstNumber(ts, args[0].first, args[0].second);
+    }
+    if (isCalloc || isNewArray || args.empty())
+      return 0;
+
+    // malloc/realloc/cplus_alloc: `N * sizeof(T)` or `sizeof(T) * N`.
+    size_t argStart = args[0].first, argEnd = args[0].second;
+    for (size_t j = argStart; j < argEnd; ++j) {
+      if (!ts.isIdent(j, "sizeof"))
+        continue;
+      size_t tsz = 0;
+      size_t sp = ts.nextSig(j);
+      if (sp < argEnd && ts.isPunct(sp, "(")) {
+        size_t srp = ts.matchParen(sp);
+        if (srp != kNPos && srp < argEnd)
+          tsz = typeBytes(ts, ts.nextSig(sp), srp, structSizes);
+      } else {
+        tsz = typeBytes(ts, sp, argEnd, structSizes);
+      }
+      if (!tsz)
+        return 0;
+      return tsz * firstNumber(ts, argStart, argEnd);
+    }
+    return 0;
+  }
+  return 0;
+}
+
+/// Known byte extents for pointer variables: fixed arrays, heap allocations
+/// and aliases of either.
+static void collectPointerExtents(
+    const TokenStream &ts, const std::map<std::string, size_t> &structSizes,
+    std::map<std::string, size_t> &bytes) {
+  // Fixed arrays: `int arr[4]` -> 16 bytes.
+  for (size_t i = 0; i < ts.size(); ++i) {
+    if (!ts.isPunct(i, "["))
+      continue;
+    size_t prev = ts.prevSig(i);
+    if (prev == kNPos || ts[prev].kind != TokKind::Identifier)
+      continue;
+    size_t before = ts.prevSig(prev);
+    if (before == kNPos ||
+        !(ts[before].kind == TokKind::Identifier || ts.isPunct(before, "*")))
+      continue;
+    size_t rb = ts.matchBracket(i);
+    if (rb == kNPos || rb == ts.nextSig(i))
+      continue;
+    size_t n = ts.nextSig(i);
+    if (n >= rb || ts[n].kind != TokKind::Number)
+      continue;
+    size_t elem = typeBytes(ts, before, prev, structSizes);
+    if (!elem)
+      continue;
+    try {
+      bytes[ts[prev].text] =
+          elem * static_cast<size_t>(std::stoull(ts[n].text));
+    } catch (...) {
+    }
+  }
+
+  // Initialisers and assignments.
+  for (size_t i = 0; i < ts.size(); ++i) {
+    if (!ts.isPunct(i, "="))
+      continue;
+    size_t lhs = ts.prevSig(i);
+    if (lhs == kNPos || ts[lhs].kind != TokKind::Identifier)
+      continue;
+    size_t semi = ts.statementEnd(i);
+    if (semi == kNPos || semi > ts.size())
+      semi = ts.size();
+    size_t rhs = ts.nextSig(i);
+    if (rhs >= semi)
+      continue;
+
+    size_t extent = allocationBytes(ts, rhs, semi, structSizes);
+    if (extent) {
+      bytes[ts[lhs].text] = extent;
+      continue;
+    }
+    // Alias of a tracked object: `int *q = arr;`.
+    size_t src = skipAliasCasts(ts, rhs, semi);
+    if (src < semi && ts[src].kind == TokKind::Identifier) {
+      auto known = bytes.find(ts[src].text);
+      if (known != bytes.end())
+        bytes[ts[lhs].text] = known->second;
+    }
+  }
+}
+
+/// Issue #39: reject a cast from a pointer with a known allocation extent to
+/// a struct type that needs more storage than the allocation provides.
+static void checkStructDowncasts(
+    const TokenStream &ts, DiagnosticEngine &diags, const std::string &filename,
+    const std::map<std::string, size_t> &structSizes,
+    const std::map<std::string, size_t> &bytes) {
+  for (size_t i = 0; i + 3 < ts.size(); ++i) {
+    if (!ts.isPunct(i, "(") || !ts.isIdent(ts.nextSig(i), "struct"))
+      continue;
+    size_t tag = ts.nextSig(ts.nextSig(i));
+    if (tag >= ts.size() || ts[tag].kind != TokKind::Identifier)
+      continue;
+    size_t star = ts.nextSig(tag);
+    if (star >= ts.size() || !ts.isPunct(star, "*"))
+      continue;
+    size_t close = ts.nextSig(star);
+    if (close >= ts.size() || !ts.isPunct(close, ")"))
+      continue;
+
+    // Skip a chain of nested casts, e.g. `(struct LargePacket *)(void *)hdr`.
+    size_t expr = ts.nextSig(close);
+    while (expr < ts.size() && ts.isPunct(expr, "(")) {
+      size_t rp = ts.matchParen(expr);
+      if (rp == kNPos)
+        break;
+      bool typey = false;
+      for (size_t k = ts.nextSig(expr); k < rp; ++k)
+        if (ts[k].kind == TokKind::Identifier || ts.isPunct(k, "*"))
+          typey = true;
+      if (!typey)
+        break;
+      expr = ts.nextSig(rp);
+    }
+    if (expr >= ts.size() || ts[expr].kind != TokKind::Identifier)
+      continue;
+
+    auto target = structSizes.find(ts[tag].text);
+    auto source = bytes.find(ts[expr].text);
+    if (target == structSizes.end() || source == bytes.end())
+      continue;
+    if (target->second <= source->second)
+      continue;
+
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = "[CPLUS-BOUNDS] struct pointer downcast from " +
+                std::to_string(source->second) + "-byte allocation '" +
+                ts[expr].text + "' to struct '" + ts[tag].text + "' (" +
+                std::to_string(target->second) +
+                " bytes) is out of bounds";
+    d.file = filename;
+    d.line = ts[expr].line;
+    d.column = ts[expr].column;
+    d.help = "allocate at least the target struct size before casting "
+             "(e.g. cplus_new(struct " +
+             ts[tag].text + "))";
+    diags.report(std::move(d));
+  }
+}
+
+/// End token index of the function body enclosing token `at`.
+static size_t enclosingFunctionEnd(const TokenStream &ts, size_t at) {
+  int depth = 0;
+  for (size_t j = at; j > 0; --j) {
+    size_t k = j - 1;
+    if (ts.isPunct(k, "}"))
+      ++depth;
+    else if (ts.isPunct(k, "{")) {
+      if (depth == 0) {
+        size_t close = ts.matchBrace(k);
+        return close == kNPos ? ts.size() : close;
+      }
+      --depth;
+    }
+  }
+  return ts.size();
+}
+
+/// Issue #40: a tracked pointer advanced by an offset that is not a provably
+/// in-range constant is not instrumented (UBSan does not check raw pointer
+/// arithmetic and the native pointer guard is suppressed when a sanitizer is
+/// selected).  Reject it when the resulting pointer is dereferenced later in
+/// the same function.
+static void checkUnprovenPointerDerefs(
+    const TokenStream &ts, DiagnosticEngine &diags, const std::string &filename,
+    const std::map<std::string, size_t> &bytes) {
+  for (size_t i = 0; i < ts.size(); ++i) {
+    size_t name = kNPos, op = kNPos, idx = kNPos, semi = kNPos;
+    if (ts.isPunct(i, "=")) {
+      size_t lhs = ts.prevSig(i);
+      if (lhs == kNPos || ts[lhs].kind != TokKind::Identifier)
+        continue;
+      size_t rhs = ts.nextSig(i);
+      if (rhs >= ts.size() || ts[rhs].kind != TokKind::Identifier ||
+          ts[rhs].text != ts[lhs].text)
+        continue;
+      size_t o = ts.nextSig(rhs);
+      if (o >= ts.size() || !(ts.isPunct(o, "+") || ts.isPunct(o, "-")))
+        continue;
+      name = lhs;
+      op = o;
+      idx = ts.nextSig(o);
+      semi = ts.statementEnd(i);
+    } else if (ts.isPunct(i, "+=") || ts.isPunct(i, "-=")) {
+      size_t lhs = ts.prevSig(i);
+      if (lhs == kNPos || ts[lhs].kind != TokKind::Identifier)
+        continue;
+      name = lhs;
+      op = i;
+      idx = ts.nextSig(i);
+      semi = ts.statementEnd(i);
+    }
+    if (name == kNPos || idx == kNPos || semi == kNPos || semi >= ts.size())
+      continue;
+    if (bytes.find(ts[name].text) == bytes.end())
+      continue; // no known extent: outside this narrow check
+
+    // A non-negative integer literal in the forward direction is provably
+    // one-past-or-inside for any non-empty object; the static checker handles
+    // larger constants.  Everything else is unproven here.
+    if (idx < semi && ts[idx].kind == TokKind::Number) {
+      unsigned long long value = firstNumber(ts, idx, idx + 1, ULLONG_MAX);
+      if (value != ULLONG_MAX && value > 0 && !ts.isPunct(op, "-"))
+        continue;
+    }
+
+    const std::string &var = ts[name].text;
+    size_t funcEnd = enclosingFunctionEnd(ts, i);
+    bool dereferenced = false;
+    for (size_t j = semi + 1; j < funcEnd && !dereferenced; ++j) {
+      if (ts[j].kind != TokKind::Identifier || ts[j].text != var)
+        continue;
+      size_t prev = ts.prevSig(j);
+      if (prev != kNPos && ts.isPunct(prev, "*")) {
+        dereferenced = true;
+        break;
+      }
+      size_t next = ts.nextSig(j);
+      if (next < funcEnd && (ts.isPunct(next, "[") || ts.isPunct(next, "->")))
+        dereferenced = true;
+    }
+    if (!dereferenced)
+      continue;
+
+    Diag d;
+    d.level = DiagLevel::Error;
+    d.message = "[CPLUS-BOUNDS] dereference of pointer '" + var +
+                "' advanced by an unproven offset is not bounds-checked";
+    d.file = filename;
+    d.line = ts[name].line;
+    d.column = ts[name].column;
+    d.help = "use a bounds-checked array subscript instead of raw pointer "
+             "arithmetic";
+    diags.report(std::move(d));
+  }
+}
+
+} // namespace
+
+void checkLexicalPointerSafety(const std::vector<Token> &toks,
+                               DiagnosticEngine &diags,
+                               const std::string &filename) {
+  TokenStream ts(toks);
+  std::map<std::string, size_t> structSizes;
+  std::map<std::string, size_t> pointerBytes;
+  collectStructSizes(ts, structSizes);
+  collectPointerExtents(ts, structSizes, pointerBytes);
+  checkStructDowncasts(ts, diags, filename, structSizes, pointerBytes);
+  checkUnprovenPointerDerefs(ts, diags, filename, pointerBytes);
+}
 
 std::string instrumentDynamicArrayBounds(
     const std::string &source,
