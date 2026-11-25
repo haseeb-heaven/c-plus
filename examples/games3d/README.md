@@ -76,3 +76,9 @@ Two small workarounds for current C+ lowering quirks are intentional:
   which the lifetime checker rejects.
 
 `--default` mode reports these as warnings but does not fail the build.
+
+## Screenshot (generated from an actual runner transcript)
+
+![games3d](../../proof/all_apps_games_screenshots/screenshots/games3d.svg)
+
+Transcript + verifier: [`proof/all_apps_games_screenshots/games3d.md`](../../proof/all_apps_games_screenshots/games3d.md).

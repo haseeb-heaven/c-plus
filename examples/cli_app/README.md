@@ -48,3 +48,9 @@ overflow and both valid command paths.
 the real `stdlib/cli.hp` to an `Intel amd64 COFF` object. This is a compile-only
 check. Highball/Wine execution is **blocked** in this environment, so no
 Windows runtime success is claimed.
+
+## Screenshot (generated from an actual runner transcript)
+
+![cli_app](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg)
+
+Transcript + verifier: [`proof/all_apps_games_screenshots/cli_app.md`](../../proof/all_apps_games_screenshots/cli_app.md).

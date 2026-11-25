@@ -101,3 +101,9 @@ final line is a scope statement, not a failure.
   [RESULTS.md](RESULTS.md)). No other platform, SDL3 version, video driver or
   renderer backend is claimed to behave identically.
 - No Rust equivalence is claimed; Rust is not used here.
+
+## Screenshot (generated from an actual runner transcript)
+
+![gui_app](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg)
+
+Transcript + verifier: [`proof/all_apps_games_screenshots/gui_app.md`](../../proof/all_apps_games_screenshots/gui_app.md).
