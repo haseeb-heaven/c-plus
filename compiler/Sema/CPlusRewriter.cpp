@@ -1587,9 +1587,64 @@ private:
     return true;
   }
 
+  std::string fieldClass(const ClassInfo *owner, const std::string &name) const {
+    if (!owner)
+      return std::string();
+    for (const auto &range : owner->fields)
+      for (size_t k = range.first + 1; k <= range.second; ++k) {
+        if (ts[k].text != name)
+          continue;
+        size_t p = ts.prevSig(k == 0 ? 0 : k - 1);
+        if (p != kNPos && classNames_.count(ts[p].text))
+          return ts[p].text;
+      }
+    return std::string();
+  }
+
   bool tryEmitMethodCall(size_t i, const ClassInfo *selfClass = nullptr) {
     if (ts[i].kind != TokKind::Identifier)
       return false;
+
+    // Nested receiver: `w.c.inc()` or `this->c.inc()`. The receiver is a
+    // class-typed MEMBER of another object, so the whole chain `w.c` / 
+    // `self->c` must be passed as the hidden self argument. Handling this at
+    // the base identifier avoids emitting a stray `w.` before the rewrite.
+    {
+      size_t op = ts.nextSig(i);
+      bool arrow = ts.isPunct(op, "->");
+      if (ts.isPunct(op, ".") || arrow) {
+        size_t member = ts.nextSig(op);
+        auto mit = member < ts.size() ? varClasses_.find(ts[member].text)
+                                      : varClasses_.end();
+        std::string nestedClass =
+            mit != varClasses_.end() ? mit->second : std::string();
+        if (nestedClass.empty() && selfClass)
+          nestedClass = fieldClass(selfClass, ts[member].text);
+        if (!nestedClass.empty() && ts.isPunct(ts.nextSig(member), ".")) {
+          size_t method = ts.nextSig(ts.nextSig(member));
+          if (method < ts.size() && ts[method].kind == TokKind::Identifier) {
+            bool known = false;
+            for (const auto &c : classes_)
+              if (c.name == nestedClass && c.methodNames.count(ts[method].text))
+                known = true;
+            if (known || externalClassNames_.count(nestedClass)) {
+              size_t lp = ts.nextSig(method);
+              if (ts.isPunct(lp, "(")) {
+                emit(nestedClass + "_" + ts[method].text + "(");
+                // The hidden self argument is a pointer to the member object
+                // for both `w.c` and `self->c` receivers.
+                emit("&");
+                for (size_t k = i; k <= member; ++k)
+                  emitToken(k);
+                skipTo_ = lp;
+                changed_ = true;
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
 
     std::string className;
     auto it = varClasses_.find(ts[i].text);

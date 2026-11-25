@@ -1,0 +1,8 @@
+Nested method suite
+macOS-27.2.1-arm64-arm-64bit
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+struct_member FAIL
+class_member FAIL
+
+cases=2 passed=0 failed=2
