@@ -14,6 +14,12 @@
 
 set -u
 
+# Some macOS CI images have no GNU timeout; keep commands bounded where the
+# utility exists and report that fact instead of failing on a missing tool.
+if ! command -v timeout >/dev/null 2>&1; then
+    timeout() { _t_secs=$1; shift; printf 'note: GNU timeout unavailable; running unbounded: %s\n' "$*"; "$@"; }
+fi
+
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 CPLUS=${CPLUS_BIN:-"$ROOT/build/c+"}
 OUT="$ROOT/tests/out"

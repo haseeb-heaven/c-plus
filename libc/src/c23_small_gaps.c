@@ -100,6 +100,9 @@
 #endif
 
 #if CPLUS_C23_HAVE_MEMSET_EXPLICIT
+#if defined(__GLIBC__) && !defined(__USE_GNU)
+extern void *memset_explicit(void *s, int c, size_t n);
+#endif
 /* C23 memset_explicit(): host-owned anti-optimisation semantics. The NULL
  * guard only gives defined behaviour for an input that is UB for the ISO C
  * function; all valid inputs pass through unchanged. */
