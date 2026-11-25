@@ -158,23 +158,23 @@ if (game_entity_pos(&amp;w, slot, &amp;x, &amp;y) == 0) printf(&quot;(%d,%d)\n&q
 <pre><code>static inline stdlib_scratch_mark stdlib_scratch_enter(stdlib_datastack *ds)</code></pre>
 <pre><code>stdlib_scratch_enter((ds != 0 ? ds : 0));  /* call skeleton: see source for contracts */</code></pre></section>
 <section><h3 id='stdlib_scratch_op_alloc'>stdlib_scratch_op_alloc</h3>
-<p class='meta'>stdlib/datastack.hp:285 — Vtable adapters bound to the calling thread&#x27;s scratch stack.</p>
+<p class='meta'>stdlib/datastack.hp:291 — Vtable adapters bound to the calling thread&#x27;s scratch stack.</p>
 <pre><code>static inline void *stdlib_scratch_op_alloc(void *ctx, size_t size, size_t align)</code></pre>
 <pre><code>stdlib_scratch_op_alloc((ctx != 0 ? ctx : 0), 0u, 0u);  /* call skeleton: see source for contracts */</code></pre></section>
 <section><h3 id='stdlib_scratch_op_release'>stdlib_scratch_op_release</h3>
-<p class='meta'>stdlib/datastack.hp:297 — See source header for contract.</p>
+<p class='meta'>stdlib/datastack.hp:303 — See source header for contract.</p>
 <pre><code>static inline void stdlib_scratch_op_release(void *ctx, void *ptr, size_t size)</code></pre>
 <pre><code>stdlib_scratch_op_release((ctx != 0 ? ctx : 0), (ptr != 0 ? ptr : 0), 0u);  /* call skeleton: see source for contracts */</code></pre></section>
 <section><h3 id='stdlib_scratch_op_reset'>stdlib_scratch_op_reset</h3>
-<p class='meta'>stdlib/datastack.hp:302 — See source header for contract.</p>
+<p class='meta'>stdlib/datastack.hp:308 — See source header for contract.</p>
 <pre><code>static inline void stdlib_scratch_op_reset(void *ctx)</code></pre>
 <pre><code>stdlib_scratch_op_reset((ctx != 0 ? ctx : 0));  /* call skeleton: see source for contracts */</code></pre></section>
 <section><h3 id='drop'>drop</h3>
-<p class='meta'>stdlib/datastack.hp:326 — See source header for contract.</p>
+<p class='meta'>stdlib/datastack.hp:332 — See source header for contract.</p>
 <pre><code>void drop(void)</code></pre>
 <pre><code>drop();  /* call skeleton: see source for contracts */</code></pre></section>
 <section><h3 id='stdlib_scratch_allocator'>stdlib_scratch_allocator</h3>
-<p class='meta'>stdlib/datastack.hp:333 — See source header for contract.</p>
+<p class='meta'>stdlib/datastack.hp:339 — See source header for contract.</p>
 <pre><code>static inline stdlib_allocator stdlib_scratch_allocator(void)</code></pre>
 <pre><code>stdlib_allocator A = stdlib_scratch_allocator();
 vector v = vector_in(&amp;A);</code></pre></section>
