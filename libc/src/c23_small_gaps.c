@@ -100,7 +100,8 @@
 #endif
 
 #if CPLUS_C23_HAVE_MEMSET_EXPLICIT
-#if defined(__GLIBC__) && !defined(__USE_GNU)
+#if defined(__GLIBC__)
+/* Always declare: feature-test macros vary across glibc headers. */
 extern void *memset_explicit(void *s, int c, size_t n);
 #endif
 /* C23 memset_explicit(): host-owned anti-optimisation semantics. The NULL
