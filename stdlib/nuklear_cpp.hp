@@ -1,0 +1,67 @@
+/* C+ modern-syntax layer over vendored Nuklear (MIT): class, TRY/CATCH,
+ * structured logs, and Goose-style scratch memory. Additive; no upstream
+ * source edited. See docs/stdlib/GAME_GUI_UPSTREAM_ADOPTION.md. */
+#ifndef CPLUS_STD_NUKLEAR_CPP_HP
+#define CPLUS_STD_NUKLEAR_CPP_HP
+
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+#include "stdlib/datastack.hp"
+#include "stdlib/nuklear_adapt.hp"
+#include "stdlib/safe/safe_except.h"
+
+static const struct e4c_exception_type NUKLEAR_INIT_FAIL = {
+    (const struct e4c_exception_type *)0, "NuklearInitFail"};
+
+/* One UI frame: every widget allocation lives on the VM data stack. */
+class NuklearScratchFrame {
+    stdlib_datastack *frame_ds;
+    unsigned char *frame_saved_top;
+    uint64_t frame_gen;
+    struct nk_allocator frame_alloc;
+    int frame_ok;
+
+    NuklearScratchFrame(stdlib_datastack *ds) {
+        this->frame_ds = ds;
+        this->frame_saved_top = (ds != (stdlib_datastack *)0) ? (*ds).top : (unsigned char *)0;
+        nuklear_scratch_allocator(&this->frame_alloc, ds);
+        this->frame_ok = (ds != (stdlib_datastack *)0) ? 1 : 0;
+        cplus_log(CPLUS_LOG_INFO, "NuklearScratchFrame enter ok=%d", this->frame_ok);
+    }
+
+    /* Returns 1 when the context was initialized, 0 after a logged refusal. */
+    int init(struct nk_context *ctx, const struct nk_user_font *font) {
+        TRY {
+            if (this->frame_ok == 0 || ctx == (struct nk_context *)0)
+                THROW(NUKLEAR_INIT_FAIL, "null frame or context");
+            if (nk_init(ctx, &this->frame_alloc, font) == 0)
+                THROW(NUKLEAR_INIT_FAIL, "nk_init refused scratch allocator");
+            cplus_log(CPLUS_LOG_INFO, "NuklearScratchFrame nk_init ok");
+            return 1;
+        }
+        CATCH (NUKLEAR_INIT_FAIL) {
+            cplus_log(CPLUS_LOG_WARN, "NuklearScratchFrame refused: %s",
+                      e4c_get_exception()->message);
+            this->frame_ok = 0;
+        }
+        CATCH_ALL {
+            cplus_log(CPLUS_LOG_ERROR, "NuklearScratchFrame unexpected failure");
+            this->frame_ok = 0;
+        }
+        return 0;
+    }
+
+    int ok(void) { return this->frame_ok; }
+
+    void drop(void) {
+        /* one store restores the data stack (generation checked) */
+        if (this->frame_ds != (stdlib_datastack *)0 &&
+            (*this->frame_ds).generation == this->frame_gen &&
+            this->frame_saved_top != (unsigned char *)0)
+            this->frame_ds->top = this->frame_saved_top;
+        cplus_log(CPLUS_LOG_INFO, "NuklearScratchFrame rewound");
+    }
+};
+
+#endif /* CPLUS_STD_NUKLEAR_CPP_HP */
