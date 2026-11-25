@@ -310,13 +310,19 @@ private:
       errorAt("ownership marker outside a function scope", toks_[i]);
       return;
     }
-    if (!v.managed && v.capture.empty())
+    if (v.capture.empty())
       v.capture = "__cplus_raii_" + std::to_string(nextDeclId_);
     registerOwned(v);
-    if (!v.managed) {
-      // Capture pointer so cleanup is stable under shadowing.
+    {
+      // Capture address so cleanup is stable under shadowing.  For managed
+      // pointers capture &var with __typeof__ so nulling is type-correct.
       size_t insertAt = toks_[i].offset + toks_[i].text.size();
-      std::string cap = " " + v.type + " *" + v.capture + " = &" + v.name + ";";
+      std::string cap;
+      if (v.managed)
+        cap = " __typeof__(&" + v.name + ") " + v.capture + " = &" + v.name +
+              ";";
+      else
+        cap = " " + v.type + " *" + v.capture + " = &" + v.name + ";";
       edits_.push_back(Edit{insertAt, 0, cap, seq_++});
     }
     edits_.push_back(

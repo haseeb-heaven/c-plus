@@ -10,7 +10,7 @@ D=tests/raii_shadowing
 OUT=$D/out
 mkdir -p "$OUT"
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-CASES="control_nonowning repro_shadow_basic repro_shadow_deep repro_shadow_branch repro_shadow_loop repro_shadow_return repro_shadow_move repro_shadow_partial repro_shadow_struct"
+CASES="control_nonowning repro_shadow_basic repro_shadow_deep repro_shadow_branch repro_shadow_loop repro_shadow_return repro_shadow_move repro_shadow_partial repro_shadow_struct repro_shadow_managed repro_shadow_managed_return"
 pass=0; fail=0
 
 for c in $CASES; do
