@@ -893,7 +893,7 @@ static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) 
     // Clang expands @response files itself, after the driver's gates, so a
     // token like `@rsp` can hide `-include evil.h` from every flag check.
     // Never allow the @ spelling in STRICT.
-    if (extra[i].starts_with('@'))
+    if (extra[i].starts_with("@"))
       return false;
     // Two-token forms produced by Main.cpp (`-I dir`, `-D NAME`, ...) and by
     // `-- -isysroot dir`. Consume the value so a path is not mistaken for a
@@ -1237,7 +1237,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // spelling explicitly with a clear diagnostic before the general allow-list.
   if (strictSafe) {
     auto rejectResponseFile = [&](llvm::StringRef a) {
-      if (a.starts_with('@')) {
+      if (a.starts_with("@")) {
         errs << "error: @response files are not allowed in STRICT Safe mode: "
                 "clang expands them after the C+ safety gates; pass flags "
                 "directly instead\n";

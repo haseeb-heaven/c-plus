@@ -43,6 +43,10 @@ build() {
   # The modern allocator demo binds the thread-local DataStack symbol from
   # the hardened libc archive; other demos need no extra link input.
   if [ "$name" = "modern_allocators" ]; then
+    # CI may run demos before the hardened archive exists.
+    if [ ! -f "$ROOT/build/libc/libcplus_hardened.a" ]; then
+      timeout 180 sh "$ROOT/tests/libc/build_libc.sh" >"$OUT/libc_build.log" 2>&1
+    fi
     "$CPLUS" build --no-werror "$src" --default --sanitize=none -I"$ROOT" -o "$OUT/$name" \
       -- "$ROOT/build/libc/libcplus_hardened.a" \
       >"$OUT/$name.build.log" 2>&1
