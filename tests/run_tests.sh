@@ -109,6 +109,8 @@ for src in "$ROOT"/tests/compile_fail/*.c "$ROOT"/tests/compile_fail/*.cp; do
          timeout 10 "$OUT/$name.lowered" >>"$OUT/$name.runlog" 2>&1; then
         pass "$name (documented known gap: VLA program compiles and runs; no compile-time rejection)"
       else
+        tail -12 "$OUT/$name.log" 2>/dev/null || true
+        tail -12 "$OUT/$name.runlog" 2>/dev/null || true
         fail "$name" "lowered VLA program did not run; see $OUT/$name.runlog"
       fi
     else
