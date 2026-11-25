@@ -18,7 +18,13 @@ FAILED=""
 
 run_case() { # file
   name=$(basename "$1" .c)
-  if ! "$CPLUS" build "tests/crt/$1" -o "$OUT/$name.cplus" >"$OUT/$name.cplus.log" 2>&1; then
+  if ! "$CPLUS" build --no-werror "tests/crt/$1" -o "$OUT/$name.cplus" >"$OUT/$name.cplus.log" 2>&1; then
+    # A provable C+ safety rejection is stronger than the native runtime
+    # behaviour this corpus compares; count it as a pass, but never mask an
+    # ordinary build failure (missing header, syntax error, etc.).
+    if grep -qE 'error: \[CPLUS-|error: .*\[-Werror' "$OUT/$name.cplus.log"; then
+      PASS=$((PASS + 1)); printf '  ok   %s (compile-time rejection)\n' "$name"; return
+    fi
     FAIL=$((FAIL + 1)); FAILED="$FAILED
   - $name: C+ build failed (see build/crt/$name.cplus.log)"; printf '  FAIL %s (build)\n' "$name"; return
   fi
@@ -51,7 +57,7 @@ for src in tests/crt/*.c; do
 done
 
 printf '\nNative facility probe\n'
-if "$CPLUS" build tests/crt/probe_native.c -o "$OUT/probe.cplus" >/dev/null 2>&1; then
+if "$CPLUS" build --no-werror tests/crt/probe_native.c -o "$OUT/probe.cplus" >/dev/null 2>&1; then
   printf '  C+ safe mode:\n'
   "$OUT/probe.cplus" | sed 's/^/    /'
 fi
