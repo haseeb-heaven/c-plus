@@ -26,8 +26,13 @@ for t in tests/libc/test_*.c; do
   if command -v timeout >/dev/null 2>&1; then
     # Large deterministic corpora can exceed 180s on a loaded CI runner
     # (observed: 760-case uninit corpus hit the 180s bound on ubuntu-latest).
+    # 2026-11-24: PR CI run 45381886516 (linux-crt) hit the former 600s bound
+    # on test_corpus_uninit.c after every prior test passed (exit 124).  The
+    # local macOS run of the same binary finishes in 0.34s.  Keep this corpus
+    # on the same 180s bound as its peers so a Linux hang is reported as a
+    # bounded FAIL with diagnostics rather than consuming 10 minutes of CI.
     LIMIT=60
-    case "$t" in *test_corpus_uninit*) LIMIT=600 ;; *test_corpus_*) LIMIT=180 ;; esac
+    case "$t" in *test_corpus_*) LIMIT=180 ;; esac
     RUN_CMD="timeout $LIMIT $b"
   fi
   # safecrt archive before libc+ so undefined refs resolve in one pass on GNU ld.
