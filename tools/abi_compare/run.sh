@@ -168,8 +168,12 @@ case "$mode" in
         cmproot="$OUT/compare"
         capture_into "$cmproot" || exit 2
 
-        filter_records "$ignore" < "$baseline"    > "$cmproot/baseline.filtered"
-        filter_records "$ignore" < "$cmproot/fingerprint.txt" > "$cmproot/current.filtered"
+        filter_records "$ignore" < "$baseline"    > "$cmproot/baseline.raw"
+        filter_records "$ignore" < "$cmproot/fingerprint.txt" > "$cmproot/current.raw"
+        # Canonicalize order for stable comparison (older baselines may have
+        # had different sort order for the same record set).
+        LC_ALL=C sort "$cmproot/baseline.raw" > "$cmproot/baseline.filtered"
+        LC_ALL=C sort "$cmproot/current.raw"  > "$cmproot/current.filtered"
 
         if $DIFF -u "$cmproot/baseline.filtered" "$cmproot/current.filtered" \
               > "$cmproot/diff.txt" 2>&1; then

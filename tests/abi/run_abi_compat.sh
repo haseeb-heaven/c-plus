@@ -129,7 +129,8 @@ step T3a_cplus_lib_compile - 180 ./build/c+ build --sanitize=none \
     -- "-I$ROOT/libc/install-include"
 step T3a_cplus_lib_archive - 60 /usr/bin/ar rcs \
     "$OUT/libabi_compat_cplus.a" "$OUT/abi_compat_cplus_lib.o"
-step T3a_c_driver_compile - 180 "$CC" -O1 -std=c99 -Wall -Wextra -pedantic $INC \
+step T3a_c_driver_compile - 180 "$CC" -O1 -std=c99 -Wall -Wextra -pedantic \
+    -fsanitize=undefined -fno-sanitize-recover=all $INC \
     tests/abi/abi_compat_c_driver.c "$OUT/libabi_compat_cplus.a" \
     build/libc/libcplus_hardened.a -lm -pthread -o "$OUT/c_driver"
 step T3a_c_driver_run "$OUT/c_driver.out" 60 "$OUT/c_driver"
