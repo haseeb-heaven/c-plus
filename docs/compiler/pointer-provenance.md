@@ -28,8 +28,25 @@ owned one.
   extent is guarded by `cplus_check_ptr_formation`; one-past formation is
   legal, dereference is not.
 - Cast: a pointer-to-pointer cast preserves provenance; integer round-trips
-  are accepted only in narrow bitwise forms. Arbitrary provenance laundering
-  is not claimed.
+  carry the source allocation's byte extent only when the integer is derived
+  from a tracked pointer (`(uintptr_t)p`, tagged/masked forms, or a tracked
+  integer variable). Arbitrary provenance laundering is not claimed.
+- Member lvalues: a pointer stored into a struct/union field inherits the
+  source allocation's identity and extent. The fact is keyed by the canonical
+  `(base VarDecl*, FieldDecl*)` pair, never by the field's spelling, so
+  shadowing cannot alias two different objects. Nested fields (`s.t.p`) and
+  a pointer formed by a constant offset from a field (`s.p + 2`) keep the
+  remaining addressable extent.
+- Conditional aliases: `q = c ? a : b` inherits an extent only when both arms
+  resolve to the same allocation and extent; divergent arms stay unknown and
+  a later bounded operation fails closed in STRICT.
+- Identity helpers: a call to a helper summarized by `returnedParam_` (for
+  example `return (T *)(void *)p;`) passes the argument's provenance through
+  the call. This is the existing interprocedural summary, not a name match.
+- Union punning: writing an integer into one union member and reading a
+  pointer out of another marks the pointer's provenance as lost. STRICT
+  rejects a later subscript/dereference; the value is never treated as an
+  opaque ABI pointer just because its extent is unavailable.
 
 ## Unknown-provenance policy
 
@@ -49,10 +66,20 @@ owned one.
 
 ## Known limitations
 
-- Runtime-indexed elements, `int **` and struct pointer fields lose extents;
-  those cases are `asan_only` in `tests/compiler/runtime_memory_safety/`.
+- Runtime-indexed elements and `int **` still lose extents; those cases are
+  `asan_only` in `tests/compiler/runtime_memory_safety/`. Constant-index
+  struct/union pointer fields are now tracked by declaration identity.
 - Integer-to-pointer casts with arbitrary bit manipulation are not validated;
-  `VisitCastExpr` accepts a conservative bitwise round-trip shape.
+  `VisitCastExpr` accepts a conservative bitwise round-trip shape. A cast back
+  to a pointer now inherits the source extent, so an out-of-bounds index is
+  rejected even when the provenance check itself accepted the cast.
+- Callbacks and deferred frees across translation units are still outside the
+  per-TU proof. Direct interprocedural frees and identity-returning helpers
+  are covered by existing effect summaries and were left unchanged.
+
+Evidence for the new propagation rules:
+`tests/compiler/pointer_provenance/results/summary.txt` (14 cases: 9 negative,
+5 positive, exact commands and outputs).
 - There is no generation token, so the 4096-entry recent-free cache can
   misattribute a stale alias after address reuse.
 - No cross-TU or whole-program provenance; no race-safe provenance under

@@ -1,0 +1,319 @@
+{
+  "generated": "2026-11-25T05:32:14.358667+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "pos_shadowed_array_scope",
+      "status": "PASS",
+      "expected": "2\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/pos_shadowed_array_scope.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/pos_shadowed_array_scope.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/pos_shadowed_array_scope.bin"
+          ],
+          "rc": 0,
+          "stdout": "2\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_shadowed_array_inner",
+      "status": "PASS",
+      "expected": "outside the bounds",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_shadowed_array_inner.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_shadowed_array_inner.c:2:48: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[8]={0}; { int a[4]={0}; a[9]=1; } printf(\"%d\\n\",a[0]); return 0; }\n                                                 ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_shadowed_array_inner.c:2:47: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[8]={0}; { int a[4]={0}; a[9]=1; } printf(\"%d\\n\",a[0]); return 0; }\n                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_shadowed_array_inner.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_shadowed_array_inner.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_shadowed_array_inner.c:2:48: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[8]={0}; { int a[4]={0}; a[9]=1; } printf(\"%d\\n\",a[0]); return 0; }\n                                                 ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_shadowed_array_inner.c:2:47: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[8]={0}; { int a[4]={0}; a[9]=1; } printf(\"%d\\n\",a[0]); return 0; }\n                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_typedef_array",
+      "status": "PASS",
+      "expected": "outside the bounds",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_typedef_array.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_typedef_array.c:3:29: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ I a[4]={0}; a[9]=1; printf(\"%d\\n\",a[9]); return 0; }\n                              ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_typedef_array.c:3:51: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ I a[4]={0}; a[9]=1; printf(\"%d\\n\",a[9]); return 0; }\n                                                    ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_typedef_array.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_typedef_array.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_typedef_array.c:3:29: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ I a[4]={0}; a[9]=1; printf(\"%d\\n\",a[9]); return 0; }\n                              ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_typedef_array.c:3:51: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ I a[4]={0}; a[9]=1; printf(\"%d\\n\",a[9]); return 0; }\n                                                    ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_macro_index",
+      "status": "PASS",
+      "expected": "outside the bounds",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_macro_index.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_macro_index.c:3:31: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={0}; a[IDX]=1; printf(\"%d\\n\",a[IDX]); return 0; }\n                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_macro_index.c:3:55: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={0}; a[IDX]=1; printf(\"%d\\n\",a[IDX]); return 0; }\n                                                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_macro_index.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_macro_index.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_macro_index.c:3:31: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={0}; a[IDX]=1; printf(\"%d\\n\",a[IDX]); return 0; }\n                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_macro_index.c:3:55: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={0}; a[IDX]=1; printf(\"%d\\n\",a[IDX]); return 0; }\n                                                        ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_cast_alias",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_cast_alias.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_cast_alias.c:3:65: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=(int*)malloc(16); int *q=(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                  ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_cast_alias.c:3:87: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=(int*)malloc(16); int *q=(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                                        ^\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_cast_alias.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_cast_alias.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_cast_alias.c:3:65: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=(int*)malloc(16); int *q=(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                  ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_cast_alias.c:3:87: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=(int*)malloc(16); int *q=(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                                        ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_function_pointer_call",
+      "status": "PASS",
+      "expected": "unverifiable extent",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_function_pointer_call.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_function_pointer_call.c:2:31: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void wr(int *p,int n){ p[n]=1; printf(\"%d\\n\",p[n]); }\n                                ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_function_pointer_call.c:2:53: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void wr(int *p,int n){ p[n]=1; printf(\"%d\\n\",p[n]); }\n                                                      ^\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_function_pointer_call.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_function_pointer_call.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_function_pointer_call.c:2:31: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void wr(int *p,int n){ p[n]=1; printf(\"%d\\n\",p[n]); }\n                                ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_function_pointer_call.c:2:53: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void wr(int *p,int n){ p[n]=1; printf(\"%d\\n\",p[n]); }\n                                                      ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_conjunctive_guard",
+      "status": "PASS",
+      "expected": "unverifiable extent",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_conjunctive_guard.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_conjunctive_guard.c:2:60: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void w(int *p,int i,int ok){ if(i>=4 && ok) return; p[i]=1; printf(\"%d\\n\",p[i]); }\n                                                             ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_conjunctive_guard.c:2:82: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void w(int *p,int i,int ok){ if(i>=4 && ok) return; p[i]=1; printf(\"%d\\n\",p[i]); }\n                                                                                   ^\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_conjunctive_guard.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_conjunctive_guard.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_conjunctive_guard.c:2:60: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void w(int *p,int i,int ok){ if(i>=4 && ok) return; p[i]=1; printf(\"%d\\n\",p[i]); }\n                                                             ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_conjunctive_guard.c:2:82: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n  static void w(int *p,int i,int ok){ if(i>=4 && ok) return; p[i]=1; printf(\"%d\\n\",p[i]); }\n                                                                                   ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_realloc_struct_field",
+      "status": "PASS",
+      "expected": "realloc",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c:4:49: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n  int main(void){ struct S s; s.p=malloc(16); s.p=realloc(s.p,64); s.p[20]=1; printf(\"%d\\n\",s.p[20]); free(s.p); return 0; }\n                                                  ^~~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c:4:66: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 20 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=malloc(16); s.p=realloc(s.p,64); s.p[20]=1; printf(\"%d\\n\",s.p[20]); free(s.p); return 0; }\n                                                                   ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c:4:91: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 20 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=malloc(16); s.p=realloc(s.p,64); s.p[20]=1; printf(\"%d\\n\",s.p[20]); free(s.p); return 0; }\n                                                                                            ^~~\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_realloc_struct_field.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c:4:49: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n  int main(void){ struct S s; s.p=malloc(16); s.p=realloc(s.p,64); s.p[20]=1; printf(\"%d\\n\",s.p[20]); free(s.p); return 0; }\n                                                  ^~~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c:4:66: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 20 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=malloc(16); s.p=realloc(s.p,64); s.p[20]=1; printf(\"%d\\n\",s.p[20]); free(s.p); return 0; }\n                                                                   ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_realloc_struct_field.c:4:91: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 20 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=malloc(16); s.p=realloc(s.p,64); s.p[20]=1; printf(\"%d\\n\",s.p[20]); free(s.p); return 0; }\n                                                                                            ^~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_template_source",
+      "status": "PASS",
+      "expected": "out of bounds",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c:2:42: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] pointer index 9 from call site is out of bounds of 'p' of extent 4\n  template<class T> void put(T *p,int i){ p[i]=1; }\n                                           ^\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c:3:56: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={0}; put(a,9); printf(\"%d\\n\",a[9]); return 0; }\n                                                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c: error: [CPLUS-ANALYSIS] cannot build the C+ safety AST for this translation unit; STRICT would silently skip all safety analysis\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/results/neg_template_source.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c:2:42: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] pointer index 9 from call site is out of bounds of 'p' of extent 4\n  template<class T> void put(T *p,int i){ p[i]=1; }\n                                           ^\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c:3:56: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={0}; put(a,9); printf(\"%d\\n\",a[9]); return 0; }\n                                                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/ast_identity/cases/neg_template_source.c: error: [CPLUS-ANALYSIS] cannot build the C+ safety AST for this translation unit; STRICT would silently skip all safety analysis\n",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

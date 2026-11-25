@@ -1,0 +1,478 @@
+{
+  "generated": "2026-11-25T05:32:07.282081+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "neg_struct_field",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c:4:57: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); s.p[5]=1; printf(\"%d\\n\",s.p[5]); cplus_release(s.p); return 0; }\n                                                          ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c:4:81: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); s.p[5]=1; printf(\"%d\\n\",s.p[5]); cplus_release(s.p); return 0; }\n                                                                                  ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_struct_field.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c:4:57: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); s.p[5]=1; printf(\"%d\\n\",s.p[5]); cplus_release(s.p); return 0; }\n                                                          ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c:4:81: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 's.p'' of 16 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); s.p[5]=1; printf(\"%d\\n\",s.p[5]); cplus_release(s.p); return 0; }\n                                                                                  ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_struct_field.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_nested_struct_field",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c:4:69: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 'o.i.p'' of 16 bytes\n  int main(void){ struct O o; int *p=cplus_new_array(int,4); o.i.p=p; o.i.p[5]=1; printf(\"%d\\n\",o.i.p[5]); cplus_release(p); return 0; }\n                                                                      ^~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c:4:95: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 'o.i.p'' of 16 bytes\n  int main(void){ struct O o; int *p=cplus_new_array(int,4); o.i.p=p; o.i.p[5]=1; printf(\"%d\\n\",o.i.p[5]); cplus_release(p); return 0; }\n                                                                                                ^~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_nested_struct_field.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c:4:69: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 'o.i.p'' of 16 bytes\n  int main(void){ struct O o; int *p=cplus_new_array(int,4); o.i.p=p; o.i.p[5]=1; printf(\"%d\\n\",o.i.p[5]); cplus_release(p); return 0; }\n                                                                      ^~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c:4:95: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'field 'o.i.p'' of 16 bytes\n  int main(void){ struct O o; int *p=cplus_new_array(int,4); o.i.p=p; o.i.p[5]=1; printf(\"%d\\n\",o.i.p[5]); cplus_release(p); return 0; }\n                                                                                                ^~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_nested_struct_field.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_field_plus_arith",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c:4:71: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 3 exceeds heap allocation 'q' of 8 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); int *q=s.p+2; q[3]=1; printf(\"%d\\n\",q[3]); cplus_release(s.p); return 0; }\n                                                                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c:4:93: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 3 exceeds heap allocation 'q' of 8 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); int *q=s.p+2; q[3]=1; printf(\"%d\\n\",q[3]); cplus_release(s.p); return 0; }\n                                                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_field_plus_arith.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c:4:71: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 3 exceeds heap allocation 'q' of 8 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); int *q=s.p+2; q[3]=1; printf(\"%d\\n\",q[3]); cplus_release(s.p); return 0; }\n                                                                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c:4:93: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 3 exceeds heap allocation 'q' of 8 bytes\n  int main(void){ struct S s; s.p=cplus_new_array(int,4); int *q=s.p+2; q[3]=1; printf(\"%d\\n\",q[3]); cplus_release(s.p); return 0; }\n                                                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_field_plus_arith.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_union_integer_pun",
+      "status": "PASS",
+      "expected": "provenance lost",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_pun.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_pun.c:5:55: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ union U x; x.u=(uintptr_t)malloc(16); x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(x.p); return 0; }\n                                                        ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_pun.c:5:79: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ union U x; x.u=(uintptr_t)malloc(16); x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(x.p); return 0; }\n                                                                                ^~~\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_pun.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_union_integer_pun.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_pun.c:5:55: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ union U x; x.u=(uintptr_t)malloc(16); x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(x.p); return 0; }\n                                                        ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_pun.c:5:79: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ union U x; x.u=(uintptr_t)malloc(16); x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(x.p); return 0; }\n                                                                                ^~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_union_integer_var_pun",
+      "status": "PASS",
+      "expected": "provenance lost",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_var_pun.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_var_pun.c:5:65: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ int *p=malloc(16); union U x; x.u=(uintptr_t)p; x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(p); return 0; }\n                                                                  ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_var_pun.c:5:89: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ int *p=malloc(16); union U x; x.u=(uintptr_t)p; x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(p); return 0; }\n                                                                                          ^~~\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_var_pun.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_union_integer_var_pun.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_var_pun.c:5:65: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ int *p=malloc(16); union U x; x.u=(uintptr_t)p; x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(p); return 0; }\n                                                                  ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_union_integer_var_pun.c:5:89: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ int *p=malloc(16); union U x; x.u=(uintptr_t)p; x.p[5]=1; printf(\"%d\\n\",x.p[5]); free(p); return 0; }\n                                                                                          ^~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_conditional_alias",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c:3:71: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=0; int *q=f?p:p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c:3:93: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=0; int *q=f?p:p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_conditional_alias.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c:3:71: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=0; int *q=f?p:p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c:3:93: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=0; int *q=f?p:p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                              ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_conditional_cast_alias",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c:3:97: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=1; int *q=f?(int*)(void*)p:(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                                  ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c:3:119: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=1; int *q=f?(int*)(void*)p:(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                                                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_conditional_cast_alias.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c:3:97: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=1; int *q=f?(int*)(void*)p:(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                                  ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c:3:119: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int f=1; int *q=f?(int*)(void*)p:(int*)(void*)p; q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                                                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_conditional_cast_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_integer_roundtrip",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_integer_roundtrip.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_integer_roundtrip.c:4:78: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=malloc(16); uintptr_t u=(uintptr_t)p; int *q=(int*)u; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                               ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_integer_roundtrip.c:4:100: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=malloc(16); uintptr_t u=(uintptr_t)p; int *q=(int*)u; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                                                     ^\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_integer_roundtrip.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_integer_roundtrip.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_integer_roundtrip.c:4:78: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=malloc(16); uintptr_t u=(uintptr_t)p; int *q=(int*)u; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                               ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_integer_roundtrip.c:4:100: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=malloc(16); uintptr_t u=(uintptr_t)p; int *q=(int*)u; q[5]=1; printf(\"%d\\n\",q[5]); free(p); return 0; }\n                                                                                                     ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_helper_cast_return",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c:4:68: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int *q=identity(p); q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c:4:90: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int *q=identity(p); q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                           ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/neg_helper_cast_return.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c:4:68: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int *q=identity(p); q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c:4:90: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds heap allocation 'q' of 16 bytes\n  int main(void){ int *p=cplus_new_array(int,4); int *q=identity(p); q[5]=1; printf(\"%d\\n\",q[5]); cplus_release(p); return 0; }\n                                                                                           ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/neg_helper_cast_return.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_struct_field_in_bounds",
+      "status": "PASS",
+      "expected": "7\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_struct_field_in_bounds.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_struct_field_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_struct_field_in_bounds.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_struct_field_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_conditional_in_bounds",
+      "status": "PASS",
+      "expected": "7\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_conditional_in_bounds.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_conditional_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_conditional_in_bounds.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_conditional_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_integer_roundtrip_in_bounds",
+      "status": "PASS",
+      "expected": "7\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_integer_roundtrip_in_bounds.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_integer_roundtrip_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_integer_roundtrip_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_helper_in_bounds",
+      "status": "PASS",
+      "expected": "7\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_helper_in_bounds.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_helper_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_helper_in_bounds.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_array', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_helper_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_malloc_cast_in_bounds",
+      "status": "PASS",
+      "expected": "7\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/cases/pos_malloc_cast_in_bounds.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_malloc_cast_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/pointer_provenance/results/pos_malloc_cast_in_bounds.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

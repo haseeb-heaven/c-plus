@@ -24,6 +24,7 @@
 
 #include <cstdlib>
 #include <climits>
+#include <cstdint>
 #include <cmath>
 #include <cmath>
 #include <map>
@@ -1159,6 +1160,11 @@ public:
     bool zeroInit = false; // calloc-style zero initialisation
     const VarDecl *decl = nullptr;
     ExtentOrigin origin = ExtentOrigin::Unknown;
+    // Set when a pointer is known to originate from a tracked object but an
+    // intervening operation (union type punning, for example) destroyed the
+    // addressable extent. STRICT fails closed on a dereference of such a
+    // value instead of treating it as an opaque ABI pointer.
+    bool provenanceLost = false;
   };
 
   /// Key used by constLocals_ for a scalar local or a struct field constant.
@@ -2550,12 +2556,14 @@ public:
   void recordHeapAllocation(VarDecl *vd) {
     if (!vd || !vd->getType()->isPointerType() || !vd->getInit())
       return;
-    const Expr *init = vd->getInit()->IgnoreParenCasts();
+    const Expr *init = stripStmtExpr(vd->getInit());
     const auto *call = dyn_cast<CallExpr>(init);
     if (!call || !call->getDirectCallee() || call->getNumArgs() < 1)
       return;
     std::string callee = call->getDirectCallee()->getNameAsString();
-    if (callee != "malloc" && callee != "calloc" && !isReallocName(callee))
+    if (callee != "malloc" && callee != "calloc" && !isReallocName(callee) &&
+        callee != "cplus_alloc" && callee != "cplus_zalloc" &&
+        callee != "cplus_alloc_array")
       return;
     if (report_ && isReallocName(callee))
       reallocResultVars_.insert(vd->getNameAsString());
@@ -2580,6 +2588,7 @@ public:
         st.decl = vd;
         st.origin = ExtentOrigin::Heap;
         heapAllocs_[vd->getNameAsString()] = st;
+        identityAllocs_[identityKeyForDecl(vd)] = st;
       }
       return;
     }
@@ -2617,8 +2626,10 @@ public:
     if (!evalByteCount(arg, bytes)) {
         return;
     }
-    // calloc(count, size) allocates count * size bytes, not just count.
-    if (callee == "calloc" && call->getNumArgs() >= 2) {
+    // calloc(count, size) and the lowered cplus_alloc_array(count, sizeof(T))
+    // allocate count * size bytes, not just count.
+    if ((callee == "calloc" || callee == "cplus_alloc_array") &&
+        call->getNumArgs() >= 2) {
       long long elem = 1;
       if (evalByteCount(call->getArg(1)->IgnoreParenImpCasts(), elem) &&
           elem > 0 && bytes <= LLONG_MAX / elem)
@@ -2626,10 +2637,14 @@ public:
     }
     HeapAllocState st;
     st.bytes = bytes;
-    st.zeroInit = (callee == "calloc");
+    st.zeroInit = (callee == "calloc" || callee == "cplus_zalloc");
     st.decl = vd;
     st.origin = ExtentOrigin::Heap;
     heapAllocs_[vd->getNameAsString()] = st;
+    // Identity view: a shadowed declaration with the same spelling must not
+    // inherit the other object's extent. The name-keyed entry above still
+    // wins for the declaration it actually belongs to (latest assignment).
+    identityAllocs_[identityKeyForDecl(vd)] = st;
   }
 
   /// Materialise a stable view of an argument-slot extent for the duration
@@ -2698,7 +2713,25 @@ public:
   const HeapAllocState *heapStateOf(const Expr *e) const {
     if (!e)
       return nullptr;
+    e = stripStmtExpr(e);
     const Expr *x = e->IgnoreParenCasts();
+    std::string identity = identityKey(e);
+    if (!identity.empty()) {
+      auto iit = identityAllocs_.find(identity);
+      if (iit != identityAllocs_.end()) {
+        if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
+            // The name-keyed fact is updated on reassignment; prefer it only
+            // when it still belongs to this exact declaration. Otherwise a
+            // shadowed binding would borrow the other object's new extent.
+            auto nit = heapAllocs_.find(vd->getNameAsString());
+            if (nit != heapAllocs_.end() &&
+                nit->second.decl == vd->getCanonicalDecl())
+              return &nit->second;
+          }
+        return &iit->second;
+      }
+    }
     if (const auto *call = dyn_cast<CallExpr>(x)) {
       auto it = callReturnExtent_.find(call->getBeginLoc().getRawEncoding());
       if (it != callReturnExtent_.end()) {
@@ -2707,6 +2740,22 @@ public:
         cached.bytes = it->second;
         cached.decl = nullptr;
         return &cached;
+      }
+      // Identity helpers (`return (T *)(void *)p;`) must not launder the
+      // argument's provenance. returnedParam_ already summarizes such helpers
+      // through casts; reuse it instead of adding a new name-based rule.
+      for (const auto &n : calleeNames(call, call->getDirectCallee())) {
+        auto rp = returnedParam_.find(n);
+        if (rp == returnedParam_.end() || rp->second >= call->getNumArgs())
+          continue;
+        const Expr *arg = stripStmtExpr(call->getArg(rp->second));
+        if (const HeapAllocState *st = heapStateOf(arg))
+          return st;
+        if (const auto *ref = dyn_cast<DeclRefExpr>(
+                arg->IgnoreParenImpCasts()))
+          if (const auto *pvd = dyn_cast<VarDecl>(ref->getDecl()))
+            if (const HeapAllocState *st = heapStateOfVar(pvd))
+              return st;
       }
     }
     // An explicit cast must not silently erase a proven extent.
@@ -2726,6 +2775,54 @@ public:
     // The extent may be bound to an argument slot the pointer merely reaches
     // through (`*pp`, `b->p`) rather than to a variable name.
     return slotExtentOf(e);
+  }
+
+  /// Extent of a pointer variable's initializer, including the GNU statement
+  /// expression produced by `cplus_new_array`. Used to carry provenance into
+  /// conditional aliases and integer round-trips without inventing extents.
+  const HeapAllocState *heapStateOfVar(const VarDecl *vd) const {
+    if (!vd)
+      return nullptr;
+    auto it = heapAllocs_.find(vd->getNameAsString());
+    if (it != heapAllocs_.end() && it->second.bytes > 0)
+      return &it->second;
+    if (!vd->getInit())
+      return nullptr;
+    const Expr *e = stripStmtExpr(vd->getInit());
+    while (const auto *ec = dyn_cast<ExplicitCastExpr>(e))
+      e = stripStmtExpr(ec->getSubExpr());
+    const auto *call = dyn_cast<CallExpr>(e);
+    if (!call || !call->getDirectCallee())
+      return nullptr;
+    long long bytes = -1;
+    for (const auto &n : calleeNames(call, call->getDirectCallee())) {
+      if (n == "cplus_alloc_array" && call->getNumArgs() >= 2) {
+        long long count = -1, size = -1;
+        if (evalByteCount(call->getArg(0), count) &&
+            evalByteCount(call->getArg(1), size) && count > 0 && size > 0 &&
+            count <= LLONG_MAX / size)
+          bytes = count * size;
+      } else if ((n == "malloc" || n == "calloc" || n == "cplus_alloc" ||
+                  n == "cplus_zalloc") &&
+                 call->getNumArgs() >= 1) {
+        if (evalByteCount(call->getArg(0), bytes) && bytes > 0 &&
+            (n == "calloc" || n == "cplus_zalloc") && call->getNumArgs() >= 2) {
+          long long elem = 1;
+          if (evalByteCount(call->getArg(1), elem) && elem > 0 &&
+              bytes <= LLONG_MAX / elem)
+            bytes *= elem;
+        }
+      }
+      if (bytes > 0)
+        break;
+    }
+    if (bytes <= 0)
+      return nullptr;
+    static thread_local HeapAllocState cached;
+    cached.bytes = bytes;
+    cached.origin = ExtentOrigin::Heap;
+    cached.decl = vd;
+    return &cached;
   }
 
   /// Resolve a subscript/offset index to a compile-time value.  The worst
@@ -2845,6 +2942,11 @@ public:
     const HeapAllocState *st = heapStateOf(sub->getBase());
     if (!st)
       return;
+    if (st->provenanceLost) {
+      warnAt(loc, "pointer provenance lost before this subscript; the "
+                  "addressable extent cannot be proven");
+      return;
+    }
     long long idx = 0;
     if (!evalIndexValue(sub->getIdx(), idx))
       return;
@@ -2961,6 +3063,11 @@ public:
     }
     const HeapAllocState *st = heapStateOf(sub);
     if (st) {
+      if (st->provenanceLost) {
+        warnAt(loc, "pointer provenance lost before this dereference; the "
+                    "addressable extent cannot be proven");
+        return;
+      }
       std::string name = varNameOf(sub);
       if (st->bytes == 0) {
         report(loc, std::string("dereference of zero-size ") +
@@ -3263,6 +3370,60 @@ public:
     if (const auto *ref = dyn_cast<DeclRefExpr>(e))
       if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
         return vd->getNameAsString();
+    return std::string();
+  }
+
+  /// `cplus_new_array` is a GNU statement expression whose final expression
+  /// is the allocation call. Peel that wrapper so provenance can see through
+  /// the macro without depending on its spelling.
+  static const Expr *stripStmtExpr(const Expr *e) {
+    if (!e)
+      return nullptr;
+    e = e->IgnoreParenImpCasts();
+    // Explicit casts are part of the allocation shape (`(int *)malloc(...)`),
+    // so peel them as well. IgnoreParenImpCasts alone would hide every C-style
+    // allocator cast from recordHeapAllocation().
+    while (const auto *ec = dyn_cast<ExplicitCastExpr>(e))
+      e = stripStmtExpr(ec->getSubExpr());
+    if (const auto *se = dyn_cast<StmtExpr>(e)) {
+      const CompoundStmt *cs = se->getSubStmt();
+      if (cs && cs->size() != 0)
+        if (const auto *last = dyn_cast<Expr>(cs->body_back()))
+          return stripStmtExpr(last);
+    }
+    return e;
+  }
+
+  static std::string identityKeyForDecl(const ValueDecl *vd) {
+    return vd ? "V" + std::to_string(reinterpret_cast<uintptr_t>(
+                    vd->getCanonicalDecl()))
+              : std::string();
+  }
+
+  /// Identity key for a pointer lvalue. Unlike lvalueKey() this uses canonical
+  /// declaration pointers, never source spellings, so shadowing and casts
+  /// cannot make two distinct objects share provenance (or split one object
+  /// into several unrelated aliases).
+  std::string identityKey(const Expr *expr) const {
+    if (!expr)
+      return std::string();
+    const Expr *e = expr->IgnoreParenImpCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        return "V" + std::to_string(reinterpret_cast<uintptr_t>(
+                         vd->getCanonicalDecl()));
+    if (const auto *me = dyn_cast<MemberExpr>(e)) {
+      std::string base = identityKey(me->getBase());
+      const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl());
+      if (base.empty() || !fd)
+        return std::string();
+      return base + ".F" +
+             std::to_string(
+                 reinterpret_cast<uintptr_t>(fd->getCanonicalDecl()));
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(e))
+      if (uo->getOpcode() == UO_Deref)
+        return "*" + identityKey(uo->getSubExpr());
     return std::string();
   }
 
@@ -4659,6 +4820,8 @@ public:
   }
 
   bool VisitVarDecl(VarDecl *vd) {
+    if (vd && !vd->getNameAsString().empty())
+      namedVars_[vd->getNameAsString()] = vd->getCanonicalDecl();
     if (!report_ && vd->getInit()) {
       // `int (*fn)(const char*, ...) = printf;` — calling through fn must
       // still enforce the literal-format rule.
@@ -4742,12 +4905,108 @@ public:
       if (vd->getType()->isPointerType()) {
         std::string src = pointerSourceOf(init);
         if (src.empty())
+          if (const auto *cast = dyn_cast<CastExpr>(
+                  init->IgnoreParenImpCasts()))
+            if (cast->getType()->isPointerType())
+              src = pointerSourceOf(cast->getSubExpr());
+        if (src.empty())
           src = staleIntegerAliasSource(init);
         if (!src.empty()) {
           linkAlias(vd->getNameAsString(), src);
           provenanceSource_[vd->getNameAsString()] = src;
           if (releasedVars_.count(src))
             releasedVars_.insert(vd->getNameAsString());
+        }
+        // Carry the source allocation's extent across an integer round-trip.
+        // Tracking identity here (not the spelling) is what makes the extent
+        // survive `(int *)(uintptr_t)p` without granting provenance to a
+        // pointer forged from an arbitrary integer.
+        if (!src.empty()) {
+          const HeapAllocState *st = nullptr;
+          auto hit = heapAllocs_.find(src);
+          if (hit != heapAllocs_.end() && hit->second.bytes > 0)
+            st = &hit->second;
+          else {
+            auto vit = namedVars_.find(src);
+            if (vit != namedVars_.end())
+              st = heapStateOfVar(vit->second);
+          }
+          if (st) {
+            HeapAllocState copy = *st;
+            copy.decl = vd;
+            identityAllocs_[identityKeyForDecl(vd)] = copy;
+          }
+        }
+      }
+      // Ternary aliases inherit an extent only when both arms describe the
+      // same allocation; divergent arms stay unknown and fail closed when a
+      // later subscript needs a bound.
+      if (vd->getType()->isPointerType()) {
+        const auto *co = dyn_cast<ConditionalOperator>(init);
+        if (co) {
+          auto armState = [&](const Expr *arm) -> const HeapAllocState * {
+            if (const HeapAllocState *st = heapStateOf(arm))
+              return st;
+            const Expr *peeled = stripStmtExpr(arm);
+            while (const auto *ec = dyn_cast<ExplicitCastExpr>(peeled))
+              peeled = stripStmtExpr(ec->getSubExpr());
+            if (const auto *ref = dyn_cast<DeclRefExpr>(
+                    peeled->IgnoreParenImpCasts()))
+              if (const auto *pvd = dyn_cast<VarDecl>(ref->getDecl()))
+                return heapStateOfVar(pvd);
+            return nullptr;
+          };
+          const HeapAllocState *a = armState(co->getTrueExpr());
+          const HeapAllocState *b = armState(co->getFalseExpr());
+          if (a && b && !a->provenanceLost && !b->provenanceLost &&
+              a->bytes > 0 && a->bytes == b->bytes &&
+              a->origin == b->origin) {
+            HeapAllocState st = *a;
+            st.decl = vd;
+            identityAllocs_[identityKeyForDecl(vd)] = st;
+          }
+        }
+      }
+      // `int *q = p + K` starts q at an interior offset. Keep the allocation
+      // identity but shrink the remaining extent, so a later q[i] is checked
+      // against what is actually addressable from q.
+      if (vd->getType()->isPointerType()) {
+        const Expr *base = init->IgnoreParenImpCasts();
+        long long offsetBytes = 0;
+        while (const auto *bo = dyn_cast<BinaryOperator>(
+                   base->IgnoreParenImpCasts())) {
+          if (bo->getOpcode() != BO_Add && bo->getOpcode() != BO_Sub)
+            break;
+          Expr::EvalResult r;
+          long long delta = 0;
+          if (!bo->getRHS()->EvaluateAsInt(r, ctx_) ||
+              r.Val.getInt().getSExtValue() == 0)
+            break;
+          delta = r.Val.getInt().getSExtValue();
+          offsetBytes += (bo->getOpcode() == BO_Sub ? -delta : delta);
+          base = bo->getLHS();
+        }
+        if (offsetBytes > 0) {
+          const HeapAllocState *st = heapStateOf(base);
+          if (!st)
+            if (const auto *ref =
+                    dyn_cast<DeclRefExpr>(base->IgnoreParenImpCasts()))
+              if (const auto *pvd = dyn_cast<VarDecl>(ref->getDecl()))
+                st = heapStateOfVar(pvd);
+          QualType pt = base->IgnoreParenImpCasts()->getType();
+          if (const auto *ptr = pt->getAs<PointerType>())
+            if (!ptr->getPointeeType()->isVoidType() &&
+                !ptr->getPointeeType()->isIncompleteType()) {
+              long long es = (long long)(ctx_.getTypeSize(
+                                            ptr->getPointeeType()) /
+                                        8u);
+              if (es > 0 && st && st->bytes > offsetBytes * es) {
+                HeapAllocState copy = *st;
+                copy.bytes -= offsetBytes * es;
+                copy.decl = vd;
+                identityAllocs_[identityKeyForDecl(vd)] = copy;
+              }
+            }
         }
       }
     }
@@ -5146,6 +5405,83 @@ public:
             reallocResultVars_.insert(varNameOf(op->getLHS()));
             break;
           }
+      // Provenance of a pointer stored into a struct/union field is keyed by
+      // the canonical (base object, field) pair. A later `s.p[i]` reads that
+      // same key, so the extent cannot be laundered through member access.
+      std::string lhsKey = identityKey(op->getLHS());
+      if (!lhsKey.empty()) {
+        bool stored = false;
+        const auto *lhsMember = dyn_cast<MemberExpr>(
+            op->getLHS()->IgnoreParenImpCasts());
+        // Writing an integer into one union member and reading a pointer out
+        // of another launders provenance. Mark every pointer member of that
+        // union as lost regardless of whether the integer expression itself
+        // happens to carry a tracked extent.
+        if (lhsMember && lhsMember->getBase() &&
+            lhsMember->getBase()->getType()->isUnionType() &&
+            op->getLHS()->getType()->isIntegerType()) {
+          std::string baseKey = identityKey(lhsMember->getBase());
+          if (!baseKey.empty())
+            if (const auto *rd = lhsMember->getBase()
+                                     ->getType()
+                                     ->getAsRecordDecl())
+              for (const FieldDecl *field : rd->fields()) {
+                if (!field->getType()->isPointerType())
+                  continue;
+                HeapAllocState lost;
+                lost.provenanceLost = true;
+                identityAllocs_[baseKey + ".F" +
+                                std::to_string(reinterpret_cast<uintptr_t>(
+                                    field->getCanonicalDecl()))] = lost;
+              }
+          stored = true;
+        }
+        const HeapAllocState *rhsState = heapStateOf(op->getRHS());
+        if (!rhsState)
+          if (const auto *rref = dyn_cast<DeclRefExpr>(
+                  stripStmtExpr(op->getRHS())))
+            if (const auto *rvd = dyn_cast<VarDecl>(rref->getDecl()))
+              rhsState = heapStateOfVar(rvd);
+        if (rhsState) {
+          HeapAllocState copy = *rhsState;
+          copy.decl = nullptr;
+          identityAllocs_[lhsKey] = copy;
+          stored = true;
+        }
+        // A freshly lowered `cplus_new_array(T, N)` reaches the AST as a
+        // `(T *)cplus_alloc_array(N, sizeof(T))` call; compute its byte extent
+        // directly so a field holding it is not treated as an opaque pointer.
+        if (!stored) {
+          const Expr *ae = stripStmtExpr(op->getRHS());
+          while (const auto *ec = dyn_cast<ExplicitCastExpr>(ae))
+            ae = stripStmtExpr(ec->getSubExpr());
+          if (const auto *call = dyn_cast<CallExpr>(ae)) {
+            long long bytes = -1;
+            for (const auto &n : calleeNames(call, call->getDirectCallee())) {
+              if (n == "cplus_alloc_array" && call->getNumArgs() >= 2) {
+                long long count = -1, size = -1;
+                if (evalByteCount(call->getArg(0), count) &&
+                    evalByteCount(call->getArg(1), size) && count > 0 &&
+                    size > 0 && count <= LLONG_MAX / size)
+                  bytes = count * size;
+              } else if ((n == "malloc" || n == "cplus_alloc" ||
+                          n == "cplus_zalloc") &&
+                         call->getNumArgs() >= 1) {
+                evalByteCount(call->getArg(0), bytes);
+              }
+              if (bytes > 0)
+                break;
+            }
+            if (bytes > 0) {
+              HeapAllocState st;
+              st.bytes = bytes;
+              st.origin = ExtentOrigin::Heap;
+              identityAllocs_[lhsKey] = st;
+              stored = true;
+            }
+          }
+        }
+      }
     }
     if (report_ && op->isAssignmentOp()) {
       // Kill guard-derived non-zero / lower-bound facts on a definite
@@ -5448,6 +5784,7 @@ public:
         if (const auto *ref = dyn_cast<DeclRefExpr>(op->getLHS()->IgnoreParenImpCasts()))
           st.decl = dyn_cast<VarDecl>(ref->getDecl());
         heapAllocs_[dstName] = st;
+        identityAllocs_[identityKey(op->getLHS())] = st;
       } else if (!dstName.empty()) {
         // The realloc result has no provable extent (e.g. a size that depends
         // on a loop induction variable).  The old block was transferred to the
@@ -5457,6 +5794,10 @@ public:
         if (stale != heapAllocs_.end())
           heapAllocs_.erase(stale);
       }
+      // The declaration's identity fact must follow the name-keyed fact:
+      // keeping the old 4-byte realloc extent here falsely rejected the
+      // later, larger rebind in realloc_chain.
+      identityAllocs_.erase(identityKey(op->getLHS()));
     }
     // An unsigned value compared with zero via < is always false: the check
     // can never protect anything, so it is a provable logic bug.
@@ -5559,13 +5900,16 @@ public:
               // New object with an unknown extent: drop p's stale one rather
               // than bounds-checking the new block against the old size.
               heapAllocs_.erase(hit);
+              identityAllocs_.erase(identityKeyForDecl(vd));
             }
             reallocResultVars_.insert(vd->getNameAsString());
             isReallocRebind = true;
           }
           if (hit != heapAllocs_.end() && hit->second.decl == vd &&
-              !isReallocRebind)
+              !isReallocRebind) {
             heapAllocs_.erase(hit);
+            identityAllocs_.erase(identityKeyForDecl(vd));
+          }
           if (isOnePastEndExpr(op->getRHS()))
             onePastEnd_.insert(vd);
           else
@@ -8007,6 +8351,12 @@ public:
   std::set<std::string> releasedVars_;
   std::set<std::string> releasedFields_;
   std::map<std::string, std::set<std::string>> fieldAliases_;
+  // Identity-keyed allocation/extent facts for member lvalues, conditional
+  // aliases and integer round-trips. Names are deliberately never used here.
+  std::map<std::string, HeapAllocState> identityAllocs_;
+  // Only a reverse index used to resolve an already-recorded source spelling
+  // back to the declaration that owns the provenance fact.
+  std::map<std::string, const VarDecl *> namedVars_;
   // Integer laundering: provenance integer variable -> pointer variable it
   // was derived from, so `(int *)u` inherits p's release state (provenance).
   std::map<std::string, std::string> provenanceSource_;
