@@ -323,16 +323,16 @@ int main(void) {
             during = open_fd_count();
             if (!t1.is_open() || !t2.is_open() || !t3.is_open() ||
                 during != before + 3) {
-                failures++; print("FAIL fd-during", before, during);
+                failures++; print("FAIL fd-during", during - before);
             }
-            print("ok fd-during", before, during);
+            print("ok fd-during", during - before);
             /* implicit drops at scope exit close all three */
         }
         after = open_fd_count();
         if (before >= 0 && after != before) {
-            failures++; print("FAIL fd-leak", before, after);
+            failures++; print("FAIL fd-leak", after - before);
         } else {
-            print("ok fd-leak", before, after);
+            print("ok fd-leak", after - before);
         }
     }
 
