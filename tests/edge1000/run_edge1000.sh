@@ -65,7 +65,8 @@ fi
 # Hardened libc + differential coverage (issue #22) and the bounded hang
 # diagnostic self-test for the corpus that timed out on Linux CI.
 for suite in tests/libc/run_libc_tests.sh tests/libc/run_corpus_uninit_watchdog.sh \
-             tests/stdlib/upstream_reuse/run_memory_safety.sh; do
+             tests/stdlib/upstream_reuse/run_memory_safety.sh \
+             proof/goose_samples/run.sh; do
     cases=$((cases + 1))
     if timeout 900 sh "$suite" >"build/edge1000/$(basename "$suite").log" 2>&1; then
         pass=$((pass + 1))
