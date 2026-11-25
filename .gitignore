@@ -131,3 +131,4 @@ tests/compiler/abi_link_flags/cases/*.a
 tests/compiler/abi_link_flags/cases/*.dylib
 tests/compiler/raii_cleanup/results/*.bin
 tests/compiler/proof1_uaf/results/*.bin
+tests/compiler/libc_contract_matrix/results/*.bin
