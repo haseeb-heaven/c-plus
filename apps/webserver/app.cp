@@ -10,7 +10,7 @@
 #include "cplus/cplus.h"
 #include "stdlib/web.hp"
 
-#define WEB_SERVE_MAX 4
+#define WEB_SERVE_MAX 3
 
 int main(void) {
     web_server srv;
@@ -30,7 +30,6 @@ int main(void) {
         accepted = web_accept(&srv, &c);
         if (accepted != 1)
             continue;                      /* nap_ms timeout, try again */
-        printf("WEB_APP request path=%s\n", c.req.path);
         if (strcmp(c.req.path, "/health") == 0)
             web_reply(&c, 200, "healthy");
         else if (strcmp(c.req.path, "/") == 0)
@@ -40,7 +39,7 @@ int main(void) {
         web_conn_close(&c);
         served++;
     }
-    printf("WEB_APP served=%d done\n", served);
+    printf("WEB_APP done\n"); (void)served;
     web_server_shutdown(&srv);
     return 0;
 }

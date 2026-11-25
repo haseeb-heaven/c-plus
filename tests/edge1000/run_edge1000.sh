@@ -51,7 +51,7 @@ for s in math3d scene3d mesh3d widgets cli web sqldb gameeng; do
     if timeout 900 sh "tests/stdlib/$s/run.sh" >/dev/null 2>&1; then
         pass=$((pass + 1))
     else
-        fail=$((fail + 1))
+        fail=$((fail + 1)); echo "EDGE1000 FAIL suite $s"
     fi
 done
 
@@ -59,14 +59,15 @@ cases=$((cases + 1))
 if timeout 900 sh tests/ctl/run_ctl_demo_coverage.sh >/dev/null 2>&1; then
     pass=$((pass + 1))
 else
-    fail=$((fail + 1))
+    fail=$((fail + 1)); echo "EDGE1000 FAIL ctl coverage"
 fi
 
 # Hardened libc + differential coverage (issue #22) and the bounded hang
 # diagnostic self-test for the corpus that timed out on Linux CI.
 for suite in tests/libc/run_libc_tests.sh tests/libc/run_corpus_uninit_watchdog.sh \
              tests/stdlib/upstream_reuse/run_memory_safety.sh \
-             proof/goose_samples/run.sh tests/runtime/run_print_test.sh; do
+             proof/goose_samples/run.sh tests/runtime/run_print_test.sh \
+             tests/ctl/run_ctl_span.sh; do
     cases=$((cases + 1))
     if timeout 900 sh "$suite" >"build/edge1000/$(basename "$suite").log" 2>&1; then
         pass=$((pass + 1))
