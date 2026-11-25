@@ -20,3 +20,4 @@ int main(void) {
     game_world_init(&w); game_add_entity(&w, 1, 1, 1); game_step(&w, 0.5f);
     print("NO_HEAP_OK", fails); return fails ? 1 : 0;
 }
+#include "stdlib/no_heap.hp"  /* policy macros must come last */

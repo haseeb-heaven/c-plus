@@ -266,6 +266,12 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
             memcpy(fresh, ptr, old_size);
             return fresh;
         }
+        /* Growing the bump pointer does not map pages: commit the newly
+         * covered region before returning, otherwise the next write faults
+         * (SIGBUS) on VM-backed stacks. */
+        if (stdlib_datastack_commit(ds,
+                (size_t)(ds->top + extra - ds->base), err) != STDLIB_OK)
+            return (void *)0;
         ds->top += extra;
     } else {
         ds->top -= (old_size - new_size);

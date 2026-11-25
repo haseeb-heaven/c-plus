@@ -16,6 +16,13 @@
 #define realloc(p, s)        CPLUS_NO_HEAP_FORBIDDEN_realloc((p), (s))
 #define free(p)              CPLUS_NO_HEAP_FORBIDDEN_free((p))
 #define aligned_alloc(a, s)  CPLUS_NO_HEAP_FORBIDDEN_aligned_alloc((a), (s))
+/* C+ runtime and stdlib allocators are heap too: refuse them as well. */
+#define cplus_alloc(s)        CPLUS_NO_HEAP_FORBIDDEN_cplus_alloc((s))
+#define cplus_realloc(p, s)   CPLUS_NO_HEAP_FORBIDDEN_cplus_realloc((p), (s))
+#define cplus_release(p)      CPLUS_NO_HEAP_FORBIDDEN_cplus_release((p))
+#define stdlib_alloc(s)       CPLUS_NO_HEAP_FORBIDDEN_stdlib_alloc((s))
+#define stdlib_realloc(p, s)  CPLUS_NO_HEAP_FORBIDDEN_stdlib_realloc((p), (s))
+#define stdlib_release(p)     CPLUS_NO_HEAP_FORBIDDEN_stdlib_release((p))
 #endif
 
 #endif /* CPLUS_STD_NO_HEAP_HP */
