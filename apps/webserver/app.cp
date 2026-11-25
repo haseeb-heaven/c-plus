@@ -13,20 +13,20 @@
 #define WEB_SERVE_MAX 4
 
 int main(void) {
-    web_server *srv = web_server_start((const char *)"127.0.0.1", 18099);
+    web_server srv;   /* stack storage: no heap allocation in this app */
     web_conn c;
     int accepted = 0;
     int i;
     int served = 0;
 
-    if (srv == (web_server *)0) {
+    if (web_server_init(&srv, (const char *)"127.0.0.1", 18099) != 0) {
         printf("WEB_APP bind_failed\n");
         return 1;
     }
     printf("WEB_APP listening 127.0.0.1:18099\n");
 
     for (i = 0; i < 200 && served < WEB_SERVE_MAX; i++) {
-        accepted = web_accept(srv, &c);
+        accepted = web_accept(&srv, &c);
         if (accepted != 1)
             continue;                      /* nap_ms timeout, try again */
         printf("WEB_APP request path=%s\n", c.req.path);
@@ -40,6 +40,6 @@ int main(void) {
         served++;
     }
     printf("WEB_APP served=%d done\n", served);
-    web_server_stop(srv);
+    web_server_shutdown(&srv);
     return 0;
 }

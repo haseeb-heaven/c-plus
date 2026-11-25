@@ -46,15 +46,21 @@ typedef struct {
     web_request req;
 } web_conn;
 
-/* Start a listening HTTP/1.1 server on host:port (POSIX sockets).
- * Returns a non-null web_server on success, 0 on failure. */
-static web_server *web_server_start(const char *host, int port) {
-    web_server *s;
+/* Initialize a caller-owned web_server (stack or static storage) on host:port.
+ * Returns 0 on success, -1 on failure. No heap allocation: this is the
+ * heap-free path used by the app; the *_start wrapper below is the malloc
+ * convenience variant for existing callers. */
+static int web_server_init(web_server *s, const char *host, int port) {
     struct sockaddr_in addr;
     int one = 1;
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd;
+    if (s == (web_server *)0)
+        return -1;
+    s->listen_fd = -1;
+    s->nap_ms = WEB_NAP_MS;
+    fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
-        return (web_server *)0;
+        return -1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -63,15 +69,21 @@ static web_server *web_server_start(const char *host, int port) {
         (host == (const char *)0) ? INADDR_ANY : inet_addr(host);
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 8) != 0) {
         close(fd);
-        return (web_server *)0;
-    }
-    s = (web_server *)malloc(sizeof(web_server));
-    if (s == (web_server *)0) {
-        close(fd);
-        return (web_server *)0;
+        return -1;
     }
     s->listen_fd = fd;
-    s->nap_ms = WEB_NAP_MS;
+    return 0;
+}
+
+/* Malloc convenience wrapper; prefer web_server_init() for a stack server. */
+static web_server *web_server_start(const char *host, int port) {
+    web_server *s = (web_server *)malloc(sizeof(web_server));
+    if (s == (web_server *)0)
+        return (web_server *)0;
+    if (web_server_init(s, host, port) != 0) {
+        free(s);
+        return (web_server *)0;
+    }
     return s;
 }
 
@@ -159,10 +171,18 @@ static void web_conn_close(web_conn *c) {
 }
 
 /* Stop the listening server. */
+/* Close a caller-owned server without releasing its storage. */
+static void web_server_shutdown(web_server *s) {
+    if (s != (web_server *)0 && s->listen_fd >= 0) {
+        close(s->listen_fd);
+        s->listen_fd = -1;
+    }
+}
+
+/* Close and release a web_server returned by web_server_start(). */
 static void web_server_stop(web_server *s) {
     if (s != (web_server *)0) {
-        if (s->listen_fd >= 0)
-            close(s->listen_fd);
+        web_server_shutdown(s);
         free(s);
     }
 }

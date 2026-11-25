@@ -64,3 +64,19 @@ are **not** reproducible proof of a fixed speedup, nor Goose equivalence.
 sh tests/run_modern_safer_evidence.sh
 sh tests/edge1000/run_edge1000.sh
 ```
+
+## 4. Goose-style heap-free path in the modern libs (2026-11-25)
+
+- `stdlib/web.hp` gained `web_server_init()` / `web_server_shutdown()` so
+  `apps/webserver/app.cp` keeps its server handle on the **stack**: no heap
+  allocation in that app. `web_server_start()` remains the additive malloc
+  convenience wrapper; app output is unchanged (`APPS 3 3 0`).
+- `stdlib/sqldb.hp` and `stdlib/gameeng.hp` use fixed slots (no per-object
+  heap); `benchmarks/goose_modern/bench.cp` runs 20,000 of their operations
+  inside one `stdlib_scratch_scope` using VM data-stack bump payloads.
+- Measured on this host: allocation-only bump **64 ns/op** vs checked-heap
+  **175 ns/op** (~2.7x); full modern workload (sqldb+game+bump) **591 ns/op**.
+  Deterministic gate: `GOOSE_MODERN_BENCH 3 3 0` (op count + OK marker only; the ratio is host/load-dependent evidence).
+- No Goose code copied; Goose's 2 GiB reservation/compile-time root inference
+  is not replicated. "No heap" here means by construction in these apps and
+  headers, not a runtime proof that the checked allocator is never called.

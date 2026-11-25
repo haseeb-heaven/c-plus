@@ -13,6 +13,7 @@ for suite in apps/run_all.sh proof/games_apps/run.sh \
              proof/real_apps_cross_platform/run.sh proof/goose_samples/run.sh \
              examples/games3d/run.sh examples/gui_app/run.sh \
              examples/cli_app/run.sh benchmarks/goose_fast/run.sh \
+             benchmarks/goose_modern/run.sh \
              tests/stdlib/upstream_reuse/run_memory_safety.sh; do
     cases=$((cases + 1))
     if timeout 1800 sh "$suite" >/dev/null 2>&1; then
