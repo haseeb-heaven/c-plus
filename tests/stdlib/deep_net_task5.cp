@@ -202,7 +202,7 @@ int main(void) {
                     _exit(1);
                 t5_rst_lng.l_onoff = 1;
 #ifdef __linux__
-                t5_rst_lng.l_on = 0;
+                t5_rst_lng.l_onoff = 0;
 #else
                 t5_rst_lng.l_linger = 0;
 #endif

@@ -110,6 +110,11 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
             raw > (size_t)-1 - p->slots_per_slab * sizeof(void *))
             return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                                   CPLUS_EXIT_BOUNDS, "pool: link array overflow"), STDLIB_FAIL;
+        if (p->slots_per_slab > (size_t)-1 / sizeof(void *) ||
+            raw > (size_t)-1 - p->slots_per_slab * sizeof(void *) -
+                  STDLIB_ALIGN_DEFAULT)
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS, "pool: link slack overflow"), STDLIB_FAIL;
         raw += p->slots_per_slab * sizeof(void *) + STDLIB_ALIGN_DEFAULT;
         uintptr_t sp;
         s = (stdlib_pool_slab *)cplus_alloc(raw);
@@ -138,8 +143,8 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
     memset(s->bitmap, 0, p->slots_per_slab);
     p->slabs = s;
     p->slab_count++;
-    /* Push every slot onto the intrusive free list (stored in the slot's
-     * first sizeof(void*) bytes; the header precedes it). */
+    /* Push every slot onto the free list; links live in the slab's
+     * separate metadata array, never in caller slot storage. */
     for (i = 0; i < p->slots_per_slab; i++) {
         stdlib_pool_slot_header *h;
         void **link;
@@ -292,7 +297,7 @@ typedef struct stdlib_slot_pool {
     size_t slot_size;
     size_t count;              /* high-water slot count */
     size_t capacity;
-    size_t *free_list;         /* intrusive free stack of indices */
+    size_t *free_list;         /* free stack of indices */
     size_t free_count;
     uint64_t *generations;     /* one generation per slot */
     int owns;                  /* 1 when items/free_list/generations heap-owned */

@@ -154,10 +154,10 @@ int main(void) {
         assert(hn == cn && strcmp(hbuf, cbuf) == 0);
     }
     for (int ch = 0; ch < 128; ++ch) {
-        assert(cplus_isalpha(ch) == isalpha(ch));
-        assert(cplus_isdigit(ch) == isdigit(ch));
-        assert(cplus_toupper(ch) == toupper(ch));
-        assert(cplus_tolower(ch) == tolower(ch));
+        assert(!!cplus_isalpha(ch) == !!isalpha(ch));
+        assert(!!cplus_isdigit(ch) == !!isdigit(ch));
+        assert(!!cplus_toupper(ch) == !!toupper(ch));
+        assert(!!cplus_tolower(ch) == !!tolower(ch));
     }
 
     puts("test_differential_libc: ok");

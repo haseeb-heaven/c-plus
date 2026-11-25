@@ -78,8 +78,9 @@ documented contract limit, not a runtime trap.
 
 ## 6. Low-level `stdlib_mem_pool` free-list is stored inside user slots
 
-`stdlib_mem_pool_release()` writes the next free-list pointer into the slot
-body. Because the pool hands out raw untyped pointers and there is no
+This was FIXED: `stdlib_mem_pool_release()` now writes the next free-list
+pointer into a per-slab metadata array (`stdlib/mempool.hp:links`), not the
+slot body. Because the pool hands out raw untyped pointers and there is no
 compile-time borrow invalidation, a caller writing through a stale pointer can
 overwrite `free_head`; the next allocation then dereferences attacker-controlled
 data (`0xdeadbeef` in `proof_agent2_mempool_freelist_corruption.cp`, fatal
@@ -89,6 +90,6 @@ Mitigation: use the generation-checked `stdlib_slot_pool` /
 `stdlib_pool_ref` API for values whose lifetime crosses scopes — stale refs are
 refused (103/104) and callers never hold the intrusive link. Treat the raw
 `stdlib_mem_pool` as a low-level internal building block: never write to a slot
-after release. Fixing the layout requires moving free-list links out of user
-storage (a separate metadata array), which is a follow-up change, not claimed
-here.
+after release. The layout fix (separate metadata array) is in `stdlib/mempool.hp` and
+verified by the edge1000 suite; stale writes into a released slot no longer
+corrupt allocator state.
