@@ -48,11 +48,12 @@ static int calc_int_arg(const cli_parse_result *p, size_t index, int *out) {
     if (p->arg_count <= (int)index)
         return 0;
     text = p->args[index].value;
-    if (text[0] == '\0')
+    if (text == (const char *)0 || text[0] == '\0')
         return 0;
     errno = 0;
+    end = (char *)text;          /* strtol writes it; keep a non-null seed */
     v = strtol(text, &end, 10);
-    if (end == text || *end != '\0' || errno == ERANGE)
+    if (end == (char *)0 || end == text || *end != '\0' || errno == ERANGE)
         return 0;
     if (v < (long)CALC_MIN || v > (long)CALC_MAX)
         return 0;

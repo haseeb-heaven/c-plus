@@ -49,7 +49,8 @@ int main(void) {
     }
     t3 = ns_now();
 
-    /* Bucketed verdicts: deterministic evidence, no exact-time claims. */
+    /* Bucketed verdicts stay the deterministic gate; exact per-op timings
+     * are printed as measured evidence for the proof document (host-specific). */
     long long bump_ns = t1 - t0;
     long long scope_ns = t2 - t1;
     long long heap_ns = t3 - t2;
@@ -57,6 +58,9 @@ int main(void) {
     print("BENCH release_ms_bucket", (scope_ns < 1000000LL) ? "one_store" : "slow");
     print("BENCH heap_ms_bucket", (heap_ns < 50000000LL) ? "fast" : "slow");
     print("BENCH ratio_ge_2", (heap_ns > bump_ns * 2) ? "yes" : "no");
+    print("BENCH bump_ns_per_op", (unsigned long long)(bump_ns / (long long)N));
+    print("BENCH heap_ns_per_op", (unsigned long long)(heap_ns / (long long)N));
+    print("BENCH scope_release_ns", (unsigned long long)scope_ns);
     print("BENCH_OK");
     return 0;
 }
