@@ -1,0 +1,2 @@
+GUI_REFUSED tag=bad-window-geometry category=1 code=108 message=widgets: invalid window geometry/columns
+GUI_RESULT refuse bad-window-geometry REFUSED 108

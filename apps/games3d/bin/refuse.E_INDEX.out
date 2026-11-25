@@ -1,0 +1,2 @@
+REFUSE code=E_INDEX reason=repeated face index rejected by mesh3d
+SCENE_DONE status=REFUSED code=E_INDEX

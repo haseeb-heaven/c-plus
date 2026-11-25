@@ -1,0 +1,2 @@
+GUI_REFUSED tag=bad-hit-test-window category=1 code=102 message=widgets: NULL window
+GUI_RESULT refuse bad-hit-test-window REFUSED 102

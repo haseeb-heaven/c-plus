@@ -1,0 +1,2 @@
+GUI_REFUSED tag=command category=1 code=108 message=gui_app: unknown command
+GUI_RESULT command REFUSED 108

@@ -1,0 +1,2 @@
+GUI_REFUSED tag=null-serialize-buffer category=1 code=102 message=widgets: NULL serialization buffer
+GUI_RESULT refuse null-serialize-buffer REFUSED 102

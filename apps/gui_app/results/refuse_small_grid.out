@@ -1,0 +1,2 @@
+GUI_REFUSED tag=small-grid category=2 code=101 message=widgets: grid cell too small
+GUI_RESULT refuse small-grid REFUSED 101
