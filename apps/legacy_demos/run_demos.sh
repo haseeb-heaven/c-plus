@@ -40,8 +40,6 @@ build() {
   if [ ! -f "$src" ]; then
     src="$ROOT/apps/legacy_demos/$name.cp"
   fi
-<<<<<<< HEAD:demos/run_demos.sh
-=======
   # The modern allocator demo binds the thread-local DataStack symbol from
   # the hardened libc archive; other demos need no extra link input.
   if [ "$name" = "modern_allocators" ]; then
@@ -54,7 +52,6 @@ build() {
       >"$OUT/$name.build.log" 2>&1
     return $?
   fi
->>>>>>> agent/modern-stdlib:apps/legacy_demos/run_demos.sh
   "$CPLUS" build --no-werror "$src" -o "$OUT/$name" \
     >"$OUT/$name.build.log" 2>&1
 }
@@ -105,11 +102,7 @@ else
   rc=$(cat "$OUT/B_bounds.exit")
   if [ "$rc" -eq 0 ]; then
     fail B_bounds "out-of-bounds read did not abort"
-<<<<<<< HEAD:demos/run_demos.sh
-  elif ! grep -q "outside the bounds" "$OUT/B_bounds.stderr"; then
-=======
   elif ! grep -qE "outside the bounds|out of bounds" "$OUT/B_bounds.stderr"; then
->>>>>>> agent/modern-stdlib:apps/legacy_demos/run_demos.sh
     fail B_bounds "no bounds diagnostic; see demos/out/B_bounds.stderr"
   fi
   pass B_bounds
