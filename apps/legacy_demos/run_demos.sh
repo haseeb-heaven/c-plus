@@ -50,7 +50,10 @@ build() {
     if "$CPLUS" build --no-werror "$src" --default --sanitize=none -I"$ROOT" \
          -o "$OUT/$name" -- "$ROOT/build/libc/libcplus_hardened.a" \
          >"$OUT/$name.build.log" 2>&1; then return 0; fi
-    "$CPLUS" build --no-werror -w "$src" -I"$ROOT" -o "$OUT/$name" \
+    if "$CPLUS" build --no-werror -w "$src" -I"$ROOT" -o "$OUT/$name" \
+         -- "$ROOT/build/libc/libcplus_hardened.a" \
+         >>"$OUT/$name.build.log" 2>&1; then return 0; fi
+    "$CPLUS" build --legacy-c --no-werror "$src" -I"$ROOT" -o "$OUT/$name" \
       -- "$ROOT/build/libc/libcplus_hardened.a" \
       >>"$OUT/$name.build.log" 2>&1
     return $?
