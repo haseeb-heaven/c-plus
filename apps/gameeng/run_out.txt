@@ -1,8 +1,0 @@
-GAMEENG_APP add0 idx=0
-GAMEENG_APP add1 idx=1
-GAMEENG_APP frame=1 ent0=(4,-2)
-GAMEENG_APP frame=2 ent0=(3,-1)
-GAMEENG_APP frame=3 ent0=(2,0)
-GAMEENG_APP frame=4 ent0=(1,0)
-GAMEENG_APP kill idx=2 rc=0
-GAMEENG_APP killed_pos_rc=1

@@ -26,7 +26,7 @@ cplus_rewritten.c
 .agent
 .codex
 
-scratch
+scratch/
 
 # Root-level compiled test/demo artifacts (user-run, not shipped)
 # (ignore the file/dir name; git will ignore both files and dirs with these names)
@@ -38,8 +38,6 @@ null_outparam
 repro_shadow_return
 t
 
-# Dev scratch dir
-scratch
 
 benchmarks/out/
 
@@ -124,3 +122,12 @@ tests/compiler/borrow_escape/results/*.bin
 tests/compiler/default_policy/results/*.bin
 tests/compiler/pointer_provenance/results/*.bin
 tests/compiler/ast_identity/results/*.bin
+
+# Generated root binaries and test artifacts (never commit).
+/branch_free_null_ok
+/case_CTRL_direct_null
+/init_all_branches
+/len_runtime_metadata
+/null_outparam
+/app_dump.db
+/out/
