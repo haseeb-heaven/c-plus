@@ -125,3 +125,7 @@ tests/compiler/default_policy/results/*.bin
 tests/compiler/pointer_provenance/results/*.bin
 tests/compiler/ast_identity/results/*.bin
 tests/compiler/data_race/results/*.bin
+tests/compiler/abi_link_flags/results/*.bin
+tests/compiler/abi_link_flags/cases/*.o
+tests/compiler/abi_link_flags/cases/*.a
+tests/compiler/abi_link_flags/cases/*.dylib
