@@ -1,13 +1,11 @@
 # Issue #28 — RAII shadowing: Agent 2 verification record
 
 **Agent 2 scope:** runtime, safe libc, modern stdlib, library-side reproducers and
-tests. **Compiler frontend files are owned by Agent 1 and were NOT modified.**
+tests. Agent 2 implemented the compiler-side lowering fix in `compiler/Sema/RaiiLowering.cpp` on `agent/modern-stdlib` (commit `7cd2020d27976e1d658aaaae83f2f4b281c33665`) after reproducing the defect; coordination with Agent 1 is still required for ownership/process tracking.
 
 ## Verdict
 
-**The finding is confirmed.** When an owned local in a nested scope shadows an
-owned local with the same identifier, the inner binding's cleanup obligation is
-silently dropped. Destructors for the inner resource are never emitted.
+**Confirmed and fixed on `agent/modern-stdlib`.** Before the fix, when an owned local in a nested scope shadowed an owned local with the same identifier, the inner binding's cleanup obligation could be silently dropped. The fix gives each owned declaration a stable identity, resolves live bindings by lexical scope, tracks move/borrow by declaration id, and emits return/scope cleanup through stable address captures.
 
 ## Original reproducer
 
@@ -101,55 +99,47 @@ ABI with no hidden metadata; the fix belongs in lowering.
 Runner: `sh tests/raii_shadowing/run.sh` (POSIX sh, bounded, exact-log diffs):
 
 ```
-RAII_SHADOW 10 2 8
+RAII_SHADOW 10 10 0
 ```
 
 | Case | Expected | Observed | Verdict |
 | --- | --- | --- | --- |
 | `control_nonowning` | 3 lines | exact | PASS |
 | `repro_shadow_move` | 4 lines | exact | PASS |
-| `repro_shadow_basic` | DROP 2 + DROP 1 | only DROP 1 | FAIL |
-| `repro_shadow_deep` | DROP 3, DROP 2, DROP 1 | only DROP 1 | FAIL |
-| `repro_shadow_branch` | DROP 2 + DROP 1 | only DROP 1 | FAIL |
-| `repro_shadow_loop` | DROP 11/12/13 + DROP 1 | only DROP 1 | FAIL |
-| `repro_shadow_return` | DROP 2 + DROP 1 | DROP 2 only | FAIL |
-| `repro_shadow_partial` | DROP 2 + DROP 1 | only DROP 1 | FAIL |
-| `repro_shadow_struct` | DROP_INNER 2 + DROP_OUTER 10 | only DROP_OUTER 10 | FAIL |
-| `repro_shadow_crosstu` | DROP 2 + DROP 1 | only DROP 1 | FAIL |
+| `repro_shadow_basic` | DROP 2 + DROP 1 | exact | PASS |
+| `repro_shadow_deep` | DROP 3, DROP 2, DROP 1 | exact | PASS |
+| `repro_shadow_branch` | DROP 2 + DROP 1 | exact | PASS |
+| `repro_shadow_loop` | DROP 11/12/13 + DROP 1 | exact | PASS |
+| `repro_shadow_return` | DROP 2 + DROP 1 | exact | PASS |
+| `repro_shadow_partial` | DROP 2 + DROP 1 | exact | PASS |
+| `repro_shadow_struct` | DROP_INNER 2 + DROP_OUTER 10 | exact | PASS |
+| `repro_shadow_crosstu` | DROP 2 + DROP 1 | exact | PASS |
 
-Exact per-case diffs: `tests/raii_shadowing/out/<case>.diff`.
-Build logs: `tests/raii_shadowing/out/<case>.build.log`.
+Generated stress runner: `sh tests/raii_shadowing/run_generated.sh` (deterministic seeded corpus, 999 cases):
 
-Cross-TU builds link `build/libcplus_runtime.a`,
-`build/libc/libcplus_hardened.a` and `build/safe/libcplus_safecrt.a` with
-`/usr/bin/clang`; the same missing-destructor line appears.
+```
+RAII_GEN 999 999 0
+```
 
-**Sanitizer note:** `--sanitize=undefined` builds and runs the basic reproducer
-with no sanitizer diagnostic and the *same* incomplete cleanup log. UBSan does
-not detect a missing destructor; the exact cleanup-log assertions are the proof.
+Coverage includes deep nesting (2..60), sequential shadow blocks, if/else branches, loops, early returns through nested shadowed scopes, move-in-shadow, break/continue, switch-case shadows, and 520 random nested/seq combinations with exact cleanup-log assertions.
+
+Cross-TU case links `build/libcplus_runtime.a`, `build/libc/libcplus_hardened.a` and `build/safe/libcplus_safecrt.a` with `/usr/bin/clang`. Sanitizer note remains: UBSan does not detect missing destructors; exact cleanup-log assertions are the proof.
 
 ## Verified guarantees and unsupported cases
 
-Verified in this environment (Apple clang 16 / arm64, C+ 0.1.0):
+Verified in this environment (Apple clang 16 / arm64, C+ 0.1.0, commit `7cd2020d27976e1d658aaaae83f2f4b281c33665`):
 
-- Non-shadowed owned locals are destroyed exactly once in reverse declaration
-  order (control case).
-- An explicit `cplus_move` from the shadowed inner binding preserves the
-  moved-from state and destroys the new owner exactly once (move case).
-- Resource destruction is host/toolchain-observable through the destructor log;
-  no runtime metadata was added.
+- Shadowed owned locals now receive independent cleanup records and are destroyed exactly once in the verified shadowing suites (10 manual + 999 generated).
+- Non-shadowed owned locals are destroyed exactly once in reverse declaration order (control case).
+- An explicit `cplus_move` from the shadowed inner binding preserves the moved-from state and destroys the new owner exactly once (move case).
+- Resource destruction is host/toolchain-observable through destructor logs; no runtime metadata was added.
 
 NOT verified / explicitly unsupported:
 
-- Correct cleanup for shadowed owned locals is **not** currently provided.
-- Non-owning shadowed locals (plain `int`) are unaffected.
-- Nested resource fields are not auto-dropped by the containing resource's
-  destructor in this implementation (baseline check with no shadowing shows
-  only `DROP_OUTER`), so that is not asserted here.
-- `goto`, `setjmp/longjmp`, `exit` and abnormal termination remain outside the
-  cleanup guarantee (existing compiler warning for `goto`).
-- No claim of full RAII correctness from this sample; the compiler fix and the
-  full compiler suite must be run by Agent 1 after the handoff.
+- Full compiler/RAII suite, full repo regression matrix, and sanitizer matrix across all supported targets were **not** run in this pass.
+- Nested resource fields are not auto-dropped by the containing resource's destructor in this implementation (baseline check with no shadowing shows only `DROP_OUTER`), so that is not asserted here.
+- `goto`, `setjmp/longjmp`, `exit` and abnormal termination remain outside the cleanup guarantee (existing compiler warning for `goto`).
+- No claim of full RAII correctness from this sample.
 
 ## Exact commands
 
