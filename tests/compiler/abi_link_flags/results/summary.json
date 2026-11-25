@@ -1,0 +1,224 @@
+{
+  "generated": "2026-11-25T07:34:15.111677+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "host_cc": "/usr/bin/clang",
+  "results": [
+    {
+      "case": "static_archive_link",
+      "status": "PASS",
+      "expected": "mul=42",
+      "steps": [
+        {
+          "command": [
+            "/usr/bin/clang",
+            "-std=c11",
+            "-c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.o"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "ar",
+            "rcs",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/libabi_helper.a",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.o"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c",
+            "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases",
+            "-labi_helper",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_default.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_default.bin"
+          ],
+          "rc": 0,
+          "stdout": "mul=42\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c",
+            "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases",
+            "-labi_helper",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_strict.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'abi_mul' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_strict.bin"
+          ],
+          "rc": 0,
+          "stdout": "mul=42\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c",
+            "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases",
+            "-labi_helper",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_legacy-c.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_legacy-c.bin"
+          ],
+          "rc": 0,
+          "stdout": "mul=42\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "shared_library_link",
+      "status": "PASS",
+      "expected": "mul=42",
+      "steps": [
+        {
+          "command": [
+            "/usr/bin/clang",
+            "-shared",
+            "-fPIC",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/libabi_helper.dylib"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c",
+            "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases",
+            "-labi_helper",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/shared.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'abi_mul' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/shared.bin"
+          ],
+          "rc": 0,
+          "stdout": "mul=42\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "check_with_link_flags",
+      "status": "PASS",
+      "expected": "accept",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c",
+            "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases",
+            "-labi_helper"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'abi_mul' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cross_tu_allocator_boundary",
+      "status": "PASS",
+      "expected": "STRICT reject + LEGACY accept",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp"
+          ],
+          "rc": 1,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: cross-TU control/data flow is not safety-checked here\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp:4:38: error: [CPLUS-FFI] pointer 'p' from an unresolved call has unverifiable extent; subscript cannot be proven safe\n  int main(void){ int *p=abi_create(); p[0]=1; abi_destroy(p); return 0; }\n                                       ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp: error: [CPLUS-FFI] function 'abi_create' has safety-relevant pointer effects but no definition with a validated effect summary in the checked translation unit and no declared contract; STRICT check cannot verify its effects (a body in another file or a name match is not a proof)\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp: error: [CPLUS-FFI] function 'abi_destroy' has safety-relevant pointer effects but no definition with a validated effect summary in the checked translation unit and no declared contract; STRICT check cannot verify its effects (a body in another file or a name match is not a proof)\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--legacy-c",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c ok\ncheck: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp ok\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

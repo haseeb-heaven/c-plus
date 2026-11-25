@@ -10,11 +10,12 @@ D=tests/raii_shadowing
 OUT=$D/out
 mkdir -p "$OUT"
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-CASES="control_nonowning repro_shadow_basic repro_shadow_deep repro_shadow_branch repro_shadow_loop repro_shadow_return repro_shadow_move repro_shadow_partial repro_shadow_struct repro_shadow_managed repro_shadow_managed_return"
+CASES="control_nonowning repro_shadow_basic repro_shadow_deep repro_shadow_branch repro_shadow_loop repro_shadow_return repro_shadow_move repro_shadow_partial repro_shadow_struct repro_shadow_managed repro_shadow_managed_return repro_shadow_break_deep"
 pass=0; fail=0
 
 for c in $CASES; do
     if ! timeout 180 "$CPLUS" build "$D/$c.cp" -I. \
+    if ! timeout 180 "$CPLUS" build --no-werror "$D/$c.cp" --default --sanitize=none -I. \
             -o "$OUT/$c" >"$OUT/$c.build.log" 2>&1; then
         printf 'RAII_CASE FAIL %s build\n' "$c"
         fail=$((fail+1))
@@ -43,6 +44,19 @@ if timeout 180 "$CPLUS" build "$D/repro_shadow_crosstu.cp" -I. -I"$D" -c -o "$OU
         "$OUT/repro_shadow_crosstu.o" "$OUT/raii_shared.o" \
         build/libcplus_runtime.a build/libc/libcplus_hardened.a \
         build/safe/libcplus_safecrt.a -lm -pthread \
+if timeout 180 "$CPLUS" build --no-werror "$D/repro_shadow_crosstu.cp" --default --sanitize=none \
+        -I. -I"$D" -c -o "$OUT/repro_shadow_crosstu.o" >"$OUT/crosstu_b.log" 2>&1 \
+   && timeout 180 "$CPLUS" build --no-werror "$D/raii_shared.cp" --default --sanitize=none \
+        -I. -I"$D" -c -o "$OUT/raii_shared.o" >"$OUT/crosstu_a.log" 2>&1 \
+   && link_extra="" \
+   && for a in build/libc/libcplus_hardened.a build/safe/libcplus_safecrt.a; do
+          # These are the safe-libc archives. They are a separate build target and
+          # are absent in a compiler-only checkout, so link them only when built:
+          # the case must still prove cross-TU cleanup against the shipped runtime.
+          if [ -f "$a" ]; then link_extra="$link_extra $a"; fi
+      done \
+   && /usr/bin/clang "$OUT/repro_shadow_crosstu.o" "$OUT/raii_shared.o" \
+        build/libcplus_runtime.a $link_extra -lm -pthread \
         -o "$OUT/repro_shadow_crosstu" >>"$OUT/crosstu_b.log" 2>&1; then
     timeout 30 "$OUT/repro_shadow_crosstu" >"$OUT/repro_shadow_crosstu.actual" 2>&1
     if diff -u "$D/expected/repro_shadow_crosstu.txt" \

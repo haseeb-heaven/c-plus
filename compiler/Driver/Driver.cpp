@@ -1098,6 +1098,28 @@ static bool warningsAreErrors(const DriverOptions &opts) {
   return opts.warningsAsErrors;
 }
 
+/// Linker-only flags must not appear on a `-c` compile step. With the
+/// default warnings-as-errors policy, Clang's otherwise harmless
+/// "'-lfoo': 'linker' input unused" warning becomes a hard error and breaks
+/// every static/shared-library link through the driver.
+static std::vector<std::string>
+withoutLinkerFlags(const std::vector<std::string> &args) {
+  std::vector<std::string> out;
+  for (size_t i = 0; i < args.size(); ++i) {
+    llvm::StringRef a = args[i];
+    if (a == "-L" || a == "-l") {
+      if (i + 1 < args.size())
+        ++i;
+      continue;
+    }
+    if (a.starts_with("-L") || a.starts_with("-l") ||
+        a.starts_with("-Wl,") || a == "-shared")
+      continue;
+    out.push_back(args[i]);
+  }
+  return out;
+}
+
 static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   std::vector<std::string> args;
   args.push_back(opts.mode == Mode::LegacyC ? "-std=gnu89" : "-std=gnu17");
@@ -1615,9 +1637,9 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       os << "note: lowered C kept at " << guard.path << "\n";
     guards.push_back(std::move(guard));
 
-    std::vector<std::string> args = base;
+    std::vector<std::string> args = withoutLinkerFlags(base);
     args.push_back("-I" + std::string(inputDir));
-    for (const auto &a : opts.extraArgs)
+    for (const auto &a : withoutLinkerFlags(opts.extraArgs))
       args.push_back(a);
     appendSafetyTail(args);
     if (opts.command == "check") {

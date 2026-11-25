@@ -131,9 +131,14 @@ tests/compiler/ast_identity/results/*.bin
 /null_outparam
 /app_dump.db
 /out/
-
 # Generated benchmark logs/artifacts (never commit; source + scripts stay).
 benchmarks/**/*.log
 benchmarks/**/*.err
 benchmarks/**/*.profraw
 benchmarks/**/*.profdata
+tests/compiler/data_race/results/*.bin
+tests/compiler/abi_link_flags/results/*.bin
+tests/compiler/abi_link_flags/cases/*.o
+tests/compiler/abi_link_flags/cases/*.a
+tests/compiler/abi_link_flags/cases/*.dylib
+tests/compiler/raii_cleanup/results/*.bin
