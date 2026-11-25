@@ -5,7 +5,7 @@
 # It runs all nine backing suites from the repository root:
 #
 #   5 library suites : tests/stdlib/{math3d,scene3d,mesh3d,widgets,cli}/run.sh
-#   3 demo apps      : examples/{games3d,gui_app,cli_app}/run.sh
+#   3 demo apps      : apps/legacy_examples/{games3d,gui_app,cli_app}/run.sh
 #   1 cross suite    : tests/modern_libs_cross/run.sh
 #
 # Every runner is invoked as:
@@ -88,9 +88,9 @@ scene3d|tests/stdlib/scene3d/run.sh
 mesh3d|tests/stdlib/mesh3d/run.sh
 widgets|tests/stdlib/widgets/run.sh
 cli|tests/stdlib/cli/run.sh
-demo_games3d|examples/games3d/run.sh
-demo_gui_app|examples/gui_app/run.sh
-demo_cli_app|examples/cli_app/run.sh
+demo_games3d|apps/games3d/run.sh
+demo_gui_app|apps/gui_app/run.sh
+demo_cli_app|apps/cli_app/run.sh
 cross|tests/modern_libs_cross/run.sh
 EOF
 

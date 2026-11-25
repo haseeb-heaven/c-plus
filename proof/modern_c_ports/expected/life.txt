@@ -1,0 +1,3 @@
+life alive 3
+life_blinker 1
+LIFE PASS

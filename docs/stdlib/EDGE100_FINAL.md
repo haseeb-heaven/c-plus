@@ -92,7 +92,7 @@ probe harnesses. No numbers are fabricated for them.
 | safecrt | PENDING | PENDING | PENDING | PENDING | PENDING | `sh tests/edge100/safecrt/run.sh` |
 | multimedia | PENDING | PENDING | PENDING | PENDING | PENDING | `sh tests/edge100/multimedia/run.sh` |
 | adapters | PENDING | PENDING | PENDING | PENDING | PENDING | `sh tests/edge100/adapters/run.sh` |
-| examples | PENDING | PENDING | PENDING | PENDING | PENDING | `sh tests/edge100/examples/run.sh` |
+| examples | PENDING | PENDING | PENDING | PENDING | PENDING | `sh tests/edge100/apps/legacy_examples/run.sh` |
 | runtime | PENDING | PENDING | PENDING | PENDING | PENDING | `sh tests/edge100/runtime/run.sh` |
 | **TOTALS (0/9 areas landed)** | PENDING | PENDING | PENDING | PENDING | **INCOMPLETE** | `sh tests/edge100/run_all.sh` |
 
@@ -197,7 +197,7 @@ sh tests/edge100/netthread/run.sh
 sh tests/edge100/safecrt/run.sh
 sh tests/edge100/multimedia/run.sh
 sh tests/edge100/adapters/run.sh
-sh tests/edge100/examples/run.sh
+sh tests/edge100/apps/legacy_examples/run.sh
 sh tests/edge100/runtime/run.sh
 ```
 

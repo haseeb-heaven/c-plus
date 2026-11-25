@@ -36,7 +36,7 @@ fi
 
 # 2. Compile the proof driver. Default mode: STRICT currently rejects
 #    pre-existing header internals in stdlib/json.hp and yyjson.h.
-timeout 600 ./build/c+ build "$BLUE/proof.cp" --default --sanitize=none \
+timeout 600 ./build/c+ build "$BLUE/proof.cp" --default --no-werror --sanitize=none \
   -DYYJSON_READER_DEPTH_LIMIT=16384 -DYYJSON_WRITER_DEPTH_LIMIT=16384 \
   -I. -Istdlib/safe -Ithird_party/yyjson \
   -L"$OUT" -lyyjson_hardened \

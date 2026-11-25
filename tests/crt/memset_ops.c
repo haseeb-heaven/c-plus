@@ -11,7 +11,7 @@ int main(void) {
     check(b[0] == 0xAB && b[15] == 0xAB, "memset full");
     memset(b + 4, 0, 4);
     check(b[3] == 0xAB && b[4] == 0 && b[7] == 0 && b[8] == 0xAB, "memset range");
-    memset(b, 1, 0); /* zero count no-op */
+    memset(b, 1, (size_t)0); /* zero count no-op */
     check(b[4] == 0, "memset zero count");
     printf("memset_ops: %s\n", failures ? "FAIL" : "ok");
     return failures ? 1 : 0;

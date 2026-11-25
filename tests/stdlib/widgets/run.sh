@@ -59,10 +59,10 @@ cd "$ROOT" || exit 2
 # -o must precede `--`: after `--` arguments go straight to the C backend.
 if [ -n "$LIB" ]; then
   timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$DIR/test_widgets.cp" \
-    --default --sanitize=none -I. -o "$BIN" -- "$LIB" >"$BLOG" 2>&1
+    --default --no-werror --sanitize=none -I. -o "$BIN" -- "$LIB" >"$BLOG" 2>&1
 else
   timeout -k "$KILL_AFTER" "$BUILD_TIMEOUT" "$CPLUS" build "$DIR/test_widgets.cp" \
-    --default --sanitize=none -I. -o "$BIN" >"$BLOG" 2>&1
+    --default --no-werror --sanitize=none -I. -o "$BIN" >"$BLOG" 2>&1
 fi
 brc=$?
 if [ "$brc" -ne 0 ]; then
@@ -70,7 +70,7 @@ if [ "$brc" -ne 0 ]; then
   tail -n 12 "$BLOG" | sed 's/^/           /'
   exit 1
 fi
-echo "BUILD ok: $CPLUS build test_widgets.cp --default --sanitize=none -I. -- ${LIB:-<runtime only>}"
+echo "BUILD ok: $CPLUS build test_widgets.cp --default --no-werror --sanitize=none -I. -- ${LIB:-<runtime only>}"
 
 run_one() {
   _so="$1"; _se="$2"

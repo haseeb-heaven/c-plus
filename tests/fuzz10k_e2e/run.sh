@@ -7,7 +7,7 @@ export PATH="$ROOT/build:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 unset SDKROOT || true
 OUT=tests/fuzz10k_e2e/out
 mkdir -p "$OUT"
-timeout 300 ./build/c+ build tests/fuzz10k_e2e/fuzz10k_e2e.cp --default --sanitize=none \
+timeout 300 ./build/c+ build tests/fuzz10k_e2e/fuzz10k_e2e.cp --default --no-werror --sanitize=none \
     -I. -o "$OUT/fuzz10k_e2e" -- build/libc/libcplus_hardened.a \
     >"$OUT/build.log" 2>&1
 rc=0

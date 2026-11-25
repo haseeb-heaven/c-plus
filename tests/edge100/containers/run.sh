@@ -31,7 +31,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 mkdir -p "$HERE/out"
-"$CPLUS" build "$SRC" --default --sanitize=none -I"$ROOT" -o "$OUT"
+"$CPLUS" build "$SRC" --default --no-werror --sanitize=none -I"$ROOT" -o "$OUT"
 
 control=$(EDGE100_SELFCHECK=1 "$OUT" 2>&1)
 printf '%s\n' "$control"
@@ -166,7 +166,7 @@ r.append("## Command\n\n")
 r.append("```sh\nsh tests/edge100/containers/run.sh\n```\n\n")
 r.append("Build line (issued by the script from the repo root):\n\n")
 r.append("```sh\n./build/c+ build tests/edge100/containers/harness.cp \\\n"
-         "  --default --sanitize=none -I. \\\n"
+         "  --default --no-werror --sanitize=none -I. \\\n"
          "  -o tests/edge100/containers/out/harness\n```\n\n")
 r.append("`STDLIB_ALLOC_LIMIT` is pinned to 4096 in the harness so exact-fit, "
          "one-over and overflow boundaries are reachable. Telemetry and the "

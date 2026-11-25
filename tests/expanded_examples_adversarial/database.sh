@@ -1,5 +1,5 @@
 #!/bin/sh
-# Adversarial driver: examples/expanded/database/{kv_store,table_query}.cp
+# Adversarial driver: apps/legacy_examples/expanded/database/{kv_store,table_query}.cp
 set -u
 . "$(dirname -- "$0")/common.sh" || exit 1
 make_fixtures
@@ -8,9 +8,9 @@ BIG=$(cat "$FIX/oversized_10k.txt")
 BADUTF=$(cat "$FIX/invalid_utf8.txt")
 SIZEMAX=18446744073709551615
 
-build_one kv_store     examples/expanded/database/kv_store.cp     || true
-build_one table_query  examples/expanded/database/table_query.cp  || true
-build_one safety_demo  examples/expanded/database/safety_demo.cp  || true
+build_one kv_store     apps/legacy_examples/expanded/database/kv_store.cp     || true
+build_one table_query  apps/legacy_examples/expanded/database/table_query.cp  || true
+build_one safety_demo  apps/legacy_examples/expanded/database/safety_demo.cp  || true
 
 # These two examples deliberately return 0 on a handled refusal; their
 # contract is the explicit "REFUSED" token (KV_SUMMARY / TQ_SUMMARY counters).

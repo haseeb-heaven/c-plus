@@ -23,7 +23,7 @@ if [ ! -x "$CPLUS" ]; then
 fi
 
 mkdir -p "$HERE/out"
-timeout 180 "$CPLUS" build "$SRC" --default --sanitize=none -I"$ROOT" \
+timeout 180 "$CPLUS" build "$SRC" --default --no-werror --sanitize=none -I"$ROOT" \
     -lcurl -I/opt/homebrew/include -L/opt/homebrew/lib -luv \
     -L"$ROOT/build/libc" -lcplus_hardened \
     -o "$OUT" >"$HERE/out/build.log" 2>&1

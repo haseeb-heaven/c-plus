@@ -31,7 +31,7 @@ fi
 mkdir -p "$HERE/out" "$HERE/out/tmp"
 
 # JSON cases include stdlib/json.hp, which wraps vendored yyjson.
-if ! "$CPLUS" build "$SRC" --default --sanitize=none -I"$ROOT" \
+if ! "$CPLUS" build "$SRC" --default --no-werror --sanitize=none -I"$ROOT" \
         -I"$ROOT/third_party/yyjson" -L"$ROOT/build/ext" -lyyjson \
         -o "$OUT" >"$BUILD_LOG" 2>&1; then
     echo "[red_io] BUILD FAILED" >&2

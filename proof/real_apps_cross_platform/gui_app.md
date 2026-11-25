@@ -1,6 +1,6 @@
 # gui_app — headless widget app (SDL3 dummy driver)
 
-**Source:** `examples/gui_app/gui_app.cp` (headers `stdlib/widgets.hp`,
+**Source:** `apps/gui_app/gui_app.cp` (headers `stdlib/widgets.hp`,
 `stdlib/error.hp`; SDL3 only for the hidden render frame).
 **APIs used:** widget tree build, integer grid layout, two fixed hit tests,
 tree serialization with CRC32, an optional real SDL3 frame under
@@ -31,4 +31,6 @@ This is an invocation difference, not a platform difference: the matching
 read the transcript header for its exact command line.  Highball/Wine stderr
 here can contain transient bottle noise (msync bootstrap,
 `winemenubuilder.exe`, driver-load errors); those lines are not app failures
-and are stripped from the marker transcript.
+and are stripped from the marker transcript.  The app runner's verified
+verdict is `GUI_APP 30 6 0 24`; its deterministic screenshot is
+[gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg).

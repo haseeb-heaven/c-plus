@@ -1,0 +1,56 @@
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]
+In file included from tests/stdlib/no_heap/bad.cp:3:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdlib.h:58:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdlib.h:120:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/malloc/_malloc.h:54:89: error: 'alloc_size' attribute argument may only refer to a function parameter of integer type
+   54 | void * __sized_by_or_null(__size) malloc(size_t __size) __result_use_check __alloc_size(1) _MALLOC_TYPED(malloc_type_malloc, 1);
+      |                                   ~~~~~~~~~~~~~~~~~~~~~                                 ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:491:53: note: expanded from macro '__alloc_size'
+  491 | #define __alloc_size(...) __attribute__((alloc_size(__VA_ARGS__)))
+      |                                                     ^
+In file included from tests/stdlib/no_heap/bad.cp:3:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdlib.h:58:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdlib.h:120:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/malloc/_malloc.h:55:115: error: 'alloc_size' attribute argument may only refer to a function parameter of integer type
+   55 | void * __sized_by_or_null(__count * __size) calloc(size_t __count, size_t __size) __result_use_check __alloc_size(1,2) _MALLOC_TYPED(malloc_type_calloc, 2);
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                 ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:491:53: note: expanded from macro '__alloc_size'
+  491 | #define __alloc_size(...) __attribute__((alloc_size(__VA_ARGS__)))
+      |                                                     ^
+In file included from tests/stdlib/no_heap/bad.cp:3:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdlib.h:58:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdlib.h:120:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/malloc/_malloc.h:57:123: error: 'alloc_size' attribute argument may only refer to a function parameter of integer type
+   57 | void * __sized_by_or_null(__size) realloc(void * __unsafe_indexable __ptr, size_t __size) __result_use_check __alloc_size(2) _MALLOC_TYPED(malloc_type_realloc, 2);
+      |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                 ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:491:53: note: expanded from macro '__alloc_size'
+  491 | #define __alloc_size(...) __attribute__((alloc_size(__VA_ARGS__)))
+      |                                                     ^
+In file included from tests/stdlib/no_heap/bad.cp:3:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdlib.h:58:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdlib.h:120:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/malloc/_malloc.h:65:117: error: 'alloc_align' attribute argument may only refer to a function parameter of integer type
+   65 | void * __sized_by_or_null(__size) aligned_alloc(size_t __alignment, size_t __size) __result_use_check __alloc_align(1) __alloc_size(2) _MALLOC_TYPED(malloc_type_aligned_alloc, 2) __OSX_AVAILABLE(10.15) __IOS_AVAILABLE(13.0) __TVOS_AVAILABLE(13.0) __WATCHOS_AVAILABLE(6.0);
+      |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                  ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:470:53: note: expanded from macro '__alloc_align'
+  470 | #define __alloc_align(n) __attribute__((alloc_align(n)))
+      |                                                     ^
+In file included from tests/stdlib/no_heap/bad.cp:3:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stdlib.h:58:
+In file included from /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdlib.h:120:
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/malloc/_malloc.h:65:133: error: 'alloc_size' attribute argument may only refer to a function parameter of integer type
+   65 | void * __sized_by_or_null(__size) aligned_alloc(size_t __alignment, size_t __size) __result_use_check __alloc_align(1) __alloc_size(2) _MALLOC_TYPED(malloc_type_aligned_alloc, 2) __OSX_AVAILABLE(10.15) __IOS_AVAILABLE(13.0) __TVOS_AVAILABLE(13.0) __WATCHOS_AVAILABLE(6.0);
+      |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                                  ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:491:53: note: expanded from macro '__alloc_size'
+  491 | #define __alloc_size(...) __attribute__((alloc_size(__VA_ARGS__)))
+      |                                                     ^
+tests/stdlib/no_heap/bad.cp:4:28: error: incompatible integer to pointer conversion passing 'int' to parameter of type 'int (*)(size_t)' (aka 'int (*)(unsigned long)') [-Wint-conversion]
+    4 | int main(void) { void *p = malloc(32); free(p); return 0; }
+      |                            ^~~~~~~~~~
+./stdlib/no_heap.hp:14:61: note: expanded from macro 'malloc'
+   14 | #define malloc(s)            CPLUS_NO_HEAP_FORBIDDEN_malloc((s))
+      |                                                             ^~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/malloc/_malloc.h:54:42: note: passing argument to parameter here
+   54 | void * __sized_by_or_null(__size) malloc(size_t __size) __result_use_check __alloc_size(1) _MALLOC_TYPED(malloc_type_malloc, 1);
+      |                                          ^
+6 errors generated.

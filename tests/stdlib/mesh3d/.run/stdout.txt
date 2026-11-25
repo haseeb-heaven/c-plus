@@ -1,0 +1,37 @@
+init 1 1 1 1 1
+build 1 1 1 1 1 1
+bbox 1 1 1 1 1 1 1 1
+center 1 1 1 1
+normals-ok 1 1
+normals-unit 1
+normals-outward 1
+normals-exact 1 1 1 1 1 1
+validate-clean 1 1 1 1 1
+translate 1 1
+scale 1 1
+transformed 1 1 1 1 1 1 1 1 1 1
+refuse-index 1 1 1
+refuse-repeat-index 1 1 1
+refuse-nan-vertex 1 1 1
+refuse-inf-vertex 1 1 1
+refuse-collinear 1 1 1
+refuse-nan-scale 1 1
+scale-atomic 1
+refuse-inf-translate 1 1
+translate-atomic 1
+refuse-overflow-scale 1 1
+refuse-oversized-vertices 1 1 1
+refuse-oversized-triangles 1 1 1
+refuse-at 1 1 1 1
+validate-degenerate 1 1 1 1
+validate-bad-index 1 1 1 1
+validate-restored 1 1
+clear 1 1 1 1 1 1
+reuse-after-clear 1 1 1 1
+single-center 1 1 1 1
+empty-center-refused 1 1
+custom-init 1 1
+custom-build 1 1 1 1
+custom-drop 1 1
+custom-double-drop 1
+drop 1 1

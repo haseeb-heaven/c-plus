@@ -11,13 +11,25 @@ toolchain PATH (`/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`),
 | `sh apps/run_all.sh` (web server via curl, SQL-like DB, headless game engine) | `APPS 3 3 0` |
 | `sh proof/games_apps/run.sh` | `PROOF_GAMES 10 0` |
 | `sh proof/real_apps_cross_platform/run.sh` (8 apps, Mach-O + PE32+) | `CROSS_PROOF 58 58 0` |
-| `sh proof/goose_samples/run.sh` (16 modern-C ports, binaries committed) | `GOOSE_PORT 16 16 0` |
-| `sh examples/games3d/run.sh` | `SCENE3D 1 4 0 13` |
-| `sh examples/gui_app/run.sh` | `GUI_APP 30 6 0 24` (Windows runtime conservative/BLOCKED in `-v`) |
-| `sh examples/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` |
+| `sh proof/modern_c_ports/run.sh` (16 modern-C ports, binaries committed) | `PORTS_MODERN_C 16 16 0` |
+| `sh apps/games3d/run.sh` (real app, not a demo) | `SCENE3D 1 4 0 13` |
+| `sh apps/gui_app/run.sh` (real app, not a demo) | `GUI_APP 30 6 0 24` (this runner's Windows `-v` capture is conservative/BLOCKED) |
+| `sh apps/cli_app/run.sh` (real app, not a demo) | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` |
 | `sh tests/run_modern_safer_evidence.sh` | one-command aggregate for the above: `GAMEAPP_EVIDENCE 9 9 0` |
 
-Fixed during this verification: `examples/cli_app/cli_calc.cp:55` now seeds the
+The three suites above were moved from `apps/legacy_examples/{games3d,gui_app,cli_app}` into
+`apps/`; the old `apps/legacy_examples/.../run.sh` entries are compatibility shims only.
+Their screenshots, rendered from actual runner stdout:
+[games3d.svg](../../proof/all_apps_games_screenshots/screenshots/games3d.svg),
+[gui_app.svg](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg),
+[cli_app.svg](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg).
+The separate cross-platform pack
+[`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
+captures genuine PE32+ runs under Highball/Wine (`CROSS_PROOF 58 58 0`); that
+is host/engine-specific evidence and does not change the app runners' own
+Windows scope.
+
+Fixed during this verification: `apps/cli_app/cli_calc.cp:55` now seeds the
 `strtol` end pointer before dereferencing, which clears the strict
 null-pointer diagnostic.
 
@@ -43,7 +55,7 @@ equivalence, memory-safety proof, or release readiness.
 
 ## 3. How much faster (measured, host-specific)
 
-`benchmarks/goose_fast/bump_bench.cp`, 200,000 × 32-byte allocations, one run:
+`benchmarks/scoped_bump/bump_bench.cp`, 200,000 × 32-byte allocations, one run:
 
 ```
 BENCH bump_ns_per_op 86
@@ -55,7 +67,7 @@ BENCH ratio_ge_2 yes
 That is **~3.0× lower allocation latency** for the VM-reserved data-stack bump
 path vs the checked heap on this run. `scope_release_ns 0` means the one-store
 scope rewind was below clock resolution. The deterministic gate checks only
-bucketed verdicts (`GOOSE_BENCH 4 4 0`); exact timings vary with host load and
+bucketed verdicts (`BENCH_SCOPED 4 4 0`); exact timings vary with host load and
 are **not** reproducible proof of a fixed speedup, nor Goose equivalence.
 
 ## Re-run
@@ -65,18 +77,18 @@ sh tests/run_modern_safer_evidence.sh
 sh tests/edge1000/run_edge1000.sh
 ```
 
-## 4. Goose-style heap-free path in the modern libs (2026-11-25)
+## 4. scoped-memory-style heap-free path in the modern libs (2026-11-25)
 
 - `stdlib/web.hp` gained `web_server_init()` / `web_server_shutdown()` so
   `apps/webserver/app.cp` keeps its server handle on the **stack**: no heap
   allocation in that app. `web_server_start()` remains the additive malloc
   convenience wrapper; app output is unchanged (`APPS 3 3 0`).
 - `stdlib/sqldb.hp` and `stdlib/gameeng.hp` use fixed slots (no per-object
-  heap); `benchmarks/goose_modern/bench.cp` runs 20,000 of their operations
+  heap); `benchmarks/scoped_apps/bench.cp` runs 20,000 of their operations
   inside one `stdlib_scratch_scope` using VM data-stack bump payloads.
 - Measured on this host: allocation-only bump **64 ns/op** vs checked-heap
   **175 ns/op** (~2.7x); full modern workload (sqldb+game+bump) **591 ns/op**.
-  Deterministic gate: `GOOSE_MODERN_BENCH 3 3 0` (op count + OK marker only; the ratio is host/load-dependent evidence).
+  Deterministic gate: `SCOPED_APPS_BENCH 3 3 0` (op count + OK marker only; the ratio is host/load-dependent evidence).
 - No Goose code copied; Goose's 2 GiB reservation/compile-time root inference
   is not replicated. "No heap" here means by construction in these apps and
   headers, not a runtime proof that the checked allocator is never called.

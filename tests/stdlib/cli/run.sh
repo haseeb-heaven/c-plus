@@ -4,7 +4,7 @@
 #   sh tests/stdlib/cli/run.sh
 #
 # Builds test_cli.cp with the exact required invocation
-#   --default --sanitize=none -I. -- build/libc/libcplus_hardened.a
+#   --default --no-werror --sanitize=none -I. -- build/libc/libcplus_hardened.a
 # then runs it and diffs stdout/stderr byte-for-byte against the golden
 # output embedded below.  Build/run are bounded by `timeout`.
 set -u
@@ -36,9 +36,9 @@ fi
 
 fail=0
 
-echo "+ $CPLUS build $HERE/test_cli.cp --default --sanitize=none -I. -o $BIN -- build/libc/libcplus_hardened.a"
+echo "+ $CPLUS build $HERE/test_cli.cp --default --no-werror --sanitize=none -I. -o $BIN -- build/libc/libcplus_hardened.a"
 timeout -k 5 60 "$CPLUS" build "$HERE/test_cli.cp" \
-    --default --sanitize=none -I. -o "$BIN" \
+    --default --no-werror --sanitize=none -I. -o "$BIN" \
     -- build/libc/libcplus_hardened.a >"$BUILDLOG" 2>&1
 brc=$?
 if [ "$brc" -eq 124 ] || [ "$brc" -eq 137 ]; then

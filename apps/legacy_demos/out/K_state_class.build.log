@@ -1,0 +1,3 @@
+/tmp/resolve2/apps/legacy_demos/K_state_class.c:17:30: warning: [CPLUS-ARITH] division by zero cannot be excluded
+          return self->count ? self->total / self->count : 0;
+                               ^~~~

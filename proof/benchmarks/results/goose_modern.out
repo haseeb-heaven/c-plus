@@ -1,0 +1,6 @@
+GOOSE_MODERN ops 20000
+GOOSE_MODERN bump_ns_per_op 23
+GOOSE_MODERN heap_ns_per_op 206
+GOOSE_MODERN modern_ns_per_op 146
+GOOSE_MODERN ratio_ge_2 yes
+GOOSE_MODERN_OK

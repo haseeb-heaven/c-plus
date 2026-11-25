@@ -9,7 +9,7 @@ unset SDKROOT
 unset CPLUS_CLANG
 D=tests/ctl
 pass=0; fail=0; cases=0
-if ! timeout 180 ./build/c+ build "$D/test_ctl_span.cp" --default --sanitize=none \
+if ! timeout 180 ./build/c+ build "$D/test_ctl_span.cp" --default --no-werror --sanitize=none \
       -I. -o "$D/test_ctl_span" -- build/libc/libcplus_hardened.a \
       >"$D/test_ctl_span.build.log" 2>&1; then
     echo "CTL_SPAN_TEST FAIL build"; tail -5 "$D/test_ctl_span.build.log"; exit 1

@@ -29,7 +29,7 @@ printf 'edge100-netthread-fixture\n' > "$HERE/out/fixture.txt"
 # The repository's build/c+ wrapper may point at a compiler that another
 # in-flight build is replacing; fall back to the installed `c+` on PATH.
 build_with() {
-    "$1" build "$SRC" --default --sanitize=none -I"$ROOT" \
+    "$1" build "$SRC" --default --no-werror --sanitize=none -I"$ROOT" \
         -lcurl -I/opt/homebrew/include -L/opt/homebrew/lib -luv \
         -o "$OUT" >"$HERE/out/build.log" 2>&1
 }

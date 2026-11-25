@@ -14,7 +14,7 @@ merge error combining agent/core-safety and agent/modern-stdlib`.
 | `.gitignore` | repo hygiene — both agents |
 | `compiler/Driver/Driver.cpp` | compiler driver — Agent 1 |
 | `compiler/Sema/RaiiLowering.cpp` | RAII lowering — Agent 1 |
-| `demos/run_demos.sh` | demos — Agent 2 |
+| `apps/legacy_demos/run_demos.sh` | demos — Agent 2 |
 | `docs/STATUS.md` | status/process — both |
 | `sonar-project.properties` | CI config — both |
 | `tests/compile_fail/alloc_return_oob.err`, `alloc_size_oob.err`, `classic_bug1_oob.err`, `constant_oob.err`, `loop_oob.err`, `multidim_bounds.err` | expected compiler diagnostics — Agent 1 |

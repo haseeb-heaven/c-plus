@@ -1,0 +1,2 @@
+GUI_REFUSED tag=bad-index category=5 code=101 message=widgets: index out of range
+GUI_RESULT refuse bad-index REFUSED 101

@@ -1,6 +1,6 @@
-# games3d — deterministic 3D scene demo
+# games3d — real deterministic 3D scene app
 
-**Source:** `examples/games3d/scene3d_demo.cp` (headers `stdlib/math3d.hp`,
+**Source:** `apps/games3d/scene3d_demo.cp` (headers `stdlib/math3d.hp`,
 `stdlib/mesh3d.hp`, `stdlib/scene3d.hp`, `stdlib/error.hp`,
 `stdlib/alloc_iface.hp`).
 **APIs used:** cube mesh build and AABB, a fixed scene graph, axis-angle to
@@ -18,5 +18,7 @@ interactive game and it does not touch a GPU.
 Both transcripts also contain the identical self-check line
 `CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40`.  macOS sets
 `SDL_VIDEODRIVER=dummy`; Windows uses `highball run -v` with the two MinGW
-DLLs beside the exe.  `run.sh` re-runs this demo on both platforms and checks
-both marker lines plus exit 0.
+DLLs beside the exe.  `run.sh` re-runs this app on both platforms and checks
+both marker lines plus exit 0.  The app runner's verified verdict is
+`SCENE3D 1 4 0 13`; its deterministic screenshot is
+[games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg).

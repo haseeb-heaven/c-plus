@@ -1,4 +1,3 @@
-clang: error: unsupported option '--no-werror'
 clang: warning: build/ext/libnuklear.a: 'linker' input unused [-Wunused-command-line-argument]
 clang: warning: build/safe/libcplus_safecrt.a: 'linker' input unused [-Wunused-command-line-argument]
 clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

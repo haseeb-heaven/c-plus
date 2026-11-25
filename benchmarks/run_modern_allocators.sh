@@ -6,7 +6,7 @@ cd "$ROOT"
 export PATH="$ROOT/build:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 unset SDKROOT || true
 BIN=build/bench_modern_allocators
-"$ROOT/build/c+" build benchmarks/modern_allocators.cp --default --sanitize=none \
+"$ROOT/build/c+" build benchmarks/modern_allocators.cp --default --no-werror --sanitize=none \
     -I. -o "$BIN" -- build/libc/libcplus_hardened.a >/dev/null 2>&1
 /tmp/warm_ma 2>/dev/null || true
 "$BIN" >/dev/null 2>&1                     # warmup

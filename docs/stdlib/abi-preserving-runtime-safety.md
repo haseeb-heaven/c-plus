@@ -341,7 +341,7 @@ upstream fetch was performed for this task.
 |---|---|---|---|---|---|
 | 1 | Microsoft STL | `main` @ `0cabaf3c7e0a73fe3040aabce40cd8833e80392b` (2026-11-21) | `Apache-2.0 WITH LLVM-exception` | `stl/inc/{vector,xstring,xmemory,xutility}`; tests `Dev10_579381_vector_grow_to`, `GH_005472_do_not_overlap`, `GH_002030_asan_annotate_{vector,string}`, `P0966R1_string_reserve_should_not_shrink`, `P1206R7_string_append_range` | `upstream_study/microsoft_stl.md` |
 | 2 | Microsoft GSL | `main`, fetched 2026-11-23; `span` blob `090a8bd917d2fb96a2401577f50ed2b30012c437` | `MIT License (MIT)`, Copyright (c) 2015 Microsoft Corporation | `include/gsl/{span,pointers,narrow,assert,util,span_ext}`, `LICENSE`; tests `span_tests.cpp`, `notnull_tests.cpp`, `owner_tests.cpp`, `assertion_tests.cpp`, `utils_tests.cpp` | `upstream_study/microsoft_gsl.md` |
-| 3 | SaferCPlusPlus | `master`, shallow-clone HEAD `5edaf67acf746d9ee472a06a51094b31a3db57c0` | `BSL-1.0`, Copyright (c) 2015 Noah Lopez | `include/{msepointerbasics,msescope,mseregistered,mserefcounting,msemsearray,msemsevector,mseasyncshared}.h`; `examples/msetl_example/{msevector_test.h,msetl_example_defs.h}` | `upstream_study/safer_cplusplus.md` |
+| 3 | SaferCPlusPlus | `master`, shallow-clone HEAD `5edaf67acf746d9ee472a06a51094b31a3db57c0` | `BSL-1.0`, Copyright (c) 2015 Noah Lopez | `include/{msepointerbasics,msescope,mseregistered,mserefcounting,msemsearray,msemsevector,mseasyncshared}.h`; `apps/legacy_examples/msetl_example/{msevector_test.h,msetl_example_defs.h}` | `upstream_study/safer_cplusplus.md` |
 | 4 | Microsoft Secure CRT (documentation only) + vendored safeclib / Intel | Microsoft Learn pages M1–M10 (no source fetched); safeclib `90b076e94c4b0fb202dddf948d5d620e5395c1b0`; Intel `f4491915cc682556ed64d4eb6a2461d8eed2eb0c` | Microsoft docs only; safeclib MIT-style (Cisco 2012–2013, Reini Urban 2017); Intel MIT (2014–2018, incl. Cisco notice) | `third_party/safeclib/src/{mem/memset_s.c,str/strcpy_s.c,str/strncpy_s.c,io/fopen_s.c,io/fprintf_s.c,io/gets_s.c,str/safe_str_constraint.c,abort_handler_s.c,ignore_handler_s.c,...}`; Intel `safeclib/{strcpy_s.c,memset_s.c}` | `upstream_study/secure_crt.md` |
 | 5 | Cake | `main` @ `2da2afd1759a7f3a62024ac781af65c8832bbe5f`, `CAKE_VERSION "0.17.07"` | `GPL-3.0-or-later` + AI-training-use addendum — **REJECTED** | `README.md`, `LICENSE`, `quickref.md`, `flow.md`, `manual.md`, `src/cake_compat.h`, `src/{defer.h,flow.h,flow_branch.h}`, `src/include/{stddefer.h,stdlib.h,stdio.h,threads.h}`, defer/flow3 tests | `upstream_study/cake.md` |
 | 6 | Fil-C | docs + raw `deluge` branch; raw `stdfil.h` = `FILC_VERSION 687u` | `LLVM-LICENSE.txt` = Apache-2.0 with LLVM Exceptions (API reports `NOASSERTION`/`other`); fetched runtime files carry per-file BSD-2-clause, Copyright (c) 2023–2026 Epic Games / 2024–2026 Filip Pizlo | `fil-c.org/{how,invisicaps,fugc,runtime,safepoints,stdfil}.html`; `libpas/src/libpas/fugc.h`; `filc/include/stdfil.h` | `upstream_study/fil_c.md` |
@@ -636,7 +636,7 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
   benchmarks/safety_compare/modern.cp -o build/bench_safety/cplus_legacy_modern
 CPLUS_GOOSE=/Users/haseeb-mir/.local/bin/goose \
   "$CPLUS_GOOSE" build benchmarks/safety_compare/modern.goose \
-  -o build/bench_safety/goose_modern
+  -o build/bench_safety/scoped_apps
 rustc -O benchmarks/safety_compare/modern.rs -o build/bench_safety/rust_modern
 
 python3 - <<'PY'

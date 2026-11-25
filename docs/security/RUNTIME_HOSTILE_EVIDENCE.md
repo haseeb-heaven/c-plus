@@ -28,7 +28,7 @@ marked **PENDING** rather than filled in.
 | `tests/security/resource_exhaustion` | **16 case/mode pairs, 78 checks per mode × 2 modes = 156 executions, 0 failures, exit 0**, 1 declared SKIP |
 | `tests/security/stdlib` (aggregate runner) | **15 invocations, 15 PASS, 0 FAIL/BUILD_FAILURE/TIMEOUT/BLOCKED, exit 0** |
 | `tests/scenarios/cve_like` | **15 baseline CVE-like cases documented; safe-variant gate `10 passed, 0 failed`, exit 0** (earlier state `4 passed, 0 failed`) |
-| `examples/screenshots/MANIFEST.md` | **6 real captured transcripts, 6 builds, 7 binary runs, 0 failures, exit 0**, all `VERDICT: PASS` |
+| `apps/legacy_examples/screenshots/MANIFEST.md` | **6 real captured transcripts, 6 builds, 7 binary runs, 0 failures, exit 0**, all `VERDICT: PASS` |
 
 Heterogeneous units (scenarios, checks, cases, transcripts) are intentionally
 **not** summed into a single grand total; each suite defines its own unit.
@@ -54,7 +54,7 @@ exit code recorded in the artifact.
 | fs_security (`tests/security/stdlib/FS_SECURITY_NOTES.md`) | `FS_SECURITY 68 0` (68 checks) | characterization, not refusals | 68 `FSQ_` lines all `1`; 0 stderr bytes | 0 | 0 |
 | thread_security (`tests/security/stdlib/THREAD_SECURITY_NOTES.md`) | 37 checks | n/a | 37 pass / 0 fail | 0 | 0 |
 | cve_like safe-variant gate (`tests/scenarios/cve_like/NOTES_5.md`) | 15 baseline cases; gate output lists 10 safe-variant runs | caller-side refusals | no ASan/UBSan diagnostics in safe variants | 0 | 0 |
-| screenshot captures (`examples/screenshots/MANIFEST.md`) | 6 transcripts / 7 runs | per-transcript refusal tokens | every transcript `VERDICT: PASS` | 0 | 0 |
+| screenshot captures (`apps/legacy_examples/screenshots/MANIFEST.md`) | 6 transcripts / 7 runs | per-transcript refusal tokens | every transcript `VERDICT: PASS` | 0 | 0 |
 
 ### 2.1 ADV1000 per-group breakdown (verbatim final lines)
 
@@ -169,7 +169,7 @@ passes; the guard is therefore the negative control, not decoration.
 | Contrast | Checked / hardened result | Plain / unguarded result | Source |
 |---|---|---|---|
 | 16 ordinary-C APIs × 4 cases (`memcpy`, `memmove`, `memset`, `strcpy`, `strncpy`, `strcat`, `strncat`, `printf`, `fprintf`, `fopen`, `fread`, `fwrite`, `malloc`, `calloc`, `realloc`, `free`) | `STDC_SAFETY 64 48 64 0`; every hostile case returns a documented failure (`EINVAL`/`ERANGE`/`EOVERFLOW` or safeclib code); all 64 canaries intact; exit 0 | **13** canaries destroyed; **23** abnormal terminations (SIGSEGV 11, SIGABRT 6, SIGTRAP 5); **19** divergent cases; **all 16 valid cases still pass with canary=1** (ABI/source-compatibility control) | `tests/abi/stdc_safety/RESULTS.md` |
-| 9-byte copy into 8-byte field | `cplus_memcpy_s` refuses `ESNOSPC = 406`, parent canary stays `0xa5`; exact-fit copy succeeds (positive control) | forked child corrupts canary `0xa5 → 0x2a`, child exits 9 | `examples/screenshots/captures/unsafe_vs_safe_memcpy.txt` |
+| 9-byte copy into 8-byte field | `cplus_memcpy_s` refuses `ESNOSPC = 406`, parent canary stays `0xa5`; exact-fit copy succeeds (positive control) | forked child corrupts canary `0xa5 → 0x2a`, child exits 9 | `apps/legacy_examples/screenshots/captures/unsafe_vs_safe_memcpy.txt` |
 | CVE-like baselines (cases 01–15) | safe variants refuse or use defined bounded results, exit 0, no sanitizer diagnostics; generation checks refuse stale aliases; checked free refuses double/invalid free | ASan reports heap-buffer-overflow, negative-size-param, heap-use-after-free, double-free, stack-overflow, stack-buffer-overflow (rc 134; `cmd=99` rc 132 control-flow hijack); TSan reports data race (rc 134) | `tests/scenarios/cve_like/NOTES_1.md` … `NOTES_5.md` |
 | Severity honesty | Several CVE-like cases are classified **PARTIAL** or **NOT-FIXABLE-BY-LIBC**: ownership/lifetime bugs (UAF, aliasing, jump-table bounds, thread race) require **caller-side** fixes; the library contributes checked allocation/copy/free and provenance queries only | — | `tests/scenarios/cve_like/NOTES_2.md`, `NOTES_3.md`, `NOTES_4.md`, `NOTES_5.md` |
 
@@ -227,7 +227,7 @@ symbols; `safe_c.h` is source-level macro rewriting only.
 sh tests/adversarial_1000/run_all.sh
 timeout 120 sh tests/expanded_examples_adversarial/run_all.sh
 sh tests/abi/stdc_safety/run.sh
-./examples/screenshots/capture.sh
+./apps/legacy_examples/screenshots/capture.sh
 sh tests/security/hostile_inputs/run.sh                 # exit 2 = BLOCKED mode, 0 failures
 sh tests/security/resource_exhaustion/run.sh --mode all
 sh tests/security/stdlib/run.sh                          # aggregate discovery runner
@@ -304,7 +304,7 @@ bounded termination, not a parser depth bound; no yyjson depth limit, no
 - `tests/adversarial_1000/RESULTS.md`, `tests/adversarial_1000/SECURITY_LOGS.md`, and the eight `<group>/NOTES.md`.
 - `tests/expanded_examples_adversarial/RESULTS.md` (including `logs/final.out`, run history, harness fix).
 - `tests/abi/stdc_safety/RESULTS.md`.
-- `examples/screenshots/MANIFEST.md` and the six `examples/screenshots/captures/*.txt` transcripts.
+- `apps/legacy_examples/screenshots/MANIFEST.md` and the six `apps/legacy_examples/screenshots/captures/*.txt` transcripts.
 - `tests/security/hostile_inputs/NOTES.md`; `tests/security/resource_exhaustion/NOTES.md`, `README.md`, `.reout/summary.json`; `tests/security/stdlib/README.md`, `FS_SECURITY_NOTES.md`, `THREAD_SECURITY_NOTES.md`; `build/security/security_summary.json`, `security_table.txt`.
 - `tests/scenarios/cve_like/NOTES_1.md` … `NOTES_5.md`.
 - `docs/security/verification-status.md` (external blockers and sanitizer status).

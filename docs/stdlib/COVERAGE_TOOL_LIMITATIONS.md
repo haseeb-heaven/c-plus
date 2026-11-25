@@ -93,7 +93,7 @@ has any relationship to execution, behaviour, branch coverage, or safety.
   (`&name`), an operator, a macro/template expansion, or a callback — with no
   literal `name(` in the scanned sources;
 - the call is generated in a source outside the three glob patterns at
-  `coverage.py:59` (e.g. only from `demos/` or a generated file);
+  `coverage.py:59` (e.g. only from `apps/legacy_demos/` or a generated file);
 - a destructor is reached only through `auto`/typedef so the class name never
   appears as a word;
 - a definition written in a style the `SIG`/`CTOR` regexes at

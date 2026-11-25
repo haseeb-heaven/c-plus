@@ -1,0 +1,22 @@
+/tmp/resolve2/stdlib/error.hp:452:13: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      fresh = cplus_realloc(ptr, actual);
+              ^~~~~~~~~~~~~
+/tmp/resolve2/stdlib/mempool.hp:96:29: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      if (p->slots_per_slab > (size_t)-1 / stride)
+                              ^
+/tmp/resolve2/stdlib/mempool.hp:118:20: warning: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+          s->slots = (unsigned char *)sp;
+                     ^
+/tmp/resolve2/stdlib/mempool.hp:186:19: warning: [CPLUS-ARITH] remainder by zero cannot be excluded
+                  (((size_t)(slot - (s->slots + STDLIB_POOL_HEADER_SIZE)) %
+                    ^
+/tmp/resolve2/stdlib/mempool.hp:194:9: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      i = (size_t)(slot - (h->slab->slots + STDLIB_POOL_HEADER_SIZE)) /
+          ^
+/tmp/resolve2/stdlib/mempool.hp:336:16: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      if (ncap > (size_t)-1 / p->slot_size)
+                 ^
+/tmp/resolve2/stdlib/datastack.hp:98:18: warning: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+          if (p == MAP_FAILED)
+                   ^~~~~~~~~~
+clang: warning: /tmp/resolve2/build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

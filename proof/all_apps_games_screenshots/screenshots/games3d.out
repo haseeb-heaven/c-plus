@@ -1,0 +1,20 @@
+BUILD ok scene3d_demo
+ok built-in run exited 0 with empty stderr
+ok exact stdout matches expected/transcript.expected
+ok two runs are byte-identical (deterministic)
+ok checksum line: CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40
+EXTERNAL_CKSUM 456015415 1903
+ok refusal E_NONFINITE (rc=2) args=NAN
+ok refusal E_NONFINITE (rc=2) args=INF
+ok refusal E_INDEX (rc=2) args=INDEX 8
+ok refusal E_INDEX (rc=2) args=INDEX 999999
+ok refusal E_INDEX (rc=2) args=INDEX -1
+ok refusal E_BOUNDS (rc=2) args=NODE 9
+ok refusal E_INDEX (rc=2) args=DEGENERATE
+ok refusal E_CYCLE (rc=2) args=CYCLE
+ok refusal E_PARSE (rc=2) args=PARSE 12x
+ok refusal E_PARSE (rc=2) args=BOGUS
+ok refusal E_PARSE (rc=2) args=INDEX
+ok refusal E_PARSE (rc=2) args=NODE
+ok refusal E_PARSE (rc=2) args=PARSE
+SCENE3D 1 4 0 13

@@ -1,4 +1,4 @@
-/* C+ adapter: Nuklear (MIT, vendored third_party/nuklear) on the Goose-style
+/* C+ adapter: Nuklear (MIT, vendored third_party/nuklear) on the scoped-memory-style
  * VM data stack. Additive header; no Nuklear source edited.
  *
  * Nuklear's nk_allocator callbacks are redirected to stdlib_datastack_alloc;

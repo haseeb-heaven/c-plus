@@ -34,7 +34,7 @@ agent. No source, header, build file, test, or git index entry was changed; no
 | `tests/stdlib/method_tests/RESULTS.md` | 518/518 per-method test aggregate |
 | `benchmarks/example_rust_compare/ALL_EXAMPLES.md` + per-group `RESULTS.md` | 49-example index; demos A–P, `crt/*`, games, `apps_system` comparisons |
 | `benchmarks/example_rust_compare/RESULTS.md` | 49-example aggregate: 43 MATCH / 5 DIFFERENT / 1 BLOCKED |
-| `examples/expanded/RESULTS.md` + `build/expanded_examples/final_lines.txt` | 6/6 expanded example groups PASS, aggregate exit 0 |
+| `apps/legacy_examples/expanded/RESULTS.md` + `build/expanded_examples/final_lines.txt` | 6/6 expanded example groups PASS, aggregate exit 0 |
 | `tests/expanded_examples_adversarial/RESULTS.md` | Expanded adversarial refusal aggregate (135 cases) |
 | `benchmarks/example_rust_compare/expanded_cli_games/RESULTS.md` | CLI/game expanded C+ vs Rust: 9/9 MATCH |
 | `benchmarks/example_rust_compare/expanded_db_engine/RESULTS.md` | DB/engine/safety expanded C+ vs Rust: 10/10 MATCH |
@@ -210,7 +210,7 @@ build calls `cplus_fopen_s`); `fread`/`fwrite` "small" uses bounded `cplus_fread
 | `demos_i_l` | **3 MATCH, 0 DIFFERENT, 1 BLOCKED** (K_state_class: strict C+ `[CPLUS-ARITH]` compile rejection) | `demos_i_l/RESULTS.md` |
 | `demos_m_p` | **4 MATCH, 0 DIFFERENT, 0 BLOCKED** | `demos_m_p/RESULTS.md` |
 
-### 3b. CRT safe-API demos (`examples/crt/*`, 26 examples) — **LANDED**
+### 3b. CRT safe-API demos (`apps/legacy_examples/crt/*`, 26 examples) — **LANDED**
 
 | Group | Result | Source |
 | --- | --- | --- |
@@ -221,7 +221,7 @@ build calls `cplus_fopen_s`); `fread`/`fwrite` "small" uses bounded `cplus_fread
 
 ### 3c. Games, including snake — **[ON-DISK, UNCOMMITTED]**
 
-`examples/games/{2048.c,snake.c,tetris.c,tiles.c}` compiled unmodified into
+`apps/legacy_examples/games/{2048.c,snake.c,tetris.c,tiles.c}` compiled unmodified into
 fixed-seed (`seed=12345`) deterministic-core drivers and compared byte-exactly
 to safe-Rust models. Result: **4 MATCH, 0 DIFFERENT, 0 BLOCKED
 (deterministic-core scope)** — 111 lines / 6456 bytes of identical output;
@@ -237,13 +237,13 @@ differing per-run hashes). See `benchmarks/example_rust_compare/games/RESULTS.md
 `benchmarks/example_rust_compare/apps_system/out/compare.run.log` records
 **3/3 examples matched on the tested deterministic paths**:
 
-- **CLI / game engine** — `examples/apps/cgame.c`: **8/8** deterministic
+- **CLI / game engine** — `apps/legacy_examples/apps/cgame.c`: **8/8** deterministic
   menu/quiz/sandbox paths byte-identical (`quit`, `invalid`, `reset`,
   `levels_back`, `libmenu`, `quiz_wrong`, `quiz_correct`, `libex0`); deeper
   level content not modeled.
-- **Database** — `examples/apps/student.cp`: **2/2** deterministic CRUD +
+- **Database** — `apps/legacy_examples/apps/student.cp`: **2/2** deterministic CRUD +
   persistence paths byte-identical (stdout, stderr, exit, `students.db`).
-- **System CLI** — `examples/system/macpulse.cp`: MATCH on the non-interactive
+- **System CLI** — `apps/legacy_examples/system/macpulse.cp`: MATCH on the non-interactive
   tty-guard path via a minimally patched copy; live interactive sampling is
   timing/hardware-dependent and **BLOCKED** for byte comparison.
 
@@ -253,7 +253,7 @@ predates these files landing); the `games/RESULTS.md` and `apps_system`
 artifacts above are the more recent on-disk evidence. `cgame.rs` shows ` M`
 and `compare.sh`/`macpulse.rs` show `??` in `git status` — **not committed**.
 
-### 3e. `examples/expanded/` — 6/6 groups PASS **[LANDED / HANDOFF]**
+### 3e. `apps/legacy_examples/expanded/` — 6/6 groups PASS **[LANDED / HANDOFF]**
 
 The expanded campaign has landed: **6/6 runner groups PASS, aggregate exit 0**.
 `build/expanded_examples/final_lines.txt` records these verbatim final lines
@@ -268,11 +268,11 @@ The expanded campaign has landed: **6/6 runner groups PASS, aggregate exit 0**.
 | Snake | `SNAKE_EXAMPLES 3 3 0` | 3/3 PASS |
 | Safety | `SAFETY_DEMOS 4 4 0` | 4/4 PASS |
 
-Reproduce: `sh examples/expanded/run_all.sh` (also `sh examples/expanded/safety/run.sh`
+Reproduce: `sh apps/legacy_examples/expanded/run_all.sh` (also `sh apps/legacy_examples/expanded/safety/run.sh`
 for the safety group alone), from the repository root.
 
 **Provenance note (not a downgrade):** the committed body of
-`examples/expanded/RESULTS.md` still records the earlier 5/6 snapshot (safety
+`apps/legacy_examples/expanded/RESULTS.md` still records the earlier 5/6 snapshot (safety
 group PENDING, aggregate exit 1). The safety `run.sh` has since landed and the
 captured `final_lines.txt` shows `SAFETY_DEMOS 4 4 0`; the coordinating agent
 confirms the refreshed aggregate is 6/6 with exit 0. Refresh the snapshot with
@@ -359,7 +359,7 @@ parity for the tested inputs only — **not** Rust equivalence.
 | Legacy labs | 54/54 pass, 0 build/timeout/skip failures | both bash 3.2.57 and 5.3.15 |
 | libc tests (`tests/libc/run_libc_tests.sh`) | **109/109 passed, 0 failed** **[HANDOFF]** | coordinator-supplied latest count; see provenance note |
 | CRT unit (`tests/crt/unit/run_unit_tests.sh`) | **85/85 passed, 0 failed** **[HANDOFF]** | coordinator-supplied latest count; see provenance note |
-| Expanded examples (`examples/expanded/RESULTS.md`) | **6/6 groups PASS, aggregate exit 0** | CLI 4/4, DB 3/3, ENGINE 3/3, GAME_CORES 3/3, SNAKE 3/3, SAFETY 4/4 (§3e) |
+| Expanded examples (`apps/legacy_examples/expanded/RESULTS.md`) | **6/6 groups PASS, aggregate exit 0** | CLI 4/4, DB 3/3, ENGINE 3/3, GAME_CORES 3/3, SNAKE 3/3, SAFETY 4/4 (§3e) |
 | Expanded adversarial (`tests/expanded_examples_adversarial/RESULTS.md`) | **135 cases / 135 refusals / 0 crashes / 0 unexpected OK** **[HANDOFF]** | hostile inputs on the expanded examples (§3e-bis) |
 | Expanded C+ vs Rust, CLI/games | **9/9 MATCH** | deterministic stdout + exit (§3e-ter) |
 | Expanded C+ vs Rust, DB/engine/safety | **10/10 MATCH** | deterministic stdout + exit (§3e-ter) |
@@ -459,7 +459,7 @@ the MATCH is legitimate, not a stale-baseline artifact.
 | 4 | **Rust examples 29 BLOCKED** | Aggregate `RESULT: FAIL`, runner exit 1: 29 BLOCKED (alloc 24, runtime_diag 2, search 1, threading 2), 2 BAD_REPORT (`safecrt_memstr`, `vendored_v` emit 5 fields instead of 6), 2 inconsistent `cases` semantics (`format`, `json_log`). 0 real mismatches — but not a green aggregate. | `sh benchmarks/rust_examples/run_all.sh` |
 | 5 | **`FE_TIESAWAY` host-blocked** | Genuinely absent from both clang versions and the SDK; honest `UNSUPPORTED-BY-HOST` refusal, not fabricated. 49 deliberate `UNSUPPORTED` ISO C entries unchanged; **no "100% ISO C complete" claim**. | `printf '#include <fenv.h>\n#ifndef FE_TIESAWAY\n#error FE_TIESAWAY_ABSENT\n#endif\n' | /usr/bin/clang -x c -std=c2x -fsyntax-only -` |
 | 6 | **Ninth adversarial group missing** | 8 groups ran → 8000/9000 scenarios; campaign target is 9000 = 9×1000. Discovery is dynamic; a ninth compliant group will be included automatically. | `sh tests/adversarial_1000/run_all.sh` |
-| 7 | **Stale committed `RESULTS.md` snapshots** *(was: expanded examples PENDING — now resolved: 6/6 PASS)* | The bodies of `examples/expanded/RESULTS.md` and `tests/expanded_examples_adversarial/RESULTS.md` still embed the earlier 5/6-exit-1 and 110/110 runs; the refreshed counts (6/6 exit 0, 135/135) come from landed commit messages, captured runner output and the coordinating agent. Refresh rather than re-interpret them. | `sh examples/expanded/run_all.sh` ; `sh tests/expanded_examples_adversarial/run_all.sh` |
+| 7 | **Stale committed `RESULTS.md` snapshots** *(was: expanded examples PENDING — now resolved: 6/6 PASS)* | The bodies of `apps/legacy_examples/expanded/RESULTS.md` and `tests/expanded_examples_adversarial/RESULTS.md` still embed the earlier 5/6-exit-1 and 110/110 runs; the refreshed counts (6/6 exit 0, 135/135) come from landed commit messages, captured runner output and the coordinating agent. Refresh rather than re-interpret them. | `sh apps/legacy_examples/expanded/run_all.sh` ; `sh tests/expanded_examples_adversarial/run_all.sh` |
 | 8 | **On-disk/uncommitted comparison artifacts** | `benchmarks/example_rust_compare/expanded_db_engine/RESULTS.md` and several expanded-adversarial logs appear as `??`/` M` in `git status`, along with `scratch/*.cp` probes. The landed commits (`c08c9d0`, `c6195a0`, `58860a8`) carry the authoritative result bodies; uncommitted logs are refresh artifacts, not new claims. | `git status --short` |
 | 9 | **Archive hash drift** | Archive SHA-256 differs across sibling runs due to concurrent rebuilds (`stdc_precompiled` hardened `86f6a722…` vs `stdc_safety` hardened `2aa3cc3e…`); each claim applies to its own run. Precompiled proof re-hashes the same saved `.a` and is self-contained. | — |
 | 10 | **Numerical fidelity caveats** | `hypot3` may differ a few ulp from a hypothetical correctly-rounded 3-arg hypot; `exp16` lowers through host `expf`; `frexp16`/`logb16` use exact f32 compositions (`__builtin_frexpf16` crashes arm64 backend at `-O0`). Platform-backed, not formal proof. | — |

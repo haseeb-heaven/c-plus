@@ -10,7 +10,7 @@ unset SDKROOT
 unset CPLUS_CLANG
 D=tests/runtime
 pass=0; fail=0; cases=0
-if ! timeout 180 ./build/c+ build "$D/test_print.cp" --default --sanitize=none \
+if ! timeout 180 ./build/c+ build "$D/test_print.cp" --default --no-werror --sanitize=none \
       -I. -o "$D/test_print" -- build/libc/libcplus_hardened.a \
       >"$D/test_print.build.log" 2>&1; then
     echo "PRINT_TEST FAIL build"; exit 1

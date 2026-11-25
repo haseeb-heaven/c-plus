@@ -5,8 +5,11 @@
  * This corpus never reads genuinely uninitialized memory (that would be UB
  * in the test itself).  Instead every object is fully initialized with a
  * deliberately hostile *but defined* bit pattern:
- *   - mbstate_t objects: zeroed, 0xFF-filled, a real partial-shift state
- *     captured from a genuine conversion, and deterministic random bytes.
+ *   - mbstate_t objects: zeroed, plus three genuine non-initial shift states
+ *     captured from real conversions of 2/3/4-byte UTF-8 leads.  They are
+ *     hostile (a partial sequence is carried into an unrelated conversion)
+ *     but always valid representations of the type.  Arbitrary raw bytes are
+ *     NOT used: glibc's iconv asserts on an invalid mbstate_t and aborts.
  *   - struct tm objects: all-zero plus out-of-range field combinations
  *     (month 13, mday 32, hour 25, year 0, isdst -1/0/1, ...).
  *   - fenv_t / fexcept_t objects: zeroed, 0xFF-filled, and random bytes.
@@ -82,42 +85,79 @@ extern intmax_t cplus_wcstoimax(const wchar_t *, wchar_t **, int);
 extern uintmax_t cplus_wcstoumax(const wchar_t *, wchar_t **, int);
 
 /* ------------------------------------------------------------------ */
-/* Crash -> FINDING reporting                                          */
+/* Signal diagnostics: always name the exact hostile case             */
 /* ------------------------------------------------------------------ */
-static void crash_handler(int sig) {
-    static const char pfx[] = "FINDING: crash signal ";
-    char num[16];
-    size_t pos = sizeof(num);
-    unsigned int v = (sig < 0) ? (unsigned int)(-(long)sig) : (unsigned int)sig;
-    num[--pos] = '\n';
-    do {
-        num[--pos] = (char)('0' + (v % 10u));
-        v /= 10u;
-    } while (v != 0u && pos > 1u);
-    if (sig < 0 && pos > 0u)
-        num[--pos] = '-';
-    (void)write(STDERR_FILENO, pfx, sizeof(pfx) - 1);
-    (void)write(STDERR_FILENO, num + pos, sizeof(num) - pos);
-    _exit(70);
-}
-
 /* Optional bounded hang diagnostics for slower CI hosts (off by default):
  *   CPLUS_CORPUS_WATCHDOG=<seconds>  alarm() bound, reports the active case
  *   CPLUS_CORPUS_TRACE=1             print each case index before dispatch
  *   CPLUS_CORPUS_HANG_AT=<index>     diagnostic hook: sleep(5) at that case
  * The last two are off unless explicitly requested; the shipped corpus run
  * still prints exactly "corpus_uninit: 760 cases ok".
+ *
+ * Both handlers are async-signal-safe: they use only stack locals and write(2),
+ * which is unbuffered, so the line reaches stderr immediately even when the
+ * signal interrupts a buffered stdio call.  snprintf/printf/malloc are NOT
+ * async-signal-safe and can themselves wedge when the signal interrupts the
+ * very glibc conversion that is non-terminating, so the previous snprintf-
+ * based hang handler could fail to name a case at all.  The full descriptor
+ * (global index, category, variant, per-category index) is stored in
+ * sig_atomic_t globals before each dispatch and written to stderr on failure.
+ * A -1 descriptor means the failure happened before the case loop (setup).
  */
 static volatile sig_atomic_t g_active_case = -1;
+static volatile sig_atomic_t g_active_cat = -1;
+static volatile sig_atomic_t g_active_variant = -1;
+static volatile sig_atomic_t g_active_idx = -1;
 static int g_hang_at = -1;
 
+static void emit_ascii(const char *s) {
+    size_t n = 0;
+    ssize_t w;
+    while (s[n] != '\0') ++n;
+    w = write(STDERR_FILENO, s, n);
+    (void)w; /* glibc marks write warn_unused_result; a partial write is fine here */
+}
+
+static void emit_signed(sig_atomic_t v) {
+    char num[32];
+    size_t pos = sizeof num;
+    unsigned long uv;
+    ssize_t w;
+    int neg = (v < 0);
+    uv = neg ? (unsigned long)(-(v + 1)) + 1UL : (unsigned long)v;
+    do {
+        num[--pos] = (char)('0' + (uv % 10UL));
+        uv /= 10UL;
+    } while (uv != 0UL && pos > 0u);
+    if (neg && pos > 0u)
+        num[--pos] = '-';
+    w = write(STDERR_FILENO, num + pos, sizeof num - pos);
+    (void)w;
+}
+
+static void report_finding(const char *kind, int sig) {
+    emit_ascii("FINDING: corpus_uninit ");
+    emit_ascii(kind);
+    emit_ascii(" at case ");
+    emit_signed(g_active_case);
+    emit_ascii(" cat=");
+    emit_signed(g_active_cat);
+    emit_ascii(" variant=");
+    emit_signed(g_active_variant);
+    emit_ascii(" idx=");
+    emit_signed(g_active_idx);
+    emit_ascii(" signal=");
+    emit_signed((sig_atomic_t)sig);
+    emit_ascii("\n");
+}
+
+static void crash_handler(int sig) {
+    report_finding("crash", sig);
+    _exit(70);
+}
+
 static void hang_handler(int sig) {
-    char msg[96];
-    int n = snprintf(msg, sizeof(msg),
-                     "FINDING: corpus_uninit hang at case %d (signal %d)\n",
-                     (int)g_active_case, sig);
-    if (n > 0)
-        (void)write(STDERR_FILENO, msg, (size_t)n);
+    report_finding("hang", sig);
     _exit(70);
 }
 
@@ -190,21 +230,20 @@ static void build_table(void) {
 static mbstate_t g_mb_base[4];
 
 static void init_mb_bases(void) {
-    const char lead = (char)0xC3; /* UTF-8 two-byte lead -> partial state */
+    /* Only valid mbstate_t representations: zeroed (initial state) and three
+     * real non-initial states from conversions that consumed a UTF-8 lead.
+     * A 0xFF fill or random bytes used to be used here as "hostile" states,
+     * but glibc's iconv asserts that the recorded byte count fits __value
+     * (iconv/loop.c: internal_ascii_loop_single) and aborts the process on
+     * such a value (SIGABRT -> FINDING at case 1 on Linux CI).  Using genuine
+     * partial states keeps all 200 mbstate_t cases hostile *and* defined. */
+    static const char leads[3] = { (char)0xC2, (char)0xC3, (char)0xE0 };
     wchar_t w = 0;
-    uint32_t s = 0x13579bdfu;
-    size_t k;
+    int k;
     memset(&g_mb_base[0], 0x00, sizeof g_mb_base[0]);
-    memset(&g_mb_base[1], 0xFF, sizeof g_mb_base[1]);
-    memset(&g_mb_base[2], 0x00, sizeof g_mb_base[2]);
-    /* A genuine, valid non-initial shift state from a real conversion. */
-    (void)cplus_mbrtowc(&w, &lead, 1, &g_mb_base[2]);
-    {
-        unsigned char *p = (unsigned char *)&g_mb_base[3];
-        for (k = 0; k < sizeof g_mb_base[3]; ++k) {
-            s = mix32(s);
-            p[k] = (unsigned char)s;
-        }
+    for (k = 0; k < 3; ++k) {
+        memset(&g_mb_base[k + 1], 0x00, sizeof g_mb_base[k + 1]);
+        (void)cplus_mbrtowc(&w, &leads[k], 1, &g_mb_base[k + 1]);
     }
 }
 
@@ -555,6 +594,9 @@ int main(void) {
 
     for (i = 0; i < N_CASES; ++i) {
         g_active_case = (sig_atomic_t)i;
+        g_active_cat = (sig_atomic_t)g_cases[i].cat;
+        g_active_variant = (sig_atomic_t)g_cases[i].variant;
+        g_active_idx = (sig_atomic_t)g_cases[i].idx;
         if (trace_cases) {
             printf("corpus_uninit case %d\n", i);
             fflush(stdout);

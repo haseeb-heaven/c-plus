@@ -1,6 +1,6 @@
 #!/bin/sh
 # BLUE-TEAM agent 18/20 - blue_apps
-# Build every app in examples/real_world/ and tests/cross_platform_apps/src/
+# Build every app in apps/legacy_examples/real_world/ and tests/cross_platform_apps/src/
 # fresh into our own artifacts dir, then run >=1000 FIXED hostile inputs PER
 # app through a bounded driver (>=106,000 bounded invocations total).
 #
@@ -24,7 +24,7 @@ build_fail=0
 
 # --- Build the 6 real-world C+ examples with the project compiler ----------
 for n in game_engine snake_game desktop_app web_app server_app database_engine; do
-    if timeout 90 ./build/c+ build "examples/real_world/$n.cp" --default \
+    if timeout 90 ./build/c+ build "apps/legacy_examples/real_world/$n.cp" --default \
         --sanitize=none -I. -o "$RW/$n" >"$RW/$n.build.log" 2>&1; then
         :
     else

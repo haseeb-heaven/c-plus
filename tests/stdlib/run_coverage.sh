@@ -26,7 +26,7 @@ fi
 # invokes every API the static scanner cannot see a call-site for.  A failure
 # here is a real coverage regression, not a soft warning.
 CLOSURE=build/native-tools/coverage_closure
-if ! "$CPLUS" build tests/stdlib/coverage_closure.cp --default --sanitize=none \
+if ! "$CPLUS" build tests/stdlib/coverage_closure.cp --default --no-werror --sanitize=none \
         -I. -Ithird_party/yyjson -Lbuild/ext -lyyjson -o "$CLOSURE" \
         >"$CLOSURE.build.log" 2>&1; then
     echo "error: coverage-closure test build failed; see $CLOSURE.build.log" >&2

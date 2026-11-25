@@ -225,7 +225,7 @@ static inline void *stdlib_datastack_alloc(stdlib_datastack *ds, size_t n,
         n > (size_t)(ds->base + ds->capacity - ds->top) - pad)
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "datastack: exhausted"), (void *)0;
-    /* Goose-style: commit only the pages touched by this bump. */
+    /* scoped-memory-style: commit only the pages touched by this bump. */
     if (stdlib_datastack_ensure(ds, (size_t)(p + pad + n - (uintptr_t)ds->base), err) != STDLIB_OK)
         return (void *)0;
     {
@@ -305,7 +305,7 @@ static inline void stdlib_scratch_op_reset(void *ctx) {
     if (ds != 0) ds->top = ds->base;
 }
 /* C+ RAII scope guard: entering saves the top, drop() restores it in one
- * store (Goose-style single-store scope free).  Nested scopes are safe. */
+ * store (scoped-memory-style single-store scope free).  Nested scopes are safe. */
 class stdlib_scratch_scope {
     stdlib_datastack *scope_ds;
     unsigned char *scope_saved_top;

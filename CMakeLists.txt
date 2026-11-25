@@ -288,4 +288,4 @@ add_test(NAME cplus_tests
           /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.sh)
 add_test(NAME cplus_demos
   COMMAND ${CMAKE_COMMAND} -E env CPLUS_BIN=$<TARGET_FILE:c+>
-          /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/demos/run_demos.sh)
+          /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/apps/legacy_demos/run_demos.sh)

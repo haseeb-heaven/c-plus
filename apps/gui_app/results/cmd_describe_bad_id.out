@@ -1,0 +1,2 @@
+GUI_REFUSED tag=describe:99,0,0 category=2 code=101 message=scenario: id out of range
+GUI_RESULT describe:99,0,0 REFUSED 101

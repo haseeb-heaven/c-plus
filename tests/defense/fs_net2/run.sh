@@ -7,7 +7,7 @@
 #           reproduces.  The C+ compiler lowers headers relative to its cwd,
 #           so -I cannot swap them; changing cwd is the non-invasive route.
 #   AFTER:  c+ runs from the repo root against the live stdlib/http.hp.
-# Both builds use --default --sanitize=none -lcurl.  The strict checker has two
+# Both builds use --default --no-werror --sanitize=none -lcurl.  The strict checker has two
 # known false positives in http.hp (CPLUS-ARITH `SIZE_MAX / size` behind the
 # `size != 0 &&` short-circuit, and CPLUS-FFI `buf[0]` on a caller buffer whose
 # extent cannot be proven); --default reports them as warnings.  No test is
@@ -19,7 +19,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 HERE="$ROOT/tests/defense/fs_net2"
 OUT="$HERE/out"
 CPLUS=${CPLUS_CPLUS:-$ROOT/build/c+}
-CFLAGS="--default --sanitize=none -lcurl"
+CFLAGS="--default --no-werror --sanitize=none -lcurl"
 mkdir -p "$OUT/baseline_root/stdlib"
 
 # Materialise the pre-fix header tree (kept entirely under out/, gitignored).

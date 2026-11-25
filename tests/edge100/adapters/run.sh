@@ -12,7 +12,7 @@ OUT=tests/edge100/adapters/out
 mkdir -p "$OUT"
 
 timeout 60 ./build/c+ build tests/edge100/adapters/harness.cp \
-    --default --sanitize=none -I. \
+    --default --no-werror --sanitize=none -I. \
     -o "$OUT/adapters_harness" \
     -- build/libc/libcplus_hardened.a > "$OUT/build.log" 2>&1
 

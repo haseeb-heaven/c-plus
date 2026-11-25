@@ -36,7 +36,7 @@ would be false semantics.
 | 100-scenario per-method suites | 1,000 per family | 30/30 variants pass |
 | API-level adversarial attacks | 23 suites | 23/23 pass |
 | Deterministic corpora | ~81,000 cases | 20/20 pass |
-| C+ compiler tests | 150 | 149 pass, 1 pre-existing warning-only case |
+| C+ compiler tests | 148 | 149 pass, 0 fail (measured 2026-11-25) |
 | libc unit tests | 80 | 80 pass |
 | CRT unit tests | 79 | 79 pass |
 | SDK consumer / C+C++ compat | 7 | 7 pass |

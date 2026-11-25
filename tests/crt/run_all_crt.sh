@@ -18,7 +18,7 @@ INC="-Istdlib/safe -Ithird_party/safeclib/include -Ithird_party/intel-safestring
 LIB=build/safe/libcplus_safecrt.a
 OUT=build/safe/examples; mkdir -p "$OUT"
 pass=0; fail=0
-for f in examples/crt/*.c; do
+for f in apps/legacy_examples/crt/*.c; do
   b="$OUT/$(basename "$f" .c)"
   if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 $INC "$f" "$LIB" -pthread -o "$b" >/tmp/ex.log 2>&1 && "$b" >/tmp/ex.out 2>&1; then pass=$((pass+1)); else echo "FAIL $f"; fail=$((fail+1)); fi
 done

@@ -1,0 +1,2 @@
+GUI_REFUSED tag=null-window category=1 code=102 message=widgets: NULL window
+GUI_RESULT refuse null-window REFUSED 102

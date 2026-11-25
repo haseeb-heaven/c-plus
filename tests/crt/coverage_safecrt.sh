@@ -47,7 +47,7 @@ for t in "$ROOT"/tests/crt/unit/test_*.c "$ROOT"/tests/crt/test_safe_*.c \
   case "$t" in
     *test_runtime_cleanup.c)
       EXTRA="-fsanitize=undefined,bounds,null,alignment -fsanitize-recover=all -fno-sanitize-trap=all -fno-omit-frame-pointer"
-      LINK_OBJS="$OUT/w_safe_runtime.o $OUT/w_safe_log.o $OUT/w_safe_stats.o"
+      LINK_OBJS="$OUT/w_safe_runtime.o $OUT/w_safe_log.o $OUT/w_safe_stats.o $OUT/w_safe_diag.o"
       ;;
     *safe_c_api*|*audit_high*|*p0_safe_crt*|*p0_alloc_contract*|*safe_c_mapping*|*checked_runtime_safety*)
       EXTRA_INC="-I$ROOT/libc -I$ROOT/libc/install-include"

@@ -126,7 +126,7 @@ Legend used in the tables:
 - **Demand** — caller-demand signal, strongest first:
   `AnnexK` = named as a not-shipped blocker in `COVERAGE.md:79`/`ISO_C_AUDIT.md`;
   `Code` = referenced by real repo code/tests/headers (grep of `stdlib/`, `libc/`, `tests/`,
-  `demos/`, `scripts/`, excluding `third_party/`);
+  `apps/legacy_demos/`, `scripts/`, excluding `third_party/`);
   `Base-ubiquitous` = bounded variant of a heavily used base call that is already
   IMPLEMENTED_BUNDLED or PLATFORM_BACKED in `iso_c_inventory.json`;
   `Closure` = a dependency of another NOT_INTEGRATED source that must land first.

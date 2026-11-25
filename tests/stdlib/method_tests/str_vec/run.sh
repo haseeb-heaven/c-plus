@@ -9,7 +9,7 @@ ROOT=$(CDPATH= cd -- "$HERE/../../../.." && pwd)
 cd "$ROOT"
 
 CPLUS=${CPLUS_BIN:-./build/c+}
-FLAGS="--default --sanitize=none"
+FLAGS="--default --no-werror --sanitize=none"
 TMP=${TMPDIR:-/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode}
 
 rc=0

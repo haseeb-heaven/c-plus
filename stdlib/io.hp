@@ -13,12 +13,18 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
-#include <math.h>
+#include <float.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
+
+/* Apple SDK <math.h> uses a union whose __u field trips the C+ lifetime
+ * analyzer; keep finite checks local instead (no ABI/symbol change). */
+static inline int stdlib_io_finite(double x) {
+    return x == x && x <= DBL_MAX && x >= -DBL_MAX;
+}
 
 static inline void println(void) {
     print();
@@ -247,7 +253,7 @@ static inline int read_float(float *out, error *err) {
     }
     /* Policy: reject overflow and non-finite values (inf/nan) rather than
      * letting them propagate silently. */
-    if (errno == ERANGE || !isfinite(value)) {
+    if (errno == ERANGE || !stdlib_io_finite(value)) {
         error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
                        "read_float: out of range or not finite");
         return STDLIB_FAIL;
@@ -283,7 +289,7 @@ static inline int read_double(double *out, error *err) {
                        "read_double: not a number");
         return STDLIB_FAIL;
     }
-    if (errno == ERANGE || !isfinite(value)) {
+    if (errno == ERANGE || !stdlib_io_finite(value)) {
         error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
                        "read_double: out of range or not finite");
         return STDLIB_FAIL;

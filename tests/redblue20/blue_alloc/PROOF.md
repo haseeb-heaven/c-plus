@@ -8,7 +8,7 @@ Proof target (modern layer only, no source edits made):
 
 - `stdlib/alloc_iface.hp` (allocator vtable / dispatch)
 - `stdlib/arena.hp` (chained bump arena + generation handles)
-- `stdlib/mempool.hp` (slab MemoryPool + Goose-style slot_pool)
+- `stdlib/mempool.hp` (slab MemoryPool + scoped-memory-style slot_pool)
 - `stdlib/datastack.hp` (thread scratch stack, heap + VM backing)
 
 Deliverables (all under `tests/redblue20/blue_alloc/`):
