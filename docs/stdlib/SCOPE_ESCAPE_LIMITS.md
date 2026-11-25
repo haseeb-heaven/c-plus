@@ -38,3 +38,29 @@ static analyzer) is Agent 1 scope and was not touched per instruction.
 
 No claim: these limitations mean the libraries are not "100% safe". They are
 documented so callers can write safe code within the supported contracts.
+
+## 3. Dynamic arena rewind leaves raw pointers unchecked
+
+`stdlib_dyn_arena_rewind()` (renamed from the former goose-arena API) resets
+block offsets to zero. Raw pointers handed out by `stdlib_dyn_arena_take()` are
+not invalidated or generation-tagged; a later take reuses the same address and
+silently mutates what the old pointer still references. Confirmed by the
+supplied `proof_agent2_arena_rewind_uaf.cp` reproducer (old pointer observes
+9999 after reuse).
+
+Mitigation: treat arena rewind as a hard lifetime boundary — drop all raw
+arena pointers before rewinding. For values that must survive, use
+`stdlib_handle_pool` / `stdlib_pool_ref` (generation checked) or copy into an
+owned container. No runtime trap is provided for raw arena aliases.
+
+## 4. Vector slice / view escape across function boundaries
+
+A slice that borrows a locally scoped vector can be returned; the compiler does
+not enforce cross-function lifetime tracking for user-defined view structs. The
+supplied `proof_agent2_vector_slice_escape.cp` confirms a stale read from freed
+vector storage with exit code 0.
+
+Mitigation: never return a view of a locally owned container; clone the data
+into an owned `vector`/`string` before returning, or keep the view inside the
+owner's scope. Cross-function escape rejection requires compiler support and is
+not present in this library layer.
