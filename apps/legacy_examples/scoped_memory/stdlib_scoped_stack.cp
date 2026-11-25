@@ -26,7 +26,7 @@ static void check(int cond, const char *label) {
     if (cond) {
         passed++;
     } else {
-        print("GOOSE_STACK CHECK_FAIL", label);
+        print("SCOPED_STACK CHECK_FAIL", label);
     }
 }
 
@@ -36,13 +36,13 @@ int main(void) {
 
     stdlib_datastack *ds = stdlib_thread_datastack(&e);
     if (ds == (stdlib_datastack *)0) {
-        print("GOOSE_STACK FATAL datastack", e.code());
+        print("SCOPED_STACK FATAL datastack", e.code());
         return 1;
     }
     stdlib_allocator scratch = stdlib_scratch_allocator();
 
     size_t enter_offset = (size_t)(ds->top - ds->base);
-    print("GOOSE_STACK enter_offset", enter_offset);
+    print("SCOPED_STACK enter_offset", enter_offset);
     check(ds->capacity > 0, "vm_reservation");
 
     {
@@ -54,13 +54,13 @@ int main(void) {
          * Its address must survive every later bump and reallocation. */
         int *anchor = (int *)stdlib_datastack_alloc(ds, sizeof(int), 4u, &e);
         if (anchor == (int *)0) {
-            print("GOOSE_STACK FATAL anchor", e.code());
+            print("SCOPED_STACK FATAL anchor", e.code());
             return 1;
         }
         *anchor = 4242;
         size_t anchor_offset = (size_t)((unsigned char *)anchor - ds->base);
-        print("GOOSE_STACK anchor_offset", anchor_offset);
-        print("GOOSE_STACK anchor_value", *anchor);
+        print("SCOPED_STACK anchor_offset", anchor_offset);
+        print("SCOPED_STACK anchor_value", *anchor);
         check(anchor_offset >= enter_offset, "anchor_inside_frame");
 
         /* Allocator-aware containers: no per-element heap bookkeeping. */
@@ -72,12 +72,12 @@ int main(void) {
         int i;
         for (i = 0; i < 40; i++) {
             if (particles.push_back(1000 + i * 7) != 0) {
-                print("GOOSE_STACK FATAL push", i);
+                print("SCOPED_STACK FATAL push", i);
                 return 1;
             }
         }
-        print("GOOSE_STACK vector_size", particles.size());
-        print("GOOSE_STACK vector_cap", particles.capacity());
+        print("SCOPED_STACK vector_size", particles.size());
+        print("SCOPED_STACK vector_cap", particles.capacity());
         check(particles.size() == 40 && particles.capacity() >= 40,
               "vector_growth");
         check(particles.at(0) == 1000 && particles.at(39) == 1273,
@@ -89,24 +89,24 @@ int main(void) {
         size_t log_before_offset = (size_t)(log_before - (const char *)ds->base);
         for (i = 0; i < 48; i++) {
             if (log.append("frame:42 tick\n") != 0) {
-                print("GOOSE_STACK FATAL append", i);
+                print("SCOPED_STACK FATAL append", i);
                 return 1;
             }
         }
         const char *log_after = log.c_str();
         size_t log_after_offset = (size_t)(log_after - (const char *)ds->base);
-        print("GOOSE_STACK log_size", log.size());
-        print("GOOSE_STACK log_cap", log.capacity());
-        print("GOOSE_STACK log_buffer_moved", log_after != log_before ? 1 : 0);
-        print("GOOSE_STACK log_offset_before", log_before_offset);
-        print("GOOSE_STACK log_offset_after", log_after_offset);
+        print("SCOPED_STACK log_size", log.size());
+        print("SCOPED_STACK log_cap", log.capacity());
+        print("SCOPED_STACK log_buffer_moved", log_after != log_before ? 1 : 0);
+        print("SCOPED_STACK log_offset_before", log_before_offset);
+        print("SCOPED_STACK log_offset_after", log_after_offset);
         check(log.size() == 48u * 14u, "log_growth");
 
         /* Stability proof: both container buffers moved, but the earlier
          * data-stack allocation kept its exact address and value. */
         size_t anchor_after = (size_t)((unsigned char *)anchor - ds->base);
-        print("GOOSE_STACK stable_anchor_offset", anchor_after);
-        print("GOOSE_STACK stable_anchor_value", *anchor);
+        print("SCOPED_STACK stable_anchor_offset", anchor_after);
+        print("SCOPED_STACK stable_anchor_value", *anchor);
         check(anchor_after == anchor_offset && *anchor == 4242,
               "anchor_stable_across_container_growth");
 
@@ -116,7 +116,7 @@ int main(void) {
             size_t top_before_empty = (size_t)(ds->top - ds->base);
             stdlib_scratch_scope empty = stdlib_scratch_scope(ds);
             empty.drop();
-            print("GOOSE_STACK empty_scope_top_ok",
+            print("SCOPED_STACK empty_scope_top_ok",
                   (size_t)(ds->top - ds->base) == top_before_empty ? 1 : 0);
             check((size_t)(ds->top - ds->base) == top_before_empty,
                   "empty_scope_restores");
@@ -129,14 +129,14 @@ int main(void) {
             size_t top_before_nested = (size_t)(ds->top - ds->base);
             int *inner = (int *)stdlib_datastack_alloc(ds, sizeof(int), 4u, &e);
             if (inner == (int *)0) {
-                print("GOOSE_STACK FATAL nested");
+                print("SCOPED_STACK FATAL nested");
                 return 1;
             }
             *inner = 77;
-            print("GOOSE_STACK nested_grew",
+            print("SCOPED_STACK nested_grew",
                   (size_t)(ds->top - ds->base) > top_before_nested ? 1 : 0);
             nested.drop();
-            print("GOOSE_STACK nested_drop_restored",
+            print("SCOPED_STACK nested_drop_restored",
                   (size_t)(ds->top - ds->base) == top_before_nested ? 1 : 0);
             check((size_t)(ds->top - ds->base) == top_before_nested,
                   "nested_scope_drop_restores");
@@ -144,16 +144,16 @@ int main(void) {
 
         /* One-store free: show the live top, drop the frame, show it rewound. */
         size_t top_before = (size_t)(ds->top - ds->base);
-        print("GOOSE_STACK frame_top_before", top_before);
+        print("SCOPED_STACK frame_top_before", top_before);
         log.drop();
         particles.drop();
         frame.drop();
         size_t top_after = (size_t)(ds->top - ds->base);
-        print("GOOSE_STACK frame_top_after", top_after);
+        print("SCOPED_STACK frame_top_after", top_after);
         check(top_after == enter_offset, "scope_exit_one_store");
     }
 
     int fails = checks - passed;
-    print("GOOSE_STACK SUMMARY", checks, passed, fails);
+    print("SCOPED_STACK SUMMARY", checks, passed, fails);
     return fails == 0 ? 0 : 1;
 }
