@@ -1,5 +1,5 @@
 #!/bin/sh
-# Adversarial driver: examples/expanded/cli/{calculator,todo}.cp
+# Adversarial driver: apps/legacy_examples/expanded/cli/{calculator,todo}.cp
 set -u
 . "$(dirname -- "$0")/common.sh" || exit 1
 make_fixtures
@@ -8,10 +8,10 @@ BIG=$(cat "$FIX/oversized_10k.txt")
 BIGD=$(cat "$FIX/oversized_10k_digits.txt")
 SIZEMAX=18446744073709551615
 
-build_one calculator examples/expanded/cli/calculator.cp || true
-build_one todo       examples/expanded/cli/todo.cp       || true
-build_one file_tools examples/expanded/cli/file_tools.cp || true
-build_one text_tools examples/expanded/cli/text_tools.cp || true
+build_one calculator apps/legacy_examples/expanded/cli/calculator.cp || true
+build_one todo       apps/legacy_examples/expanded/cli/todo.cp       || true
+build_one file_tools apps/legacy_examples/expanded/cli/file_tools.cp || true
+build_one text_tools apps/legacy_examples/expanded/cli/text_tools.cp || true
 
 if [ -x "$BIN/calculator" ]; then
     # -- calculator: REFUSAL tokens are "CALC ERROR ...", exit 1. ---------------

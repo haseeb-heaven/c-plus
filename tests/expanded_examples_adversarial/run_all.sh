@@ -1,5 +1,5 @@
 #!/bin/sh
-# Master adversarial driver for all examples/expanded categories.
+# Master adversarial driver for all apps/legacy_examples/expanded categories.
 #
 # Every individual build and every individual program invocation is bounded by
 # `timeout 120` (see common.sh).  This script aggregates the per-category

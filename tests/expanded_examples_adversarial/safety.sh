@@ -1,5 +1,5 @@
 #!/bin/sh
-# Adversarial driver: self-contained safety demos under examples/expanded/safety/.
+# Adversarial driver: self-contained safety demos under apps/legacy_examples/expanded/safety/.
 #
 # These demos take no input; each one constructs its own hostile scenario
 # (one-over write / out-of-range span / stale generation / double release) and
@@ -12,11 +12,11 @@ make_fixtures
 BIG=$(cat "$FIX/oversized_10k.txt")
 SIZEMAX=18446744073709551615
 
-build_one memcpy_s_demo examples/expanded/safety/memcpy_s_demo.cp -- \
+build_one memcpy_s_demo apps/legacy_examples/expanded/safety/memcpy_s_demo.cp -- \
     "$ROOT/build/safe/libcplus_safecrt.a" \
     "$ROOT/build/libc/libcplus_hardened.a" || true
-build_one bounds_demo   examples/expanded/safety/bounds_demo.cp   || true
-build_one lifetime_demo examples/expanded/safety/lifetime_demo.cp || true
+build_one bounds_demo   apps/legacy_examples/expanded/safety/bounds_demo.cp   || true
+build_one lifetime_demo apps/legacy_examples/expanded/safety/lifetime_demo.cp || true
 
 safety_cases() {
     _demo=$1

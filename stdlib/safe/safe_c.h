@@ -91,9 +91,9 @@
 #define memset(d, c, n) \
     ((void)cplus_memset_s_auto((d), (c), (n), CPLUS_SAFE_OBJ_SIZE(d)))
 #define memcpy(d, s, n) \
-    ((void)cplus_memcpy_s_auto((d), (s), (n), CPLUS_SAFE_OBJ_SIZE(d)))
+    cplus_memcpy_s_auto((d), (s), (n), CPLUS_SAFE_OBJ_SIZE(d))
 #define memmove(d, s, n) \
-    ((void)cplus_memmove_s_auto((d), (s), (n), CPLUS_SAFE_OBJ_SIZE(d)))
+    cplus_memmove_s_auto((d), (s), (n), CPLUS_SAFE_OBJ_SIZE(d))
 #define memcmp(a, b, n) \
     cplus_memcmp_s_auto((a), (b), (n), CPLUS_SAFE_OBJ_SIZE(a), CPLUS_SAFE_OBJ_SIZE(b))
 

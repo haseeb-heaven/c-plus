@@ -14,7 +14,7 @@ sh "$DIR/generate.sh" >/dev/null
 built=0; bfail=0; pass=0; fail=0; timeout_n=0
 i=0
 while [ "$i" -lt 100 ]; do
-    f="$DIR/examples/variant_$i.cp"
+    f="$DIR/apps/legacy_examples/variant_$i.cp"
     if timeout 60 ./build/c+ build "$f" --default --no-werror --sanitize=none -I. \
          -o "$OUT/v$i" -- build/libc/libcplus_hardened.a \
          >"$OUT/v$i.build.log" 2>&1; then

@@ -49,7 +49,7 @@
 set -u
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
-ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd) || exit 1
+ROOT=$(CDPATH= cd -- "$HERE/../../.." && pwd) || exit 1
 cd "$ROOT" || exit 1
 
 # Resolve tool directories BEFORE narrowing PATH.  Only the directories that

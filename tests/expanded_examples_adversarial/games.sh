@@ -1,5 +1,5 @@
 #!/bin/sh
-# Adversarial driver: deterministic game cores under examples/expanded/games/.
+# Adversarial driver: deterministic game cores under apps/legacy_examples/expanded/games/.
 set -u
 . "$(dirname -- "$0")/common.sh" || exit 1
 make_fixtures
@@ -8,10 +8,10 @@ BIG=$(cat "$FIX/oversized_10k.txt")
 SIZEMAX=18446744073709551615
 
 for g in game2048 maze tictactoe; do
-    build_one "$g" "examples/expanded/games/cores/$g.cp" || true
+    build_one "$g" "apps/legacy_examples/expanded/games/cores/$g.cp" || true
 done
-build_one snake_core examples/expanded/games/snake/snake_core.cp || true
-build_one snake_cli  examples/expanded/games/snake/snake_cli.cp  || true
+build_one snake_core apps/legacy_examples/expanded/games/snake/snake_core.cp || true
+build_one snake_cli  apps/legacy_examples/expanded/games/snake/snake_cli.cp  || true
 
 # Move-token games reject bad input with stderr "name: ..." and exit 2.
 for g in game2048 maze; do

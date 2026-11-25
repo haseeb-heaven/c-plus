@@ -41,7 +41,7 @@ mkdir -p "$OUT" "$BIN" "$TMP"
 
 # The C+ runtime C source is the single source of truth for the symbols the
 # lowered C references (cplus_print_value, __cplus_checked_*, etc.).
-RUNTIME_SRC=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c
+RUNTIME_SRC="$ROOT/runtime/cplus_runtime.c"
 RUNTIME_INC=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/include
 
 SDL_CFLAGS=

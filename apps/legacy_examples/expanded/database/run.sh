@@ -6,7 +6,7 @@
 set -u
 
 DB_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(CDPATH= cd -- "$DB_DIR/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$DB_DIR/../../../.." && pwd)
 RES="$DB_DIR/results"
 C="$ROOT/build/c+"
 

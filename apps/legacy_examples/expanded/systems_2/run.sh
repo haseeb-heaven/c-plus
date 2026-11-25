@@ -16,7 +16,7 @@
 set -u
 
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
-ROOT=$(CDPATH= cd -- "$DIR/../../.." && pwd) || exit 2
+ROOT=$(CDPATH= cd -- "$DIR/../../../.." && pwd) || exit 2
 CPLUS=${CPLUS_BIN:-"$ROOT/build/c+"}
 RES="$DIR/results"
 GOLDEN="$DIR/expected"

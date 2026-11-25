@@ -11,7 +11,7 @@
 set -u
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(CDPATH= cd -- "$HERE/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$HERE/../../../.." && pwd)
 cd "$ROOT" || exit 2
 
 D=apps/legacy_examples/utilities/dev_tools

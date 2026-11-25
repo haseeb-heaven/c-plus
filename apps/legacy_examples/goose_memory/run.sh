@@ -5,7 +5,7 @@
 set -u
 
 GM_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(CDPATH= cd -- "$GM_DIR/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$GM_DIR/../../.." && pwd)
 RES="$GM_DIR/results"
 C="$ROOT/build/c+"
 

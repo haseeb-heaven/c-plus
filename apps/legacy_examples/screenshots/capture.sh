@@ -15,7 +15,7 @@
 set -u
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
-ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd) || exit 2
+ROOT=$(CDPATH= cd -- "$HERE/../../.." && pwd) || exit 2
 CAP="$HERE/captures"
 TMP="$CAP/tmp"
 

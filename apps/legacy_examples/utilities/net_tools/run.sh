@@ -12,7 +12,7 @@
 set -u
 
 NET_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(CDPATH= cd -- "$NET_DIR/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$NET_DIR/../../../.." && pwd)
 RES="$NET_DIR/results"
 C="$ROOT/build/c+"
 

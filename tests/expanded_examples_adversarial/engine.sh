@@ -1,5 +1,5 @@
 #!/bin/sh
-# Adversarial driver: examples/expanded/engine/{engine_loop,ecs}.cp
+# Adversarial driver: apps/legacy_examples/expanded/engine/{engine_loop,ecs}.cp
 set -u
 . "$(dirname -- "$0")/common.sh" || exit 1
 make_fixtures
@@ -7,9 +7,9 @@ make_fixtures
 BIG=$(cat "$FIX/oversized_10k.txt")
 SIZEMAX=18446744073709551615
 
-build_one engine_loop    examples/expanded/engine/engine_loop.cp    || true
-build_one ecs            examples/expanded/engine/ecs.cp            || true
-build_one resource_cache examples/expanded/engine/resource_cache.cp || true
+build_one engine_loop    apps/legacy_examples/expanded/engine/engine_loop.cp    || true
+build_one ecs            apps/legacy_examples/expanded/engine/ecs.cp            || true
+build_one resource_cache apps/legacy_examples/expanded/engine/resource_cache.cp || true
 
 if [ -x "$BIN/engine_loop" ]; then
     # Bad token -> "ERROR ... code=" on stdout and exit 2.
