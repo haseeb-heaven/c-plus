@@ -1,0 +1,3 @@
+tests/stdlib/agent1_handoff/strict_safe_mode/00_control_strict_delta.cp:11:5: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)
+      printf(fmt, 42);   /* non-literal format: warn (default) / error (strict) */
+      ^~~~~~

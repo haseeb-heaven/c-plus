@@ -1,0 +1,75 @@
+# CRT Matrix (Agent 2)
+
+Evidence-based matrix for the shipped SafeCRT and hardened libc slice. Not a full ISO C replacement.
+
+| Function | Class | Header | Backend / Impl | Tests | Fuzz | Notes |
+|---|---|---|---|---|---|---|
+| `cplus_malloc` / `cplus_calloc` / `cplus_realloc` / `cplus_free` / `cplus_free_checked` | IMPLEMENTED + METADATA | `libc/install-include/cplus_libc.h` | `libc/src/stdlib/alloc.c` | `test_libc_basic.c`, `test_alloc_metadata.c`, `test_scenarios_threads.c` | `fuzz_libc2.c` | Thread-safe live table, double/invalid free detection, `cplus_alloc_len` |
+| `cplus_alloc_get_meta` / `query_length` / `transfer_ownership` | METADATA + OWNERSHIP | `cplus_libc.h` | `libc/src/stdlib/alloc.c` | `test_alloc_metadata.c`, `test_scenarios_c.c` | `fuzz_libc2.c` | Tracks `byte_size`, `elem_size`, `elem_count`, `generation` |
+| `cplus_memcpy` / `memmove` / `memset` / `memcmp` / `memchr` / `memrchr` | IMPLEMENTED | `cplus_libc.h` | `libc/src/string/memory.c` | `test_libc_basic.c`, `test_differential_libc.c` | `fuzz_libc.c` | Differential tested against host libc; raw C bounds remain caller/compiler responsibility |
+| `cplus_strlen`..`strpbrk` / `musl_extra` | IMPLEMENTED | `cplus_libc.h` | `libc/src/string/` | `test_string_extra*.c`, `test_musl_extra.c`, `test_differential_libc.c` | `fuzz_libc.c` | Selective musl primitives + platform extras |
+| `cplus_memcpy_s` / `memmove_s` / `memset_s` / `memcmp_s` / `memzero_s` | CHECKED-OPTIONAL | `stdlib/safe/safe_memory.h` | **rurban/safeclib** (`build_safecrt.sh`) | unit + adversarial + examples | `fuzz_memory.c` | Null/bounds/overlap constraint checking |
+| `cplus_strcpy_s` / `strncpy_s` / `strcat_s` / `strncat_s` / `strcmp_s` / `strnlen_s` / `strtok_s` / `strerror_s` | CHECKED-OPTIONAL | `stdlib/safe/safe_string.h` | **rurban/safeclib** (`build_safecrt.sh`) | unit + adversarial + examples | `fuzz_strings.c`, `fuzz_parsing.c` | `strtok_s` trailing state & empty input fixed |
+| `malloc_s` / `calloc_s` / `realloc_s` / `free_s` / `free_checked_s` / `aligned_alloc_s` | CHECKED EXTENSION (standard C signatures) | `stdlib/safe/safe_alloc.h` | `stdlib/safe/src/safe_alloc.c` | `test_alloc_metadata_s.c`, `test_alloc50_*.c`, `test_bugs_catalogue_204.c` | `fuzz_allocator.c`, `fuzz_realloc.c`, `fuzz_free.c`, `fuzz_ownership.c` | Overflow/alignment checks, owner preserve on OOM, metadata, `cplus_safe_len` |
+| `cplus_fopen_s` / `cplus_fclose_s` | CHECKED ADAPTER (standard C signatures) | `stdlib/safe/safe_io.h` | `stdlib/safe/src/safe_io.c` | `test_iofam_*.c`, `test_io50_*.c` | `fuzz_stdio.c`, `fuzz_lifecycle.c` | Thread-safe live/closed stream cache rejects double close |
+| `cplus_fread_s` / `cplus_fwrite_s` | CHECKED ADAPTER (Annex K `bmax`) | `stdlib/safe/safe_io.h` | `stdlib/safe/src/safe_io.c` | `test_iofam_stream.c`, `test_io50_clamp_bmax.c` | `fuzz_stdio.c` | Clamps `count` to `bmax / size` |
+| `cplus_snprintf_s` / `vsnprintf_s` / `sprintf_s` / `vsprintf_s` | CHECKED BOUNDED ADAPTER | `stdlib/safe/safe_format.h` | `stdlib/safe/src/safe_format.c` | `test_safe_format.c`, `test_allocfmt_roundtrip.c` | `fuzz_format.c` | C99 bounded NUL-terminated formatting |
+| `cplus_runtime_guard` / `cplus_runtime_push_cleanup` | RUNTIME RECOVERY + CLEANUP | `stdlib/safe/safe_runtime.h` | `stdlib/safe/src/safe_runtime.c` | `test_runtime_recover.c`, `test_runtime_cleanup.c` | — | LIFO cleanup stack; fail-stop mode supported |
+| ordinary `malloc`/`calloc`/`realloc`/`free`, `memset`/`memcpy`/`memmove`/`memcmp`, `strcpy`/`strncpy`/`strcat`/`strncat`, `fread`/`fwrite`, `printf`/`fprintf` | COMPILE-TIME MACRO → CHECKED `_s` (no new ABI) | `stdlib/safe/safe_c.h:61-117` | targets already shipped: `malloc_s`…, `cplus_*_s_auto`, `cplus_fread`/`cplus_fwrite`, `cplus_printf`/`cplus_fprintf` (`libcplus_safecrt.a` + `libcplus_hardened.a`) | `test_safe_c_api.c`, `scratch/demo.c` | — | ordinary spellings rewritten in the including TU only; no source/export change, no libc interposition; valid input gives the same data result, invalid input refused via `errno` + safeclib `ESNOSPC 406` diagnostic; unknown capacity unresolved by default |
+
+## ABI-preserving ordinary-C checked layer
+
+The last row is a **compile-time mapping**, not another backend or another
+shipped API surface. `stdlib/safe/safe_c.h` maps ordinary C names onto the
+checked implementations above in the including translation unit only; it edits
+no C source, renames no exported symbol, exports nothing itself, and does not
+interpose host libc. A precompiled library built without the header is
+unaffected. Valid input yields the same data result; invalid input is refused
+with the codes documented in `docs/libc/SAFE_CRT_MEMORY_CONTRACT.md` (direct
+`_s`: positive `ESNULLP` 400 … `ESNOSPC` 406; `_s_auto`: `errno = EINVAL` /
+`ERANGE` plus a diagnostic). Unknown capacity is still unchecked by default
+(strict mode: `cplus_safe_set_unknown_capacity_mode(1)`). No Rust equivalence
+or full safety claim is made.
+
+Full statement, exact reproduction commands and non-claims:
+[`docs/ABI_SAFE_LAYER.md`](ABI_SAFE_LAYER.md). ABI evidence:
+`build/abi/compat/results.log` (`abi_compat: 69 passed, 0 failed`, 22+10+7 =
+39 audited symbol names, no ` T __Z`), `docs/abi/compatibility-matrix.md`,
+`docs/stdlib/abi-preserving-runtime-safety.md` (70/70 layouts on both
+toolchains), `docs/stdlib/allocator/ABI_EVIDENCE.md` (`NO_ABI_IMPACT`). The
+C+-calls-precompiled-C lab reports `24 passed, 0 failed` and `30/30 calls match`
+(`tests/abi/c_to_cp/README.md`), superseding the older snapshot's 4/4 PARTIAL
+figure; the separate `tests/abi/precompiled/` suite was PENDING at the ABI
+snapshot. All evidence is macOS arm64 / Apple clang 16 only.
+
+## Integration and verification inventory (2026-11-23)
+
+Branch `agent/modern-stdlib`, PR #17 open (nothing pushed or merged). The table
+above lists the shipped slice only; counts below give the full denominator so
+the slice is not mistaken for a complete CRT.
+
+| Category | Count (of 437 vendored safeclib public APIs) |
+| --- | --- |
+| Integrated | 40 of 437 |
+| Adapter-only | 10 of 437 |
+| Not integrated | 387 of 437 |
+
+- This is **not** a full ISO C replacement: 27 of 948 APIs MISSING and 49 of
+  948 UNSUPPORTED in `docs/libc/iso_c_inventory.json`.
+- Wrapper-safety findings: 127 total — 17 of 127 FIXED, 46 of 127 OPEN, 7 of
+  127 GAP-COMPILER, 4 of 127 BLOCKED, 53 of 127 DOCUMENTED-CONTRACT
+  (`docs/libc/AUDIT_FINDINGS_TRACKER.md`).
+- Recorded verification: 50 of 50 Agent 2 runner tests PASS (28 deep + 11
+  `agent2/*.cp` + 11 curated existing); 28 deep tests x 3 modes = 84 of 84
+  invocations PASS; 23 of 23 evidence suites PASS. Compile-time suite: 52
+  cases across 8 manifests with 27 of 52 capability/tagging gaps not counted
+  as passes.
+- Sanitizer matrix (`tests/stdlib/agent2/SANITIZER_MATRIX.md`): 72 builds
+  attempted (9 tests x 8 configurations), 27 of 72 executed, 23 of 27 PASS,
+  4 of 27 FAIL under `--sanitize=integer` (runtime hashing, outside Agent 2
+  scope), 45 of 72 rejected at build as UNSUPPORTED. ASan is UNSUPPORTED on
+  this backend: 0 of 9 selected tests executed under it.
+- Remote Linux CI, SonarCloud, Windows x86 and live-game results are
+  **UNVERIFIED**; a local pass is not a remote result or a memory-safety proof.
+  Agent 2 has stopped adding new stdlib surface; compiler-enforced safety
+  (P0/P1/P2) is Agent 1 work (`docs/libc/AGENT1_PRIORITY_HANDOFF.md`).

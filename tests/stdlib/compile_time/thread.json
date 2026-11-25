@@ -1,0 +1,46 @@
+{
+  "header": "stdlib/thread.hp",
+  "commands": {
+    "check": "c+ check --strict <file>",
+    "build": "c+ build --strict --sanitize=none <file> -o <out>"
+  },
+  "notes": "All cases were verified with build/c+ (the runner's default). Every case: check rc=0, build rc=0, no [CPLUS- diagnostic, built binary exits 0. The four unsafe shapes are C+ capability gaps (RUNTIME): thread.hp enforces them at runtime with NULL-handle/owner guards, not via static proofs. Earlier in this session the header emitted a pre-existing [CPLUS-BORROW] false positive at thread.hp:159 ('stack borrow passed to thread: arg') that made every thread.hp file fail --strict; an external fix (round-tripping arg through uintptr_t in thread::start) removed it, so the current header compiles cleanly.",
+  "cases": [
+    {
+      "file": "thread_double_unlock.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: guard::unlock() clears its owner pointer on the first call, so a second unlock() is a no-op. C+ tracks no guard ownership/unlock state, so both strict commands accept the file (rc=0, no [CPLUS- diagnostic). Safety is runtime-by-design, not a compile-time proof; cover the double-unlock no-op in a runtime suite."
+    },
+    {
+      "file": "thread_unlock_without_ownership.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: guard(NULL) owns no critical section and unlock() is a guarded no-op. C+ models no guard ownership state, so the file compiles cleanly (rc=0, no [CPLUS- diagnostic). Runtime-enforced property; cover in a runtime/behavioral suite."
+    },
+    {
+      "file": "thread_guard_after_destroy.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: using a guard after its mutex was dropped is inert only because mutex::drop() NULLs the handle and mutex::unlock() checks it before use. C+ does not model the guard->mutex owner liveness relationship, so no static rejection (rc=0, no [CPLUS- diagnostic). Runtime-enforced; a raw unlocked pthread handle would be a genuine UAF, but the typed wrapper prevents it. Cover in a runtime suite."
+    },
+    {
+      "file": "thread_invalid_mutex_owner.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "GAP: a guard over a zero-initialised (invalid) mutex is inert because mutex::lock()/unlock() check handle != NULL before touching the OS primitive. C+ does not prove mutex owner validity at compile time (rc=0, no [CPLUS- diagnostic). Runtime-enforced; cover in a runtime suite."
+    },
+    {
+      "file": "thread_valid_guard.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control: guard over a live mutex, holds() then unlock() in valid order. check rc=0, build rc=0, no [CPLUS- diagnostic; built binary exits 0."
+    },
+    {
+      "file": "thread_valid_lock.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "Positive control: lock/unlock pair on a live mutex plus is_valid() read. check rc=0, build rc=0, no [CPLUS- diagnostic; built binary exits 0."
+    }
+  ]
+}

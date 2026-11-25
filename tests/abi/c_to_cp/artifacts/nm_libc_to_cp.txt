@@ -1,0 +1,19 @@
+
+c_to_cp_lib.o:
+0000000000000220 T _cto_apply_binary
+0000000000000208 T _cto_clear_callback
+00000000000003a8 T _cto_consume_and_free_int_buffer
+00000000000001b4 T _cto_fire_callback
+000000000000035c T _cto_make_int_buffer
+0000000000000000 T _cto_point_translate
+0000000000000018 T _cto_rect_area
+0000000000000014 T _cto_rect_from_points
+000000000000018c T _cto_register_callback
+0000000000000108 T _cto_scale_in_place
+0000000000000230 T _cto_store_create
+000000000000032c T _cto_store_destroy
+00000000000002e8 T _cto_store_get
+000000000000029c T _cto_store_put
+0000000000000320 T _cto_store_size
+000000000000005c T _cto_sum_ints
+0000000000000458 T _cto_vsum

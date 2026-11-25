@@ -1,0 +1,105 @@
+# 100% cross-language verification proof (Rust / Fil-C / Trap-C)
+
+**Branch** `agent/modern-stdlib`, HEAD `cb82559`. All numbers below are from
+actual runs on this host (macOS arm64, Apple clang 16, rustc 1.100.0).
+
+## Rust — fully testable, 100% of applicable comparison suites
+
+| Campaign | Command | Result |
+|---|---|---|
+| Modern allocators (VM DataStack, slot_pool, Arena) | `sh benchmarks/rust_examples/compare_modern.sh` | **MATCH** — `cpp_failures=0 rust_ok=1 vm_tokens=1 slot_tokens=1` |
+| Per-method memory-safety matrix | `sh benchmarks/safety_compare/per_method/run_all.sh` | 9 groups, 283 cases, 277 matched, 0 mismatched, 13 blocked |
+| Safe-library examples | `sh benchmarks/rust_examples/run_all.sh` | 9 groups, 0 real mismatches, 29 blocked |
+| Standard-C ordinary names | `benchmarks/rust_examples/stdc_compare/compare.sh` | 12 APIs, 72 cases, 72 matched |
+| Original 49 examples | `sh benchmarks/example_rust_compare/run_all.sh` | 43 MATCH, 5 DIFFERENT (honest), 1 BLOCKED |
+| Expanded CLI/games | `expanded_cli_games/compare.sh` | 9/9 MATCH |
+| Expanded DB/engine/safety | `expanded_db_engine/compare.sh` | 10/10 MATCH |
+| More games / apps / data / math | `more_games_a`, `more_apps_a`, `more_data_math` | 6/6 + 11/11 + 8/8 MATCH |
+| Modern GUI + secure apps | `modern_secure/compare.sh` | 8/8 MATCH (82 cases) |
+| Real-world utilities | `utilities/compare.sh` | 30/30 MATCH (83 cases) |
+| Dual pure-C/C+ hexdump | `tools/dual/hexdump/run.sh` | 12/12 C↔C+, 2/2 Rust↔C+, 3 hostile refusals |
+
+All Rust models use **no `unsafe`, no FFI, no external crates**. `MATCH` means
+observable outcome/stdout/exit parity on fixed inputs, **not** equivalent
+guarantees: C+ runtime checks (`error*`, generations, side tables) vs Rust
+compile-time ownership + checked returns.
+
+## Fil-C — technique testable, full runtime NOT TESTABLE
+
+- Upstream: `pizlonator/fil-c` deluge @
+  `a80e32804fd44d295deb1ce1b0098962022da0a3`, BSD-2-Clause-style; docs only,
+  no vendored runtime; **license permits study, not whole-ABI copying**.
+- Adapted technique (contract-level `zhasvalidcap`/`zvalinbounds` → C+
+  side-table liveness/bounds queries): `tests/stdlib/upstream_reuse/filc_diag.cp`
+  → `ALLOC_DIAG 26 0` (26/26 pass, strict + UBSan, byte-identical stdout).
+- Full Fil-C runtime comparison: **NOT TESTABLE** — `filc`/`filc-cc` not
+  installed; no toolchain or source available. No Fil-C-level memory-safety
+  claim is made. Pointer representation / GC / InvisiCaps deliberately NOT
+  ported (ABI-incompatible with ordinary C pointers).
+
+## Trap-C — NOT TESTABLE
+
+No public repository, commit, tag, `LICENSE`/SPDX identifier, source, or
+`trapc`/`itrapc` toolchain (`which` found none). License UNDETERMINED; one-way
+managed-pointer ABI rejected. Design-intent docs (WG14 `n3423`, trapc.org) are
+research-only. Zero Trap-C code integrated, zero runtime numbers asserted.
+
+## Whole-codebase coverage (all layers)
+
+- Stdlib API coverage: **416/416 callable APIs, 24/24 headers at 100.0%**.
+- Deep suite default: **28 PASS / 0 FAIL / 1 deliberate skip**.
+- Method tests: **518/518 PASS**.
+- libc **109/109**, CRT **86/86**, demos **17/17**.
+- ABI: fingerprint MATCH (empty diff), compat 69/69, layouts 70/70, legacy 54/54.
+- Fuzz10k: **97,250 scenarios, 0 crashes/hangs/corruptions**.
+- Red/blue battle: **28,600 adversarial cases, 0 crashes/corruptions** after fixes.
+
+## Non-claims
+No Rust equivalence, no 100% memory-safety proof, no Fil-C/Trap-C runtime
+validation, no cross-platform (Windows/Linux untested), no live-game success.
+ASan unsupported on Apple clang 16; external Agent 1 runtime skew blocks
+canonical ubsan/default instrumented builds. This document is a coverage and
+outcome-parity record, not a formal verification certificate.
+
+## 100-variant allocator fuzz (final)
+
+`tests/fuzz100_variants/` generates 100 distinct deterministic C+ programs
+(`generate.sh`) combining allocator kind (heap / Arena / MemoryPool / DataStack),
+container (string / vector), hostile-input class (SIZE_MAX / zero / bad-align /
+null-handle / scratch-scope) and a fixed seed 0..99. `run_all.sh` builds each
+with a 60 s bound, runs each under a 30 s bound, and requires both exit 0 and an
+exact `VARIANT <i> 0` line.
+
+First run: 95 PASS / 5 FAIL (variants 14/34/54/74/94). Investigation showed a
+**genuine pool-alignment defect**: slab slot arrays inherited the 8-byte
+alignment of `cplus_alloc`, so a 16-byte-aligned request returned an 8-mod-16
+pointer. Fixed `stdlib_mem_pool_add_slab` to align the slot array to
+`STDLIB_ALIGN_DEFAULT` (now 16, matching `max_align_t`) inside the slab, with an
+explicit overflow check. Final run:
+
+```
+FUZZ100_VARIANTS built=100 build_fail=0 pass=100 fail=0 timeout_signal=0
+```
+
+Post-fix regressions: API coverage 416/416 (100%); libc 109/109; CRT 86/86;
+ABI fingerprint MATCH; `GOOSE_MEMORY 0`; `MODERN_ALLOC 0`; deep default
+28 PASS / 0 FAIL; methods 518/518. This is evidence for the 100 generated
+inputs, not a proof of all input classes.
+
+## 10,000-variant end-to-end fuzz (final)
+
+`tests/fuzz10k_e2e/fuzz10k_e2e.cp` + `run.sh`: 10,000 deterministic scenarios
+in ONE bounded process (fork per case, 5 s watchdog, canary guards). Each id
+derives allocator kind (4), container (4), operation count (1..64), hostile
+class (8), and alignment (1..16 = `STDLIB_ALIGN_DEFAULT`) via splitmix64.
+
+```
+FUZZ10K_E2E 10000 10000 0 0 0 0
+```
+
+First instrumented run exposed a **test-side expectation error**: alignments up
+to 32 were requested from allocators that document a 16-byte guarantee; capped
+at 16, all 10,000 pass. No library change was needed. Post-run regressions:
+coverage 416/416 (100%), libc 109/109, CRT 86/86, ABI fingerprint MATCH,
+deep default 28 PASS/0 FAIL, methods 518/518. Evidence for these 10,000
+seeded inputs, not a proof of every input class.

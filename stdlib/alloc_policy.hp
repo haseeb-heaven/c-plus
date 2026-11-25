@@ -1,0 +1,177 @@
+/* C+ standard library: additive allocation-policy helpers (mimalloc port).
+ *
+ * This header is purely ADDITIVE.  It defines no new allocation model, changes
+ * no existing API, adds no fields to any existing struct, introduces no fat
+ * pointers, and exports no symbols: every helper is `static inline` and works
+ * only on scalar values plus caller-provided out-parameters.  There is no ABI
+ * change and nothing here allocates, frees, or touches process state.
+ *
+ * The routines below adapt the size-overflow and size-class arithmetic used by
+ * mimalloc's calloc/new paths.  They are independent helpers: callers may use
+ * them before entering the checked allocator (stdlib_alloc / stdlib_calloc) to
+ * compute a padded request size without ever performing a wrapping arithmetic
+ * operation.  They do not replace stdlib_calloc's own guard in error.hp.
+ *
+ * UPSTREAM / LICENSE (exact provenance is also in
+ * tests/stdlib/upstream_reuse/alloc_policy_NOTES.md)
+ * -------------------------------------------------------------
+ *   * `stdlib_count_size_overflow` adapts `mi_count_size_overflow` and
+ *     `mi_mul_overflow` from mimalloc `include/mimalloc/internal.h`
+ *     (lines 468-503 at the fetched revision: builtin multiply overflow check
+ *     on 474-482, division fallback on 484-490, wrapper on 493-503).
+ *     Call sites: `src/alloc.c` lines 221-224 (`mi_heap_calloc`) and
+ *     265-270 (`mi_ucalloc`).
+ *   * `stdlib_size_class_round_up` adapts `_mi_align_up` (internal.h
+ *     lines 404-413; the power-of-two branch mirrors mimalloc's fast path).
+ *   * `stdlib_size_class_words` adapts `_mi_wsize_from_size` (internal.h
+ *     lines 462-466), adding the overflow check that mimalloc only asserts.
+ *   * `stdlib_size_normalize_zero` documents the zero-size rule at
+ *     `src/alloc.c` line 133 (`if (size == 0) size = sizeof(void*);`).
+ *   Fetched from https://raw.githubusercontent.com/microsoft/mimalloc/master/
+ *   on 2026-11-23 (GitHub resolves `master` to the `main` branch);
+ *   refs/heads/main = c683b7c60c91cb2809977e37d3f4d084d7497180.
+ *   mimalloc is Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
+ *   (alloc.c / internal.h) and Copyright (c) 2018-2025 Microsoft Corporation,
+ *   Daan Leijen (LICENSE).  Licensed under the MIT License; full text below.
+ *
+ * RETURN CONVENTIONS
+ * ------------------
+ * stdlib_count_size_overflow() mirrors mimalloc's bool: 1 means "overflow or
+ * invalid argument, request rejected", 0 means "product computed".  On
+ * overflow *total is set to SIZE_MAX (mimalloc behaviour) so a caller that
+ * ignores the return value still sees an unallocatable size.  A NULL
+ * out-parameter is treated as failure (1) rather than dereferenced.
+ *
+ * The rounding/normalization helpers use the C+ convention: 0 on success,
+ * -1 on invalid argument or overflow.  On failure the out-parameter is left
+ * untouched so a caller cannot accidentally consume a stale-but-plausible
+ * rounded value.
+ */
+#ifndef CPLUS_STD_ALLOC_POLICY_HP
+#define CPLUS_STD_ALLOC_POLICY_HP
+
+#include <stddef.h>
+#include <stdint.h> /* SIZE_MAX, uintptr_t */
+
+/* Safe `count * size` product for array/allocator requests.
+ *
+ * 1 (reject) if `total == NULL`, or if the mathematical product cannot be
+ * represented in size_t; in that case *total = SIZE_MAX.  0 (accept)
+ * otherwise, with *total = count * size.
+ *
+ * Algorithm (mimalloc internal.h:493-503): the common count == 1 case is a
+ * direct assignment, then a builtin overflow-detecting multiply; mimalloc's
+ * portable fallback checks `(SIZE_MAX / size) < count` and writes SIZE_MAX on
+ * detection.  This port keeps the same observable results but performs the
+ * division guard BEFORE the multiply in the fallback, so no wrapping product
+ * is ever computed, and it never divides by zero.  No memory is allocated and
+ * no error callback is invoked: rejection is reported only by the return
+ * value.  Combine with stdlib_size_normalize_zero / rounding helpers below
+ * before calling the allocator; stdlib_calloc performs its own independent
+ * check. */
+static inline int stdlib_count_size_overflow(size_t count, size_t size,
+                                             size_t *total) {
+    size_t product = (size_t)0;
+    if (total == (size_t *)0)
+        return 1;
+    if (count == (size_t)1) { /* common case for C++ allocators */
+        *total = size;
+        return 0;
+    }
+#if defined(__GNUC__) || defined(__clang__)
+    if (__builtin_mul_overflow(count, size, &product)) {
+        *total = SIZE_MAX;
+        return 1;
+    }
+    *total = product;
+    return 0;
+#else
+    /* Portable fallback: reject before multiplying.  GCC/Clang optimize this
+     * to the same overflow-flag test as mimalloc's version. */
+    if (size != (size_t)0 && count > SIZE_MAX / size) {
+        *total = SIZE_MAX;
+        return 1;
+    }
+    *total = count * size;
+    return 0;
+#endif
+}
+
+/* Round `size` UP to a multiple of `alignment` (mimalloc `_mi_align_up`).
+ *
+ * 0 on success with *out = smallest multiple of `alignment` >= `size`;
+ * -1 (out untouched) if `out == NULL`, `alignment == 0`, `alignment` is not a
+ * power of two, or the rounded value would exceed SIZE_MAX.  mimalloc assumes
+ * a valid power-of-two alignment and non-overflowing input (assert-only); this
+ * port makes both preconditions explicit and reports them as failures.  Only
+ * the branch-free mask form is used, so no division is needed in the fast
+ * path. */
+static inline int stdlib_size_class_round_up(size_t size, size_t alignment,
+                                             size_t *out) {
+    size_t mask;
+    if (out == (size_t *)0 || alignment == (size_t)0)
+        return -1;
+    if ((alignment & (alignment - (size_t)1)) != 0)
+        return -1;
+    mask = alignment - (size_t)1;
+    if (size > SIZE_MAX - mask)
+        return -1;
+    *out = (size + mask) & ~mask;
+    return 0;
+}
+
+/* Round `size` UP to whole machine words (mimalloc `_mi_wsize_from_size`).
+ *
+ * 0 on success with *words = ceil(size / sizeof(uintptr_t)); -1 (out
+ * untouched) if `words == NULL` or `size` is within sizeof(uintptr_t)-1 of
+ * SIZE_MAX (the addition would wrap).  There is no zero-size special case:
+ * zero maps to zero words, and callers should normalize separately. */
+static inline int stdlib_size_class_words(size_t size, size_t *words) {
+    const size_t w = sizeof(uintptr_t);
+    if (words == (size_t *)0 || size > SIZE_MAX - (w - (size_t)1))
+        return -1;
+    *words = (size + w - (size_t)1) / w;
+    return 0;
+}
+
+/* Zero-size normalization (mimalloc `src/alloc.c` line 133).
+ *
+ * 0 on success with *out = (`size == 0` ? `zero_size` : `size`); -1 if
+ * `out == NULL`.  Pass `sizeof(void*)` to mirror mimalloc's padded small-block
+ * rule, or `1u` to mirror this repository's `stdlib_calloc` (error.hp:412),
+ * which maps a zero product to one tracked byte.  Non-zero sizes are returned
+ * unchanged: this helper never rounds or clamps. */
+static inline int stdlib_size_normalize_zero(size_t size, size_t zero_size,
+                                             size_t *out) {
+    if (out == (size_t *)0)
+        return -1;
+    *out = (size == (size_t)0) ? zero_size : size;
+    return 0;
+}
+
+/* --------------------------------------------------------------------------
+ * MIT License (mimalloc, https://github.com/microsoft/mimalloc)
+ *
+ * Copyright (c) 2018-2024, Microsoft Research, Daan Leijen
+ * Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * -------------------------------------------------------------------------- */
+
+#endif /* CPLUS_STD_ALLOC_POLICY_HP */

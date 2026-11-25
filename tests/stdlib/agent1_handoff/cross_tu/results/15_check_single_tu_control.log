@@ -1,0 +1,7 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check single_tu_control.cp
+single_tu_control.cp:10:12: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer
+      return ((char *)shared_resource)[0];
+             ^
+help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+
+[exit code: 1]

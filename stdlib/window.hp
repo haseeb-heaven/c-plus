@@ -1,0 +1,114 @@
+/* C+ standard library: SDL lifetime and windows via SDL3 (zlib licence).
+ *
+ * C++-flavoured RAII: `sdl core = sdl(SDL_INIT_VIDEO, &err); window w =
+ * window("title", 640, 480, 0, &err);` and both release in drop().  SDL3 stays
+ * the backend.  Link with pkg-config sdl3.
+ */
+#ifndef CPLUS_STD_WINDOW_HP
+#define CPLUS_STD_WINDOW_HP
+
+#include <SDL3/SDL.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+/* Process-wide SDL lifetime; windows must be dropped before it. */
+class sdl {
+    int initialized;
+    unsigned flags;
+
+    sdl(unsigned flags, error *err) {
+        do {
+            error_reset(err);
+            this->initialized = 0;
+            this->flags = flags;
+            if (!SDL_Init((SDL_InitFlags)flags)) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, SDL_GetError());
+                break;
+            }
+            this->initialized = 1;
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->initialized != 0;
+    }
+
+    unsigned subsystem_flags(void) {
+        return this->flags;
+    }
+
+    void drop(void) {
+        if (this->initialized) {
+            SDL_Quit();
+            this->initialized = 0;
+        }
+    }
+};
+
+static inline const char *sdl_backend_error(void) {
+    return SDL_GetError();
+}
+
+class window {
+    SDL_Window *handle;
+
+    window(const char *title, int width, int height, unsigned flags, error *err) {
+        error_reset(err);
+        this->handle = NULL;
+        if (width <= 0 || height <= 0) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "window: width and height must be positive");
+        } else {
+            this->handle = SDL_CreateWindow(title, width, height,
+                                            (SDL_WindowFlags)flags);
+            if (this->handle == NULL)
+                error_fail(err, CPLUS_EXIT_RESOURCE, SDL_GetError());
+        }
+    }
+
+    int valid(void) {
+        return this->handle != NULL;
+    }
+
+    /* Borrowed native handle for APIs that need the SDL3 type. */
+    SDL_Window *native(void) {
+        return this->handle;
+    }
+
+    int size(int *width, int *height, error *err) {
+        error_reset(err);
+        if (this->handle == NULL || width == NULL || height == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "window::size: invalid window");
+            return STDLIB_FAIL;
+        }
+        *width = 0;
+        *height = 0;
+        if (!SDL_GetWindowSize(this->handle, width, height)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int set_title(const char *title, error *err) {
+        error_reset(err);
+        if (this->handle == NULL || title == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "window::set_title: invalid window");
+            return STDLIB_FAIL;
+        }
+        if (!SDL_SetWindowTitle(this->handle, title)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->handle != NULL) {
+            SDL_DestroyWindow(this->handle);
+            this->handle = NULL;
+        }
+    }
+};
+
+#endif

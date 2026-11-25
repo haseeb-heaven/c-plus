@@ -1,61 +1,401 @@
-/* C+ standard library: growable int vector with a tracked length. */
+/* C+ standard library: growable int vector with a tracked size.
+ *
+ * Storage comes from the checked allocator in error.hp (stdlib_alloc /
+ * stdlib_release over the C+ managed allocator); there is no second
+ * allocator here.  Growth is overflow-checked and EVERY mutation that can fail
+ * is failure-atomic: when it returns -1 the vector is exactly as it was
+ * before the call (same buffer, same contents, same size, same capacity).
+ *
+ * Borrowing and invalidation
+ * --------------------------
+ * `view()` returns a borrowed `slice`.  The slice records the vector's
+ * generation counter; the counter is bumped by every operation that can move
+ * or shorten the storage (a reallocation, pop_back, clear, insert, erase,
+ * copy_from, shrink_to_fit, drop).  A slice taken before such an operation
+ * reports stale() == 1, valid() == 0, and refuses reads.  push_back without a
+ * reallocation does not invalidate existing slices.  The check dereferences
+ * the owning vector, so it is only meaningful while that vector object is
+ * still alive (a slice outliving the vector's own storage is a lifetime
+ * error that a library cannot detect).
+ */
 #ifndef CPLUS_STD_VECTOR_HP
 #define CPLUS_STD_VECTOR_HP
 
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
 
-class IntVec {
-    int *data;
-    size_t length;
-    size_t capacity;
+/* ---- Upstream-derived growth / invariant helpers (Microsoft STL) ---------
+ *
+ * Both helpers below are adaptations of two concrete Microsoft STL algorithms
+ * (see tests/stdlib/upstream_reuse/vector_stl_NOTES.md for exact URLs, revision
+ * and license).  They are re-expressed in strict C+ with size_t arithmetic: no
+ * templates, no exceptions, no allocator_traits and no raw-game offsets.
+ *
+ *  - vector_allocation_bytes  <- <xmemory> _Get_size_of_n<sizeof(int)>
+ *  - vector_calculate_growth  <- <vector> vector::_Calculate_growth
+ *
+ * The multiplication check is the division form of the upstream
+ * `_Count > static_cast<size_t>(-1) / _Ty_size` predicate, with
+ * STDLIB_ALLOC_LIMIT substituting for SIZE_MAX.  The growth guard is the same
+ * subtraction form used upstream: compare the current capacity against
+ * (ceiling - step) before adding, so the test itself cannot overflow.
+ */
 
-    IntVec(void) {
-        cplus_log(CPLUS_LOG_DEBUG, "IntVec ctor");
-        self->data = NULL;
-        self->length = 0;
-        self->capacity = 0;
+/* Checked byte count for `count` ints (the _Get_size_of_n adaptation).
+ * 0 on success (bytes written to *out_bytes), -1 when the product would exceed
+ * STDLIB_ALLOC_LIMIT.  The caller performs no arithmetic before this guard. */
+static inline int vector_allocation_bytes(size_t count, size_t *out_bytes) {
+    size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+    if (count > max_count) {
+        stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                    "vector: element count exceeds allocation limit");
+        return -1;
+    }
+    *out_bytes = sizeof(int) * count;
+    return 0;
+}
+
+/* Geometric growth with a subtraction-form overflow guard, a demand floor and
+ * saturation at the ceiling (the _Calculate_growth adaptation).
+ *
+ * Upstream shape:
+ *   if (_Oldcapacity > _Max - _Oldcapacity / 2) return _Max;
+ *   _Geometric = _Oldcapacity + _Oldcapacity / 2;
+ *   if (_Geometric < _Newsize) return _Newsize;
+ *   return _Geometric;
+ *
+ * C+ keeps its documented 2x step (oldcapacity + oldcapacity) rather than the
+ * upstream 1.5x step; the guard, demand floor and saturation structure is the
+ * ported invariant.  `newsize` is expected to be <= the ceiling (reserve()
+ * re-checks it); the result is therefore always a usable capacity. */
+static inline size_t vector_calculate_growth(size_t oldcapacity, size_t newsize) {
+    size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+    size_t geometric;
+    if (oldcapacity >= max_count)
+        return max_count; /* already at the ceiling */
+    /* Subtraction form: would oldcapacity + oldcapacity exceed max_count? */
+    if (oldcapacity > max_count - oldcapacity)
+        return max_count; /* geometric growth would overflow -> saturate */
+    geometric = oldcapacity + oldcapacity;
+    if (geometric < newsize)
+        return newsize; /* geometric growth insufficient -> demand floor */
+    return geometric; /* geometric growth sufficient */
+}
+
+/* Borrowed, bounds-checked window over ints.  It never owns storage and is
+ * invalidated by the owner's growth or destruction. */
+class slice {
+    int *items;
+    size_t count;
+    const size_t *generation_ref;
+    size_t generation_at;
+
+    slice(int *items, size_t count) {
+        this->items = items;
+        this->count = count;
+        this->generation_ref = NULL;
+        this->generation_at = 0;
     }
 
-    size_t len(void) {
-        cplus_log(CPLUS_LOG_TRACE, "IntVec len=%zu", self->length);
-        return self->length;
+    size_t size(void) {
+        return this->count;
     }
 
-    void push(int value) {
-        cplus_log(CPLUS_LOG_TRACE, "IntVec push value=%d", value);
-        if (self->length == self->capacity) {
-            size_t next = self->capacity == 0 ? 4 : self->capacity * 2;
-            cplus_log(CPLUS_LOG_DEBUG, "IntVec grow %zu -> %zu",
-                      self->capacity, next);
-            int *fresh = (int *)cplus_alloc(sizeof(int) * next);
-            size_t i;
-            for (i = 0; i < self->length; i++)
-                fresh[i] = self->data[i];
-            if (self->data != NULL)
-                cplus_release(self->data);
-            self->data = fresh;
-            self->capacity = next;
+    /* 1 when the owning vector changed shape after this slice was taken. */
+    int stale(void) {
+        return this->generation_ref != NULL &&
+               *this->generation_ref != this->generation_at;
+    }
+
+    int valid(void) {
+        return this->items != NULL && this->count > 0 && !this->stale();
+    }
+
+    /* 0 on success, -1 when the index is outside the slice or it is stale. */
+    int at_checked(size_t index, int *out) {
+        if (out == NULL)
+            return -1;
+        if (this->items == NULL || index >= this->count || this->stale()) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "slice::at_checked: index out of range or stale slice");
+            return -1;
         }
-        self->data[self->length++] = value;
+        *out = this->items[index];
+        return 0;
     }
 
-    int at(size_t index) {
-        cplus_log(CPLUS_LOG_TRACE, "IntVec at=%zu len=%zu", index,
-                  self->length);
-        if (index >= self->length)
-            return 0;
-        return self->data[index];
-    }
-
-    void drop(void) {
-        cplus_log(CPLUS_LOG_DEBUG, "IntVec drop len=%zu", self->length);
-        if (self->data != NULL) {
-            cplus_release(self->data);
-            self->data = NULL;
-            self->length = 0;
-            self->capacity = 0;
+    /* Sub-slice [start, start+n) clamped to the extent; empty when start is
+     * outside the slice.  An empty result has size() == 0 and valid() == 0. */
+    slice sub(size_t start, size_t length) {
+        slice empty = slice(NULL, 0);
+        size_t available;
+        if (this->items == NULL || start >= this->count || this->stale())
+            return empty;
+        available = this->count - start;
+        if (length > available)
+            length = available;
+        {
+            slice part = slice(this->items + start, length);
+            part.generation_ref = this->generation_ref;
+            part.generation_at = this->generation_at;
+            return part;
         }
     }
 };
+
+class vector {
+    int *items;
+    size_t used;
+    size_t space;
+    size_t generation;
+    const stdlib_allocator *alloc; /* NULL = checked heap */
+
+    vector(void) {
+        this->alloc = (const stdlib_allocator *)0;
+        this->items = NULL;
+        this->used = 0;
+        this->space = 0;
+        this->generation = 0;
+    }
+
+    int *valloc(size_t bytes) {
+        error e = error();
+        return (int *)stdlib_allocate(this->alloc, bytes, STDLIB_ALIGN_DEFAULT, &e);
+    }
+    void vfree(int *p, size_t bytes) {
+        stdlib_deallocate(this->alloc, (void *)p, bytes);
+    }
+
+    size_t size(void) {
+        return this->used;
+    }
+
+    size_t capacity(void) {
+        return this->space;
+    }
+
+    /* Grow the buffer to hold at least `want` elements.  0 on success; -1 on
+     * overflow or allocation failure with the vector untouched. */
+    int reserve(size_t want) {
+        int *fresh;
+        size_t bytes = 0;
+        size_t i;
+        if (want <= this->space)
+            return 0;
+        /* Commit-last guard: validate the product and allocate/copy FIRST; the
+         * owning fields are published only after every fallible step succeeds
+         * (upstream _Allocation_guard / _Reallocation_guard2 discipline). */
+        if (vector_allocation_bytes(want, &bytes) != 0)
+            return -1;
+        fresh = this->valloc(bytes);
+        if (fresh == NULL)
+            return -1;
+        for (i = 0; i < this->used; i++)
+            fresh[i] = this->items[i];
+        /* ---- commit point: nothing above can leave the vector modified ---- */
+        if (this->items != NULL)
+            this->vfree(this->items, this->space * sizeof(int));
+        this->items = fresh;
+        this->space = want;
+        this->generation++;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        return 0;
+    }
+
+    int push_back(int value) {
+        if (this->used == this->space) {
+            size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+            size_t newsize;
+            size_t want;
+            /* Upstream equivalent of the `_Oldsize == max_size()` -> `_Xlength()`
+             * guard, plus C+'s documented conservative half-limit policy. */
+            if (this->used >= max_count || this->space > max_count / 2) {
+                stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                            "vector::push_back: capacity overflow");
+                return -1;
+            }
+            newsize = this->used + 1;
+            if (newsize < 4)
+                newsize = 4; /* C+ minimum initial capacity */
+            want = vector_calculate_growth(this->space, newsize);
+            if (vector_reserve(this, want) != 0)
+                return -1;
+        }
+        this->items[this->used++] = value;
+        return 0;
+    }
+
+    /* Compatibility accessor: returns 0 for an out-of-range index (and counts
+     * a bounds violation in telemetry).  Prefer at_checked. */
+    int at(size_t index) {
+        if (index >= this->used) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "vector::at: index out of range");
+            return 0;
+        }
+        return this->items[index];
+    }
+
+    /* Checked access: 0 on success, -1 when the index is out of range. */
+    int at_checked(size_t index, int *out) {
+        if (out == NULL)
+            return -1;
+        if (index >= this->used) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "vector::at_checked: index out of range");
+            return -1;
+        }
+        *out = this->items[index];
+        return 0;
+    }
+
+    /* Remove the last element into out: 0 on success, -1 when empty. */
+    int pop_back(int *out) {
+        if (out == NULL)
+            return -1;
+        if (this->used == 0)
+            return -1;
+        *out = this->items[this->used - 1];
+        this->used--;
+        this->generation++;
+        return 0;
+    }
+
+    /* Insert before `index` (index == size() appends).  Failure-atomic. */
+    int insert(size_t index, int value) {
+        size_t i;
+        if (index > this->used)
+            return -1;
+        if (this->used == this->space) {
+            size_t max_count = STDLIB_ALLOC_LIMIT / sizeof(int);
+            size_t newsize;
+            size_t want;
+            /* Same _Xlength() + half-limit guards as push_back (no note here,
+             * matching this method's historical silent-refusal behaviour). */
+            if (this->used >= max_count || this->space > max_count / 2)
+                return -1;
+            newsize = this->used + 1;
+            if (newsize < 4)
+                newsize = 4; /* C+ minimum initial capacity */
+            want = vector_calculate_growth(this->space, newsize);
+            if (vector_reserve(this, want) != 0)
+                return -1;
+        }
+        for (i = this->used; i > index; i--)
+            this->items[i] = this->items[i - 1];
+        this->items[index] = value;
+        this->used++;
+        this->generation++;
+        return 0;
+    }
+
+    /* Remove the element at `index`; the value goes to *out when out != NULL. */
+    int erase(size_t index, int *out) {
+        size_t i;
+        if (index >= this->used)
+            return -1;
+        if (out != NULL)
+            *out = this->items[index];
+        for (i = index; i + 1 < this->used; i++)
+            this->items[i] = this->items[i + 1];
+        this->used--;
+        this->generation++;
+        return 0;
+    }
+
+    void clear(void) {
+        this->used = 0;
+        this->generation++;
+    }
+
+    /* Replace the contents with a copy of `other`.  Failure-atomic: on -1 this
+     * vector is unchanged.  Copying a vector onto itself is a no-op. */
+    int copy_from(vector *other) {
+        int *fresh = NULL;
+        size_t i;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "vector::copy_from: null source");
+            return -1;
+        }
+        if (other == this)
+            return 0;
+        if (other->used > 0) {
+            size_t bytes = 0;
+            if (vector_allocation_bytes(other->used, &bytes) != 0)
+                return -1;
+            fresh = this->valloc(bytes);
+            if (fresh == NULL)
+                return -1;
+            for (i = 0; i < other->used; i++)
+                fresh[i] = other->items[i];
+        }
+        if (this->items != NULL)
+            this->vfree(this->items, this->space * sizeof(int));
+        this->items = fresh;
+        this->used = other->used;
+        this->space = other->used;
+        this->generation++;
+        return 0;
+    }
+
+    /* Release unused capacity.  Failure-atomic (the old, larger buffer stays
+     * valid when the smaller allocation fails). */
+    int shrink_to_fit(void) {
+        int *fresh;
+        size_t bytes = 0;
+        size_t i;
+        if (this->space == this->used)
+            return 0;
+        if (this->used == 0) {
+            if (this->items != NULL)
+                this->vfree(this->items, this->space * sizeof(int));
+            this->items = NULL;
+            this->space = 0;
+            this->generation++;
+            return 0;
+        }
+        if (vector_allocation_bytes(this->used, &bytes) != 0)
+            return -1;
+        fresh = this->valloc(bytes);
+        if (fresh == NULL)
+            return -1;
+        for (i = 0; i < this->used; i++)
+            fresh[i] = this->items[i];
+        this->vfree(this->items, this->space * sizeof(int));
+        this->items = fresh;
+        this->space = this->used;
+        this->generation++;
+        return 0;
+    }
+
+    /* Borrowed view of the current contents; see the header comment for the
+     * invalidation rules. */
+    slice view(void) {
+        slice borrowed = slice(this->items, this->used);
+        borrowed.generation_ref = &this->generation;
+        borrowed.generation_at = this->generation;
+        return borrowed;
+    }
+
+    void drop(void) {
+        if (this->items != NULL) {
+            this->vfree(this->items, this->space * sizeof(int));
+            this->items = NULL;
+            this->used = 0;
+            this->space = 0;
+            this->generation++;
+        }
+    }
+};
+
+/* Allocator-aware vector factory.  The vector is bound to `a`, which must
+ * outlive it; a monotonic Arena/DataStack makes individual frees no-ops. */
+static inline vector vector_in(const stdlib_allocator *a) {
+    vector v = vector();
+    v.alloc = a;
+    return v;
+}
 
 #endif

@@ -1,0 +1,660 @@
+/* C+ modern standard library: mesh3d -- a small, allocator-aware 3D mesh.
+ *
+ * MODERN LAYER ONLY.  Plain C syntax (structs + static inline functions), no
+ * templates, no exceptions, no exported symbols.  Storage comes from the
+ * unified allocator interface in alloc_iface.hp: pass a stdlib_allocator to
+ * mesh3d_init(), or NULL for the checked heap default.
+ *
+ * Layout
+ * ------
+ *   mesh3d_vertex   position + accumulated/unit normal
+ *   mesh3d_triangle three indices into the mesh's vertex array
+ *   mesh3d          two growable arrays (vertices, triangles) + allocator
+ *
+ * Contract
+ * --------
+ *   - Every operation that can fail is failure-atomic: on STDLIB_FAIL the
+ *     mesh is byte-for-byte unchanged (same buffers, counts and contents).
+ *   - Invalid indices (>= vertex_count), non-finite coordinates, degenerate
+ *     triangles and oversized requests are refused with a populated error.
+ *   - mesh_clear() keeps the allocated capacity; mesh_drop() releases it.
+ *   - Every helper is static inline: no ABI surface, header-only addition.
+ *
+ * Numeric note: <math.h> is deliberately NOT included -- the C+ lifetime
+ * checker rejects the SDK's inline signbit()/fpclassify() definitions.  A
+ * finite check is done on the IEEE-754 bit pattern (exponent all ones means
+ * infinity or NaN), and sqrtf is declared locally so no math header is needed.
+ */
+#ifndef CPLUS_STD_MESH3D_HP
+#define CPLUS_STD_MESH3D_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+
+/* Square-root is supplied by libm (part of libSystem on supported targets).
+ * Declared here instead of pulling in <math.h>; see numeric note above. */
+extern float sqrtf(float);
+
+/* Hard ceilings: derived from the checked allocator's request limit so that
+ * count * sizeof(element) can never wrap or exceed STDLIB_ALLOC_LIMIT. */
+#define MESH3D_LIMIT_VERTICES ((size_t)(STDLIB_ALLOC_LIMIT / sizeof(mesh3d_vertex)))
+#define MESH3D_LIMIT_TRIANGLES ((size_t)(STDLIB_ALLOC_LIMIT / sizeof(mesh3d_triangle)))
+
+/* Squared-area threshold used for degenerate-triangle refusal.  A triangle is
+ * degenerate when any two indices repeat or when |cross|^2 <= this value. */
+#define MESH3D_EPS2 (1e-12f)
+
+typedef struct mesh3d_vec3 {
+    float x;
+    float y;
+    float z;
+} mesh3d_vec3;
+
+typedef struct mesh3d_vertex {
+    mesh3d_vec3 position;
+    mesh3d_vec3 normal;
+} mesh3d_vertex;
+
+typedef struct mesh3d_triangle {
+    size_t i0;
+    size_t i1;
+    size_t i2;
+} mesh3d_triangle;
+
+typedef struct mesh3d_aabb {
+    mesh3d_vec3 min;
+    mesh3d_vec3 max;
+    int valid; /* 1 when at least one contributed a finite position */
+} mesh3d_aabb;
+
+typedef struct mesh3d_validation {
+    size_t nonfinite_vertices;
+    size_t bad_index_triangles;
+    size_t degenerate_triangles;
+} mesh3d_validation;
+
+typedef struct mesh3d {
+    mesh3d_vertex *vertices;
+    size_t vertex_count;
+    size_t vertex_capacity;
+    mesh3d_triangle *triangles;
+    size_t triangle_count;
+    size_t triangle_capacity;
+    stdlib_allocator alloc;
+    int initialized;
+} mesh3d;
+
+/* ------------------------------------------------------------------ */
+/* Small vector helpers                                                */
+/* ------------------------------------------------------------------ */
+
+/* 1 only when the float is neither infinity nor NaN (IEEE-754 exponent is
+ * not all ones).  Avoids <math.h> and its checker-hostile inline functions. */
+static inline int mesh3d_finite(float v) {
+    uint32_t bits;
+    memcpy(&bits, &v, sizeof(bits));
+    return ((bits >> 23) & 0xFFu) != 0xFFu;
+}
+
+static inline int mesh3d_vec3_finite(mesh3d_vec3 v) {
+    return mesh3d_finite(v.x) && mesh3d_finite(v.y) && mesh3d_finite(v.z);
+}
+
+static inline mesh3d_vec3 mesh3d_vec3_zero(void) {
+    mesh3d_vec3 r;
+    r.x = 0.0f;
+    r.y = 0.0f;
+    r.z = 0.0f;
+    return r;
+}
+
+static inline mesh3d_vec3 mesh3d_vec3_sub(mesh3d_vec3 a, mesh3d_vec3 b) {
+    mesh3d_vec3 r;
+    r.x = a.x - b.x;
+    r.y = a.y - b.y;
+    r.z = a.z - b.z;
+    return r;
+}
+
+static inline float mesh3d_vec3_dot(mesh3d_vec3 a, mesh3d_vec3 b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static inline mesh3d_vec3 mesh3d_vec3_cross(mesh3d_vec3 a, mesh3d_vec3 b) {
+    mesh3d_vec3 r;
+    r.x = a.y * b.z - a.z * b.y;
+    r.y = a.z * b.x - a.x * b.z;
+    r.z = a.x * b.y - a.y * b.x;
+    return r;
+}
+
+static inline float mesh3d_vec3_len2(mesh3d_vec3 v) {
+    return mesh3d_vec3_dot(v, v);
+}
+
+/* ------------------------------------------------------------------ */
+/* Internal: guarded growth                                            */
+/* ------------------------------------------------------------------ */
+
+static inline int mesh3d_fail(error *err, int category, cplus_exit_code code,
+                              const char *message) {
+    error_fail_cat(err, category, code, message);
+    return STDLIB_FAIL;
+}
+
+/* Compute the next capacity for `need` elements.  Geometric x2 growth with a
+ * subtraction-form overflow guard and saturation at max_count (the
+ * allocator-derived ceiling).  Never returns a capacity below `need`. */
+static inline int mesh3d_capacity_for(size_t current, size_t need,
+                                     size_t max_count, size_t *out,
+                                     error *err) {
+    size_t doubled;
+    size_t want;
+    error_reset(err);
+    if (need > max_count)
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d: element count exceeds allocation limit");
+    if (current > max_count)
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d: corrupt capacity exceeds allocation limit");
+    if (current > max_count - current)
+        doubled = max_count;
+    else
+        doubled = current + current;
+    want = need > doubled ? need : doubled;
+    if (want < 4u)
+        want = 4u;
+    if (want > max_count)
+        want = max_count;
+    if (want < need)
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d: cannot grow to requested size");
+    *out = want;
+    return STDLIB_OK;
+}
+
+/* Reallocation that also supports allocators without a realloc callback:
+ * allocate + copy + release.  The checked-heap default uses stdlib_realloc
+ * directly so failure injection and generation metadata stay active. */
+static inline void *mesh3d_realloc_bytes(const stdlib_allocator *a, void *ptr,
+                                         size_t old_bytes, size_t new_bytes,
+                                         error *err) {
+    void *fresh;
+    error_reset(err);
+    if (a != (const stdlib_allocator *)0 && a->realloc == (void *)0 &&
+        a->alloc != (void *)0) {
+        fresh = stdlib_allocate(a, new_bytes, STDLIB_ALIGN_DEFAULT, err);
+        if (fresh == (void *)0)
+            return (void *)0;
+        if (ptr != (void *)0 && old_bytes != 0u)
+            memcpy(fresh, ptr, old_bytes);
+        stdlib_deallocate(a, ptr, old_bytes);
+        return fresh;
+    }
+    return stdlib_reallocate(a, ptr, old_bytes, new_bytes,
+                             STDLIB_ALIGN_DEFAULT, err);
+}
+
+/* ------------------------------------------------------------------ */
+/* Lifecycle                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Initialise an empty mesh.  `alloc == NULL` selects the checked heap. */
+static inline int mesh3d_init(mesh3d *m, const stdlib_allocator *alloc,
+                              error *err) {
+    error_reset(err);
+    if (m == (mesh3d *)0)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_NULL_POINTER, "mesh3d_init: NULL mesh");
+    memset(m, 0, sizeof(*m));
+    if (alloc != (const stdlib_allocator *)0)
+        m->alloc = *alloc;
+    else
+        m->alloc = stdlib_heap_allocator();
+    m->initialized = 1;
+    return STDLIB_OK;
+}
+
+static inline int mesh3d_valid(const mesh3d *m) {
+    return m != (const mesh3d *)0 && m->initialized == 1;
+}
+
+static inline size_t mesh3d_vertex_count(const mesh3d *m) {
+    return mesh3d_valid(m) ? m->vertex_count : 0u;
+}
+
+static inline size_t mesh3d_triangle_count(const mesh3d *m) {
+    return mesh3d_valid(m) ? m->triangle_count : 0u;
+}
+
+static inline size_t mesh3d_vertex_capacity(const mesh3d *m) {
+    return mesh3d_valid(m) ? m->vertex_capacity : 0u;
+}
+
+static inline size_t mesh3d_triangle_capacity(const mesh3d *m) {
+    return mesh3d_valid(m) ? m->triangle_capacity : 0u;
+}
+
+/* Reserve room for at least `want` vertices (no logical mutation). */
+static inline int mesh3d_reserve_vertices(mesh3d *m, size_t want, error *err) {
+    size_t newcap = 0u;
+    mesh3d_vertex *fresh;
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_reserve_vertices: invalid mesh");
+    if (want <= m->vertex_capacity)
+        return STDLIB_OK;
+    if (mesh3d_capacity_for(m->vertex_capacity, want, MESH3D_LIMIT_VERTICES,
+                            &newcap, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    fresh = (mesh3d_vertex *)mesh3d_realloc_bytes(
+        &m->alloc, m->vertices,
+        m->vertex_capacity * sizeof(mesh3d_vertex),
+        newcap * sizeof(mesh3d_vertex), err);
+    if (fresh == (mesh3d_vertex *)0)
+        return STDLIB_FAIL;
+    m->vertices = fresh;
+    m->vertex_capacity = newcap;
+    return STDLIB_OK;
+}
+
+/* Reserve room for at least `want` triangles (no logical mutation). */
+static inline int mesh3d_reserve_triangles(mesh3d *m, size_t want, error *err) {
+    size_t newcap = 0u;
+    mesh3d_triangle *fresh;
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_reserve_triangles: invalid mesh");
+    if (want <= m->triangle_capacity)
+        return STDLIB_OK;
+    if (mesh3d_capacity_for(m->triangle_capacity, want, MESH3D_LIMIT_TRIANGLES,
+                            &newcap, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    fresh = (mesh3d_triangle *)mesh3d_realloc_bytes(
+        &m->alloc, m->triangles,
+        m->triangle_capacity * sizeof(mesh3d_triangle),
+        newcap * sizeof(mesh3d_triangle), err);
+    if (fresh == (mesh3d_triangle *)0)
+        return STDLIB_FAIL;
+    m->triangles = fresh;
+    m->triangle_capacity = newcap;
+    return STDLIB_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mutation                                                            */
+/* ------------------------------------------------------------------ */
+
+/* Append a vertex.  Rejects non-finite position/normal and meshes already at
+ * the vertex ceiling.  `out_index` is optional. */
+static inline int mesh3d_add_vertex(mesh3d *m, const mesh3d_vertex *vertex,
+                                    size_t *out_index, error *err) {
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_add_vertex: invalid mesh");
+    if (vertex == (const mesh3d_vertex *)0)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_NULL_POINTER, "mesh3d_add_vertex: NULL vertex");
+    if (!mesh3d_vec3_finite(vertex->position) ||
+        !mesh3d_vec3_finite(vertex->normal))
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_add_vertex: non-finite coordinate");
+    if (m->vertex_count >= MESH3D_LIMIT_VERTICES)
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_add_vertex: vertex ceiling reached");
+    if (mesh3d_reserve_vertices(m, m->vertex_count + 1u, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    m->vertices[m->vertex_count] = *vertex;
+    if (out_index != (size_t *)0)
+        *out_index = m->vertex_count;
+    m->vertex_count++;
+    return STDLIB_OK;
+}
+
+/* Append a triangle.  Refuses indices outside [0, vertex_count) and triangles
+ * that are degenerate (a repeated index or a zero-area cross product). */
+static inline int mesh3d_add_triangle(mesh3d *m, const mesh3d_triangle *tri,
+                                      error *err) {
+    mesh3d_vec3 ab;
+    mesh3d_vec3 ac;
+    mesh3d_vec3 cross;
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_add_triangle: invalid mesh");
+    if (tri == (const mesh3d_triangle *)0)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_NULL_POINTER, "mesh3d_add_triangle: NULL triangle");
+    if (tri->i0 >= m->vertex_count || tri->i1 >= m->vertex_count ||
+        tri->i2 >= m->vertex_count)
+        return mesh3d_fail(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_add_triangle: index out of range");
+    if (tri->i0 == tri->i1 || tri->i1 == tri->i2 || tri->i0 == tri->i2)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "mesh3d_add_triangle: repeated index (degenerate)");
+    ab = mesh3d_vec3_sub(m->vertices[tri->i1].position,
+                         m->vertices[tri->i0].position);
+    ac = mesh3d_vec3_sub(m->vertices[tri->i2].position,
+                         m->vertices[tri->i0].position);
+    cross = mesh3d_vec3_cross(ab, ac);
+    if (!mesh3d_vec3_finite(cross) || mesh3d_vec3_len2(cross) <= MESH3D_EPS2)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "mesh3d_add_triangle: degenerate triangle");
+    if (m->triangle_count >= MESH3D_LIMIT_TRIANGLES)
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_add_triangle: triangle ceiling reached");
+    if (mesh3d_reserve_triangles(m, m->triangle_count + 1u, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    m->triangles[m->triangle_count] = *tri;
+    m->triangle_count++;
+    return STDLIB_OK;
+}
+
+/* Uniform scale helper (calls mesh3d_scale with the same factor on all axes). */
+static inline int mesh3d_scale(mesh3d *m, float sx, float sy, float sz,
+                               error *err);
+
+static inline int mesh3d_scale_uniform(mesh3d *m, float s, error *err) {
+    return mesh3d_scale(m, s, s, s, err);
+}
+
+/* Scale vertex positions by (sx, sy, sz).  Refuses non-finite factors and any
+ * scale that would make a coordinate non-finite; validation happens before any
+ * write, so a refusal leaves the mesh untouched.  Normals are NOT transformed
+ * by non-uniform scale -- call mesh3d_compute_normals() afterwards. */
+static inline int mesh3d_scale(mesh3d *m, float sx, float sy, float sz,
+                               error *err) {
+    size_t i;
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_scale: invalid mesh");
+    if (!mesh3d_finite(sx) || !mesh3d_finite(sy) || !mesh3d_finite(sz))
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_scale: non-finite scale factor");
+    for (i = 0; i < m->vertex_count; i++) {
+        mesh3d_vec3 p = m->vertices[i].position;
+        mesh3d_vec3 q;
+        q.x = p.x * sx;
+        q.y = p.y * sy;
+        q.z = p.z * sz;
+        if (!mesh3d_vec3_finite(q))
+            return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "mesh3d_scale: scale overflow");
+    }
+    for (i = 0; i < m->vertex_count; i++) {
+        m->vertices[i].position.x *= sx;
+        m->vertices[i].position.y *= sy;
+        m->vertices[i].position.z *= sz;
+    }
+    return STDLIB_OK;
+}
+
+/* Translate vertex positions by (dx, dy, dz).  Two-pass and failure-atomic;
+ * normals are unaffected by translation. */
+static inline int mesh3d_translate(mesh3d *m, float dx, float dy, float dz,
+                                   error *err) {
+    size_t i;
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_translate: invalid mesh");
+    if (!mesh3d_finite(dx) || !mesh3d_finite(dy) || !mesh3d_finite(dz))
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_translate: non-finite offset");
+    for (i = 0; i < m->vertex_count; i++) {
+        mesh3d_vec3 p = m->vertices[i].position;
+        mesh3d_vec3 q;
+        q.x = p.x + dx;
+        q.y = p.y + dy;
+        q.z = p.z + dz;
+        if (!mesh3d_vec3_finite(q))
+            return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "mesh3d_translate: translation overflow");
+    }
+    for (i = 0; i < m->vertex_count; i++) {
+        m->vertices[i].position.x += dx;
+        m->vertices[i].position.y += dy;
+        m->vertices[i].position.z += dz;
+    }
+    return STDLIB_OK;
+}
+
+/* Reset logical size to zero while keeping capacity for reuse. */
+static inline int mesh3d_clear(mesh3d *m, error *err) {
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_clear: invalid mesh");
+    m->vertex_count = 0u;
+    m->triangle_count = 0u;
+    return STDLIB_OK;
+}
+
+/* Release all storage and mark the mesh uninitialised.  Idempotent. */
+static inline void mesh3d_drop(mesh3d *m) {
+    if (m == (mesh3d *)0 || m->initialized != 1)
+        return;
+    stdlib_deallocate(&m->alloc, m->vertices,
+                      m->vertex_capacity * sizeof(mesh3d_vertex));
+    stdlib_deallocate(&m->alloc, m->triangles,
+                      m->triangle_capacity * sizeof(mesh3d_triangle));
+    m->vertices = (mesh3d_vertex *)0;
+    m->triangles = (mesh3d_triangle *)0;
+    m->vertex_count = 0u;
+    m->vertex_capacity = 0u;
+    m->triangle_count = 0u;
+    m->triangle_capacity = 0u;
+    m->initialized = 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Queries                                                             */
+/* ------------------------------------------------------------------ */
+
+/* Bounds-checked element access.  Returns STDLIB_FAIL and populates `err` on
+ * an out-of-range index; STDLIB_OK on success. */
+static inline int mesh3d_vertex_at(const mesh3d *m, size_t index,
+                                   const mesh3d_vertex **out, error *err) {
+    error_reset(err);
+    if (!mesh3d_valid(m) || out == (const mesh3d_vertex **)0)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_NULL_POINTER, "mesh3d_vertex_at: invalid argument");
+    if (index >= m->vertex_count)
+        return mesh3d_fail(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_vertex_at: index out of range");
+    *out = &m->vertices[index];
+    return STDLIB_OK;
+}
+
+static inline int mesh3d_triangle_at(const mesh3d *m, size_t index,
+                                     const mesh3d_triangle **out, error *err) {
+    error_reset(err);
+    if (!mesh3d_valid(m) || out == (const mesh3d_triangle **)0)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_NULL_POINTER, "mesh3d_triangle_at: invalid argument");
+    if (index >= m->triangle_count)
+        return mesh3d_fail(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_triangle_at: index out of range");
+    *out = &m->triangles[index];
+    return STDLIB_OK;
+}
+
+/* Axis-aligned bounding box.  An empty mesh yields valid == 0 (and STDLIB_OK). */
+static inline int mesh3d_bounding_box(const mesh3d *m, mesh3d_aabb *out,
+                                      error *err) {
+    size_t i;
+    error_reset(err);
+    if (!mesh3d_valid(m) || out == (mesh3d_aabb *)0)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_NULL_POINTER, "mesh3d_bounding_box: invalid argument");
+    out->min = mesh3d_vec3_zero();
+    out->max = mesh3d_vec3_zero();
+    out->valid = 0;
+    if (m->vertex_count == 0u)
+        return STDLIB_OK;
+    out->min = m->vertices[0].position;
+    out->max = m->vertices[0].position;
+    for (i = 1; i < m->vertex_count; i++) {
+        mesh3d_vec3 p = m->vertices[i].position;
+        if (!mesh3d_vec3_finite(p))
+            return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "mesh3d_bounding_box: non-finite position");
+        if (p.x < out->min.x) out->min.x = p.x;
+        if (p.y < out->min.y) out->min.y = p.y;
+        if (p.z < out->min.z) out->min.z = p.z;
+        if (p.x > out->max.x) out->max.x = p.x;
+        if (p.y > out->max.y) out->max.y = p.y;
+        if (p.z > out->max.z) out->max.z = p.z;
+    }
+    out->valid = 1;
+    return STDLIB_OK;
+}
+
+/* Center of the mesh's bounding box.  Refuses an empty mesh. */
+static inline int mesh3d_center(const mesh3d *m, mesh3d_vec3 *out, error *err) {
+    mesh3d_aabb box;
+    error_reset(err);
+    if (!mesh3d_valid(m) || out == (mesh3d_vec3 *)0)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_NULL_POINTER, "mesh3d_center: invalid argument");
+    if (m->vertex_count == 0u)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "mesh3d_center: empty mesh has no center");
+    if (mesh3d_bounding_box(m, &box, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    out->x = (box.min.x + box.max.x) * 0.5f;
+    out->y = (box.min.y + box.max.y) * 0.5f;
+    out->z = (box.min.z + box.max.z) * 0.5f;
+    if (!mesh3d_vec3_finite(*out))
+        return mesh3d_fail(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "mesh3d_center: non-finite center");
+    return STDLIB_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* Normals and validation                                              */
+/* ------------------------------------------------------------------ */
+
+/* Accumulate area-weighted face normals into per-vertex normals and normalise
+ * each result to unit length.  Refuses (atomically) when any triangle is
+ * degenerate, since a zero-area face has no usable normal.  Vertices not
+ * referenced by any triangle keep a zero normal. */
+static inline int mesh3d_compute_normals(mesh3d *m, error *err) {
+    size_t i;
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_compute_normals: invalid mesh");
+    /* Validate every face before writing any normal. */
+    for (i = 0; i < m->triangle_count; i++) {
+        mesh3d_triangle t = m->triangles[i];
+        mesh3d_vec3 ab;
+        mesh3d_vec3 ac;
+        mesh3d_vec3 cross;
+        if (t.i0 >= m->vertex_count || t.i1 >= m->vertex_count ||
+            t.i2 >= m->vertex_count)
+            return mesh3d_fail(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                               "mesh3d_compute_normals: index out of range");
+        ab = mesh3d_vec3_sub(m->vertices[t.i1].position,
+                             m->vertices[t.i0].position);
+        ac = mesh3d_vec3_sub(m->vertices[t.i2].position,
+                             m->vertices[t.i0].position);
+        cross = mesh3d_vec3_cross(ab, ac);
+        if (!mesh3d_vec3_finite(cross) || mesh3d_vec3_len2(cross) <= MESH3D_EPS2)
+            return mesh3d_fail(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                               "mesh3d_compute_normals: degenerate triangle");
+    }
+    for (i = 0; i < m->vertex_count; i++)
+        m->vertices[i].normal = mesh3d_vec3_zero();
+    for (i = 0; i < m->triangle_count; i++) {
+        mesh3d_triangle t = m->triangles[i];
+        mesh3d_vec3 a = m->vertices[t.i0].position;
+        mesh3d_vec3 b = m->vertices[t.i1].position;
+        mesh3d_vec3 c = m->vertices[t.i2].position;
+        mesh3d_vec3 n = mesh3d_vec3_cross(mesh3d_vec3_sub(b, a),
+                                          mesh3d_vec3_sub(c, a));
+        mesh3d_vec3 v0 = m->vertices[t.i0].normal;
+        mesh3d_vec3 v1 = m->vertices[t.i1].normal;
+        mesh3d_vec3 v2 = m->vertices[t.i2].normal;
+        v0.x += n.x; v0.y += n.y; v0.z += n.z;
+        v1.x += n.x; v1.y += n.y; v1.z += n.z;
+        v2.x += n.x; v2.y += n.y; v2.z += n.z;
+        m->vertices[t.i0].normal = v0;
+        m->vertices[t.i1].normal = v1;
+        m->vertices[t.i2].normal = v2;
+    }
+    for (i = 0; i < m->vertex_count; i++) {
+        float len2 = mesh3d_vec3_len2(m->vertices[i].normal);
+        mesh3d_vec3 n = m->vertices[i].normal;
+        if (len2 > MESH3D_EPS2) {
+            float inv = 1.0f / sqrtf(len2);
+            n.x *= inv;
+            n.y *= inv;
+            n.z *= inv;
+        } else {
+            n = mesh3d_vec3_zero();
+        }
+        m->vertices[i].normal = n;
+    }
+    return STDLIB_OK;
+}
+
+/* Full read-only consistency check.  `report` (optional) receives counts of
+ * non-finite vertices, out-of-range triangles and degenerate triangles.
+ * Returns STDLIB_OK only when all three counts are zero. */
+static inline int mesh3d_validate(const mesh3d *m, mesh3d_validation *report,
+                                  error *err) {
+    size_t i;
+    mesh3d_validation local;
+    error_reset(err);
+    if (!mesh3d_valid(m))
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID,
+                           CPLUS_EXIT_UNSUPPORTED, "mesh3d_validate: invalid mesh");
+    local.nonfinite_vertices = 0u;
+    local.bad_index_triangles = 0u;
+    local.degenerate_triangles = 0u;
+    for (i = 0; i < m->vertex_count; i++) {
+        if (!mesh3d_vec3_finite(m->vertices[i].position) ||
+            !mesh3d_vec3_finite(m->vertices[i].normal))
+            local.nonfinite_vertices++;
+    }
+    for (i = 0; i < m->triangle_count; i++) {
+        mesh3d_triangle t = m->triangles[i];
+        mesh3d_vec3 ab;
+        mesh3d_vec3 ac;
+        mesh3d_vec3 cross;
+        if (t.i0 >= m->vertex_count || t.i1 >= m->vertex_count ||
+            t.i2 >= m->vertex_count) {
+            local.bad_index_triangles++;
+            continue;
+        }
+        if (t.i0 == t.i1 || t.i1 == t.i2 || t.i0 == t.i2) {
+            local.degenerate_triangles++;
+            continue;
+        }
+        ab = mesh3d_vec3_sub(m->vertices[t.i1].position,
+                             m->vertices[t.i0].position);
+        ac = mesh3d_vec3_sub(m->vertices[t.i2].position,
+                             m->vertices[t.i0].position);
+        cross = mesh3d_vec3_cross(ab, ac);
+        if (!mesh3d_vec3_finite(cross) || mesh3d_vec3_len2(cross) <= MESH3D_EPS2)
+            local.degenerate_triangles++;
+    }
+    if (report != (mesh3d_validation *)0)
+        *report = local;
+    if (local.nonfinite_vertices != 0u || local.bad_index_triangles != 0u ||
+        local.degenerate_triangles != 0u)
+        return mesh3d_fail(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "mesh3d_validate: mesh contains invalid geometry");
+    return STDLIB_OK;
+}
+
+#endif /* CPLUS_STD_MESH3D_HP */

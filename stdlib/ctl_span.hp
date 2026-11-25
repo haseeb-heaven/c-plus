@@ -1,0 +1,79 @@
+/* Checked non-owning span view for CTL contiguous containers (ctl_span.hp).
+ *
+ * Issue #24 ADOPT decision: CTL's span (`third_party/ctl/ctl/span.h:1-25`) is
+ * a borrow-only {T *data; size_t size} view with no allocation or destructor.
+ * Its `at` uses release-disabled assert (`:38-42`), so this additive wrapper
+ * supplies checked access with error* refusal. No CTL source is edited, no
+ * ownership is taken, and no Goose/other code is copied.
+ *
+ * Contract: init/from_ctl_vector return STDLIB_OK (0) or a non-zero code;
+ * at() returns 0 and sets *err on null/empty/out-of-range views; slice()
+ * refuses ranges outside the parent view.
+ */
+#ifndef CPLUS_STD_CTL_SPAN_HP
+#define CPLUS_STD_CTL_SPAN_HP
+
+#include <stddef.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+typedef struct {
+    void *data;
+    size_t len;
+    size_t elem_size;
+} ctl_span;
+
+static inline int ctl_span_init(ctl_span *s, void *data, size_t len,
+                                size_t elem_size, error *err) {
+    error_reset(err);
+    if (s == (ctl_span *)0 || elem_size == 0u ||
+        (len > 0u && data == (void *)0)) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "ctl_span: invalid view");
+        return -1;
+    }
+    s->data = data;
+    s->len = len;
+    s->elem_size = elem_size;
+    return STDLIB_OK;
+}
+
+/* Wrap the contiguous storage of a CTL vector (e.g. vec_int.vector/.size).
+ * The caller keeps ownership of the vector; the span never frees anything. */
+static inline int ctl_span_from_ctl_vector(void *items, size_t count,
+                                           size_t elem_size, ctl_span *out,
+                                           error *err) {
+    return ctl_span_init(out, items, count, elem_size, err);
+}
+
+static inline void *ctl_span_at(ctl_span *s, size_t index, error *err) {
+    error_reset(err);
+    if (s == (ctl_span *)0 || s->data == (void *)0 || index >= s->len) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "ctl_span: index out of bounds");
+        return (void *)0;
+    }
+    return (void *)((unsigned char *)s->data + index * s->elem_size);
+}
+
+static inline int ctl_span_slice(ctl_span *s, size_t off, size_t len,
+                                 ctl_span *out, error *err) {
+    error_reset(err);
+    if (s == (ctl_span *)0 || out == (ctl_span *)0 ||
+        off > s->len || len > s->len - off) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "ctl_span: slice out of bounds");
+        return -1;
+    }
+    out->elem_size = s->elem_size;
+    out->len = len;
+    out->data = len ? (void *)((unsigned char *)s->data + off * s->elem_size)
+                    : (void *)0;
+    return STDLIB_OK;
+}
+
+static inline size_t ctl_span_size(const ctl_span *s) {
+    return s == (const ctl_span *)0 ? 0u : s->len;
+}
+
+#endif /* CPLUS_STD_CTL_SPAN_HP */

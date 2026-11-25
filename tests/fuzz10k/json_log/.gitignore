@@ -1,0 +1,6 @@
+# Generated evidence for the FUZZ10K json_log suite (never commit).
+results/
+*.bin
+*.stderr
+*.out
+*.log

@@ -1,0 +1,7 @@
+./stdlib/error.hp:452:13: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      fresh = cplus_realloc(ptr, actual);
+              ^~~~~~~~~~~~~
+./stdlib/datastack.hp:98:18: warning: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+          if (p == MAP_FAILED)
+                   ^~~~~~~~~~
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

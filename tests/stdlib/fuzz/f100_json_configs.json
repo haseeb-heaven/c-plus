@@ -1,0 +1,93 @@
+{
+  "family": "f100 json deterministic fuzz configurations",
+  "branch": "agent/modern-stdlib",
+  "date": "2026-11-23",
+  "owner_prefix": "f100_json_",
+  "mode_order": ["--strict --sanitize=none", "--strict --sanitize=undefined"],
+  "run_timeout_seconds": 30,
+  "notes": "F100_THREAD_JSON_NOTES.md",
+  "json_build_flags_argv": ["-Ithird_party/yyjson", "-Lbuild/ext", "-lyyjson"],
+  "json_flags_note": "Each element is a separate argv operand passed to c+ build; never a single shell string.",
+  "configs": [
+    {
+      "id": "F-089",
+      "source": "tests/stdlib/fuzz/f100_json_gen.cp",
+      "topic": "deterministic generation of valid and malformed JSON documents",
+      "seed": "0xC0FFEE89",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1024,
+      "ops_kind": "512 seeded fixed-template parses + 512 bounded-grammar generated documents",
+      "extra_checks": "validity bit, root kind/size, bounded array traversal, INVALID error category, json_free(NULL)",
+      "watchdog_seconds": 8,
+      "build_flags": ["-Ithird_party/yyjson", "-Lbuild/ext", "-lyyjson"],
+      "expected_digest": "65d5e5d4c73f16a9",
+      "expected_final_line": "F089_GEN 4 0",
+      "skips": []
+    },
+    {
+      "id": "F-090",
+      "source": "tests/stdlib/fuzz/f100_json_getters.cp",
+      "topic": "typed getters including wrong-type refusals",
+      "seed": "0xC0FFEE90",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1024,
+      "ops_kind": "1024 seeded (member, getter) combinations over one mixed-type document",
+      "extra_checks": "value correctness on success; INVALID/RANGE category and unchanged out-param on refusal; NULL out/error args; json_view_of(NULL)",
+      "watchdog_seconds": 8,
+      "build_flags": ["-Ithird_party/yyjson", "-Lbuild/ext", "-lyyjson"],
+      "expected_digest": "3d89f31c9e408be1",
+      "expected_final_line": "F090_GETTERS 4 0",
+      "skips": []
+    },
+    {
+      "id": "F-091",
+      "source": "tests/stdlib/fuzz/f100_json_builder.cp",
+      "topic": "seeded builder mutations with write/parse round-trip",
+      "seed": "0xC0FFEE91",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1024,
+      "ops_kind": "128 cycles x 8 seeded add_int/add_double/add_bool/add_string mutations",
+      "extra_checks": "per-key shadow-value verification after write/parse; NULL key/value and non-finite double refusal; triple-drop mutator refusal",
+      "watchdog_seconds": 8,
+      "build_flags": ["-Ithird_party/yyjson", "-Lbuild/ext", "-lyyjson"],
+      "expected_digest": "5f7a1752dbfc71fc",
+      "expected_final_line": "F091_BUILDER 4 0",
+      "skips": [],
+      "findings": [
+        "json_builder::add_* does not copy the key (yyjson mutable add_* borrows it); a reused stack key buffer makes all keys alias the last value. This harness uses program-lifetime key literals; see notes."
+      ]
+    },
+    {
+      "id": "F-092",
+      "source": "tests/stdlib/fuzz/f100_json_cycles.cp",
+      "topic": "repeated parse / view / write / free cycles",
+      "seed": "0xC0FFEE92",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1024,
+      "ops_kind": "1024 generated-parse + seeded-malformed-parse cycles",
+      "extra_checks": "root size, typed member/at values, write() buffer re-parse parity, json_free per buffer, triple-drop doc, malformed INVALID refusal",
+      "watchdog_seconds": 8,
+      "build_flags": ["-Ithird_party/yyjson", "-Lbuild/ext", "-lyyjson"],
+      "expected_digest": "a2ee9c78125ab398",
+      "expected_final_line": "F092_CYCLES 3 0",
+      "skips": []
+    },
+    {
+      "id": "F-093",
+      "source": "tests/stdlib/fuzz/f100_json_drop.cp",
+      "topic": "post-drop refusal without UAF",
+      "seed": "0xC0FFEE93",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1024,
+      "ops_kind": "128 cycles x 8 documented post-drop refusal checks",
+      "extra_checks": "invalid root/child/member views, all getters refuse with unchanged out-params, write() NULL, triple/quadruple drop inert, builder mutators refuse",
+      "watchdog_seconds": 8,
+      "build_flags": ["-Ithird_party/yyjson", "-Lbuild/ext", "-lyyjson"],
+      "expected_digest": "762e93c1f5170370",
+      "expected_final_line": "F093_DROP 3 0",
+      "skips": [
+        "f093_precapture_view_after_owner_drop: a json_view captured before owner drop is a dangling borrow by contract; using it is caller UB, and ASan is unavailable on this host"
+      ]
+    }
+  ]
+}

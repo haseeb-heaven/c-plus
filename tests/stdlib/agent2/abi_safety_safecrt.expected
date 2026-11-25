@@ -1,0 +1,2 @@
+SKIP abi_safety_safecrt: build with -DABI_SAFETY_SAFECRT -Istdlib/safe and link build/safe/libcplus_safecrt.a (see abi_safety_run.sh)
+ABI_SAFETY 0 0

@@ -1,0 +1,7 @@
+# Generated build artifacts: ignore binaries and scratch, keep text evidence.
+*.o
+*.a
+app_plain
+app_safe
+negative_safe
+_err

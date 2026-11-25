@@ -1,0 +1,1083 @@
+/* C+ standard library: collections.
+ *
+ * Small, auditable containers over the checked allocator in error.hp:
+ *   intmap  int -> int hash map         strmap  string -> int, owned keys
+ *   intset  int hash set                deque   double-ended ring buffer
+ *   list    doubly linked list          stack   LIFO       queue   FIFO
+ *
+ * Common rules
+ *  - Ownership is explicit: every container owns its storage and releases it
+ *    exactly once in drop(); drop() is idempotent and a zero-initialised
+ *    container is a valid empty container.
+ *  - Allocation is failure-atomic: when an operation returns -1 the container
+ *    is exactly as it was before the call, and nothing was leaked.  Growth
+ *    that needs several buffers allocates all of them first and rolls the
+ *    partial set back on failure.
+ *  - Sizes are overflow-checked against STDLIB_ALLOC_LIMIT before any
+ *    multiplication or capacity doubling.
+ *  - Hash tables use open addressing with tombstones and a power-of-two
+ *    capacity; the table is never allowed to fill, so probing terminates.
+ *  - Iterator invalidation: containers expose no iterators; element access is
+ *    by value (get / at_checked / top_checked / front_checked), so nothing a
+ *    caller holds can dangle after growth.
+ *  - Not thread-safe: external synchronisation (see stdlib/thread.hp) is
+ *    required for concurrent mutation.
+ */
+#ifndef CPLUS_STD_COLLECTIONS_HP
+#define CPLUS_STD_COLLECTIONS_HP
+
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+#define MAP_EMPTY 0
+#define MAP_FULL 1
+#define MAP_DELETED 2
+
+static inline unsigned long long stdlib_map_hash_int(long long key) {
+    unsigned long long x = (unsigned long long)key;
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    x *= 0xc4ceb9fe1a85ec53ULL;
+    x ^= x >> 33;
+    return x;
+}
+
+static inline unsigned long long stdlib_map_hash_text(const char *text) {
+    unsigned long long hash = 1469598103934665603ULL;
+    while (text != NULL && *text != '\0') {
+        hash ^= (unsigned char)*text++;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+/* Smallest power of two >= want and >= 8; 0 when it would not fit. */
+static inline size_t stdlib_map_next_pow2(size_t want) {
+    size_t cap = 8;
+    while (cap < want) {
+        if (cap > (SIZE_MAX >> 2))
+            return 0;
+        cap <<= 1;
+    }
+    return cap;
+}
+
+/* 1 when one more slot would push the table over its 70% load factor. */
+static inline int stdlib_map_needs_room(size_t used_slots, size_t capacity) {
+    return capacity == 0 ||
+           ((unsigned long long)used_slots + 1ULL) * 10ULL >=
+               (unsigned long long)capacity * 7ULL;
+}
+
+/* Capacity to rebuild into when the table is full of live entries + tombstones:
+ * double when more than half the slots hold live entries, otherwise rebuild at
+ * the same size to purge tombstones.  0 on overflow. */
+static inline size_t stdlib_map_rebuild_capacity(size_t count, size_t capacity) {
+    if (capacity == 0)
+        return 8;
+    if (((unsigned long long)count + 1ULL) * 2ULL >= (unsigned long long)capacity) {
+        if (capacity > (SIZE_MAX >> 2))
+            return 0;
+        return capacity * 2;
+    }
+    return capacity;
+}
+
+/* Linearise a ring buffer into a fresh array of `newspace` ints (NULL on
+ * failure).  Does not touch the source. */
+static inline int *stdlib_ring_copy(const int *items, size_t space, size_t head,
+                                    size_t used, size_t newspace) {
+    int *fresh;
+    size_t i;
+    if (newspace > STDLIB_ALLOC_LIMIT / sizeof(int)) {
+        stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                    "ring buffer: capacity too large");
+        return NULL;
+    }
+    fresh = (int *)stdlib_alloc(sizeof(int) * newspace);
+    if (fresh == NULL)
+        return NULL;
+    /* The caller guarantees space > 0 for any non-empty source; keep the
+     * guard in this exact form so the strict ARITH checker can prove it. */
+    if (space == 0)
+        return fresh;
+    for (i = 0; i < used; i++)
+        {
+            int v;
+            size_t pos = head + i;
+            if (pos >= space)
+                pos -= space; /* head < space and i < used <= space => one subtraction */
+            __builtin_memcpy(&v, items + pos, sizeof(v));
+            fresh[i] = v;
+        }
+    return fresh;
+}
+
+/* ---- int -> int ---------------------------------------------------------- */
+
+class intmap {
+    int *keys;
+    int *values;
+    unsigned char *state;
+    size_t capacity;
+    size_t count;
+    size_t used_slots;
+
+    intmap(void) {
+        this->keys = NULL;
+        this->values = NULL;
+        this->state = NULL;
+        this->capacity = 0;
+        this->count = 0;
+        this->used_slots = 0;
+    }
+
+    size_t size(void) {
+        return this->count;
+    }
+
+    int valid(void) {
+        return this->state != NULL;
+    }
+
+    /* Slot index of `key`, or -1.  Terminates: the table always keeps empty
+     * slots, and the loop is bounded by the capacity anyway. */
+    long long stdlib_probe(int key) {
+        size_t slot;
+        size_t probes;
+        if (this->state == NULL)
+            return -1;
+        slot = (size_t)(stdlib_map_hash_int(key) & (this->capacity - 1));
+        for (probes = 0; probes < this->capacity; probes++) {
+            if (this->state[slot] == MAP_EMPTY)
+                return -1;
+            if (this->state[slot] == MAP_FULL && this->keys[slot] == key)
+                return (long long)slot;
+            slot = (slot + 1) & (this->capacity - 1);
+        }
+        return -1;
+    }
+
+    /* Rebuild into exactly `cap` slots (a power of two > count).  All three
+     * buffers are allocated before anything is modified. */
+    int stdlib_rebuild(size_t cap) {
+        int *fresh_keys;
+        int *fresh_values;
+        unsigned char *fresh_state;
+        size_t i;
+        if (cap < 8 || cap > STDLIB_ALLOC_LIMIT / sizeof(int))
+            return -1;
+        fresh_keys = (int *)stdlib_alloc(sizeof(int) * cap);
+        if (fresh_keys == NULL)
+            return -1;
+        fresh_values = (int *)stdlib_alloc(sizeof(int) * cap);
+        if (fresh_values == NULL) {
+            stdlib_release(fresh_keys);
+            return -1;
+        }
+        fresh_state = (unsigned char *)stdlib_alloc(sizeof(unsigned char) * cap);
+        if (fresh_state == NULL) {
+            stdlib_release(fresh_values);
+            stdlib_release(fresh_keys);
+            return -1;
+        }
+        memset(fresh_state, MAP_EMPTY, sizeof(unsigned char) * cap);
+        for (i = 0; i < this->capacity; i++) {
+            if (this->state[i] == MAP_FULL) {
+                size_t slot = (size_t)(stdlib_map_hash_int(this->keys[i]) & (cap - 1));
+                while (fresh_state[slot] == MAP_FULL)
+                    slot = (slot + 1) & (cap - 1);
+                fresh_keys[slot] = this->keys[i];
+                fresh_values[slot] = this->values[i];
+                fresh_state[slot] = MAP_FULL;
+            }
+        }
+        if (this->keys != NULL)
+            stdlib_release(this->keys);
+        if (this->values != NULL)
+            stdlib_release(this->values);
+        if (this->state != NULL)
+            stdlib_release(this->state);
+        this->keys = fresh_keys;
+        this->values = fresh_values;
+        this->state = fresh_state;
+        this->capacity = cap;
+        this->used_slots = this->count;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        return 0;
+    }
+
+    /* Ensure at least `want` slots (rounded up to a power of two).  0 on
+     * success; -1 leaves the map untouched.  Never shrinks. */
+    int grow(size_t want) {
+        size_t cap = stdlib_map_next_pow2(want);
+        if (cap == 0)
+            return -1;
+        if (cap <= this->capacity)
+            return 0;
+        return this->stdlib_rebuild(cap);
+    }
+
+    int put(int key, int value) {
+        long long found;
+        size_t slot;
+        size_t first_deleted = (size_t)-1;
+        found = this->stdlib_probe(key);
+        if (found >= 0) {
+            this->values[(size_t)found] = value; /* overwrite needs no memory */
+            return 0;
+        }
+        if (stdlib_map_needs_room(this->used_slots, this->capacity)) {
+            size_t cap = stdlib_map_rebuild_capacity(this->count, this->capacity);
+            if (cap == 0 || this->stdlib_rebuild(cap) != 0)
+                return -1;
+        }
+        slot = (size_t)(stdlib_map_hash_int(key) & (this->capacity - 1));
+        for (;;) {
+            if (this->state[slot] == MAP_EMPTY) {
+                if (first_deleted != (size_t)-1)
+                    slot = first_deleted;
+                else
+                    this->used_slots++;
+                this->keys[slot] = key;
+                this->values[slot] = value;
+                this->state[slot] = MAP_FULL;
+                this->count++;
+                return 0;
+            } else if (this->state[slot] == MAP_DELETED &&
+                       first_deleted == (size_t)-1) {
+                first_deleted = slot;
+            }
+            slot = (slot + 1) & (this->capacity - 1);
+        }
+    }
+
+    int get(int key, int *out) {
+        long long found;
+        if (out == NULL)
+            return -1;
+        found = this->stdlib_probe(key);
+        if (found < 0)
+            return -1;
+        *out = this->values[(size_t)found];
+        return 0;
+    }
+
+    int contains(int key) {
+        int value = 0;
+        return this->get(key, &value) == 0;
+    }
+
+    int remove(int key) {
+        long long found = this->stdlib_probe(key);
+        if (found < 0)
+            return -1;
+        this->state[(size_t)found] = MAP_DELETED;
+        this->count--;
+        return 0;
+    }
+
+    void clear(void) {
+        if (this->state != NULL)
+            memset(this->state, MAP_EMPTY, sizeof(unsigned char) * this->capacity);
+        this->count = 0;
+        this->used_slots = 0;
+    }
+
+    void drop(void) {
+        if (this->keys != NULL)
+            stdlib_release(this->keys);
+        if (this->values != NULL)
+            stdlib_release(this->values);
+        if (this->state != NULL)
+            stdlib_release(this->state);
+        this->keys = NULL;
+        this->values = NULL;
+        this->state = NULL;
+        this->capacity = 0;
+        this->count = 0;
+        this->used_slots = 0;
+    }
+};
+
+/* ---- string -> int, with owned keys ------------------------------------- */
+
+class strmap {
+    char **keys;
+    int *values;
+    unsigned char *state;
+    size_t capacity;
+    size_t count;
+    size_t used_slots;
+
+    strmap(void) {
+        this->keys = NULL;
+        this->values = NULL;
+        this->state = NULL;
+        this->capacity = 0;
+        this->count = 0;
+        this->used_slots = 0;
+    }
+
+    size_t size(void) {
+        return this->count;
+    }
+
+    int valid(void) {
+        return this->state != NULL;
+    }
+
+    /* internal helper: copy a key into owned storage; NULL on failure */
+    char *stdlib_copy_key(const char *text) {
+        size_t len;
+        char *copy;
+        if (text == NULL)
+            return NULL;
+        len = strlen(text);
+        if (len >= STDLIB_ALLOC_LIMIT)
+            return NULL;
+        copy = (char *)stdlib_alloc(len + 1);
+        if (copy == NULL)
+            return NULL;
+        memcpy(copy, text, len + 1);
+        return copy;
+    }
+
+    long long stdlib_probe(const char *key) {
+        size_t slot;
+        size_t probes;
+        if (this->state == NULL || key == NULL)
+            return -1;
+        slot = (size_t)(stdlib_map_hash_text(key) & (this->capacity - 1));
+        for (probes = 0; probes < this->capacity; probes++) {
+            if (this->state[slot] == MAP_EMPTY)
+                return -1;
+            if (this->state[slot] == MAP_FULL &&
+                strcmp(this->keys[slot], key) == 0)
+                return (long long)slot;
+            slot = (slot + 1) & (this->capacity - 1);
+        }
+        return -1;
+    }
+
+    /* Rebuild into exactly `cap` slots.  Keys are moved, not copied, so the
+     * rebuild cannot fail after its three buffers are allocated. */
+    int stdlib_rebuild(size_t cap) {
+        char **fresh_keys;
+        int *fresh_values;
+        unsigned char *fresh_state;
+        size_t i;
+        if (cap < 8 || cap > STDLIB_ALLOC_LIMIT / sizeof(char *))
+            return -1;
+        fresh_keys = (char **)stdlib_alloc(sizeof(char *) * cap);
+        if (fresh_keys == NULL)
+            return -1;
+        fresh_values = (int *)stdlib_alloc(sizeof(int) * cap);
+        if (fresh_values == NULL) {
+            stdlib_release(fresh_keys);
+            return -1;
+        }
+        fresh_state = (unsigned char *)stdlib_alloc(sizeof(unsigned char) * cap);
+        if (fresh_state == NULL) {
+            stdlib_release(fresh_values);
+            stdlib_release(fresh_keys);
+            return -1;
+        }
+        memset(fresh_keys, 0, sizeof(char *) * cap);
+        memset(fresh_state, MAP_EMPTY, sizeof(unsigned char) * cap);
+        for (i = 0; i < this->capacity; i++) {
+            if (this->state[i] == MAP_FULL) {
+                size_t slot =
+                    (size_t)(stdlib_map_hash_text(this->keys[i]) & (cap - 1));
+                while (fresh_state[slot] == MAP_FULL)
+                    slot = (slot + 1) & (cap - 1);
+                fresh_keys[slot] = this->keys[i];
+                fresh_values[slot] = this->values[i];
+                fresh_state[slot] = MAP_FULL;
+            }
+        }
+        if (this->keys != NULL)
+            stdlib_release(this->keys);
+        if (this->values != NULL)
+            stdlib_release(this->values);
+        if (this->state != NULL)
+            stdlib_release(this->state);
+        this->keys = fresh_keys;
+        this->values = fresh_values;
+        this->state = fresh_state;
+        this->capacity = cap;
+        this->used_slots = this->count;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        return 0;
+    }
+
+    int grow(size_t want) {
+        size_t cap = stdlib_map_next_pow2(want);
+        if (cap == 0)
+            return -1;
+        if (cap <= this->capacity)
+            return 0;
+        return this->stdlib_rebuild(cap);
+    }
+
+    int put(const char *key, int value) {
+        long long found;
+        size_t slot;
+        size_t first_deleted = (size_t)-1;
+        char *copied;
+        if (key == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "strmap::put: null key");
+            return -1;
+        }
+        found = this->stdlib_probe(key);
+        if (found >= 0) {
+            this->values[(size_t)found] = value; /* overwrite needs no memory */
+            return 0;
+        }
+        if (stdlib_map_needs_room(this->used_slots, this->capacity)) {
+            size_t cap = stdlib_map_rebuild_capacity(this->count, this->capacity);
+            if (cap == 0 || this->stdlib_rebuild(cap) != 0)
+                return -1;
+        }
+        /* The key copy is the last fallible step: nothing below it can fail,
+         * and nothing above it has changed the logical contents. */
+        copied = this->stdlib_copy_key(key);
+        if (copied == NULL)
+            return -1;
+        slot = (size_t)(stdlib_map_hash_text(key) & (this->capacity - 1));
+        for (;;) {
+            if (this->state[slot] == MAP_EMPTY) {
+                if (first_deleted != (size_t)-1)
+                    slot = first_deleted;
+                else
+                    this->used_slots++;
+                this->keys[slot] = copied;
+                this->values[slot] = value;
+                this->state[slot] = MAP_FULL;
+                this->count++;
+                return 0;
+            } else if (this->state[slot] == MAP_DELETED &&
+                       first_deleted == (size_t)-1) {
+                first_deleted = slot;
+            }
+            slot = (slot + 1) & (this->capacity - 1);
+        }
+    }
+
+    int get(const char *key, int *out) {
+        long long found;
+        if (key == NULL || out == NULL)
+            return -1;
+        found = this->stdlib_probe(key);
+        if (found < 0)
+            return -1;
+        *out = this->values[(size_t)found];
+        return 0;
+    }
+
+    int contains(const char *key) {
+        int value = 0;
+        return this->get(key, &value) == 0;
+    }
+
+    int remove(const char *key) {
+        long long found = this->stdlib_probe(key);
+        if (found < 0)
+            return -1;
+        stdlib_release(this->keys[(size_t)found]);
+        this->keys[(size_t)found] = NULL;
+        this->state[(size_t)found] = MAP_DELETED;
+        this->count--;
+        return 0;
+    }
+
+    void clear(void) {
+        size_t i;
+        for (i = 0; i < this->capacity; i++) {
+            if (this->state[i] == MAP_FULL && this->keys[i] != NULL) {
+                stdlib_release(this->keys[i]);
+                this->keys[i] = NULL;
+            }
+            this->state[i] = MAP_EMPTY;
+        }
+        this->count = 0;
+        this->used_slots = 0;
+    }
+
+    void drop(void) {
+        if (this->state != NULL)
+            this->clear();
+        if (this->keys != NULL)
+            stdlib_release(this->keys);
+        if (this->values != NULL)
+            stdlib_release(this->values);
+        if (this->state != NULL)
+            stdlib_release(this->state);
+        this->keys = NULL;
+        this->values = NULL;
+        this->state = NULL;
+        this->capacity = 0;
+        this->count = 0;
+        this->used_slots = 0;
+    }
+};
+
+/* ---- int set -------------------------------------------------------------- */
+
+class intset {
+    int *keys;
+    unsigned char *state;
+    size_t capacity;
+    size_t count;
+    size_t used_slots;
+
+    intset(void) {
+        this->keys = NULL;
+        this->state = NULL;
+        this->capacity = 0;
+        this->count = 0;
+        this->used_slots = 0;
+    }
+
+    size_t size(void) {
+        return this->count;
+    }
+
+    int valid(void) {
+        return this->state != NULL;
+    }
+
+    long long stdlib_probe(int key) {
+        size_t slot;
+        size_t probes;
+        if (this->state == NULL)
+            return -1;
+        slot = (size_t)(stdlib_map_hash_int(key) & (this->capacity - 1));
+        for (probes = 0; probes < this->capacity; probes++) {
+            if (this->state[slot] == MAP_EMPTY)
+                return -1;
+            if (this->state[slot] == MAP_FULL && this->keys[slot] == key)
+                return (long long)slot;
+            slot = (slot + 1) & (this->capacity - 1);
+        }
+        return -1;
+    }
+
+    int stdlib_rebuild(size_t cap) {
+        int *fresh_keys;
+        unsigned char *fresh_state;
+        size_t i;
+        if (cap < 8 || cap > STDLIB_ALLOC_LIMIT / sizeof(int))
+            return -1;
+        fresh_keys = (int *)stdlib_alloc(sizeof(int) * cap);
+        if (fresh_keys == NULL)
+            return -1;
+        fresh_state = (unsigned char *)stdlib_alloc(sizeof(unsigned char) * cap);
+        if (fresh_state == NULL) {
+            stdlib_release(fresh_keys);
+            return -1;
+        }
+        memset(fresh_state, MAP_EMPTY, sizeof(unsigned char) * cap);
+        for (i = 0; i < this->capacity; i++) {
+            if (this->state[i] == MAP_FULL) {
+                size_t slot = (size_t)(stdlib_map_hash_int(this->keys[i]) & (cap - 1));
+                while (fresh_state[slot] == MAP_FULL)
+                    slot = (slot + 1) & (cap - 1);
+                fresh_keys[slot] = this->keys[i];
+                fresh_state[slot] = MAP_FULL;
+            }
+        }
+        if (this->keys != NULL)
+            stdlib_release(this->keys);
+        if (this->state != NULL)
+            stdlib_release(this->state);
+        this->keys = fresh_keys;
+        this->state = fresh_state;
+        this->capacity = cap;
+        this->used_slots = this->count;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        return 0;
+    }
+
+    int grow(size_t want) {
+        size_t cap = stdlib_map_next_pow2(want);
+        if (cap == 0)
+            return -1;
+        if (cap <= this->capacity)
+            return 0;
+        return this->stdlib_rebuild(cap);
+    }
+
+    /* 0 when the key is present afterwards (new or already there), -1 when
+     * memory could not be obtained (the set is unchanged). */
+    int insert(int key) {
+        size_t slot;
+        size_t first_deleted = (size_t)-1;
+        if (this->stdlib_probe(key) >= 0)
+            return 0;
+        if (stdlib_map_needs_room(this->used_slots, this->capacity)) {
+            size_t cap = stdlib_map_rebuild_capacity(this->count, this->capacity);
+            if (cap == 0 || this->stdlib_rebuild(cap) != 0)
+                return -1;
+        }
+        slot = (size_t)(stdlib_map_hash_int(key) & (this->capacity - 1));
+        for (;;) {
+            if (this->state[slot] == MAP_EMPTY) {
+                if (first_deleted != (size_t)-1)
+                    slot = first_deleted;
+                else
+                    this->used_slots++;
+                this->keys[slot] = key;
+                this->state[slot] = MAP_FULL;
+                this->count++;
+                return 0;
+            } else if (this->state[slot] == MAP_DELETED &&
+                       first_deleted == (size_t)-1) {
+                first_deleted = slot;
+            }
+            slot = (slot + 1) & (this->capacity - 1);
+        }
+    }
+
+    int contains(int key) {
+        return this->stdlib_probe(key) >= 0;
+    }
+
+    int remove(int key) {
+        long long found = this->stdlib_probe(key);
+        if (found < 0)
+            return -1;
+        this->state[(size_t)found] = MAP_DELETED;
+        this->count--;
+        return 0;
+    }
+
+    void clear(void) {
+        if (this->state != NULL)
+            memset(this->state, MAP_EMPTY, sizeof(unsigned char) * this->capacity);
+        this->count = 0;
+        this->used_slots = 0;
+    }
+
+    void drop(void) {
+        if (this->keys != NULL)
+            stdlib_release(this->keys);
+        if (this->state != NULL)
+            stdlib_release(this->state);
+        this->keys = NULL;
+        this->state = NULL;
+        this->capacity = 0;
+        this->count = 0;
+        this->used_slots = 0;
+    }
+};
+
+/* ---- deque (ring buffer) -------------------------------------------------- */
+
+class deque {
+    int *items;
+    size_t head;
+    size_t used;
+    size_t space;
+
+    deque(void) {
+        this->items = NULL;
+        this->head = 0;
+        this->used = 0;
+        this->space = 0;
+    }
+
+    size_t size(void) {
+        return this->used;
+    }
+
+    size_t capacity(void) {
+        return this->space;
+    }
+
+    /* Ensure room for `want` elements; failure-atomic. */
+    int reserve(size_t want) {
+        int *fresh;
+        if (want <= this->space)
+            return 0;
+        fresh = stdlib_ring_copy(this->items, this->space, this->head,
+                                 this->used, want);
+        if (fresh == NULL)
+            return -1;
+        if (this->items != NULL)
+            stdlib_release(this->items);
+        this->items = fresh;
+        this->head = 0;
+        this->space = want;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        return 0;
+    }
+
+    int stdlib_make_room(void) {
+        size_t want;
+        if (this->used < this->space)
+            return 0;
+        if (this->space == 0) {
+            want = 8;
+        } else {
+            if (this->space > (STDLIB_ALLOC_LIMIT / sizeof(int)) / 2)
+                return -1;
+            want = this->space * 2;
+        }
+        return this->reserve(want);
+    }
+
+    int push_back(int value) {
+        if (this->stdlib_make_room() != 0)
+            return -1;
+        size_t idx = this->head + this->used;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, used < space => idx < 2*space */
+        this->items[idx] = value;
+        this->used++;
+        return 0;
+    }
+
+    int push_front(int value) {
+        if (this->stdlib_make_room() != 0)
+            return -1;
+        size_t idx = this->head + this->space - 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space => idx < 2*space */
+        this->head = idx;
+        this->items[this->head] = value;
+        this->used++;
+        return 0;
+    }
+
+    int pop_front(int *out) {
+        if (out == NULL || this->used == 0)
+            return -1;
+        *out = this->items[this->head];
+        size_t idx = this->head + 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space => idx <= space */
+        this->head = idx;
+        this->used--;
+        return 0;
+    }
+
+    int pop_back(int *out) {
+        if (out == NULL || this->used == 0)
+            return -1;
+        size_t idx = this->head + this->used - 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, 0 < used <= space => idx < 2*space */
+        *out = this->items[idx];
+        this->used--;
+        return 0;
+    }
+
+    int at_checked(size_t index, int *out) {
+        if (out == NULL)
+            return -1;
+        if (index >= this->used) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "deque::at_checked: index out of range");
+            return -1;
+        }
+        size_t idx = this->head + index;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, index < used <= space => idx < 2*space */
+        *out = this->items[idx];
+        return 0;
+    }
+
+    void clear(void) {
+        this->head = 0;
+        this->used = 0;
+    }
+
+    void drop(void) {
+        if (this->items != NULL)
+            stdlib_release(this->items);
+        this->items = NULL;
+        this->head = 0;
+        this->used = 0;
+        this->space = 0;
+    }
+};
+
+/* ---- doubly linked list ---------------------------------------------------- */
+
+typedef struct list_node {
+    int value;
+    struct list_node *prev;
+    struct list_node *next;
+} list_node;
+
+class list {
+    list_node *first;
+    list_node *last;
+    size_t used;
+
+    list(void) {
+        this->first = NULL;
+        this->last = NULL;
+        this->used = 0;
+    }
+
+    size_t size(void) {
+        return this->used;
+    }
+
+    /* The node is allocated before any link is touched, so a failed push
+     * leaves the list exactly as it was. */
+    int push_back(int value) {
+        list_node *node = (list_node *)stdlib_alloc(sizeof(list_node));
+        if (node == NULL)
+            return -1;
+        node->value = value;
+        node->prev = this->last;
+        node->next = NULL;
+        if (this->last != NULL)
+            this->last->next = node;
+        else
+            this->first = node;
+        this->last = node;
+        this->used++;
+        return 0;
+    }
+
+    int push_front(int value) {
+        list_node *node = (list_node *)stdlib_alloc(sizeof(list_node));
+        if (node == NULL)
+            return -1;
+        node->value = value;
+        node->prev = NULL;
+        node->next = this->first;
+        if (this->first != NULL)
+            this->first->prev = node;
+        else
+            this->last = node;
+        this->first = node;
+        this->used++;
+        return 0;
+    }
+
+    int pop_front(int *out) {
+        list_node *node;
+        if (out == NULL || this->first == NULL)
+            return -1;
+        node = this->first;
+        *out = node->value;
+        this->first = node->next;
+        if (this->first != NULL)
+            this->first->prev = NULL;
+        else
+            this->last = NULL;
+        this->used--;
+        stdlib_release(node);
+        return 0;
+    }
+
+    int pop_back(int *out) {
+        list_node *node;
+        if (out == NULL || this->last == NULL)
+            return -1;
+        node = this->last;
+        *out = node->value;
+        this->last = node->prev;
+        if (this->last != NULL)
+            this->last->next = NULL;
+        else
+            this->first = NULL;
+        this->used--;
+        stdlib_release(node);
+        return 0;
+    }
+
+    /* O(n) positional read. */
+    int at_checked(size_t index, int *out) {
+        list_node *node;
+        size_t i;
+        if (out == NULL)
+            return -1;
+        if (index >= this->used) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "list::at_checked: index out of range");
+            return -1;
+        }
+        node = this->first;
+        for (i = 0; i < index; i++)
+            node = node->next;
+        *out = node->value;
+        return 0;
+    }
+
+    void clear(void) {
+        list_node *node = this->first;
+        while (node != NULL) {
+            list_node *next = node->next;
+            stdlib_release(node);
+            node = next;
+        }
+        this->first = NULL;
+        this->last = NULL;
+        this->used = 0;
+    }
+
+    void drop(void) {
+        this->clear();
+    }
+};
+
+/* ---- stack ------------------------------------------------------------------ */
+
+class stack {
+    int *items;
+    size_t used;
+    size_t space;
+
+    stack(void) {
+        this->items = NULL;
+        this->used = 0;
+        this->space = 0;
+    }
+
+    size_t size(void) {
+        return this->used;
+    }
+
+    int push(int value) {
+        if (this->used == this->space) {
+            int *fresh;
+            size_t want = 8;
+            size_t i;
+            if (this->space > 0) {
+                if (this->space > (STDLIB_ALLOC_LIMIT / sizeof(int)) / 2)
+                    return -1;
+                want = this->space * 2;
+            }
+            fresh = (int *)stdlib_alloc(sizeof(int) * want);
+            if (fresh == NULL)
+                return -1;
+            for (i = 0; i < this->used; i++)
+                fresh[i] = this->items[i];
+            if (this->items != NULL)
+                stdlib_release(this->items);
+            this->items = fresh;
+            this->space = want;
+            stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        }
+        this->items[this->used++] = value;
+        return 0;
+    }
+
+    int pop(int *out) {
+        if (out == NULL || this->used == 0)
+            return -1;
+        *out = this->items[--this->used];
+        return 0;
+    }
+
+    int top_checked(int *out) {
+        if (out == NULL || this->used == 0)
+            return -1;
+        *out = this->items[this->used - 1];
+        return 0;
+    }
+
+    void clear(void) {
+        this->used = 0;
+    }
+
+    void drop(void) {
+        if (this->items != NULL)
+            stdlib_release(this->items);
+        this->items = NULL;
+        this->used = 0;
+        this->space = 0;
+    }
+};
+
+/* ---- queue (FIFO ring buffer) ------------------------------------------------ */
+
+class queue {
+    int *items;
+    size_t head;
+    size_t used;
+    size_t space;
+
+    queue(void) {
+        this->items = NULL;
+        this->head = 0;
+        this->used = 0;
+        this->space = 0;
+    }
+
+    size_t size(void) {
+        return this->used;
+    }
+
+    int push(int value) {
+        if (this->used == this->space) {
+            int *fresh;
+            size_t want = 8;
+            if (this->space > 0) {
+                if (this->space > (STDLIB_ALLOC_LIMIT / sizeof(int)) / 2)
+                    return -1;
+                want = this->space * 2;
+            }
+            fresh = stdlib_ring_copy(this->items, this->space, this->head,
+                                     this->used, want);
+            if (fresh == NULL)
+                return -1;
+            if (this->items != NULL)
+                stdlib_release(this->items);
+            this->items = fresh;
+            this->head = 0;
+            this->space = want;
+            stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        }
+        size_t idx = this->head + this->used;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space, used < space => idx < 2*space */
+        this->items[idx] = value;
+        this->used++;
+        return 0;
+    }
+
+    int pop(int *out) {
+        if (out == NULL || this->used == 0)
+            return -1;
+        *out = this->items[this->head];
+        size_t idx = this->head + 1;
+        if (idx >= this->space)
+            idx -= this->space; /* head < space => idx <= space */
+        this->head = idx;
+        this->used--;
+        return 0;
+    }
+
+    int front_checked(int *out) {
+        if (out == NULL || this->used == 0)
+            return -1;
+        *out = this->items[this->head];
+        return 0;
+    }
+
+    void clear(void) {
+        this->head = 0;
+        this->used = 0;
+    }
+
+    void drop(void) {
+        if (this->items != NULL)
+            stdlib_release(this->items);
+        this->items = NULL;
+        this->head = 0;
+        this->used = 0;
+        this->space = 0;
+    }
+};
+
+#endif

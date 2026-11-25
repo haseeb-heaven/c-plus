@@ -1,0 +1,4 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check stack_consumer.cp
+check: stack_consumer.cp ok
+
+[exit code: 0]

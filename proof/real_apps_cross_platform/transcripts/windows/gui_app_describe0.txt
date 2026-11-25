@@ -1,0 +1,27 @@
+# Windows runtime transcript: gui_app.exe
+# Invocation args: describe 0
+# Command: PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin timeout -k 5 90 highball run -v proof/real_apps_cross_platform/binaries/windows/gui_app.exe describe 0
+# Exit code: 0
+# Launch line (Highball, noted): Launching gui_app.exe in bottle 'Games' [engine: x64-crossover26.3-r27, renderer: dxvk]...
+# Bottle reset before run: timeout 20 highball bottle kill Games >/dev/null 2>&1; sleep 1
+# Runtime: real Windows PE via Highball / Wine engine x64-crossover26.3-r27 (bottle Games).
+# Verbosity note: -v is the conservative/verbose choice; earlier flakiness was stale bottle/sync state,
+#   not the -v flag itself. After a clean bottle reset, plain 'highball run' also produces the same marker.
+# Noise note: transient msync bootstrap lines, winemenubuilder.exe (126), and
+#   idmwfp.sys / fwpkclnt.sys / ZwLoadDriver errors appear in Wine stderr; they are bottle noise,
+#   not app failures - the app still ran and printed its marker lines.
+# App marker lines (verbatim; Highball/Wine noise stripped):
+# ------------------------------------------------------------------------
+GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90
+GUI_LAYOUT cell=80x45 origin=0,0
+WIDGETS 6
+W 1 4 1 1 78 43 3 root
+W 2 2 81 1 78 43 3 user
+W 3 3 161 1 78 43 3 name
+W 4 2 1 46 78 43 3 pass
+W 5 3 81 46 78 43 3 secret
+W 6 1 161 46 78 43 3 OK
+GUI_SERIAL bytes=157 crc32=a52b03af
+GUI_HIT p=5,5 index=0 id=1 label=root
+GUI_HIT p=85,5 index=1 id=2 label=user
+GUI_RESULT describe:0,0,0 OK

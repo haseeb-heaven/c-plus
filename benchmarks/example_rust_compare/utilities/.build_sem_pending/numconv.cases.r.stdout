@@ -1,0 +1,5 @@
+NUMCONV 255 dec hex ff
+NUMCONV 101010 bin dec 42
+NUMCONV ff hex bin 11111111
+NUMCONV REFUSED overflow
+NUMCONV REFUSED invalid-digit

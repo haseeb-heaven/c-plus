@@ -1,0 +1,1 @@
+check: tests/stdlib/agent1_handoff/strict_safe_mode/01_raw_ptr_arithmetic.cp ok

@@ -1,0 +1,6 @@
+clang: warning: no such sysroot directory: '/Library/Developer/CommandLineTools/SDKs/MacOSX27.sdk' [-Wmissing-sysroot]
+clang: warning: using sysroot for 'macOS 27' but targeting 'arm64-apple-macosx27.0.0' [-Wincompatible-sysroot]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/log/log.c:27:10: fatal error: 'errno.h' file not found
+   27 | #include <errno.h>
+      |          ^~~~~~~~~
+1 error generated.

@@ -1,0 +1,1 @@
+type-punned dereference violates strict aliasing; use memcpy

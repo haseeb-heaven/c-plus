@@ -1,0 +1,126 @@
+{
+  "task": "P0 Cross-function lifetime analysis",
+  "handoff": "subagent 1 of 12 (branch agent/modern-stdlib)",
+  "directory": "tests/stdlib/agent1_handoff/cross_function_lifetime",
+  "ownership": "Only files under this directory were created/modified; no git add/commit; no compiler/runtime/header/test-runner edits.",
+  "execution_safety": "No binary from these cases was built or run. All five .cp files were only passed to `c+ check` (lower/type-check, no executable written, no escape executed).",
+  "environment": {
+    "cwd": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib",
+    "tool": "./build/c+",
+    "version_output": "C+ 0.1.0\nLanguage: C+ (C with memory safety, deterministic RAII, lightweight classes)\nBackend: host Clang/LLVM",
+    "version_exit": 0,
+    "version_raw_log": "results/cplus-version.log"
+  },
+  "commands": {
+    "per_case_strict_check": "./build/c+ check --strict tests/stdlib/agent1_handoff/cross_function_lifetime/<case>.cp",
+    "note": "Exact stdout/stderr/exit captured per case in results/<name>.check.stdout, results/<name>.check.stderr, results/<name>.check.exit and consolidated in results/<name>.check-strict.log."
+  },
+  "classification_rule": {
+    "TAGGED_REJECT": "exit != 0 and literal '[CPLUS-' token in stdout/stderr",
+    "UNTAGGED_PARTIAL": "exit != 0 but no '[CPLUS-' token (backend warning or untagged lowering error)",
+    "ACCEPT": "exit 0 and no diagnostic"
+  },
+  "cases": [
+    {
+      "file": "cfl_string_view_from_local.cp",
+      "shape": "make_view() returns a string_view borrowing the buffer of a local string; string_drop at exit releases it",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "classification": "CAPABILITY_GAP",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_string_view_from_local.cp ok\n",
+        "stderr": "",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "raw_log": "results/cfl_string_view_from_local.check-strict.log"
+    },
+    {
+      "file": "cfl_vector_slice_from_local.cp",
+      "shape": "make_slice() returns a vector::slice borrowing v.items and &v.generation of a local vector; vector_drop at exit releases both",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "classification": "CAPABILITY_GAP",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_vector_slice_from_local.cp ok\n",
+        "stderr": "",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "raw_log": "results/cfl_vector_slice_from_local.check-strict.log"
+    },
+    {
+      "file": "cfl_store_local_address.cp",
+      "shape": "produce() passes &local to store_ptr(), which stores the unannotated pointer in a longer-lived global sink",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "classification": "CAPABILITY_GAP",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_store_local_address.cp ok\n",
+        "stderr": "",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "raw_log": "results/cfl_store_local_address.check-strict.log"
+    },
+    {
+      "file": "cfl_borrowed_file_from_local_stream.cp",
+      "shape": "make_borrowed() returns file_borrow(local.native()) around a local owned file's FILE*; local.drop() fclose()s it at exit",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "classification": "CAPABILITY_GAP",
+      "check_strict": {
+        "stdout": "check: tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_borrowed_file_from_local_stream.cp ok\n",
+        "stderr": "",
+        "exit": 0,
+        "cplus_diagnostic": null
+      },
+      "raw_log": "results/cfl_borrowed_file_from_local_stream.check-strict.log"
+    },
+    {
+      "file": "cfl_pointer_to_parameter.cp",
+      "shape": "ptr_to_parameter() returns the address of its by-value parameter, whose storage dies at the call boundary",
+      "expect": "REJECT",
+      "observed": "UNTAGGED_REJECT",
+      "classification": "UNTAGGED_PARTIAL",
+      "check_strict": {
+        "stdout": "",
+        "stderr": "tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_pointer_to_parameter.cp:10:13: error: address of stack memory associated with parameter 'value' returned [-Werror,-Wreturn-stack-address]\n   10 |     return &value;             /* address of parameter outlives the call */\n      |             ^~~~~\n1 error generated.\n",
+        "exit": 1,
+        "cplus_diagnostic": null,
+        "source_of_rejection": "host Clang -Wreturn-stack-address promoted by -Werror; not a [CPLUS- diagnostic and only covers the direct-return form"
+      },
+      "raw_log": "results/cfl_pointer_to_parameter.check-strict.log"
+    }
+  ],
+  "classification_summary": {
+    "total_cases": 5,
+    "expected_reject": 5,
+    "observed_tagged_reject": 0,
+    "observed_untagged_reject": 1,
+    "observed_accept": 4,
+    "headline": "No case achieves tagged C+ enforcement. Four are accepted with no diagnostic; one is rejected only by a Clang backend warning."
+  },
+  "agent1_must_provide": {
+    "interprocedural_summary": [
+      "Return-origin / borrow-vs-own summary per function: whether the result is a new owner or a borrow, and the owner/allocation site it aliases (cases 1, 2, 4). Must be field-sensitive for string_view.chars, slice.items/slice.generation_ref, and file.stream/file.owns.",
+      "Parameter escape / capture summary: for each parameter, whether its address is returned, stored in a global/heap/field, or passed to a capturing callee, plus the required referent lifetime (cases 3, 5).",
+      "Storage-lifetime lattice with a call-site check: callee-local, caller-local, by-value parameter, global/static, managed heap; reject a shorter-lived value stored in a longer-lived region.",
+      "Transitive composition through wrappers so to_view()/view()/file_borrow() and helper calls propagate the borrow/capture to the caller.",
+      "Tagged diagnostic (proposed [CPLUS-LIFETIME], optionally [CPLUS-BORROW]) that names the invalid operation and the owning local, counted as enforcement under --strict."
+    ],
+    "positive_controls_must_stay_accepted": [
+      "tests/stdlib/compile_time/string_valid_view.cp",
+      "tests/stdlib/compile_time/vector_valid_slice.cp",
+      "tests/stdlib/compile_time/file_valid_borrow.cp",
+      "tests/stdlib/compile_time/json_valid_ref.cp",
+      "ACCEPT cases in tests/stdlib/compile_time/*.json"
+    ]
+  },
+  "related_existing_evidence": [
+    "docs/libc/AGENT1_PRIORITY_HANDOFF.md \u2014 P0 row 'Cross-function lifetime analysis' points at this directory and cites string_dangling_view.cp / json_dangling_ref.cp as accepted gaps",
+    "docs/libc/KNOWN_COMPILER_GAPS.md \u2014 no interprocedural analysis; stack-escape gap; Clang -Wreturn-stack-address covers only direct returns",
+    "compiler/Sema/RaiiLowering.cpp::checkReturnValue \u2014 only a direct `return <identifier>;` of a tracked borrow/owner is rejected (untagged)"
+  ],
+  "evidence_integrity": "All stdout/stderr strings and exit codes were produced by the recorded commands in this workspace on branch agent/modern-stdlib; raw logs are in results/. Nothing fabricated; no runtime result is claimed."
+}

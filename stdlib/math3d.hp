@@ -1,0 +1,522 @@
+/* C+ modern standard library: 3D math for game engines.
+ *
+ * Additive, C-style header: plain structs plus `static inline` functions.
+ * No classes, no templates, no exported symbols, no ABI change.  Every
+ * operation is pure (no global/static mutable state) and therefore
+ * deterministic for a given input.
+ *
+ * Conventions
+ *   - Vectors are {x, y, z}; quaternions are {x, y, z, w} (w last).
+ *   - Matrices are column-major (OpenGL layout): m[col * 4 + row].
+ *     The translation of a transform lives in m[12], m[13], m[14].
+ *   - Transform helpers compose on the right: out = a * T / a * R / a * S.
+ *     Start from mat4_identity() to build a standalone transform.
+ *
+ * Safety / refusal
+ *   - Finite-input checks reject NaN and +/-Inf on every floating input.
+ *   - Division-by-zero guards reject zero-length axes, zero-length vectors
+ *     and degenerate projections (aspect == 0, near == far, eye == center,
+ *     view direction parallel to up).
+ *   - Every function returns a status: MATH3D_OK (0) on success,
+ *     MATH3D_ERR_NONFINITE (-1) when an input is not finite,
+ *     MATH3D_ERR_ZERO (-2) when a guard prevents a division by zero, or
+ *     MATH3D_ERR_NULL (-3) when the output pointer is null.
+ *   - On refusal the output is still written with a safe deterministic value
+ *     (zero vector/quaternion/scalar, identity matrix), so a rejected call
+ *     never leaves the caller's output uninitialised.
+ *
+ * Note: <math.h> is intentionally NOT included -- its inline union macros
+ * trip the C+ lifetime checker.  The handful of libm entry points used here
+ * are declared explicitly below; link against the host C math library as
+ * usual (the C+ driver does so by default).
+ */
+#ifndef CPLUS_STD_MATH3D_HP
+#define CPLUS_STD_MATH3D_HP
+
+#include <stddef.h>
+#include "cplus/cplus.h"
+
+/* libm entry points (declared directly to avoid <math.h> union macros). */
+extern float sqrtf(float x);
+extern float sinf(float x);
+extern float cosf(float x);
+extern float atan2f(float y, float x);
+extern float fabsf(float x);
+
+#define MATH3D_OK 0
+#define MATH3D_ERR_NONFINITE (-1)
+#define MATH3D_ERR_ZERO (-2)
+#define MATH3D_ERR_NULL (-3)
+
+/* Largest finite float magnitude, used by the finite check below. */
+#define MATH3D_FLT_MAX 3.4028234663852886e+38f
+
+typedef struct vec3 {
+    float x;
+    float y;
+    float z;
+} vec3;
+
+typedef struct mat4 {
+    float m[16];
+} mat4;
+
+typedef struct quat {
+    float x;
+    float y;
+    float z;
+    float w;
+} quat;
+
+/* ------------------------------------------------------------------ */
+/* Scalar / finite helpers                                             */
+/* ------------------------------------------------------------------ */
+
+/* x != x detects NaN; magnitudes beyond FLT_MAX detect +/-Inf. */
+static inline int math3d_finite(float x) {
+    if (x != x)
+        return 0;
+    if (x > MATH3D_FLT_MAX || x < -MATH3D_FLT_MAX)
+        return 0;
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* vec3                                                                */
+/* ------------------------------------------------------------------ */
+
+static inline int vec3_finite(vec3 v) {
+    if (!math3d_finite(v.x) || !math3d_finite(v.y) || !math3d_finite(v.z))
+        return 0;
+    return 1;
+}
+
+static inline vec3 vec3_zero(void) {
+    vec3 r;
+    r.x = 0.0f;
+    r.y = 0.0f;
+    r.z = 0.0f;
+    return r;
+}
+
+static inline int vec3_add(vec3 a, vec3 b, vec3 *out) {
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(a) || !vec3_finite(b)) {
+        *out = vec3_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    out->x = a.x + b.x;
+    out->y = a.y + b.y;
+    out->z = a.z + b.z;
+    return MATH3D_OK;
+}
+
+static inline int vec3_sub(vec3 a, vec3 b, vec3 *out) {
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(a) || !vec3_finite(b)) {
+        *out = vec3_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    out->x = a.x - b.x;
+    out->y = a.y - b.y;
+    out->z = a.z - b.z;
+    return MATH3D_OK;
+}
+
+static inline int vec3_scale(vec3 a, float s, vec3 *out) {
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(a) || !math3d_finite(s)) {
+        *out = vec3_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    out->x = a.x * s;
+    out->y = a.y * s;
+    out->z = a.z * s;
+    return MATH3D_OK;
+}
+
+static inline int vec3_dot(vec3 a, vec3 b, float *out) {
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(a) || !vec3_finite(b)) {
+        *out = 0.0f;
+        return MATH3D_ERR_NONFINITE;
+    }
+    *out = a.x * b.x + a.y * b.y + a.z * b.z;
+    return MATH3D_OK;
+}
+
+static inline int vec3_cross(vec3 a, vec3 b, vec3 *out) {
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(a) || !vec3_finite(b)) {
+        *out = vec3_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    out->x = a.y * b.z - a.z * b.y;
+    out->y = a.z * b.x - a.x * b.z;
+    out->z = a.x * b.y - a.y * b.x;
+    return MATH3D_OK;
+}
+
+static inline int vec3_length(vec3 a, float *out) {
+    float s;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(a)) {
+        *out = 0.0f;
+        return MATH3D_ERR_NONFINITE;
+    }
+    s = a.x * a.x + a.y * a.y + a.z * a.z;
+    *out = sqrtf(s);
+    return MATH3D_OK;
+}
+
+static inline int vec3_normalize(vec3 a, vec3 *out) {
+    float len;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(a)) {
+        *out = vec3_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    len = sqrtf(a.x * a.x + a.y * a.y + a.z * a.z);
+    if (len == 0.0f) {
+        *out = vec3_zero();
+        return MATH3D_ERR_ZERO;
+    }
+    out->x = a.x / len;
+    out->y = a.y / len;
+    out->z = a.z / len;
+    return MATH3D_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* mat4 (column-major: m[col * 4 + row])                              */
+/* ------------------------------------------------------------------ */
+
+static inline int mat4_finite(mat4 a) {
+    int i;
+    for (i = 0; i < 16; i++)
+        if (!math3d_finite(a.m[i]))
+            return 0;
+    return 1;
+}
+
+static inline int mat4_identity(mat4 *out) {
+    int i;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    for (i = 0; i < 16; i++)
+        out->m[i] = 0.0f;
+    out->m[0] = 1.0f;
+    out->m[5] = 1.0f;
+    out->m[10] = 1.0f;
+    out->m[15] = 1.0f;
+    return MATH3D_OK;
+}
+
+/* out = a * b (column-major product). */
+static inline int mat4_multiply(mat4 a, mat4 b, mat4 *out) {
+    mat4 r;
+    int col, row, k;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!mat4_finite(a) || !mat4_finite(b)) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_NONFINITE;
+    }
+    for (col = 0; col < 4; col++) {
+        for (row = 0; row < 4; row++) {
+            float sum = 0.0f;
+            for (k = 0; k < 4; k++)
+                sum = sum + a.m[k * 4 + row] * b.m[col * 4 + k];
+            r.m[col * 4 + row] = sum;
+        }
+    }
+    *out = r;
+    return MATH3D_OK;
+}
+
+/* out = a * T(v). */
+static inline int mat4_translate(mat4 a, vec3 v, mat4 *out) {
+    mat4 r;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!mat4_finite(a) || !vec3_finite(v)) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_NONFINITE;
+    }
+    r = a;
+    r.m[12] = a.m[0] * v.x + a.m[4] * v.y + a.m[8] * v.z + a.m[12];
+    r.m[13] = a.m[1] * v.x + a.m[5] * v.y + a.m[9] * v.z + a.m[13];
+    r.m[14] = a.m[2] * v.x + a.m[6] * v.y + a.m[10] * v.z + a.m[14];
+    r.m[15] = a.m[3] * v.x + a.m[7] * v.y + a.m[11] * v.z + a.m[15];
+    *out = r;
+    return MATH3D_OK;
+}
+
+/* out = a * S(v) (non-uniform scale). */
+static inline int mat4_scale(mat4 a, vec3 v, mat4 *out) {
+    mat4 r;
+    int row;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!mat4_finite(a) || !vec3_finite(v)) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_NONFINITE;
+    }
+    r = a;
+    for (row = 0; row < 4; row++) {
+        r.m[0 * 4 + row] = a.m[0 * 4 + row] * v.x;
+        r.m[1 * 4 + row] = a.m[1 * 4 + row] * v.y;
+        r.m[2 * 4 + row] = a.m[2 * 4 + row] * v.z;
+    }
+    *out = r;
+    return MATH3D_OK;
+}
+
+/* out = a * R(axis, angle_rad).  axis need not be pre-normalised. */
+static inline int mat4_rotate(mat4 a, float angle_rad, vec3 axis, mat4 *out) {
+    mat4 rot;
+    mat4 r;
+    vec3 n;
+    float c, s, t, x, y, z;
+    int col, row, k;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!mat4_finite(a) || !math3d_finite(angle_rad) || !vec3_finite(axis)) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_NONFINITE;
+    }
+    if (vec3_normalize(axis, &n) != MATH3D_OK) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_ZERO;
+    }
+    c = cosf(angle_rad);
+    s = sinf(angle_rad);
+    x = n.x;
+    y = n.y;
+    z = n.z;
+    t = 1.0f - c;
+    rot = a; /* whole-struct copy marks every element initialised */
+    rot.m[0] = t * x * x + c;     rot.m[4] = t * x * y - s * z; rot.m[8]  = t * x * z + s * y; rot.m[12] = 0.0f;
+    rot.m[1] = t * x * y + s * z; rot.m[5] = t * y * y + c;     rot.m[9]  = t * y * z - s * x; rot.m[13] = 0.0f;
+    rot.m[2] = t * x * z - s * y; rot.m[6] = t * y * z + s * x; rot.m[10] = t * z * z + c;     rot.m[14] = 0.0f;
+    rot.m[3] = 0.0f;              rot.m[7] = 0.0f;              rot.m[11] = 0.0f;              rot.m[15] = 1.0f;
+    for (col = 0; col < 4; col++) {
+        for (row = 0; row < 4; row++) {
+            float sum = 0.0f;
+            for (k = 0; k < 4; k++)
+                sum = sum + a.m[k * 4 + row] * rot.m[col * 4 + k];
+            r.m[col * 4 + row] = sum;
+        }
+    }
+    *out = r;
+    return MATH3D_OK;
+}
+
+/* OpenGL-style perspective projection matrix. */
+static inline int mat4_perspective(float fovy_rad, float aspect,
+                                   float near_z, float far_z, mat4 *out) {
+    mat4 r;
+    float f, nf, inv;
+    int i;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!math3d_finite(fovy_rad) || !math3d_finite(aspect) ||
+        !math3d_finite(near_z) || !math3d_finite(far_z)) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_NONFINITE;
+    }
+    if (aspect == 0.0f || near_z == far_z) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_ZERO;
+    }
+    for (i = 0; i < 16; i++)
+        r.m[i] = 0.0f;
+    f = cosf(fovy_rad * 0.5f);
+    f = sinf(fovy_rad * 0.5f) / f; /* tan(fovy/2) */
+    nf = near_z - far_z;
+    inv = 1.0f / nf;
+    r.m[0] = f / aspect;
+    r.m[5] = f;
+    r.m[10] = (far_z + near_z) * inv;
+    r.m[11] = -1.0f;
+    r.m[14] = (2.0f * far_z * near_z) * inv;
+    r.m[15] = 0.0f;
+    *out = r;
+    return MATH3D_OK;
+}
+
+/* gluLookAt-style view matrix. */
+static inline int mat4_look_at(vec3 eye, vec3 center, vec3 up, mat4 *out) {
+    mat4 r;
+    vec3 fwd, s, u;
+    float d;
+    int i;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(eye) || !vec3_finite(center) || !vec3_finite(up)) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_NONFINITE;
+    }
+    if (vec3_sub(center, eye, &fwd) != MATH3D_OK ||
+        vec3_normalize(fwd, &fwd) != MATH3D_OK) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_ZERO;
+    }
+    if (vec3_cross(fwd, up, &s) != MATH3D_OK ||
+        vec3_normalize(s, &s) != MATH3D_OK) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_ZERO;
+    }
+    if (vec3_cross(s, fwd, &u) != MATH3D_OK) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_ZERO;
+    }
+    for (i = 0; i < 16; i++)
+        r.m[i] = 0.0f;
+    r.m[0] = s.x; r.m[4] = u.x; r.m[8]  = -fwd.x; r.m[12] = 0.0f;
+    r.m[1] = s.y; r.m[5] = u.y; r.m[9]  = -fwd.y; r.m[13] = 0.0f;
+    r.m[2] = s.z; r.m[6] = u.z; r.m[10] = -fwd.z; r.m[14] = 0.0f;
+    r.m[3] = 0.0f; r.m[7] = 0.0f; r.m[11] = 0.0f; r.m[15] = 1.0f;
+    vec3_dot(s, eye, &d); r.m[12] = -d;
+    vec3_dot(u, eye, &d); r.m[13] = -d;
+    vec3_dot(fwd, eye, &d); r.m[14] = d;
+    *out = r;
+    return MATH3D_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* quat (x, y, z, w)                                                   */
+/* ------------------------------------------------------------------ */
+
+static inline int quat_finite(quat q) {
+    if (!math3d_finite(q.x) || !math3d_finite(q.y) ||
+        !math3d_finite(q.z) || !math3d_finite(q.w))
+        return 0;
+    return 1;
+}
+
+static inline quat quat_zero(void) {
+    quat r;
+    r.x = 0.0f;
+    r.y = 0.0f;
+    r.z = 0.0f;
+    r.w = 0.0f;
+    return r;
+}
+
+static inline int quat_from_axis_angle(vec3 axis, float angle_rad, quat *out) {
+    vec3 n;
+    float h, s;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!vec3_finite(axis) || !math3d_finite(angle_rad)) {
+        *out = quat_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    if (vec3_normalize(axis, &n) != MATH3D_OK) {
+        *out = quat_zero();
+        return MATH3D_ERR_ZERO;
+    }
+    h = angle_rad * 0.5f;
+    s = sinf(h);
+    out->x = n.x * s;
+    out->y = n.y * s;
+    out->z = n.z * s;
+    out->w = cosf(h);
+    return MATH3D_OK;
+}
+
+/* Hamilton product. */
+static inline int quat_multiply(quat a, quat b, quat *out) {
+    quat r;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!quat_finite(a) || !quat_finite(b)) {
+        *out = quat_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    r.w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z;
+    r.x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y;
+    r.y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x;
+    r.z = a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w;
+    *out = r;
+    return MATH3D_OK;
+}
+
+static inline int quat_normalize(quat q, quat *out) {
+    float len;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!quat_finite(q)) {
+        *out = quat_zero();
+        return MATH3D_ERR_NONFINITE;
+    }
+    len = sqrtf(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+    if (len == 0.0f) {
+        *out = quat_zero();
+        return MATH3D_ERR_ZERO;
+    }
+    out->x = q.x / len;
+    out->y = q.y / len;
+    out->z = q.z / len;
+    out->w = q.w / len;
+    return MATH3D_OK;
+}
+
+/* Rotation matrix from a (normalised internally) quaternion. */
+static inline int quat_to_mat4(quat q, mat4 *out) {
+    quat n;
+    mat4 r;
+    float x, y, z, w;
+    if (out == 0)
+        return MATH3D_ERR_NULL;
+    if (!quat_finite(q)) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_NONFINITE;
+    }
+    if (quat_normalize(q, &n) != MATH3D_OK) {
+        mat4_identity(&r);
+        *out = r;
+        return MATH3D_ERR_ZERO;
+    }
+    x = n.x; y = n.y; z = n.z; w = n.w;
+    r.m[0]  = 1.0f - 2.0f * (y * y + z * z);
+    r.m[4]  = 2.0f * (x * y - z * w);
+    r.m[8]  = 2.0f * (x * z + y * w);
+    r.m[12] = 0.0f;
+    r.m[1]  = 2.0f * (x * y + z * w);
+    r.m[5]  = 1.0f - 2.0f * (x * x + z * z);
+    r.m[9]  = 2.0f * (y * z - x * w);
+    r.m[13] = 0.0f;
+    r.m[2]  = 2.0f * (x * z - y * w);
+    r.m[6]  = 2.0f * (y * z + x * w);
+    r.m[10] = 1.0f - 2.0f * (x * x + y * y);
+    r.m[14] = 0.0f;
+    r.m[3]  = 0.0f;
+    r.m[7]  = 0.0f;
+    r.m[11] = 0.0f;
+    r.m[15] = 1.0f;
+    *out = r;
+    return MATH3D_OK;
+}
+
+#endif /* CPLUS_STD_MATH3D_HP */

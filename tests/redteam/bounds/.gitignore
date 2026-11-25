@@ -1,0 +1,5 @@
+# Generated red-team evidence (logs + binaries); sources stay tracked.
+scenarios.log
+scenarios.log.sha256
+out/
+cplus_rewritten.c

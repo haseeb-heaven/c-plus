@@ -1,49 +1,494 @@
-/* C+ standard library: owned string.
- * Thin safe wrapper over libc string functions; no new string engine. */
+/* C+ standard library: owned string and borrowed view.
+ *
+ * A thin, RAII-safe wrapper over libc string/memory functions; there is no
+ * second string engine here.  `string` owns its buffer and frees it in
+ * drop(); `string_view` is a borrowed window and never frees anything.
+ *
+ * Storage comes from the checked allocator in error.hp.  Every operation that
+ * can fail is failure-atomic: on -1 the string is exactly as it was.  A string
+ * whose constructor could not allocate is *invalid* (valid() == 0): it behaves
+ * as an empty string for reads and re-initialises on the next successful
+ * append/reserve/copy_from, but valid() lets callers tell "empty" from
+ * "failed".
+ *
+ * NULL handling: a NULL `const char *` argument is an invalid operation, not
+ * an empty string.  Constructors treat it as "" for convenience (documented);
+ * append(NULL) fails with -1, equals(NULL) is 0, compare(NULL) is 1.
+ */
 #ifndef CPLUS_STD_STRING_HP
 #define CPLUS_STD_STRING_HP
 
+#include <stdint.h>
 #include <string.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
 
-class String {
-    char *data;
-    size_t length;
+/* Strict UTF-8 (RFC 3629) validation of exactly `len` bytes: rejects overlong
+ * forms, UTF-16 surrogates, code points above U+10FFFF, stray continuation
+ * bytes and truncated sequences.  NUL bytes are valid code points (U+0000).
+ * Returns 1 when valid, 0 otherwise (and for data == NULL with len > 0). */
+static inline int stdlib_utf8_validate(const char *data, size_t len) {
+    const unsigned char *s = (const unsigned char *)data;
+    size_t i = 0;
+    if (len == 0)
+        return 1;
+    if (s == NULL)
+        return 0;
+    while (i < len) {
+        unsigned char c = s[i];
+        size_t need;
+        unsigned char lo = 0x80;
+        unsigned char hi = 0xBF;
+        if (c < 0x80) {
+            i++;
+            continue;
+        }
+        if (c >= 0xC2 && c <= 0xDF) {
+            need = 1;
+        } else if (c >= 0xE0 && c <= 0xEF) {
+            need = 2;
+            if (c == 0xE0)
+                lo = 0xA0; /* no overlong 3-byte forms */
+            if (c == 0xED)
+                hi = 0x9F; /* no surrogates */
+        } else if (c >= 0xF0 && c <= 0xF4) {
+            need = 3;
+            if (c == 0xF0)
+                lo = 0x90; /* no overlong 4-byte forms */
+            if (c == 0xF4)
+                hi = 0x8F; /* nothing above U+10FFFF */
+        } else {
+            return 0; /* 0x80..0xC1 and 0xF5..0xFF can never start a sequence */
+        }
+        if (len - i - 1 < need)
+            return 0; /* truncated */
+        if (s[i + 1] < lo || s[i + 1] > hi)
+            return 0;
+        {
+            size_t k;
+            for (k = 2; k <= need; k++) {
+                if (s[i + k] < 0x80 || s[i + k] > 0xBF)
+                    return 0;
+            }
+        }
+        i += need + 1;
+    }
+    return 1;
+}
 
-    String(const char *text) {
-        size_t n = strlen(text);
-        cplus_log(CPLUS_LOG_DEBUG, "String ctor len=%zu", n);
-        self->data = (char *)cplus_alloc(n + 1);
-        memcpy(self->data, text, n + 1);
-        self->length = n;
+/* Capacity policy ported from Microsoft STL <xstring>, `_Calculate_growth`
+ * (SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception; upstream URL and
+ * commit recorded in tests/stdlib/upstream_reuse/string_stl_NOTES.md).
+ *
+ * Upstream pattern:
+ *   const auto _Masked = _Requested | _Alloc_mask;
+ *   if (_Masked > _Max) return _Max;             // roundup overflow
+ *   if (_Old > _Max - _Old / 2) return _Max;     // geometric overflow
+ *   return max(_Masked, _Old + _Old / 2);
+ *
+ * C+ adaptations: `space` already counts the terminating NUL, the checked
+ * allocator's `STDLIB_ALLOC_LIMIT` is a hard ceiling (not `max_size()`), the
+ * geometric factor stays x2 so the documented capacity contract of `string`
+ * is unchanged, and `_Alloc_mask` is 0 because `stdlib_alloc` has no 16-byte
+ * granularity.  When the geometric step would overflow we fall back to the
+ * exact request instead of the ceiling: near the hard limit that is the
+ * largest allocation that can still succeed and it preserves the existing
+ * exact-fit behaviour (tests/stdlib/allocator/overflow_string.cp).  Returns 0
+ * when the request itself cannot be served.  Only a constant divisor/OR is
+ * used, so the strict checker's "variable division" rule is not involved. */
+#define STDLIB_STRING_ALLOC_MASK ((size_t)0)
+
+static inline size_t stdlib_string_calculate_growth(size_t requested,
+                                                    size_t old_space) {
+    size_t masked = requested | STDLIB_STRING_ALLOC_MASK;
+    size_t geometric = old_space;
+    size_t want;
+    if (masked > STDLIB_ALLOC_LIMIT)
+        return 0; /* upstream: mask overflow -> growth refused */
+    if (old_space <= STDLIB_ALLOC_LIMIT - old_space)
+        geometric = old_space + old_space; /* upstream geometric step */
+    /* Otherwise upstream settles at _Max; here the exact request is the
+     * largest safe allocation and keeps near-limit growth exact. */
+    want = masked > geometric ? masked : geometric;
+    if (want > STDLIB_ALLOC_LIMIT)
+        want = STDLIB_ALLOC_LIMIT;
+    return want;
+}
+
+/* Borrowed view of a character range, valid while its owner lives. */
+class string_view {
+    const char *chars;
+    size_t count;
+
+    string_view(const char *chars, size_t count) {
+        this->chars = chars;
+        this->count = count;
     }
 
-    size_t len(void) {
-        cplus_log(CPLUS_LOG_TRACE, "String len=%zu", self->length);
-        return self->length;
+    size_t size(void) {
+        return this->count;
+    }
+
+    const char *data(void) {
+        return this->chars;
+    }
+
+    int equals(const char *other) {
+        size_t n;
+        if (other == NULL)
+            return 0;
+        if (this->count > 0 && this->chars == NULL)
+            return 0;
+        n = strlen(other);
+        if (n != this->count)
+            return 0;
+        if (n == 0)
+            return 1;
+        return memcmp(this->chars, other, n) == 0;
+    }
+
+    int is_valid_utf8(void) {
+        return stdlib_utf8_validate(this->chars, this->count);
+    }
+};
+
+class string {
+    char *chars;
+    size_t count;
+    size_t space;
+    const stdlib_allocator *alloc; /* NULL = checked heap (default) */
+
+    /* Default constructor: checked heap allocator. */
+    string(const char *text) {
+        size_t n = text == NULL ? 0 : strlen(text);
+        this->alloc = (const stdlib_allocator *)0;
+        this->chars = NULL;
+        this->count = 0;
+        this->space = 0;
+        if (n < STDLIB_ALLOC_LIMIT) {
+            this->chars = (char *)stdlib_alloc(n + 1);
+            if (this->chars != NULL) {
+                if (n > 0)
+                    memcpy(this->chars, text, n);
+                this->chars[n] = '\0';
+                this->count = n;
+                this->space = n + 1;
+            }
+        }
+    }
+
+    /* Allocator-aware constructor: binds this string to `a` (Arena, Pool,
+     * DataStack, or HeapAllocator).  The allocator must outlive the string. */
+    /* Internal allocator dispatch: default NULL means checked heap. */
+    char *salloc(size_t n) {
+        error e = error();
+        return (char *)stdlib_allocate(this->alloc, n, 1u, &e);
+    }
+    void sfree(char *p) {
+        stdlib_deallocate(this->alloc, (void *)p, this->space);
+    }
+
+    size_t size(void) {
+        return this->count;
+    }
+
+    size_t capacity(void) {
+        return this->space;
+    }
+
+    /* 1 when the string owns a buffer (false after drop() or a failed ctor). */
+    int valid(void) {
+        return this->chars != NULL;
     }
 
     char at(size_t index) {
-        cplus_log(CPLUS_LOG_TRACE, "String at=%zu len=%zu", index,
-                  self->length);
-        if (index >= self->length)
+        if (this->chars == NULL || index >= this->count)
             return '\0';
-        return self->data[index];
+        return this->chars[index];
     }
 
+    /* Never NULL, even after drop(): callers treat it as an empty string. */
     const char *c_str(void) {
-        cplus_log(CPLUS_LOG_TRACE, "String c_str");
-        return self->data;
+        return this->chars != NULL ? this->chars : "";
+    }
+
+    int equals(const char *other) {
+        size_t other_count;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::equals: null argument");
+            return 0;
+        }
+        other_count = strlen(other);
+        if (this->chars == NULL)
+            return other_count == 0;
+        if (other_count != this->count)
+            return 0;
+        if (this->count == 0)
+            return 1;
+        return memcmp(this->chars, other, this->count) == 0;
+    }
+
+    /* -1 / 0 / 1.  compare(NULL) is an invalid operation and returns 1
+     * ("never equal"). */
+    int compare(const char *other) {
+        int r;
+        char first;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::compare: null argument");
+            return 1;
+        }
+        if (this->chars == NULL) {
+            __builtin_memcpy(&first, other, 1);
+            return first == '\0' ? 0 : -1;
+        }
+        r = strcmp(this->chars, other);
+        if (r < 0)
+            return -1;
+        if (r > 0)
+            return 1;
+        return 0;
+    }
+
+    long find(const char *needle) {
+        const char *hit;
+        if (this->chars == NULL || needle == NULL)
+            return -1;
+        hit = strstr(this->chars, needle);
+        if (hit == NULL)
+            return -1;
+        return (long)(hit - this->chars);
+    }
+
+    /* Ensure room for `want` bytes including the terminator.  Failure-atomic. */
+    int reserve(size_t want) {
+        char *fresh;
+        if (want <= this->space)
+            return 0;
+        if (want > STDLIB_ALLOC_LIMIT) {
+            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                        "string::reserve: capacity too large");
+            return -1;
+        }
+        fresh = this->salloc(want);
+        if (fresh == NULL)
+            return -1;
+        if (this->chars != NULL)
+            memcpy(fresh, this->chars, this->count + 1);
+        else
+            fresh[0] = '\0';
+        if (this->chars != NULL)
+            this->sfree(this->chars);
+        this->chars = fresh;
+        this->space = want;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        return 0;
+    }
+
+    /* Append a NUL-terminated string.  0 on success (including an empty
+     * argument), -1 for NULL, overflow or allocation failure - in which case
+     * the string is unchanged.  Appending a string (or a suffix of it) to
+     * itself is supported.
+     *
+     * The overlap strategy is ported from Microsoft STL <xstring> `_Append`,
+     * `_Traits_move_batch` and `_Reallocate_grow_by` (Apache-2.0 WITH
+     * LLVM-exception):
+     *   - when the bytes fit in the current buffer, the copy is a memmove
+     *     (`_Traits_move_batch` uses `traits::move`, i.e. memmove for char),
+     *     so a source that aliases the destination tail is safe in place;
+     *   - when growth is needed, allocate the new buffer FIRST, prepare it
+     *     from the still-live old buffer, and only then release the old
+     *     buffer.  A `text` pointer into the old allocation therefore stays
+     *     valid for the whole copy, which removes the need for the previous
+     *     manual alias-offset bookkeeping (and for integer pointer compares).
+     *
+     * Both paths keep this operation failure-atomic and use exactly one
+     * allocation when growth is required. */
+    int append(const char *text) {
+        size_t extra;
+        size_t need;
+        size_t want;
+        char *fresh;
+
+        if (text == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::append: null argument");
+            return -1;
+        }
+        extra = strlen(text);
+        if (extra == 0)
+            return 0;
+        if (extra > STDLIB_ALLOC_LIMIT - 1 ||
+            this->count > STDLIB_ALLOC_LIMIT - 1 - extra) {
+            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                        "string::append: result too large");
+            return -1;
+        }
+        need = this->count + extra + 1;
+        if (need <= this->space) {
+            /* `_Append` in-place path: overlap-safe move, no reallocation. */
+            __builtin_memmove(this->chars + this->count, text, extra);
+            this->count += extra;
+            this->chars[this->count] = '\0';
+            return 0;
+        }
+
+        /* `_Reallocate_grow_by` path: refuse, allocate, fill, retire. */
+        want = stdlib_string_calculate_growth(need, this->space);
+        if (want == 0 || want < need) {
+            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                        "string::append: result too large");
+            return -1;
+        }
+        fresh = this->salloc(want);
+        if (fresh == NULL)
+            return -1;
+        if (this->count > 0 && this->chars != NULL)
+            __builtin_memcpy(fresh, this->chars, this->count);
+        /* `text` may alias the old buffer, which is still alive at this point. */
+        __builtin_memmove(fresh + this->count, text, extra);
+        fresh[need - 1] = '\0';
+        if (this->chars != NULL)
+            this->sfree(this->chars);
+        this->chars = fresh;
+        this->count += extra;
+        this->space = want;
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);
+        return 0;
+    }
+
+    void clear(void) {
+        if (this->chars != NULL)
+            this->chars[0] = '\0';
+        this->count = 0;
+    }
+
+    /* Replace the contents with a copy of `other`.  Failure-atomic. */
+    int copy_from(string *other) {
+        char *fresh;
+        size_t n;
+        if (other == NULL) {
+            stdlib_note(STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                        "string::copy_from: null source");
+            return -1;
+        }
+        if (other == this)
+            return 0;
+        n = other->count;
+        if (n >= STDLIB_ALLOC_LIMIT)
+            return -1;
+        fresh = this->salloc(n + 1);
+        if (fresh == NULL)
+            return -1;
+        if (n > 0 && other->chars != NULL)
+            memcpy(fresh, other->chars, n);
+        fresh[n] = '\0';
+        if (this->chars != NULL)
+            this->sfree(this->chars);
+        this->chars = fresh;
+        this->count = n;
+        this->space = n + 1;
+        return 0;
+    }
+
+    /* 1 when the contents are well-formed UTF-8 (an empty string is). */
+    int is_valid_utf8(void) {
+        return stdlib_utf8_validate(this->chars, this->count);
+    }
+
+    /* Copy up to `n` characters from `start` into `out` (always terminated). */
+    int substr(size_t start, size_t n, char *out, size_t out_size) {
+        size_t available;
+        char term = '\0';
+        if (out == NULL || out_size == 0)
+            return -1;
+        if (start > this->count)
+            return -1;
+        available = this->count - start;
+        if (n > available)
+            n = available;
+        if (n + 1 > out_size)
+            n = out_size - 1;
+        if (n > 0 && this->chars != NULL)
+            memmove(out, this->chars + start, n);
+        __builtin_memcpy(out + n, &term, 1);
+        return 0;
+    }
+
+    /* Number of separator-delimited fields (1 when sep is absent). */
+    size_t count_fields(char sep) {
+        size_t fields = 1;
+        size_t i;
+        for (i = 0; i < this->count; i++)
+            if (this->chars[i] == sep)
+                fields++;
+        return fields;
+    }
+
+    /* Copy the index-th separator-delimited field into out. */
+    int field(char sep, size_t index, char *out, size_t out_size) {
+        size_t current = 0;
+        size_t start = 0;
+        size_t i;
+        char term = '\0';
+        if (out == NULL || out_size == 0)
+            return -1;
+        for (i = 0; i <= this->count; i++) {
+            if (i == this->count || this->chars[i] == sep) {
+                if (current == index) {
+                    size_t n = i - start;
+                    if (n + 1 > out_size)
+                        n = out_size - 1;
+                    if (n > 0 && this->chars != NULL)
+                        memmove(out, this->chars + start, n);
+                    __builtin_memcpy(out + n, &term, 1);
+                    return 0;
+                }
+                current++;
+                start = i + 1;
+            }
+        }
+        return -1;
+    }
+
+    string_view to_view(void) {
+        string_view borrowed;
+        borrowed.chars = this->chars;
+        borrowed.count = this->count;
+        return borrowed;
     }
 
     void drop(void) {
-        cplus_log(CPLUS_LOG_DEBUG, "String drop len=%zu", self->length);
-        if (self->data != NULL) {
-            cplus_release(self->data);
-            self->data = NULL;
-            self->length = 0;
+        if (this->chars != NULL) {
+            this->sfree(this->chars);
+            this->chars = NULL;
+            this->count = 0;
+            this->space = 0;
         }
     }
 };
+
+/* Allocator-aware factory. C+ has no constructor overloading; callers write
+ *   string s = string_in(&A, "hello");
+ * where A is any stdlib_allocator (arena/pool/scratch/heap).  A must outlive s.
+ */
+static inline string string_in(const stdlib_allocator *a, const char *text) {
+    string s = string("");
+    error e = error();
+    size_t n = text == 0 ? 0 : strlen(text);
+    s.alloc = a;
+    if (n < STDLIB_ALLOC_LIMIT && n + 1u > n) {
+        s.chars = (char *)stdlib_allocate(a, n + 1u, 1u, &e);
+        if (s.chars != 0) {
+            if (n > 0) memcpy(s.chars, text, n);
+            s.chars[n] = '\0';
+            s.count = n;
+            s.space = n + 1u;
+        }
+    }
+    return s;
+}
 
 #endif

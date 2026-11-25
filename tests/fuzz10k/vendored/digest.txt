@@ -1,0 +1,8 @@
+seed=0xc0ffee5af10d5eed
+functions=26
+scenarios=13000
+digest=a5f9a37fc06413a9
+crashes=0
+hangs=0
+corruptions=0
+refusals=7175

@@ -1,0 +1,194 @@
+sdk consumer: FAIL: libc build failed
+--- /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T//cplus-sdk-consumer.gCSO3Y/libc-build.log ---
+[  0%] Building C object CMakeFiles/cplus_hardened_libc.dir/log/log.c.o
+[  1%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/errno/errno.c.o
+[  1%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/alloc.c.o
+[  2%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/stdlib_extra.c.o
+[  3%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/stdlib_extra2.c.o
+[  3%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/stdlib_extra3.c.o
+[  4%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/stdlib_extra4.c.o
+[  5%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/stdlib_extra5.c.o
+[  5%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/stdlib_extra6.c.o
+[  6%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/assert_extra.c.o
+[  7%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/musl_stdlib_extra.c.o
+[  7%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/memory.c.o
+[  8%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/bounded.c.o
+[  8%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/string.c.o
+[  9%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/extra.c.o
+[ 10%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/extra2.c.o
+[ 10%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/extra3.c.o
+[ 11%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/string_extra4.c.o
+[ 12%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/string_extra5.c.o
+[ 12%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/string_extra6.c.o
+[ 13%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/strtok.c.o
+[ 14%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/musl_extra.c.o
+[ 14%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/strndup.c.o
+[ 15%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/strerror.c.o
+[ 16%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/string/upstream_safecrt.c.o
+[ 16%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/c23_nextup.c.o
+[ 17%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/c23_arith.c.o
+[ 17%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/c23_hypot16.c.o
+[ 18%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/c23_time_unicode.c.o
+[ 19%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/thread/sync_checked.c.o
+[ 19%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/alloc_hardened.c.o
+[ 20%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/runtime/violation_log.c.o
+[ 21%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdio/stdio.c.o
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/src/stdio/stdio.c:33:15: warning: variable 'g_closed_count' set but not used [-Wunused-but-set-global]
+   33 | static size_t g_closed_count;
+      |               ^
+1 warning generated.
+[ 21%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdio/stdio2.c.o
+[ 22%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdio/stdio3.c.o
+[ 23%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/ctype/ctype.c.o
+[ 23%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/wchar/wchar.c.o
+[ 24%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/wctype/wctype.c.o
+[ 25%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/ctype/ctype2.c.o
+[ 25%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/ctype/ctype3.c.o
+[ 26%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math.c.o
+[ 26%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math2.c.o
+[ 27%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math3.c.o
+[ 28%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math4.c.o
+[ 28%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/time/time.c.o
+[ 29%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/time/time_extra.c.o
+[ 30%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/locale/locale.c.o
+[ 30%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/signal/signal.c.o
+[ 31%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/signal/signal2.c.o
+[ 32%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/fenv/fenv.c.o
+[ 32%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/complex/complex.c.o
+[ 33%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/thread/thread.c.o
+[ 33%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/thread/threads_c11.c.o
+[ 34%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/fenv/fenv_extra.c.o
+[ 35%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/time/time_ascii.c.o
+[ 35%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/wchar/wchar_numeric.c.o
+[ 36%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/wchar/wchar_multibyte.c.o
+[ 37%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/wchar/wchar_format.c.o
+[ 37%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/wctype/wctype_extra.c.o
+[ 38%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/complex/complex_extra.c.o
+[ 39%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/complex/complex_inverse.c.o
+[ 39%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/wchar/wchar_gaps.c.o
+[ 40%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/uchar/uchar.c.o
+[ 41%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/c23_small_gaps.c.o
+[ 41%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/c23_upstream_small.c.o
+[ 42%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/uchar/uchar_c23.c.o
+[ 42%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_c23_upstream.c.o
+[ 43%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_c23.c.o
+[ 44%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_c23_hypot3_f16.c.o
+[ 44%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_c23_next.c.o
+[ 45%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_c23_musl.c.o
+[ 46%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_gaps.c.o
+[ 46%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_float.c.o
+[ 47%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/math/math_ldouble.c.o
+[ 48%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/stdlib_c17.c.o
+[ 48%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/inttypes_wide.c.o
+[ 49%] Building C object CMakeFiles/cplus_hardened_libc.dir/src/stdlib/atomic_wrappers.c.o
+[ 50%] Linking C static library libcplus_hardened_libc.a
+[ 50%] Built target cplus_hardened_libc
+[ 50%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/log/log.c.o
+[ 51%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/errno/errno.c.o
+[ 51%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/alloc.c.o
+[ 52%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/stdlib_extra.c.o
+[ 53%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/stdlib_extra2.c.o
+[ 53%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/stdlib_extra3.c.o
+[ 54%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/stdlib_extra4.c.o
+[ 55%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/stdlib_extra5.c.o
+[ 55%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/stdlib_extra6.c.o
+[ 56%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/assert_extra.c.o
+[ 57%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/musl_stdlib_extra.c.o
+[ 57%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/memory.c.o
+[ 58%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/bounded.c.o
+[ 58%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/string.c.o
+[ 59%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/extra.c.o
+[ 60%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/extra2.c.o
+[ 60%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/extra3.c.o
+[ 61%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/string_extra4.c.o
+[ 62%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/string_extra5.c.o
+[ 62%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/string_extra6.c.o
+[ 63%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/strtok.c.o
+[ 64%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/musl_extra.c.o
+[ 64%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/strndup.c.o
+[ 65%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/strerror.c.o
+[ 66%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/string/upstream_safecrt.c.o
+[ 66%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/c23_nextup.c.o
+[ 67%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/c23_arith.c.o
+[ 67%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/c23_hypot16.c.o
+[ 68%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/c23_time_unicode.c.o
+[ 69%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/thread/sync_checked.c.o
+[ 69%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/alloc_hardened.c.o
+[ 70%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/runtime/violation_log.c.o
+[ 71%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdio/stdio.c.o
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/src/stdio/stdio.c:33:15: warning: variable 'g_closed_count' set but not used [-Wunused-but-set-global]
+   33 | static size_t g_closed_count;
+      |               ^
+1 warning generated.
+[ 71%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdio/stdio2.c.o
+[ 72%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdio/stdio3.c.o
+[ 73%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/ctype/ctype.c.o
+[ 73%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/wchar/wchar.c.o
+[ 74%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/wctype/wctype.c.o
+[ 75%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/ctype/ctype2.c.o
+[ 75%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/ctype/ctype3.c.o
+[ 76%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math.c.o
+[ 76%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math2.c.o
+[ 77%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math3.c.o
+[ 78%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math4.c.o
+[ 78%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/time/time.c.o
+[ 79%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/time/time_extra.c.o
+[ 80%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/locale/locale.c.o
+[ 80%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/signal/signal.c.o
+[ 81%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/signal/signal2.c.o
+[ 82%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/fenv/fenv.c.o
+[ 82%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/complex/complex.c.o
+[ 83%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/thread/thread.c.o
+[ 83%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/thread/threads_c11.c.o
+[ 84%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/fenv/fenv_extra.c.o
+[ 85%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/time/time_ascii.c.o
+[ 85%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/wchar/wchar_numeric.c.o
+[ 86%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/wchar/wchar_multibyte.c.o
+[ 87%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/wchar/wchar_format.c.o
+[ 87%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/wctype/wctype_extra.c.o
+[ 88%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/complex/complex_extra.c.o
+[ 89%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/complex/complex_inverse.c.o
+[ 89%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/wchar/wchar_gaps.c.o
+[ 90%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/uchar/uchar.c.o
+[ 91%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/c23_small_gaps.c.o
+[ 91%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/c23_upstream_small.c.o
+[ 92%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/uchar/uchar_c23.c.o
+[ 92%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23_upstream.c.o
+[ 93%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23.c.o
+[ 94%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23_hypot3_f16.c.o
+[ 94%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23_next.c.o
+[ 95%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23_musl.c.o
+[ 96%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_gaps.c.o
+[ 96%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_float.c.o
+[ 97%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_ldouble.c.o
+[ 98%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/stdlib_c17.c.o
+[ 98%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/inttypes_wide.c.o
+[ 99%] Building C object CMakeFiles/cplus_hardened_libc_shared.dir/src/stdlib/atomic_wrappers.c.o
+[100%] Linking C shared library libcplus_hardened_libc.dylib
+duplicate symbol '_cplus_exp10' in:
+    /private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-sdk-consumer.gCSO3Y/libc-build/CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23.c.o
+    /private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-sdk-consumer.gCSO3Y/libc-build/CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23_musl.c.o
+duplicate symbol '_cplus_exp10l' in:
+    /private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-sdk-consumer.gCSO3Y/libc-build/CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23.c.o
+    /private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-sdk-consumer.gCSO3Y/libc-build/CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23_musl.c.o
+duplicate symbol '_cplus_exp10f' in:
+    /private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-sdk-consumer.gCSO3Y/libc-build/CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23.c.o
+    /private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-sdk-consumer.gCSO3Y/libc-build/CMakeFiles/cplus_hardened_libc_shared.dir/src/math/math_c23_musl.c.o
+ld: 3 duplicate symbols
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+make[2]: *** [libcplus_hardened_libc.dylib] Error 1
+make[1]: *** [CMakeFiles/cplus_hardened_libc_shared.dir/all] Error 2
+make: *** [all] Error 2
+--- /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T//cplus-sdk-consumer.gCSO3Y/libc-configure.log ---
+-- The C compiler identification is Clang 23.1.6
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /opt/homebrew/opt/llvm/bin/clang - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Configuring done (8.8s)
+-- Generating done (0.1s)
+-- Build files have been written to: /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-sdk-consumer.gCSO3Y/libc-build

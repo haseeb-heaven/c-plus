@@ -1,0 +1,343 @@
+/* C+ modern standard library: Arena allocator (region / bump allocator).
+ *
+ * MODERN LAYER ONLY.  Backing blocks come from the checked upstream heap
+ * (cplus_alloc/cplus_release); the existing managed heap stays intact as the
+ * default allocator for all other containers.
+ *
+ * Design:
+ *   - Chained blocks, each with a small header (prev pointer + capacity).
+ *     Zero per-object metadata in release mode: allocation is a cursor bump.
+ *   - `stdlib_arena_init(capacity)` allocates the first block from the heap.
+ *   - `stdlib_arena_from_buffer(buf, len)` uses caller storage first, then
+ *     spills to heap blocks when exhausted (caller buffer is never freed).
+ *   - Power-of-two alignment enforced with bit masking (no division).
+ *   - `reset` rewinds to the first block in O(1) and bumps `generation`;
+ *     every live handle is invalidated.  `destroy` releases heap blocks and
+ *     bumps generation again.
+ *   - Safe/diagnostic handle struct carries (arena*, generation).  Querying
+ *     or freeing with a stale handle fails closed through error* (no abort
+ *     in library code; callers convert to fatal via their own policy).
+ *
+ * All helpers are static inline: no exported symbols, no ABI change.
+ */
+#ifndef CPLUS_STD_ARENA_HP
+#define CPLUS_STD_ARENA_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+
+typedef struct stdlib_arena_block {
+    struct stdlib_arena_block *prev;
+    size_t capacity;
+    unsigned char *base;       /* aligned payload start */
+    int owns;                  /* 1 when allocated from the checked heap */
+} stdlib_arena_block;
+
+typedef struct stdlib_arena {
+    stdlib_arena_block *block;         /* current block */
+    unsigned char *cursor;
+    size_t remaining;
+    uint64_t generation;
+    size_t default_block;
+    int owns_first;                    /* first block came from the heap */
+    stdlib_arena_block *first_block;   /* reset target (may be caller-owned) */
+    unsigned char *first_base;         /* reset target payload */
+    size_t first_capacity;
+} stdlib_arena;
+
+/* Handle used by diagnostic APIs: (arena identity, generation). */
+typedef struct stdlib_arena_handle {
+    stdlib_arena *arena;
+    uint64_t generation;
+} stdlib_arena_handle;
+
+static inline uint64_t stdlib_arena_next_generation(void) {
+    static uint64_t counter = 1;
+    uint64_t g = counter++;
+    return g == 0 ? 1 : g;
+}
+
+static inline int stdlib_arena_new_block(stdlib_arena *a, size_t capacity,
+                                         error *err) {
+    stdlib_arena_block *b;
+    size_t raw;
+    error_reset(err);
+    if (a == 0 || capacity == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "arena: invalid block size"),
+               STDLIB_FAIL;
+    if (capacity > (size_t)-1 - sizeof(*b) - STDLIB_ALIGN_DEFAULT)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "arena: block size overflow"),
+               STDLIB_FAIL;
+    raw = sizeof(*b) + capacity + STDLIB_ALIGN_DEFAULT;
+    b = (stdlib_arena_block *)cplus_alloc(raw);
+    if (b == (stdlib_arena_block *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE, "arena: block allocation refused"),
+               STDLIB_FAIL;
+    b->prev = a->block;
+    b->capacity = capacity;
+    b->owns = 1;
+    {
+        uintptr_t p = (uintptr_t)(b + 1);
+        uintptr_t mask = (uintptr_t)STDLIB_ALIGN_DEFAULT - 1u;
+        p = (p + mask) & ~mask;
+        b->base = (unsigned char *)p;
+    }
+    a->block = b;
+    a->cursor = b->base;
+    a->remaining = capacity;
+    return STDLIB_OK;
+}
+
+/* Initialise an empty arena with one heap block of `capacity` bytes. */
+static inline int stdlib_arena_init(stdlib_arena *a, size_t capacity, error *err) {
+    error_reset(err);
+    if (a == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "arena: NULL arena"), STDLIB_FAIL;
+    a->block = (stdlib_arena_block *)0;
+    a->cursor = (unsigned char *)0;
+    a->remaining = 0;
+    a->generation = stdlib_arena_next_generation();
+    a->default_block = capacity == 0 ? 4096u : capacity;
+    a->owns_first = 1;
+    a->first_base = (unsigned char *)0;
+    a->first_capacity = 0;
+    if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    a->first_block = a->block;
+    a->first_base = a->block->base;
+    a->first_capacity = a->block->capacity;
+    return STDLIB_OK;
+}
+
+/* Initialise from caller storage.  Caller storage is used first and never
+ * freed; exhaustion spills to heap blocks. */
+static inline int stdlib_arena_from_buffer(stdlib_arena *a, void *buf,
+                                           size_t len, error *err) {
+    uintptr_t p, mask;
+    error_reset(err);
+    if (a == 0 || (buf == 0 && len != 0))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "arena: invalid buffer"), STDLIB_FAIL;
+    a->block = (stdlib_arena_block *)0;
+    a->cursor = (unsigned char *)0;
+    a->remaining = 0;
+    a->generation = stdlib_arena_next_generation();
+    a->default_block = 4096u;
+    a->owns_first = 0;
+    a->first_base = (unsigned char *)0;
+    a->first_capacity = 0;
+    if (len != 0) {
+        /* Embed a header in the caller buffer only if it is large enough;
+         * otherwise use a heap header pointing at the caller buffer. */
+        if (len > sizeof(stdlib_arena_block) + STDLIB_ALIGN_DEFAULT) {
+            stdlib_arena_block *b = (stdlib_arena_block *)buf;
+            p = (uintptr_t)(b + 1);
+            mask = (uintptr_t)STDLIB_ALIGN_DEFAULT - 1u;
+            p = (p + mask) & ~mask;
+            b->prev = (stdlib_arena_block *)0;
+            b->owns = 0;       /* caller storage: never released */
+            b->base = (unsigned char *)p;
+            if (p > (uintptr_t)buf + len)
+                b->capacity = 0;
+            else
+                b->capacity = (size_t)((uintptr_t)buf + len - p);
+            a->block = b;
+            a->first_block = b;
+            a->cursor = b->base;
+            a->remaining = b->capacity;
+            a->first_base = b->base;
+            a->first_capacity = b->capacity;
+        } else {
+            /* Small caller buffer: keep it as a separate region via a heap
+             * header allocated below the first bump. */
+            if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK)
+                return STDLIB_FAIL;
+            a->first_block = a->block;
+            a->first_base = a->block->base;
+            a->first_capacity = a->block->capacity;
+        }
+    } else {
+        if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK)
+            return STDLIB_FAIL;
+        a->first_base = a->block->base;
+        a->first_capacity = a->block->capacity;
+    }
+    return STDLIB_OK;
+}
+
+/* Bump-allocate n bytes with power-of-two alignment.  Returns NULL on
+ * refusal (including n == 0). */
+static inline void *stdlib_arena_alloc(stdlib_arena *a, size_t n,
+                                       size_t align, error *err) {
+    uintptr_t p, mask;
+    size_t pad;
+    error_reset(err);
+    if (a == 0 || a->block == 0 || n == 0 || align == 0 ||
+        (align & (align - 1u)) != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "arena: invalid request"),
+               (void *)0;
+    mask = (uintptr_t)align - 1u;
+    p = (uintptr_t)a->cursor;
+    pad = (size_t)((align - (p & mask)) & mask);
+    if (pad > a->remaining || n > a->remaining - pad) {
+        /* Need a new block: at least n+align bytes. */
+        size_t cap = n + align;
+        if (cap < a->default_block) cap = a->default_block;
+        if (stdlib_arena_new_block(a, cap, err) != STDLIB_OK)
+            return (void *)0;
+        /* Recompute alignment padding against the NEW block's base. */
+        p = (uintptr_t)a->cursor;
+        pad = (size_t)((align - (p & mask)) & mask);
+        if (pad > a->remaining || n > a->remaining - pad)
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS, "arena: block too small for alignment"),
+                   (void *)0;
+    }
+    {
+        void *out = (void *)(a->cursor + pad);
+        a->cursor += pad + n;
+        a->remaining -= pad + n;
+        memset(out, 0, n);
+        return out;
+    }
+}
+
+/* In-place growth when ptr is the current top; otherwise allocate+copy. */
+static inline void *stdlib_arena_realloc(stdlib_arena *a, void *ptr,
+                                         size_t old_size, size_t new_size,
+                                         size_t align, error *err) {
+    unsigned char *top;
+    void *fresh;
+    error_reset(err);
+    if (a == 0 || a->block == 0 || new_size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "arena: invalid realloc"),
+               (void *)0;
+    /* Reject implausible old_size before subtracting it from the cursor: a
+     * forged size (RED-20 1/3/4) caused a huge memcpy or wrapped top math. */
+    if (old_size > a->block->capacity ||
+        ptr < (void *)a->block->base || ptr > (void *)a->cursor) {
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS, "arena: implausible realloc size/ptr"),
+               (void *)0;
+    }
+    top = a->cursor - old_size;
+    if (ptr != (void *)top || old_size > (size_t)(a->cursor - a->block->base)) {
+        fresh = stdlib_arena_alloc(a, new_size, align, err);
+        if (fresh == (void *)0) return (void *)0;
+        if (ptr != (void *)0 && old_size != 0) memcpy(fresh, ptr, old_size);
+        return fresh;
+    }
+    /* Top of stack: consume additional bytes in place if available. */
+    if (new_size > old_size) {
+        size_t extra = new_size - old_size;
+        if (extra > a->remaining) {
+            fresh = stdlib_arena_alloc(a, new_size, align, err);
+            if (fresh == (void *)0) return (void *)0;
+            memcpy(fresh, ptr, old_size);
+            return fresh;
+        }
+        a->cursor += extra;
+        a->remaining -= extra;
+    } else {
+        a->cursor -= (old_size - new_size);
+        a->remaining += (old_size - new_size);
+    }
+    return ptr;
+}
+
+/* Monotonic free: no-op.  handle check is a diagnostic, never a deref. */
+static inline void stdlib_arena_release(stdlib_arena *a, void *ptr,
+                                        size_t size, error *err) {
+    (void)ptr; (void)size;
+    error_reset(err);
+    if (a == 0) error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                               CPLUS_EXIT_NULL_POINTER, "arena: NULL arena");
+}
+
+static inline size_t stdlib_arena_used(const stdlib_arena *a) {
+    if (a == 0 || a->first_base == 0 || a->cursor < a->first_base) return 0;
+    return (size_t)(a->cursor - a->first_base);
+}
+
+static inline void stdlib_arena_do_reset(stdlib_arena *a, error *err) {
+    error_reset(err);
+    if (a == 0) return;
+    a->block = a->first_block;
+    a->cursor = a->first_base;
+    a->remaining = a->first_capacity;
+    a->generation = stdlib_arena_next_generation();
+}
+
+static inline void stdlib_arena_destroy(stdlib_arena *a, error *err) {
+    stdlib_arena_block *b, *prev;
+    error_reset(err);
+    if (a == 0 || a->block == 0) return;
+    b = a->block;
+    /* The first buffer may be caller-owned; stop before it when !owns_first
+     * and it is a caller-embedded header.  Heap headers are always managed. */
+    while (b != (stdlib_arena_block *)0) {
+        prev = b->prev;
+        if (b->owns) cplus_release(b); /* caller-embedded header stays intact */
+        b = prev;
+    }
+    a->block = (stdlib_arena_block *)0;
+    a->cursor = (unsigned char *)0;
+    a->remaining = 0;
+    a->generation = stdlib_arena_next_generation();
+    (void)err;
+}
+
+/* Generation-safe handle query: returns 1 only when both match. */
+static inline int stdlib_arena_handle_valid(const stdlib_arena_handle *h) {
+    return h != 0 && h->arena != 0 && h->generation == h->arena->generation;
+}
+
+static inline stdlib_arena_handle stdlib_arena_mark(const stdlib_arena *a) {
+    stdlib_arena_handle h;
+    h.arena = (stdlib_arena *)a;
+    h.generation = a == 0 ? 0 : a->generation;
+    return h;
+}
+
+/* Vtable adapters used by allocator-aware containers. */
+static inline void *stdlib_arena_op_alloc(void *ctx, size_t size, size_t align) {
+    error e = error();
+    return stdlib_arena_alloc((stdlib_arena *)ctx, size, align, &e);
+}
+static inline void *stdlib_arena_op_realloc(void *ctx, void *ptr,
+                                            size_t old_size, size_t new_size,
+                                            size_t align) {
+    error e = error();
+    return stdlib_arena_realloc((stdlib_arena *)ctx, ptr, old_size,
+                                new_size, align, &e);
+}
+static inline void stdlib_arena_op_release(void *ctx, void *ptr, size_t size) {
+    error e = error();
+    stdlib_arena_release((stdlib_arena *)ctx, ptr, size, &e);
+}
+static inline void stdlib_arena_op_reset(void *ctx) {
+    error e = error();
+    stdlib_arena_do_reset((stdlib_arena *)ctx, &e);
+}
+static inline stdlib_allocator stdlib_arena_as_allocator(stdlib_arena *a) {
+    stdlib_allocator v;
+    v.ctx = (void *)a;
+    v.alloc = stdlib_arena_op_alloc;
+    v.realloc = stdlib_arena_op_realloc;
+    v.release = stdlib_arena_op_release;
+    v.reset = stdlib_arena_op_reset;
+    return v;
+}
+
+#endif /* CPLUS_STD_ARENA_HP */

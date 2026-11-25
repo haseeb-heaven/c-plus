@@ -1,0 +1,5 @@
+COMMAND: ./build/c+ --version
+C+ 0.1.0
+Language: C+ (C with memory safety, deterministic RAII, lightweight classes)
+Backend: host Clang/LLVM
+EXIT: 0

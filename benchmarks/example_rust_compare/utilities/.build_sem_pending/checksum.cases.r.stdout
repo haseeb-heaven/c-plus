@@ -1,0 +1,9 @@
+CHECKSUM selfcheck OK fnv=0x4f9f2cab crc=0xcbf43926
+CHECKSUM valid OK len=5 fnv=0x4f9f2cab crc=0x3610a686 text=hello
+CHECKSUM done
+CHECKSUM selfcheck OK fnv=0x4f9f2cab crc=0xcbf43926
+CHECKSUM oversize REFUSED code=101 cat=5 reason=input-too-long
+CHECKSUM selfcheck OK fnv=0x4f9f2cab crc=0xcbf43926
+CHECKSUM empty REFUSED code=108 cat=1 reason=empty-input
+CHECKSUM selfcheck OK fnv=0x4f9f2cab crc=0xcbf43926
+CHECKSUM usage REFUSED code=108 cat=1 reason=missing-input

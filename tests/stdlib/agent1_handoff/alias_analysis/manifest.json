@@ -1,0 +1,177 @@
+{
+  "task": "P0 Sound alias analysis",
+  "directory": "tests/stdlib/agent1_handoff/alias_analysis/",
+  "owner": "Agent 2 reproducers only (no compiler/, runtime/, header, build-script or git-index changes)",
+  "provenance": [
+    "docs/libc/AGENT1_PRIORITY_HANDOFF.md:16 — maps P0 Sound alias analysis to this directory",
+    "docs/libc/AGENT1_COMPILER_GAPS.md:220-296 — capability 3, alias/exclusivity; proposed [CPLUS-ALIAS]/[CPLUS-BORROW]; six cases accepted",
+    "docs/libc/DISPATCH_BOUNDS_HANDOFF.md — dynamic function-pointer index is UBSan-only, not C+ enforcement",
+    "docs/libc/api_status_matrix.json:818 — cplus_at_quick_exit: handler function-pointer validity is caller responsibility (thin evidence)",
+    "docs/libc/api_status_matrix.json:14386 — raw runtime-index bounds are UBSan-only"
+  ],
+  "compiler": "build/c+ (C+ 0.1.0, host Clang backend)",
+  "commands": {
+    "classified": "./build/c+ check --strict <file>",
+    "supplementary_build": "./build/c+ build --strict --sanitize=none <file> -o <tmp>/<name>.exe",
+    "supplementary_default_sanitizer_build": "./build/c+ build <file> -o <tmp>/<name>.ubsan.exe"
+  },
+  "classification_rule": "Only diagnostics containing a literal '[CPLUS-' token count as tagged C+ enforcement. REJECT = check exits nonzero with a [CPLUS- token naming the invalid operation; ACCEPT = check exits 0; PARTIAL = nonzero without a [CPLUS- token. Runtime aborts (UBSan, SIGSEGV) and untagged lowering/type errors are never enforcement.",
+  "requested_vs_runtime": {
+    "compiler_must_reject": [
+      "two_mutable_aliases.cp: [CPLUS-ALIAS] for two mutable borrows of one owner",
+      "borrow_mutate_same_expression.cp: [CPLUS-ALIAS]/[CPLUS-BORROW] for a read through the borrow overlapping a mutable method call in one expression",
+      "interior_ptr_before_mutation.cp: [CPLUS-BORROW] for an interior pointer used after a reallocating mutation",
+      "funcptr_dispatch_dynamic.cp: [CPLUS-SAFE-BOUNDS] dynamic guard before the function-pointer load",
+      "alias_through_parameter.cp: [CPLUS-ALIAS] for two aliases of one owner passed through parameters"
+    ],
+    "runtime_api_currently_refuses": "No case has a C+ runtime refusal. Cases 1, 2 and 5 run cleanly; case 3 has no stale/generation guard and exits 1 only from its own value assertion; case 4 is refused only by Clang UBSan (or SIGSEGV without the sanitizer), which is not C+ enforcement. See docs/libc/DISPATCH_BOUNDS_HANDOFF.md and api_status_matrix.json:818."
+  },
+  "cases": [
+    {
+      "file": "two_mutable_aliases.cp",
+      "scenario": "two mutable aliases to one stdlib object",
+      "requested": "REJECT",
+      "expected_tag": "[CPLUS-ALIAS]",
+      "invalid_operation": "overlapping mutable borrows 'left' and 'right' of owner 'v'",
+      "observed": {
+        "check": {
+          "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/alias_analysis/two_mutable_aliases.cp",
+          "exit": 0,
+          "stdout": "check: tests/stdlib/agent1_handoff/alias_analysis/two_mutable_aliases.cp ok\n",
+          "stderr": "",
+          "tagged_cplus": false
+        },
+        "classification": "ACCEPT",
+        "is_capability_gap": true
+      },
+      "runtime_evidence": {
+        "build_strict_no_sanitize": {"exit": 0, "stdout": "", "stderr": ""},
+        "run": {"exit": 0, "stdout": "", "stderr": "", "cplus_runtime_refusal": false}
+      },
+      "gap": "No pointer-alias/exclusivity analysis for class owners; checked methods keep the shared buffer coherent but there is no static proof."
+    },
+    {
+      "file": "borrow_mutate_same_expression.cp",
+      "scenario": "borrowed pointer and a mutable method call in the same full-expression",
+      "requested": "REJECT",
+      "expected_tag": "[CPLUS-ALIAS] / [CPLUS-BORROW]",
+      "invalid_operation": "read through 'borrow' in the argument overlapping the mutating push_back receiver on the same owner in one expression",
+      "observed": {
+        "check": {
+          "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/alias_analysis/borrow_mutate_same_expression.cp",
+          "exit": 0,
+          "stdout": "check: tests/stdlib/agent1_handoff/alias_analysis/borrow_mutate_same_expression.cp ok\n",
+          "stderr": "",
+          "tagged_cplus": false
+        },
+        "classification": "ACCEPT",
+        "is_capability_gap": true
+      },
+      "runtime_evidence": {
+        "build_strict_no_sanitize": {"exit": 0, "stdout": "", "stderr": ""},
+        "run": {"exit": 0, "stdout": "", "stderr": "", "cplus_runtime_refusal": false}
+      },
+      "gap": "No overlap detection between a borrowed pointer read and a mutable method call in one expression."
+    },
+    {
+      "file": "interior_ptr_before_mutation.cp",
+      "scenario": "interior pointer captured before a mutating operation, then used",
+      "requested": "REJECT",
+      "expected_tag": "[CPLUS-BORROW]",
+      "invalid_operation": "'p' (from string::c_str()) used after append() may reallocate the owned buffer",
+      "observed": {
+        "check": {
+          "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/alias_analysis/interior_ptr_before_mutation.cp",
+          "exit": 0,
+          "stdout": "check: tests/stdlib/agent1_handoff/alias_analysis/interior_ptr_before_mutation.cp ok\n",
+          "stderr": "",
+          "tagged_cplus": false
+        },
+        "classification": "ACCEPT",
+        "is_capability_gap": true
+      },
+      "runtime_evidence": {
+        "build_strict_no_sanitize": {"exit": 0, "stdout": "", "stderr": ""},
+        "run": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "",
+          "cplus_runtime_refusal": false,
+          "note": "exit 1 is the reproducer's own `return c == 'a' ? 0 : 1;` after reading the stale pointer, not a C+ guard; string has no stale()/generation API."
+        }
+      },
+      "gap": "No source-to-view linking for method-returned interior pointers; unlike vector::slice, string has no runtime liveness check.",
+      "discarded_probe": {
+        "original_expression": "s.data()",
+        "check": {
+          "exit": 1,
+          "stderr": "tests/stdlib/agent1_handoff/alias_analysis/interior_ptr_before_mutation.cp:16:17: error: [CPLUS-FFI] incompatible integer to pointer conversion initializing 'const char *' with an expression of type 'int'\n      const char *p = s.data(); /* interior pointer captured before mutation */\n                  ^\n"
+        },
+        "reason": "data() is a string_view method, not a string method; this is a type/FFI error, not alias enforcement. Replaced with string::c_str()."
+      }
+    },
+    {
+      "file": "funcptr_dispatch_dynamic.cp",
+      "scenario": "array of function pointers with a dynamic index (thin evidence: api_status_matrix.json:818)",
+      "requested": "REJECT",
+      "expected_tag": "[CPLUS-SAFE-BOUNDS]",
+      "invalid_operation": "subscript dispatch[cmd] with index not statically provable in [0,3) must get a C+ guard before the function-pointer load",
+      "observed": {
+        "check": {
+          "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/alias_analysis/funcptr_dispatch_dynamic.cp",
+          "exit": 0,
+          "stdout": "check: tests/stdlib/agent1_handoff/alias_analysis/funcptr_dispatch_dynamic.cp ok\n",
+          "stderr": "",
+          "tagged_cplus": false
+        },
+        "classification": "ACCEPT",
+        "is_capability_gap": true
+      },
+      "runtime_evidence": {
+        "build_strict_no_sanitize": {"exit": 0, "stdout": "", "stderr": ""},
+        "run_no_sanitize": {"exit": -11, "stdout": "", "stderr": "", "signal": "SIGSEGV", "cplus_runtime_refusal": false},
+        "build_default_sanitizer": {"exit": 0, "stdout": "", "stderr": ""},
+        "run_default_sanitizer": {
+          "exit": -6,
+          "signal": "SIGABRT",
+          "stdout": "",
+          "stderr": "tests/stdlib/agent1_handoff/alias_analysis/funcptr_dispatch_dynamic.cp:26:5: runtime error: index 5556 out of bounds for type 'handler_fn[3]' (aka 'void (*[3])(void)')\nSUMMARY: UndefinedBehaviorSanitizer: undefined-behavior tests/stdlib/agent1_handoff/alias_analysis/funcptr_dispatch_dynamic.cp:26:5 in \n",
+          "diagnostic_source": "Clang UndefinedBehaviorSanitizer, not C+",
+          "cplus_runtime_refusal": false
+        }
+      },
+      "gap": "No C+ dynamic bounds guard before the function-pointer load; api_status_matrix.json:818 records only caller responsibility for handler validity, and DISPATCH_BOUNDS_HANDOFF.md documents the UBSan-only runtime path."
+    },
+    {
+      "file": "alias_through_parameter.cp",
+      "scenario": "alias through a function parameter (interprocedural)",
+      "requested": "REJECT",
+      "expected_tag": "[CPLUS-ALIAS]",
+      "invalid_operation": "parameters 'a' and 'b' are two mutable aliases of the same owner passed from main()",
+      "observed": {
+        "check": {
+          "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/alias_analysis/alias_through_parameter.cp",
+          "exit": 0,
+          "stdout": "check: tests/stdlib/agent1_handoff/alias_analysis/alias_through_parameter.cp ok\n",
+          "stderr": "",
+          "tagged_cplus": false
+        },
+        "classification": "ACCEPT",
+        "is_capability_gap": true
+      },
+      "runtime_evidence": {
+        "build_strict_no_sanitize": {"exit": 0, "stdout": "", "stderr": ""},
+        "run": {"exit": 0, "stdout": "", "stderr": "", "cplus_runtime_refusal": false}
+      },
+      "gap": "Alias/exclusivity facts are not propagated across the function boundary."
+    }
+  ],
+  "positive_controls": [
+    "tests/stdlib/compile_time/vector_valid.cp",
+    "tests/stdlib/compile_time/vector_valid_slice.cp",
+    "tests/stdlib/compile_time/collections_valid_borrow.cp",
+    "tests/stdlib/compile_time/string_valid_basic.cp",
+    "tests/stdlib/compile_time/string_valid_view.cp"
+  ],
+  "definition_of_done": "All five cases exit nonzero from `c+ check --strict` with the named [CPLUS- tag describing the invalid operation; the positive controls remain ACCEPT with no [CPLUS- line. UBSan aborts and untagged diagnostics are not counted."
+}

@@ -1,0 +1,6 @@
+abi_fp: generating C sources in tools/abi_compare/.out/compare
+abi_fp: compile probe   : /usr/bin/clang -O2 -std=c11 -Wall -Wextra -Werror <includes> tools/abi_compare/.out/compare/abi_fp_probe.c
+abi_fp: compile json    : /usr/bin/clang -O2 -std=c11 -Wall -Wextra tools/abi_compare/.out/compare/fp_to_json.c
+abi_fp: wrote tools/abi_compare/.out/compare/fingerprint.txt (1246 records) and fingerprint.json
+abi_fp: ABI fingerprint MATCHES baseline (tests/abi/fingerprints/baseline.txt).
+abi_fp: diff is empty: tools/abi_compare/.out/compare/diff.txt

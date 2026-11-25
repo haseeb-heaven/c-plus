@@ -1,0 +1,4 @@
+sync mtx_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+sync cnd_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+sync thrd_join REFUSED join=0 result=42 double=22 (EINVAL=22)
+sync null_handles REFUSED mtx_NULL=22 cnd_NULL=22 thrd_zero=22 (EINVAL=22)

@@ -1,0 +1,1 @@
+check: tests/stdlib/agent1_handoff/strict_safe_mode/02_unchecked_malloc_with_stdlib.cp ok

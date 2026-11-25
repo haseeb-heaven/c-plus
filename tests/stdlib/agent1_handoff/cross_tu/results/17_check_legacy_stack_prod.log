@@ -1,0 +1,8 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check --legacy-c stack_producer.cp
+stack_producer.cp:6:12: warning: address of stack memory associated with local variable 'local' returned [-Wreturn-stack-address]
+    6 |     return local;
+      |            ^~~~~
+1 warning generated.
+check: stack_producer.cp ok
+
+[exit code: 0]

@@ -1,0 +1,14 @@
+
+--- stderr ---
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/negative.cp:56:78: warning: logical not is only applied to the left hand side of this comparison [-Wlogical-not-parentheses]
+   56 |     if (!error_failed_now(&err) || error_code(&err) != (int)CPLUS_EXIT_IO || !error_ok(&err) == 0)
+      |                                                                              ^               ~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/negative.cp:56:78: note: add parentheses after the '!' to evaluate the comparison first
+   56 |     if (!error_failed_now(&err) || error_code(&err) != (int)CPLUS_EXIT_IO || !error_ok(&err) == 0)
+      |                                                                              ^                   
+      |                                                                               (                  )
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/negative.cp:56:78: note: add parentheses around left hand side expression to silence this warning
+   56 |     if (!error_failed_now(&err) || error_code(&err) != (int)CPLUS_EXIT_IO || !error_ok(&err) == 0)
+      |                                                                              ^
+      |                                                                              (              )
+1 warning generated.

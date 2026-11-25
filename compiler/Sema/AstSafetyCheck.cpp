@@ -8939,7 +8939,14 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   // Keep only parse-relevant flags; sanitizer and warning-as-error flags can
   // make the in-memory AST parse fail for unrelated reasons.
   std::vector<std::string> args;
-  for (const auto &arg : backendArgs) {
+  for (size_t i = 0; i < backendArgs.size(); ++i) {
+    const auto &arg = backendArgs[i];
+    if (arg == "-isysroot") {
+      ++i; // skip the SDK path too: it is not a parse-relevant flag
+      continue;
+    }
+    if (arg.rfind("-isysroot=", 0) == 0)
+      continue;
     if (arg.rfind("-I", 0) == 0 || arg.rfind("-D", 0) == 0 ||
         arg.rfind("-std=", 0) == 0)
       args.push_back(arg);

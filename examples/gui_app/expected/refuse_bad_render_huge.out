@@ -1,0 +1,2 @@
+GUI_REFUSED tag=bad-render-huge category=2 code=101 message=gui_app: window dimensions exceed GUI_MAX_DIM
+GUI_RESULT refuse bad-render-huge REFUSED 101

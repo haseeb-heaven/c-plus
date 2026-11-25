@@ -1,0 +1,11 @@
+Usage: xdump [-h] [-v] [-s OFFSET] [-n LENGTH] [-w COUNT] [-g SIZE] [FILE...]
+
+Options:
+  -h         display this help and exit
+  -v         output version information and exit
+  -s OFFSET  skip OFFSET bytes from the beginning of the input
+  -n LENGTH  interpret only LENGTH bytes of input
+  -w COUNT   print COUNT hex per line
+  -g SIZE    group output into SIZE-hex groups
+
+Report bugs to <https://github.com/xfgusta/xdump/issues>

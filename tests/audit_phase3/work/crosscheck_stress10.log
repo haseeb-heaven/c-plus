@@ -1,0 +1,22 @@
+===== 01_class_this_destructor (run) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+===== 02_resource_early_return (run) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+===== 03_managed_len (run) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+===== 04_stdlib_string_vector (run) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+===== 05_range_countof_auto (run) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+===== 06_real_c_compatibility (run) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+===== 07_defer_nested_returns (run) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+===== 08_reject_resource_copy (compile_fail) =====
+PASS: expected rejection (status 1)
+===== 09_reject_borrow_escape (compile_fail) =====
+PASS: expected rejection (status 1)
+===== 10_trap_double_free (runtime_fail) =====
+FAIL: build rejected (exit 1); 5 errors generated. error: failed to compile instrumented C+ runtime 
+
+SUMMARY: 2 passed, 8 failed (10 total)

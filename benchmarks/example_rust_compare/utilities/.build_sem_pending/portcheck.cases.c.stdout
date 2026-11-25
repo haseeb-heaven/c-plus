@@ -1,0 +1,15 @@
+PORT v_min VALID 0
+PORT v_max VALID 65535
+PORT v_https VALID 443
+PORT h_negative REFUSED 108 invalid non-digit
+PORT h_too_big REFUSED 101 bounds overflow
+PORT h_huge REFUSED 101 bounds too-long
+PORT h_not_num REFUSED 108 invalid non-digit
+PORT h_trailing REFUSED 108 invalid non-digit
+PORT h_empty REFUSED 108 invalid empty
+PORT h_plus REFUSED 108 invalid non-digit
+PORT h_space REFUSED 108 invalid non-digit
+PORT h_leading_zero REFUSED 108 invalid leading-zero
+PORT argv VALID 8080
+PORT argv REFUSED 101 bounds overflow
+PORT_SUMMARY 14 4 10 0

@@ -1,0 +1,15 @@
+=== allocator boundary symbol evidence ===
+CMD: /usr/bin/nm -gU /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build-verify-1123/libcplus_runtime.a
+0000000000000594 T _cplus_alloc
+00000000000009a0 T _cplus_zalloc
+0000000000000a14 T _cplus_alloc_array
+0000000000000bd4 T _cplus_realloc
+0000000000000d20 T _cplus_release
+0000000000001220 T _cplus_alloc_bytes
+000000000000132c T _cplus_alloc_count
+CMD: /usr/bin/nm -gU build/libc/libcplus_hardened.a
+0000000000000354 T _cplus_malloc
+0000000000000554 T _cplus_realloc
+0000000000000acc T _cplus_free
+0000000000000bd8 T _cplus_alloc_get_meta
+00000000000011f4 T _cplus_transfer_ownership

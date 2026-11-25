@@ -1,0 +1,189 @@
+{
+  "task": "P1 Strict-safe mode — reject operations without proven safety",
+  "status": "report-only; no compiler/runtime/header/build files modified",
+  "generated_utc": "2026-11-23T00:14:36Z",
+  "repo": {
+    "name": "c-plus-stdlib",
+    "branch": "agent/modern-stdlib",
+    "head": "a90b69c"
+  },
+  "tool": {
+    "binary": "./build/c+",
+    "version": "C+ 0.1.0",
+    "backend": "Apple clang version 16.0.0 (clang-1600.0.26.6), arm64-apple-darwin27.2.0",
+    "path_prefix": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
+  },
+  "commands": {
+    "strict": "./build/c+ check --strict <case>",
+    "default": "./build/c+ check --default <case>"
+  },
+  "counting_rule": "Only diagnostics containing a literal '[CPLUS-' token count as tagged C+ enforcement (docs/libc/AGENT1_COMPILER_GAPS.md §0). An untagged rejection is PARTIAL, not a strict-safe pass. A proven error (both modes reject) is distinct from an unverified operation (default warns / strict must reject).",
+  "definition_of_reject_without_proven_safety": "Strict-safe mode must reject at compile time (non-zero exit from 'c+ check --strict' with a [CPLUS-...] diagnostic) any operation whose safety the compiler cannot prove from translation-unit facts: (1) raw pointer arithmetic/deref whose address is not proven within a live object's extent; (2) an allocation of foreign provenance (raw malloc) used with a checked stdlib API; (3) a bounded-wrapper dmax/smax that is not a proven upper bound or derived from tracked capacity metadata; (4) a raw FILE* operation not routed through the managed wrapper; (5) a void* to typed pointer cast whose type/extent is not justified by provenance; (6) an indirect call whose target is not a known direct callee or a provably in-range table entry. DEFAULT may warn; STRICT fails closed. Contract: ../c-plus-core/compiler/Driver/Driver.h:67-69 and AstSafetyCheck.cpp:2159-2161.",
+  "summary": {
+    "matrix_cases": 6,
+    "rejected_in_strict": 0,
+    "tagged_cplus_diagnostics_in_strict": 0,
+    "strict_default_delta_cases": 0,
+    "control_confirms_strict_is_live": true,
+    "conclusion": "All six unverified operations are accepted identically by --strict and --default (rc=0, no [CPLUS- diagnostics, no warnings). This is the P1 capability gap. A positive control (non-literal printf format) shows strict does fail closed on a documented unverified op, so the flag is not a no-op."
+  },
+  "raw_evidence_convention": "For each case, exact stdout/stderr/exit are stored in <stem>.strict.stdout, <stem>.strict.stderr, <stem>.strict.rc and <stem>.default.stdout, <stem>.default.stderr, <stem>.default.rc in this directory. The strings below are verbatim copies of those files.",
+  "cases": [
+    {
+      "id": "01",
+      "file": "01_raw_ptr_arithmetic.cp",
+      "operation": "raw pointer arithmetic on a stdlib object (string_view::data() + 100 deref)",
+      "strict": {
+        "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/strict_safe_mode/01_raw_ptr_arithmetic.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/01_raw_ptr_arithmetic.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "default": {
+        "command": "./build/c+ check --default tests/stdlib/agent1_handoff/strict_safe_mode/01_raw_ptr_arithmetic.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/01_raw_ptr_arithmetic.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "rejected_in_strict": false,
+      "delta": "none: identical accept and output in both modes"
+    },
+    {
+      "id": "02",
+      "file": "02_unchecked_malloc_with_stdlib.cp",
+      "operation": "unchecked raw malloc used with a stdlib API (cplus_memset_s on raw malloc block with unproven capacity)",
+      "strict": {
+        "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/strict_safe_mode/02_unchecked_malloc_with_stdlib.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/02_unchecked_malloc_with_stdlib.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "default": {
+        "command": "./build/c+ check --default tests/stdlib/agent1_handoff/strict_safe_mode/02_unchecked_malloc_with_stdlib.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/02_unchecked_malloc_with_stdlib.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "rejected_in_strict": false,
+      "delta": "none: identical accept and output in both modes"
+    },
+    {
+      "id": "03",
+      "file": "03_unproven_capacity_bounded.cp",
+      "operation": "unproven capacity passed to a bounded wrapper (cplus_memcpy_s with caller-parameter dmax/smax)",
+      "strict": {
+        "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/strict_safe_mode/03_unproven_capacity_bounded.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/03_unproven_capacity_bounded.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "default": {
+        "command": "./build/c+ check --default tests/stdlib/agent1_handoff/strict_safe_mode/03_unproven_capacity_bounded.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/03_unproven_capacity_bounded.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "rejected_in_strict": false,
+      "delta": "none: identical accept and output in both modes"
+    },
+    {
+      "id": "04",
+      "file": "04_raw_file_outside_wrapper.cp",
+      "operation": "raw FILE* operation outside the file wrapper (fopen/fread/fclose with caller-supplied length)",
+      "strict": {
+        "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/strict_safe_mode/04_raw_file_outside_wrapper.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/04_raw_file_outside_wrapper.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "default": {
+        "command": "./build/c+ check --default tests/stdlib/agent1_handoff/strict_safe_mode/04_raw_file_outside_wrapper.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/04_raw_file_outside_wrapper.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "rejected_in_strict": false,
+      "delta": "none: identical accept and output in both modes"
+    },
+    {
+      "id": "05",
+      "file": "05_void_ptr_cast.cp",
+      "operation": "cast from void* to typed pointer (stdlib_alloc void* cast to int* and subscripted)",
+      "strict": {
+        "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/strict_safe_mode/05_void_ptr_cast.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/05_void_ptr_cast.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "default": {
+        "command": "./build/c+ check --default tests/stdlib/agent1_handoff/strict_safe_mode/05_void_ptr_cast.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/05_void_ptr_cast.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "rejected_in_strict": false,
+      "delta": "none: identical accept and output in both modes"
+    },
+    {
+      "id": "06",
+      "file": "06_func_ptr_call.cp",
+      "operation": "function-pointer call with unproven target (table[volatile cmd]() indirect call)",
+      "strict": {
+        "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/strict_safe_mode/06_func_ptr_call.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/06_func_ptr_call.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "default": {
+        "command": "./build/c+ check --default tests/stdlib/agent1_handoff/strict_safe_mode/06_func_ptr_call.cp",
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/06_func_ptr_call.cp ok\n",
+        "stderr": "",
+        "tagged_cplus_diagnostic": false
+      },
+      "rejected_in_strict": false,
+      "delta": "none: identical accept and output in both modes"
+    }
+  ],
+  "control": {
+    "id": "C",
+    "file": "00_control_strict_delta.cp",
+    "purpose": "Positive control proving --strict is wired up: a documented unverified operation (non-literal printf format) that warns in DEFAULT and fails closed in STRICT.",
+    "strict": {
+      "command": "./build/c+ check --strict tests/stdlib/agent1_handoff/strict_safe_mode/00_control_strict_delta.cp",
+      "exit": 1,
+      "stdout": "",
+      "stderr": "tests/stdlib/agent1_handoff/strict_safe_mode/00_control_strict_delta.cp:11:5: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n      printf(fmt, 42);   /* non-literal format: warn (default) / error (strict) */\n      ^~~~~~\n",
+      "tagged_cplus_diagnostic": true,
+      "tag": "CPLUS-FFI"
+    },
+    "default": {
+      "command": "./build/c+ check --default tests/stdlib/agent1_handoff/strict_safe_mode/00_control_strict_delta.cp",
+      "exit": 0,
+      "stdout": "check: tests/stdlib/agent1_handoff/strict_safe_mode/00_control_strict_delta.cp ok\n",
+      "stderr": "tests/stdlib/agent1_handoff/strict_safe_mode/00_control_strict_delta.cp:11:5: warning: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n      printf(fmt, 42);   /* non-literal format: warn (default) / error (strict) */\n      ^~~~~~\n",
+      "tagged_cplus_diagnostic": true,
+      "tag": "CPLUS-FFI"
+    },
+    "rejected_in_strict": true,
+    "delta": "strict: error + exit 1; default: warning + exit 0"
+  },
+  "cross_references": [
+    "docs/libc/AGENT1_COMPILER_GAPS.md §0 (tagged [CPLUS- diagnostic counting rule)",
+    "../c-plus-core/compiler/Driver/Driver.h:67-69 (DEFAULT vs STRICT contract)",
+    "../c-plus-core/compiler/Sema/AstSafetyCheck.cpp:2159-2161 (warnAt promotes warning to error under strict)",
+    "docs/libc/DISPATCH_BOUNDS_HANDOFF.md (case 06 dynamic function-pointer index shape)",
+    "docs/libc/ADVERSARIAL_FINDINGS.md and docs/libc/IMPLEMENTATION_PLAN.md (raw-C UB/provenance/unknown-capacity gap family)"
+  ]
+}

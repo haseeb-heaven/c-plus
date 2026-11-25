@@ -1,0 +1,4 @@
+./stdlib/web.hp:72:9: warning: allocation 's' leaks on this return path (no matching free)
+      }
+help: free/close the resource on every return path, or use a C+ managed allocation
+clang: warning: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

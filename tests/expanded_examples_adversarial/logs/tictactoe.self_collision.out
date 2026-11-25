@@ -1,0 +1,15 @@
+tictactoe: illegal move: cell out of range or already occupied
+TICTACTOE players=X:fixed,O:fixed moves= 2
+INITIAL
+  . | . | .
+  --+---+--
+  . | . | .
+  --+---+--
+  . | . | .
+STEP 1 X cell=0 pos=(0,0)
+  X | . | .
+  --+---+--
+  . | . | .
+  --+---+--
+  . | . | .
+ILLEGAL step=2 player=O cell=0

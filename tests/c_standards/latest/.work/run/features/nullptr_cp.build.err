@@ -1,0 +1,8 @@
+tests/c_standards/latest/.work/run/features/nullptr.c:4:12: error: [CPLUS-FFI] C23 nullptr is not supported; use NULL
+    int *p = nullptr; printf("pnull=%d\n", p == nullptr);
+             ^~~~~~~
+help: use C+ managed allocations and cplus_* helpers
+tests/c_standards/latest/.work/run/features/nullptr.c:4:47: error: [CPLUS-FFI] C23 nullptr is not supported; use NULL
+    int *p = nullptr; printf("pnull=%d\n", p == nullptr);
+                                                ^~~~~~~
+help: use C+ managed allocations and cplus_* helpers

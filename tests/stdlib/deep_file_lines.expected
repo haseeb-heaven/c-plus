@@ -1,0 +1,15 @@
+ok normal-line 0 alpha
+ok overlong -1 5 
+ok aligned 0 beta
+ok eof 1
+ok one-byte-progress 2 2 1
+ok borrowed-close 1
+ok overlong-eof -1 5 
+ok after-overlong-eof 1
+ok exact-fit 0 123456
+ok crlf 0 crlf
+ok null-handle -1 3
+ok null-buffer -1 108
+ok zero-length -1
+ok oversized-length -1 5
+deep-file-lines PASS 0

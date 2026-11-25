@@ -1,0 +1,20 @@
+CACHE max= 8 payload= 8 derived= asset_01
+LOAD id= tex slot= 0
+LOAD id= snd slot= 1
+LOAD id= asset_01 slot= 2
+REFUSE duplicate-load ok= 0 category= invalid code= 106 msg= asset id is already loaded
+ACQUIRE id= tex handle= 1 refs= 1
+ACQUIRE id= tex handle= 2 refs= 2
+REFUSE stale-handle ok= 0 category= lifecycle code= 103 msg= stale handle generation
+USE id= tex byte0= 3
+RELEASE id= tex handle= 2 refs= 1
+UNLOAD id= tex slot= 0
+REFUSE double-release ok= 0 category= lifecycle code= 103 msg= double release
+REFUSE use-after-release ok= 0 category= lifecycle code= 103 msg= use after release
+REFUSE not-loaded ok= 0 category= invalid code= 106 msg= asset id is not loaded
+REFUSE unknown-id ok= 0 category= invalid code= 106 msg= asset id is not loaded
+LOAD id= tex slot= 3
+ACQUIRE id= tex handle= 49 refs= 1
+USE id= tex byte0= 3
+UNLOAD id= tex slot= 3
+SUMMARY used= 4 index= 2

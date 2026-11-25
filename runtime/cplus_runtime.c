@@ -1169,7 +1169,10 @@ void cplus_scope_cleanup(cplus_scope *scope) {
   scope->head = NULL;
   while (c) {
     cplus_cleanup *next = c->next;
-    if (c->ptr && c->drop) {
+    /* MANAGED cleanups release via cplus_release() and legitimately carry a
+     * NULL drop callback; requiring c->drop skipped them entirely, hiding a
+     * double-managed release (EDGE100 runtime finding). */
+    if (c->ptr && (c->drop || c->kind == CPLUS_CLEANUP_MANAGED)) {
       if (c->kind == CPLUS_CLEANUP_MANAGED)
         cplus_release(c->ptr);
       else
@@ -1293,67 +1296,124 @@ void cplus_tls_free(void *s) { (void)s; }
  * without a format string.
  * ------------------------------------------------------------------------- */
 
-static cplus_print_state cplus_print_line = {1};
+/* Each `print(...)` invocation owns one output buffer. Values are appended to
+ * it and flushed by cplus_print_end(), so arguments evaluated while printing
+ * can never interleave with this invocation's own output. The buffer grows on
+ * demand (no silent truncation); if growth fails, the pending bytes and the
+ * new chunk are written directly, which preserves data at the cost of the
+ * interleaving guarantee in that out-of-memory case. */
+#define CPLUS_PRINT_MAX_DEPTH 64
 
-static void cplus_print_separator(void) {
-  if (cplus_print_line.first)
-    cplus_print_line.first = 0;
-  else
-    putchar(' ');
+static char *cplus_print_buf[CPLUS_PRINT_MAX_DEPTH];
+static size_t cplus_print_cap[CPLUS_PRINT_MAX_DEPTH];
+static size_t cplus_print_len[CPLUS_PRINT_MAX_DEPTH];
+static int cplus_print_first[CPLUS_PRINT_MAX_DEPTH];
+static int cplus_print_depth = 0;
+
+void cplus_print_begin(void) {
+  if (cplus_print_depth < CPLUS_PRINT_MAX_DEPTH) {
+    int d = cplus_print_depth++;
+    cplus_print_len[d] = 0;
+    cplus_print_first[d] = 1;
+  }
+}
+
+static void cplus_print_append(int d, const char *text, size_t n) {
+  if (n == 0)
+    return;
+  if (cplus_print_len[d] + n + 1 > cplus_print_cap[d]) {
+    size_t want = cplus_print_len[d] + n + 1;
+    size_t cap = cplus_print_cap[d] ? cplus_print_cap[d] : 128;
+    char *grown;
+    while (cap < want) {
+      if (cap > (size_t)-1 / 2) { cap = want; break; }
+      cap *= 2;
+    }
+    grown = (char *)realloc(cplus_print_buf[d], cap);
+    if (!grown) {
+      /* Last-resort direct write: never drop caller data silently. */
+      if (cplus_print_len[d] > 0)
+        fwrite(cplus_print_buf[d], 1, cplus_print_len[d], stdout);
+      cplus_print_len[d] = 0;
+      fwrite(text, 1, n, stdout);
+      return;
+    }
+    cplus_print_buf[d] = grown;
+    cplus_print_cap[d] = cap;
+  }
+  memcpy(cplus_print_buf[d] + cplus_print_len[d], text, n);
+  cplus_print_len[d] += n;
+  cplus_print_buf[d][cplus_print_len[d]] = '\0';
+}
+
+void cplus_print_end(void) {
+  if (cplus_print_depth > 0) {
+    int d = cplus_print_depth - 1;
+    if (cplus_print_len[d] > 0) {
+      fwrite(cplus_print_buf[d], 1, cplus_print_len[d], stdout);
+    }
+    putchar('\n');
+    cplus_print_len[d] = 0;
+    cplus_print_first[d] = 1;
+    --cplus_print_depth;
+  }
 }
 
 void cplus_print_value(cplus_print_kind kind, ...) {
   cplus_log(CPLUS_LOG_TRACE, "cplus_print_value kind=%d", (int)kind);
+  int d = cplus_print_depth > 0 ? cplus_print_depth - 1 : 0;
   va_list ap;
   va_start(ap, kind);
-  cplus_print_separator();
-
+  if (!cplus_print_first[d])
+    cplus_print_append(d, " ", 1);
+  cplus_print_first[d] = 0;
+  char numbuf[64];
   switch (kind) {
   case CPLUS_PRINT_INT:
-    printf("%d", va_arg(ap, int));
+    snprintf(numbuf, sizeof(numbuf), "%d", va_arg(ap, int));
     break;
   case CPLUS_PRINT_UINT:
-    printf("%u", va_arg(ap, unsigned int));
+    snprintf(numbuf, sizeof(numbuf), "%u", va_arg(ap, unsigned int));
     break;
   case CPLUS_PRINT_LONG:
-    printf("%ld", va_arg(ap, long));
+    snprintf(numbuf, sizeof(numbuf), "%ld", va_arg(ap, long));
     break;
   case CPLUS_PRINT_ULONG:
-    printf("%lu", va_arg(ap, unsigned long));
+    snprintf(numbuf, sizeof(numbuf), "%lu", va_arg(ap, unsigned long));
     break;
   case CPLUS_PRINT_LLONG:
-    printf("%lld", va_arg(ap, long long));
+    snprintf(numbuf, sizeof(numbuf), "%lld", va_arg(ap, long long));
     break;
   case CPLUS_PRINT_ULLONG:
-    printf("%llu", va_arg(ap, unsigned long long));
+    snprintf(numbuf, sizeof(numbuf), "%llu", va_arg(ap, unsigned long long));
     break;
   case CPLUS_PRINT_DOUBLE:
-    printf("%g", va_arg(ap, double));
+    snprintf(numbuf, sizeof(numbuf), "%g", va_arg(ap, double));
     break;
   case CPLUS_PRINT_LDOUBLE:
-    printf("%Lg", va_arg(ap, long double));
+    snprintf(numbuf, sizeof(numbuf), "%Lg", va_arg(ap, long double));
     break;
   case CPLUS_PRINT_CHAR:
-    printf("%c", (char)va_arg(ap, int));
+    snprintf(numbuf, sizeof(numbuf), "%c", (char)va_arg(ap, int));
     break;
   case CPLUS_PRINT_BOOL:
-    printf("%s", va_arg(ap, int) ? "true" : "false");
+    snprintf(numbuf, sizeof(numbuf), "%s", va_arg(ap, int) ? "true" : "false");
     break;
   case CPLUS_PRINT_STR: {
     const char *text = va_arg(ap, const char *);
-    fputs(text ? text : "(null)", stdout);
-    break;
+    /* Append strings directly: they can be arbitrarily long, unlike the
+     * numeric scratch buffer below. */
+    cplus_print_append(d, text ? text : "(null)",
+                       text ? strlen(text) : 7u);
+    va_end(ap);
+    return;
   }
   default:
-    fputs("<unprintable>", stdout);
+    snprintf(numbuf, sizeof(numbuf), "%s", "<unprintable>");
     break;
   }
   va_end(ap);
-}
-
-void cplus_print_end(void) {
-  putchar('\n');
-  cplus_print_line.first = 1;
+  cplus_print_append(d, numbuf, strlen(numbuf));
 }
 
 static const char *cplus_scan_type_name(size_t size, int is_unsigned) {

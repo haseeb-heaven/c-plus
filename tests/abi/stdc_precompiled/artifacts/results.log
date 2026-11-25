@@ -1,0 +1,83 @@
+=== stdc_precompiled: precompiled standard-C library ABI proof ===
+date_utc=2026-11-23T06:19:03Z
+arch=arm64 os=Darwin
+PATH=/usr/bin:/bin
+Apple clang version 16.0.0 (clang-1600.0.26.6)
+Target: arm64-apple-darwin27.2.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+support: SAFECRT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a sha256=d64b6bf1f0c7e40b9453e16f8d7b27eb72bb1c27b04852779c6cf46f6007e154
+support: HARDENED=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a sha256=fa80fac8fd79c3bd27194ff3664192fb6714917f7b90042048b84218490a32b2
+==========================================================
+-- stage 1: compile legacy.c exactly once and archive --
+CMD[lib_compile]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/legacy.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/stdc_legacy.o
+RC[lib_compile]=0
+--- stdout[lib_compile] ---
+--- stderr[lib_compile] ---
+CMD[lib_archive]: /usr/bin/ar rcs /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/libstdc_legacy.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/stdc_legacy.o
+RC[lib_archive]=0
+--- stdout[lib_archive] ---
+--- stderr[lib_archive] ---
+SHA256[stdc_legacy.o]=57ec4966a559090df3370f2137e49d2a0d0692875aedb1cd24761f3b02e0c1a1  <-- bit-reproducible object baseline
+SHA256[libstdc_legacy.a]=f1a181cf73e063e7764e386a0db4ef0c3135239d55c4ab0d42ece07363b60e7a  <-- baseline (ar embeds a timestamp)
+-- stage 2: build callers against the SAME saved archive --
+PRE-LINK sha256(libstdc_legacy.a)=f1a181cf73e063e7764e386a0db4ef0c3135239d55c4ab0d42ece07363b60e7a
+PRE-LINK sha256(stdc_legacy.o)=57ec4966a559090df3370f2137e49d2a0d0692875aedb1cd24761f3b02e0c1a1
+PASS archive unchanged before links
+PASS object unchanged before links
+CMD[build_plain]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/caller.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/libstdc_legacy.a -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/app_plain
+RC[build_plain]=0
+--- stdout[build_plain] ---
+--- stderr[build_plain] ---
+CMD[build_safe]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/stdlib/safe -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/safeclib/include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/intel-safestringlib/include -include stdlib/safe/safe_c.h /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/caller.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/libstdc_legacy.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a -lm -pthread -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/app_safe
+RC[build_safe]=0
+--- stdout[build_safe] ---
+--- stderr[build_safe] ---
+CMD[build_negative]: /usr/bin/clang -O2 -std=c11 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/stdlib/safe -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/safeclib/include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/intel-safestringlib/include -include stdlib/safe/safe_c.h /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/negative.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/libstdc_legacy.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/safe/libcplus_safecrt.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/libc/libcplus_hardened.a -lm -pthread -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/stdc_precompiled/artifacts/negative_safe
+RC[build_negative]=0
+--- stdout[build_negative] ---
+--- stderr[build_negative] ---
+POST-LINK sha256(libstdc_legacy.a)=f1a181cf73e063e7764e386a0db4ef0c3135239d55c4ab0d42ece07363b60e7a
+POST-LINK sha256(stdc_legacy.o)=57ec4966a559090df3370f2137e49d2a0d0692875aedb1cd24761f3b02e0c1a1
+PASS archive unchanged after all links
+PASS object unchanged after all links
+-- stage 3: run both valid callers with identical inputs (20 22) --
+RUN[app_plain] rc=0 argv=[20 22]
+--- stdout[app_plain] ---
+caller: version=11
+caller: mul=440
+caller: sum=36
+caller: copy_equal=1
+caller: label=stdc-legacy-ok
+caller: END
+--- stderr[app_plain] ---
+RUN[app_safe] rc=0 argv=[20 22]
+--- stdout[app_safe] ---
+caller: version=11
+caller: mul=440
+caller: sum=36
+caller: copy_equal=1
+caller: label=stdc-legacy-ok
+caller: END
+--- stderr[app_safe] ---
+RUN[negative_safe] rc=70 argv=[]
+--- stdout[negative_safe] ---
+negative: lib_version=11 lib_mul=42 lib_sum=294
+negative: valid_copy=ok small0=O
+--- stderr[negative_safe] ---
+[CPLUS-SAFE] memcpy_s: buffer overflow refused (requested 64 > capacity 8, ESNOSPC 406)
+PASS app_plain exit 0
+PASS app_safe exit 0
+PASS stdout byte-identical (plain vs safe, cmp -s)
+stdout sha256 plain=2919b20d948858a07cf17c107af894cf47b9a463dd19e822b5c815ab98ae7d64
+stdout sha256 safe =2919b20d948858a07cf17c107af894cf47b9a463dd19e822b5c815ab98ae7d64
+PASS negative_safe exit 70 (refusal)
+PASS negative stderr reports ESNOSPC refusal
+PASS negative stderr names ESNOSPC 406
+PASS negative stdout shows unchanged C library was called
+PASS negative overflow refused before UNEXPECTED line
+----
+exit codes: app_plain=0 app_safe=0 negative_safe=70
+failures=0
+CONCLUSION: caller-side -include safe_c.h is compile-time macro mapping;
+            NO rebuild of the precompiled C library is needed; ABI unchanged.

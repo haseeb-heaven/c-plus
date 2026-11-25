@@ -1,0 +1,6 @@
+# Generated evidence / build artifacts for the FUZZ10K thread_async harness.
+scenarios.log
+run.stdout.log
+run.stderr.log
+fuzz10k_thread_async.bin
+*.bin

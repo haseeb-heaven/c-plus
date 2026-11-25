@@ -1,0 +1,34 @@
+/* PID-unique temp path generator for C+ system tests.
+ *
+ * The PID component makes a path unique across concurrent test processes;
+ * the caller-supplied tag distinguishes different paths inside one process.
+ * An optional numeric ordinal supports several same-tag paths in one process.
+ * No variable division or modulo is involved.
+ */
+#ifndef CPLUS_SYS_SAFETY_TEMP_PATH_HP
+#define CPLUS_SYS_SAFETY_TEMP_PATH_HP
+
+#include <stdio.h>
+#include <unistd.h>
+#include <stddef.h>
+
+/* Writes "/tmp/cplus-ss-<pid>-<tag>" into buf using snprintf (safe truncate).
+ * Returns snprintf's would-have-been-written length, or -1 on bad arguments. */
+static inline int ss_temp_path(char *buf, size_t cap, const char *tag) {
+    const char *safe_tag = (tag != (const char *)0) ? tag : "x";
+    if (buf == (char *)0 || cap == 0)
+        return -1;
+    return snprintf(buf, cap, "/tmp/cplus-ss-%ld-%s", (long)getpid(), safe_tag);
+}
+
+/* As above with an extra "-<ordinal>" suffix. */
+static inline int ss_temp_path_n(char *buf, size_t cap, const char *tag,
+                                 unsigned int ordinal) {
+    const char *safe_tag = (tag != (const char *)0) ? tag : "x";
+    if (buf == (char *)0 || cap == 0)
+        return -1;
+    return snprintf(buf, cap, "/tmp/cplus-ss-%ld-%s-%u", (long)getpid(),
+                    safe_tag, ordinal);
+}
+
+#endif /* CPLUS_SYS_SAFETY_TEMP_PATH_HP */

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1387" height="210" viewBox="0 0 1387 210">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">gui_app (windows)</text>
+  <text class="sub" x="84" y="48">GUI widget / layout app  |  exit=0</text>
+  <text class="sub" x="84" y="68">run: PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin timeout -k 5 90 highball run -v /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/proof/real_...</text>
+  <rect y="84" width="100%" height="68" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">GUI_REFUSED tag=describe:0,0,0 category=1 code=108 message=describe: missing or invalid arguments</text>
+  <text class="body" xml:space="preserve" x="20" y="134">GUI_RESULT describe:0,0,0 <tspan class="refused">REFUSED</tspan> 108</text>
+  <rect y="152" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="174">Verbatim captured terminal output for gui_app on windows — evidence for the recorded host/toolchain only; not a memory-safety proof.</text>
+  <text class="disclaimer" x="20" y="194">rendered terminal output from a real captured run — not a fabricated GUI capture</text>
+  <desc>Verbatim captured output:
+    GUI_REFUSED tag=describe:0,0,0 category=1 code=108 message=describe: missing or invalid arguments
+    GUI_RESULT describe:0,0,0 REFUSED 108
+    [toolchain: real Windows PE via Highball / Wine engine x64-crossover26.3-r27 (-v verbose required)]
+  </desc>
+</svg>

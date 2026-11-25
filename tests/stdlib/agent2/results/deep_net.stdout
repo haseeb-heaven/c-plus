@@ -1,0 +1,15 @@
+SCENARIO port_ephemeral_zero 0
+SCENARIO port_65535 0
+SCENARIO port_invalid_range 1
+SCENARIO bind_in_use_fork 1
+SCENARIO borrow_no_close_012 0
+SCENARIO borrow_ge3_no_close 0
+SCENARIO write_broken_pipe 1
+SCENARIO eof_exact 0
+SCENARIO partial_write_short 0
+SCENARIO invalid_handles 1
+SCENARIO fault_write_no_progress 1
+SCENARIO fault_read_retry 0
+SCENARIO fault_socket_emfile 1
+SCENARIO no_fd_leak 0
+SUMMARY 8 6 0 0

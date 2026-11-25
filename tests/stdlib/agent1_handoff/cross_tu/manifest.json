@@ -1,0 +1,117 @@
+{
+  "suite": "agent1_handoff/cross_tu",
+  "priority": "P1",
+  "topic": "Cross-translation-unit analysis",
+  "handoff_source": "docs/libc/AGENT1_PRIORITY_HANDOFF.md",
+  "scope": "fixtures and observations only; no compiler/runtime/header edits, no commits",
+  "environment": {
+    "cwd": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent1_handoff/cross_tu",
+    "repo_root": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib",
+    "compiler_env": "CPLUS_BIN",
+    "compiler_default": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+",
+    "CPLUS_ROOT": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib",
+    "CPLUS_ROOT_reason": "Without it, header lookup falls back to ../c-plus-core/stdlib/string.hp (String/StringView API) and case A fails to compile with 'unknown type name string_view'.",
+    "driver": "sh run.sh",
+    "logs": "results/<step>.log (each log contains the exact command, combined stdout/stderr, and exit code)",
+    "output_field": "the 'output' of each step below is the compiler's combined stdout/stderr only; run.sh logs add a '$ command' header and a blank line plus '[exit code: N]' trailer around it"
+  },
+  "driver_limitation": {
+    "statement": "The driver accepts multiple inputs but checks them independently; there is no cross-TU semantic state.",
+    "evidence": "compiler/Driver/Driver.cpp::runDriver creates a fresh DiagnosticEngine per input and calls clearExternalClasses() at the top of each loop iteration; preprocessModernHeaders also receives a fresh processedHeaders map per TU. c+ build lowers/compiles each TU separately and only links the resulting object files.",
+    "observed": "Step 06 and step 13 print one independent 'check: ... ok' per TU; no diagnostic is emitted where the TUs meet."
+  },
+  "expected": "REJECT or WARNING at compile or link for cases A and B; a tagged [CPLUS-BORROW]/[CPLUS-LIFETIME] diagnostic naming the escaping borrow or cross-TU use-after-free.",
+  "cases": [
+    {
+      "id": "A",
+      "name": "borrowed view returned by another TU",
+      "files": ["owner.hp", "producer.cp", "consumer.cp"],
+      "invalid_operation": "producer.cp returns local.to_view() for a local string whose buffer is freed at scope exit; consumer.cp reads the view with no owner visible.",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "observed_steps": [1, 2, 3, 4, 5, 6, 7],
+      "tagged_diagnostic": "",
+      "note": "check rc=0, check --strict rc=0, two-TU check rc=0, build/link rc=0; zero diagnostics. Observable but undefined behaviour: linked binary prints 'view size 17' and exits 0."
+    },
+    {
+      "id": "B",
+      "name": "release in one TU, extern-pointer use in another",
+      "files": ["shared.hp", "dropper.cp", "user.cp"],
+      "invalid_operation": "dropper.cp releases the heap resource; user.cp subscripts the extern pointer after calling the release function defined in the other TU.",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "observed_steps": [8, 9, 10, 11, 12, 13, 14],
+      "tagged_diagnostic": "",
+      "note": "check rc=0, check --strict rc=0, two-TU check rc=0, build/link rc=0; zero diagnostics. Linked binary exits 6 on this host (5/5 runs) after reading freed memory; that byte is UB, not a stable result."
+    },
+    {
+      "id": "B-control",
+      "name": "same alloc/release/subscript sequence in one TU",
+      "files": ["single_tu_control.cp"],
+      "expect": "REJECT",
+      "observed": "REJECT",
+      "observed_steps": [15],
+      "tagged_diagnostic": "[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer",
+      "note": "Positive control proving the checker works when the release and the use are in one TU. Isolates the gap to visibility across TU boundaries (and also across function calls, see notes)."
+    },
+    {
+      "id": "C",
+      "name": "borrowed pointer to a stack local (backend-only signal)",
+      "files": ["stack_owner.hp", "stack_producer.cp", "stack_consumer.cp"],
+      "invalid_operation": "stack_producer.cp returns the address of a stack local; stack_consumer.cp uses it.",
+      "expect": "REJECT",
+      "observed": "REJECT_IN_SAFE_MODE_WARNING_IN_LEGACY_C",
+      "observed_steps": [16, 17, 18],
+      "tagged_diagnostic": "",
+      "note": "Untagged Clang -Wreturn-stack-address in the producer TU only (Safe: rc=1 with -Werror; --legacy-c: rc=0 plus a warning). Consumer TU checks clean. Under the AGENT1_COMPILER_GAPS.md section 0 counting rule this is PARTIAL, not tagged C+ enforcement."
+    }
+  ],
+  "steps": [
+    {"n": 1, "argv": ["$CPLUS_BIN", "check", "owner.hp"], "exit_code": 0, "output": "check: owner.hp ok\n"},
+    {"n": 2, "argv": ["$CPLUS_BIN", "check", "producer.cp"], "exit_code": 0, "output": "check: producer.cp ok\n"},
+    {"n": 3, "argv": ["$CPLUS_BIN", "check", "consumer.cp"], "exit_code": 0, "output": "check: consumer.cp ok\n"},
+    {"n": 4, "argv": ["$CPLUS_BIN", "check", "--strict", "producer.cp"], "exit_code": 0, "output": "check: producer.cp ok\n"},
+    {"n": 5, "argv": ["$CPLUS_BIN", "check", "--strict", "consumer.cp"], "exit_code": 0, "output": "check: consumer.cp ok\n"},
+    {"n": 6, "argv": ["$CPLUS_BIN", "check", "producer.cp", "consumer.cp"], "exit_code": 0, "output": "check: producer.cp ok\ncheck: consumer.cp ok\n"},
+    {"n": 7, "argv": ["$CPLUS_BIN", "build", "producer.cp", "consumer.cp", "-o", "$PWD/results/case_a"], "exit_code": 0, "output": ""},
+    {"n": 8, "argv": ["$CPLUS_BIN", "check", "shared.hp"], "exit_code": 0, "output": "check: shared.hp ok\n"},
+    {"n": 9, "argv": ["$CPLUS_BIN", "check", "dropper.cp"], "exit_code": 0, "output": "check: dropper.cp ok\n"},
+    {"n": 10, "argv": ["$CPLUS_BIN", "check", "user.cp"], "exit_code": 0, "output": "check: user.cp ok\n"},
+    {"n": 11, "argv": ["$CPLUS_BIN", "check", "--strict", "dropper.cp"], "exit_code": 0, "output": "check: dropper.cp ok\n"},
+    {"n": 12, "argv": ["$CPLUS_BIN", "check", "--strict", "user.cp"], "exit_code": 0, "output": "check: user.cp ok\n"},
+    {"n": 13, "argv": ["$CPLUS_BIN", "check", "dropper.cp", "user.cp"], "exit_code": 0, "output": "check: dropper.cp ok\ncheck: user.cp ok\n"},
+    {"n": 14, "argv": ["$CPLUS_BIN", "build", "dropper.cp", "user.cp", "-o", "$PWD/results/case_b"], "exit_code": 0, "output": ""},
+    {
+      "n": 15,
+      "argv": ["$CPLUS_BIN", "check", "single_tu_control.cp"],
+      "exit_code": 1,
+      "output": "single_tu_control.cp:10:12: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer\n      return ((char *)shared_resource)[0];\n             ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\n"
+    },
+    {
+      "n": 16,
+      "argv": ["$CPLUS_BIN", "check", "stack_producer.cp"],
+      "exit_code": 1,
+      "output": "stack_producer.cp:6:12: error: address of stack memory associated with local variable 'local' returned [-Werror,-Wreturn-stack-address]\n    6 |     return local;\n      |            ^~~~~\n1 error generated.\n"
+    },
+    {
+      "n": 17,
+      "argv": ["$CPLUS_BIN", "check", "--legacy-c", "stack_producer.cp"],
+      "exit_code": 0,
+      "output": "stack_producer.cp:6:12: warning: address of stack memory associated with local variable 'local' returned [-Wreturn-stack-address]\n    6 |     return local;\n      |            ^~~~~\n1 warning generated.\ncheck: stack_producer.cp ok\n"
+    },
+    {"n": 18, "argv": ["$CPLUS_BIN", "check", "stack_consumer.cp"], "exit_code": 0, "output": "check: stack_consumer.cp ok\n"}
+  ],
+  "runtime_observations": [
+    {"command": "./results/case_a", "stdout": "view size 17\n", "exit_code": 0, "note": "stale view still reads intact heap memory; UB, not a correctness pass"},
+    {"command": "./results/case_b", "stdout": "", "exit_code": 6, "note": "5/5 identical runs on this host; byte read from freed memory, UB"}
+  ],
+  "summary": {
+    "steps": 18,
+    "accept": 16,
+    "reject": 2,
+    "tagged_cplus_rejects": 1,
+    "tagged_cplus_reject_location": "single_tu_control.cp (one-TU positive control only)",
+    "key_gap": "Neither cross-TU case produces any C+ diagnostic at check, --strict, multi-TU check, or link. The only REJECT/WARNING signals are a one-TU positive control and an untagged Clang backend warning in the stack-pointer variant."
+  },
+  "acceptance_target": "Cases A and B must become stable tagged [CPLUS-BORROW]/[CPLUS-LIFETIME] rejections naming the escaping borrow or cross-TU use-after-free, with no false positives on consumer.cp, user.cp, or the 19 valid controls in tests/stdlib/compile_time/."
+}

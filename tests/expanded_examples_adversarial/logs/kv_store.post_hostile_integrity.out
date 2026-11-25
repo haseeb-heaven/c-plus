@@ -1,0 +1,5 @@
+KV insert OK k
+KV insert REFUSED 101 range key exceeds KV_KEY_MAX
+KV item 0 k v
+KV list 1
+KV_SUMMARY 3 2 1 0

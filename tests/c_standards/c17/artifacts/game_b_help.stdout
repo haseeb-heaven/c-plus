@@ -1,0 +1,10 @@
+Usage: 2048 [OPTION] | [MODE]
+Play the game 2048 in the console
+
+Options:
+  -h,  --help       Show this help message.
+  -v,  --version    Show version number.
+
+Modes:
+  bluered      Use a blue-to-red color scheme (requires 256-color terminal support).
+  blackwhite   The black-to-white color scheme (requires 256-color terminal support).

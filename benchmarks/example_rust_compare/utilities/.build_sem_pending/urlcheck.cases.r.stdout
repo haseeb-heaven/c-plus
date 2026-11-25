@@ -1,0 +1,16 @@
+URL v_http VALID http example.com 80 / default
+URL v_https_port VALID https example.com 8443 /a/b explicit
+URL v_ip_port VALID http 127.0.0.1 8080 / explicit
+URL h_bad_scheme REFUSED 108 invalid bad-scheme
+URL h_empty_auth REFUSED 108 invalid empty-authority
+URL h_no_scheme REFUSED 108 invalid no-scheme
+URL h_space_host REFUSED 108 invalid bad-host-char
+URL h_big_port REFUSED 101 bounds port-overflow
+URL h_alpha_port REFUSED 108 invalid bad-port
+URL h_empty_port REFUSED 108 invalid empty-port
+URL h_bad_edge REFUSED 108 invalid bad-host-edge
+URL h_traversal REFUSED 108 invalid dot-dot-path
+URL h_oversized REFUSED 101 bounds too-long
+URL argv VALID https example.com 443 /x default
+URL argv REFUSED 108 invalid empty-authority
+URL_SUMMARY 15 4 11 0

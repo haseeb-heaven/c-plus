@@ -1,0 +1,11 @@
+SAFECOPY exact OK rc=0 canary=0xa5 buf7=8
+IGNORE CONSTRAINT HANDLER: (406) memcpy_s: slen exceeds max
+SAFECOPY over REFUSED code=406 reason=slen-exceeds-dmax canary=0xa5 intact=1
+SAFECOPY unknown_case REFUSED code=108 reason=unknown-case
+IGNORE CONSTRAINT HANDLER: (400) memcpy_s: dest is null
+SAFECOPY null REFUSED code=400 reason=null-destination canary=0xa5 intact=1
+IGNORE CONSTRAINT HANDLER: (400) memcpy_s: src is null
+SAFECOPY nullsrc REFUSED code=400 reason=null-source canary=0xa5 intact=1
+SAFECOPY raw OK canary=0x2a corrupted=1 (unguarded subprocess)
+SAFECOPY raw_child OK child_exit=9 parent_canary=0xa5
+SAFECOPY unknown_case REFUSED code=108 reason=unknown-case

@@ -1,0 +1,5 @@
+{"a":[1,2,3],"b":{"c":[true,false,null,"x"]}}
+[[[[[[[[[[1]]]]]]]]]]
+{"s":"escaped \" quote and \\ slash","n":-42,"f":3.25}
+{invalid
+[1,2,3]
