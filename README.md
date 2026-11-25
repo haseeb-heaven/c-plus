@@ -218,8 +218,8 @@ not language-equivalence claims. Full narrative:
 
 | Measurement | Result | Meaning |
 |---|---|---|
-| Goose-style data-stack bump vs checked heap (`sh benchmarks/goose_fast/run.sh`) | **30 ns/op vs 328 ns/op** in the committed evidence run (~10.9× lower allocation latency) | [binary + raw output + screenshot](proof/benchmarks/README.md). `stdlib/datastack.hp` bump + one-store scope release. Gate `GOOSE_BENCH 4 4 0`. |
-| Modern libs on scratch (`sh benchmarks/goose_modern/run.sh`) | **23 ns/op bump vs 206 ns/op heap** (~9.0×); full workload 146 ns/op in the [committed evidence](proof/benchmarks/README.md) | Real app-shaped workload, gate `GOOSE_MODERN_BENCH 3 3 0`. |
+| scoped-memory-style data-stack bump vs checked heap (`sh benchmarks/scoped_bump/run.sh`) | **30 ns/op vs 328 ns/op** in the committed evidence run (~10.9× lower allocation latency) | [binary + raw output + screenshot](proof/benchmarks/README.md). `stdlib/datastack.hp` bump + one-store scope release. Gate `BENCH_SCOPED 4 4 0`. |
+| Modern libs on scratch (`sh benchmarks/scoped_apps/run.sh`) | **23 ns/op bump vs 206 ns/op heap** (~9.0×); full workload 146 ns/op in the [committed evidence](proof/benchmarks/README.md) | Real app-shaped workload, gate `SCOPED_APPS_BENCH 3 3 0`. |
 | Checked-heap tracking ON/OFF | 2.59× median overhead (79.91 vs 30.85 ns/op) | Cost of the live-allocation side table; the reason hot paths use arenas/pools instead. |
 | Rust-vs-C+ runtime outcomes (`sh tests/rust_vs_cplus/run_compare.sh`) | 473 matched, 119 documented differences, 8 both-skip, **0 failures** | Outcome parity on valid inputs is evidence of behavior, **not** a speed or safety proof. |
 | Fil-C-style liveness / SoftBound / GSL / lifetime (`sh tests/stdlib/upstream_reuse/run_memory_safety.sh`) | `MEMSAFE 5 5 0` (26 + 51 + 80 + 25 checks) | Adapted side-table/bounds techniques only; no Fil-C compiler, GC or capability ABI, and no timing comparison. |
@@ -227,7 +227,7 @@ not language-equivalence claims. Full narrative:
 
 **Real apps/games, end to end:** `APPS 3 3 0` (web server via curl, SQL-like
 DB, headless game engine), `GAME_SUITE 4 4 0` (snake, maze, Nuklear UI + SVG
-screenshots), `CROSS_PROOF 58 58 0` (Mach-O + PE32+), `GOOSE_PORT 16 16 0`.
+screenshots), `CROSS_PROOF 58 58 0` (Mach-O + PE32+), `PORTS_MODERN_C 16 16 0`.
 Screenshots and per-app proof pages:
 [`proof/all_apps_games_screenshots/README.md`](proof/all_apps_games_screenshots/README.md).
 

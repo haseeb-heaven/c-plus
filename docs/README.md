@@ -7,7 +7,7 @@ library layer: a checked, additive C API that keeps the ordinary C ABI.
 
 | Topic | Document |
 | --- | --- |
-| **Core memory philosophy (Goose-style)** | [CORE_PHILOSOPHY.md](CORE_PHILOSOPHY.md) |
+| **Core memory philosophy (scoped-memory-style)** | [CORE_PHILOSOPHY.md](CORE_PHILOSOPHY.md) |
 | Architecture and layout | [ARCHITECTURE.md](ARCHITECTURE.md), [STRUCTURE.md](STRUCTURE.md) |
 | Standard library API | [STDLIB.md](STDLIB.md), [MODERN_STDLIB.md](MODERN_STDLIB.md) |
 | Checked C layer | [SAFE_CRT.md](SAFE_CRT.md), [LOGGING.md](LOGGING.md) |

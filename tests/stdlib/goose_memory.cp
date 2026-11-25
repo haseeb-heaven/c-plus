@@ -42,7 +42,7 @@ int main(void) {
         ck(ds.base == 0 && ds.capacity == 0, "vm_destroy");
     }
 
-    /* ---- Goose-style slot_pool: stable slots, free list, stale refusal -- */
+    /* ---- scoped-memory-style slot_pool: stable slots, free list, stale refusal -- */
     {
         stdlib_slot_pool sp;
         ck(stdlib_slot_pool_init(&sp, 32, 4, &e) == STDLIB_OK, "slot_init");
@@ -85,6 +85,6 @@ int main(void) {
         ck(sp.items == 0 && sp.count == 0, "slot_raii_destroy");
     }
 
-    print("GOOSE_MEMORY", fails);
+    print("SCOPED_MEMORY", fails);
     return fails == 0 ? 0 : 1;
 }

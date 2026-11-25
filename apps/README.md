@@ -20,6 +20,6 @@ their own runners; see [proof/real_apps_cross_platform](../proof/real_apps_cross
 
 Related real game/UI work lives in [proof/games_gui_nuklear](../proof/games_gui_nuklear/README.md)
 (`GAME_SUITE 4 4 0`) and modern-C ports in
-[proof/goose_samples](../proof/goose_samples/README.md) (`GOOSE_PORT 16 16 0`).
+[proof/modern_c_ports](../proof/modern_c_ports/README.md) (`PORTS_MODERN_C 16 16 0`).
 All deterministic screenshots are indexed in
 [proof/all_apps_games_screenshots](../proof/all_apps_games_screenshots/README.md).

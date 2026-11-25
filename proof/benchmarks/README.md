@@ -6,23 +6,23 @@ stdout, the binaries, build logs and SVG screenshots are all in this folder.
 
 | Benchmark | Source | Binary | Raw result | Screenshot |
 |---|---|---|---|---|
-| Goose-style bump vs checked heap | [bump_bench.cp](../../benchmarks/goose_fast/bump_bench.cp) | [bump_bench](bin/bump_bench) | [goose_fast.out](results/goose_fast.out) | [goose_fast.svg](screenshots/goose_fast.svg) |
-| Modern libs on scratch | [bench.cp](../../benchmarks/goose_modern/bench.cp) | [goose_modern](bin/goose_modern) | [goose_modern.out](results/goose_modern.out) | [goose_modern.svg](screenshots/goose_modern.svg) |
+| scoped-memory-style bump vs checked heap | [bump_bench.cp](../../benchmarks/scoped_bump/bump_bench.cp) | [bump_bench](bin/bump_bench) | [scoped_bump.out](results/scoped_bump.out) | [scoped_bump.svg](screenshots/scoped_bump.svg) |
+| Modern libs on scratch | [bench.cp](../../benchmarks/scoped_apps/bench.cp) | [scoped_apps](bin/scoped_apps) | [scoped_apps.out](results/scoped_apps.out) | [scoped_apps.svg](screenshots/scoped_apps.svg) |
 
 Measured on the committed run:
 
 ```text
 BENCH bump_ns_per_op 30
 BENCH heap_ns_per_op 328
-GOOSE_MODERN bump_ns_per_op 23
-GOOSE_MODERN heap_ns_per_op 206
-GOOSE_MODERN modern_ns_per_op 146
+SCOPED_APPS bump_ns_per_op 23
+SCOPED_APPS heap_ns_per_op 206
+SCOPED_APPS modern_ns_per_op 146
 ```
 
-That is ~10.9x and ~9.0x lower allocation latency for the Goose-style bump
+That is ~10.9x and ~9.0x lower allocation latency for the scoped-memory-style bump
 path in these two runs. Earlier runs measured 86/261 ns and 60/162 ns; timings
 are host/load dependent, so the deterministic gates only assert bucketed
-verdicts (`GOOSE_BENCH 4 4 0`, `GOOSE_MODERN_BENCH 3 3 0`). No equivalence with
+verdicts (`BENCH_SCOPED 4 4 0`, `SCOPED_APPS_BENCH 3 3 0`). No equivalence with
 Goose/Rust/Fil-C is claimed.
 
 Cross-language *outcome* evidence (not timing): `tests/rust_vs_cplus/run_compare.sh`

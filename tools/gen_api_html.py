@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 HEADERS = [
     "stdlib/web.hp", "stdlib/sqldb.hp", "stdlib/gameeng.hp",
     "stdlib/datastack.hp", "stdlib/mempool.hp", "stdlib/arena.hp",
-    "stdlib/ctl_span.hp", "stdlib/nuklear_adapt.hp", "stdlib/goose_mem.hp", "stdlib/no_heap.hp",
+    "stdlib/ctl_span.hp", "stdlib/nuklear_adapt.hp", "stdlib/scoped_mem.hp", "stdlib/no_heap.hp",
     "stdlib/math3d.hp", "stdlib/scene3d.hp", "stdlib/mesh3d.hp",
     "stdlib/widgets.hp", "stdlib/cli.hp",
 ] + sorted(str(p.relative_to(ROOT)) for p in (ROOT / "stdlib/safe").glob("*.h"))

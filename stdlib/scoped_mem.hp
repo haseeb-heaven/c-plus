@@ -1,0 +1,89 @@
+/* scoped-memory-style dynamic memory facade for C+ safer/modern libraries.
+ * Additive header: VM-reserved bump data stack (no per-object free), stable
+ * slot-pool refs, and an allocator-aware dynamic arena.  No Goose code copied.
+ *
+ * Rules: allocate inside a stdlib_scoped_scope; drop() restores the stack top in one
+ * store. Never keep a raw pointer beyond the scope; use stdlib_pool_ref for
+ * values that must survive growth.
+ */
+#ifndef CPLUS_STD_SCOPED_MEM_HP
+#define CPLUS_STD_SCOPED_MEM_HP
+
+#include <stddef.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+#include "stdlib/datastack.hp"
+#include "stdlib/arena.hp"
+#include "stdlib/mempool.hp"
+
+/* Thread data stack: one VM reservation, bump pointer, no per-object heap. */
+typedef stdlib_datastack stdlib_scoped_stack;
+
+static stdlib_scoped_stack *stdlib_scoped_stack_current(error *err) {
+    return stdlib_thread_datastack(err);
+}
+
+static void *stdlib_scoped_alloc(stdlib_scoped_stack *s, size_t bytes, error *err) {
+    return stdlib_datastack_alloc(s, bytes, 16u, err);
+}
+
+static stdlib_allocator stdlib_scoped_allocator(void) {
+    return stdlib_scratch_allocator();
+}
+
+/* One-store scope release; stable generation guard is inherited. */
+class stdlib_scoped_scope {
+    stdlib_scoped_stack *scope_ds;
+    unsigned char *saved_top;
+    uint64_t saved_gen;
+    stdlib_scoped_scope(stdlib_scoped_stack *s) {
+        this->scope_ds = s;
+        this->saved_top = (s != (stdlib_scoped_stack *)0) ? (*s).top : (unsigned char *)0;
+        this->saved_gen = (s != (stdlib_scoped_stack *)0) ? (*s).generation : 0u;
+    }
+    void drop(void) {
+        if (this->scope_ds != (stdlib_scoped_stack *)0 &&
+            (*this->scope_ds).generation == this->saved_gen &&
+            this->saved_top != (unsigned char *)0)
+            (*this->scope_ds).top = this->saved_top;
+    }
+};
+
+/* Dynamic arena: grows in blocks, reset reclaims all blocks at once. */
+typedef stdlib_arena stdlib_dyn_arena;
+
+static int stdlib_dyn_arena_open(stdlib_dyn_arena *a, size_t initial, error *err) {
+    return stdlib_arena_init(a, initial, err);
+}
+
+static void *stdlib_dyn_arena_take(stdlib_dyn_arena *a, size_t bytes, error *err) {
+    return stdlib_arena_alloc(a, bytes, 16u, err);
+}
+
+static void stdlib_dyn_arena_rewind(stdlib_dyn_arena *a, error *err) {
+    stdlib_arena_do_reset(a, err);
+}
+
+/* Stable handles across growth (generation-checked, stale refs refused). */
+typedef stdlib_slot_pool stdlib_handle_pool;
+typedef stdlib_slot_ref stdlib_pool_ref;
+
+static int stdlib_handle_pool_open(stdlib_handle_pool *p, size_t slot_size, size_t slots,
+                           error *err) {
+    return stdlib_slot_pool_init(p, slot_size, slots, err);
+}
+
+static int stdlib_handle_pool_take(stdlib_handle_pool *p, stdlib_pool_ref *out, error *err) {
+    return stdlib_slot_pool_alloc_ref(p, out, err);
+}
+
+static void *stdlib_pool_ref_get(stdlib_pool_ref *r, error *err) {
+    return stdlib_slot_ref_get(r, err);
+}
+
+static void stdlib_pool_ref_release(stdlib_pool_ref *r, error *err) {
+    stdlib_slot_ref_free(r, err);
+}
+
+#endif /* CPLUS_STD_SCOPED_MEM_HP */

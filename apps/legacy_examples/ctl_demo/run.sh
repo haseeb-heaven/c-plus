@@ -52,7 +52,7 @@ timeout 180 "$CPLUS" build "$src" --legacy-c --sanitize=none \
 }
 
 check_case ctl_collections
-check_case ctl_goose_hybrid
+check_case ctl_scoped_hybrid
 
 printf 'CTL_DEMO %d %d %d\n' "$cases" "$pass" "$fail"
 [ "$fail" -eq 0 ]

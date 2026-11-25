@@ -1,7 +1,7 @@
-# goose_memory screenshot
+# scoped_memory screenshot
 
-Runner: `examples/goose_memory/run.sh`. Generated from its actual stdout (bounded by timeout).
+Runner: `examples/scoped_memory/run.sh`. Generated from its actual stdout (bounded by timeout).
 
-![goose_memory](screenshots/goose_memory.svg)
+![scoped_memory](screenshots/scoped_memory.svg)
 
-Transcript: [`screenshots/goose_memory.out`](screenshots/goose_memory.out).
+Transcript: [`screenshots/scoped_memory.out`](screenshots/scoped_memory.out).

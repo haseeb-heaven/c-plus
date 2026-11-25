@@ -79,7 +79,7 @@ static void test_strchr_s(void)
     CHECK(rc == CPLUS_VENDOR_STRCHR_ESNOTFND);
     CHECK(r == NULL);
     r = NULL;
-    rc = cplus_v__strchr_s_chk(bounded, 4, 'X', &r, BOS_UNKNOWN);
+    rc = cplus_v__strchr_s_chk(bounded, sizeof(bounded), 'X', &r, BOS_UNKNOWN);
     CHECK(rc == CPLUS_VENDOR_STRCHR_EOK);
     CHECK(r == strchr(bounded, 'X'));
     CHECK(r == bounded + 3);

@@ -947,7 +947,7 @@ S	symbol build/libc/libcplus_hardened.a::_nextup	1
 S	symbol build/libc/libcplus_hardened.a::_nextupf	1
 S	symbol build/libc/libcplus_hardened.a::_nextupl	1
 S	symbol build/libc/libcplus_hardened.a::_stdlib_tls_datastack	1
-S	archive build/safe/libcplus_safecrt.a	count=238
+S	archive build/safe/libcplus_safecrt.a	count=239
 S	symbol build/safe/libcplus_safecrt.a::___ubsan_on_report	1
 S	symbol build/safe/libcplus_safecrt.a::__memccpy_s_uchk	1
 S	symbol build/safe/libcplus_safecrt.a::__memchr_s_uchk	1
@@ -1131,6 +1131,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_v__stpcpy_s_chk	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_v__stpncpy_s_chk	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_v__strcasestr_s_chk	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_v__strchr_s_chk	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_v__strchr_s_chk_unbounded	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_v__strcmpfld_s_chk	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_v__strcoll_s_chk	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_v__strcpyfld_s_chk	1

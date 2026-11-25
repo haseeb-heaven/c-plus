@@ -4,11 +4,11 @@ Requested upstreams: raylib, SDL, Allegro 5, bgfx, raygui, Nuklear, GTK, LVGL.
 **None of these was rewritten in full.** A line-for-line C+ rewrite of eight
 mature C/C++ libraries (hundreds of thousands of lines, platform backends and
 drivers) cannot be delivered or validated in one change. What is delivered:
-one real Goose-style memory adapter (Nuklear) plus an honest, file-level plan
+one real scoped-memory-style memory adapter (Nuklear) plus an honest, file-level plan
 for the rest. No upstream source was copied except Nuklear, which was already
 vendored in this repository (MIT, `third_party/nuklear/`).
 
-| Upstream | License / risk | In this repo | C+ decision | Goose-style memory plan |
+| Upstream | License / risk | In this repo | C+ decision | scoped-memory-style memory plan |
 |---|---|---|---|---|
 | Nuklear | MIT, vendored | `third_party/nuklear`, `build/ext/libnuklear.a` | **ADOPT adapter now**: `stdlib/nuklear_adapt.hp` + `tests/stdlib/nuklear_adapt/` (`NK_ADAPT_TEST 1 1 0`) | `nk_allocator` callbacks route to `stdlib_datastack_alloc`; `free` is a no-op; one `stdlib_scratch_scope` drop reclaims the whole frame. Context must be rebuilt per frame. |
 | raygui | zlib, header-only | not vendored | DEFER: single-header vendor + checked wrapper | Bind its memory callbacks to the scratch allocator; wrap draw calls in scope. Requires vendoring/license pin first. |
@@ -27,8 +27,8 @@ vendored in this repository (MIT, `third_party/nuklear/`).
   growth never invalidates live refs.
 - `stdlib/arena.hp`, `stdlib/alloc_iface.hp`: allocator-aware `vector_in`/
   `string_in` so containers can use the scratch allocator instead of malloc.
-- Measured: `GOOSE_BENCH 4 4 0` (bump 86 ns/op vs checked heap 261 ns/op on
-  this host) and `GOOSE_MODERN_BENCH 3 3 0`.
+- Measured: `BENCH_SCOPED 4 4 0` (bump 86 ns/op vs checked heap 261 ns/op on
+  this host) and `SCOPED_APPS_BENCH 3 3 0`.
 
 ## Non-claims
 

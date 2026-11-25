@@ -67,13 +67,14 @@
 int cplus_v__strchr_s_chk(const char *restrict dest, size_t dmax,
                           const int ch, char **restrict resultp,
                           const size_t destbos) {
+    if (resultp != (char **)0)
+        *resultp = (char *)0;   /* always clear the result on refusal */
     if (dest == (const char *)0 || resultp == (char **)0)
         return CPLUS_VENDOR_STRCHR_ESNULLP;
     if (dmax == 0u)
         return CPLUS_VENDOR_STRCHR_ESZEROL;
     if (destbos != 0u && dmax > destbos)
         return CPLUS_VENDOR_STRCHR_ESLEMAX;
-    *resultp = (char *)0;
     if (memchr(dest, 0, dmax) == (const void *)0)
         return CPLUS_VENDOR_STRCHR_ESNOTFND; /* no in-bounds terminator */
     return cplus_v__strchr_s_chk_unbounded(dest, dmax, ch, resultp, destbos);

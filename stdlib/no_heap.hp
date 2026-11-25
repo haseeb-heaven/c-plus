@@ -1,7 +1,7 @@
 /* C+ no-heap policy (additive, opt-in): when CPLUS_NO_HEAP is defined, direct
  * dynamic-heap calls in C+ source are compile-time errors. C+ code must use
- * the Goose-style data stack, dynamic arena and slot pools from
- * stdlib/goose_mem.hp. Ordinary C ABI/ABI-compatible headers are NOT changed:
+ * the scoped-memory-style data stack, dynamic arena and slot pools from
+ * stdlib/scoped_mem.hp. Ordinary C ABI/ABI-compatible headers are NOT changed:
  * malloc/free remain available to precompiled C libraries and legacy C mode.
  *
  * Usage: ./build/c+ build app.cp -DCPLUS_NO_HEAP -include stdlib/no_heap.hp ...

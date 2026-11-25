@@ -11,15 +11,15 @@ apps/                 real applications and game suites (verified runners)
   games3d/           3D game/scene app suite (moved from apps/legacy_examples/)
   gui_app/           GUI app suite (moved from apps/legacy_examples/)
   cli_app/           CLI app suite (moved from apps/legacy_examples/)
-benchmarks/           measured speed evidence (goose_fast, goose_modern)
+benchmarks/           measured speed evidence (scoped_bump, scoped_apps)
 compiler/ runtime/   C+ compiler and runtime (Agent 1 owned)
 libc/ stdlib/        checked libc and C+ standard/safer libraries
-  stdlib/goose_mem.hp  single Goose-style memory facade
+  stdlib/scoped_mem.hp  single scoped-memory-style memory facade
   stdlib/no_heap.hp    opt-in compile-time heap refusal
 proof/               deterministic evidence: binaries, screenshots, transcripts
   all_apps_games_screenshots/  one screenshot + .md per app/game
   games_gui_nuklear/           snake, maze, Nuklear UI + SVG proof
-  games_apps/ real_apps_cross_platform/ goose_samples/  other evidence packs
+  games_apps/ real_apps_cross_platform/ modern_c_ports/  other evidence packs
 tests/               all verification runners (edge1000, PR31/32/33, libc, CRT)
 tools/               generators and build helpers
 third_party/         pinned MIT/Apache/zlib upstreams (do not format/edit)

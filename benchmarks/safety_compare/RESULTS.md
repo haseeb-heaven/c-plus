@@ -76,7 +76,7 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
   benchmarks/safety_compare/modern.cp -o build/bench_safety/cplus_legacy_modern
 rustc -O benchmarks/safety_compare/modern.rs -o build/bench_safety/rust_modern
 "$CPLUS_GOOSE" build benchmarks/safety_compare/modern.goose \
-  -o build/bench_safety/goose_modern
+  -o build/bench_safety/scoped_apps
 ```
 
 Timing: one warmup run per binary, then **7 interleaved timed runs** per binary

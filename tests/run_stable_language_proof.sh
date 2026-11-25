@@ -20,15 +20,15 @@ for runner in \
   tests/run_modern_safer_evidence.sh \
   tests/stdlib/upstream_reuse/run_memory_safety.sh \
   tests/stdlib/no_heap/run.sh \
-  tests/stdlib/goose_mem/run.sh \
+  tests/stdlib/scoped_mem/run.sh \
   tests/stdlib/nuklear_cpp/run.sh \
   tests/docs/run_doc_check.sh \
   apps/run_all.sh \
   proof/games_gui_nuklear/run.sh \
-  proof/goose_samples/run.sh \
+  proof/modern_c_ports/run.sh \
   proof/all_apps_games_screenshots/run.sh \
-  benchmarks/goose_fast/run.sh \
-  benchmarks/goose_modern/run.sh; do
+  benchmarks/scoped_bump/run.sh \
+  benchmarks/scoped_apps/run.sh; do
     cases=$((cases + 1))
     log="$OUT/$(echo "$runner" | tr '/' '_').log"
     if timeout 3600 sh "$runner" >"$log" 2>&1; then

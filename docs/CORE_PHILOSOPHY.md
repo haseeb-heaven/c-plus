@@ -1,4 +1,4 @@
-# Core memory philosophy — speed and security from Goose-style allocation
+# Core memory philosophy — speed and security from scoped-memory-style allocation
 
 This is the normative design rule for C+ standard and safer libraries. It
 explains **how** the libraries are meant to be fast and safe, and what is
@@ -27,15 +27,15 @@ explicitly out of scope. Architecture inspiration: `aardappel/goose`
    calls a compile-time refusal; ordinary C and precompiled C libraries keep
    `malloc/free`. Strict mode is a policy for C+ source, not a claim about C.
 6. **Measure, don't assert.** Speed claims come from bounded benchmark verdicts
-   (`GOOSE_BENCH 4 4 0`, `GOOSE_MODERN_BENCH 3 3 0`); safety claims come from
+   (`BENCH_SCOPED 4 4 0`, `SCOPED_APPS_BENCH 3 3 0`); safety claims come from
    reproducible runner lines (`EDGE1000`, `PR31_LIBC`, `PR33_VERIFY`, `MEMSAFE`).
    Exact timings and "equivalent to Goose/Rust" claims are not made.
 
 ## Facade
 
-`stdlib/goose_mem.hp` is the single entry point: `goose_stack_current`,
-`goose_alloc`, `goose_scope`, `goose_arena_open/take/rewind`, `goose_pool_open/
-take`, `goose_ref_get/release`. All new modern libraries (`sqldb.hp`,
+`stdlib/scoped_mem.hp` is the single entry point: `stdlib_scoped_stack_current`,
+`stdlib_scoped_alloc`, `stdlib_scoped_scope`, `stdlib_dyn_arena_open/take/rewind`, `stdlib_handle_pool_open/
+take`, `stdlib_pool_ref_get/release`. All new modern libraries (`sqldb.hp`,
 `gameeng.hp`, `web.hp`, `nuklear_cpp.hp`, `ctl_span.hp`) follow the same model:
 fixed slots or scoped scratch storage, no per-object malloc on the hot path.
 
@@ -49,6 +49,6 @@ fixed slots or scoped scratch storage, no per-object malloc on the hot path.
 
 ## Evidence index
 
-`docs/stdlib/GOOSE_FAST_DESIGN.md`, `docs/stdlib/GOOSE_MEMORY_INSPIRATION.md`,
+`docs/stdlib/SCOPED_MEMORY_DESIGN.md`, `docs/stdlib/SCOPED_MEMORY_INSPIRATION.md`,
 `docs/stdlib/MODERN_SAFER_EVIDENCE.md`, `docs/stdlib/NO_HEAP_MODE.md`,
 `docs/stdlib/GAME_GUI_UPSTREAM_ADOPTION.md`, `docs/AGENT2_FINAL_STATUS_2026_11_25.md`.

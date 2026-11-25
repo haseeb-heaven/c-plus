@@ -90,11 +90,11 @@ int main(void) {
     /* E2: repeated reset/set, long-then-short tail, clean category/code. */
     {
         error err = error();
-        char msg[STDLIB_ERROR_SIZE];
+        char msg_e2[STDLIB_ERROR_SIZE];
         int all_ok = 1;
         int i;
-        memset(msg, 'B', STDLIB_ERROR_SIZE - 1);
-        msg[STDLIB_ERROR_SIZE - 1] = '\0';
+        memset(msg_e2, 'B', STDLIB_ERROR_SIZE - 1);
+        msg_e2[STDLIB_ERROR_SIZE - 1] = '\0';
 
         err.set(CPLUS_EXIT_IO, "first");
         if (!err.failed_now() || err.ok() || err.code() != (int)CPLUS_EXIT_IO ||
@@ -105,7 +105,7 @@ int main(void) {
             err.category() != STDLIB_CATEGORY_OK || strcmp(err.what(), "") != 0)
             all_ok = 0;
 
-        err.set(CPLUS_EXIT_BOUNDS, msg);
+        err.set(CPLUS_EXIT_BOUNDS, msg_e2);
         err.set(CPLUS_EXIT_OWNERSHIP, "short");
         if (strcmp(err.what(), "short") != 0 ||
             err.category() != STDLIB_CATEGORY_OWNERSHIP ||

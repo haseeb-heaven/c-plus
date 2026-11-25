@@ -33,8 +33,8 @@ run_name gameeng apps/gameeng/run.sh
 run_name games3d apps/games3d/run.sh
 run_name gui_app apps/gui_app/run.sh
 run_name cli_app apps/cli_app/run.sh
-run_name goose_memory apps/legacy_examples/goose_memory/run.sh
+run_name scoped_memory apps/legacy_examples/scoped_memory/run.sh
 run_name ctl_demo apps/legacy_examples/ctl_demo/run.sh
 run_name nuklear proof/games_gui_nuklear/run.sh
-run_name goose_ports proof/goose_samples/run.sh
+run_name modern_c_ports proof/modern_c_ports/run.sh
 echo "SCREENSHOTS $(find "$D/screenshots" -name '*.svg' | wc -l | tr -d ' ')"

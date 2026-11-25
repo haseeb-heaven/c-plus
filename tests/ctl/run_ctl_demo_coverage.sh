@@ -23,8 +23,8 @@ run_runner() {
 }
 
 run_runner apps/legacy_examples/ctl_demo/run.sh
-run_runner apps/legacy_examples/goose_memory/run.sh
-run_runner benchmarks/goose_fast/run.sh
+run_runner apps/legacy_examples/scoped_memory/run.sh
+run_runner benchmarks/scoped_bump/run.sh
 run_runner tests/ctl/run_ctl_tests.sh
 run_runner tests/ctl/run_ctl_span.sh
 

@@ -1,5 +1,5 @@
 /* C+ modern-syntax layer over vendored Nuklear (MIT): class, TRY/CATCH,
- * structured logs, and Goose-style scratch memory. Additive; no upstream
+ * structured logs, and scoped-memory-style scratch memory. Additive; no upstream
  * source edited. See docs/stdlib/GAME_GUI_UPSTREAM_ADOPTION.md. */
 #ifndef CPLUS_STD_NUKLEAR_CPP_HP
 #define CPLUS_STD_NUKLEAR_CPP_HP

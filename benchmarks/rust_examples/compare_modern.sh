@@ -9,7 +9,7 @@ unset SDKROOT || true
 
 # Build C+ side (canonical token program from the Goose memory test).
 BIN=build/bench_modern_compare
-"$ROOT/build/c+" build tests/stdlib/goose_memory.cp --default --no-werror --sanitize=none \
+"$ROOT/build/c+" build tests/stdlib/scoped_memory.cp --default --no-werror --sanitize=none \
     -I. -o "$BIN" -- build/libc/libcplus_hardened.a >/dev/null 2>&1
 timeout 60 "$BIN" > /tmp/cmp_cpp.out 2>/dev/null || true
 
@@ -18,7 +18,7 @@ rustc -O benchmarks/rust_examples/modern_alloc.rs -o /tmp/cmp_rust >/dev/null 2>
 timeout 60 /tmp/cmp_rust > /tmp/cmp_rust.out 2>/dev/null || true
 
 # Derive comparable tokens from both streams.
-# C+: GOOSE_MEMORY 0 means all checks passed; Rust: RUST_MODEL_OK plus key flags.
+# C+: SCOPED_MEMORY 0 means all checks passed; Rust: RUST_MODEL_OK plus key flags.
 cpp_token=$(grep -c '^FAIL' /tmp/cmp_cpp.out || true)
 rust_ok=$(grep -c 'RUST_MODEL_OK' /tmp/cmp_rust.out || true)
 vm_c=$(grep -c 'in_place=true rewind=true' /tmp/cmp_rust.out || true)

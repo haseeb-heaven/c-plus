@@ -36,10 +36,10 @@ unset SDKROOT CPLUS_CLANG
   -o ctl_collections -- build/libc/libcplus_hardened.a
 ./ctl_collections
 
-./build/c+ build apps/legacy_examples/ctl_demo/ctl_goose_hybrid.cp \
+./build/c+ build apps/legacy_examples/ctl_demo/ctl_scoped_hybrid.cp \
   --default --sanitize=none -I. -Ithird_party/ctl \
-  -o ctl_goose_hybrid -- build/libc/libcplus_hardened.a
-./ctl_goose_hybrid
+  -o ctl_scoped_hybrid -- build/libc/libcplus_hardened.a
+./ctl_scoped_hybrid
 ```
 
 The build emits warnings such as `[CPLUS-ALIAS]` at `vector.h:245` (raw
@@ -90,7 +90,7 @@ explicitly dropped once; the later implicit drop is inert, so there is exactly
 one `CTL_FREE seen` line and `CTL_RAII frees=4`. A repeated free would change
 the output and fail the diff.
 
-## `ctl_goose_hybrid.cp` — CTL index + transient DataStack
+## `ctl_scoped_hybrid.cp` — CTL index + transient DataStack
 
 A stream of document ids is aggregated into a persistent CTL `vec_score`
 index. Inside one `stdlib_scratch_scope`, allocator-aware C+ `vector_in` and
@@ -146,7 +146,7 @@ scope and is released once by `CtlBoard::drop()` (`CTL_FREE board`,
 
 Both runners diff byte-for-byte against `expected/`. New edge cases:
 `ctl_collections` adds `CTL_EDGE duplicate_accumulate` and `CTL_EDGE
-double_drop`; `ctl_goose_hybrid` adds `HYBRID edge_empty_window` and
+double_drop`; `ctl_scoped_hybrid` adds `HYBRID edge_empty_window` and
 `HYBRID edge_bump_missing` (a `bump` on a missing id is a no-op). Verdict:
 `CTL_DEMO 2 2 0`. Run `sh tests/ctl/run_ctl_demo_coverage.sh` for an
 aggregate end-to-end coverage pass.

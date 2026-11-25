@@ -20,7 +20,7 @@ claim for the whole repository.
 | `sh tests/crt/run_safecrt_tests.sh` | `safecrt tests: 6 passed, 0 failed` |
 | runtime print regression | `PRINT_TEST 3 3 0` |
 | CTL checked span | `CTL_SPAN 13 13 0` |
-| Goose-style modern benchmarks | `GOOSE_BENCH 4 4 0`, `GOOSE_MODERN_BENCH 3 3 0` |
+| scoped-memory-style modern benchmarks | `BENCH_SCOPED 4 4 0`, `SCOPED_APPS_BENCH 3 3 0` |
 
 Closed as verified: #35 (print truncation), #28 (RAII shadowing), #27 (duplicate).
 

@@ -107,14 +107,14 @@ static void test_intset_grow(void) {
     long seqc;
     char lbl[32];
     stdlib_telemetry_stats tmstat;
-    int pre[5];
-    pre[0] = 10; pre[1] = 20; pre[2] = 30; pre[3] = 40; pre[4] = 50;
+    int isg_pre[5];
+    isg_pre[0] = 10; isg_pre[1] = 20; isg_pre[2] = 30; isg_pre[3] = 40; isg_pre[4] = 50;
 
     stdlib_alloc_fail_reset();
     {
         intset isg_probe = intset();
         for (i = 0; i < 5; i++)
-            isg_probe.insert(pre[i]);
+            isg_probe.insert(isg_pre[i]);
         stdlib_alloc_fail_reset();
         rc = isg_probe.insert(777);
         seqc = stdlib_alloc_seq();
@@ -127,7 +127,7 @@ static void test_intset_grow(void) {
         stdlib_telemetry_reset();
         intset isg_a = intset();
         for (i = 0; i < 5; i++)
-            isg_a.insert(pre[i]);
+            isg_a.insert(isg_pre[i]);
         stdlib_alloc_fail_reset();
         stdlib_alloc_fail_at(N);
         rc = isg_a.insert(777);
@@ -135,7 +135,7 @@ static void test_intset_grow(void) {
         ok = rc == -1 && isg_a.size() == 5 && isg_a.valid() == 1 &&
              isg_a.contains(777) == 0;
         for (i = 0; i < 5; i++)
-            if (!isg_a.contains(pre[i]))
+            if (!isg_a.contains(isg_pre[i]))
                 ok = 0;
         snprintf(lbl, sizeof(lbl), "isg_o%d", N);
         check(lbl, ok);
@@ -144,12 +144,12 @@ static void test_intset_grow(void) {
         {
             intset isg_b = intset();
             for (i = 0; i < 5; i++)
-                isg_b.insert(pre[i]);
+                isg_b.insert(isg_pre[i]);
             stdlib_alloc_fail_reset();
             rc2 = isg_b.insert(777);
             ok2 = rc2 == 0 && isg_b.size() == 6 && isg_b.contains(777) == 1;
             for (i = 0; i < 5; i++)
-                if (!isg_b.contains(pre[i]))
+                if (!isg_b.contains(isg_pre[i]))
                     ok2 = 0;
             snprintf(lbl, sizeof(lbl), "isg_r%d", N);
             check(lbl, ok2);
@@ -385,14 +385,14 @@ static void test_list_push_back_nonempty(void) {
     long seqc;
     char lbl[32];
     stdlib_telemetry_stats tmstat;
-    int pre[3];
-    pre[0] = 11; pre[1] = 22; pre[2] = 33;
+    int lpbn_pre[3];
+    lpbn_pre[0] = 11; lpbn_pre[1] = 22; lpbn_pre[2] = 33;
 
     stdlib_alloc_fail_reset();
     {
         list lpbn_probe = list();
         for (i = 0; i < 3; i++)
-            lpbn_probe.push_back(pre[i]);
+            lpbn_probe.push_back(lpbn_pre[i]);
         stdlib_alloc_fail_reset();
         rc = lpbn_probe.push_back(321);
         seqc = stdlib_alloc_seq();
@@ -404,14 +404,14 @@ static void test_list_push_back_nonempty(void) {
         stdlib_telemetry_reset();
         list lpbn_a = list();
         for (i = 0; i < 3; i++)
-            lpbn_a.push_back(pre[i]);
+            lpbn_a.push_back(lpbn_pre[i]);
         stdlib_alloc_fail_reset();
         stdlib_alloc_fail_at(N);
         rc = lpbn_a.push_back(321);
         stdlib_alloc_fail_reset();
         ok = rc == -1 && lpbn_a.size() == 3;
         for (i = 0; i < 3; i++)
-            if (lpbn_a.at_checked((size_t)i, &v_lpbn) != 0 || v_lpbn != pre[i])
+            if (lpbn_a.at_checked((size_t)i, &v_lpbn) != 0 || v_lpbn != lpbn_pre[i])
                 ok = 0;
         snprintf(lbl, sizeof(lbl), "lpbn_o%d", N);
         check(lbl, ok);
@@ -420,12 +420,12 @@ static void test_list_push_back_nonempty(void) {
         {
             list lpbn_b = list();
             for (i = 0; i < 3; i++)
-                lpbn_b.push_back(pre[i]);
+                lpbn_b.push_back(lpbn_pre[i]);
             stdlib_alloc_fail_reset();
             rc2 = lpbn_b.push_back(321);
             ok2 = rc2 == 0 && lpbn_b.size() == 4;
             for (i = 0; i < 3; i++)
-                if (lpbn_b.at_checked((size_t)i, &v_lpbn) != 0 || v_lpbn != pre[i])
+                if (lpbn_b.at_checked((size_t)i, &v_lpbn) != 0 || v_lpbn != lpbn_pre[i])
                     ok2 = 0;
             if (lpbn_b.at_checked(3, &v_lpbn) != 0 || v_lpbn != 321)
                 ok2 = 0;
@@ -492,14 +492,14 @@ static void test_list_push_front_nonempty(void) {
     long seqc;
     char lbl[32];
     stdlib_telemetry_stats tmstat;
-    int pre[3];
-    pre[0] = 11; pre[1] = 22; pre[2] = 33;
+    int lpfn_pre[3];
+    lpfn_pre[0] = 11; lpfn_pre[1] = 22; lpfn_pre[2] = 33;
 
     stdlib_alloc_fail_reset();
     {
         list lpfn_probe = list();
         for (i = 0; i < 3; i++)
-            lpfn_probe.push_back(pre[i]);
+            lpfn_probe.push_back(lpfn_pre[i]);
         stdlib_alloc_fail_reset();
         rc = lpfn_probe.push_front(123);
         seqc = stdlib_alloc_seq();
@@ -511,14 +511,14 @@ static void test_list_push_front_nonempty(void) {
         stdlib_telemetry_reset();
         list lpfn_a = list();
         for (i = 0; i < 3; i++)
-            lpfn_a.push_back(pre[i]);
+            lpfn_a.push_back(lpfn_pre[i]);
         stdlib_alloc_fail_reset();
         stdlib_alloc_fail_at(N);
         rc = lpfn_a.push_front(123);
         stdlib_alloc_fail_reset();
         ok = rc == -1 && lpfn_a.size() == 3;
         for (i = 0; i < 3; i++)
-            if (lpfn_a.at_checked((size_t)i, &v_lpfn) != 0 || v_lpfn != pre[i])
+            if (lpfn_a.at_checked((size_t)i, &v_lpfn) != 0 || v_lpfn != lpfn_pre[i])
                 ok = 0;
         snprintf(lbl, sizeof(lbl), "lpfn_o%d", N);
         check(lbl, ok);
@@ -527,7 +527,7 @@ static void test_list_push_front_nonempty(void) {
         {
             list lpfn_b = list();
             for (i = 0; i < 3; i++)
-                lpfn_b.push_back(pre[i]);
+                lpfn_b.push_back(lpfn_pre[i]);
             stdlib_alloc_fail_reset();
             rc2 = lpfn_b.push_front(123);
             ok2 = rc2 == 0 && lpfn_b.size() == 4;
@@ -535,7 +535,7 @@ static void test_list_push_front_nonempty(void) {
                 ok2 = 0;
             for (i = 0; i < 3; i++)
                 if (lpfn_b.at_checked((size_t)(i + 1), &v_lpfn) != 0 ||
-                    v_lpfn != pre[i])
+                    v_lpfn != lpfn_pre[i])
                     ok2 = 0;
             snprintf(lbl, sizeof(lbl), "lpfn_r%d", N);
             check(lbl, ok2);

@@ -14,10 +14,10 @@ to the raw transcript. The three game SVGs from
 | 3D scene app (real, verified) | [games3d.svg](screenshots/games3d.svg) — `SCENE3D 1 4 0 13` | `apps/games3d/run.sh` |
 | GUI app (real, verified) | [gui_app.svg](screenshots/gui_app.svg) — `GUI_APP 30 6 0 24` | `apps/gui_app/run.sh` |
 | Calculator CLI app (real, verified) | [cli_app.svg](screenshots/cli_app.svg) — `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | `apps/cli_app/run.sh` |
-| Goose-memory demos | [goose_memory.svg](screenshots/goose_memory.svg) | `examples/goose_memory/run.sh` |
+| Goose-memory demos | [scoped_memory.svg](screenshots/scoped_memory.svg) | `examples/scoped_memory/run.sh` |
 | CTL + C+ demos | [ctl_demo.svg](screenshots/ctl_demo.svg) | `examples/ctl_demo/run.sh` |
 | Nuklear/Goose games | [nuklear.svg](screenshots/nuklear.svg) | `proof/games_gui_nuklear/run.sh` |
-| Modern-C Goose ports | [goose_ports.svg](screenshots/goose_ports.svg) | `proof/goose_samples/run.sh` |
+| Modern-C Goose ports | [modern_c_ports.svg](screenshots/modern_c_ports.svg) | `proof/modern_c_ports/run.sh` |
 | Snake game board | [snake.svg](screenshots/snake.svg) | game-suite |
 | Maze explorer | [maze.svg](screenshots/maze.svg) | game-suite |
 | Nuklear UI frame | [nuklear_ui.svg](screenshots/nuklear_ui.svg) | game-suite |

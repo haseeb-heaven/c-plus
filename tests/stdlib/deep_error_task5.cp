@@ -39,15 +39,21 @@ static void t5_skip(const char *tag, const char *reason) {
 
 /* A callback that re-enters the error API. stdlib_note() has a per-thread
  * reporting guard, so the nested error_fail must note counters but must NOT
- * re-invoke the callback (no recursion) and must not leave the guard latched. */
+ * re-invoke the callback (no recursion) and must not leave the guard latched.
+ * The nested failure targets its own record: error_fail_cat() captures fields
+ * before the callback runs, so reusing the outer slot would intentionally
+ * overwrite it with the nested state (RED-20 E3) and test recursion, not the
+ * outer record. */
 static void t5_reentrant_cb(int category, cplus_exit_code code,
                             const char *message) {
     (void)category;
     (void)code;
     (void)message;
     t5_reentrant_calls++;
-    if (t5_reentrant_target != (error *)0)
-        error_fail(t5_reentrant_target, CPLUS_EXIT_RESOURCE, "nested");
+    if (t5_reentrant_target != (error *)0) {
+        error nested = error();
+        error_fail(&nested, CPLUS_EXIT_RESOURCE, "nested");
+    }
 }
 
 /* One message-length boundary. Payload capacity is STDLIB_ERROR_SIZE-1 (255);
