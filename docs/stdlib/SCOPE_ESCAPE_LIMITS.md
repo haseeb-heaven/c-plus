@@ -64,3 +64,31 @@ Mitigation: never return a view of a locally owned container; clone the data
 into an owned `vector`/`string` before returning, or keep the view inside the
 owner's scope. Cross-function escape rejection requires compiler support and is
 not present in this library layer.
+
+## 5. `string_view` outlives its owning string
+
+`stdlib/string.hp` `string_view` is a non-owning `{const char *chars, size_t
+count}` pair. It has no owner-generation token or borrow scope; returning a
+view of a local `string` leaves it pointing at freed heap memory (confirmed by
+`proof_agent2_string_view_uaf.cp`; read returns residual bytes with exit 0).
+
+Mitigation: never return a view of a locally owned string. Copy into an owned
+`string` before returning, or keep the view within the owner's scope. This is a
+documented contract limit, not a runtime trap.
+
+## 6. Low-level `stdlib_mem_pool` free-list is stored inside user slots
+
+`stdlib_mem_pool_release()` writes the next free-list pointer into the slot
+body. Because the pool hands out raw untyped pointers and there is no
+compile-time borrow invalidation, a caller writing through a stale pointer can
+overwrite `free_head`; the next allocation then dereferences attacker-controlled
+data (`0xdeadbeef` in `proof_agent2_mempool_freelist_corruption.cp`, fatal
+abort).
+
+Mitigation: use the generation-checked `stdlib_slot_pool` /
+`stdlib_pool_ref` API for values whose lifetime crosses scopes — stale refs are
+refused (103/104) and callers never hold the intrusive link. Treat the raw
+`stdlib_mem_pool` as a low-level internal building block: never write to a slot
+after release. Fixing the layout requires moving free-list links out of user
+storage (a separate metadata array), which is a follow-up change, not claimed
+here.
