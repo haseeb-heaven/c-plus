@@ -10,11 +10,11 @@ D=tests/raii_shadowing
 OUT=$D/out
 mkdir -p "$OUT"
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-CASES="control_nonowning repro_shadow_basic repro_shadow_deep repro_shadow_branch repro_shadow_loop repro_shadow_return repro_shadow_move repro_shadow_partial repro_shadow_struct repro_shadow_managed repro_shadow_managed_return repro_shadow_break_deep"
+# repro_shadow_break_deep source is not present in this branch; reported NOT_TESTED below.
+CASES="control_nonowning repro_shadow_basic repro_shadow_deep repro_shadow_branch repro_shadow_loop repro_shadow_return repro_shadow_move repro_shadow_partial repro_shadow_struct repro_shadow_managed repro_shadow_managed_return"
 pass=0; fail=0
 
 for c in $CASES; do
-    if ! timeout 180 "$CPLUS" build "$D/$c.cp" -I. \
     if ! timeout 180 "$CPLUS" build --no-werror "$D/$c.cp" --default --sanitize=none -I. \
             -o "$OUT/$c" >"$OUT/$c.build.log" 2>&1; then
         printf 'RAII_CASE FAIL %s build\n' "$c"
