@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:2:23: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'g'
+  static void wr(void){ g[7]=3; }
+                        ^
+help: array contains 4 elements; valid indices are 0..3

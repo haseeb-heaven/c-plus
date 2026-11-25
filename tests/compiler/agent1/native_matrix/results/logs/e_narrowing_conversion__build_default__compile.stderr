@@ -1,0 +1,7 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/e_narrowing_conversion.c:10:12: warning: [CPLUS-FFI] implicit conversion from 'int' to 'char' changes value from 300 to 44
+    char c = 300;
+             ^~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/e_narrowing_conversion.c:10:12: warning: implicit conversion from 'int' to 'char' changes value from 300 to 44 [-Wconstant-conversion]
+   10 |   char c = 300;
+      |        ~   ^~~
+1 warning generated.

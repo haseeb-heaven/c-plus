@@ -1,0 +1,25 @@
+CASE=d_invalid_shift_count
+CONFIG=build_default
+STATUS=PASS
+REASON=PASS: run rc=110/110 with asserted diagnostic [shift]/[shift] and generated-C token [checked_shl]; shift by -1 and by 32 (width 32) must both trap (native 110 or UBSan 134)
+EXPECT_COMPILE=accept
+EXPECT_DIAG=
+EXPECT_REJECT_DIAG=
+EXPECT_GEN_SUBSTR=checked_shl
+EXPECT_RUN=trap
+EXPECT_RUN_RC=110
+EXPECT_RUN_DIAG=shift
+EXPECT_RUN2_RC=110
+EXPECT_RUN2_DIAG=shift
+COMPILE_CMD=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/d_invalid_shift_count__build_default.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/d_invalid_shift_count.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/bins/d_invalid_shift_count__build_default.bin
+COMPILE_RC=0
+COMPILE_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/d_invalid_shift_count__build_default__compile.stdout
+COMPILE_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/d_invalid_shift_count__build_default__compile.stderr
+GENERATED_C=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/d_invalid_shift_count__build_default.c
+NATIVE_GUARD_WRAPPER_COUNT=17
+RUN1_RC=110
+RUN1_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/d_invalid_shift_count__build_default__run1.stdout
+RUN1_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/d_invalid_shift_count__build_default__run1.stderr
+RUN2_RC=110
+RUN2_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/d_invalid_shift_count__build_default__run2.stdout
+RUN2_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/d_invalid_shift_count__build_default__run2.stderr

@@ -1,0 +1,7 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_borrow_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:5:3: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 exceeds heap allocation 'q' of 16 bytes
+    q[6]=1; free(a); return 0; }
+    ^

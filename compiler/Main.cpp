@@ -34,8 +34,15 @@ struct Options {
   std::string emitC;
   Mode mode = Mode::Safe;
   OptMode opt = OptMode::Debug;
+  Sanitizer sanitizer = Sanitizer::Undefined;
+  bool sanitizerExplicit = false;
+  bool autoRuntime = false;
+  bool strict = false;
   bool verbose = false;
-  bool warningsAsErrors = false;
+  // Issue #34: warning-as-error is the default policy; -Werror is accepted but
+  // redundant. --legacy-c opts out unless -Werror is explicit.
+  bool warningsAsErrors = true;
+  bool warningsAsErrorsExplicit = false;
   bool keepTemp = false;
   bool logging = false;
   std::string logLevel = "warn";
@@ -69,14 +76,25 @@ void printUsage(raw_ostream &os) {
   os << "  --release        -O2 (runtime safety checks stay on)\n";
   os << "  --debug          -O0 plus debug info (default)\n";
   os << "  --legacy-c       legacy C compatibility mode (NOT memory safe)\n";
+  os << "  --default        DEFAULT mode: report proven errors, warn if unverified\n";
+  os << "  --strict         STRICT mode: reject unverified operations (fail closed)\n";
+  os << "  --sanitize=LIST  comma-separated: none|address|undefined|memory|thread|\n";
+  os << "                   leak|cfi|integer (Safe mode defaults to undefined)\n";
+  os << "  --no-sanitize    plain unsanitized build (alias: --sanitize=none)\n";
+  os << "  --auto-runtime   runtime safety violations become catchable C+ exceptions "
+        "inside try/catch; fatal when no handler exists\n";
+  os << "  --print-sanitizers  print sanitizer names and backend, no build\n";
   os << "  -o <file>        output path\n";
   os << "  --emit-c <file>  write the lowered C source for inspection\n";
   os << "  --keep-temp      keep the generated C file\n";
-  os << "  -Werror          turn C+ warnings into errors\n";
+  os << "  -Werror          accepted for compatibility; warnings are already errors\n";
+  os << "  --no-werror      opt out of warning-as-error (diagnostic only; not a safety\n";
+  os << "                   gate, and unavailable as a proof in STRICT mode)\n";
   os << "  --verbose        show the backend command line\n";
   os << "  --log            enable compiler/runtime logging (off by default)\n";
   os << "  --log-level LVL  trace|debug|info|warn|error|fatal (default warn)\n";
-  os << "  -w               disable warnings (gcc compatible)\n";
+  os << "  -w               suppress backend warnings in --legacy-c only; never\n";
+  os << "                   suppresses C+ diagnostics or safety gates in Safe mode\n";
   os << "  -c / -S / -E     object / assembly / preprocess (gcc compatible)\n";
   os << "  -O2 -g -std=...  passed through to the C backend\n";
   os << "  c+ file.c -o f   gcc-style invocation (no subcommand needed)\n";
@@ -118,11 +136,16 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     if (passThrough) {
-      opts.extraArgs.push_back(a);
+      opts.extraArgs.emplace_back(a);
       continue;
     }
     if (a == "--version" || a == "-V") {
       printVersion(outs());
+      return 0;
+    }
+    if (a == "--print-sanitizers" || a == "--list-sanitizers") {
+      // Diagnostic-only: no input file, capability probe or build is needed.
+      printSanitizerInfo(outs());
       return 0;
     }
     if (a == "--help" || a == "-h") {
@@ -145,8 +168,87 @@ int main(int argc, char **argv) {
       opts.mode = Mode::LegacyC;
       continue;
     }
+    if (a == "--strict") {
+      opts.strict = true;
+      continue;
+    }
+    if (a == "--default") {
+      opts.strict = false;
+      continue;
+    }
+    if (a == "--sanitize" || a.rfind("--sanitize=", 0) == 0 ||
+        a.rfind("-fsanitize=", 0) == 0) {
+      std::string value;
+      if (a == "--sanitize") {
+        if (i + 1 >= argc) {
+          errs() << "error: --sanitize requires a value\n";
+          return 1;
+        }
+        value = argv[++i];
+      } else if (a.rfind("-fsanitize=", 0) == 0) {
+        value = a.substr(strlen("-fsanitize="));
+      } else {
+        value = a.substr(strlen("--sanitize="));
+      }
+      Sanitizer selected = Sanitizer::None;
+      size_t pos = 0;
+      while (pos <= value.size()) {
+        size_t comma = value.find_first_of(",+", pos);
+        std::string name = value.substr(
+            pos, comma == std::string::npos ? std::string::npos : comma - pos);
+        if (name == "none" || name == "off") {
+          selected = Sanitizer::None;
+        } else if (name == "address" || name == "asan") {
+          selected = selected | Sanitizer::Address;
+        } else if (name == "undefined" || name == "ubsan") {
+          selected = selected | Sanitizer::Undefined;
+        } else if (name == "memory" || name == "msan") {
+          selected = selected | Sanitizer::Memory;
+        } else if (name == "thread" || name == "tsan") {
+          selected = selected | Sanitizer::Thread;
+        } else if (name == "leak" || name == "lsan") {
+          selected = selected | Sanitizer::Leak;
+        } else if (name == "cfi") {
+          selected = selected | Sanitizer::Cfi;
+        } else if (name == "integer" || name == "unsigned" ||
+                   name == "unsigned-integer-overflow") {
+          selected = selected | Sanitizer::Integer;
+        } else if (name == "all") {
+          selected = Sanitizer::Address | Sanitizer::Undefined |
+                     Sanitizer::Thread | Sanitizer::Leak | Sanitizer::Cfi |
+                     Sanitizer::Integer;
+        } else {
+          errs() << "error: invalid sanitizer '" << name
+                 << "' (expected none|address|undefined|memory|thread|leak|"
+                    "cfi|integer)\n";
+          return 1;
+        }
+        if (comma == std::string::npos)
+          break;
+        pos = comma + 1;
+      }
+      opts.sanitizer = selected;
+      opts.sanitizerExplicit = true;
+      continue;
+    }
+    if (a == "--no-sanitize") {
+      opts.sanitizer = Sanitizer::None;
+      opts.sanitizerExplicit = true;
+      continue;
+    }
+    if (a == "--auto-runtime") {
+      // Driver option only: consumed here so it never reaches extraArgs (and
+      // therefore never trips the STRICT pass-through allow-list).
+      opts.autoRuntime = true;
+      continue;
+    }
     if (a == "-Werror") {
       opts.warningsAsErrors = true;
+      opts.warningsAsErrorsExplicit = true;
+      continue;
+    }
+    if (a == "--no-werror") {
+      opts.warningsAsErrors = false;
       continue;
     }
     if (a == "--verbose" || a == "-v") {
@@ -188,6 +290,22 @@ int main(int argc, char **argv) {
         opts.output = argv[++i];
       continue;
     }
+    // gcc-style two-token options: -I dir, -D NAME, -U NAME, -L dir, -l lib,
+    // -x language.  Consuming the value here prevents it from being mistaken
+    // for a subcommand or source file.
+    if ((a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l" ||
+         a == "-x") && i + 1 < argc) {
+      std::string value = argv[++i];
+      if (a == "-x") {
+        // C+ lowers every source to C and buildClangArgs already emits `-x c`.
+        // Accept gcc's -x spelling (and ignore the value) without duplicating
+        // the flag after the input file.
+      } else {
+        opts.extraArgs.emplace_back(a);
+        opts.extraArgs.emplace_back(value);
+      }
+      continue;
+    }
     if (a == "--emit-c") {
       if (i + 1 < argc)
         opts.emitC = argv[++i];
@@ -200,36 +318,33 @@ int main(int argc, char **argv) {
         a.rfind("-std=", 0) == 0 || a.rfind("-W", 0) == 0 ||
         a.rfind("-f", 0) == 0 || a == "-pthread" || a == "-shared" ||
         a == "-pedantic" || a == "-ansi" || a == "-pipe") {
-      opts.extraArgs.push_back(a);
+      opts.extraArgs.emplace_back(a);
       continue;
     }
     if (a.size() > 1 && a[0] == '-' && a != "-") {
-      opts.extraArgs.push_back(a);
+      opts.extraArgs.emplace_back(a);
       continue;
     }
-    positional.push_back(a);
+    positional.emplace_back(a);
   }
 
   if (positional.empty()) {
     printUsage(errs());
     return 1;
   }
+  if (positional[0] == "help") {
+    printUsage(outs());
+    return 0;
+  }
 
   auto isKnownCommand = [](const std::string &s) {
     return s == "build" || s == "run" || s == "check" || s == "test" ||
            s == "bench" || s == "demos";
   };
-  auto looksLikeSource = [](const std::string &s) {
-    static const char *const exts[] = {".c",  ".cp",  ".cpp", ".cc",
-                                       ".cxx", ".C",  ".h",   ".hp"};
-    for (const char *ext : exts)
-      if (s.size() >= std::string(ext).size() &&
-          s.compare(s.size() - std::string(ext).size(),
-                    std::string(ext).size(), ext) == 0)
-        return true;
-    return s.find('/') != std::string::npos;
-  };
-  if (!isKnownCommand(positional[0]) && looksLikeSource(positional[0]))
+  // gcc/g++ accept bare source names with no extension and multiple inputs.
+  // Anything that is not a C+ subcommand is therefore an implicit `build`,
+  // matching `gcc file.c -o file` and `c+ c4.c -o c4`.
+  if (!isKnownCommand(positional[0]))
     positional.insert(positional.begin(), "build");
 
   opts.command = positional[0];
@@ -261,6 +376,12 @@ int main(int argc, char **argv) {
   if (opts.output.empty())
     opts.output.clear(); // driver picks a default
 
+  // Issue #34: --legacy-c is the explicit compatibility escape hatch and must
+  // not inherit the default warning-as-error policy by accident. An explicit
+  // -Werror still promotes warnings there, as documented.
+  if (opts.mode == Mode::LegacyC && !opts.warningsAsErrorsExplicit)
+    opts.warningsAsErrors = false;
+
   DriverOptions d;
   d.command = opts.command;
   d.input = opts.input;
@@ -269,8 +390,13 @@ int main(int argc, char **argv) {
   d.emitC = opts.emitC;
   d.mode = opts.mode;
   d.opt = opts.opt;
+  d.sanitizer = opts.sanitizer;
+  d.sanitizerExplicit = opts.sanitizerExplicit;
+  d.autoRuntime = opts.autoRuntime;
+  d.strict = opts.strict;
   d.verbose = opts.verbose;
   d.warningsAsErrors = opts.warningsAsErrors;
+  d.warningsAsErrorsExplicit = opts.warningsAsErrorsExplicit;
   d.keepTemp = opts.keepTemp;
   d.extraArgs = opts.extraArgs;
   d.logging = opts.logging;

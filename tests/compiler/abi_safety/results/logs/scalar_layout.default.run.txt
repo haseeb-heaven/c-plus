@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+c=1 s=2 i=4 l=8 ll=8 f=4 d=8
+union=8 enum=4
+
+--- stderr ---
+

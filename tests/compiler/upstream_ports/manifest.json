@@ -1,0 +1,420 @@
+{
+  "schema": 1,
+  "suite": "compiler_upstream_ports",
+  "description": "Independently authored C cases mirroring the SHAPES of upstream bounds/malloc/div-zero/spatial-temporal tests. No upstream source text is copied. Every case asserts exact C+ diagnostics in DEFAULT and STRICT with --sanitize=none, and exact runtime output/exit status where a build succeeds.",
+  "compiler_version_note": "Assertions were captured against build/c+ (C+ 0.1.0) on 2026-11-23; paths are normalised to <SRC> before matching.",
+  "upstreams": {
+    "checkedc-clang": {
+      "repo": "https://github.com/checkedc/checkedc-clang.git",
+      "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "verified_from_local_clone": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-upstreams/checkedc"
+    },
+    "apple-llvm": {
+      "repo": "https://github.com/swiftlang/llvm-project.git",
+      "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "verified_from_local_clone": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-upstreams/apple-llvm"
+    },
+    "llvm": {
+      "repo": "https://github.com/llvm/llvm-project.git",
+      "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "verified_from_local_clone": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-upstreams/llvm"
+    },
+    "softboundcets-34": {
+      "repo": "https://github.com/santoshn/softboundcets-34.git",
+      "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+      "licence": "BSD-3-Clause",
+      "verified_from": "GitHub API: /repos/santoshn/softboundcets-34/commits/master"
+    }
+  },
+  "families": {
+    "checkedc_dynamic_bounds": 5,
+    "apple_bounds_traps": 5,
+    "clang_sa_malloc_divzero": 5,
+    "softboundcets_spatial_temporal": 5
+  },
+  "cases": [
+    {
+      "name": "cc_dyn_stack_read",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_abort",
+      "source": "cases/cc_dyn_stack_read.c",
+      "sha256": "54de93893ce5b981204788b4add0b12051b7962c5e756edc2b5c5e1d45ffdf31",
+      "note": "argc-derived index hides OOB from the static checker; the native bounds guard aborts at runtime.",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/array-read-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "dynamic array subscript read generating a dynamic bounds check"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n"}, "binary": true},
+        "strict": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n"}, "binary": true}
+      }
+    },
+    {
+      "name": "cc_dyn_stack_write",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_abort",
+      "source": "cases/cc_dyn_stack_write.c",
+      "sha256": "084a51b63380df19d5b331e7769a54c38e3f73ae0e3ac35b92f5b614c2bf2f5a",
+      "note": "Mirror of the Checked C dynamic array-write check shape; guard fires on a store.",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/array-write-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "dynamic array subscript store generating a dynamic bounds check"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n"}, "binary": true},
+        "strict": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n"}, "binary": true}
+      }
+    },
+    {
+      "name": "cc_const_index_reject",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "static_reject",
+      "source": "cases/cc_const_index_reject.c",
+      "sha256": "ed8ce9ab76f9c903a6188e848e964194b9666dd56ffc096b6b8acf0bc39ca57c",
+      "note": "Constant index is provably outside the array; rejected at check time in both modes with two diagnostics.",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/dynamic_check-warning.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "out-of-bounds constant subscript diagnosed during bounds checking"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'", "help: array contains 4 elements; valid indices are 0..3", "<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'", "help: array contains 4 elements; valid indices are 0..3", "<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'", "help: array contains 4 elements; valid indices are 0..3", "<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'", "help: array contains 4 elements; valid indices are 0..3", "<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "cc_dyn_struct_field",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_abort",
+      "source": "cases/cc_dyn_struct_field.c",
+      "sha256": "406e5d369d843ac40956b4cd6247128cd04df2e6c15e36815c2653022a7df5d6",
+      "note": "Bounds check on a struct's fixed-size array field with a runtime-derived index.",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/struct-read-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "dynamic subscript of a struct array field generating a bounds check"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'v' (length 4)\n"}, "binary": true},
+        "strict": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'v' (length 4)\n"}, "binary": true}
+      }
+    },
+    {
+      "name": "cc_ptr_formation_lower",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_trap",
+      "source": "cases/cc_ptr_formation_lower.c",
+      "sha256": "b994c8f23c9e07e6f155f6eb9067713985f308a7b09d21d095cb9a85f6535a5f",
+      "note": "Direct pointer formation below the lower bound; C+ traps with exit 101, not SIGABRT.",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/ptr-arith-null-check-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "pointer arithmetic offset check on a bounds-annotated pointer"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": 101, "stdout": "", "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:6: pointer offset -1 is outside [0, 4] elements\n"}, "binary": true},
+        "strict": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": 101, "stdout": "", "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:6: pointer offset -1 is outside [0, 4] elements\n"}, "binary": true}
+      }
+    },
+    {
+      "name": "ap_null_deref_reject",
+      "family": "apple_bounds_traps",
+      "kind": "static_reject",
+      "source": "cases/ap_null_deref_reject.c",
+      "sha256": "18fd9a52918c934d8df1c4b2a21626dd67b86b2e571fa1609c742ee93af66626",
+      "note": "Null-derived pointer dereference: the null trap category is diagnosed before codegen.",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety-legacy-checks/CodeGen/single-null.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "null-valued `__single` pointer dereference trap category"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "ap_global_oob_trap",
+      "family": "apple_bounds_traps",
+      "kind": "runtime_abort",
+      "source": "cases/ap_global_oob_trap.c",
+      "sha256": "1e310ecc02a4dfed25408a75124af14c0db9e4d40c338911ef8dded6a898cca2",
+      "note": "Out-of-bounds subscript of a global array; runtime trap names the global and its length.",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety/CodeGen/runtime-checks/oob-array-subscript.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "out-of-bounds array subscript runtime check"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'g' (length 4)\n"}, "binary": true},
+        "strict": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": -6, "stdout": "", "stderr": "C+ error: index 9 is outside the bounds of 'g' (length 4)\n"}, "binary": true}
+      }
+    },
+    {
+      "name": "ap_subscript_static_reject",
+      "family": "apple_bounds_traps",
+      "kind": "static_reject",
+      "source": "cases/ap_subscript_static_reject.c",
+      "sha256": "4d2f4c51560b4ed26231877c20d38eb169e2af29d018313e530d340b56aab67a",
+      "note": "Provably OOB constant subscript; the compiler rejects before a trap can be emitted.",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety-legacy-checks/CodeGen/runtime-checks/oob-array-subscript-deref.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "out-of-bounds array subscript with dereference runtime check"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'", "help: array contains 8 elements; valid indices are 0..7"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'", "help: array contains 8 elements; valid indices are 0..7"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'", "help: array contains 8 elements; valid indices are 0..7"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'", "help: array contains 8 elements; valid indices are 0..7"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "ap_shift_count_trap",
+      "family": "apple_bounds_traps",
+      "kind": "warn_then_trap",
+      "source": "cases/ap_shift_count_trap.c",
+      "sha256": "2799e65169a4510c2473c671e682085084a166017727ee94b7040adf73da380c",
+      "note": "Untrusted count used as a shift width: DEFAULT warns then traps at runtime, STRICT fails closed at compile time.",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety/CodeGen/trap-reasons/general_trap-O0.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "untrusted-count operation that lowers to a general runtime trap"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok", "<SRC>:6:13: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width"], "forbidden": ["error:"]}, "build": {"rc": 0, "contains": ["<SRC>:6:13: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width"], "forbidden": ["error:"]}, "run": {"rc": 110, "stdout": "", "stderr": "C+ runtime error: invalid shift: shift count 41 is outside [0, 32)\n"}, "binary": true},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:6:13: error: [CPLUS-FFI] shift count cannot be proven within the left operand's width"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:6:13: error: [CPLUS-FFI] shift count cannot be proven within the left operand's width"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "ap_inbounds_control",
+      "family": "apple_bounds_traps",
+      "kind": "clean",
+      "source": "cases/ap_inbounds_control.c",
+      "sha256": "8088658455aa13bc8e5e8de3de2bb89d5e8b22b7e7c871f9a846a91ef8c44e65",
+      "note": "Positive control: runtime-derived but in-bounds index must not trap in either mode.",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety/CodeGen/runtime-checks/bound-to-array-ok.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "in-bounds array access through a bounded pointer positive control"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": 0, "stdout": "6\n", "stderr": ""}, "binary": true},
+        "strict": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": 0, "stdout": "6\n", "stderr": ""}, "binary": true}
+      }
+    },
+    {
+      "name": "sa_malloc_zero_reject",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "static_reject",
+      "source": "cases/sa_malloc_zero_reject.c",
+      "sha256": "1efd679c5e76a00de147b5567d7b128f96a9b1ed256155f43e0c47f8acb22b40",
+      "note": "malloc(0) shape from the Clang SA malloc checker: C+ rejects as implementation-defined.",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/malloc.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "zero-size allocation tracked by the malloc checker"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc", "help: use C+ managed allocations and cplus_* helpers"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc", "help: use C+ managed allocations and cplus_* helpers"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc", "help: use C+ managed allocations and cplus_* helpers"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc", "help: use C+ managed allocations and cplus_* helpers"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sa_malloc_size_wrap",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "static_reject",
+      "source": "cases/sa_malloc_size_wrap.c",
+      "sha256": "49fde5dbf5223606241d0c57f2f0a179172a30f684ffeada2eb46e417cc99e77",
+      "note": "Multiplication in malloc size wraps size_t; the allocation-size checker rejects it.",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/malloc-sizeof.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "malloc size expression derived from a computed element count"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sa_double_free",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "static_reject",
+      "source": "cases/sa_double_free.c",
+      "sha256": "7cc3b9baab43f708707a1b2b2122366443033a519ee2a15af43432bfde424ef0",
+      "note": "Classic Clang SA malloc double-free shape, rejected by the ownership checker.",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/malloc.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "double free of the same allocated pointer"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'", "help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'", "help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'", "help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'", "help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sa_divzero_constant",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "warn_then_reject_strict",
+      "source": "cases/sa_divzero_constant.c",
+      "sha256": "27ea014f86d53a1f5fdf0ebe4a6dd3e28407f44138471d200e1708540e254728",
+      "note": "Provable zero divisor: DEFAULT warns and still builds, STRICT turns the same diagnostic into an error.",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/division-by-zero.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "division by a known-zero divisor reported by the static analyzer"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok", "<SRC>:4:13: warning: [CPLUS-ARITH] division by zero"], "forbidden": ["error:"]}, "build": {"rc": 0, "contains": ["<SRC>:4:13: warning: [CPLUS-ARITH] division by zero"], "forbidden": ["error:"]}, "run": {"rc": 0, "stdout": "", "stderr": ""}, "binary": true},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:4:13: error: [CPLUS-ARITH] division by zero"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:4:13: error: [CPLUS-ARITH] division by zero"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sa_divzero_dynamic",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "warn_then_trap",
+      "source": "cases/sa_divzero_dynamic.c",
+      "sha256": "1316f2e28af1e5189eb9f340264d2ac61257aee371f9be51699d0cc6c72d8fbd",
+      "note": "Divisor only provably zero at runtime: DEFAULT warns then traps (exit 110), STRICT rejects at compile time.",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/division-by-zero-track-zero.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "zero-valued divisor tracked through a value assignment before division"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok", "<SRC>:6:13: warning: [CPLUS-ARITH] division by zero cannot be excluded"], "forbidden": ["error:"]}, "build": {"rc": 0, "contains": ["<SRC>:6:13: warning: [CPLUS-ARITH] division by zero cannot be excluded"], "forbidden": ["error:"]}, "run": {"rc": 110, "stdout": "", "stderr": "C+ runtime error: division by zero: division by zero\n"}, "binary": true},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:6:13: error: [CPLUS-ARITH] division by zero cannot be excluded"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:6:13: error: [CPLUS-ARITH] division by zero cannot be excluded"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sb_heap_oob_static",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "static_reject",
+      "source": "cases/sb_heap_oob_static.c",
+      "sha256": "3b7b585e916dcb474f370ace744530496b1be7cd6cb957b81cdfc8531a3610be",
+      "note": "SoftBound spatial shape: store beyond a malloc'd object is rejected from the registered extent.",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "spatial bounds violation on a heap object (SoftBound store check)"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sb_uaf_deref",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "static_reject",
+      "source": "cases/sb_uaf_deref.c",
+      "sha256": "fc6f314f5bf232e0fb604ac5dc06ee94700eb90efcf5d95005a9e57cc6ea7fe6",
+      "note": "CETS temporal shape: dereference after release is rejected with allocation/release notes.",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "temporal use-after-free violation (CETS lock/key check)"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'", "note: allocation: <SRC>:5", "note: owner released: <SRC>:7"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'", "note: allocation: <SRC>:5", "note: owner released: <SRC>:7"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'", "note: allocation: <SRC>:5", "note: owner released: <SRC>:7"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'", "note: allocation: <SRC>:5", "note: owner released: <SRC>:7"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sb_realloc_alias",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "warn_then_reject_strict",
+      "source": "cases/sb_realloc_alias.c",
+      "sha256": "7aac6f7a7d95d9475f7b1021ca3c0e637c9db16df6d6570532344fe6636ecc99",
+      "note": "Temporal stale-pointer shape after realloc: DEFAULT warns, STRICT rejects the unproven alias.",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "stale pointer use after reallocation (CETS temporal check)"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok", "<SRC>:6:14: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown"], "forbidden": ["error:"]}, "build": {"rc": 0, "contains": ["<SRC>:6:14: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown"], "forbidden": ["error:"]}, "run": {"rc": 0, "stdout": "", "stderr": ""}, "binary": true},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:6:14: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:6:14: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sb_free_interior",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "static_reject",
+      "source": "cases/sb_free_interior.c",
+      "sha256": "6b1d31e8d0d04fe8ab423255f8af57d54be13f4b532743642ded339e823f5798",
+      "note": "Invalid free of an interior pointer: the owned base must be the deallocation argument.",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "invalid deallocation of a pointer not equal to the allocation base"
+      },
+      "expect": {
+        "default": {"check": {"rc": 1, "contains": ["<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free"], "forbidden": ["check: "]}, "run": null, "binary": false},
+        "strict": {"check": {"rc": 1, "contains": ["<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free"], "forbidden": ["check: "]}, "build": {"rc": 1, "contains": ["<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free"], "forbidden": ["check: "]}, "run": null, "binary": false}
+      }
+    },
+    {
+      "name": "sb_heap_ptr_lower",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "runtime_trap",
+      "source": "cases/sb_heap_ptr_lower.c",
+      "sha256": "cceb2629d6f282861ec62f3a20545d965b0ff302d42e936cad8a8bbcd9cba5f3",
+      "note": "SoftBound lower-bound shape on a heap object: forming p-1 traps with exit 101.",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "spatial violation from pointer arithmetic below the lower bound"
+      },
+      "expect": {
+        "default": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": 101, "stdout": "", "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:9: pointer offset -1 is outside [0, 4] elements\n"}, "binary": true},
+        "strict": {"check": {"rc": 0, "contains": ["check: <SRC> ok"], "forbidden": ["error:", "warning:"]}, "build": {"rc": 0, "contains": [], "forbidden": ["error:", "warning:"]}, "run": {"rc": 101, "stdout": "", "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:9: pointer offset -1 is outside [0, 4] elements\n"}, "binary": true}
+      }
+    }
+  ]
+}

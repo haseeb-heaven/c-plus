@@ -1,0 +1,8 @@
+command: /usr/bin/clang -std=c99 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/union_layout.oracle_std_c99.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/union_layout.oracle_std_c99.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

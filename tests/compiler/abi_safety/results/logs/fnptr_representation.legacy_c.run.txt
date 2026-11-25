@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.legacy_c.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+sz=8 ptr=8 ua=8 eq=1 same=1 diff=1 cross=1 call=42 rt=53
+
+--- stderr ---
+

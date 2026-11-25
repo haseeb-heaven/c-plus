@@ -1,0 +1,10 @@
+case: ap_global_oob_trap
+mode: strict
+step: build
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_global_oob_trap.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_global_oob_trap.strict
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

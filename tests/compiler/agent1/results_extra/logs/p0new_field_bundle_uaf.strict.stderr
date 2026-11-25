@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_field_bundle_uaf.c:16:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer
+      b.slots[0].value[0] = 9;
+      ^~~~~~~
+help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()

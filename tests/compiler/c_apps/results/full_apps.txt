@@ -1,0 +1,9 @@
+Full playable C apps: c+ vs clang
+snake_full         legacy=True default=True strict=True
+game2048_full      legacy=True default=True strict=True
+tic_tac_toe_full   legacy=True default=True strict=True
+tetris_mini        legacy=True default=True strict=True
+line_editor        legacy=True default=True strict=True
+calc_repl          legacy=True default=True strict=True
+
+failures: 0

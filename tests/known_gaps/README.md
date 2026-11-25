@@ -31,3 +31,5 @@ They are kept here as evidence of the limitation, not as verified safety tests.
   bypass deterministic cleanup. They now produce a warning, not an error, so
   real C programs (e.g. Lua) still compile; RAII is not guaranteed across
   non-local jumps.
+- `allocator_reuse.c` — stale alias after allocator address reuse is not
+  reliably detected without capability/generation metadata (issue #1).

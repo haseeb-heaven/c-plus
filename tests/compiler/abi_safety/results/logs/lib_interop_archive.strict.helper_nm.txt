@@ -1,0 +1,13 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_strict.a
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+lib_interop_archive.strict.helper.o:
+0000000000000000 T _abi_lib_mul
+0000000000000194 T _abi_lib_pair
+0000000000000170 T _abi_lib_scale
+
+--- stderr ---
+

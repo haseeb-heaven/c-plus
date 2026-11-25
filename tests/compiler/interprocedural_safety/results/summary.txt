@@ -1,0 +1,42 @@
+C+ interprocedural-safety regression suite
+============================================================
+binary       : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+version      : C+ 0.1.0
+generated    : 2026-11-23T23:42:01
+modes        : --default, --strict, --legacy-c
+timeout      : 90s per subprocess
+
+SUMMARY
+------------------------------------------------------------
+cases                : 61
+cases passed         : 61
+cases failed         : 0
+mode checks          : 183
+mode checks passed   : 183
+mode checks failed   : 0
+runtime cases        : 24
+runtime passed       : 24
+runtime failed       : 0
+soundness-gap cases  : 6 (0 failing as designed)
+
+BY FAMILY
+------------------------------------------------------------
+  alias              cases= 4 passed= 4 failed= 0
+  array_decay        cases= 4 passed= 4 failed= 0
+  call_shape         cases=11 passed=11 failed= 0
+  dataflow           cases= 6 passed= 6 failed= 0
+  effects            cases= 2 passed= 2 failed= 0
+  globals            cases= 4 passed= 4 failed= 0
+  nullability        cases= 6 passed= 6 failed= 0
+  ownership          cases= 3 passed= 3 failed= 0
+  param_bounds       cases= 4 passed= 4 failed= 0
+  reassignment       cases= 2 passed= 2 failed= 0
+  ret_ownership      cases= 6 passed= 6 failed= 0
+  static_arith       cases= 5 passed= 5 failed= 0
+  structs            cases= 4 passed= 4 failed= 0
+
+FAILURES (exact case names)
+------------------------------------------------------------
+  none
+
+Full records: results/summary.json

@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug12_aliasing.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug12_aliasing.c:6:21: error: [CPLUS-FFI] type-punned dereference violates strict aliasing; use memcpy

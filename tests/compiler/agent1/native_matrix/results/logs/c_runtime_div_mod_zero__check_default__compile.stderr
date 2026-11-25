@@ -1,0 +1,6 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/c_runtime_div_mod_zero.c:17:20: warning: [CPLUS-ARITH] division by zero cannot be excluded
+      printf("%d\n", x / d);
+                     ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/c_runtime_div_mod_zero.c:19:20: warning: [CPLUS-ARITH] remainder by zero cannot be excluded
+      printf("%d\n", x % d);
+                     ^

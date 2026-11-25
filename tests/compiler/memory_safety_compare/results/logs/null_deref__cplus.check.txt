@@ -1,0 +1,7 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/null_deref__cplus.c
+returncode: 1
+timed_out: False
+
+<SRC>:3:12: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference
+      return *p;
+             ^

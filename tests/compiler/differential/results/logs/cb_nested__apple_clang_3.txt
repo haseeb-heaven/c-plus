@@ -1,0 +1,46 @@
+=== reference compile ===
+command: /usr/bin/cc -std=c11 -O0 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/differential/cases/cb_nested.c -o /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-diff-cb_nested__apple_clang_3-e32jnw4e/cb_nested__apple_clang_3.ref
+returncode: 0
+timed_out: False
+os_error: None
+
+--- stdout ---
+
+--- stderr ---
+
+
+=== cplus compile ===
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --legacy-c --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/differential/cases/cb_nested.c -o /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-diff-cb_nested__apple_clang_3-e32jnw4e/cb_nested__apple_clang_3.cplus -- -std=c11
+returncode: 0
+timed_out: False
+os_error: None
+
+--- stdout ---
+
+--- stderr ---
+
+
+=== reference run ===
+command: /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-diff-cb_nested__apple_clang_3-e32jnw4e/cb_nested__apple_clang_3.ref
+returncode: 0
+timed_out: False
+os_error: None
+
+--- stdout ---
+nested=4376 direct=1328
+
+--- stderr ---
+
+
+=== cplus run ===
+command: /var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-diff-cb_nested__apple_clang_3-e32jnw4e/cb_nested__apple_clang_3.cplus
+returncode: 0
+timed_out: False
+os_error: None
+
+--- stdout ---
+nested=4376 direct=1328
+
+--- stderr ---
+
+

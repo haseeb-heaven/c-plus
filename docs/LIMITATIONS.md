@@ -34,15 +34,15 @@ depends on a runtime check, the check is named.
 | Format-free `scan(...)` | supported | lvalues, bounded string reads, fatal on conversion failure |
 | Default function arguments | supported | same translation unit only; filled at call sites; defaults should be trailing |
 | Range-based `for` | supported | simple lvalue ranges with a visible `.len`; no side-effecting range expressions |
-| Dynamic out-of-bounds index, null/misaligned dereference | supported at run time | UBSan checks, abort on first failure |
+| Dynamic out-of-bounds index, null/misaligned dereference | supported at run time | C+ inserted `__cplus_bounds_check` for fixed-array indices (including function-pointer arrays); UBSan for null/alignment; abort on first failure |
 | Deterministic exit codes for safety failures | supported | `101`–`108` in `runtime/include/cplus/cplus.h` |
 | Lightweight classes with methods | supported | inline methods only; lower to `T_m(T *self, ...)` |
 | `p.m()` / `p->m()` sugar | supported | resolved from simple `T p;` / `T *p;` declarations in the same TU |
 | Pthreads + RAII mutex guard | supported | primitives and deterministic unlock; see race note below |
 | `--legacy-c` compatibility mode | supported | no safety checks; **not** memory safe |
-| Use-after-free detection | **not implemented** | ASan unavailable on this host; see below |
+| Use-after-free detection | single-TU named shapes rejected statically | direct, local alias, field, constant array slot, `void*` cast, helper-return alias, released-pointer argument, and runtime-index element cases are rejected in DEFAULT and STRICT; general temporal safety (indirect calls, integer casts, heap address reuse, threads, cross-TU) is still unsupported and needs opt-in ASan where available |
 | Static verification that shared data is locked | **not implemented** | concurrency is primitive-based, not verified |
-| `goto` / `longjmp` cleanup | warning only | non-local exits bypass inserted destructors |
+| `goto` / `longjmp` cleanup | STRICT rejects live-resource cases | a jump that bypasses cleanup of a live allocation is a STRICT error; plain no-resource jumps warn and still bypass inserted destructors |
 | Constructors as class methods | supported | `T(...)` → `T_ctor`, no return type, no early return |
 | Destructors as class methods | supported | `void drop(void)` → `T_drop`; makes the class an owning type |
 | Inheritance, interfaces, virtual dispatch, access control | **not supported** | classes are structs + functions |
@@ -55,8 +55,8 @@ depends on a runtime check, the check is named.
 
 | bug | status in safe C+ | mechanism |
 | --- | --- | --- |
-| 1. Buffer overflow / bad index | caught | compile-time for constants and simple loops; UBSan `bounds` at run time |
-| 2. Use-after-free | **not caught** for raw `malloc`/`free`; no ASan on this host | C+ managed allocations detect double/invalid release, not stale dereferences |
+| 1. Buffer overflow / bad index | caught | compile-time for constants and simple loops (including function-pointer arrays); C+ `__cplus_bounds_check` / UBSan `bounds` at run time |
+| 2. Use-after-free | **named single-TU shapes caught statically** (direct/alias/field/array/cast/helper-return/callee argument/runtime index); general raw `malloc`/`free` UAF still unsupported | cast-transparent alias groups, `returnedParam_` alias transfer, released-pointer call-boundary rule, conservative runtime-index element rule; managed allocations also detect double/invalid release |
 | 3. Returning a pointer to a local | caught | `-Werror=return-stack-address` |
 | 4. Memory leak on early return | prevented for managed/RAII allocations; not detected for raw `malloc` | scope-exit cleanup |
 | 5. Double free | caught for C+ allocations; not for raw `free` | allocator side table + freed-address cache |
@@ -88,7 +88,7 @@ depends on a runtime check, the check is named.
 | 31. Plain `char` into `<ctype.h>` | caught | static check recommending `(unsigned char)` |
 | 32. Unchecked `fread`/`fwrite` | caught | static check for ignored return value |
 | 33. Empty infinite loop | caught | static check; add a volatile/atomic side effect |
-| 34. `longjmp` bypassing cleanup | warning | valid C compiles; RAII is not guaranteed across non-local jumps |
+| 34. `longjmp` bypassing cleanup | STRICT rejects live-resource cases | warning in DEFAULT/valid C; RAII is still not guaranteed across non-local jumps |
 | 35. Cross-TU declaration/ABI mismatch | **not detected** | single-TU compiler; see `tests/known_gaps/abi_mismatch/` |
 | 36. Casting away const to mutate | caught | `-Werror=cast-qual` |
 | 37. NaN equality comparison | caught | static check recommending `isnan()` |
@@ -131,16 +131,24 @@ Safe mode compiles with:
 compile error (as in your `arr[10]` example). This is reused from the existing
 C compiler, not a separate C+ type system.
 
+Safe-mode *builds* also insert `__cplus_bounds_check` around dynamic indices
+into fixed-size arrays (including function-pointer arrays) after static
+analysis. That check is C+-generated and does not depend on a sanitizer
+backend; `c+ check` produces no executable, and `--legacy-c` inserts no checks.
+
 This gives abort-on-violation checks for fixed-extent array subscripts, null
 and misaligned pointer use, and the undefined-behaviour checks that ship in
 UBSan's `undefined` group (including signed integer overflow). It does **not**
 give a complete spatial/temporal memory-safety guarantee:
 
-- **No use-after-free detection.** AddressSanitizer was tested and is broken
-  on this machine: even a trivial program aborts during initialisation with
-  `AddressSanitizer: CHECK failed: sanitizer_malloc_mac.inc:189`. Enabling it
-  would produce a tool that crashes in its own runtime, so it is not used and
-  no use-after-free claim is made.
+- **Use-after-free detection requires a working ASan backend.** Apple clang
+  16's ASan aborts during initialisation on this host
+  (`AddressSanitizer: CHECK failed: sanitizer_malloc_mac.inc:189`), so the
+  default build does not enable it. `--sanitize=address` (or
+  `address,undefined`) is available with a working backend such as Homebrew
+  clang 23 plus an explicit `-isysroot`; see `docs/CAPABILITIES.md`. The
+  sanitizer suite verifies the diagnostics on that backend, but the default
+  build still makes no UAF-detection claim.
 - A stale managed pointer whose address has already been reused can be
   misattributed to the new allocation. The bounded cache catches the common
   immediate double-release case (tested), not every stale-pointer case.
@@ -192,6 +200,10 @@ give a complete spatial/temporal memory-safety guarantee:
   fields must be written by the programmer.
 - Arbitrary pointer arithmetic and casts remain C behaviour.
 
+The paired compile-time comparison in `docs/RUST_COMPARISON.md` covers only
+the overlapping subset (15/20 rejections for each language) and explicitly
+does not claim parity with Rust's ownership model.
+
 `--legacy-c` turns all of the above checks off. It is provided for
 compatibility experiments, not for safe code.
 
@@ -205,10 +217,12 @@ still the underlying C/POSIX facilities.
 
 ## Control flow
 
-`return`, `break` and `continue` cleanup is inserted and tested. `goto`,
-`longjmp` and `setjmp` are outside the supported subset: a `goto` produces a
-warning, and a non-local jump bypasses inserted destructors. `exit()` also
-bypasses them, as in C.
+`return`, `break` and `continue` cleanup is inserted and tested. In STRICT mode
+a `goto` or `longjmp` that bypasses cleanup of a live allocation is an error
+(`tests/core/p0_correctness_suite.py`); a plain jump with no live resource is
+warned about and still bypasses inserted destructors, as does `exit()`. The
+`setjmp`/`longjmp` resume idiom that frees the allocation on the resumed path
+is accepted because cleanup is reachable. Compatibility mode keeps warnings.
 
 ## Language surface
 
@@ -271,7 +285,8 @@ How to read these numbers:
 
 ## Roadmap (not promised)
 
-- use-after-free detection with a working sanitizer backend;
+- use-after-free detection in the default build (opt-in `--sanitize=address`
+  already works with a backend such as Homebrew clang 23);
 - typed borrows that can be checked statically;
 - data-race detection or a verified lock discipline;
 - constructors and destructors as first-class class members;

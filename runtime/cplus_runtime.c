@@ -13,9 +13,75 @@
  *===----------------------------------------------------------------------===*/
 
 #include "cplus/cplus.h"
+#include <errno.h>
+#include <math.h>
+#include <setjmp.h>
+#include <limits.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/* C+ exception frames. The stack is thread-local and holds only ordinary C
+ * pointers; raising with no active try is a deterministic fatal error. */
+static void cplus_print_fatal(cplus_exit_code code, const char *kind,
+                              const char *file, int line, const char *msg);
+static __thread CPlusExceptionFrame *cplus_exception_current = NULL;
+
+void cplus_exception_enter(CPlusExceptionFrame *frame) {
+  if (!frame)
+    return;
+  frame->prev = cplus_exception_current;
+  cplus_exception_current = frame;
+}
+
+void cplus_exception_pop(void) {
+  if (cplus_exception_current)
+    cplus_exception_current = cplus_exception_current->prev;
+}
+
+void cplus_exception_raise(int code, const char *message, const char *file,
+                           int line) {
+  if (!cplus_exception_current)
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unhandled C+ exception", file,
+                      line, "throw outside a try block");
+  CPlusExceptionFrame *active = cplus_exception_current;
+  cplus_exception_current = active->prev;
+  active->exc.code = code;
+  active->exc.message = message;
+  active->exc.file = file;
+  active->exc.line = line;
+  longjmp(active->env, 1);
+}
+
+size_t __cplus_bounds_check(size_t index, size_t length, const char *name) {
+  if (index < length)
+    return index;
+  fprintf(stderr,
+          "C+ error: index %zu is outside the bounds of '%s' (length %zu)\n",
+          index, name ? name : "array", length);
+  abort();
+}
+
+int cplus_runtime_log_level = 99; /* enabled by generated program constructor */
+
+static void cplus_log_impl(int level, const char *file, int line,
+                           const char *func, const char *fmt, ...) {
+  if (level < cplus_runtime_log_level)
+    return;
+  va_list ap;
+  va_start(ap, fmt);
+  fprintf(stdout, "[%d] ", level);
+  vfprintf(stdout, fmt, ap);
+  fprintf(stdout, "  (%s:%d in %s)\n", file, line, func);
+  va_end(ap);
+}
+#undef cplus_log
+#define cplus_log(level, ...)                                                  \
+  cplus_log_impl((int)(level), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -25,9 +91,45 @@
 #define CPLUS_POSIX 1
 #endif
 
+/* Usable size of a malloc block.  Used only to *clamp* a caller-supplied
+ * registration extent so that a registry size can never authorize a copy or a
+ * length query past the real allocation.  Returns 0 on platforms without a
+ * query or when the pointer is not a malloc block (portable fallback: keep the
+ * caller's value). */
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+static size_t cplus_malloc_capacity(const void *p) {
+  return p ? (size_t)malloc_size(p) : 0u;
+}
+#define CPLUS_HAVE_MALLOC_CAPACITY 1
+#elif defined(__linux__)
+#include <malloc.h>
+static size_t cplus_malloc_capacity(const void *p) {
+  return p ? (size_t)malloc_usable_size((void *)p) : 0u;
+}
+#define CPLUS_HAVE_MALLOC_CAPACITY 1
+#else
+static size_t cplus_malloc_capacity(const void *p) {
+  (void)p;
+  return 0u;
+}
+#define CPLUS_HAVE_MALLOC_CAPACITY 0
+#endif
+
+/* Never let a caller-supplied size exceed the block the allocator actually
+ * handed out.  A smaller declared size is kept verbatim. */
+static size_t cplus_clamp_registered_size(const void *p, size_t bytes) {
+  size_t usable = cplus_malloc_capacity(p);
+  if (usable != 0u && bytes > usable)
+    return usable;
+  return bytes;
+}
+
 /* -------------------------------------------------------------------------
  * Diagnostics
  * ------------------------------------------------------------------------- */
+
+void (*cplus_fatal_hook)(cplus_exit_code, const char *) = NULL;
 
 static void cplus_print_fatal(cplus_exit_code code, const char *kind,
                               const char *file, int line, const char *msg) {
@@ -41,6 +143,8 @@ static void cplus_print_fatal(cplus_exit_code code, const char *kind,
   }
   fputc('\n', stderr);
   fflush(stderr);
+  if (cplus_fatal_hook)
+    cplus_fatal_hook(code, kind);
   _Exit((int)code);
 }
 
@@ -60,6 +164,21 @@ void cplus_check_bounds(const void *base, size_t count, size_t index,
   cplus_print_fatal(CPLUS_EXIT_BOUNDS, "out-of-bounds access", file, line, buf);
 }
 
+
+void cplus_check_ptr_formation(const void *base, size_t count, int64_t index,
+                               const char *file, int line, const char *expr) {
+  (void)base;
+  (void)expr;
+  if (index >= 0 && (uintmax_t)index <= (uintmax_t)count)
+    return;
+  char buf[192];
+  snprintf(buf, sizeof(buf),
+           "pointer offset %lld is outside [0, %llu] elements",
+           (long long)index, (unsigned long long)count);
+  cplus_print_fatal(CPLUS_EXIT_BOUNDS, "out-of-bounds pointer formation", file,
+                    line, buf);
+}
+
 void cplus_check_nonnull(const void *ptr, const char *file, int line,
                          const char *expr) {
   if (ptr != NULL)
@@ -69,6 +188,214 @@ void cplus_check_nonnull(const void *ptr, const char *file, int line,
            expr ? expr : "");
   cplus_print_fatal(CPLUS_EXIT_NULL_POINTER, "null pointer dereference", file,
                     line, buf);
+}
+
+/* -------------------------------------------------------------------------
+ * Native checked signed arithmetic
+ *
+ * The exact mathematical result is computed in 128 bits, so the check itself
+ * never overflows.  We compare against the width of the source expression,
+ * not int64_t: `int a = INT_MAX; a + 1` must trap even though it fits in 64
+ * bits.  This is independent of UBSan and is emitted only for expressions the
+ * compiler cannot fold to a constant.
+ * ------------------------------------------------------------------------- */
+static int64_t cplus_checked_result(__int128 r, unsigned bits,
+                                    unsigned isSigned,
+                                    const char *operation) {
+  if (bits == 0 || bits > 64 || !isSigned)
+    return (int64_t)r; /* unsigned arithmetic is defined to wrap */
+  __int128 lo = -((__int128)1 << (bits - 1));
+  __int128 hi = ((__int128)1 << (bits - 1)) - 1;
+  if (r < lo || r > hi) {
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+             "%s result does not fit in a %u-bit signed integer", operation,
+             bits);
+    cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "signed integer overflow", NULL, 0,
+                      buf);
+  }
+  return (int64_t)r;
+}
+
+static void cplus_arith_fatal(const char *kind, const char *msg) {
+  cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, kind, NULL, 0, msg);
+}
+
+int64_t __cplus_checked_add_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_result((__int128)a + (__int128)b, bits, isSigned,
+                              "addition");
+}
+
+int64_t __cplus_checked_sub_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_result((__int128)a - (__int128)b, bits, isSigned,
+                              "subtraction");
+}
+
+int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_result((__int128)a * (__int128)b, bits, isSigned,
+                              "multiplication");
+}
+
+/* Division and remainder: reject a zero divisor and the signed INT_MIN/-1
+ * overflow.  Predicates follow Clang's EmitUndefinedBehaviorIntegerDivAndRemCheck
+ * and UBSan's handleDivremOverflowImpl (Apache-2.0 WITH LLVM-exception),
+ * implemented here without any sanitizer dependency. */
+static int64_t cplus_checked_divrem(int64_t a, int64_t b, unsigned bits,
+                                    unsigned isSigned, int remainder) {
+  if (b == 0)
+    cplus_arith_fatal("division by zero",
+                      remainder ? "remainder by zero" : "division by zero");
+  if (isSigned && bits > 1 && bits <= 64 && b == -1 &&
+      a == (int64_t)(-((__int128)1 << (bits - 1))))
+    cplus_arith_fatal("signed integer overflow",
+                      remainder ? "remainder overflows the source type"
+                                : "division overflows the source type");
+  return remainder ? a % b : a / b;
+}
+
+int64_t __cplus_checked_div_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_divrem(a, b, bits, isSigned, 0);
+}
+
+int64_t __cplus_checked_rem_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_divrem(a, b, bits, isSigned, 1);
+}
+
+/* Shifts: enforce 0 <= count < width.  For signed left shift also reject a
+ * negative left operand and any non-zero bit shifted out of the value bits,
+ * matching Clang's EmitShl predicates. */
+static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
+                                   unsigned isSigned, int left) {
+  if (bits == 0 || bits > 64)
+    return left ? (int64_t)((uint64_t)a << (uint64_t)b)
+                : (int64_t)(a >> (uint64_t)b);
+  if (b < 0 || (unsigned long long)b >= bits) {
+    char buf[160];
+    snprintf(buf, sizeof(buf), "shift count %lld is outside [0, %u)",
+             (long long)b, bits);
+    cplus_arith_fatal("invalid shift", buf);
+  }
+  if (left && isSigned) {
+    if (a < 0)
+      cplus_arith_fatal("invalid shift",
+                        "left shift of a negative signed value");
+    uint64_t ua = (uint64_t)a;
+    unsigned count = (unsigned)b;
+    uint64_t limit = (~(uint64_t)0) >> (64 - bits);
+    if ((ua << count) & ~limit)
+      cplus_arith_fatal("invalid shift",
+                        "left shift loses bits above the source width");
+  }
+  return left ? (int64_t)((uint64_t)a << (uint64_t)b)
+              : (int64_t)(a >> (uint64_t)b);
+}
+
+int64_t __cplus_checked_shl_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_shift(a, b, bits, isSigned, 1);
+}
+
+int64_t __cplus_checked_shr_i64(int64_t a, int64_t b, unsigned bits,
+                                unsigned isSigned) {
+  return cplus_checked_shift(a, b, bits, isSigned, 0);
+}
+
+/* Value-based narrowing check.  Predicates follow Clang's
+ * EmitIntegerTruncationCheckHelper (any-extend then compare) and GSL's
+ * narrow (round-trip equality), implemented here in plain C with no
+ * sanitizer runtime.  Only the value is checked; a narrow *type* is fine. */
+int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
+                                   unsigned db, unsigned ds) {
+  __int128 src = (__int128)value;
+  if (ss && sb > 0 && sb < 64 && ((value >> (sb - 1)) & 1u))
+    src = (__int128)(int64_t)(value | (~((uint64_t)0) << sb));
+  uint64_t mask = db >= 64 ? ~((uint64_t)0)
+                           : ((((uint64_t)1) << db) - 1);
+  uint64_t truncated = value & mask;
+  __int128 dst = (__int128)truncated;
+  if (ds && db > 0 && db < 64 && ((truncated >> (db - 1)) & 1u))
+    dst = (__int128)(int64_t)(truncated | (~((uint64_t)0) << db));
+  if (src != dst) {
+    char buf[192];
+    snprintf(buf, sizeof(buf),
+             "implicit conversion from a %u-bit %s value changed it to a "
+             "%u-bit %s value",
+             sb, ss ? "signed" : "unsigned", db, ds ? "signed" : "unsigned");
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "implicit integer conversion",
+                      NULL, 0, buf);
+  }
+  return (int64_t)dst;
+}
+
+/* Floating-point -> integer conversion.  The compiler emits an inline
+ * range/NAN predicate and calls this helper only on the failure path, so the
+ * hot path needs no cross-TU call.  The full predicate is repeated here so
+ * the symbol is also correct when called directly.  No __int128 is needed:
+ * every bound is an exactly representable double power of two. */
+int64_t __cplus_checked_f2i_i64(double value, unsigned bits, unsigned isSigned) {
+  double lo, hi;
+  char buf[192];
+
+  if (bits == 0 || bits > 64) {
+    bits = 64;
+    isSigned = 1;
+  }
+  if (isSigned) {
+    if (bits == 64) {
+      lo = -9223372036854775808.0;
+      hi = 9223372036854775808.0;
+    } else {
+      int b = (int)bits, i;
+      double p = 1.0;
+      for (i = 0; i < b - 1; ++i)
+        p *= 2.0;
+      lo = -p;
+      hi = p;
+    }
+  } else {
+    if (bits == 64) {
+      lo = 0.0;
+      hi = 18446744073709551616.0;
+    } else {
+      int b = (int)bits, i;
+      double p = 1.0;
+      for (i = 0; i < b; ++i)
+        p *= 2.0;
+      lo = 0.0;
+      hi = p;
+    }
+  }
+
+  if (!isnan(value) && value >= lo && value < hi) {
+    if (!isSigned && bits == 64)
+      return (int64_t)(uint64_t)value; /* preserve the 64-bit bit pattern */
+    return (int64_t)value;
+  }
+  snprintf(buf, sizeof(buf),
+           "floating-point value does not fit in a %u-bit %s integer", bits,
+           isSigned ? "signed" : "unsigned");
+  cplus_print_fatal(CPLUS_EXIT_CONVERSION, "floating-point conversion", NULL, 0,
+                    buf);
+  return 0;
+}
+
+/* Allocation-extent multiplication.  size_t overflow silently under-allocates
+ * the object, so the check runs before the allocator is called. */
+size_t __cplus_checked_size_mul(size_t a, size_t b) {
+  if (b != 0 && a > ((size_t)-1) / b) {
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+             "allocation size %lu * %lu overflows size_t",
+             (unsigned long)a, (unsigned long)b);
+    cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                      0, buf);
+  }
+  return a * b;
 }
 
 void cplus_resource_check_borrow(const void *self, const char *file, int line,
@@ -89,31 +416,197 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
  * releases are detected without touching freed memory.  The metadata lives
  * beside the allocation, never in front of the user pointer.
  *
- * A small direct-mapped cache remembers recently freed addresses, which lets
- * us report a double release even when malloc has already handed the same
- * address out again.  It is bounded, so bookkeeping stays O(1).
+ * Temporal (generation) model
+ * ---------------------------
+ * Every registration gets a monotonically increasing generation stored in the
+ * side table.  A direct-mapped recent-free cache records the (address,
+ * generation) pair of each retired allocation, and a persistent retired-address
+ * ledger records the generation under which each address was last retired.
+ *
+ * The ledger is the important part: the recent cache and the quarantine ring
+ * are bounded and evict, but the ledger does not.  A release of an address that
+ * is no longer live is therefore a deterministic double free (104) even long
+ * after the recent cache has been overwritten, and a stale liveness query is a
+ * deterministic dangling-pointer failure (105).  A live-table hit is still a
+ * legitimate release, so ordinary alloc/free churn produces no false positives.
+ *
+ * OPEN LIMIT (F2 - stale free at a REUSED address; no pointer ABI change):
+ *   Ordinary C pointers carry no generation token.  If allocation A at address
+ *   X is freed and malloc later hands X out again as live allocation B, a
+ *   stale integer alias of A passed to cplus_release/cplus_free_registered is
+ *   bit-identical to a genuine pointer to B: cplus_find_live(X) finds B's live
+ *   slot and the release is accepted.  The retired ledger cannot help because
+ *   the address is legitimately live again, and rejecting it would produce
+ *   false positives on every normal reuse.
+ *
+ *   An earlier attempt to close F2 by refusing to re-register retired
+ *   addresses (malloc retry loops plus a quarantine of rejected blocks) was
+ *   reverted: on macOS allocator reuse it cost ~31x on alloc_churn while still
+ *   not being sound once the bounded ring wrapped.  Closing F2 requires an ABI
+ *   change (a compiler-supplied provenance token or a fat pointer).  Ordinary
+ *   dereferences are not instrumented by this runtime either.
+ *
+ * Synchronization / open limits (wave 3)
+ * ---------------------------------------
+ *   Every read/write of the live table, the retired ledger, the recent cache,
+ *   the quarantine ring and the generation/counter globals is serialized by
+ *   cplus_alloc_mutex, so concurrent operations on *different* pointers have
+ *   no data races.  Each public entry point takes the lock for exactly one
+ *   critical section; helpers named below are called only with it held.
+ *   Operating on the *same* pointer concurrently (e.g. releasing while a
+ *   realloc of that pointer is in flight) is a caller-level race, exactly as
+ *   it is for malloc/free; the side table cannot make that sequence atomic.
+ *
+ *   Interior pointers: the side table is keyed on base addresses only.  A free
+ *   or liveness query through base+k cannot match the live slot for base, so
+ *   it is a deterministic 105/type-confusion failure, not a silent success.
+ *   The recorded size is used for copy bounds and the length query, not as a
+ *   per-byte ownership map; proving interior ownership for every address
+ *   would need a different (ABI-changing) representation.
+ *
+ *   Caller-supplied sizes are clamped to the block's real usable size where
+ *   the platform exposes one (malloc_size / malloc_usable_size), so a false
+ *   size cannot authorize an overread.  On platforms without that query the
+ *   caller's value is kept (portable fallback).
+ *
+ *   Re-registration of a stale retired address is rejected deterministically
+ *   (105): accepting it would re-arm a genuine second free of an already
+ *   released block.  A retired address is stale when it is still in quarantine
+ *   or the platform allocator query reports no live block there; a proven
+ *   fresh malloc of the same address is accepted.  Fresh managed reuse is
+ *   unaffected because it goes through cplus_alloc / in-place realloc.
+ *
+ *   Retired-ledger cap (CPLUS_RETIRED_MAX, 1048576): once full, a one-time
+ *   stderr warning is printed, cplus_retired_wrapped becomes sticky and
+ *   cplus_retired_ledger_full() reports it.  New retirements then evict one
+ *   slot round-robin instead of being dropped, so the address retired *now*
+ *   stays detectable as 104.  The evicted address loses ledger coverage
+ *   (cplus_address_retired() honestly returns 0 for it): that is a bounded
+ *   resource limit, not a silent correctness claim.
  * ------------------------------------------------------------------------- */
 
 #define CPLUS_LIVE_INITIAL 64u
 #define CPLUS_RECENT_SLOTS 4096u
+#define CPLUS_RETIRED_INITIAL 256u
+/* Upper bound on retired ledger entries.  Beyond this we evict round-robin
+ * (never drop a retirement), set cplus_retired_wrapped (sticky) and print a
+ * one-time warning; the evicted address loses ledger coverage.  The cap is a
+ * fixed 1,048,576 addresses (documented above). */
+#define CPLUS_RETIRED_MAX 1048576u
 #define CPLUS_TOMBSTONE ((void *)(uintptr_t)-1)
 
 typedef struct cplus_live_slot {
   void *ptr;
   size_t size;
+  uint64_t generation;
 } cplus_live_slot;
+
+typedef struct cplus_recent_slot {
+  void *ptr;
+  uint64_t generation;
+} cplus_recent_slot;
+
+typedef struct cplus_retired_slot {
+  void *ptr;
+  uint64_t generation;
+} cplus_retired_slot;
+
+/* Generation zero is reserved for "none"; the counter starts at one. */
+static uint64_t cplus_generation = 1u;
 
 static cplus_live_slot *cplus_live = NULL;
 static size_t cplus_live_cap = 0;
 static size_t cplus_live_count = 0;
 static size_t cplus_live_deleted = 0;
-static void *cplus_recent[CPLUS_RECENT_SLOTS];
+static cplus_recent_slot cplus_recent[CPLUS_RECENT_SLOTS];
+
+static cplus_retired_slot *cplus_retired = NULL;
+static size_t cplus_retired_cap = 0;
+static size_t cplus_retired_count = 0;
+static size_t cplus_retired_deleted = 0;
+static int cplus_retired_wrapped = 0;
+/* Once the ledger is full, new retirements evict this slot round-robin so
+ * double-free detection keeps working instead of silently degrading to 105. */
+static size_t cplus_retired_evict_cursor = 0;
+
+/* Opt-in temporal-safety experiment: keep released blocks out of malloc's
+ * reuse pool for a bounded time so stale aliases are detected instead of
+ * being misattributed to a new allocation.  Disabled by default. */
+#define CPLUS_QUARANTINE_SLOTS 1024u
+static void *cplus_quarantine[CPLUS_QUARANTINE_SLOTS];
+static size_t cplus_quarantine_next = 0;
+static size_t cplus_quarantine_count = 0;
+
+static int cplus_quarantine_enabled(void) {
+  const char *env = getenv("CPLUS_QUARANTINE");
+  return env && env[0] != '0';
+}
+
+/* Called with the allocator lock held.  If a pointer is (re)registered, any
+ * stale quarantine entry for that address must go away: ring eviction would
+ * otherwise free a block that is live again.  O(ring slots), registration
+ * path only - never on the cplus_alloc/cplus_release hot path. */
+static void cplus_quarantine_drop(const void *p) {
+  for (size_t k = 0; k < CPLUS_QUARANTINE_SLOTS; ++k) {
+    if (cplus_quarantine[k] == p) {
+      cplus_quarantine[k] = NULL;
+      if (cplus_quarantine_count > 0u)
+        --cplus_quarantine_count;
+      return;
+    }
+  }
+}
+
+static int cplus_quarantine_contains(const void *p) {
+  for (size_t k = 0; k < CPLUS_QUARANTINE_SLOTS; ++k)
+    if (cplus_quarantine[k] == p)
+      return 1;
+  return 0;
+}
+
+static uint64_t cplus_retired_generation(const void *p); /* defined below */
+
+/* Called with the allocator lock held.  A retired address is a stale alias
+ * unless the allocator proves a *new* block currently lives there.  macOS
+ * malloc_size()/glibc malloc_usable_size() return 0 for a freed block and a
+ * positive size for a live one, which distinguishes S1/S9 (stale alias)
+ * from a legitimate fresh malloc that reuses an address.  A block still held
+ * in our quarantine has not been returned to malloc yet and is always stale.
+ * Without a platform query we reject conservatively. */
+static int cplus_retired_address_stale(const void *p) {
+  if (cplus_retired_generation(p) == 0u)
+    return 0;
+  if (cplus_quarantine_contains(p))
+    return 1;
+#if CPLUS_HAVE_MALLOC_CAPACITY
+  return cplus_malloc_capacity(p) == 0u;
+#else
+  return 1;
+#endif
+}
 
 #ifdef CPLUS_POSIX
 static pthread_mutex_t cplus_alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void cplus_alloc_lock(void) { pthread_mutex_lock(&cplus_alloc_mutex); }
 static void cplus_alloc_unlock(void) {
   pthread_mutex_unlock(&cplus_alloc_mutex);
+}
+
+/* fork() in a multi-threaded process inherits only the calling thread.  If
+ * that fork happens while another thread holds cplus_alloc_mutex, the child
+ * would inherit a locked mutex with no thread able to unlock it, and the
+ * first managed-memory call in the child would deadlock.  The standard
+ * prepare/parent/child handshake makes the snapshot consistent: prepare
+ * waits for the side-table lock, parent releases it, and the child
+ * reinitializes it (safe because the child has exactly one thread).  These
+ * are internal static hooks; no exported symbol or ABI changes. */
+static void cplus_atfork_prepare(void) { cplus_alloc_lock(); }
+static void cplus_atfork_parent(void) { cplus_alloc_unlock(); }
+static void cplus_atfork_child(void) {
+  pthread_mutex_init(&cplus_alloc_mutex, NULL);
+}
+__attribute__((constructor)) static void cplus_atfork_install(void) {
+  pthread_atfork(cplus_atfork_prepare, cplus_atfork_parent, cplus_atfork_child);
 }
 #else
 static void cplus_alloc_lock(void) {}
@@ -134,6 +627,13 @@ static size_t cplus_recent_index(const void *p) {
   return (size_t)(cplus_hash(p) & (CPLUS_RECENT_SLOTS - 1u));
 }
 
+/* Called with the allocator lock held.  Never returns zero. */
+static uint64_t cplus_next_generation(void) {
+  if (cplus_generation == UINT64_MAX)
+    cplus_generation = 1u; /* wrap only after 2^64 registrations */
+  return cplus_generation++;
+}
+
 static cplus_live_slot *cplus_find_live(const void *p) {
   if (cplus_live_cap == 0)
     return NULL;
@@ -150,7 +650,7 @@ static cplus_live_slot *cplus_find_live(const void *p) {
   return NULL;
 }
 
-static void cplus_live_insert(const void *p, size_t size) {
+static void cplus_live_insert(const void *p, size_t size, uint64_t generation) {
   size_t mask = cplus_live_cap - 1;
   size_t i = cplus_hash(p) & mask;
   while (cplus_live[i].ptr != NULL && cplus_live[i].ptr != CPLUS_TOMBSTONE)
@@ -159,7 +659,138 @@ static void cplus_live_insert(const void *p, size_t size) {
     --cplus_live_deleted;
   cplus_live[i].ptr = (void *)p;
   cplus_live[i].size = size;
+  cplus_live[i].generation = generation;
   ++cplus_live_count;
+}
+
+/* Persistent retired-address ledger --------------------------------------- */
+
+static size_t cplus_retired_index(const void *p) {
+  return (size_t)(cplus_hash(p) & (cplus_retired_cap - 1u));
+}
+
+/* Called with the allocator lock held. */
+static cplus_retired_slot *cplus_find_retired(const void *p) {
+  if (cplus_retired_cap == 0)
+    return NULL;
+  size_t mask = cplus_retired_cap - 1;
+  size_t i = cplus_retired_index(p);
+  for (size_t probe = 0; probe <= mask; ++probe) {
+    void *slot = cplus_retired[i].ptr;
+    if (slot == p)
+      return &cplus_retired[i];
+    if (slot == NULL)
+      return NULL;
+    i = (i + 1) & mask;
+  }
+  return NULL;
+}
+
+/* Called with the allocator lock held. */
+static uint64_t cplus_retired_generation(const void *p) {
+  cplus_retired_slot *slot = cplus_find_retired(p);
+  return slot ? slot->generation : 0u;
+}
+
+/* Called with the allocator lock held. */
+static void cplus_retired_grow(void) {
+  size_t cap = cplus_retired_cap ? cplus_retired_cap * 2u
+                                 : CPLUS_RETIRED_INITIAL;
+  /* Cap the *entry count* at CPLUS_RETIRED_MAX, but keep the hash table at
+   * twice that size.  A completely full open-addressed table makes every
+   * unsuccessful lookup O(cap); the 2x slack keeps lookups short and leaves
+   * room for eviction tombstones. */
+  if (cap > CPLUS_RETIRED_MAX * 2u)
+    cap = CPLUS_RETIRED_MAX * 2u;
+  cplus_retired_slot *fresh =
+      (cplus_retired_slot *)calloc(cap, sizeof(*fresh));
+  if (!fresh) {
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "retired-address ledger failed");
+  }
+  for (size_t k = 0; k < cplus_retired_cap; ++k) {
+    void *p = cplus_retired[k].ptr;
+    if (p != NULL && p != CPLUS_TOMBSTONE) {
+      size_t mask = cap - 1u;
+      size_t i = (size_t)(cplus_hash(p) & mask);
+      while (fresh[i].ptr != NULL)
+        i = (i + 1) & mask;
+      fresh[i] = cplus_retired[k];
+    }
+  }
+  free(cplus_retired);
+  cplus_retired = fresh;
+  cplus_retired_cap = cap;
+  cplus_retired_deleted = 0;
+}
+
+/* Called with the allocator lock held.  Records the generation under which an
+ * address was retired.  A repeated retirement updates the recorded generation;
+ * the address may legitimately be reused by a later allocation. */
+static void cplus_retired_insert(const void *p, uint64_t generation) {
+  cplus_retired_slot *slot = cplus_find_retired(p);
+  if (slot) {
+    slot->generation = generation;
+    return;
+  }
+  if (cplus_retired_count + cplus_retired_deleted + 1u >= CPLUS_RETIRED_MAX) {
+    if (!cplus_retired_wrapped) {
+      cplus_retired_wrapped = 1;
+      fprintf(stderr,
+              "C+ runtime warning: retired-address ledger is full (%u "
+              "entries); further retirements evict entries round-robin\n",
+              (unsigned)CPLUS_RETIRED_MAX);
+      fflush(stderr);
+    }
+    /* Bounded ledger: evict one occupied slot round-robin rather than drop
+     * the retirement.  The victim becomes a tombstone (so other probe chains
+     * stay intact) and p is inserted on its own hash probe sequence, which
+     * keeps every entry findable.  The evicted address loses ledger coverage
+     * (cplus_address_retired() honestly reports 0 for it), but the address
+     * retired *now* remains detectable as a double free (104). */
+    /* Tombstones from many evictions would eventually fill the table again;
+     * rebuild it (dropping tombstones, resetting deleted) when they get high. */
+    if (cplus_retired_deleted > cplus_retired_cap / 4u)
+      cplus_retired_grow();
+    size_t mask = cplus_retired_cap - 1u;
+    size_t victim = cplus_retired_evict_cursor++ & mask;
+    for (size_t probe = 0; probe <= mask; ++probe) {
+      void *q = cplus_retired[victim].ptr;
+      if (q != NULL && q != CPLUS_TOMBSTONE && q != p)
+        break;
+      victim = (victim + 1) & mask;
+    }
+    void *vq = cplus_retired[victim].ptr;
+    if (vq != NULL && vq != CPLUS_TOMBSTONE) {
+      cplus_retired[victim].ptr = CPLUS_TOMBSTONE;
+      --cplus_retired_count;
+      ++cplus_retired_deleted;
+    }
+    size_t i = cplus_retired_index(p);
+    while (cplus_retired[i].ptr != NULL &&
+           cplus_retired[i].ptr != CPLUS_TOMBSTONE)
+      i = (i + 1) & mask;
+    if (cplus_retired[i].ptr == CPLUS_TOMBSTONE)
+      --cplus_retired_deleted;
+    cplus_retired[i].ptr = (void *)p;
+    cplus_retired[i].generation = generation;
+    ++cplus_retired_count;
+    return;
+  }
+  if (cplus_retired_cap < CPLUS_RETIRED_MAX * 2u &&
+      (cplus_retired_count + cplus_retired_deleted + 1u) * 4u >
+          cplus_retired_cap * 3u)
+    cplus_retired_grow();
+  size_t mask = cplus_retired_cap - 1u;
+  size_t i = cplus_retired_index(p);
+  while (cplus_retired[i].ptr != NULL &&
+         cplus_retired[i].ptr != CPLUS_TOMBSTONE)
+    i = (i + 1) & mask;
+  if (cplus_retired[i].ptr == CPLUS_TOMBSTONE)
+    --cplus_retired_deleted;
+  cplus_retired[i].ptr = (void *)p;
+  cplus_retired[i].generation = generation;
+  ++cplus_retired_count;
 }
 
 /* Called with the allocator lock held. */
@@ -186,6 +817,123 @@ static void cplus_live_grow(void) {
   cplus_live_deleted = 0;
 }
 
+void *cplus_register_allocation(void *p, size_t bytes, const char *file,
+                                int line) {
+  if (!p)
+    return p;
+  cplus_alloc_lock();
+  cplus_live_slot *existing = cplus_find_live(p);
+  if (existing) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", file,
+                      line, "pointer is already a live C+ allocation");
+  }
+  /* S1/S9: a stale integer alias of an already-retired block would re-arm a
+   * real second free.  Reject a retired address unless the allocator proves
+   * a fresh block now lives at that address (legitimate malloc reuse). */
+  if (cplus_retired_address_stale(p)) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", file, line,
+                      "retired address cannot be re-registered");
+  }
+  bytes = cplus_clamp_registered_size(p, bytes);
+  cplus_quarantine_drop(p);
+  uint64_t gen = cplus_next_generation();
+  if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
+    cplus_live_grow();
+  cplus_live_insert(p, bytes, gen);
+  cplus_alloc_unlock();
+  return p;
+}
+
+void *cplus_realloc_registered(void *oldp, void *newp, size_t bytes,
+                               const char *file, int line) {
+  if (!newp)
+    return newp; /* realloc failed: the old block is still live */
+  cplus_alloc_lock();
+  /* A transfer target that is already live as a different allocation must be
+   * rejected before touching the old slot.  Inserting a second live entry for
+   * the same address would leave a stale live entry after one of the two is
+   * released (a caller-supplied registration/size mismatch).  newp == oldp is
+   * the legitimate in-place realloc case and is allowed.  Note (F2): raw
+   * realloc() may also return a previously retired address; an old alias at a
+   * reused address remains indistinguishable from the new allocation - see
+   * the file header. */
+  cplus_live_slot *old = oldp ? cplus_find_live(oldp) : NULL;
+  cplus_live_slot *dest = cplus_find_live(newp);
+  if (dest && dest != old) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", file,
+                      line, "pointer is already a live C+ allocation");
+  }
+  /* A non-live transfer target that is a stale retired alias would re-arm a
+   * real double free.  The in-place case (newp == oldp, live) and a proven
+   * fresh malloc reuse are legitimate and are allowed. */
+  if (!dest && cplus_retired_address_stale(newp)) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", file, line,
+                      "retired address cannot be re-registered");
+  }
+  bytes = cplus_clamp_registered_size(newp, bytes);
+  cplus_quarantine_drop(newp);
+  if (old) {
+    uint64_t old_generation = old->generation;
+    old->ptr = CPLUS_TOMBSTONE;
+    --cplus_live_count;
+    ++cplus_live_deleted;
+    cplus_recent[cplus_recent_index(oldp)].ptr = oldp;
+    cplus_recent[cplus_recent_index(oldp)].generation = old_generation;
+    cplus_retired_insert(oldp, old_generation);
+  }
+  uint64_t gen = cplus_next_generation();
+  if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
+    cplus_live_grow();
+  cplus_live_insert(newp, bytes, gen);
+  cplus_alloc_unlock();
+  return newp;
+}
+
+void cplus_free_registered(void *p, const char *file, int line) {
+  if (!p)
+    return;
+  cplus_alloc_lock();
+  /* The retired ledger is consulted on a live-table miss only.  A live hit is
+   * a legitimate release of the current generation, so normal reuse of an
+   * address produces no false double-free; a release of an address that is no
+   * longer live is deterministic even after the recent cache evicted. */
+  uint64_t retired_generation = cplus_retired_generation(p);
+  cplus_live_slot *slot = cplus_find_live(p);
+  if (!slot) {
+    cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(p)];
+    int recently_freed = recent->ptr == p;
+    cplus_alloc_unlock();
+    if (retired_generation != 0u || recently_freed) {
+      cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", file, line,
+                        "allocation released twice");
+    }
+    // A pointer whose allocation was produced OUTSIDE the tracked paths
+    // (a helper returning malloc/strdup/realloc, a third-party library) is
+    // ordinary C and must keep ordinary C behaviour. Aborting here broke
+    // real unmodified C applications: the rewriter wraps `free()` for ABI
+    // preservation but cannot see allocations made in another TU. Managed
+    // releases (cplus_release) and tracked double frees above still trap.
+    free(p);
+    return;
+  }
+  uint64_t generation = slot->generation;
+  slot->ptr = CPLUS_TOMBSTONE;
+  --cplus_live_count;
+  ++cplus_live_deleted;
+  cplus_recent[cplus_recent_index(p)].ptr = p;
+  cplus_recent[cplus_recent_index(p)].generation = generation;
+  cplus_retired_insert(p, generation);
+  /* Free while the side-table lock is still held.  Releasing it first lets a
+   * concurrent registration insert the same address into the live table
+   * before the free lands, leaving a stale live entry and a real double free. */
+  free(p);
+  cplus_alloc_unlock();
+}
+
 void *cplus_alloc(size_t size) {
   if (size <= 0)
     size = 1;
@@ -195,9 +943,10 @@ void *cplus_alloc(size_t size) {
                       "managed allocation failed");
   }
   cplus_alloc_lock();
+  uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
-  cplus_live_insert(p, size);
+  cplus_live_insert(p, size, gen);
   cplus_alloc_unlock();
   return p;
 }
@@ -221,20 +970,31 @@ void *cplus_alloc_array(size_t count, size_t element_size) {
 }
 
 void *cplus_realloc(void *ptr, size_t size) {
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_realloc ptr=%p size=%zu", ptr, size);
   if (!ptr)
     return cplus_alloc(size);
   if (size == 0) {
     cplus_release(ptr);
     return NULL;
   }
-  /* Managed allocations are scope-owned, so reallocation makes a fresh block
-   * instead of invalidating pointers held elsewhere. */
+  /* cplus_realloc is an ownership transfer: the old slot is retired with its
+   * generation and the fresh block gets a new generation.  If malloc happens
+   * to reuse the old address, an old alias can no longer be distinguished
+   * from the new allocation (F2, documented in the file header). */
   void *fresh = cplus_alloc(size);
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
-  if (slot)
-    memcpy(fresh, ptr, size < slot->size ? size : slot->size);
+  if (slot) {
+    size_t n = size < slot->size ? size : slot->size;
+    /* Belt-and-braces: even a wrongly registered or stale extent must never
+     * authorize a copy past the block malloc actually handed out. */
+    size_t usable = cplus_malloc_capacity(ptr);
+    if (usable != 0u && n > usable)
+      n = usable;
+    memcpy(fresh, ptr, n);
+  }
   cplus_alloc_unlock();
+  cplus_release(ptr);
   return fresh;
 }
 
@@ -249,23 +1009,42 @@ void cplus_release(void *ptr) {
   cplus_log(CPLUS_LOG_DEBUG, "cplus_release ptr=%p", ptr);
 
   cplus_alloc_lock();
+  /* Retired-ledger hit on a live-table miss is authoritative and survives
+   * cache eviction; a live hit is always a legitimate release. */
+  uint64_t retired_generation = cplus_retired_generation(ptr);
   cplus_live_slot *slot = cplus_find_live(ptr);
   if (!slot) {
-    int recently_freed = cplus_recent[cplus_recent_index(ptr)] == ptr;
+    cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(ptr)];
+    int recently_freed = recent->ptr == ptr;
     cplus_alloc_unlock();
-    if (recently_freed)
+    if (retired_generation != 0u || recently_freed)
       cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "double free", NULL, 0,
                         "managed memory released twice");
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid free", NULL, 0,
                       "pointer was not produced by the C+ allocator");
   }
+  uint64_t generation = slot->generation;
   slot->ptr = CPLUS_TOMBSTONE;
   --cplus_live_count;
   ++cplus_live_deleted;
-  cplus_recent[cplus_recent_index(ptr)] = ptr;
-  cplus_alloc_unlock();
-
+  cplus_recent[cplus_recent_index(ptr)].ptr = ptr;
+  cplus_recent[cplus_recent_index(ptr)].generation = generation;
+  cplus_retired_insert(ptr, generation);
+  if (cplus_quarantine_enabled()) {
+    void *oldest = cplus_quarantine[cplus_quarantine_next];
+    cplus_quarantine[cplus_quarantine_next] = ptr;
+    cplus_quarantine_next = (cplus_quarantine_next + 1) %
+                            CPLUS_QUARANTINE_SLOTS;
+    if (cplus_quarantine_count < CPLUS_QUARANTINE_SLOTS)
+      ++cplus_quarantine_count;
+    if (oldest)
+      free(oldest); /* bounded: at most CPLUS_QUARANTINE_SLOTS delayed frees */
+    cplus_alloc_unlock();
+    return;
+  }
+  /* Keep the lock across free(): see cplus_free_registered above. */
   free(ptr);
+  cplus_alloc_unlock();
 }
 
 void cplus_check_live(const void *ptr) {
@@ -283,6 +1062,7 @@ void cplus_check_live(const void *ptr) {
 }
 
 size_t cplus_alloc_bytes(const void *ptr) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_alloc_bytes ptr=%p", ptr);
   if (!ptr)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
                       0, "null pointer has no allocation length");
@@ -296,7 +1076,48 @@ size_t cplus_alloc_bytes(const void *ptr) {
   return bytes;
 }
 
+/* Additive generation introspection.  These do not change any existing ABI. */
+
+uint64_t cplus_allocation_generation(const void *ptr) {
+  if (!ptr)
+    return 0u;
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_find_live(ptr);
+  uint64_t gen = slot ? slot->generation : 0u;
+  cplus_alloc_unlock();
+  return gen;
+}
+
+uint64_t cplus_epoch(void) {
+  cplus_alloc_lock();
+  uint64_t epoch = cplus_generation;
+  cplus_alloc_unlock();
+  return epoch;
+}
+
+int cplus_address_retired(const void *ptr) {
+  if (!ptr)
+    return 0;
+  cplus_alloc_lock();
+  int retired = cplus_retired_generation(ptr) != 0u;
+  cplus_alloc_unlock();
+  return retired;
+}
+
+/* Additive introspection for the bounded retired ledger.  Once this returns
+ * non-zero, the cap has been reached and further retirements evict an older
+ * entry round-robin; the evicted address is then no longer covered by the
+ * ledger. */
+int cplus_retired_ledger_full(void) {
+  cplus_alloc_lock();
+  int full = cplus_retired_wrapped;
+  cplus_alloc_unlock();
+  return full;
+}
+
 size_t cplus_alloc_count(const void *ptr, size_t elem_size) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_alloc_count ptr=%p elem=%zu", ptr,
+            elem_size);
   if (elem_size == 0)
     cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "invalid length query", NULL,
                       0, "element size must be greater than zero");
@@ -322,6 +1143,7 @@ size_t cplus_check_index(size_t index, size_t count, const char *file,
 
 int cplus_scope_push(cplus_scope *scope, void *ptr, void (*drop)(void *),
                      cplus_cleanup_kind kind) {
+  cplus_log(CPLUS_LOG_TRACE, "cplus_scope_push scope=%p ptr=%p", scope, ptr);
   if (!scope)
     return -1;
   cplus_cleanup *c = (cplus_cleanup *)malloc(sizeof(cplus_cleanup));
@@ -338,6 +1160,7 @@ int cplus_scope_push(cplus_scope *scope, void *ptr, void (*drop)(void *),
 }
 
 void cplus_scope_cleanup(cplus_scope *scope) {
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_scope_cleanup scope=%p", scope);
   if (!scope)
     return;
   /* Cleanups run in reverse order of registration: the most recently
@@ -593,33 +1416,172 @@ void cplus_print_value(cplus_print_kind kind, ...) {
   cplus_print_append(d, numbuf, strlen(numbuf));
 }
 
-void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
+static const char *cplus_scan_type_name(size_t size, int is_unsigned) {
+  if (size == 1)
+    return is_unsigned ? "unsigned char" : "signed char";
+  if (size == sizeof(short))
+    return is_unsigned ? "unsigned short" : "short";
+  if (size == sizeof(int))
+    return is_unsigned ? "unsigned int" : "int";
+  if (size == sizeof(long))
+    return is_unsigned ? "unsigned long" : "long";
+  if (size == sizeof(long long))
+    return is_unsigned ? "unsigned long long" : "long long";
+  return is_unsigned ? "unsigned integer" : "integer";
+}
+
+static void cplus_scan_signed_checked(void *dest, size_t size,
+                                      const char *expr, const char *file,
+                                      int line) {
+  char token[128];
+  char detail[384];
+  int rc = scanf("%127s", token);
+  char *end = NULL;
+  long long v;
+  long long minv = LLONG_MIN;
+  long long maxv = LLONG_MAX;
+  const char *target = (expr && *expr) ? expr : "variable";
+  const char *tname = cplus_scan_type_name(size, 0);
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "could not read input for '%s' (%s) - input ended unexpectedly",
+             target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  errno = 0;
+  v = strtoll(token, &end, 0);
+  if (end == token || *end != '\0') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s) - expected a valid integer, not text/extra characters",
+             token, target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (size == 1) {
+    minv = SCHAR_MIN;
+    maxv = SCHAR_MAX;
+  } else if (size == sizeof(short)) {
+    minv = SHRT_MIN;
+    maxv = SHRT_MAX;
+  } else if (size == sizeof(int)) {
+    minv = INT_MIN;
+    maxv = INT_MAX;
+  } else if (size == sizeof(long)) {
+    minv = LONG_MIN;
+    maxv = LONG_MAX;
+  } else if (size != sizeof(long long)) {
+    snprintf(detail, sizeof(detail),
+             "unsupported destination size (%zu bytes) for '%s'", size, target);
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line, detail);
+  }
+  if (errno == ERANGE || v < minv || v > maxv) {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s, valid range %lld..%lld) - the number is too large/small for this variable type and would overflow memory",
+             token, target, tname, minv, maxv);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  if (size == 1) {
+    *(signed char *)dest = (signed char)v;
+  } else if (size == sizeof(short)) {
+    *(short *)dest = (short)v;
+  } else if (size == sizeof(int)) {
+    *(int *)dest = (int)v;
+  } else if (size == sizeof(long)) {
+    *(long *)dest = (long)v;
+  } else {
+    *(long long *)dest = v;
+  }
+}
+
+static void cplus_scan_unsigned_checked(void *dest, size_t size,
+                                        const char *expr, const char *file,
+                                        int line) {
+  char token[128];
+  char detail[384];
+  int rc = scanf("%127s", token);
+  char *end = NULL;
+  unsigned long long v;
+  unsigned long long maxv = ULLONG_MAX;
+  const char *target = (expr && *expr) ? expr : "variable";
+  const char *tname = cplus_scan_type_name(size, 1);
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "could not read input for '%s' (%s) - input ended unexpectedly",
+             target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (token[0] == '-') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s) - negative numbers are not allowed in an unsigned variable",
+             token, target, tname);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  errno = 0;
+  v = strtoull(token, &end, 0);
+  if (end == token || *end != '\0') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s) - expected a valid unsigned integer, not text/extra characters",
+             token, target, tname);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (size == 1) {
+    maxv = UCHAR_MAX;
+  } else if (size == sizeof(unsigned short)) {
+    maxv = USHRT_MAX;
+  } else if (size == sizeof(unsigned int)) {
+    maxv = UINT_MAX;
+  } else if (size == sizeof(unsigned long)) {
+    maxv = ULONG_MAX;
+  } else if (size != sizeof(unsigned long long)) {
+    snprintf(detail, sizeof(detail),
+             "unsupported destination size (%zu bytes) for '%s'", size, target);
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line, detail);
+  }
+  if (errno == ERANGE || v > maxv) {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (%s, valid range 0..%llu) - the number is too large for this variable type and would overflow memory",
+             token, target, tname, maxv);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  if (size == 1) {
+    *(unsigned char *)dest = (unsigned char)v;
+  } else if (size == sizeof(unsigned short)) {
+    *(unsigned short *)dest = (unsigned short)v;
+  } else if (size == sizeof(unsigned int)) {
+    *(unsigned int *)dest = (unsigned int)v;
+  } else if (size == sizeof(unsigned long)) {
+    *(unsigned long *)dest = (unsigned long)v;
+  } else {
+    *(unsigned long long *)dest = v;
+  }
+}
+
+void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
+                         const char *expr, const char *file, int line) {
   int rc = 0;
+  char detail[256];
+  const char *target = (expr && *expr) ? expr : "variable";
   cplus_log(CPLUS_LOG_DEBUG, "cplus_scan_value dest=%p size=%zu kind=%d", dest,
             size, (int)kind);
-  if (!dest)
-    cplus_print_fatal(CPLUS_EXIT_IO, "input error", NULL, 0,
-                      "scan destination is null");
+  if (!dest) {
+    snprintf(detail, sizeof(detail),
+             "scan destination '%s' is null (would dereference NULL)", target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
 
   switch (kind) {
   case CPLUS_SCAN_INT:
-    rc = scanf("%d", (int *)dest);
-    break;
-  case CPLUS_SCAN_UINT:
-    rc = scanf("%u", (unsigned int *)dest);
-    break;
   case CPLUS_SCAN_LONG:
-    rc = scanf("%ld", (long *)dest);
-    break;
-  case CPLUS_SCAN_ULONG:
-    rc = scanf("%lu", (unsigned long *)dest);
-    break;
   case CPLUS_SCAN_LLONG:
-    rc = scanf("%lld", (long long *)dest);
-    break;
+    cplus_scan_signed_checked(dest, size, target, file, line);
+    return;
+  case CPLUS_SCAN_UINT:
+  case CPLUS_SCAN_ULONG:
   case CPLUS_SCAN_ULLONG:
-    rc = scanf("%llu", (unsigned long long *)dest);
-    break;
+    cplus_scan_unsigned_checked(dest, size, target, file, line);
+    return;
   case CPLUS_SCAN_FLOAT:
     rc = scanf("%f", (float *)dest);
     break;
@@ -642,11 +1604,17 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
     break;
   }
   default:
-    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", NULL, 0,
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line,
                       "unsupported scan type");
   }
 
-  if (rc != 1)
-    cplus_print_fatal(CPLUS_EXIT_IO, "input error", NULL, 0,
-                      "failed to read a value from stdin");
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "failed to read a valid value for '%s' from stdin", target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+}
+
+void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind) {
+  cplus_scan_value_at(dest, size, kind, NULL, NULL, 0);
 }

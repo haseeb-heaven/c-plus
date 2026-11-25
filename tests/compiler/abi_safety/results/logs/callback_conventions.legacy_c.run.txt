@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.legacy_c.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+call2=42 calld=6.0 pair=7,2.5 qsort=654321
+
+--- stderr ---
+

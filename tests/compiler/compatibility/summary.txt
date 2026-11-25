@@ -1,0 +1,136 @@
+Native C compatibility suite (LEGACY C mode)
+==============================================================
+compiler : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+standard : gnu89
+command  : <CPLUS_BIN> run --legacy-c <fixture>
+totals   : 21 passed / 21 total, 0 failed
+
+[PASS] integer_promotions       integer promotions
+    file       : fixtures/integer_promotions.c
+    exit       : expected 0, actual 0
+    stdout exp : '-1 200 -2 65535\n1 1 40000\n-201\n'
+    stdout got : '-1 200 -2 65535\n1 1 40000\n-201\n'
+
+[PASS] signed_unsigned          signed/unsigned conversions
+    file       : fixtures/signed_unsigned.c
+    exit       : expected 0, actual 0
+    stdout exp : '1\n0 1\n1\n0\n1\n'
+    stdout got : '1\n0 1\n1\n0\n1\n'
+
+[PASS] pointer_conversions      pointer conversions
+    file       : fixtures/pointer_conversions.c
+    exit       : expected 0, actual 0
+    stdout exp : '7 1\n1\n1\n'
+    stdout got : '7 1\n1\n1\n'
+
+[PASS] array_pointer_expressions array/pointer expressions
+    file       : fixtures/array_pointer_expressions.c
+    exit       : expected 0, actual 0
+    stdout exp : '5 1\n30 30 30\n1 1\n5 20\n'
+    stdout got : '5 1\n30 30 30\n1 1\n5 20\n'
+
+[PASS] function_pointers        function pointers
+    file       : fixtures/function_pointers.c
+    exit       : expected 0, actual 0
+    stdout exp : '7 5\n3 -1\n1\n'
+    stdout got : '7 5\n3 -1\n1\n'
+
+[PASS] variadic_functions       variadic functions
+    file       : fixtures/variadic_functions.c
+    exit       : expected 0, actual 0
+    stdout exp : '6 0\n10,20,30,40\nhi\n3\n'
+    stdout got : '6 0\n10,20,30,40\nhi\n3\n'
+
+[PASS] struct_union_layout      struct/union layout (sizeof/offsetof)
+    file       : fixtures/struct_union_layout.c
+    exit       : expected 0, actual 0
+    stdout exp : '12 4 8\n8 1 4\n1 1\n'
+    stdout got : '12 4 8\n8 1 4\n1 1\n'
+
+[PASS] bitfields                bitfields
+    file       : fixtures/bitfields.c
+    exit       : expected 0, actual 0
+    stdout exp : '5 10 1\n4\n1\n'
+    stdout got : '5 10 1\n4\n1\n'
+    stderr     : "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compatibility/fixtures/bitfields.c:21:9: warning: implicit truncation from 'int' to bit-field changes value from 9 to 1 [-Wbitfield-constant-conversion]\n   21 |     x.a = 9;                     /* truncated to 3 bits: 9 & 7 == 1 */\n      |         ^ ~\n1 warning generated.\n"
+
+[PASS] enums                    enums
+    file       : fixtures/enums.c
+    exit       : expected 0, actual 0
+    stdout exp : '0 5 6 -2\n6 1\n'
+    stdout got : '0 5 6 -2\n6 1\n'
+
+[PASS] designated_initializers  designated initializers
+    file       : fixtures/designated_initializers.c
+    exit       : expected 0, actual 0
+    stdout exp : '10 0 30\n0 11 0 0 44 0\n'
+    stdout got : '10 0 30\n0 11 0 0 44 0\n'
+
+[PASS] compound_literals        compound literals
+    file       : fixtures/compound_literals.c
+    exit       : expected 0, actual 0
+    stdout exp : '3 4\n7 8 9\n25\n'
+    stdout got : '3 4\n7 8 9\n25\n'
+
+[PASS] flexible_array_members   flexible array members
+    file       : fixtures/flexible_array_members.c
+    exit       : expected 0, actual 0
+    stdout exp : '5 hello\n1\n'
+    stdout got : '5 hello\n1\n'
+
+[PASS] cv_qualifiers            const/volatile/restrict
+    file       : fixtures/cv_qualifiers.c
+    exit       : expected 0, actual 0
+    stdout exp : '12 10\n1 1\n'
+    stdout got : '12 10\n1 1\n'
+
+[PASS] function_declarations    function declarations
+    file       : fixtures/function_declarations.c
+    exit       : expected 0, actual 0
+    stdout exp : '42 6\n42\n'
+    stdout got : '42 6\n42\n'
+    stderr     : '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compatibility/fixtures/function_declarations.c:13:23: warning: passing arguments to \'mul\' without a prototype is deprecated in all versions of C and is not supported in C2x [-Wdeprecated-non-prototype]\n   13 |     printf("%d\\n", mul(6, 7));\n      |                       ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compatibility/fixtures/function_declarations.c:20:12: warning: a function definition without a prototype is deprecated in all versions of C and is not supported in C2x [-Wdeprecated-non-prototype]\n   20 | static int mul(a, b)\n      |            ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compatibility/fixtures/function_declarations.c:9:12: warning: a function declaration without a prototype is deprecated in all versions of C and is treated as a zero-parameter prototype in C2x, conflicting with a subsequent definition [-Wdeprecated-non-prototype]\n    9 | static int mul();                /* old-style (K&R) declaration */\n      |            ^\n3 warnings generated.\n'
+
+[PASS] preprocessor_macros      preprocessor macros
+    file       : fixtures/preprocessor_macros.c
+    exit       : expected 0, actual 0
+    stdout exp : '4 25 3\nhello N\n12\n'
+    stdout got : '4 25 3\nhello N\n12\n'
+
+[PASS] conditional_compilation  conditional compilation
+    file       : fixtures/conditional_compilation.c
+    exit       : expected 0, actual 0
+    stdout exp : 'A mid ok\nstdc=1\n'
+    stdout got : 'A mid ok\nstdc=1\n'
+
+[PASS] typedef                  typedef
+    file       : fixtures/typedef.c
+    exit       : expected 0, actual 0
+    stdout exp : '1 2 17\n1\n'
+    stdout got : '1 2 17\n1\n'
+
+[PASS] nested_declarations      nested declarations
+    file       : fixtures/nested_declarations.c
+    exit       : expected 0, actual 0
+    stdout exp : '7 8 9 10\n100\n1\n'
+    stdout got : '7 8 9 10\n100\n1\n'
+
+[PASS] complex_expressions      complex expressions
+    file       : fixtures/complex_expressions.c
+    exit       : expected 0, actual 0
+    stdout exp : '11 16 5\n2 8 13\n1 1\n2\n'
+    stdout got : '11 16 5\n2 8 13\n1 1\n2\n'
+    stderr     : '/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compatibility/fixtures/complex_expressions.c:12:15: warning: left operand of comma operator has no effect [-Wunused-value]\n   12 |     int r4 = (a, b, c);               /* comma operator: 2 */\n      |               ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compatibility/fixtures/complex_expressions.c:12:18: warning: left operand of comma operator has no effect [-Wunused-value]\n   12 |     int r4 = (a, b, c);               /* comma operator: 2 */\n      |                  ^\n2 warnings generated.\n'
+
+[PASS] libc_calls               libc calls
+    file       : fixtures/libc_calls.c
+    exit       : expected 0, actual 0
+    stdout exp : '5 Hello,World 11\n1 1\n12-34\n130\n'
+    stdout got : '5 Hello,World 11\n1 1\n12-34\n130\n'
+
+[PASS] exit_status              harness validation: non-zero exit code
+    file       : fixtures/exit_status.c
+    exit       : expected 42, actual 42
+    stdout exp : 'before exit\n'
+    stdout got : 'before exit\n'
+

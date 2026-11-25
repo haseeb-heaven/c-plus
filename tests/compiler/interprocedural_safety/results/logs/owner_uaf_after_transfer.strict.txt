@@ -1,0 +1,9 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_uaf_after_transfer.c
+returncode: 1
+timed_out: False
+
+<SRC>:4:65: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'a'
+  int main(void){ int *a=malloc(4); if(!a)return 2; rel(a); int v=*a; (void)v; return 0; }
+                                                                  ^
+help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+note: allocation: <SRC>:4

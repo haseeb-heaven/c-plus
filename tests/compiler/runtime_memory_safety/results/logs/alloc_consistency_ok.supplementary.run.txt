@@ -1,0 +1,7 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_consistency_ok.supplementary.bin
+returncode: 0
+timed_out: False
+
+v=7
+w=9
+ok

@@ -106,7 +106,6 @@ benchmarks/example_rust_compare/demos_a_d/orig_*
 benchmarks/example_rust_compare/demos_a_d/clang_*
 benchmarks/benchmarks/
 benchmarks/example_rust_compare/**/rbuild/
-benchmarks/example_rust_compare/**/cbuild/
 examples/expanded/**/.build/
 examples/expanded/**/.run/
 examples/expanded/**/bin_*
@@ -133,7 +132,6 @@ tests/fuzz10k/**/results/
 tests/fuzz10k/**/logs/
 tests/fuzz10k/**/bin/
 benchmarks/example_rust_compare/**/.build*/
-benchmarks/example_rust_compare/**/out/
 external_projects/**/build/
 external_projects/**/.build/
 external_projects/**/results/
@@ -144,8 +142,6 @@ tools/c2modern*/.build/
 # All generated binaries and build output (never commit).
 out/
 results/
-*.dylib
-*.a
 examples/modern_gui/dashboard/dashboard
 examples/modern_gui/settings/settings_panel
 examples/utilities/dev_tools/envfilter

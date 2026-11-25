@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/alloc_zero_realloc.debug.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+az=5,9
+
+--- stderr ---
+

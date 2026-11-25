@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "suite": "real_world_c",
+  "description": "Unmodified, externally sourced single-file C programs built with c+ --legacy-c --sanitize=none and /usr/bin/clang, then compared on exact stdout and exit status. Generated C must equal the original modulo one leading #line directive.",
+  "upstream": {
+    "name": "TheAlgorithms/C",
+    "url": "https://github.com/TheAlgorithms/C",
+    "pinned_commit": "e5dad3fa8def3726ec850ca66a7f51521f8ad393",
+    "raw_base": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393",
+    "license": "MIT (as found in the pinned tree; verify with LICENSE at the pin)",
+    "download": "curl -fsSL --max-time <timeout> -o <dest> <url>"
+  },
+  "download_timeout_sec": 60,
+  "build_timeout_sec": 180,
+  "run_timeout_sec": 30,
+  "mode": "--legacy-c",
+  "sanitize": "none",
+  "reference_cc": "/usr/bin/clang",
+  "reference_flags": ["-std=gnu89", "-O2"],
+  "cases": [
+    {
+      "name": "gcd",
+      "path": "math/gcd.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/math/gcd.c",
+      "sha256": "c7a5a627c27baed2ebedf3b9cea47b6cd644e3e5da7420d5b1d766409a3588c5",
+      "args": [],
+      "stdin": "48 18\n",
+      "expected_rc": 0,
+      "expected_stdout": "Input two numbers:\nGreatest common divisor: 6\n"
+    },
+    {
+      "name": "hash_djb2",
+      "path": "hash/hash_djb2.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/hash/hash_djb2.c",
+      "sha256": "3d57724d179c63e3f1815c12c5c6a7e725a7809394893d3dfbd278fc9fca854b",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "Tests passed\n"
+    },
+    {
+      "name": "hash_crc32",
+      "path": "hash/hash_crc32.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/hash/hash_crc32.c",
+      "sha256": "3e914ac1d42f200ec50fcb5d52aacc9375ff3e379a9b6306e7067cfbf3c93c2f",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "Tests passed\n"
+    },
+    {
+      "name": "rot13",
+      "path": "cipher/rot13.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/cipher/rot13.c",
+      "sha256": "c565595718b2e33411e4a3ed8cf2ee888329f9455e2970285776d34993155518",
+      "args": [],
+      "stdin": "",
+      "expected_rc": 0,
+      "expected_stdout": "All tests have successfully passed!\n"
+    },
+    {
+      "name": "catalan",
+      "path": "math/catalan.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/math/catalan.c",
+      "sha256": "7bc6545f6f47414239436f90dcb256caf9de2d79e90dd76ee10f93a5d0621594",
+      "args": [],
+      "stdin": "5\n",
+      "expected_rc": 0,
+      "expected_stdout": "42.00"
+    },
+    {
+      "name": "factorial",
+      "path": "math/factorial.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/math/factorial.c",
+      "sha256": "c14b67eedae70f039101edacd8eda2eb4b97005f1cb9ef4b9eee1da82d5336d5",
+      "args": [],
+      "stdin": "10\n",
+      "expected_rc": 0,
+      "expected_stdout": "Enter a whole number to Find its Factorial: 3628800"
+    }
+  ]
+}

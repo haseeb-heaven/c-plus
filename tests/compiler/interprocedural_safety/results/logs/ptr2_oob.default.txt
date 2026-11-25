@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ptr2_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:32: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 reaches past array 'a' via pointer-to-pointer parameter 'pp'
+  static void wr(int **pp){ (*pp)[6]=1; }
+                                 ^
+help: use C+ managed allocations and cplus_* helpers

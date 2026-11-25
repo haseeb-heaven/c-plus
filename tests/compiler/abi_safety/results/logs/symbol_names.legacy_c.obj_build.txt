@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.c --legacy-c --sanitize=none -c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.o
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

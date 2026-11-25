@@ -1,0 +1,7 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/param_bounds_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:3:26: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 10 exceeds heap allocation 'p' of 8 bytes
+  static void put(int *p){ p[10]=1; }
+                           ^

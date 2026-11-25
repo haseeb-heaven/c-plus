@@ -1,0 +1,33 @@
+{
+  "toolchain": "Fil-C 0.687 (clang 20.1.8, aarch64 Linux, pizfix distribution)",
+  "install": {
+    "source": "https://github.com/pizlonator/fil-c/releases/download/v0.687/filc-0.687-linux-aarch64.tar.xz",
+    "sha_or_release": "v0.687, commit e7947f079c976fb167108f7407c20240bca0ca89",
+    "host": "macOS arm64 via Colima Linux/arm64 container, volume mounted at /work",
+    "exact_commands": [
+      "colima start --arch aarch64 --memory 4 --cpu 2 --disk 40",
+      "docker --context colima run -d --name filc-ubuntu --platform linux/arm64 -v <results-dir>:/work ubuntu:24.04 sleep infinity",
+      "apt-get install -y xz-utils tar curl file patchelf binutils time",
+      "curl -fsSL -o filc.tar.xz https://github.com/pizlonator/fil-c/releases/download/v0.687/filc-0.687-linux-aarch64.tar.xz",
+      "mkdir filc && tar -xf filc.tar.xz -C filc --strip-components=1 && (cd filc && ./setup.sh)",
+      "/work/filc/build/bin/filcc -O2 -o <out> <src>"
+    ],
+    "note": "The pizfix binary release supports Linux only; the macOS host cannot run Fil-C binaries directly, so scenarios were executed in the Linux/arm64 VM. TrapC has no public release/binary (project still pre-release); rustc 1.100.0 is installed on the host."
+  },
+  "safety_scenarios": [
+    {"scenario": "const_oob", "source": "/work/const_oob_cplus_strict.c", "compile_rc": 0,
+     "warning": "array index 7 is past the end of the array", "run_rc": 133,
+     "stderr": "filc safety error: cannot read pointer with ptr >= upper."},
+    {"scenario": "overflow", "source": "/work/overflow_cplus_strict.c", "compile_rc": 0,
+     "run_rc": 0, "note": "non-constant signed overflow is not trapped by Fil-C in this build/config; C+ native guard traps rc 110"},
+    {"scenario": "null_deref", "source": "/work/null_deref_cplus_strict.c", "compile_rc": 0,
+     "run_rc": 133, "stderr": "filc safety error: llvm unreachable instruction"},
+    {"scenario": "clean", "source": "/work/clean_cplus_strict.c", "compile_rc": 0, "run_rc": 0}
+  ],
+  "benchmark": {
+    "source": "/work/compute_cplus_strict.c",
+    "command": "/usr/bin/time -f '%e %M' /work/compute.filc.bin",
+    "runs": [[0.16, 6016], [0.13, 6016], [0.11, 5888]],
+    "note": "median ~0.13 s; host C+ --strict --sanitize=none ~1.13 s on the same source, clang -O2 ~0.06 s"
+  }
+}

@@ -1,0 +1,11 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ret_double_free.c
+returncode: 1
+timed_out: False
+
+<SRC>:4:59: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: released pointer 'a' passed to 'rel'
+  int main(void){ int *a=malloc(4); if(!a)return 2; rel(a); rel(a); return 0; }
+                                                            ^~~
+<SRC>:4:59: error: [CPLUS-OWNER] double free after call to 'rel' which frees its argument
+  int main(void){ int *a=malloc(4); if(!a)return 2; rel(a); rel(a); return 0; }
+                                                            ^~~
+help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership

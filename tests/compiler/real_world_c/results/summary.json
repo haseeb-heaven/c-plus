@@ -1,0 +1,529 @@
+{
+  "suite": "real_world_c",
+  "generated_utc": "2026-11-23T10:44:33.306912+00:00",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "reference_cc": "/usr/bin/clang",
+  "reference_flags": [
+    "-std=gnu89",
+    "-O2"
+  ],
+  "mode": "--legacy-c",
+  "sanitize": "none",
+  "upstream": {
+    "name": "TheAlgorithms/C",
+    "url": "https://github.com/TheAlgorithms/C",
+    "pinned_commit": "e5dad3fa8def3726ec850ca66a7f51521f8ad393",
+    "raw_base": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393",
+    "license": "MIT (as found in the pinned tree; verify with LICENSE at the pin)",
+    "download": "curl -fsSL --max-time <timeout> -o <dest> <url>"
+  },
+  "counts": {
+    "projects": 6,
+    "projects_passed": 6,
+    "projects_failed": 0,
+    "failure_entries": 0,
+    "source_preservation_passed": 6,
+    "cplus_vs_clang_matches": 6
+  },
+  "results": [
+    {
+      "name": "catalan",
+      "upstream_path": "math/catalan.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/math/catalan.c",
+      "failures": [],
+      "steps": {
+        "cplus_build": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "--sanitize=none",
+            "--emit-c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/catalan.generated.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/catalan.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/catalan.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": ""
+        },
+        "ref_build": {
+          "cmd": [
+            "/usr/bin/clang",
+            "-std=gnu89",
+            "-O2",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/catalan.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/catalan.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": ""
+        },
+        "cplus_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/catalan.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "42.00",
+          "stderr": ""
+        },
+        "ref_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/catalan.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "42.00",
+          "stderr": ""
+        }
+      },
+      "sha256_actual": "7bc6545f6f47414239436f90dcb256caf9de2d79e90dd76ee10f93a5d0621594",
+      "source_preservation": {
+        "has_leading_line_directive": true,
+        "byte_identical_after_line": true,
+        "generated_bytes": 782,
+        "original_bytes": 679
+      },
+      "runs": {
+        "cplus_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "42.00",
+          "stderr": ""
+        },
+        "ref_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "42.00",
+          "stderr": ""
+        }
+      },
+      "cplus_vs_clang": {
+        "stdout_equal": true,
+        "exit_equal": true,
+        "match": true
+      }
+    },
+    {
+      "name": "factorial",
+      "upstream_path": "math/factorial.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/math/factorial.c",
+      "failures": [],
+      "steps": {
+        "cplus_build": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "--sanitize=none",
+            "--emit-c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/factorial.generated.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/factorial.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/factorial.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": ""
+        },
+        "ref_build": {
+          "cmd": [
+            "/usr/bin/clang",
+            "-std=gnu89",
+            "-O2",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/factorial.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/factorial.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": ""
+        },
+        "cplus_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/factorial.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Enter a whole number to Find its Factorial: 3628800",
+          "stderr": ""
+        },
+        "ref_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/factorial.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Enter a whole number to Find its Factorial: 3628800",
+          "stderr": ""
+        }
+      },
+      "sha256_actual": "c14b67eedae70f039101edacd8eda2eb4b97005f1cb9ef4b9eee1da82d5336d5",
+      "source_preservation": {
+        "has_leading_line_directive": true,
+        "byte_identical_after_line": true,
+        "generated_bytes": 850,
+        "original_bytes": 745
+      },
+      "runs": {
+        "cplus_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Enter a whole number to Find its Factorial: 3628800",
+          "stderr": ""
+        },
+        "ref_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Enter a whole number to Find its Factorial: 3628800",
+          "stderr": ""
+        }
+      },
+      "cplus_vs_clang": {
+        "stdout_equal": true,
+        "exit_equal": true,
+        "match": true
+      }
+    },
+    {
+      "name": "gcd",
+      "upstream_path": "math/gcd.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/math/gcd.c",
+      "failures": [],
+      "steps": {
+        "cplus_build": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "--sanitize=none",
+            "--emit-c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/gcd.generated.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/gcd.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/gcd.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": ""
+        },
+        "ref_build": {
+          "cmd": [
+            "/usr/bin/clang",
+            "-std=gnu89",
+            "-O2",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/gcd.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/gcd.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": ""
+        },
+        "cplus_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/gcd.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Input two numbers:\nGreatest common divisor: 6\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/gcd.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Input two numbers:\nGreatest common divisor: 6\n",
+          "stderr": ""
+        }
+      },
+      "sha256_actual": "c7a5a627c27baed2ebedf3b9cea47b6cd644e3e5da7420d5b1d766409a3588c5",
+      "source_preservation": {
+        "has_leading_line_directive": true,
+        "byte_identical_after_line": true,
+        "generated_bytes": 377,
+        "original_bytes": 278
+      },
+      "runs": {
+        "cplus_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Input two numbers:\nGreatest common divisor: 6\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Input two numbers:\nGreatest common divisor: 6\n",
+          "stderr": ""
+        }
+      },
+      "cplus_vs_clang": {
+        "stdout_equal": true,
+        "exit_equal": true,
+        "match": true
+      }
+    },
+    {
+      "name": "hash_crc32",
+      "upstream_path": "hash/hash_crc32.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/hash/hash_crc32.c",
+      "failures": [],
+      "steps": {
+        "cplus_build": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "--sanitize=none",
+            "--emit-c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/hash_crc32.generated.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_crc32.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_crc32.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_crc32.c:28:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   28 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning generated.\n"
+        },
+        "ref_build": {
+          "cmd": [
+            "/usr/bin/clang",
+            "-std=gnu89",
+            "-O2",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_crc32.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_crc32.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_crc32.c:28:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   28 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning generated.\n"
+        },
+        "cplus_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_crc32.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_crc32.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        }
+      },
+      "sha256_actual": "3e914ac1d42f200ec50fcb5d52aacc9375ff3e379a9b6306e7067cfbf3c93c2f",
+      "source_preservation": {
+        "has_leading_line_directive": true,
+        "byte_identical_after_line": true,
+        "generated_bytes": 1282,
+        "original_bytes": 1176
+      },
+      "runs": {
+        "cplus_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        }
+      },
+      "cplus_vs_clang": {
+        "stdout_equal": true,
+        "exit_equal": true,
+        "match": true
+      }
+    },
+    {
+      "name": "hash_djb2",
+      "upstream_path": "hash/hash_djb2.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/hash/hash_djb2.c",
+      "failures": [],
+      "steps": {
+        "cplus_build": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "--sanitize=none",
+            "--emit-c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/hash_djb2.generated.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_djb2.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:36:35: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   36 |     assert(djb2(\"Hello World\") == 13827776004929097857);\n      |                                   ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:37:36: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   37 |     assert(djb2(\"Hello World!\") == 13594750393630990530);\n      |                                    ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:38:35: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   38 |     assert(djb2(\"Hello world\") == 13827776004967047329);\n      |                                   ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:39:36: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   39 |     assert(djb2(\"Hello world!\") == 13594750394883323106);\n      |                                    ^\n4 warnings generated.\n"
+        },
+        "ref_build": {
+          "cmd": [
+            "/usr/bin/clang",
+            "-std=gnu89",
+            "-O2",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_djb2.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:36:35: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   36 |     assert(djb2(\"Hello World\") == 13827776004929097857);\n      |                                   ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:37:36: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   37 |     assert(djb2(\"Hello World!\") == 13594750393630990530);\n      |                                    ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:38:35: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   38 |     assert(djb2(\"Hello world\") == 13827776004967047329);\n      |                                   ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/hash_djb2.c:39:36: warning: integer literal is too large to be represented in type 'long', interpreting as 'unsigned long' per C89; this literal will be ill-formed in C99 onwards [-Wc99-compat]\n   39 |     assert(djb2(\"Hello world!\") == 13594750394883323106);\n      |                                    ^\n4 warnings generated.\n"
+        },
+        "cplus_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_djb2.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_djb2.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        }
+      },
+      "sha256_actual": "3d57724d179c63e3f1815c12c5c6a7e725a7809394893d3dfbd278fc9fca854b",
+      "source_preservation": {
+        "has_leading_line_directive": true,
+        "byte_identical_after_line": true,
+        "generated_bytes": 1122,
+        "original_bytes": 1017
+      },
+      "runs": {
+        "cplus_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "Tests passed\n",
+          "stderr": ""
+        }
+      },
+      "cplus_vs_clang": {
+        "stdout_equal": true,
+        "exit_equal": true,
+        "match": true
+      }
+    },
+    {
+      "name": "rot13",
+      "upstream_path": "cipher/rot13.c",
+      "url": "https://raw.githubusercontent.com/TheAlgorithms/C/e5dad3fa8def3726ec850ca66a7f51521f8ad393/cipher/rot13.c",
+      "failures": [],
+      "steps": {
+        "cplus_build": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "--sanitize=none",
+            "--emit-c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/rot13.generated.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/rot13.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/rot13.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/rot13.c:24:10: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   24 |     for (int i = 0; s[i]; i++) {\n      |          ^\n1 warning generated.\n"
+        },
+        "ref_build": {
+          "cmd": [
+            "/usr/bin/clang",
+            "-std=gnu89",
+            "-O2",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/rot13.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/rot13.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/rot13.c:24:10: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   24 |     for (int i = 0; s[i]; i++) {\n      |          ^\n1 warning generated.\n"
+        },
+        "cplus_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/rot13.cplus"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "All tests have successfully passed!\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "cmd": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/rot13.clang"
+          ],
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "All tests have successfully passed!\n",
+          "stderr": ""
+        }
+      },
+      "sha256_actual": "c565595718b2e33411e4a3ed8cf2ee888329f9455e2970285776d34993155518",
+      "source_preservation": {
+        "has_leading_line_directive": true,
+        "byte_identical_after_line": true,
+        "generated_bytes": 2006,
+        "original_bytes": 1905
+      },
+      "runs": {
+        "cplus_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "All tests have successfully passed!\n",
+          "stderr": ""
+        },
+        "ref_run": {
+          "rc": 0,
+          "timed_out": false,
+          "stdout": "All tests have successfully passed!\n",
+          "stderr": ""
+        }
+      },
+      "cplus_vs_clang": {
+        "stdout_equal": true,
+        "exit_equal": true,
+        "match": true
+      }
+    }
+  ],
+  "mismatches": []
+}

@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug42_c23_realloc.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug42_c23_realloc.c:3:66: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc

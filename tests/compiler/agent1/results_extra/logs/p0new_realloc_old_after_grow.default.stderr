@@ -1,0 +1,3 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_realloc_old_after_grow.c:12:18: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      int *grown = realloc(buf, 64);
+                   ^~~~~~~

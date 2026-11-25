@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/pos_resource_move.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/resource_move.c:31:27: warning: use of moved-from resource 'a'

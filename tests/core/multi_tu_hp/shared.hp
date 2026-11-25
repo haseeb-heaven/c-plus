@@ -1,0 +1,11 @@
+#ifndef CPLUS_CORE_SHARED_HP
+#define CPLUS_CORE_SHARED_HP
+#include "cplus/cplus.h"
+class Counter {
+  int value;
+  Counter(int start) { this->value = start; }
+  void add(int n) { this->value += n; }
+  int get(void) { return this->value; }
+  void drop(void) { print("drop", this->value); }
+};
+#endif

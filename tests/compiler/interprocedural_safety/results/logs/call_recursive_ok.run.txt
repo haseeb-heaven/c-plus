@@ -1,0 +1,6 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/call_recursive_ok.bin
+returncode: 0
+timed_out: False
+
+v=4
+

@@ -1,0 +1,12 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/exported_symbols.strict.o
+returncode: 0
+timed_out: False
+
+--- stdout ---
+000000000000014c T _main
+0000000000000000 T _rw_add_exported
+0000000000000330 D _rw_glob_counter
+0000000000000338 D _rw_glob_name
+
+--- stderr ---
+

@@ -1,0 +1,2039 @@
+{
+  "suite": "compiler_upstream_ports",
+  "generated_utc": "2026-11-23T07:54:05.840301+00:00",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "sanitize": "none",
+  "modes": [
+    "default",
+    "strict"
+  ],
+  "counts": {
+    "cases": 20,
+    "cases_passed": 20,
+    "cases_failed": 0,
+    "mode_checks": 40,
+    "failure_entries": 0,
+    "per_family": {
+      "apple_bounds_traps": 5,
+      "checkedc_dynamic_bounds": 5,
+      "clang_sa_malloc_divzero": 5,
+      "softboundcets_spatial_temporal": 5
+    },
+    "per_kind": {
+      "runtime_abort": 4,
+      "clean": 1,
+      "static_reject": 9,
+      "warn_then_trap": 2,
+      "runtime_trap": 2,
+      "warn_then_reject_strict": 2
+    }
+  },
+  "upstreams": {
+    "checkedc-clang": {
+      "repo": "https://github.com/checkedc/checkedc-clang.git",
+      "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "verified_from_local_clone": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-upstreams/checkedc"
+    },
+    "apple-llvm": {
+      "repo": "https://github.com/swiftlang/llvm-project.git",
+      "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "verified_from_local_clone": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-upstreams/apple-llvm"
+    },
+    "llvm": {
+      "repo": "https://github.com/llvm/llvm-project.git",
+      "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "verified_from_local_clone": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-upstreams/llvm"
+    },
+    "softboundcets-34": {
+      "repo": "https://github.com/santoshn/softboundcets-34.git",
+      "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+      "licence": "BSD-3-Clause",
+      "verified_from": "GitHub API: /repos/santoshn/softboundcets-34/commits/master"
+    }
+  },
+  "results": [
+    {
+      "name": "ap_global_oob_trap",
+      "family": "apple_bounds_traps",
+      "kind": "runtime_abort",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety/CodeGen/runtime-checks/oob-array-subscript.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "out-of-bounds array subscript runtime check"
+      },
+      "source": "cases/ap_global_oob_trap.c",
+      "sha256_expected": "1e310ecc02a4dfed25408a75124af14c0db9e4d40c338911ef8dded6a898cca2",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_global_oob_trap.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_global_oob_trap.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_global_oob_trap.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_global_oob_trap.default"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'g' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_global_oob_trap.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_global_oob_trap.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_global_oob_trap.strict"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_global_oob_trap.strict"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'g' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        }
+      },
+      "failures": [],
+      "sha256_actual": "1e310ecc02a4dfed25408a75124af14c0db9e4d40c338911ef8dded6a898cca2"
+    },
+    {
+      "name": "ap_inbounds_control",
+      "family": "apple_bounds_traps",
+      "kind": "clean",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety/CodeGen/runtime-checks/bound-to-array-ok.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "in-bounds array access through a bounded pointer positive control"
+      },
+      "source": "cases/ap_inbounds_control.c",
+      "sha256_expected": "8088658455aa13bc8e5e8de3de2bb89d5e8b22b7e7c871f9a846a91ef8c44e65",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_inbounds_control.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_inbounds_control.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_inbounds_control.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_inbounds_control.default"
+              ],
+              "rc": 0,
+              "stdout": "6\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_inbounds_control.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_inbounds_control.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_inbounds_control.strict"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_inbounds_control.strict"
+              ],
+              "rc": 0,
+              "stdout": "6\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        }
+      },
+      "failures": [],
+      "sha256_actual": "8088658455aa13bc8e5e8de3de2bb89d5e8b22b7e7c871f9a846a91ef8c44e65"
+    },
+    {
+      "name": "ap_null_deref_reject",
+      "family": "apple_bounds_traps",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety-legacy-checks/CodeGen/single-null.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "null-valued `__single` pointer dereference trap category"
+      },
+      "source": "cases/ap_null_deref_reject.c",
+      "sha256_expected": "18fd9a52918c934d8df1c4b2a21626dd67b86b2e571fa1609c742ee93af66626",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_null_deref_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n      *p = 1;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_null_deref_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_null_deref_reject.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n      *p = 1;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_null_deref_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n      *p = 1;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_null_deref_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_null_deref_reject.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n      *p = 1;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "18fd9a52918c934d8df1c4b2a21626dd67b86b2e571fa1609c742ee93af66626"
+    },
+    {
+      "name": "ap_shift_count_trap",
+      "family": "apple_bounds_traps",
+      "kind": "warn_then_trap",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety/CodeGen/trap-reasons/general_trap-O0.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "untrusted-count operation that lowers to a general runtime trap"
+      },
+      "source": "cases/ap_shift_count_trap.c",
+      "sha256_expected": "2799e65169a4510c2473c671e682085084a166017727ee94b7040adf73da380c",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_shift_count_trap.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "<SRC>:6:13: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width\n      int x = 1 << s;\n              ^\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_shift_count_trap.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_shift_count_trap.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "<SRC>:6:13: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width\n      int x = 1 << s;\n              ^\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_shift_count_trap.default"
+              ],
+              "rc": 110,
+              "stdout": "",
+              "stderr": "C+ runtime error: invalid shift: shift count 41 is outside [0, 32)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_shift_count_trap.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:13: error: [CPLUS-FFI] shift count cannot be proven within the left operand's width\n      int x = 1 << s;\n              ^\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_shift_count_trap.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_shift_count_trap.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:13: error: [CPLUS-FFI] shift count cannot be proven within the left operand's width\n      int x = 1 << s;\n              ^\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "2799e65169a4510c2473c671e682085084a166017727ee94b7040adf73da380c"
+    },
+    {
+      "name": "ap_subscript_static_reject",
+      "family": "apple_bounds_traps",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/swiftlang/llvm-project.git",
+        "path": "clang/test/BoundsSafety-legacy-checks/CodeGen/runtime-checks/oob-array-subscript-deref.c",
+        "sha": "ca74e48841e588074fba77543e4e0fc643edc52c",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "out-of-bounds array subscript with dereference runtime check"
+      },
+      "source": "cases/ap_subscript_static_reject.c",
+      "sha256_expected": "4d2f4c51560b4ed26231877c20d38eb169e2af29d018313e530d340b56aab67a",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_subscript_static_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'\n      a[8] = 3;\n      ^\nhelp: array contains 8 elements; valid indices are 0..7\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_subscript_static_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_subscript_static_reject.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'\n      a[8] = 3;\n      ^\nhelp: array contains 8 elements; valid indices are 0..7\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_subscript_static_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'\n      a[8] = 3;\n      ^\nhelp: array contains 8 elements; valid indices are 0..7\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_subscript_static_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_subscript_static_reject.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 8 is outside the bounds of 'a'\n      a[8] = 3;\n      ^\nhelp: array contains 8 elements; valid indices are 0..7\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "4d2f4c51560b4ed26231877c20d38eb169e2af29d018313e530d340b56aab67a"
+    },
+    {
+      "name": "cc_const_index_reject",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/dynamic_check-warning.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "out-of-bounds constant subscript diagnosed during bounds checking"
+      },
+      "source": "cases/cc_const_index_reject.c",
+      "sha256_expected": "ed8ce9ab76f9c903a6188e848e964194b9666dd56ffc096b6b8acf0bc39ca57c",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_const_index_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      a[9] = 1;\n      ^\nhelp: array contains 4 elements; valid indices are 0..3\n<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      return a[9];\n             ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_const_index_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_const_index_reject.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      a[9] = 1;\n      ^\nhelp: array contains 4 elements; valid indices are 0..3\n<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      return a[9];\n             ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_const_index_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      a[9] = 1;\n      ^\nhelp: array contains 4 elements; valid indices are 0..3\n<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      return a[9];\n             ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_const_index_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_const_index_reject.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      a[9] = 1;\n      ^\nhelp: array contains 4 elements; valid indices are 0..3\n<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n      return a[9];\n             ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "ed8ce9ab76f9c903a6188e848e964194b9666dd56ffc096b6b8acf0bc39ca57c"
+    },
+    {
+      "name": "cc_dyn_stack_read",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_abort",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/array-read-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "dynamic array subscript read generating a dynamic bounds check"
+      },
+      "source": "cases/cc_dyn_stack_read.c",
+      "sha256_expected": "54de93893ce5b981204788b4add0b12051b7962c5e756edc2b5c5e1d45ffdf31",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_read.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_read.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_read.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_read.default"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_read.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_read.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_read.strict"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_read.strict"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        }
+      },
+      "failures": [],
+      "sha256_actual": "54de93893ce5b981204788b4add0b12051b7962c5e756edc2b5c5e1d45ffdf31"
+    },
+    {
+      "name": "cc_dyn_stack_write",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_abort",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/array-write-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "dynamic array subscript store generating a dynamic bounds check"
+      },
+      "source": "cases/cc_dyn_stack_write.c",
+      "sha256_expected": "084a51b63380df19d5b331e7769a54c38e3f73ae0e3ac35b92f5b614c2bf2f5a",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_write.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_write.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_write.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_write.default"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_write.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_write.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_write.strict"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_stack_write.strict"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'a' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        }
+      },
+      "failures": [],
+      "sha256_actual": "084a51b63380df19d5b331e7769a54c38e3f73ae0e3ac35b92f5b614c2bf2f5a"
+    },
+    {
+      "name": "cc_dyn_struct_field",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_abort",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/struct-read-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "dynamic subscript of a struct array field generating a bounds check"
+      },
+      "source": "cases/cc_dyn_struct_field.c",
+      "sha256_expected": "406e5d369d843ac40956b4cd6247128cd04df2e6c15e36815c2653022a7df5d6",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_struct_field.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_struct_field.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_struct_field.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_struct_field.default"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'v' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_struct_field.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_struct_field.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_struct_field.strict"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_dyn_struct_field.strict"
+              ],
+              "rc": -6,
+              "stdout": "",
+              "stderr": "C+ error: index 9 is outside the bounds of 'v' (length 4)\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        }
+      },
+      "failures": [],
+      "sha256_actual": "406e5d369d843ac40956b4cd6247128cd04df2e6c15e36815c2653022a7df5d6"
+    },
+    {
+      "name": "cc_ptr_formation_lower",
+      "family": "checkedc_dynamic_bounds",
+      "kind": "runtime_trap",
+      "origin": {
+        "repo": "https://github.com/checkedc/checkedc-clang.git",
+        "path": "clang/test/CheckedC/dynamic-checks/ptr-arith-null-check-code-gen.c",
+        "sha": "a2843eae17d96cbfad2cf386dd60de0b849cfb6d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "pointer arithmetic offset check on a bounds-annotated pointer"
+      },
+      "source": "cases/cc_ptr_formation_lower.c",
+      "sha256_expected": "b994c8f23c9e07e6f155f6eb9067713985f308a7b09d21d095cb9a85f6535a5f",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_ptr_formation_lower.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_ptr_formation_lower.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_ptr_formation_lower.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_ptr_formation_lower.default"
+              ],
+              "rc": 101,
+              "stdout": "",
+              "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:6: pointer offset -1 is outside [0, 4] elements\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_ptr_formation_lower.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_ptr_formation_lower.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_ptr_formation_lower.strict"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_ptr_formation_lower.strict"
+              ],
+              "rc": 101,
+              "stdout": "",
+              "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:6: pointer offset -1 is outside [0, 4] elements\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        }
+      },
+      "failures": [],
+      "sha256_actual": "b994c8f23c9e07e6f155f6eb9067713985f308a7b09d21d095cb9a85f6535a5f"
+    },
+    {
+      "name": "sa_divzero_constant",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "warn_then_reject_strict",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/division-by-zero.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "division by a known-zero divisor reported by the static analyzer"
+      },
+      "source": "cases/sa_divzero_constant.c",
+      "sha256_expected": "27ea014f86d53a1f5fdf0ebe4a6dd3e28407f44138471d200e1708540e254728",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_constant.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "<SRC>:4:13: warning: [CPLUS-ARITH] division by zero\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_constant.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_divzero_constant.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "<SRC>:4:13: warning: [CPLUS-ARITH] division by zero\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_divzero_constant.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_constant.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:13: error: [CPLUS-ARITH] division by zero\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_constant.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_divzero_constant.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:4:13: error: [CPLUS-ARITH] division by zero\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "27ea014f86d53a1f5fdf0ebe4a6dd3e28407f44138471d200e1708540e254728"
+    },
+    {
+      "name": "sa_divzero_dynamic",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "warn_then_trap",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/division-by-zero-track-zero.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "zero-valued divisor tracked through a value assignment before division"
+      },
+      "source": "cases/sa_divzero_dynamic.c",
+      "sha256_expected": "1316f2e28af1e5189eb9f340264d2ac61257aee371f9be51699d0cc6c72d8fbd",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "<SRC>:6:13: warning: [CPLUS-ARITH] division by zero cannot be excluded\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_divzero_dynamic.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "<SRC>:6:13: warning: [CPLUS-ARITH] division by zero cannot be excluded\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_divzero_dynamic.default"
+              ],
+              "rc": 110,
+              "stdout": "",
+              "stderr": "C+ runtime error: division by zero: division by zero\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:13: error: [CPLUS-ARITH] division by zero cannot be excluded\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_divzero_dynamic.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:13: error: [CPLUS-ARITH] division by zero cannot be excluded\n      int x = 10 / z;\n              ^~\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "1316f2e28af1e5189eb9f340264d2ac61257aee371f9be51699d0cc6c72d8fbd"
+    },
+    {
+      "name": "sa_double_free",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/malloc.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "double free of the same allocated pointer"
+      },
+      "source": "cases/sa_double_free.c",
+      "sha256_expected": "7cc3b9baab43f708707a1b2b2122366443033a519ee2a15af43432bfde424ef0",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_double_free.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'\n      free(p);\n      ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_double_free.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_double_free.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'\n      free(p);\n      ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_double_free.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'\n      free(p);\n      ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_double_free.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_double_free.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-OWNER] double free of 'p'\n      free(p);\n      ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "7cc3b9baab43f708707a1b2b2122366443033a519ee2a15af43432bfde424ef0"
+    },
+    {
+      "name": "sa_malloc_size_wrap",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/malloc-sizeof.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "malloc size expression derived from a computed element count"
+      },
+      "source": "cases/sa_malloc_size_wrap.c",
+      "sha256_expected": "49fde5dbf5223606241d0c57f2f0a179172a30f684ffeada2eb46e417cc99e77",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_size_wrap.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating\n      int *p = malloc(n * 4);\n               ^~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_size_wrap.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_malloc_size_wrap.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating\n      int *p = malloc(n * 4);\n               ^~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_size_wrap.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating\n      int *p = malloc(n * 4);\n               ^~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_size_wrap.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_malloc_size_wrap.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:14: error: [CPLUS-FFI] allocation size wraps size_t; check the multiplication before allocating\n      int *p = malloc(n * 4);\n               ^~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "49fde5dbf5223606241d0c57f2f0a179172a30f684ffeada2eb46e417cc99e77"
+    },
+    {
+      "name": "sa_malloc_zero_reject",
+      "family": "clang_sa_malloc_divzero",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/llvm/llvm-project.git",
+        "path": "clang/test/Analysis/malloc.c",
+        "sha": "14fee62eb543435c407837d2c07e8054be3de90d",
+        "licence": "Apache-2.0 WITH LLVM-exception",
+        "shape": "zero-size allocation tracked by the malloc checker"
+      },
+      "source": "cases/sa_malloc_zero_reject.c",
+      "sha256_expected": "1efd679c5e76a00de147b5567d7b128f96a9b1ed256155f43e0c47f8acb22b40",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_zero_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc\n      int *p = malloc(0);\n               ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_zero_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_malloc_zero_reject.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc\n      int *p = malloc(0);\n               ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_zero_reject.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc\n      int *p = malloc(0);\n               ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_zero_reject.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_malloc_zero_reject.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc\n      int *p = malloc(0);\n               ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "1efd679c5e76a00de147b5567d7b128f96a9b1ed256155f43e0c47f8acb22b40"
+    },
+    {
+      "name": "sb_free_interior",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "invalid deallocation of a pointer not equal to the allocation base"
+      },
+      "source": "cases/sb_free_interior.c",
+      "sha256_expected": "6b1d31e8d0d04fe8ab423255f8af57d54be13f4b532743642ded339e823f5798",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_free_interior.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n      free(p + 1);\n      ^~~~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_free_interior.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_free_interior.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n      free(p + 1);\n      ^~~~\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_free_interior.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n      free(p + 1);\n      ^~~~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_free_interior.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_free_interior.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:5: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n      free(p + 1);\n      ^~~~\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "6b1d31e8d0d04fe8ab423255f8af57d54be13f4b532743642ded339e823f5798"
+    },
+    {
+      "name": "sb_heap_oob_static",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "spatial bounds violation on a heap object (SoftBound store check)"
+      },
+      "source": "cases/sb_heap_oob_static.c",
+      "sha256_expected": "3b7b585e916dcb474f370ace744530496b1be7cd6cb957b81cdfc8531a3610be",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_oob_static.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes\n      p[9] = 42;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_oob_static.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_heap_oob_static.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes\n      p[9] = 42;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_oob_static.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes\n      p[9] = 42;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_oob_static.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_heap_oob_static.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes\n      p[9] = 42;\n      ^\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "3b7b585e916dcb474f370ace744530496b1be7cd6cb957b81cdfc8531a3610be"
+    },
+    {
+      "name": "sb_heap_ptr_lower",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "runtime_trap",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "spatial violation from pointer arithmetic below the lower bound"
+      },
+      "source": "cases/sb_heap_ptr_lower.c",
+      "sha256_expected": "cceb2629d6f282861ec62f3a20545d965b0ff302d42e936cad8a8bbcd9cba5f3",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_ptr_lower.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_ptr_lower.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_heap_ptr_lower.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_heap_ptr_lower.default"
+              ],
+              "rc": 101,
+              "stdout": "",
+              "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:9: pointer offset -1 is outside [0, 4] elements\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_ptr_lower.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_ptr_lower.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_heap_ptr_lower.strict"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_heap_ptr_lower.strict"
+              ],
+              "rc": 101,
+              "stdout": "",
+              "stderr": "C+ runtime error: out-of-bounds pointer formation at <SRC>:9: pointer offset -1 is outside [0, 4] elements\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        }
+      },
+      "failures": [],
+      "sha256_actual": "cceb2629d6f282861ec62f3a20545d965b0ff302d42e936cad8a8bbcd9cba5f3"
+    },
+    {
+      "name": "sb_realloc_alias",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "warn_then_reject_strict",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "stale pointer use after reallocation (CETS temporal check)"
+      },
+      "source": "cases/sb_realloc_alias.c",
+      "sha256_expected": "7aac6f7a7d95d9475f7b1021ca3c0e637c9db16df6d6570532344fe6636ecc99",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_realloc_alias.c"
+              ],
+              "rc": 0,
+              "stdout": "check: <SRC> ok\n",
+              "stderr": "<SRC>:6:14: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n      int *q = realloc(p, 32);\n               ^~~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_realloc_alias.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_realloc_alias.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "<SRC>:6:14: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n      int *q = realloc(p, 32);\n               ^~~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "run": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_realloc_alias.default"
+              ],
+              "rc": 0,
+              "stdout": "",
+              "stderr": "",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": true
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_realloc_alias.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:14: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n      int *q = realloc(p, 32);\n               ^~~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_realloc_alias.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_realloc_alias.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:6:14: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n      int *q = realloc(p, 32);\n               ^~~~~~~\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "7aac6f7a7d95d9475f7b1021ca3c0e637c9db16df6d6570532344fe6636ecc99"
+    },
+    {
+      "name": "sb_uaf_deref",
+      "family": "softboundcets_spatial_temporal",
+      "kind": "static_reject",
+      "origin": {
+        "repo": "https://github.com/santoshn/softboundcets-34.git",
+        "path": "tests/test.c",
+        "sha": "9a9c09f04e16f2d1ef3a906fd138a7b89df44996",
+        "licence": "BSD-3-Clause",
+        "shape": "temporal use-after-free violation (CETS lock/key check)"
+      },
+      "source": "cases/sb_uaf_deref.c",
+      "sha256_expected": "fc6f314f5bf232e0fb604ac5dc06ee94700eb90efcf5d95005a9e57cc6ea7fe6",
+      "modes": {
+        "default": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_uaf_deref.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n      *p = 7;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:5\nnote: owner released: <SRC>:7\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--default",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_uaf_deref.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_uaf_deref.default"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n      *p = 7;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:5\nnote: owner released: <SRC>:7\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        },
+        "strict": {
+          "steps": {
+            "check": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "check",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_uaf_deref.c"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n      *p = 7;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:5\nnote: owner released: <SRC>:7\n",
+              "timed_out": false,
+              "crashed": false
+            },
+            "build": {
+              "cmd": [
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+                "build",
+                "--strict",
+                "--sanitize=none",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_uaf_deref.c",
+                "-o",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_uaf_deref.strict"
+              ],
+              "rc": 1,
+              "stdout": "",
+              "stderr": "<SRC>:8:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n      *p = 7;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: <SRC>:5\nnote: owner released: <SRC>:7\n",
+              "timed_out": false,
+              "crashed": false
+            }
+          },
+          "failures": [],
+          "binary_produced": false
+        }
+      },
+      "failures": [],
+      "sha256_actual": "fc6f314f5bf232e0fb604ac5dc06ee94700eb90efcf5d95005a9e57cc6ea7fe6"
+    }
+  ]
+}

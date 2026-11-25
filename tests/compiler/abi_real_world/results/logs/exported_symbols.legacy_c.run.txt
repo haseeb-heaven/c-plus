@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/exported_symbols.legacy_c.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+sym=7,7,rw,42
+
+--- stderr ---
+

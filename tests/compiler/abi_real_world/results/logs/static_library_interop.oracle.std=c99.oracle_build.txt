@@ -1,0 +1,10 @@
+command: /usr/bin/clang -std=c99 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.oracle_std=c99.c -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases -llibstatic_library_interop_oracle_std=c99 -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.oracle_std=c99.bin
+returncode: 1
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+ld: library 'libstatic_library_interop_oracle_std=c99' not found
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+

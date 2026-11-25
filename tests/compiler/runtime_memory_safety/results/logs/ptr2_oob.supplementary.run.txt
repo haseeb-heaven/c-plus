@@ -1,0 +1,52 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_oob.supplementary.bin
+returncode: -6
+timed_out: False
+
+=================================================================
+==24640==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x00016b93e218 at pc 0x0001044c8c20 bp 0x00016b93e180 sp 0x00016b93e178
+WRITE of size 4 at 0x00016b93e218 thread T0
+    #0 0x0001044c8c1c in wr ptr2_oob.c:4
+    #1 0x0001044c8a98 in main ptr2_oob.c:5
+    #2 0x00018993cd78 in start+0x19f8 (dyld:arm64e+0x31d78)
+
+Address 0x00016b93e218 is located in stack of thread T0 at offset 56 in frame
+    #0 0x0001044c8928 in main ptr2_oob.c:5
+
+  This frame has 2 object(s):
+    [32, 48) 'a' (line 5)
+    [64, 72) 'p' (line 5) <== Memory access at offset 56 underflows this variable
+HINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork
+      (longjmp and C++ exceptions *are* supported)
+SUMMARY: AddressSanitizer: stack-buffer-overflow ptr2_oob.c:4 in wr
+Shadow bytes around the buggy address:
+  0x00016b93df80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e180: 00 00 00 00 00 00 00 00 00 00 00 00 f1 f1 f1 f1
+=>0x00016b93e200: 00 00 f2[f2]00 f3 f3 f3 00 00 00 00 00 00 00 00
+  0x00016b93e280: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e380: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x00016b93e480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==24640==ABORTING

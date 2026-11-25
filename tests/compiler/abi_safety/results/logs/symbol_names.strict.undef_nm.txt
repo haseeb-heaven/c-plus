@@ -1,0 +1,39 @@
+command: /usr/bin/nm -u /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+__Exit
+___chkstk_darwin
+___memcpy_chk
+___memset_chk
+___snprintf_chk
+___stack_chk_fail
+___stack_chk_guard
+___stderrp
+___stdoutp
+_abort
+_calloc
+_fflush
+_fprintf
+_fputc
+_fputs
+_free
+_getenv
+_malloc
+_printf
+_pthread_getspecific
+_pthread_key_create
+_pthread_key_delete
+_pthread_mutex_destroy
+_pthread_mutex_init
+_pthread_mutex_lock
+_pthread_mutex_unlock
+_pthread_setspecific
+_putchar
+_scanf
+_strlen
+_vfprintf
+
+--- stderr ---
+

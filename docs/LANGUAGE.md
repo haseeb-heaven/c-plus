@@ -76,6 +76,28 @@ A local of a resource type without an initialiser is zero-initialised and the
 destructor is still inserted; the destructor should treat a zeroed handle as
 empty.
 
+#### Shadowing
+
+Every declaration is a distinct cleanup obligation, even when it reuses the
+name of an outer owner. Each binding is destroyed exactly once, at the end of
+the scope it was declared in, so an inner owner is destroyed before the outer
+one it shadows:
+
+```c
+File f = File_open("a");
+{
+    File f = File_open("b");   /* a different binding, not a redeclaration */
+}                              /* f ("b") is closed here */
+/* f ("a") is still open until the end of the function */
+```
+
+A `return` inside the inner block destroys the inner binding and then the
+outer one. Because the C name `f` no longer denotes the outer object at that
+point, the lowering saves its address (`&f`) immediately before the shadowing
+declaration and drops through that saved pointer. Ownership state (moved,
+explicitly dropped, borrowed) is likewise per declaration: moving or dropping
+the inner `f` does not affect the outer one.
+
 ### Ownership transfer
 
 ```c
@@ -394,9 +416,42 @@ state.add(3);        /* lowers to State_add(&state, 3) */
 
 | mode | syntax lowering | runtime checks | safety claim |
 | --- | --- | --- | --- |
-| default (safe) | yes | UBSan bounds/null/alignment/undefined, abort on first failure | memory safety for the supported subset |
-| `--release` | yes | same checks, `-O2` | same |
-| `--legacy-c` | yes | none | **none**; behaves like plain C |
+| default (safe, strict policy) | yes | UBSan bounds/null/alignment/undefined, abort on first failure | memory safety for the supported subset; **every C+ warning is an error** |
+| `--release` | yes | same checks, `-O2` | same policy: optimization only, no safety weakening |
+| `--legacy-c` | yes | none | **none**; behaves like plain C, warnings are not promoted by default |
 
-`--legacy-c` does not turn off the C+ source lowering; it turns off the safety
-instrumentation and warnings. Use it only for compatibility experiments.
+**Default policy (issue #34).** Ordinary invocations of `c+ build`, `c+ check`,
+`c+ run` and the gcc-style `c+ file.c` form use Safe mode and promote every C+
+diagnostic of severity Warning to a compilation error. The C backend is invoked
+with `-Werror` in addition to the individually promoted safety warnings, so
+enabled host-Clang warnings are fatal too. `-Werror` remains accepted but is
+redundant. `--strict` is an explicit spelling for the fail-closed analysis gates;
+it is not required to obtain the default safety policy.
+
+`-w` is accepted for gcc compatibility, but in Safe mode it is consumed by the
+driver and **never forwarded to the backend**: it cannot suppress C+ diagnostics,
+safety gates or warning promotion. Its only backend scope is `--legacy-c`.
+`--no-werror` is an explicit diagnostic-only opt-out from warning promotion; it
+does not disable any C+ safety analysis or runtime check and is not evidence of
+safety in STRICT mode. `--legacy-c` is the compatibility escape hatch: by default
+it neither runs C+ safety analysis nor promotes warnings; an explicit `-Werror`
+still promotes backend warnings there.
+
+Strict mode enforces only the implemented, documented safe subset. It does not
+claim complete memory safety or general use-after-free detection, and a clean
+result is per-translation-unit (see `docs/compiler/semantic_safety_inventory.md`).
+
+Evidence: `tests/compiler/default_policy/results/summary.txt` (14 cases, exact
+commands, exit codes, stdout and stderr).
+
+### `--auto-runtime` (opt-in)
+
+By default a runtime safety violation prints its diagnostic and terminates with
+the documented exit code (101–111). Passing `--auto-runtime` changes that only
+while a C+ `try` frame is live: the same diagnostic is printed, then the
+violation is raised as a catchable C+ exception, so a `catch` handler can run
+and execution continues after the `try`. With no live handler the process still
+terminates with the original code — a defect is never silently ignored. The
+flag is a driver option: it defines `CPLUS_AUTO_RUNTIME=1` for safe-mode builds
+only, never for `--legacy-c`, and it does not alter the C ABI or any pointer
+representation. Evidence: `tests/compiler/auto_runtime/results/summary.txt`.

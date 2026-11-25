@@ -1,0 +1,5 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr2_ok.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+returncode: 0
+timed_out: False
+
+

@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/uaf.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/uaf.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+returncode: 1
+timed_out: False
+
+<SRC>:4:78: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer
+  int main(void){ int *p=malloc(16); if(!p)return 2; free(p); printf("v=%d\n", p[0]); return 0; }
+                                                                               ^
+help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+note: allocation: <SRC>:4
+note: owner released: <SRC>:4

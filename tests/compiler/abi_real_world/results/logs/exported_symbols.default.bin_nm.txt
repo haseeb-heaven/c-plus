@@ -1,0 +1,58 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/exported_symbols.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+0000000100003834 T ___cplus_bounds_check
+0000000100003dc0 T ___cplus_checked_add_i64
+00000001000041dc T ___cplus_checked_div_i64
+0000000100004178 T ___cplus_checked_mul_i64
+00000001000046c8 T ___cplus_checked_narrow_i64
+00000001000043a8 T ___cplus_checked_rem_i64
+00000001000043e8 T ___cplus_checked_shl_i64
+0000000100004688 T ___cplus_checked_shr_i64
+0000000100004118 T ___cplus_checked_sub_i64
+0000000100000000 T __mh_execute_header
+0000000100006094 T _cplus_address_retired
+000000010000562c T _cplus_alloc
+000000010000578c T _cplus_alloc_array
+0000000100005ec4 T _cplus_alloc_bytes
+00000001000060fc T _cplus_alloc_count
+0000000100005fd0 T _cplus_allocation_generation
+0000000100003ab4 T _cplus_check_bounds
+000000010000619c T _cplus_check_index
+0000000100005ddc T _cplus_check_live
+0000000100003cc8 T _cplus_check_nonnull
+0000000100003bd8 T _cplus_check_ptr_formation
+0000000100006064 T _cplus_epoch
+00000001000038ec T _cplus_fatal
+000000010000c068 S _cplus_fatal_hook
+0000000100005420 T _cplus_free_registered
+00000001000066dc T _cplus_mutex_free
+00000001000065ec T _cplus_mutex_lock
+0000000100006544 T _cplus_mutex_new
+0000000100006664 T _cplus_mutex_unlock
+0000000100006c9c T _cplus_print_end
+0000000100006904 T _cplus_print_value
+000000010000594c T _cplus_realloc
+0000000100005098 T _cplus_realloc_registered
+0000000100004ab0 T _cplus_register_allocation
+0000000100005a98 T _cplus_release
+00000001000049b8 T _cplus_resource_check_borrow
+000000010000c010 D _cplus_runtime_log_level
+0000000100006cc0 T _cplus_scan_value
+0000000100006420 T _cplus_scope_cleanup
+0000000100006310 T _cplus_scope_push
+00000001000068b0 T _cplus_tls_free
+00000001000067d4 T _cplus_tls_get
+000000010000672c T _cplus_tls_new
+000000010000682c T _cplus_tls_set
+0000000100005718 T _cplus_zalloc
+0000000100005d18 T _cplus_zero
+0000000100003654 T _main
+0000000100003508 T _rw_add_exported
+000000010000c000 D _rw_glob_counter
+000000010000c008 D _rw_glob_name
+
+--- stderr ---
+

@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug41_signal_flag.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug41_signal_flag.c:5:38: error: [CPLUS-FFI] signal-modified global must be volatile sig_atomic_t

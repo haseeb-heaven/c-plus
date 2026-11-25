@@ -1,0 +1,165 @@
+Wave 2 BLUE DEFENDER regression suite (wave-1 bypasses)
+Generated: 2026-11-23T14:21:19.246970+00:00
+Binary:    /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+Mode:      c+ check --strict --sanitize=none
+Timeout:   60s (hard)
+
+PER-CASE RESULTS
+- S2_relay_free                closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S2_relay_free.c
+    expected categories: [CPLUS-OWNER] | found: [CPLUS-OWNER] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S2_relay_free.c:5:57: error: [CPLUS-OWNER] double free of 'p'
+    diag: int main(void){ int *p = malloc(sizeof(int)); relay(p); free(p); return 0; }
+    diag: ^~~~
+    diag: help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership
+
+- S3_return_chain              closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S3_return_chain.c
+    expected categories: [CPLUS-LIFETIME] | found: [CPLUS-LIFETIME], [CPLUS-SAFE-LIFETIME] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S3_return_chain.c:5:76: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'q'
+    diag: int main(void){ int *p=malloc(sizeof(int)); int *q=id2(p); free(p); return *q; }
+    diag: ^
+    diag: help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+    diag: note: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S3_return_chain.c:5
+    diag: note: alias created: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S3_return_chain.c:5
+    diag: note: owner released: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S3_return_chain.c:5
+
+- S4_null_wrapper              closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S4_null_wrapper.c
+    expected categories: [CPLUS-LIFETIME] | found: [CPLUS-LIFETIME], [CPLUS-SAFE-LIFETIME] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S4_null_wrapper.c:5:17: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'wrap'
+    diag: int main(void){ wrap(NULL); return 0; }
+    diag: ^~~~
+
+- S8_self_recursion_oob        closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S8_self_recursion_oob.c
+    expected categories: [CPLUS-BOUNDS] | found: [CPLUS-BOUNDS] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S8_self_recursion_oob.c:3:45: error: [CPLUS-BOUNDS] array index 10 from recursive call is out of bounds of array 'a' of length 4
+    diag: int f(int i){ if(i<=0) return a[0]; return a[i] + f(i-1); }
+    diag: ^
+    diag: help: use C+ managed allocations and cplus_* helpers
+
+- S1_flag_divergence           closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none -DDANGER /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S1_flag_divergence.c
+    expected categories: [CPLUS-LIFETIME], [CPLUS-OWNER] | found: [CPLUS-LIFETIME], [CPLUS-OWNER], [CPLUS-SAFE-LIFETIME] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S1_flag_divergence.c:7:15: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: released pointer 'p' passed to 'consume'
+    diag: consume(p); consume(p);
+    diag: ^~~~~~~
+    diag: help: suggested correction: do not dereference after release; copy the data or transfer ownership with cplus_move()
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S1_flag_divergence.c:7:15: error: [CPLUS-OWNER] double free after call to 'consume' which frees its argument
+    diag: consume(p); consume(p);
+    diag: ^~~~~~~
+    diag: help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership
+
+- P1_int_launder_uaf           closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_P1_int_launder_uaf.c
+    expected categories: [CPLUS-LIFETIME] | found: [CPLUS-LIFETIME], [CPLUS-SAFE-LIFETIME] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_P1_int_launder_uaf.c:4:103: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'q'
+    diag: int main(void){ int *p=malloc(sizeof(int)); uintptr_t u=(uintptr_t)p; int *q=(int*)u; free(p); return *q; }
+    diag: ^
+    diag: help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+    diag: note: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_P1_int_launder_uaf.c:4
+    diag: note: alias created: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_P1_int_launder_uaf.c:4
+    diag: note: owner released: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_P1_int_launder_uaf.c:4
+
+- P1_union_pun_uaf             closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_P1_union_pun_uaf.c
+    expected categories: [CPLUS-LIFETIME] | found: [CPLUS-LIFETIME], [CPLUS-SAFE-LIFETIME] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_P1_union_pun_uaf.c:4:71: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'u.i'
+    diag: int main(void){ union U u; u.p=malloc(sizeof(int)); free(u.p); return *u.i; }
+    diag: ^
+    diag: help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+
+- T1_indirect_realloc          closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_T1_indirect_realloc.c
+    expected categories: [CPLUS-LIFETIME] | found: [CPLUS-LIFETIME], [CPLUS-SAFE-LIFETIME] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_T1_indirect_realloc.c:6:16: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'
+    diag: printf("%d\n",*p); free(q); return 0; }
+    diag: ^
+    diag: help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+    diag: note: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_T1_indirect_realloc.c:4
+
+- A1_stale_nonzero             closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_stale_nonzero.c
+    expected categories: [CPLUS-ARITH] | found: [CPLUS-ARITH] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_stale_nonzero.c:3:39: error: [CPLUS-ARITH] division by zero cannot be excluded
+    diag: int f(int d){ if(d){ d=zero(); return 100/d; } return 0; }
+    diag: ^~~
+
+- A1_incdec                    closed      PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_incdec.c
+    expected categories: [CPLUS-ARITH] | found: [CPLUS-ARITH] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_incdec.c:3:85: error: [CPLUS-ARITH] signed integer overflow in unary minus of minimum value
+    diag: int main(void){ volatile int x=INT_MAX; x++; volatile int m=INT_MIN; volatile int n=-m; return x+n; }
+    diag: ^
+
+- S2_fnptr_free                known_open  NEWLY_CLOSED  rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S2_fnptr_free.c
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S2_fnptr_free.c:4:77: error: [CPLUS-OWNER] double free of 'p'
+    diag: int main(void){ int *p = malloc(sizeof(int)); void(*f)(int*)=consume; f(p); free(p); return 0; }
+    diag: ^~~~
+    diag: help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership
+
+- S6_global_alias_uaf          known_open  NEWLY_CLOSED  rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S6_global_alias_uaf.c
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S6_global_alias_uaf.c:6:70: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'
+    diag: int main(void){ int *p=malloc(sizeof(int)); setg(p); freeg(); return *p; }
+    diag: ^
+    diag: help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()
+    diag: note: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_S6_global_alias_uaf.c:6
+
+- T1_fnptr_double_free         known_open  NEWLY_CLOSED  rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_T1_fnptr_double_free.c
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_T1_fnptr_double_free.c:3:80: error: [CPLUS-OWNER] double free of 'p'
+    diag: int main(void){ int *p=malloc(4); if(!p) return 1; void(*f)(void*)=free; f(p); free(p); return 0; }
+    diag: ^~~~
+    diag: help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership
+
+- A1_compound_assign           known_open  KNOWN_OPEN    rc=0        accepted=True
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_compound_assign.c
+    diag: check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_compound_assign.c ok
+
+- A1_implicit_narrow           known_open  KNOWN_OPEN    rc=0        accepted=True
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_implicit_narrow.c
+    diag: check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_implicit_narrow.c ok
+
+- A1_float_to_int              known_open  KNOWN_OPEN    rc=0        accepted=True
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_float_to_int.c
+    diag: check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_A1_float_to_int.c ok
+
+- CTRL_direct_double_free      control     PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_CTRL_direct_double_free.c
+    expected categories: [CPLUS-OWNER] | found: [CPLUS-OWNER] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_CTRL_direct_double_free.c:3:54: error: [CPLUS-OWNER] double free of 'p'
+    diag: int main(void){ int *p=malloc(sizeof(int)); free(p); free(p); return 0; }
+    diag: ^~~~
+    diag: help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership
+
+- CTRL_direct_null             control     PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_CTRL_direct_null.c
+    expected categories: [CPLUS-LIFETIME] | found: [CPLUS-LIFETIME], [CPLUS-SAFE-LIFETIME] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_CTRL_direct_null.c:4:17: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'
+    diag: int main(void){ deref(NULL); return 0; }
+    diag: ^~~~~
+
+- CTRL_direct_overflow         control     PASS          rc=1        accepted=False
+    command: c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_CTRL_direct_overflow.c
+    expected categories: [CPLUS-ARITH] | found: [CPLUS-ARITH] | missing: (none)
+    diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/wave2/cases/case_CTRL_direct_overflow.c:3:48: error: [CPLUS-ARITH] signed integer overflow in addition
+    diag: int main(void){ volatile int x=INT_MAX; return x+1; }
+    diag: ^
+
+KNOWN_OPEN (3): A1_compound_assign, A1_implicit_narrow, A1_float_to_int
+NEWLY_CLOSED (3): S2_fnptr_free, S6_global_alias_uaf, T1_fnptr_double_free
+
+COUNTS
+  total                        19
+  closed_asserted_rejected     10
+  closed_failed                0
+  controls_asserted_rejected   3
+  controls_failed              0
+  known_open                   3
+  newly_closed                 3
+  anomalies                    0
+
+SUITE PASSED: True

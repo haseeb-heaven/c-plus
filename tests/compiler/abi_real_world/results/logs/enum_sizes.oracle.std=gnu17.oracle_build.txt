@@ -1,0 +1,8 @@
+command: /usr/bin/clang -std=gnu17 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/enum_sizes.oracle_std=gnu17.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/enum_sizes.oracle_std=gnu17.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

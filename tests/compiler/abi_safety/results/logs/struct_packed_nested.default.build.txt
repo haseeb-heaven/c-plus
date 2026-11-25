@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.default.c --default --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

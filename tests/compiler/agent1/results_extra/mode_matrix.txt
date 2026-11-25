@@ -1,0 +1,10 @@
+MODE MATRIX (extra orphaned-fixture runner)
+- embedded // EXPECT: accept -> c+ check --strict must exit 0.
+- embedded // EXPECT: reject -> c+ check --strict must exit non-zero and the
+  // DIAG: substring must appear (if present). DEFAULT is run for evidence
+  only: p0new_realloc_old_after_grow is a warning (rc=0) in DEFAULT but an
+  error (rc=1) in STRICT, so STRICT is authoritative for these generators.
+- <name>.err -> expected compile diagnostic substring (reject).
+- <name>.exit[+.stderr] -> build then execute with timeout; assert exit code
+  and optional stderr substring. No such expectation files exist in this set.
+- no expectation marker/file -> BLOCKED (never PASS by default), reason recorded.

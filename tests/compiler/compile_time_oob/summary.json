@@ -1,0 +1,55 @@
+{
+  "generated": "2026-11-24T02:49:19.815971+00:00",
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "source": "cast_negative.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/cast_negative.c:1:36: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'a'\n  int main(void){int a[3]={0};return a[(int)-1];}\n                                     ^\n",
+      "status": "PASS"
+    },
+    {
+      "source": "derived_negative.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/derived_negative.c:1:57: error: [CPLUS-BOUNDS] constant array index -2 is outside the bounds of 'a'\n  int main(void){int a[3]={0};for(int i=0;i<3;i++){int v=a[i-4];(void)v;}return 0;}\n                                                          ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb",
+      "status": "PASS"
+    },
+    {
+      "source": "helper_negative.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/helper_negative.c:2:37: error: [CPLUS-BOUNDS] negative array index -1 on 'a'\n  int main(void){int a[3]={0};return a[idx()];}\n                                      ^\nhelp: use C+ managed allocations and cplus_* helpers\n",
+      "status": "PASS"
+    },
+    {
+      "source": "literal_negative.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/literal_negative.c:1:36: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'a'\n  int main(void){int a[3]={0};return a[-1];}\n                                     ^\n",
+      "status": "PASS"
+    },
+    {
+      "source": "ternary_both_oob.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/ternary_both_oob.c:1:47: error: [CPLUS-BOUNDS] constant array index -2 is outside the bounds of 'a'\n  int main(void){int a[3]={0};int c=1;return a[c?-2:7];}\n                                                ^\nhelp: array contains 3 elements; valid indices are 0..2\n",
+      "status": "PASS"
+    },
+    {
+      "source": "ternary_large.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/ternary_large.c:1:62: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){int a[3]={0};for(int i=0;i<3;i++){int v=a[i==0?9:i];(void)v;}return 0;}\n                                                               ^\nhelp: array contains 3 elements; valid indices are 0..2\n",
+      "status": "PASS"
+    },
+    {
+      "source": "ternary_negative.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/ternary_negative.c:1:62: error: [CPLUS-BOUNDS] constant array index -1 is outside the bounds of 'a'\n  int main(void){int a[3]={0};for(int i=0;i<3;i++){int v=a[i==0?-1:i];(void)v;}return 0;}\n                                                               ^\nhelp: array contains 3 elements; valid indices are 0..2\n",
+      "status": "PASS"
+    },
+    {
+      "source": "ternary_offset.c",
+      "rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/compile_time_oob/cases/ternary_offset.c:1:62: error: [CPLUS-BOUNDS] constant array index -1 is outside the bounds of 'a'\n  int main(void){int a[3]={0};for(int i=0;i<3;i++){int v=a[i==0?-1-i:i];(void)v;}return 0;}\n                                                               ^\nhelp: array contains 3 elements; valid indices are 0..2\n",
+      "status": "PASS"
+    }
+  ],
+  "failures": []
+}

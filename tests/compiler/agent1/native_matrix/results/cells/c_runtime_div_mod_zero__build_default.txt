@@ -1,0 +1,25 @@
+CASE=c_runtime_div_mod_zero
+CONFIG=build_default
+STATUS=PASS
+REASON=PASS: run rc=110/110 with asserted diagnostic [zero]/[zero] and generated-C token [checked_div]; zero divisor/op must trap for both / and % (native 110 or UBSan 134), never return 0/dividend
+EXPECT_COMPILE=either
+EXPECT_DIAG=
+EXPECT_REJECT_DIAG=zero
+EXPECT_GEN_SUBSTR=checked_div
+EXPECT_RUN=trap
+EXPECT_RUN_RC=110
+EXPECT_RUN_DIAG=zero
+EXPECT_RUN2_RC=110
+EXPECT_RUN2_DIAG=zero
+COMPILE_CMD=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/c_runtime_div_mod_zero__build_default.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/c_runtime_div_mod_zero.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/bins/c_runtime_div_mod_zero__build_default.bin
+COMPILE_RC=0
+COMPILE_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__build_default__compile.stdout
+COMPILE_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__build_default__compile.stderr
+GENERATED_C=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/c_runtime_div_mod_zero__build_default.c
+NATIVE_GUARD_WRAPPER_COUNT=18
+RUN1_RC=110
+RUN1_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__build_default__run1.stdout
+RUN1_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__build_default__run1.stderr
+RUN2_RC=110
+RUN2_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__build_default__run2.stdout
+RUN2_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__build_default__run2.stderr

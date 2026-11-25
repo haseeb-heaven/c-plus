@@ -1,0 +1,12 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/struct_layout.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+header=24,0,4,8,16
+wire=13,0,1,5
+seg=24,0,4,12,20,4,8,12,16
+samples=40,0,8,32
+
+--- stderr ---
+

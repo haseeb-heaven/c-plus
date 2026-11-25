@@ -1,0 +1,11 @@
+LEGACY C source and ABI preservation
+macOS-27.2.1-arm64-arm-64bit
+C+ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+ref /usr/bin/clang
+
+tests/cases/c_abi.c                      source=True stdout=True symbols=True
+benchmarks/bounds_sum.c                  source=True stdout=True symbols=True
+tests/legacy/plain.c                     source=True stdout=True symbols=True
+tests/cases/hello.c                      source=True stdout=True symbols=True
+
+failures: 0

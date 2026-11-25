@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.legacy_c.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+i=42 l=6 d=6.0 p=5 set=5
+
+--- stderr ---
+

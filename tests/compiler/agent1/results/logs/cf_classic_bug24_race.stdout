@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug24_race.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug24_race.c:7:36: error: [CPLUS-FFI] unsynchronized write to shared global 'shared_counter' in thread function 'worker'

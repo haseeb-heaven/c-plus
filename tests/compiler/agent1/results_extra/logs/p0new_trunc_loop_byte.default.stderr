@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_trunc_loop_byte.c:12:35: error: [CPLUS-SAFE-BOUNDS] constant array index 43 is outside the bounds of 'table'
+      for (int k = 0; k < cap; ++k) table[k] = 0;
+                                    ^~~~~
+help: array contains 4 elements; valid indices are 0..3
