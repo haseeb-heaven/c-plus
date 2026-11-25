@@ -1,4 +1,4 @@
 ./stdlib/error.hp:452:13: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
       fresh = cplus_realloc(ptr, actual);
               ^~~~~~~~~~~~~
-error: 1 C+ warning(s) treated as errors (default warning policy)
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

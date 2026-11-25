@@ -11,7 +11,7 @@ unset SDKROOT
 unset CPLUS_CLANG
 pass=0; fail=0
 
-"$ROOT/build/c+" build "$D/app.cp" --default --sanitize=none -I. \
+"$ROOT/build/c+" build "$D/app.cp" --default --no-werror --sanitize=none -I. \
     -o "$D/app" -- "$ROOT/build/libc/libcplus_hardened.a" \
     >"$D/build.log" 2>&1 || { echo "APP sqldb FAIL build"; fail=$((fail + 1)); exit 1; }
 

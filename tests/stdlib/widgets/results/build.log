@@ -76,4 +76,4 @@
 /tmp/resolve2/tests/stdlib/widgets/test_widgets.cp:447:12: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'stdlib_window_init'
           ck(stdlib_window_init(&w, (const stdlib_allocator *)0,
              ^~~~~~~~~~~~~~~~~~
-error: 26 C+ warning(s) treated as errors (default warning policy)
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

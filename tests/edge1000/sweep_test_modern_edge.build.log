@@ -1,1 +1,0 @@
-clang: error: build/libc/libcplus_hardened.a: 'linker' input unused [-Werror,-Wunused-command-line-argument]

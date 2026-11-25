@@ -16,4 +16,4 @@
 ./stdlib/mempool.hp:336:16: warning: [CPLUS-ARITH] division by zero cannot be excluded
       if (ncap > (size_t)-1 / p->slot_size)
                  ^
-error: 6 C+ warning(s) treated as errors (default warning policy)
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

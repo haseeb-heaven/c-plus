@@ -4,4 +4,4 @@
 /tmp/resolve2/tests/stdlib/scene3d/test_scene3d.cp:59:13: warning: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe
           if (p[i] != value)
               ^
-error: 2 C+ warning(s) treated as errors (default warning policy)
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

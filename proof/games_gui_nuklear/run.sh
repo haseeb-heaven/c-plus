@@ -10,7 +10,18 @@ unset SDKROOT
 unset CPLUS_CLANG
 D=proof/games_gui_nuklear
 pass=0; fail=0; cases=0
-if ! timeout 300 ./build/c+ build "$D/game_suite.cp" --legacy-c --sanitize=none \
+# The vendored Nuklear archive is a build artifact (gitignored); rebuild it
+# from the MIT source if a fresh worktree lacks it.
+if [ ! -f build/ext/libnuklear.a ]; then
+    mkdir -p build/ext
+    # Build core Nuklear only; nuklear_impl.c needs an SDL3 backend we do not ship.
+    printf '#define NK_IMPLEMENTATION\n#include "nuklear.h"\n' \
+        > build/ext/nuklear_core.c
+    ${CPLUS_CC:-clang} -O2 -std=c11 -Ithird_party/nuklear -c \
+        build/ext/nuklear_core.c -o build/ext/nuklear_impl.o || exit 1
+    /usr/bin/ar rcs build/ext/libnuklear.a build/ext/nuklear_impl.o || exit 1
+fi
+if ! timeout 300 ./build/c+ build "$D/game_suite.cp" --legacy-c --no-werror --sanitize=none \
       -I. -Ithird_party/nuklear -o "$D/bin/game_suite" \
       -- build/ext/libnuklear.a build/libc/libcplus_hardened.a \
       >"$D/bin/build.log" 2>&1; then

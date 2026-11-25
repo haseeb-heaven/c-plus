@@ -4,4 +4,4 @@
 ./stdlib/datastack.hp:98:18: warning: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
           if (p == MAP_FAILED)
                    ^~~~~~~~~~
-error: 2 C+ warning(s) treated as errors (default warning policy)
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]
