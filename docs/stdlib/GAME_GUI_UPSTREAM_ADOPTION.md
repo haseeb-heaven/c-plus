@@ -45,3 +45,12 @@ sh tests/stdlib/nuklear_adapt/run.sh      # NK_ADAPT_TEST 1 1 0
 sh tests/edge1000/run_edge1000.sh
 python3 tools/gen_api_html.py --check
 ```
+
+## C+ modern syntax layer (delivered)
+
+`stdlib/nuklear_cpp.hp` rewrites the vendored adapter in the repo's C+ style:
+a `NuklearScratchFrame` **class** (constructor/drop), **TRY/CATCH** with
+`THROW(NUKLEAR_INIT_FAIL, ...)` and `CATCH_ALL`, structured `cplus_log()` calls,
+and one-store scratch rewind. `tests/stdlib/nuklear_cpp/run.sh` → `NK_CPP_TEST 1 1 0`.
+This is the pattern to apply when the other seven upstreams are vendored; it is
+not a claim that those libraries were copied or rewritten.
