@@ -23,6 +23,7 @@
 #include <clang/Tooling/Tooling.h>
 
 #include <cstdlib>
+#include <climits>
 #include <cmath>
 #include <cmath>
 #include <map>
@@ -582,15 +583,14 @@ public:
     return vd ? vd->getNameAsString() : std::string();
   }
 
-  /// Like varNameOf, but also looks through explicit C-style casts.  A
-  /// `(void *)p` alias must inherit p's release state.
+  /// Like varNameOf, but also looks through explicit C-style casts and
+  /// no-op pointer offsets. A `(void *)p` alias, and a `p + 0` / `0 + p`
+  /// rebinding, must inherit p's release/extent state; without the canonical
+  /// form a zero-offset alias escapes the alias and UAF checks.
   std::string castedVarName(const Expr *expr) const {
     if (!expr)
       return std::string();
-    const Expr *e = expr->IgnoreParenImpCasts();
-    while (const auto *ce = dyn_cast<ExplicitCastExpr>(e))
-      e = ce->getSubExpr()->IgnoreParenImpCasts();
-    return varNameOf(e);
+    return varNameOf(canonicalPointer(expr));
   }
 
   /// Find the original pointer variable behind an integer-laundering
@@ -603,7 +603,9 @@ public:
       if (cast->getType()->isIntegerType())
         return castedVarName(cast->getSubExpr());
     if (const auto *bo = dyn_cast<BinaryOperator>(e))
-      if (bo->isBitwiseOp()) {
+      if (bo->isBitwiseOp() || bo->isAdditiveOp()) {
+        // Tagged (`u | 2`) and re-based (`u + 8`) integer views of p keep p's
+        // provenance; both are integer-laundering forms, not fresh pointers.
         std::string a = pointerSourceOf(bo->getLHS());
         return a.empty() ? pointerSourceOf(bo->getRHS()) : a;
       }
@@ -1055,7 +1057,7 @@ public:
       if (it != fnPtrVarTargets_.end() && !it->second.empty())
         out.insert(it->second);
     } else if (const auto *uo = dyn_cast<UnaryOperator>(callee)) {
-      if (uo->getOpcode() == UO_Deref)
+      if (uo->getOpcode() == UO_Deref || uo->getOpcode() == UO_AddrOf)
         resolveCalleeExpr(uo->getSubExpr(), out, depth + 1);
     } else if (const auto *c = dyn_cast<CallExpr>(callee)) {
       // `get()(p)`: the callee is itself a call returning a function pointer.
@@ -1090,6 +1092,13 @@ public:
 
   static bool isReleaseName(const std::string &n) {
     return n == "free" || n == "cplus_release";
+  }
+
+  /// C+ exposes a managed realloc as `cplus_realloc`; it has the same
+  /// success-only ownership semantics as libc `realloc` and must use the same
+  /// state machine (stale source/alias invalidation on success only).
+  static bool isReallocName(const std::string &n) {
+    return n == "realloc" || n == "cplus_realloc";
   }
 
   /// Compiler-runtime / rewriter helpers and standard allocators have known
@@ -1218,6 +1227,66 @@ public:
     return (unsigned long long)(ctx_.getTypeSize(t) / 8u);
   }
 
+  /// Resolve a `%s` destination to its base object and fixed byte capacity.
+  /// Accepts the forms used to hide a fixed buffer from a naive DeclRefExpr
+  /// check: `buf`, `&buf[0]`, `s.buf`, and a pointer alias of a stack array.
+  /// Unknown forms return nullptr so no bounded-write claim is made.
+  const VarDecl *charDestOf(const Expr *arg, unsigned long long &cap,
+                            bool allowPointerAlias = true) const {
+    cap = 0;
+    if (!arg)
+      return nullptr;
+    const Expr *e = arg->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
+      if (uo->getOpcode() != UO_AddrOf)
+        return nullptr;
+      e = uo->getSubExpr()->IgnoreParenImpCasts();
+    }
+    // `&buf[i]` decays to the array object; resolve to its base variable.
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e))
+      e = ase->getBase()->IgnoreParenCasts();
+    const VarDecl *vd = nullptr;
+    if (const auto *me = dyn_cast<MemberExpr>(e)) {
+      const auto *at = ctx_.getAsConstantArrayType(me->getType());
+      if (!at || !at->getElementType()->isCharType())
+        return nullptr;
+      const auto *ref = dyn_cast<DeclRefExpr>(me->getBase()->IgnoreParenCasts());
+      vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+      if (!vd)
+        return nullptr;
+      cap = at->getSize().getZExtValue();
+      return vd;
+    }
+    const auto *ref = dyn_cast<DeclRefExpr>(e);
+    vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd)
+      return nullptr;
+    if (const auto *at = ctx_.getAsConstantArrayType(vd->getType())) {
+      if (!at->getElementType()->isCharType())
+        return nullptr;
+      cap = at->getSize().getZExtValue();
+      return vd;
+    }
+    // Pointer alias of a stack array (`char *p = buf`) keeps the extent.
+    // Diagnostics that inspect the array's own initializer must not follow
+    // this path: we cannot see a pointee's bytes through a pointer variable.
+    if (!allowPointerAlias)
+      return nullptr;
+    const std::string &n = vd->getNameAsString();
+    auto sit = stackArrayExtents_.find(n);
+    if (sit != stackArrayExtents_.end() && sit->second > 0) {
+      cap = (unsigned long long)sit->second;
+      return vd;
+    }
+    auto hit = heapAllocs_.find(n);
+    if (hit != heapAllocs_.end() && hit->second.bytes > 0 &&
+        hit->second.origin == ExtentOrigin::Stack) {
+      cap = (unsigned long long)hit->second.bytes;
+      return vd;
+    }
+    return nullptr;
+  }
+
   /// An adjacent integer argument that supplies the pointer's element count.
   /// `knownConst` also accepts locals folded to a constant in the collection
   /// pass, so a passed length variable counts when its value is known.
@@ -1288,11 +1357,94 @@ public:
     return pointee->isCharType() && pointee.isConstQualified();
   }
 
-  /// True when a pointer parameter access has one of the two proven
-  /// contracts: a companion count parameter that visibly bounds the index,
-  /// or a read-only NUL-terminator traversal of a `const char *`.
+  /// True when `cond` holding implies `argc > k`.
+  bool argcExceedsFromCond(const Expr *cond, long long k) const {
+    if (!cond)
+      return false;
+    cond = cond->IgnoreParenImpCasts();
+    const auto *bo = dyn_cast<BinaryOperator>(cond);
+    if (!bo)
+      return false;
+    if (bo->getOpcode() == BO_LAnd)
+      return argcExceedsFromCond(bo->getLHS(), k) ||
+             argcExceedsFromCond(bo->getRHS(), k);
+    if (bo->getOpcode() == BO_LOr)
+      return argcExceedsFromCond(bo->getLHS(), k) &&
+             argcExceedsFromCond(bo->getRHS(), k);
+    auto isArgc = [](const Expr *e) {
+      const auto *ref = dyn_cast<DeclRefExpr>(e->IgnoreParenImpCasts());
+      return ref && ref->getDecl() && ref->getDecl()->getName() == "argc";
+    };
+    long long bound = 0;
+    if (isArgc(bo->getLHS()) && evalIndexValue(bo->getRHS(), bound)) {
+      if (bo->getOpcode() == BO_GT)
+        return bound >= k;
+      if (bo->getOpcode() == BO_GE)
+        return bound > k;
+      return false;
+    }
+    if (isArgc(bo->getRHS()) && evalIndexValue(bo->getLHS(), bound)) {
+      if (bo->getOpcode() == BO_LT)
+        return bound >= k;
+      if (bo->getOpcode() == BO_LE)
+        return bound > k;
+      return false;
+    }
+    return false;
+  }
+
+  /// The C standard gives `main`'s `argv` a known extent: exactly `argc + 1`
+  /// pointers (entries 0..argc-1 plus the NULL terminator at argv[argc]).  A
+  /// constant subscript `argv[k]` is therefore in bounds whenever `k <= argc`.
+  /// Require the ordinary dominating guard `argc > k` in a ternary true-branch
+  /// or an `if` then-branch before accepting it.
+  bool argvIndexGuarded(const ArraySubscriptExpr *sub,
+                        const ParmVarDecl *pvd) const {
+    if (currentFunction_ != "main" || pvd->getFunctionScopeIndex() != 1)
+      return false;
+    QualType paramTy = pvd->getType();
+    if (!paramTy->isPointerType())
+      return false;
+    QualType pointee = paramTy->getPointeeType();
+    if (!pointee->isPointerType() || !pointee->getPointeeType()->isCharType())
+      return false;
+    long long k = -1;
+    if (!evalIndexValue(sub->getIdx(), k) || k < 0)
+      return false;
+    DynTypedNode cur = DynTypedNode::create(*sub);
+    for (int depth = 0; depth < 64; ++depth) {
+      DynTypedNodeList parents = ctx_.getParents(cur);
+      if (parents.empty())
+        return false;
+      const DynTypedNode &parent = *parents.begin();
+      const Expr *cond = nullptr;
+      const Stmt *branch = nullptr;
+      if (const auto *co = parent.get<ConditionalOperator>()) {
+        cond = co->getCond();
+        branch = co->getTrueExpr();
+      } else if (const auto *bc = parent.get<BinaryConditionalOperator>()) {
+        cond = bc->getCond();
+        branch = bc->getTrueExpr();
+      } else if (const auto *ifs = parent.get<IfStmt>()) {
+        cond = ifs->getCond();
+        branch = ifs->getThen();
+      }
+      if (cond && branch && cur.get<Stmt>() == branch &&
+          argcExceedsFromCond(cond, k))
+        return true;
+      cur = parent;
+    }
+    return false;
+  }
+
+  /// True when a pointer parameter access has one of the proven contracts: a
+  /// companion count parameter that visibly bounds the index, a read-only
+  /// NUL-terminator traversal of a `const char *`, or a guarded subscript of
+  /// `main`'s `argv`.
   bool hasProvenParamExtent(const ParmVarDecl *pvd,
                             const ArraySubscriptExpr *sub) const {
+    if (argvIndexGuarded(sub, pvd))
+      return true;
     const ArgSlotKey key{currentFunction_, pvd->getFunctionScopeIndex()};
     auto cit = countPairedParams_.find(key);
     if (cit != countPairedParams_.end()) {
@@ -1455,13 +1607,23 @@ public:
       unsafe = floatOutOfRange(value, dst);
     } else if (kind == CheckedArithmeticSite::Op::Narrow) {
       unsigned sb = src->isIntegerType() ? ctx_.getIntWidth(src) : 0;
-      if (sb == 0 || sb > 64 || db >= sb || src->isBooleanType() ||
+      if (sb == 0 || sb > 64 || db > sb || src->isBooleanType() ||
           src->isEnumeralType())
         return;
       __int128 v = 0;
       if (!intConstValue(value, src, v))
         return;
-      unsafe = !intFits(v, db, dst->isSignedIntegerType());
+      if (db < sb) {
+        unsafe = !intFits(v, db, dst->isSignedIntegerType());
+      } else {
+        // db == sb: the rewriter does not instrument same-width conversions,
+        // but an implicit unsigned -> signed conversion of a compile-time
+        // constant above the signed maximum still silently changes value.
+        // Name that provable case in STRICT; values that still fit (idiomatic
+        // sign round-trips) stay accepted.
+        unsafe = src->isUnsignedIntegerType() &&
+                 dst->isSignedIntegerType() && !intFits(v, db, true);
+      }
     }
     if (unsafe) {
       // An explicit C-style cast is the programmer's assertion that the
@@ -1634,14 +1796,81 @@ public:
     __int128 lo = -((__int128)1 << (w - 1));
     __int128 hi = ((__int128)1 << (w - 1)) - 1;
     __int128 r = 0;
+    // Compound assignment opcodes must be normalised to their arithmetic
+    // counterpart: `v += 1` has the same overflow behaviour as `v = v + 1`,
+    // but the switch below originally ignored the *_Assign opcodes so a
+    // provably overflowing compound update slipped through `check` and only
+    // trapped in the guarded build.
     switch (opc) {
-    case BO_Add: r = (__int128)a + b; break;
-    case BO_Sub: r = (__int128)a - b; break;
-    case BO_Mul: r = (__int128)a * b; break;
+    case BO_Add: case BO_AddAssign: r = (__int128)a + b; break;
+    case BO_Sub: case BO_SubAssign: r = (__int128)a - b; break;
+    case BO_Mul: case BO_MulAssign: r = (__int128)a * b; break;
     default: return false;
     }
     overflow = r < lo || r > hi;
     return true;
+  }
+
+  /// Signed constant overflow for integer widths the long long fast path
+  /// cannot represent (e.g. `__int128`). Compute at (width+1) bits and verify
+  /// that truncating back to the real width and re-extending reproduces the
+  /// result; a mismatch means the mathematical result wrapped. Used only for
+  /// fail-closed STRICT diagnostics, so no operand value is ever guessed.
+  bool wideConstOverflow(const BinaryOperator *op, bool &overflow) const {
+    overflow = false;
+    if (!op || !op->getType()->isSignedIntegerType())
+      return false;
+    unsigned w = ctx_.getIntWidth(op->getType());
+    if (w <= 64 || w > 128)
+      return false;
+    llvm::APSInt a, b;
+    if (!knownConst(op->getLHS(), a) || !knownConst(op->getRHS(), b))
+      return false;
+    if (a.getBitWidth() != w || b.getBitWidth() != w)
+      return false;
+    a.setIsSigned(true);
+    b.setIsSigned(true);
+    const auto opc = op->getOpcode();
+    if (opc == BO_Div || opc == BO_DivAssign || opc == BO_Rem ||
+        opc == BO_RemAssign) {
+      // The only signed div/rem overflow is MIN / -1 (MIN % -1 has the same
+      // UB in C). Compare against an exact APSInt minimum at the real width.
+      llvm::APSInt minVal = llvm::APSInt::getMinValue(w, /*Unsigned=*/false);
+      llvm::APSInt minusOne(w, /*isSigned=*/true);
+      minusOne.setAllBits(); // two's complement -1
+      overflow = (a == minVal && b == minusOne);
+      return true;
+    }
+    llvm::APSInt wide;
+    llvm::APSInt wa = a.extend(w + 1), wb = b.extend(w + 1);
+    switch (opc) {
+    case BO_Add: case BO_AddAssign: wide = wa + wb; break;
+    case BO_Sub: case BO_SubAssign: wide = wa - wb; break;
+    case BO_Mul: case BO_MulAssign: wide = wa * wb; break;
+    default: return false;
+    }
+    llvm::APSInt back = wide.trunc(w).extend(w + 1);
+    overflow = (back != wide);
+    return true;
+  }
+
+  /// STRICT fail-closed for arithmetic whose operator token comes from a
+  /// macro expansion with runtime operands: the rewriter cannot instrument
+  /// it. Shared by the `check` diagnostic and the build-mode site recorder
+  /// so the two modes agree (no fail-open gap).
+  bool arithmeticMacroFailClosed(const BinaryOperator *op) const {
+    if (!strict_ || !op)
+      return false;
+    SourceLocation b = op->getBeginLoc(), o = op->getOperatorLoc();
+    if (!b.isValid() || !o.isValid() || (!b.isMacroID() && !o.isMacroID()))
+      return false;
+    if (isHeaderLocation(b))
+      return false;
+    if (isConstantMacroExpr(op->getLHS()) &&
+        isConstantMacroExpr(op->getRHS()))
+      return false; // constant macros fold cleanly, no runtime guard needed
+    SourceManager &sm = ctx_.getSourceManager();
+    return sm.getFileID(sm.getExpansionLoc(b)) == sm.getMainFileID();
   }
 
   /// True when an operand is not a macro-derived runtime value. Plain
@@ -1732,10 +1961,7 @@ public:
     // expansion point; the backend sanitizer (when enabled) still covers it.
     if (b.isInvalid() || o.isInvalid() || e.isInvalid() || b.isMacroID() ||
         o.isMacroID() || e.isMacroID()) {
-      if (strict_ && b.isValid() && b.isMacroID() &&
-          !(isConstantMacroExpr(op->getLHS()) &&
-            isConstantMacroExpr(op->getRHS())) &&
-          sm.getFileID(sm.getExpansionLoc(b)) == sm.getMainFileID())
+      if (arithmeticMacroFailClosed(op))
         report(b, "arithmetic in a macro expansion cannot be instrumented; "
                   "STRICT cannot prove it safe");
       return;
@@ -2210,7 +2436,7 @@ public:
     site.bytes = static_cast<unsigned long long>(bytes);
     if (const FunctionDecl *callee = call->getDirectCallee()) {
       std::string cn = callee->getNameAsString();
-      site.isRealloc = (cn == "realloc");
+      site.isRealloc = isReallocName(cn);
       if (site.isRealloc && call->getNumArgs() >= 1) {
         SourceLocation ob = call->getArg(0)->getBeginLoc();
         SourceLocation oe = call->getArg(0)->getEndLoc();
@@ -2300,6 +2526,24 @@ public:
     return false;
   }
 
+  /// True when `e` mentions a loop induction variable whose value is supplied
+  /// by loopLowerBound_/loopIndexOverride_ rather than being a genuine
+  /// compile-time constant. Such a value changes per iteration and must never
+  /// be folded into a fixed allocation extent.
+  bool dependsOnLoopInduction(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 12)
+      return false;
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        return loopLowerBound_.count(vd) != 0 ||
+               loopIndexOverride_.count(vd) != 0;
+    for (const Stmt *c : e->children())
+      if (const auto *ce = dyn_cast<Expr>(c))
+        if (dependsOnLoopInduction(ce, depth + 1))
+          return true;
+    return false;
+  }
+
   /// Record the byte extent of a heap allocation performed in a variable's
   /// initializer.  Called in both passes so the checking pass sees the same
   /// facts as the collection pass.
@@ -2311,11 +2555,23 @@ public:
     if (!call || !call->getDirectCallee() || call->getNumArgs() < 1)
       return;
     std::string callee = call->getDirectCallee()->getNameAsString();
-    if (callee != "malloc" && callee != "calloc" && callee != "realloc")
+    if (callee != "malloc" && callee != "calloc" && !isReallocName(callee))
+      return;
+    if (report_ && isReallocName(callee))
+      reallocResultVars_.insert(vd->getNameAsString());
+    // A size derived from a loop induction variable is NOT a compile-time
+    // constant: evalByteCount()/evalConstArithmetic() can fold the induction
+    // variable to its lower-bound/override value (e.g. `i` -> 0), which would
+    // record a fixed 8-byte extent for `sizeof(int)*(i+2)` and then falsely
+    // reject `p[i+1]` at the loop's worst index. Leave the result untracked;
+    // the StaticBounds token pass covers the runtime bound.
+    unsigned sizeIdx = isReallocName(callee) ? 1 : 0;
+    if (call->getNumArgs() > sizeIdx &&
+        dependsOnLoopInduction(call->getArg(sizeIdx)))
       return;
     // realloc(ptr, n): the new extent is argument 1, regardless of whether
     // ptr was null.  The runtime transfer helper unregisters the old block.
-    if (callee == "realloc" && call->getNumArgs() >= 2) {
+    if (isReallocName(callee) && call->getNumArgs() >= 2) {
       const Expr *sizeArg = call->getArg(1)->IgnoreParenImpCasts();
       long long n = 0;
       if (evalByteCount(sizeArg, n) && n > 0) {
@@ -3028,6 +3284,12 @@ public:
     auto pit = provenanceSource_.find(cname);
     if (pit != provenanceSource_.end() && releasedVars_.count(pit->second))
       return true;
+    // Tagged / masked laundering: `(int *)(u & ~(uintptr_t)1)`, `u ^ 1`,
+    // `(void *)(uintptr_t)p` etc. The untagging BinaryOperator has no single
+    // variable name, so the name-based checks above miss it even though the
+    // release-call path (checkStaleIntegerAliasArgs) already recognises it.
+    if (!staleIntegerAliasSource(expr).empty())
+      return true;
     // A freed value reachable through a global pointer invalidates its aliases
     // and vice versa (s06/s14/s19).
     auto git = globalPointsTo_.find(cname);
@@ -3056,6 +3318,8 @@ public:
     if (!e || depth > 6)
       return false;
     if (isReleased(e))
+      return true;
+    if (!staleIntegerAliasSource(e).empty())
       return true;
     const Expr *canon = canonicalPointer(e);
     if (canon && canon != e && isReleased(canon))
@@ -3106,6 +3370,96 @@ public:
       if (const auto *me = dyn_cast<MemberExpr>(e))
         owner = varNameOf(me->getBase());
     return owner;
+  }
+
+  /// The stack object an expression ultimately designates, using Clang AST
+  /// node structure rather than spelling: `&x`, `s.field`, `a[i]`, and their
+  /// casted/parenthesized forms all resolve to the same VarDecl identity.
+  const VarDecl *localStackOwner(const Expr *e, unsigned depth = 0,
+                                 bool allowPointerBase = false) const {
+    if (!e || depth > 8)
+      return nullptr;
+    e = e->IgnoreParenCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(e))
+      if (uo->getOpcode() == UO_AddrOf)
+        return localStackOwner(uo->getSubExpr(), depth + 1, true);
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e))
+      return localStackOwner(ase->getBase(), depth + 1);
+    if (const auto *me = dyn_cast<MemberExpr>(e)) {
+      // A function pointer stored in a local struct is a value copied from
+      // its initializer, not a borrow of the struct's storage. Returning it
+      // preserves the native C ABI and is safe (abi_safety/fnptr_representation).
+      QualType mt = me->getType();
+      if (const auto *fpt = mt->getAs<PointerType>())
+        if (fpt->getPointeeType()->isFunctionProtoType())
+          return nullptr;
+      return localStackOwner(me->getBase(), depth + 1);
+    }
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e)) {
+      const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+      if (!vd || !vd->hasLocalStorage())
+        return nullptr;
+      // `self->field` through a pointer parameter/local designates the
+      // pointee, not the pointer variable. Only `&p` (address-of) makes the
+      // pointer variable itself the dying stack object.
+      if (!allowPointerBase && vd->getType()->isPointerType())
+        return nullptr;
+      return vd;
+    }
+    return nullptr;
+  }
+
+  /// Find the borrow owner carried by a return expression.  Casts (including
+  /// C-style, qualifier and void-pointer conversions), parentheses, comma
+  /// expressions, conditional arms and helpers summarized as returning a
+  /// pointer parameter are all traversed semantically; no token pattern or
+  /// variable spelling is used to decide whether a borrow escapes.
+  const VarDecl *borrowOwnerInReturn(const Expr *e, const VarDecl **borrowVar,
+                                     std::string *borrowName,
+                                     unsigned depth = 0) const {
+    if (!e || depth > 12)
+      return nullptr;
+    e = e->IgnoreParenCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(e)) {
+      const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+      if (!vd)
+        return nullptr;
+      auto it = returnBorrowOwner_.find(vd);
+      if (it == returnBorrowOwner_.end())
+        return nullptr;
+      if (borrowVar)
+        *borrowVar = vd;
+      if (borrowName)
+        *borrowName = it->second.second; // original source spelling
+      return it->second.first;
+    }
+    if (const auto *co = dyn_cast<ConditionalOperator>(e)) {
+      if (const VarDecl *o = borrowOwnerInReturn(co->getTrueExpr(), borrowVar,
+                                                 borrowName, depth + 1))
+        return o;
+      return borrowOwnerInReturn(co->getFalseExpr(), borrowVar, borrowName,
+                                 depth + 1);
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(e))
+      if (bo->getOpcode() == BO_Comma)
+        return borrowOwnerInReturn(bo->getRHS(), borrowVar, borrowName,
+                                   depth + 1);
+    if (const auto *call = dyn_cast<CallExpr>(e)) {
+      for (const auto &cn : calleeNames(call, call->getDirectCallee())) {
+        auto rp = returnedParam_.find(cn);
+        if (rp != returnedParam_.end() && rp->second < call->getNumArgs())
+          if (const VarDecl *o = borrowOwnerInReturn(call->getArg(rp->second),
+                                                     borrowVar, borrowName,
+                                                     depth + 1))
+            return o;
+      }
+      return nullptr;
+    }
+    // A directly returned address of a stack object (`return &local;`) is
+    // diagnosed by the existing frame-escape check; do not duplicate it here.
+    if (isa<UnaryOperator>(e))
+      return nullptr;
+    return localStackOwner(e);
   }
 
   bool containsAssignFrom(const Stmt *node, const std::string &lhs,
@@ -3181,7 +3535,7 @@ public:
       return false;
     bool isRealloc = false;
     for (const auto &cn : calleeNames(call, call->getDirectCallee()))
-      if (cn == "realloc") {
+      if (isReallocName(cn)) {
         isRealloc = true;
         break;
       }
@@ -3749,6 +4103,7 @@ public:
       heapInterior_.clear();
       onePastEnd_.clear();
       strlenSized_.clear();
+      reallocResultVars_.clear();
 
     }
     // Parameter extents inferred at call sites apply in both passes so
@@ -3788,9 +4143,9 @@ public:
             if (const auto *call = dyn_cast<CallExpr>(v))
               if (call->getDirectCallee() && call->getNumArgs() >= 1) {
                 std::string cn = call->getDirectCallee()->getNameAsString();
-                if (cn == "malloc" || cn == "calloc" || cn == "realloc") {
+                if (cn == "malloc" || cn == "calloc" || isReallocName(cn)) {
                   long long n = -1;
-                  const Expr *sz = cn == "realloc" && call->getNumArgs() >= 2
+                  const Expr *sz = isReallocName(cn) && call->getNumArgs() >= 2
                                        ? call->getArg(1)
                                        : call->getArg(0);
                   if (evalByteCount(sz->IgnoreParenImpCasts(), n) && n > 0) {
@@ -3911,10 +4266,10 @@ public:
                     if (ac->getDirectCallee()) {
                       std::string cn = ac->getDirectCallee()->getNameAsString();
                       if ((cn == "malloc" || cn == "calloc" ||
-                           cn == "realloc") &&
+                           isReallocName(cn)) &&
                           ac->getNumArgs() >= 1) {
                         long long nb = -1;
-                        const Expr *sz = cn == "realloc" && ac->getNumArgs() >= 2
+                        const Expr *sz = isReallocName(cn) && ac->getNumArgs() >= 2
                                              ? ac->getArg(1)
                                              : ac->getArg(0);
                         if (evalByteCount(sz->IgnoreParenImpCasts(), nb) &&
@@ -4256,6 +4611,28 @@ public:
                         "suggested correction: copy the pointed-to data into "
                         "the result or heap-allocate it before returning",
                         true);
+      // Issue #26: a borrow must not survive the frame that owns it.  The
+      // expression is walked with Clang AST nodes so casts, conditionals and
+      // pointer-returning helpers cannot erase the provenance recorded when
+      // the borrow variable was declared.
+      if (currentFnDecl_ &&
+          currentFnDecl_->getReturnType()->isPointerType()) {
+        const VarDecl *borrowVar = nullptr;
+        std::string borrowName;
+        if (const VarDecl *owner = borrowOwnerInReturn(
+                s->getRetValue(), &borrowVar, &borrowName)) {
+          std::string bn = borrowName.empty()
+                               ? (borrowVar ? borrowVar->getNameAsString()
+                                            : owner->getNameAsString())
+                               : borrowName;
+          reportNamed(s->getBeginLoc(), "CPLUS-BORROW",
+                      "borrow '" + bn + "' of local '" +
+                          owner->getNameAsString() +
+                          "' cannot escape the function",
+                      "return the owner instead, or copy the borrowed data",
+                      true);
+        }
+      }
     }
     if (report_ || !s->getRetValue() || !currentFnDecl_ ||
         !currentFnDecl_->getBody())
@@ -4335,7 +4712,10 @@ public:
         vd->getType()->isRecordType() &&
         exprContainsLocalAddress(vd->getInit()))
       structLocalAddrVars_.insert(vd->getNameAsString());
-    if (!report_ && vd->hasGlobalStorage()) {
+    // Thread-local storage has one instance per thread, so it is never a
+    // shared global and must not be reported as a data race.
+    if (!report_ && vd->hasGlobalStorage() &&
+        vd->getTLSKind() == VarDecl::TLS_None) {
       allGlobals_.insert(vd->getNameAsString());
       if (!vd->getType().isVolatileQualified())
         nonVolatileGlobals_.insert(vd->getNameAsString());
@@ -4343,24 +4723,12 @@ public:
     recordHeapAllocation(vd);
     if (report_ && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenImpCasts();
-      std::function<bool(const Expr *)> derivedFromPointer = [&](const Expr *e) -> bool {
-        if (!e)
-          return false;
-        if (const auto *cast = dyn_cast<CastExpr>(e))
-          return cast->getType()->isIntegerType() &&
-                 cast->getSubExpr()->IgnoreParenImpCasts()->getType()
-                     ->isPointerType();
-        // `((uintptr_t)&x | 1)` and `x & ~mask` preserve provenance.
-        if (const auto *bo = dyn_cast<BinaryOperator>(e))
-          if (bo->isBitwiseOp())
-            return derivedFromPointer(bo->getLHS()) ||
-                   derivedFromPointer(bo->getRHS());
-        if (const auto *ref = dyn_cast<DeclRefExpr>(e))
-          if (const auto *ivd = dyn_cast<VarDecl>(ref->getDecl()))
-            return provenanceInts_.count(ivd->getNameAsString()) != 0;
-        return false;
-      };
-      if (derivedFromPointer(init)) {
+      // Use the shared provenance-shape predicate so integer locals seeded by
+      // `(uintptr_t)p`, tagged/offset forms (`u | 2`, `u + 8`) and further
+      // copies are all tracked. The old ad-hoc predicate only handled bitwise
+      // operators, so `uintptr_t u = (uintptr_t)p + 8` lost p's provenance and
+      // a later `(int *)u` dereference escaped the UAF checks.
+      if (isIntegerProvenanceExpr(init)) {
         provenanceInts_.insert(vd->getNameAsString());
         std::string src = pointerSourceOf(init);
         if (!src.empty())
@@ -4368,20 +4736,19 @@ public:
       }
       // `(int *)u` where u carried p's provenance restores the same object:
       // put q in p's alias group so free(p) taints q (integer-laundering UAF).
+      // Resolve the source from the whole expression shape, not just a direct
+      // DeclRefExpr, so tagged/masked forms such as `(int*)(u & ~(uintptr_t)1)`
+      // and re-based forms `(int*)(u + 8)` inherit the release state too.
       if (vd->getType()->isPointerType()) {
-        const Expr *x = init;
-        while (const auto *ce = dyn_cast_or_null<ExplicitCastExpr>(x))
-          x = ce->getSubExpr()->IgnoreParenImpCasts();
-        if (const auto *ref = dyn_cast_or_null<DeclRefExpr>(x))
-          if (const auto *ivd = dyn_cast<VarDecl>(ref->getDecl())) {
-            auto ps = provenanceSource_.find(ivd->getNameAsString());
-            if (ps != provenanceSource_.end()) {
-              linkAlias(vd->getNameAsString(), ps->second);
-              provenanceSource_[vd->getNameAsString()] = ps->second;
-              if (releasedVars_.count(ps->second))
-                releasedVars_.insert(vd->getNameAsString());
-            }
-          }
+        std::string src = pointerSourceOf(init);
+        if (src.empty())
+          src = staleIntegerAliasSource(init);
+        if (!src.empty()) {
+          linkAlias(vd->getNameAsString(), src);
+          provenanceSource_[vd->getNameAsString()] = src;
+          if (releasedVars_.count(src))
+            releasedVars_.insert(vd->getNameAsString());
+        }
       }
     }
     if (!report_) {
@@ -4474,6 +4841,55 @@ public:
     // last element; dereferencing it is undefined even though forming it is ok.
     if (vd->getInit() && isOnePastEndExpr(vd->getInit()))
       onePastEnd_.insert(vd);
+    // Issue #26: record the stack owner behind a pointer local so a later
+    // `return` can be checked on the full AST expression instead of a bare
+    // identifier.  A pointer local initialized from a genuine stack object
+    // (`&x`, `s.field`, `a[i]`, or a non-pointer local array/record) is a borrow;
+    // a pointer local initialized from another pointer is an alias and inherits
+    // that variable's borrow owner.  Heap results are never borrows.
+    if (vd->getType()->isPointerType() && vd->getInit()) {
+      const Expr *binit = vd->getInit()->IgnoreParenCasts();
+      const VarDecl *owner = localStackOwner(binit);
+      bool addressOf = isa<UnaryOperator>(binit) &&
+                       cast<UnaryOperator>(binit)->getOpcode() == UO_AddrOf;
+      bool stackObject =
+          owner && owner->hasLocalStorage() &&
+          (addressOf || !owner->getType()->isPointerType());
+      const VarDecl *alias = nullptr;
+      if (const auto *ref = dyn_cast<DeclRefExpr>(binit))
+        alias = dyn_cast<VarDecl>(ref->getDecl());
+      if (!alias)
+        if (const auto *call = dyn_cast<CallExpr>(binit))
+          for (const auto &cn : calleeNames(call, call->getDirectCallee())) {
+            auto rp = returnedParam_.find(cn);
+            if (rp != returnedParam_.end() && rp->second < call->getNumArgs()) {
+              if (const auto *aref = dyn_cast<DeclRefExpr>(
+                      call->getArg(rp->second)->IgnoreParenCasts())) {
+                alias = dyn_cast<VarDecl>(aref->getDecl());
+                if (alias)
+                  break;
+              }
+            }
+          }
+      if (stackObject)
+        returnBorrowOwner_[vd] = {owner, vd->getNameAsString()};
+      else if (alias) {
+        auto bit = returnBorrowOwner_.find(alias);
+        if (bit != returnBorrowOwner_.end())
+          returnBorrowOwner_[vd] = bit->second; // keep original source name
+      } else if (isa<ConditionalOperator>(binit) ||
+                 (isa<BinaryOperator>(binit) &&
+                  cast<BinaryOperator>(binit)->getOpcode() == BO_Comma)) {
+        // RAII lowering materializes `return c ? a : b;` and `return (z++, b);`
+        // as a temporary. The expression walker resolves both shapes.
+        const VarDecl *bvar = nullptr;
+        std::string bname;
+        if (const VarDecl *o =
+                borrowOwnerInReturn(binit, &bvar, &bname, 1))
+          if (bvar)
+            returnBorrowOwner_[vd] = {o, bname};
+      }
+    }
     // `T *b = &owner;` records a borrow for lifetime/conflict checks.
     if (vd->getType()->isPointerType() && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenCasts();
@@ -4493,7 +4909,7 @@ public:
       if (const auto *call = dyn_cast<CallExpr>(init)) {
         if (call->getDirectCallee()) {
           std::string callee = call->getDirectCallee()->getNameAsString();
-          if (callee == "malloc" || callee == "calloc" || callee == "realloc" ||
+          if (callee == "malloc" || callee == "calloc" || isReallocName(callee) ||
               callee.rfind("cplus_new", 0) == 0)
             allocLocs_[vd->getNameAsString()] = vd->getBeginLoc();
         }
@@ -4719,6 +5135,19 @@ public:
   bool VisitBinaryOperator(BinaryOperator *op) {
     noteAssignedValueSource(op);
     if (report_ && op->isAssignmentOp()) {
+      // `q = realloc(...)` (as opposed to an initializer) also makes q a
+      // realloc-result variable, so a later `p = q` can transfer its extent.
+      const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
+      while (const auto *ce = dyn_cast<ExplicitCastExpr>(rhs))
+        rhs = ce->getSubExpr()->IgnoreParenImpCasts();
+      if (const auto *call = dyn_cast<CallExpr>(rhs))
+        for (const auto &t : calleeNames(call, call->getDirectCallee()))
+          if (isReallocName(t)) {
+            reallocResultVars_.insert(varNameOf(op->getLHS()));
+            break;
+          }
+    }
+    if (report_ && op->isAssignmentOp()) {
       // Kill guard-derived non-zero / lower-bound facts on a definite
       // assignment; a later division must not reuse a stale `if (d)` proof.
       const Expr *lhse = op->getLHS()->IgnoreParenImpCasts();
@@ -4829,10 +5258,17 @@ public:
       // Queue a native guard for every supported non-constant operation.
       // Compile-time cases are rejected below and never reach codegen.
       maybeRecordCheckedArithmetic(op);
+      // `check` and `build` must agree: a macro-expanded arithmetic op with
+      // runtime operands cannot be instrumented, so STRICT rejects it here
+      // too instead of certifying a program the guarded build refuses.
+      if (arithmeticMacroFailClosed(op))
+        report(op->getBeginLoc(),
+               "arithmetic in a macro expansion cannot be instrumented; "
+               "STRICT cannot prove it safe");
       auto asLL = [&](const Expr *e, long long &out) -> bool {
         llvm::APSInt v;
-        if (!knownConst(e, v))
-          return false;
+        if (!knownConst(e, v) || !fits64(v))
+          return false; // >64-bit constants use wideConstOverflow below
         // For signed expressions interpret the stored bit pattern as signed
         // even when Clang folded it into an unsigned APSInt.
         out = op->getType()->isSignedIntegerType()
@@ -4878,6 +5314,19 @@ public:
           }
         }
       }
+      // Widths beyond 64 bits (__int128) cannot use the long long path. Do
+      // not silently accept a provably overflowing wide constant in STRICT.
+      if (strict_ && op->getType()->isSignedIntegerType() &&
+          (opc == BO_Add || opc == BO_Sub || opc == BO_Mul ||
+           opc == BO_Div || opc == BO_Rem ||
+           opc == BO_AddAssign || opc == BO_SubAssign ||
+           opc == BO_MulAssign || opc == BO_DivAssign ||
+           opc == BO_RemAssign)) {
+        bool wideOverflow = false;
+        if (wideConstOverflow(op, wideOverflow) && wideOverflow)
+          report(op->getBeginLoc(), "signed integer overflow of a compile-time "
+                                    "constant wider than 64 bits");
+      }
       // Shift counts must be in [0, promoted-left-width). Volatile-backed
       // constants are tracked like other local constants by knownConst.
       if ((opc == BO_Shl || opc == BO_Shr || opc == BO_ShlAssign ||
@@ -4911,11 +5360,31 @@ public:
       if ((opc == BO_Div || opc == BO_Rem || opc == BO_DivAssign ||
            opc == BO_RemAssign) && op->getType()->isSignedIntegerType()) {
         long long a = 0, b = 0;
-        if (asLL(op->getLHS(), a) && asLL(op->getRHS(), b)) {
+        bool haveA = false;
+        // A compound `v /= -1` / `v %= -1` reads the pre-update constant of
+        // the LHS, which knownConst() rejects for an assigned variable.
+        if (opc == BO_DivAssign || opc == BO_RemAssign) {
+          llvm::APSInt v;
+          if (knownConstAtUpdate(op->getLHS(), v) && fits64(v)) {
+            a = v.getSExtValue();
+            haveA = true;
+          }
+        } else {
+          haveA = asLL(op->getLHS(), a);
+        }
+        if (haveA && asLL(op->getRHS(), b)) {
           unsigned w = ctx_.getIntWidth(op->getType());
-          if (w > 1 && w <= 63 && a == -(1LL << (w - 1)) && b == -1) {
+          // `1LL << 63` is UB, so compare the 64-bit case against LLONG_MIN
+          // directly. The wider case is handled by wideConstOverflow above.
+          bool isMin = false;
+          if (w > 1 && w < 64)
+            isMin = (a == -(1LL << (w - 1)));
+          else if (w == 64)
+            isMin = (a == LLONG_MIN);
+          if (isMin && b == -1) {
             std::string msg = std::string("signed integer overflow in ") +
-                              (opc == BO_Div ? "division" : "remainder");
+                              ((opc == BO_Div || opc == BO_DivAssign)
+                                   ? "division" : "remainder");
             if (strict_) report(op->getBeginLoc(), msg);
             else warnAt(op->getBeginLoc(), msg);
           }
@@ -4979,6 +5448,14 @@ public:
         if (const auto *ref = dyn_cast<DeclRefExpr>(op->getLHS()->IgnoreParenImpCasts()))
           st.decl = dyn_cast<VarDecl>(ref->getDecl());
         heapAllocs_[dstName] = st;
+      } else if (!dstName.empty()) {
+        // The realloc result has no provable extent (e.g. a size that depends
+        // on a loop induction variable).  The old block was transferred to the
+        // realloc, so the destination's previous extent is stale: erase it
+        // rather than bounds-checking the new object against the old size.
+        auto stale = heapAllocs_.find(dstName);
+        if (stale != heapAllocs_.end())
+          heapAllocs_.erase(stale);
       }
     }
     // An unsigned value compared with zero via < is always false: the check
@@ -5064,6 +5541,28 @@ public:
               !reallocRebindOwner_.empty() &&
               reallocRebindOwner_ == vd->getNameAsString() &&
               varNameOf(op->getRHS()) == reallocRebindTemp_;
+          // `p = q` (or `p = q + 0`) where q directly holds this function's
+          // realloc result is another spelling of the same rebind: the
+          // success check may be written as a separate `if (!q) return;`
+          // statement, which detectReallocSuccess() does not pair with the
+          // initializer. Transfer q's extent to p only for that proven RHS;
+          // an ordinary pointer assignment must never manufacture an extent.
+          std::string rhsName = castedVarName(op->getRHS());
+          if (!isReallocRebind && !rhsName.empty() &&
+              reallocResultVars_.count(rhsName)) {
+            auto rhit = heapAllocs_.find(rhsName);
+            if (rhit != heapAllocs_.end() && rhit->second.bytes > 0) {
+              HeapAllocState st = rhit->second;
+              st.decl = vd;
+              heapAllocs_[vd->getNameAsString()] = st;
+            } else if (hit != heapAllocs_.end()) {
+              // New object with an unknown extent: drop p's stale one rather
+              // than bounds-checking the new block against the old size.
+              heapAllocs_.erase(hit);
+            }
+            reallocResultVars_.insert(vd->getNameAsString());
+            isReallocRebind = true;
+          }
           if (hit != heapAllocs_.end() && hit->second.decl == vd &&
               !isReallocRebind)
             heapAllocs_.erase(hit);
@@ -5802,8 +6301,8 @@ public:
     }
     // Register every constant-sized allocator call, including allocations
     // assigned through out-parameters rather than a simple initializer.
-    if (name == "malloc" || name == "calloc" || name == "realloc") {
-      unsigned argIdx = name == "realloc" ? 1 : 0;
+    if (name == "malloc" || name == "calloc" || isReallocName(name)) {
+      unsigned argIdx = isReallocName(name) ? 1 : 0;
       if (call->getNumArgs() > argIdx) {
         long long n = -1;
         if (evalByteCount(call->getArg(argIdx)->IgnoreParenImpCasts(), n) &&
@@ -5827,8 +6326,7 @@ public:
     // dereference it and no single-TU summary is needed to see the risk.
     // free/realloc are handled by their own release/double-free checks.
     if (report_ && name != "free" && name != "cplus_release" &&
-        name != "realloc" && name != "cplus_realloc" &&
-        name != "cplus_check_live") {
+        !isReallocName(name) && name != "cplus_check_live") {
       for (const Expr *arg : call->arguments()) {
         std::string an = castedVarName(arg);
         if (an.empty())
@@ -5951,6 +6449,17 @@ public:
             }
           }
       }
+      if (!callee && name.empty()) {
+        // A function pointer held in a struct field, global, array slot or
+        // parameter still resolves to the libc format function it targets.
+        // Without this, `ops.log(fmt)` / `tbl[0](fmt)` bypass the literal
+        // format rule even though the call graph is fully known.
+        for (const auto &t : calleeNames(call, nullptr))
+          if (isFormatFunctionName(t)) {
+            name = t;
+            break;
+          }
+      }
       if (!callee && name.empty())
         return true;
     }
@@ -6023,11 +6532,9 @@ public:
             }
             if (isScanf && hasUnboundedStringConversion(lit))
               for (unsigned a = fmtIdx + 1; a < call->getNumArgs(); ++a) {
-                const Expr *arg = call->getArg(a)->IgnoreParenCasts();
-                const auto *ref = dyn_cast<DeclRefExpr>(arg);
-                const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl())
-                                     : nullptr;
-                if (vd && vd->getType()->isArrayType()) {
+                unsigned long long cap = 0;
+                const VarDecl *vd = charDestOf(call->getArg(a), cap);
+                if (vd && cap) {
                   std::string msg = "unbounded '%s' in " + name +
                                     " writes into fixed-size array '" +
                                     vd->getNameAsString() +
@@ -6043,16 +6550,10 @@ public:
                  unsigned pos = fmtIdx + 1 + spec.first;
                  if (pos >= call->getNumArgs())
                    continue;
-                 const Expr *arg = call->getArg(pos)->IgnoreParenCasts();
-                 const auto *ref = dyn_cast<DeclRefExpr>(arg);
-                 const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl())
-                                      : nullptr;
-                 if (!vd)
+                 unsigned long long cap = 0;
+                 const VarDecl *vd = charDestOf(call->getArg(pos), cap);
+                 if (!vd || !cap)
                    continue;
-                 const auto *at = ctx_.getAsConstantArrayType(vd->getType());
-                 if (!at || !at->getElementType()->isCharType())
-                   continue;
-                 unsigned long long cap = at->getSize().getZExtValue();
                  if ((unsigned long long)spec.second + 1 > cap) {
                    std::string msg = "scanf field width " +
                                      std::to_string(spec.second) + " for '%s' "
@@ -6067,13 +6568,13 @@ public:
               // A fixed char array whose initializer has no NUL byte cannot be
               // passed to %s without an over-read.
               for (unsigned a = fmtIdx + 1; a < call->getNumArgs(); ++a) {
-                const Expr *arg = call->getArg(a)->IgnoreParenCasts();
-                const auto *ref = dyn_cast<DeclRefExpr>(arg);
-                const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-                if (!vd || !vd->getInit())
-                  continue;
-                const auto *cat = ctx_.getAsConstantArrayType(vd->getType());
-                if (!cat || !cat->getElementType()->isCharType())
+                unsigned long long cap = 0;
+                const VarDecl *vd =
+                    charDestOf(call->getArg(a), cap, /*allowPointerAlias=*/false);
+                // Only inspect the initializer of an actual array object; a
+                // struct field's bytes are nested and cannot be read from the
+                // base variable's flat initializer list.
+                if (!vd || !vd->getType()->isArrayType() || !vd->getInit())
                   continue;
                 bool terminated = false;
                 if (const auto *il = dyn_cast<InitListExpr>(
@@ -6086,7 +6587,7 @@ public:
                   }
                 } else if (const auto *sl = dyn_cast<StringLiteral>(
                                vd->getInit()->IgnoreParenImpCasts())) {
-                  terminated = sl->getLength() < cat->getSize().getZExtValue();
+                  terminated = sl->getLength() < cap;
                 }
                 if (!terminated)
                   report(call->getBeginLoc(),
@@ -6442,7 +6943,7 @@ public:
       // writeEffects / ownershipTransfer were parsed but had no effect (S11).
       bool isAllocatorFreeApi =
           baseName == "free" || baseName == "cplus_release" ||
-          baseName == "realloc";
+          isReallocName(baseName);
       if (strict_) {
         for (int idx : contract.freeArgs) {
           if (isAllocatorFreeApi || idx < 0 || (unsigned)idx >= call->getNumArgs())
@@ -6491,9 +6992,9 @@ public:
                        baseName + " (" + contract.category + ")");
             break;
           }
-      bool reallocFromNull = baseName == "realloc" && call->getNumArgs() >= 1 &&
+      bool reallocFromNull = isReallocName(baseName) && call->getNumArgs() >= 1 &&
                              isNullConstant(call->getArg(0)->IgnoreParenCasts());
-      if (baseName == "realloc" && !reallocFromNull &&
+      if (isReallocName(baseName) && !reallocFromNull &&
           handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0) {
         // Do NOT mark the old pointer released: on failure realloc returns
         // NULL and the original block remains owned by the caller.  Alias
@@ -6506,7 +7007,7 @@ public:
       }
       // Allocation sizes computed from local constants: detect size_t wrap.
       if ((baseName == "malloc" || baseName == "calloc" ||
-           baseName == "realloc") && call->getNumArgs() >= 1) {
+           isReallocName(baseName)) && call->getNumArgs() >= 1) {
         auto apToU64 = [](const llvm::APSInt &v) -> unsigned long long {
           return v.isNegative()
                      ? static_cast<unsigned long long>(v.getSExtValue())
@@ -6550,7 +7051,7 @@ public:
           }
           return false;
         };
-        unsigned sizeIdx = (baseName == "realloc") ? 1 : 0;
+        unsigned sizeIdx = isReallocName(baseName) ? 1 : 0;
         if (sizeIdx < call->getNumArgs()) {
           unsigned long long v = 0;
           bool overflow = false;
@@ -6562,8 +7063,8 @@ public:
         }
       }
       if ((baseName == "malloc" || baseName == "calloc" ||
-           baseName == "realloc") && call->getNumArgs() >= 1) {
-        unsigned sizeIdx = (baseName == "realloc") ? 1 : 0;
+           isReallocName(baseName)) && call->getNumArgs() >= 1) {
+        unsigned sizeIdx = isReallocName(baseName) ? 1 : 0;
         std::string n = varNameOf(call->getArg(sizeIdx)->IgnoreParenCasts());
         if (overflowingConstVars_.count(n))
           report(call->getBeginLoc(),
@@ -7517,6 +8018,11 @@ public:
   std::set<unsigned> staleIntegerAliasReported_;
   std::set<std::string> guardedSnprintf_;
   std::string reallocRebindOwner_, reallocRebindTemp_;
+  // Locals holding a realloc/cplus_realloc result in this function. Used to
+  // transfer that result's extent through a plain `p = q` alias, which is not
+  // nested in an `if (!q)` success branch and so is invisible to
+  // detectReallocSuccess(). Ordinary pointer assignments never create extents.
+  std::set<std::string> reallocResultVars_;
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
@@ -7536,6 +8042,13 @@ public:
   std::map<std::string, std::string> varAllocIdentity_;
 
   std::map<std::string, std::string> borrowOwner_;
+  // Issue #26: identity-based borrow -> (stack owner, source name) facts used
+  // by the return escape check. Keyed by VarDecl, not by spelling, so
+  // shadowing and casts cannot change which object a borrow refers to. The
+  // name is kept separately because RAII lowering replaces a returned borrow
+  // with a generated `__cplus_ret` temporary.
+  std::map<const VarDecl *, std::pair<const VarDecl *, std::string>>
+      returnBorrowOwner_;
   std::map<std::string, std::set<std::string>> writeBorrows_;
   std::set<std::string> movedVars_;
   std::set<std::string> destructors_;

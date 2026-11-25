@@ -42,6 +42,12 @@ namespace {
 static bool g_logEnabled = false;
 static int g_logLevel = 3; // CLOG_WARN
 
+/// Set for the lifetime of a STRICT Safe run. Security-critical path lookups
+/// (runtime library, shipped include dir) must then ignore CPLUS_ROOT: an
+/// untrusted source root could otherwise substitute a pass-through runtime or
+/// a no-op header while `check` still saw a well-formed safety AST.
+static bool g_strictSafePaths = false;
+
 static int logLevelFromString(const std::string &name) {
   if (name == "trace") return 0;
   if (name == "debug") return 1;
@@ -77,7 +83,8 @@ std::string joinPath(const std::string &a, const std::string &b) {
 
 /// Locate a file relative to the running executable (installed layout) or
 /// the source tree (development layout).
-std::string findByLayout(const std::string &relative) {
+std::string findByLayout(const std::string &relative,
+                         bool trustEnvRoot = true) {
   std::string exe = llvm::sys::fs::getMainExecutable("c+", nullptr);
   if (!exe.empty()) {
     std::string dir = llvm::sys::path::parent_path(exe).str();
@@ -87,7 +94,9 @@ std::string findByLayout(const std::string &relative) {
         return candidate;
     }
   }
-  std::string root = findSourceRoot();
+  // CPLUS_ROOT is an untrusted env override. For security-critical lookups in
+  // STRICT Safe mode only the compiled-in / installed locations may be used.
+  std::string root = trustEnvRoot ? findSourceRoot() : std::string();
   if (!root.empty()) {
     std::string candidate = joinPath(root, relative);
     if (llvm::sys::fs::exists(candidate))
@@ -210,7 +219,9 @@ std::string runtimeLibArg(bool trustEnvOverride) {
       for (const char *relative :
            {"build/libcplus_runtime.a", "lib/libcplus_runtime.a",
             "libcplus_runtime.a"}) {
-        std::string found = findByLayout(relative);
+        // trustEnvOverride == false here (STRICT): do not fall back to a
+        // CPLUS_ROOT-supplied library either.
+        std::string found = findByLayout(relative, trustEnvOverride);
         if (!found.empty()) {
           result = found;
           break;
@@ -276,7 +287,8 @@ std::string findCPlusIncludeDir() {
   std::string env = envOr("CPLUS_INCLUDE");
   if (!env.empty() && llvm::sys::fs::exists(joinPath(env, "cplus/cplus.h")))
     return env;
-  std::string found = findByLayout("runtime/include");
+  // In STRICT, CPLUS_ROOT must not redirect the shipped runtime headers.
+  std::string found = findByLayout("runtime/include", !g_strictSafePaths);
   if (!found.empty() && llvm::sys::fs::exists(joinPath(found, "cplus/cplus.h")))
     return found;
   return std::string();
@@ -905,6 +917,15 @@ static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) 
       // warnings; additive forms (-Wall, -Wextra, -Werror=...) are fine.
       if (s == "-Wno-error" || s.starts_with("-Wno-"))
         return false;
+      // -Wl,/-Wa,/-Wp,/-Wf, are Clang's "forward this list to the linker /
+      // assembler / preprocessor" spellings, NOT warning flags. They can
+      // inject e.g. -Wl,--wrap=__cplus_bounds_check after every safety gate,
+      // interposing instrumentation that the safety AST never sees. Reject
+      // them and any comma-bearing -W token; ordinary warning flags never
+      // contain a comma, so this is not a blanket -W rejection.
+      if (s.find(',') != llvm::StringRef::npos || s == "-Wl" || s == "-Wa" ||
+          s == "-Wp" || s == "-Wf")
+        return false;
       continue;
     }
     return false;
@@ -933,8 +954,12 @@ static bool redefinesReservedCPlusMacro(const std::vector<std::string> &extra) {
     llvm::StringRef name = def.take_while([](char c) {
       return c != '=' && c != '(' && c != ' ';
     });
-    if (name == "CPLUS" || name.starts_with("CPLUS_") ||
-        isReservedHelperName(name))
+    // The whole CPLUS/CPLUS_/CPLUS<Name> gate family and the implementation
+    // namespace (__cplus_*, reserved to the implementation) are closed sets;
+    // reserve the prefix so a future gate macro cannot be redefined by a
+    // pass-through -D before its name is added here.
+    if (name == "CPLUS" || name.starts_with("CPLUS") ||
+        name.starts_with("__cplus_") || isReservedHelperName(name))
       return true;
   }
   return false;
@@ -1064,6 +1089,15 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
                        output.find("CHECK failed") == std::string::npos);
 }
 
+/// Issue #34: warnings are errors by default in Safe mode. --legacy-c keeps
+/// plain-C behaviour unless -Werror was requested explicitly. -w is accepted
+/// for gcc compatibility but never promotes itself over C+ safety gates.
+static bool warningsAreErrors(const DriverOptions &opts) {
+  if (opts.mode == Mode::LegacyC)
+    return opts.warningsAsErrorsExplicit && opts.warningsAsErrors;
+  return opts.warningsAsErrors;
+}
+
 static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   std::vector<std::string> args;
   args.push_back(opts.mode == Mode::LegacyC ? "-std=gnu89" : "-std=gnu17");
@@ -1078,27 +1112,36 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   }
   if (opts.mode == Mode::Safe) {
     args.push_back("-pthread");
-    if (!opts.disableWarnings) {
-      args.push_back("-Werror=array-bounds");
-      args.push_back("-Werror=return-stack-address");
-      args.push_back("-Werror=uninitialized");
-      args.push_back("-Wwrite-strings");
-      args.push_back("-Werror=sizeof-array-argument");
-      args.push_back("-Werror=sizeof-pointer-div");
-      args.push_back("-Werror=format-security");
-      args.push_back("-Werror=unsequenced");
-      args.push_back("-Werror=shift-count-overflow");
-      args.push_back("-Werror=shift-negative-value");
-      args.push_back("-Werror=varargs");
-      // Rust-like enum exhaustiveness: a switch on an enum must handle every
-      // enumerator. Compile-time only; no ABI or emitted-code change.
-      args.push_back("-Werror=switch");
-    } else {
-      args.push_back("-w");
-    }
+    // Issue #34: these gates are unconditional in Safe mode. `-w` is consumed
+    // by the driver for gcc compatibility but is deliberately NOT forwarded:
+    // it would inhibit even -Werror=... diagnostics and defeat the C+ warning
+    // policy. Its backend scope is documented as --legacy-c only.
+    args.push_back("-Werror=array-bounds");
+    args.push_back("-Werror=return-stack-address");
+    args.push_back("-Werror=uninitialized");
+    args.push_back("-Wwrite-strings");
+    args.push_back("-Werror=sizeof-array-argument");
+    args.push_back("-Werror=sizeof-pointer-div");
+    args.push_back("-Werror=format-security");
+    args.push_back("-Werror=unsequenced");
+    args.push_back("-Werror=shift-count-overflow");
+    args.push_back("-Werror=shift-negative-value");
+    args.push_back("-Werror=varargs");
+    // Rust-like enum exhaustiveness: a switch on an enum must handle every
+    // enumerator. Compile-time only; no ABI or emitted-code change.
+    args.push_back("-Werror=switch");
     args.push_back("-DCPLUS_SAFE=1");
+    // Opt-in runtime safety -> catchable exception behavior. Placed in the
+    // shared base so it reaches every compiled TU, the instrumented runtime
+    // recompilation, and the link step; Legacy C is deliberately unaffected.
+    if (opts.autoRuntime)
+      args.push_back("-DCPLUS_AUTO_RUNTIME=1");
   } else {
     args.push_back("-DCPLUS_LEGACY_C=1");
+    // -w keeps its documented gcc meaning only in the explicit compatibility
+    // mode. It cannot reach a Safe-mode invocation (branch above).
+    if (opts.disableWarnings && !warningsAreErrors(opts))
+      args.push_back("-w");
   }
   // Runtime sanitizers. Flags are part of `base`, which is used for both
   // per-file compilation and the final link, so the sanitizer runtime is
@@ -1106,7 +1149,7 @@ static std::vector<std::string> backendArgs(const DriverOptions &opts) {
   // does not need (and must not appear to probe) any sanitizer flags.
   if (!isCheckCommand(opts))
     addSanitizerFlags(args, effectiveSanitizer(opts));
-  if (opts.warningsAsErrors)
+  if (warningsAreErrors(opts))
     args.push_back("-Werror");
   if (opts.verbose)
     args.push_back("-v");
@@ -1161,19 +1204,55 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // these (no soundness claim), and --legacy-c --strict only gets its
   // documented no-effect disclosure so plain-C ABI/source stays untouched.
   const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
+  g_strictSafePaths = strictSafe;
+  // STRICT never trusts an environment-supplied runtime library: a pass-through
+  // runtime would strip every trap while `check` still reported a clean result.
+  // runtimeLibArg(false) already ignores it; drop it here as well so no other
+  // consumer can pick it up by accident.
+  if (strictSafe) {
+    ::unsetenv("CPLUS_RUNTIME_LIB");
+    // An env-supplied contract CAN carry a legitimate, validated effect
+    // summary (the honest header-declared FFI shape), so it must stay usable.
+    // Harden it instead: a relative, symlinked or missing path is a
+    // substitution attempt and fails closed before any analysis. Content
+    // validation remains in checkAstSafety/OwnershipAnalysis.
+    if (const char *env = std::getenv("CPLUS_CONTRACT_PATH")) {
+      if (*env) {
+        llvm::SmallString<256> canonical;
+        std::error_code ec = llvm::sys::fs::real_path(env, canonical);
+        if (ec || canonical.empty() ||
+            !llvm::sys::path::is_absolute(canonical) ||
+            !fileExists(std::string(canonical.str())) ||
+            std::string(env) != std::string(canonical.str())) {
+          errs << "error: CPLUS_CONTRACT_PATH must name a canonical absolute "
+                  "regular file in STRICT Safe mode\n";
+          return 1;
+        }
+      }
+    }
+  }
   // Clang expands @response files itself, after the driver's flag gates. A
   // token such as `@rsp` can therefore hide `-include guard.h` (which redefines
   // a bounds-check helper to a no-op) from every other check. Reject the @
   // spelling explicitly with a clear diagnostic before the general allow-list.
   if (strictSafe) {
-    for (const auto &a : opts.extraArgs) {
+    auto rejectResponseFile = [&](llvm::StringRef a) {
       if (a.starts_with('@')) {
         errs << "error: @response files are not allowed in STRICT Safe mode: "
                 "clang expands them after the C+ safety gates; pass flags "
                 "directly instead\n";
-        return 1;
+        return true;
       }
-    }
+      return false;
+    };
+    for (const auto &a : opts.extraArgs)
+      if (rejectResponseFile(a))
+        return 1;
+    // Clang expands any argv token beginning with '@', not just pass-through
+    // flags. -o's value is forwarded verbatim to the backend, so `-o @rsp`
+    // could otherwise smuggle -include/-Wl flags past every gate above.
+    if (rejectResponseFile(opts.output))
+      return 1;
   }
   if (strictSafe && extraArgsChangeParse(opts.extraArgs)) {
     errs << "error: pass-through flags change how the C+ safety AST parses "
@@ -1258,7 +1337,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // occurrence of -Werror=/-Wno-error= and -f(no-)sanitize-recover, so an
   // appended user token must not silently win over the driver's gate.
   auto appendSafetyTail = [&](std::vector<std::string> &v) {
-    if (opts.mode == Mode::Safe && !opts.disableWarnings)
+    if (opts.mode == Mode::Safe)
       for (const auto &f : safetyWarningErrorFlags())
         v.push_back(f);
     if (san != Sanitizer::None)
@@ -1342,9 +1421,20 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (astInputDir.empty())
       astInputDir = ".";
     astArgs.push_back("-I" + std::string(astInputDir));
-    for (const auto &a : opts.extraArgs) {
+    for (size_t i = 0; i < opts.extraArgs.size(); ++i) {
+      const std::string &a = opts.extraArgs[i];
       if (a.rfind("-fsanitize=", 0) == 0 || a.rfind("-fno-sanitize=", 0) == 0)
         continue;
+      llvm::StringRef na = normalizeFlag(a);
+      // safetyParseArgs() keeps only -I/-D/-std= tokens. A two-token `-I dir`
+      // / `-D NAME` would be split there into a dangling `-I`/`-D` (dropping
+      // the value), making the safety AST fail to parse -- the compiled TU
+      // parses it fine. Fold the pair into one token so check and build feed
+      // the analyser the same definition the backend compiles.
+      if ((na == "-I" || na == "-D") && i + 1 < opts.extraArgs.size()) {
+        astArgs.push_back(na.str() + opts.extraArgs[++i]);
+        continue;
+      }
       astArgs.push_back(a);
     }
     if (opts.mode == Mode::Safe)
@@ -1356,7 +1446,9 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
         // Disclose that instead of silently reporting a clean check.
         if (!strictDisclosureEmitted) {
           Diag d;
-          d.level = DiagLevel::Warning;
+          // Informational disclosure, not a safety finding: issue #34 makes
+          // every Warning fatal, so keep the notice visible as a Note.
+          d.level = DiagLevel::Note;
           d.message = "[CPLUS-LEGACY] STRICT mode has no effect with --legacy-c: "
                       "C+ safety analysis is disabled to preserve plain-C "
                       "ABI and source";
@@ -1415,70 +1507,28 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
         // executable, and LEGACY/ABI source preservation is unaffected.)
         // Pure libc calls are excluded by probeSafetyAst via the built-in
         // effect table / JSON contract, so printf/malloc etc. stay accepted.
-        if (isCheckCommand(opts) &&
-            !probe.unverifiedPointerExterns.empty()) {
-          // Do NOT reject a normal multi-TU main: its API prototype lives in a
-          // header and the body lives in another input of this invocation or
-          // in a sibling helper file in the same directory. A source-local
-          // `extern` (the red case) has no such pairing and stays an error.
-          const std::set<std::string> headerDeclared(
-              probe.headerDeclaredExterns.begin(),
-              probe.headerDeclaredExterns.end());
-          std::set<std::string> definedInInputs, definedInSiblings;
-          auto scanDefs = [&](const std::vector<std::string> &files,
-                              std::set<std::string> &into) {
-            for (const auto &f : files) {
-              if (f == input)
-                continue;
-              std::string err;
-              std::string src = readFile(f, &err);
-              if (!err.empty())
-                continue;
-              // Cheap pre-filter: a file that never mentions any candidate
-              // name cannot define it. Avoids parsing every sibling TU.
-              bool mentions = false;
-              for (const auto &fn : probe.unverifiedPointerExterns)
-                if (src.find(fn) != std::string::npos) {
-                  mentions = true;
-                  break;
-                }
-              if (!mentions)
-                continue;
-              std::vector<std::string> defArgs = astArgs;
-              llvm::StringRef dir = llvm::sys::path::parent_path(f);
-              if (!dir.empty())
-                defArgs.push_back("-I" + std::string(dir));
-              auto defs = definedFunctionNames(src, defArgs, f);
-              into.insert(defs.begin(), defs.end());
-            }
-          };
-          scanDefs(inputs, definedInInputs);
-          std::vector<std::string> siblings;
-          llvm::StringRef inputDirRef = llvm::sys::path::parent_path(input);
-          std::string inputDir = inputDirRef.empty() ? "." : inputDirRef.str();
-          std::error_code dec;
-          for (llvm::sys::fs::directory_iterator it(inputDir, dec), end;
-               !dec && it != end; it.increment(dec)) {
-            llvm::StringRef ext = llvm::sys::path::extension(it->path());
-            if (ext != ".c" && ext != ".cp")
-              continue;
-            siblings.push_back(it->path());
-          }
-          scanDefs(siblings, definedInSiblings);
-
+        //
+        // A same-named body elsewhere is NOT a safety proof. Analysis is
+        // per-translation-unit: a body in a sibling file is never passed to
+        // this invocation and is never analysed, while a body in another
+        // explicit input only receives an independent per-TU check -- neither
+        // yields a validated effect summary at THIS call site. That is exactly
+        // the cross-TU double-free shape (`main` frees p after `victim(p)`
+        // whose body frees p) that previously slipped through both the
+        // `definedInInputs` and `definedInSiblings` name matches. Only a
+        // declared/validated effect summary can discharge this gate, and
+        // probeSafetyAst already excludes every function that has one from
+        // `unverifiedPointerExterns`; there is no name-based exemption left.
+        if (isCheckCommand(opts)) {
           for (const auto &fn : probe.unverifiedPointerExterns) {
-            // Definition passed on this command line always suffices; a mere
-            // sibling file only counts for a header-declared multi-TU API.
-            if (definedInInputs.count(fn) ||
-                (headerDeclared.count(fn) && definedInSiblings.count(fn)))
-              continue;
             Diag d;
             d.level = DiagLevel::Error;
             d.message = "[CPLUS-FFI] function '" + fn +
                         "' has safety-relevant pointer effects but no "
-                        "definition in this translation unit or any paired "
-                        "input and no declared contract; STRICT check cannot "
-                        "verify its effects";
+                        "definition with a validated effect summary in the "
+                        "checked translation unit and no declared contract; "
+                        "STRICT check cannot verify its effects (a body in "
+                        "another file or a name match is not a proof)";
             d.file = input;
             diags.report(std::move(d));
           }
@@ -1494,7 +1544,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
             names += "'" + fn + "'";
           }
           Diag d;
-          d.level = DiagLevel::Warning;
+          // Scope disclosure, not a finding about the program: issue #34 makes
+          // every Warning fatal, so this stays a Note and cannot reject a
+          // program that is accepted by STRICT's soundness gates.
+          d.level = DiagLevel::Note;
           d.message =
               "[CPLUS-MULTITU] STRICT analysis is per-translation-unit: ";
           if (!names.empty())
@@ -1511,8 +1564,16 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     printDiagnostics(diags, errs, input);
     if (diags.hasErrors())
       return 1;
-    if (opts.warningsAsErrors && diags.warningCount() > 0)
+    if (warningsAreErrors(opts) && diags.warningCount() > 0) {
+      errs << "error: " << diags.warningCount()
+           << " C+ warning(s) treated as errors (default warning policy)\n";
+      // Multi-TU `-c`/`-S`/`-E` can have written an output for an earlier TU
+      // before a later TU failed. Never leave an artifact that looks like a
+      // successful build of a rejected program.
+      if (!output.empty())
+        llvm::sys::fs::remove(output);
       return 1;
+    }
     if (opts.mode == Mode::Safe && opts.command != "check") {
       // Runtime checks are inserted only after all static analysis, so an
       // instrumented index expression cannot mask a provable bounds error.

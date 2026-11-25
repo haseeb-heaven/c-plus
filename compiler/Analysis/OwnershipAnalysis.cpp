@@ -23,12 +23,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
 #include <deque>
 #include <iterator>
 #include <map>
 #include <optional>
 #include <set>
+#include <tuple>
 #include <vector>
 
 using namespace clang;
@@ -48,6 +50,11 @@ struct ContractState {
   std::string resolvedPath;
   std::string parsedBytes;
   bool swapped = false;
+  // True when the contract set was loaded from an explicit CPLUS_CONTRACT_PATH
+  // override. Such a contract is a caller-made claim, not evidence that a
+  // defining body was analysed; the STRICT bodiless-extern gate must not be
+  // silenced by it alone.
+  bool envPath = false;
 };
 
 ContractState &contractState() {
@@ -221,6 +228,14 @@ static bool isBuiltinLibcEffectName(llvm::StringRef name) {
   return kBuiltins.count(name) != 0;
 }
 
+/// Compiler/runtime entry points are emitted by the rewriter, have known
+/// semantics and are linked from the C+ runtime; they are trusted regardless of
+/// where the contract file came from. Shared by hasDeclaredEffect() and the
+/// authoritative-summary predicate so the two cannot drift apart.
+static bool isCompilerHelperEffectName(llvm::StringRef name) {
+  return name.starts_with("cplus_") || name.starts_with("__cplus_");
+}
+
 /// True when a function declaration can carry safety-relevant pointer effects.
 /// Any pointer parameter (including a callback/function pointer) or a pointer
 /// return makes the callee's behaviour unverifiable without a body or a
@@ -310,6 +325,33 @@ public:
         if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
           addrTaken_.insert(vd);
     }
+
+    // Model `sscanf("0", "%p", &p)`: parsing the literal "0" with %p writes a
+    // NULL pointer into p. The variable is still *written* (so definite-init
+    // must not call it uninitialised), but its value is provably null. Record
+    // that fact for the STRICT null analysis instead of emitting a speculative
+    // diagnostic here: a guarded dereference (`if (p) ...`) remains valid.
+    if (calleeName == "sscanf" && call->getNumArgs() >= 2) {
+      auto literalBytes = [](const Expr *e) -> llvm::StringRef {
+        const auto *sl = dyn_cast_or_null<StringLiteral>(e->IgnoreParenImpCasts());
+        return sl ? sl->getBytes() : llvm::StringRef();
+      };
+      const llvm::StringRef src = literalBytes(call->getArg(0));
+      const llvm::StringRef fmt = literalBytes(call->getArg(1));
+      if (src.trim() == "0" && fmt.contains("%p")) {
+        for (unsigned i = 2; i < call->getNumArgs(); ++i) {
+          const Expr *a = call->getArg(i)->IgnoreParenCasts();
+          const auto *uo = dyn_cast<UnaryOperator>(a);
+          if (!uo || uo->getOpcode() != UO_AddrOf)
+            continue;
+          const Expr *sub = uo->getSubExpr()->IgnoreParenImpCasts();
+          const auto *ref = dyn_cast<DeclRefExpr>(sub);
+          const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+          if (vd && vd->getType()->isPointerType())
+            nullWrittenVars_.insert(vd);
+        }
+      }
+    }
     return true;
   }
 
@@ -318,7 +360,12 @@ public:
         isa<ParmVarDecl>(vd))
       return true;
     QualType t = vd->getType();
-    if (!(t->isIntegerType() || t->isPointerType() || t->isEnumeralType()))
+    // Aggregates are tracked so element/field reads can be diagnosed by the
+    // subobject pass below. Scalar tracking is unchanged. Clang's upstream
+    // uninit analysis deliberately skips array elements, so relying on it
+    // alone would leave `int a[3]; return a[0];` unreported.
+    if (!(t->isIntegerType() || t->isPointerType() || t->isEnumeralType() ||
+          t->isArrayType() || t->isRecordType()))
       return true;
     vars_.push_back(vd);
     return true;
@@ -329,13 +376,338 @@ public:
   const std::set<const VarDecl *> &nonOutputAddrTaken() const {
     return nonOutputAddrTaken_;
   }
+  const std::set<const VarDecl *> &nullWrittenVars() const {
+    return nullWrittenVars_;
+  }
 
 private:
   ASTContext &ctx_;
   std::vector<const VarDecl *> vars_;
   std::set<const VarDecl *> addrTaken_;
   std::set<const VarDecl *> nonOutputAddrTaken_;
+  std::set<const VarDecl *> nullWrittenVars_;
 };
+
+// --- Subobject-sensitive definite initialization ---------------------------
+// Clang's upstream uninit analysis intentionally skips array elements and does
+// not reason about individual struct fields, so `int a[3]; return a[0];` would
+// otherwise be accepted. A SubKey names one provably-identifiable subobject of
+// a local aggregate; non-constant indices and arrow accesses are deliberately
+// NOT keys (their target cannot be proven), so a write through one conservatively
+// marks the whole base as written. That keeps this pass strictly a no-FP
+// extension: it only reports a read when NO write to that exact subobject (and
+// no whole-base write) exists anywhere in the function.
+struct SubKey {
+  const VarDecl *base = nullptr;
+  const FieldDecl *field = nullptr; // null for a whole base or array element
+  int index = -1;                   // >= 0 for a[constant], -1 otherwise
+  bool operator<(const SubKey &o) const {
+    return std::tie(base, field, index) < std::tie(o.base, o.field, o.index);
+  }
+};
+using SubState = std::set<SubKey>;
+
+static SubKey wholeKey(const VarDecl *vd) { return SubKey{vd, nullptr, -1}; }
+
+/// Resolve `e` to a SubKey when it is a direct, constant-index access to a
+/// local aggregate. Returns false for anything not precisely identifiable.
+static bool subKeyOf(ASTContext &ctx, const Expr *e, SubKey &key) {
+  if (!e)
+    return false;
+  e = e->IgnoreParenImpCasts();
+  if (const auto *me = dyn_cast<MemberExpr>(e)) {
+    if (me->isArrow())
+      return false; // pointee identity is not tracked here
+    const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl());
+    if (!fd)
+      return false;
+    const auto *dr =
+        dyn_cast<DeclRefExpr>(me->getBase()->IgnoreParenImpCasts());
+    const auto *vd = dr ? dyn_cast<VarDecl>(dr->getDecl()) : nullptr;
+    if (vd && vd->getType()->isRecordType()) {
+      key = SubKey{vd, fd, -1};
+      return true;
+    }
+    return false;
+  }
+  if (const auto *ase = dyn_cast<ArraySubscriptExpr>(e)) {
+    Expr::EvalResult r;
+    if (!ase->getIdx()->EvaluateAsInt(r, ctx) || !r.Val.isInt() ||
+        r.Val.getInt().getBitWidth() > 64)
+      return false;
+    const int64_t raw = r.Val.getInt().getSExtValue();
+    if (raw < 0 || raw > INT32_MAX)
+      return false;
+    const int index = static_cast<int>(raw);
+    const Expr *base = ase->getBase()->IgnoreParenImpCasts();
+    if (const auto *dr = dyn_cast<DeclRefExpr>(base)) {
+      const auto *vd = dyn_cast<VarDecl>(dr->getDecl());
+      if (vd) {
+        key = SubKey{vd, nullptr, index};
+        return true;
+      }
+    }
+    // s.arr[constant] is a field plus a constant index.
+    if (const auto *me = dyn_cast<MemberExpr>(base)) {
+      if (me->isArrow())
+        return false;
+      const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl());
+      const auto *dr =
+          dyn_cast<DeclRefExpr>(me->getBase()->IgnoreParenImpCasts());
+      const auto *vd = dr ? dyn_cast<VarDecl>(dr->getDecl()) : nullptr;
+      if (fd && vd && vd->getType()->isRecordType()) {
+        key = SubKey{vd, fd, index};
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
+class SubWriteCollector : public RecursiveASTVisitor<SubWriteCollector> {
+public:
+  SubWriteCollector(ASTContext &ctx, const std::set<const VarDecl *> &tracked,
+                    SubState &written, std::set<const VarDecl *> &escaped)
+      : ctx_(ctx), tracked_(tracked), written_(written), escaped_(escaped) {}
+
+  bool VisitBinaryOperator(BinaryOperator *bo) {
+    if (bo->isAssignmentOp())
+      markWritten(bo->getLHS());
+    return true;
+  }
+  bool VisitUnaryOperator(UnaryOperator *uo) {
+    if (uo->isIncrementOp() || uo->isDecrementOp())
+      markWritten(uo->getSubExpr());
+    return true;
+  }
+  bool VisitCallExpr(CallExpr *call) {
+    // A callee may write any aggregate passed by value (decayed array) or by
+    // address. Mark the whole base so later reads are never falsely reported.
+    struct Refs : RecursiveASTVisitor<Refs> {
+      std::set<const VarDecl *> &found;
+      explicit Refs(std::set<const VarDecl *> &f) : found(f) {}
+      bool VisitDeclRefExpr(DeclRefExpr *dr) {
+        if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+          found.insert(vd);
+        return true;
+      }
+    } refs(foundInCalls_);
+    for (Expr *arg : call->arguments())
+      refs.TraverseStmt(arg);
+    for (const VarDecl *vd : foundInCalls_)
+      if (tracked_.count(vd))
+        escaped_.insert(vd);
+    foundInCalls_.clear();
+    return true;
+  }
+  bool VisitVarDecl(VarDecl *vd) {
+    if (tracked_.count(vd) && vd->hasInit())
+      written_.insert(wholeKey(vd)); // {..} / = {...} initialises the aggregate
+    return true;
+  }
+
+private:
+  void markWritten(const Expr *e) {
+    if (!e)
+      return;
+    const Expr *base = e->IgnoreParenImpCasts();
+    SubKey k;
+    if (subKeyOf(ctx_, base, k)) {
+      written_.insert(k);
+      return;
+    }
+    // Non-constant index / arrow / nested: conservatively mark the whole base.
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(base))
+      base = ase->getBase()->IgnoreParenImpCasts();
+    else if (const auto *me = dyn_cast<MemberExpr>(base))
+      base = me->getBase()->IgnoreParenImpCasts();
+    if (const auto *dr = dyn_cast<DeclRefExpr>(base))
+      if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+        if (tracked_.count(vd))
+          written_.insert(wholeKey(vd));
+  }
+
+  ASTContext &ctx_;
+  const std::set<const VarDecl *> &tracked_;
+  SubState &written_;
+  std::set<const VarDecl *> &escaped_;
+  std::set<const VarDecl *> foundInCalls_;
+};
+
+class SubReadWalker {
+public:
+  SubReadWalker(ASTContext &ctx, const std::set<const VarDecl *> &tracked,
+                const SubState &written, const std::set<const VarDecl *> &escaped,
+                const std::set<const VarDecl *> &skipBases,
+                const CfgReportFn &report, std::set<const Stmt *> &reported)
+      : ctx_(ctx), tracked_(tracked), written_(written), escaped_(escaped),
+        skipBases_(skipBases), report_(report), reported_(reported) {}
+
+  void walk(const Stmt *s) {
+    if (!s)
+      return;
+    if (const auto *bo = dyn_cast<BinaryOperator>(s)) {
+      if (bo->isAssignmentOp()) {
+        if (bo->isCompoundAssignmentOp())
+          walk(bo->getLHS());
+        walk(bo->getRHS());
+        return;
+      }
+      walk(bo->getLHS());
+      walk(bo->getRHS());
+      return;
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(s)) {
+      if (uo->getOpcode() == UO_AddrOf)
+        return; // taking an address does not read the object
+      walk(uo->getSubExpr());
+      return;
+    }
+    if (const auto *ase = dyn_cast<ArraySubscriptExpr>(s)) {
+      checkRead(s, ase);
+      walk(ase->getBase());
+      walk(ase->getIdx());
+      return;
+    }
+    if (const auto *me = dyn_cast<MemberExpr>(s)) {
+      checkRead(s, me);
+      walk(me->getBase());
+      return;
+    }
+    for (const Stmt *child : s->children())
+      walk(child);
+  }
+
+private:
+  void checkRead(const Stmt *s, const Expr *e) {
+    SubKey k;
+    if (!subKeyOf(ctx_, e, k) || !tracked_.count(k.base))
+      return;
+    if (escaped_.count(k.base) || skipBases_.count(k.base))
+      return;
+    if (written_.count(wholeKey(k.base)) || written_.count(k))
+      return;
+    if (!reported_.insert(s).second)
+      return;
+    std::string what;
+    if (k.field && k.index >= 0)
+      what = "element " + std::to_string(k.index) + " of field '" +
+             k.field->getNameAsString() + "'";
+    else if (k.field)
+      what = "field '" + k.field->getNameAsString() + "'";
+    else
+      what = "element " + std::to_string(k.index);
+    report_(s->getBeginLoc(), what + " of '" + k.base->getNameAsString() +
+                                  "' is uninitialized (read before it is "
+                                  "initialized)");
+  }
+
+  ASTContext &ctx_;
+  const std::set<const VarDecl *> &tracked_;
+  const SubState &written_;
+  const std::set<const VarDecl *> &escaped_;
+  const std::set<const VarDecl *> &skipBases_;
+  CfgReportFn report_;
+  std::set<const Stmt *> &reported_;
+};
+
+static void checkSubobjectDefiniteInitialization(
+    ASTContext &ctx, Stmt *body, const std::set<const VarDecl *> &aggregates,
+    const std::set<const VarDecl *> &skipBases, const CfgReportFn &report) {
+  if (aggregates.empty())
+    return;
+  SubState written;
+  std::set<const VarDecl *> escaped;
+  SubWriteCollector writes(ctx, aggregates, written, escaped);
+  writes.TraverseStmt(body);
+  std::set<const Stmt *> reported;
+  SubReadWalker reader(ctx, aggregates, written, escaped, skipBases, report,
+                       reported);
+  reader.walk(body);
+}
+
+/// A %p conversion of the literal "0" writes a provably NULL pointer. Report a
+/// direct dereference of that variable in the SAME basic block, before any
+/// reassignment. A guard lives in a different block, so `if (p) return *p;`
+/// stays clean; this never speculates about non-literal inputs or other
+/// conversions. STRICT null analysis should additionally seed the model from
+/// nullPointerOutParams() for inter-block cases.
+static void checkNullOutParamDerefs(const CFG &cfg, const CfgReportFn &report) {
+  auto literalBytes = [](const Expr *e) -> llvm::StringRef {
+    const auto *sl = dyn_cast_or_null<StringLiteral>(e->IgnoreParenImpCasts());
+    return sl ? sl->getBytes() : llvm::StringRef();
+  };
+  for (const CFGBlock *b : cfg) {
+    if (!b)
+      continue;
+    std::set<const VarDecl *> nullVars;
+    std::set<const Stmt *> reported;
+    for (const CFGElement &el : *b) {
+      std::optional<CFGStmt> cs = el.getAs<CFGStmt>();
+      if (!cs)
+        continue;
+      Stmt *s = const_cast<Stmt *>(cs->getStmt());
+
+      if (const auto *call = dyn_cast<CallExpr>(s)) {
+        const FunctionDecl *callee = call->getDirectCallee();
+        if (callee && callee->getName() == "sscanf" && call->getNumArgs() >= 2 &&
+            literalBytes(call->getArg(0)).trim() == "0" &&
+            literalBytes(call->getArg(1)).contains("%p")) {
+          for (unsigned i = 2; i < call->getNumArgs(); ++i) {
+            const Expr *a = call->getArg(i)->IgnoreParenCasts();
+            const auto *uo = dyn_cast<UnaryOperator>(a);
+            if (!uo || uo->getOpcode() != UO_AddrOf)
+              continue;
+            const auto *ref = dyn_cast<DeclRefExpr>(
+                uo->getSubExpr()->IgnoreParenImpCasts());
+            const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+            if (vd && vd->getType()->isPointerType())
+              nullVars.insert(vd);
+          }
+        }
+      }
+      if (const auto *bo = dyn_cast<BinaryOperator>(s)) {
+        if (bo->isAssignmentOp()) {
+          const auto *dr =
+              dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+          const auto *vd = dr ? dyn_cast<VarDecl>(dr->getDecl()) : nullptr;
+          if (vd)
+            nullVars.erase(vd);
+        }
+      }
+      struct DerefVisitor : RecursiveASTVisitor<DerefVisitor> {
+        const std::set<const VarDecl *> &nullVars;
+        const CfgReportFn &report;
+        std::set<const Stmt *> &reported;
+        DerefVisitor(const std::set<const VarDecl *> &n, const CfgReportFn &r,
+                     std::set<const Stmt *> &rep)
+            : nullVars(n), report(r), reported(rep) {}
+        bool VisitUnaryOperator(UnaryOperator *uo) {
+          if (uo->getOpcode() == UO_Deref)
+            check(uo, uo->getSubExpr());
+          return true;
+        }
+        bool VisitMemberExpr(MemberExpr *me) {
+          if (me->isArrow())
+            check(me, me->getBase());
+          return true;
+        }
+        void check(const Stmt *at, const Expr *base) {
+          base = base->IgnoreParenImpCasts();
+          const auto *dr = dyn_cast<DeclRefExpr>(base);
+          const auto *vd = dr ? dyn_cast<VarDecl>(dr->getDecl()) : nullptr;
+          if (vd && nullVars.count(vd) && reported.insert(at).second)
+            report(at->getBeginLoc(),
+                   "variable '" + vd->getNameAsString() +
+                       "' is provably null after a '%p' conversion of the "
+                       "literal \"0\" (null pointer dereference)");
+        }
+      } visitor(nullVars, report, reported);
+      visitor.TraverseStmt(s);
+    }
+  }
+}
 
 class DefInitWalker {
 public:
@@ -453,6 +825,196 @@ private:
   std::set<const Stmt *> &reported_;
 };
 
+/// A deliberately small integer constant folder used ONLY to decide whether
+/// the alternative (initialising) side of an upstream "Sometimes" uninit report
+/// is compile-time dead. Any expression it cannot fold yields "unknown", which
+/// always means "do not escalate" -- so it can never create a false positive.
+/// Loop-induction variables modified solely by a for-increment keep their entry
+/// value while folding the condition: `for (i=0; i<0; ++i)` is provably dead.
+class ConstIntFolder {
+public:
+  explicit ConstIntFolder(const FunctionDecl *fd) { collect(fd); }
+
+  /// `loopIncVars` is non-null only when folding the condition OF a for-loop
+    /// and names exactly the variables that loop increments: those still hold
+    /// their entry value at the first condition check. In a nested branch or a
+    /// different loop the value may have changed, so trusting it would be
+    /// unsound and could create false positives.
+  bool eval(const Expr *e, int64_t &out,
+            const std::set<const VarDecl *> *loopIncVars = nullptr) const {
+    if (!e)
+      return false;
+    e = e->IgnoreParenImpCasts();
+    if (const auto *il = dyn_cast<IntegerLiteral>(e)) {
+      llvm::APInt v = il->getValue();
+      if (v.getBitWidth() > 64)
+        return false;
+      out = v.getSExtValue();
+      return true;
+    }
+    if (const auto *cl = dyn_cast<CharacterLiteral>(e)) {
+      out = static_cast<int64_t>(cl->getValue());
+      return true;
+    }
+    if (const auto *bl = dyn_cast<CXXBoolLiteralExpr>(e)) {
+      out = bl->getValue() ? 1 : 0;
+      return true;
+    }
+    if (const auto *dr = dyn_cast<DeclRefExpr>(e)) {
+      const auto *vd = dyn_cast<VarDecl>(dr->getDecl());
+      if (!vd)
+        return false;
+      // incVars are only meaningful at the condition of the loop that owns
+      // the increment, never in a nested branch or another loop.
+      if (incVars.count(vd) &&
+          !(loopIncVars && loopIncVars->count(vd)))
+        return false;
+      auto it = env_.find(vd);
+      if (it == env_.end())
+        return false;
+      out = it->second;
+      return true;
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
+      int64_t v = 0;
+      if (!eval(uo->getSubExpr(), v, loopIncVars))
+        return false;
+      switch (uo->getOpcode()) {
+      case UO_Plus:
+        out = v;
+        return true;
+      case UO_Minus:
+        out = -v;
+        return true;
+      case UO_Not:
+        out = ~v;
+        return true;
+      case UO_LNot:
+        out = !v;
+        return true;
+      default:
+        return false;
+      }
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(e)) {
+      int64_t l = 0, r = 0;
+      if (!eval(bo->getLHS(), l, loopIncVars) ||
+          !eval(bo->getRHS(), r, loopIncVars))
+        return false;
+      switch (bo->getOpcode()) {
+      case BO_Add:  out = l + r; return true;
+      case BO_Sub:  out = l - r; return true;
+      case BO_Mul:  out = l * r; return true;
+      case BO_Div:  if (!r) return false; out = l / r; return true;
+      case BO_Rem:  if (!r) return false; out = l % r; return true;
+      case BO_LT:   out = l < r;  return true;
+      case BO_GT:   out = l > r;  return true;
+      case BO_LE:   out = l <= r; return true;
+      case BO_GE:   out = l >= r; return true;
+      case BO_EQ:   out = l == r; return true;
+      case BO_NE:   out = l != r; return true;
+      case BO_And:  out = l & r;  return true;
+      case BO_Or:   out = l | r;  return true;
+      case BO_Xor:  out = l ^ r;  return true;
+      case BO_LAnd: out = l && r; return true;
+      case BO_LOr:  out = l || r; return true;
+      default:      return false;
+      }
+    }
+    if (const auto *co = dyn_cast<ConditionalOperator>(e)) {
+      int64_t c = 0, a = 0, b = 0;
+      if (eval(co->getCond(), c, loopIncVars) &&
+          eval(co->getTrueExpr(), a, loopIncVars) &&
+          eval(co->getFalseExpr(), b, loopIncVars)) {
+        out = c ? a : b;
+        return true;
+      }
+    }
+    return false;
+  }
+
+private:
+  void collect(const FunctionDecl *fd) {
+    if (!fd || !fd->getBody())
+      return;
+    struct Candidates : RecursiveASTVisitor<Candidates> {
+      std::map<const VarDecl *, int64_t> &env;
+      ASTContext &ctx;
+      Candidates(std::map<const VarDecl *, int64_t> &e, ASTContext &c)
+          : env(e), ctx(c) {}
+      bool VisitVarDecl(VarDecl *vd) {
+        if (const Expr *init = vd->getInit()) {
+          Expr::EvalResult r;
+          if (init->EvaluateAsInt(r, ctx) && r.Val.isInt() &&
+              r.Val.getInt().getBitWidth() <= 64)
+            env[vd] = r.Val.getInt().getSExtValue();
+        }
+        return true;
+      }
+    };
+    Candidates candidates(env_, fd->getASTContext());
+    candidates.TraverseStmt(fd->getBody());
+
+    struct Mods : RecursiveASTVisitor<Mods> {
+      std::set<const VarDecl *> &modified;
+      explicit Mods(std::set<const VarDecl *> &m) : modified(m) {}
+      void add(const Expr *e) {
+        e = e->IgnoreParenImpCasts();
+        if (const auto *dr = dyn_cast<DeclRefExpr>(e))
+          if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+            modified.insert(vd);
+      }
+      bool VisitBinaryOperator(BinaryOperator *bo) {
+        if (bo->isAssignmentOp())
+          add(bo->getLHS());
+        return true;
+      }
+      bool VisitUnaryOperator(UnaryOperator *uo) {
+        if (uo->isIncrementOp() || uo->isDecrementOp() ||
+            uo->getOpcode() == UO_AddrOf)
+          add(uo->getSubExpr());
+        return true;
+      }
+    };
+    Mods mods(modified);
+    mods.TraverseStmt(fd->getBody());
+
+    // Values changed only by a for-increment are still fixed when the loop's
+    // condition is evaluated on its first iteration, which is what decides
+    // whether the loop body is reachable at all.
+    struct Incs : RecursiveASTVisitor<Incs> {
+      std::set<const VarDecl *> &incVars;
+      explicit Incs(std::set<const VarDecl *> &i) : incVars(i) {}
+      struct Refs : RecursiveASTVisitor<Refs> {
+        std::set<const VarDecl *> &out;
+        explicit Refs(std::set<const VarDecl *> &o) : out(o) {}
+        bool VisitDeclRefExpr(DeclRefExpr *dr) {
+          if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+            out.insert(vd);
+          return true;
+        }
+      };
+      bool VisitForStmt(ForStmt *fs) {
+        if (Expr *inc = fs->getInc()) {
+          Refs refs(incVars);
+          refs.TraverseStmt(inc);
+        }
+        return true;
+      }
+    };
+    Incs incs(incVars);
+    incs.TraverseStmt(fd->getBody());
+
+    for (const VarDecl *vd : modified)
+      if (!incVars.count(vd))
+        env_.erase(vd);
+  }
+
+  std::map<const VarDecl *, int64_t> env_;
+  std::set<const VarDecl *> modified;
+  std::set<const VarDecl *> incVars;
+};
+
 } // namespace
 
 void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
@@ -494,8 +1056,10 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
   public:
     UpstreamUninitHandler(const std::set<const VarDecl *> &tracked,
                           const CfgReportFn &report,
-                          std::set<const VarDecl *> &reported)
-        : tracked_(tracked), report_(report), reported_(reported) {}
+                          std::set<const VarDecl *> &reported,
+                          const ConstIntFolder *folder)
+        : tracked_(tracked), report_(report), reported_(reported),
+          folder_(folder) {}
 
     void handleUseOfUninitVariable(const VarDecl *vd,
                                    const clang::UninitUse &use) override {
@@ -512,8 +1076,16 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
       case clang::UninitUse::AfterCall:
         break;
       case clang::UninitUse::Sometimes:
+        // Escalate a "Sometimes" to definite only when EVERY listed branch is
+        // forced by a compile-time-constant condition: the alternative path
+        // (the one that initialises the variable) is then provably dead, e.g.
+        // `int x; for (int i=0; i<0; ++i) x=1; return x;`. Unknown conditions
+        // keep the old discard policy, so guarded initialisation stays clean.
+        if (!folder_ || !allBranchesForced(use))
+          return;
+        break;
       case clang::UninitUse::Maybe:
-        return;
+        return; // no branch evidence at all: stay conservative
       }
       reported_.insert(vd);
       report_(user->getBeginLoc(),
@@ -530,15 +1102,80 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
     }
 
   private:
+    static const Expr *conditionOf(const Stmt *term) {
+      if (!term)
+        return nullptr;
+      if (const auto *s = dyn_cast<IfStmt>(term))
+        return s->getCond();
+      if (const auto *s = dyn_cast<ForStmt>(term))
+        return s->getCond();
+      if (const auto *s = dyn_cast<WhileStmt>(term))
+        return s->getCond();
+      // do-while's body executes before the condition, so a folded condition
+      // does not by itself prove an uninitialized path: never escalate on it.
+      if (const auto *s = dyn_cast<ConditionalOperator>(term))
+        return s->getCond();
+      return nullptr;
+    }
+
+    /// Clang's Branch::Output is the CFG successor index that leads to the
+    /// reported uninit use: 0 = condition true (then/loop body), 1 = false
+    /// (else/loop exit). If the condition folds to the same output, every live
+    /// path to the use is an uninit path and the report is definite.
+    bool allBranchesForced(const clang::UninitUse &use) const {
+      if (use.branch_empty())
+        return false;
+      for (auto it = use.branch_begin(); it != use.branch_end(); ++it) {
+        const Expr *cond = conditionOf(it->Terminator);
+        int64_t value = 0;
+        // Only this loop's own increment variables may keep their entry value;
+        // a nested branch or another loop's counter may have changed by now.
+        std::set<const VarDecl *> loopIncVars;
+        if (const auto *fs =
+                dyn_cast_or_null<ForStmt>(it->Terminator)) {
+          struct Refs : RecursiveASTVisitor<Refs> {
+            std::set<const VarDecl *> &out;
+            explicit Refs(std::set<const VarDecl *> &o) : out(o) {}
+            bool VisitDeclRefExpr(DeclRefExpr *dr) {
+              if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+                out.insert(vd);
+              return true;
+            }
+          } refs(loopIncVars);
+          if (const Expr *inc = fs->getInc())
+            refs.TraverseStmt(const_cast<Expr *>(inc));
+        }
+        if (!cond || !folder_->eval(cond, value, &loopIncVars))
+          return false;
+        const unsigned forced = value != 0 ? 0u : 1u;
+        if (it->Output != forced)
+          return false;
+      }
+      return true;
+    }
+
     const std::set<const VarDecl *> &tracked_;
     CfgReportFn report_;
     std::set<const VarDecl *> &reported_;
+    const ConstIntFolder *folder_;
   };
 
   clang::AnalysisDeclContext ac(nullptr, fd);
-  UpstreamUninitHandler handler(tracked, report, upstreamReported);
+  ConstIntFolder folder(fd);
+  UpstreamUninitHandler handler(tracked, report, upstreamReported, &folder);
   clang::UninitVariablesAnalysisStats stats{};
   clang::runUninitializedVariablesAnalysis(*fd, *cfg, ac, handler, stats);
+
+  // Arrays and records are outside upstream's uninit analysis, so run the
+  // subobject pass for them. Variables upstream already reported are skipped as
+  // bases to avoid duplicate diagnostics for the same object.
+  std::set<const VarDecl *> aggregates;
+  for (const VarDecl *vd : collector.vars())
+    if (vd->getType()->isArrayType() || vd->getType()->isRecordType())
+      aggregates.insert(vd);
+  checkSubobjectDefiniteInitialization(ctx, fd->getBody(), aggregates,
+                                       upstreamReported, report);
+  checkNullOutParamDerefs(*cfg, report);
 
   // Preserve C+'s diagnostic policy where upstream Clang deliberately
   // suppresses reports: Clang treats a variable as initialised when its
@@ -553,7 +1190,10 @@ void checkDefiniteInitialization(ASTContext &ctx, FunctionDecl *fd,
   // introducing new diagnostics for correct code.
   std::set<const VarDecl *> needsPolicyPass;
   for (const VarDecl *vd : collector.nonOutputAddrTaken())
-    if (tracked.count(vd) && !entryInit.count(vd) &&
+    // Aggregates are handled by the subobject pass, which knows that writing
+    // one element/field does not initialise the whole object. The scalar policy
+    // worklist reasons only about whole VarDecls and would mis-handle them.
+    if (tracked.count(vd) && !aggregates.count(vd) && !entryInit.count(vd) &&
         !upstreamReported.count(vd))
       needsPolicyPass.insert(vd);
   if (needsPolicyPass.empty())
@@ -685,6 +1325,7 @@ static ContractState &loadedContracts() {
     return st;
   }
   st.resolvedPath = canonical;
+  st.envPath = explicitEnvPath; // evidence vs claim: see hasVerifiedEffectDeclaration
   st.parsedBytes.assign((*buf)->getBuffer().begin(), (*buf)->getBuffer().end());
   auto parsed = llvm::json::parse((*buf)->getBuffer());
   if (!parsed) {
@@ -743,6 +1384,30 @@ static ContractState &loadedContracts() {
           st.issues.push_back({fn, std::string("contract field '") + arr +
                                        "' must be an array"});
 
+    // Every remaining list field is a list of strings (nullableArgs is the one
+    // integer list and is validated below). A non-string entry would be
+    // silently skipped by the effect consumers -- fail closed instead.
+    for (const auto &list : {"params", "effects", "borrow", "dynamic",
+                             "paramTypes", "readEffects", "writeEffects",
+                             "freeEffects", "threadAssumptions"})
+      if (const auto *arr = spec->getArray(list))
+        for (const auto &item : *arr)
+          if (!item.getAsString())
+            st.issues.push_back({fn, std::string("contract field '") + list +
+                                        "' must contain strings"});
+
+    // Textual fields must be strings when present. JSON null is the shipped
+    // spelling of "not applicable" and is accepted; any other wrong type means
+    // the contract cannot be fully interpreted, so the set fails closed.
+    for (const auto &text : {"ownership", "transfer", "extent", "failure",
+                             "borrowLifetime", "returnState",
+                             "failureBehavior", "allocationSize",
+                             "pointerBounds", "ownershipTransfer"})
+      if (const auto *v = spec->get(text))
+        if (!v->getAsNull() && !v->getAsString())
+          st.issues.push_back({fn, std::string("contract field '") + text +
+                                       "' must be a string"});
+
     FunctionEffect e;
     // diagnostics category: honour the contract's own category.
     if (auto diag = spec->getString("diagnostics")) {
@@ -752,10 +1417,20 @@ static ContractState &loadedContracts() {
         st.issues.push_back({fn, "invalid diagnostics category"});
     }
     // nullableArgs: array of argument indices. Keep the legacy boolean and
-    // additionally record the exact indices for precise consumers.
+    // additionally record the exact indices for precise consumers. An index
+    // outside `params` cannot name an argument, so the summary is incomplete
+    // and must fail closed instead of silently granting nullability to a
+    // different parameter.
+    const auto *nullableParams = spec->getArray("params");
     if (const auto *nullable = spec->getArray("nullableArgs")) {
       for (const auto &v : *nullable) {
         if (auto index = v.getAsInteger()) {
+          if (*index < 0 || *index > INT32_MAX ||
+              (nullableParams &&
+               static_cast<size_t>(*index) >= nullableParams->size())) {
+            st.issues.push_back({fn, "nullableArgs index out of range"});
+            continue;
+          }
           e.nullableArg = true;
           e.nullableArgIndices.push_back(static_cast<int>(*index));
         } else {
@@ -990,9 +1665,36 @@ bool hasDeclaredEffect(llvm::StringRef name) {
   // by the compiler itself, have known semantics, and are linked from the C+
   // runtime rather than defined in the source TU. They are not user FFI and
   // must not trip the unverified-extern gate.
-  if (name.starts_with("cplus_") || name.starts_with("__cplus_"))
+  if (isCompilerHelperEffectName(name))
     return true;
   return loadedContracts().contracts.count(name.str()) != 0;
+}
+
+bool hasVerifiedEffectDeclaration(llvm::StringRef name) {
+  if (isBuiltinLibcEffectName(name) || isCompilerHelperEffectName(name))
+    return true;
+  // A contract supplied through CPLUS_CONTRACT_PATH is a claim made by the
+  // caller. STRICT must not treat it as evidence that a defining body was
+  // analysed: a bodiless pointer extern backed only by such a summary stays
+  // unverified. The compiled-in default set ships with the compiler and remains
+  // authoritative.
+  ContractState &st = contractState();
+  if (!st.attempted)
+    loadedContracts(); // force the single validated load before checking
+  if (st.envPath)
+    return false;
+  return st.contracts.count(name.str()) != 0;
+}
+
+std::set<std::string> nullPointerOutParams(FunctionDecl *fd) {
+  std::set<std::string> names;
+  if (!fd || !fd->doesThisDeclarationHaveABody() || !fd->getBody())
+    return names;
+  LocalCollector collector(fd->getASTContext());
+  collector.TraverseStmt(fd->getBody());
+  for (const VarDecl *vd : collector.nullWrittenVars())
+    names.insert(vd->getNameAsString());
+  return names;
 }
 
 SafetyAstProbe probeSafetyAst(const std::string &source,
@@ -1076,9 +1778,12 @@ SafetyAstProbe probeSafetyAst(const std::string &source,
       if (loc.isValid() && sm.isInSystemHeader(loc))
         return true;
       out.insert(name);
-      // No body and no declared effect => the pointer effects of this extern
-      // are invisible to this TU. Flag for the driver's STRICT check gate.
-      if (hasPointerEffectSignature(fd) && !hasDeclaredEffect(fd->getName())) {
+      // No body and no *authoritative* effect summary => the pointer effects
+      // of this extern are invisible to this TU. A contract is a claim, not
+      // evidence: an env-supplied summary does not certify a defining body was
+      // analysed, so it cannot silence the STRICT gate on its own.
+      if (hasPointerEffectSignature(fd) &&
+          !hasVerifiedEffectDeclaration(fd->getName())) {
         unverified.insert(name);
         // Remember whether the prototype came from a header. The driver uses
         // this to suppress the hard error when a sibling TU supplies the body

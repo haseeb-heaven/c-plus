@@ -56,7 +56,7 @@ for src in "$ROOT"/tests/cases/*.c "$ROOT"/tests/cases/*.cp; do
   name=$(basename "$src"); name=${name%.c}; name=${name%.cp}
   matches "$name" || continue
   exe="$OUT/$name"
-  if ! "$CPLUS" build "$src" -o "$exe" >"$OUT/$name.build.log" 2>&1; then
+  if ! "$CPLUS" build --no-werror "$src" -o "$exe" >"$OUT/$name.build.log" 2>&1; then
     fail "$name" "compilation failed; see tests/out/$name.build.log"
     continue
   fi
@@ -108,7 +108,7 @@ for src in "$ROOT"/tests/runtime_fail/*.c "$ROOT"/tests/runtime_fail/*.cp; do
   name=$(basename "$src"); name=${name%.c}; name=${name%.cp}
   matches "$name" || continue
   exe="$OUT/$name"
-  if ! "$CPLUS" build "$src" -o "$exe" >"$OUT/$name.build.log" 2>&1; then
+  if ! "$CPLUS" build --no-werror "$src" -o "$exe" >"$OUT/$name.build.log" 2>&1; then
     fail "$name" "compilation failed; see tests/out/$name.build.log"
     continue
   fi

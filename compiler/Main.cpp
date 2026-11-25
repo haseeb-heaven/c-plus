@@ -36,9 +36,13 @@ struct Options {
   OptMode opt = OptMode::Debug;
   Sanitizer sanitizer = Sanitizer::Undefined;
   bool sanitizerExplicit = false;
+  bool autoRuntime = false;
   bool strict = false;
   bool verbose = false;
-  bool warningsAsErrors = false;
+  // Issue #34: warning-as-error is the default policy; -Werror is accepted but
+  // redundant. --legacy-c opts out unless -Werror is explicit.
+  bool warningsAsErrors = true;
+  bool warningsAsErrorsExplicit = false;
   bool keepTemp = false;
   bool logging = false;
   std::string logLevel = "warn";
@@ -77,15 +81,20 @@ void printUsage(raw_ostream &os) {
   os << "  --sanitize=LIST  comma-separated: none|address|undefined|memory|thread|\n";
   os << "                   leak|cfi|integer (Safe mode defaults to undefined)\n";
   os << "  --no-sanitize    plain unsanitized build (alias: --sanitize=none)\n";
+  os << "  --auto-runtime   runtime safety violations become catchable C+ exceptions "
+        "inside try/catch; fatal when no handler exists\n";
   os << "  --print-sanitizers  print sanitizer names and backend, no build\n";
   os << "  -o <file>        output path\n";
   os << "  --emit-c <file>  write the lowered C source for inspection\n";
   os << "  --keep-temp      keep the generated C file\n";
-  os << "  -Werror          turn C+ warnings into errors\n";
+  os << "  -Werror          accepted for compatibility; warnings are already errors\n";
+  os << "  --no-werror      opt out of warning-as-error (diagnostic only; not a safety\n";
+  os << "                   gate, and unavailable as a proof in STRICT mode)\n";
   os << "  --verbose        show the backend command line\n";
   os << "  --log            enable compiler/runtime logging (off by default)\n";
   os << "  --log-level LVL  trace|debug|info|warn|error|fatal (default warn)\n";
-  os << "  -w               disable warnings (gcc compatible)\n";
+  os << "  -w               suppress backend warnings in --legacy-c only; never\n";
+  os << "                   suppresses C+ diagnostics or safety gates in Safe mode\n";
   os << "  -c / -S / -E     object / assembly / preprocess (gcc compatible)\n";
   os << "  -O2 -g -std=...  passed through to the C backend\n";
   os << "  c+ file.c -o f   gcc-style invocation (no subcommand needed)\n";
@@ -227,8 +236,19 @@ int main(int argc, char **argv) {
       opts.sanitizerExplicit = true;
       continue;
     }
+    if (a == "--auto-runtime") {
+      // Driver option only: consumed here so it never reaches extraArgs (and
+      // therefore never trips the STRICT pass-through allow-list).
+      opts.autoRuntime = true;
+      continue;
+    }
     if (a == "-Werror") {
       opts.warningsAsErrors = true;
+      opts.warningsAsErrorsExplicit = true;
+      continue;
+    }
+    if (a == "--no-werror") {
+      opts.warningsAsErrors = false;
       continue;
     }
     if (a == "--verbose" || a == "-v") {
@@ -356,6 +376,12 @@ int main(int argc, char **argv) {
   if (opts.output.empty())
     opts.output.clear(); // driver picks a default
 
+  // Issue #34: --legacy-c is the explicit compatibility escape hatch and must
+  // not inherit the default warning-as-error policy by accident. An explicit
+  // -Werror still promotes warnings there, as documented.
+  if (opts.mode == Mode::LegacyC && !opts.warningsAsErrorsExplicit)
+    opts.warningsAsErrors = false;
+
   DriverOptions d;
   d.command = opts.command;
   d.input = opts.input;
@@ -366,9 +392,11 @@ int main(int argc, char **argv) {
   d.opt = opts.opt;
   d.sanitizer = opts.sanitizer;
   d.sanitizerExplicit = opts.sanitizerExplicit;
+  d.autoRuntime = opts.autoRuntime;
   d.strict = opts.strict;
   d.verbose = opts.verbose;
   d.warningsAsErrors = opts.warningsAsErrors;
+  d.warningsAsErrorsExplicit = opts.warningsAsErrorsExplicit;
   d.keepTemp = opts.keepTemp;
   d.extraArgs = opts.extraArgs;
   d.logging = opts.logging;

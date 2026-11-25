@@ -50,10 +50,25 @@ FunctionEffect libcEffect(llvm::StringRef name);
 
 /// True when `name` has a declared safety effect summary: either a v2 JSON
 /// contract (CPLUS_CONTRACT_PATH / compiled-in default) or one of the built-in
-/// libc fallbacks in libcEffect(). STRICT analysis may accept a bodiless call
-/// only when such a summary exists; an unannotated extern with pointer effects
-/// is unverifiable and must be rejected by `c+ check --strict`.
+/// libc fallbacks in libcEffect(). This answers only "a summary was supplied";
+/// it is NOT evidence that a defining body was safety-analysed.
 bool hasDeclaredEffect(llvm::StringRef name);
+
+/// True when `name` has an effect summary that STRICT may treat as authoritative
+/// evidence: a built-in libc fallback, a compiler/runtime helper, or a contract
+/// from the compiled-in default set. A summary supplied only through the
+/// CPLUS_CONTRACT_PATH environment override is a caller-made claim, not proof
+/// that the defining body was analysed, so this returns false for it. The
+/// bodiless-pointer-extern gate uses this stricter predicate; using
+/// hasDeclaredEffect() there would let a lying env contract silence the gate.
+bool hasVerifiedEffectDeclaration(llvm::StringRef name);
+
+/// Names of local pointer variables written by an `sscanf(<"0">, "%p", &v)`
+/// style conversion. The literal "0" parsed by %p is a NULL pointer, so STRICT
+/// null analysis must seed these variables as provably null (unless they are
+/// later reassigned or guarded). Exposed so the AST checker can consume the
+/// model without this analysis emitting speculative diagnostics of its own.
+std::set<std::string> nullPointerOutParams(clang::FunctionDecl *fd);
 
 /// Names of functions actually DEFINED (given a body) in `source`, parsed with
 /// the same parse-relevant args as probeSafetyAst. The driver uses this to

@@ -2906,6 +2906,36 @@ collectNonnullDerefSites(const std::string &source,
       continue;
     if (isArrayDeclaratorBracket(toks, sig, si, typeNames))
       declaredArrays.insert(toks[sig[si - 1]].text);
+    // A single identifier followed by `[...]` that is NOT a subscript is a
+    // declared array even when its element type is an unknown typedef (e.g.
+    // `pthread_t`).  `isArrayDeclaratorBracket` only recognises element types
+    // it knows (builtins / C+ classes / resources / struct/union/enum tags),
+    // so a bare typedef'd array declarator is otherwise missed and later
+    // treated as a nonnull deref site.
+    else {
+      // Walk back to the start of this declaration's declarator list to be
+      // confident this `[` follows a declared name rather than an expression
+      // subscript.  A declaration-bound `[` is preceded at the top level by
+      // `;`, `{`, `}`, `(`, `,` or a type keyword.
+      bool declBound = false;
+      for (int k = static_cast<int>(si) - 2; k >= 0; --k) {
+        const Token &u = toks[sig[k]];
+        if (u.kind == TokKind::Punct &&
+            (u.text == ";" || u.text == "{" || u.text == "}" ||
+             u.text == "(" || u.text == ","))
+        {
+          declBound = true;
+          break;
+        }
+        if (u.kind == TokKind::Punct && (u.text == ")" || u.text == "]" ||
+                                         u.text == "}"))
+          break;
+        if (u.kind == TokKind::Punct && u.text == "[")
+          break; // expression subscript `x[0]` — not a declarator
+      }
+      if (declBound)
+        declaredArrays.insert(toks[sig[si - 1]].text);
+    }
   }
 
   std::set<size_t> seen;
@@ -3309,6 +3339,567 @@ static bool lowerVariableLengthArrays(
   return haveVla;
 }
 
+// ---------------------------------------------------------------------------
+// Alias-extent recovery for pointer subscripts.
+//
+// Fixed-array subscripts are handled by name above, but an access through a
+// pointer that provably points into a tracked object (`int a[4]; int *p=a;
+// p[i]`) previously received no runtime guard at all.  The AST pass records
+// such facts in CheckedBoundsSite, but no producer wires that registry today;
+// this lexical pass recovers the same facts from the lowered C so no
+// recorded site is required.  Only objects whose extent is *proved* enter the
+// fact table, so unrelated pointers are never blanket-wrapped.
+// ---------------------------------------------------------------------------
+
+struct AliasExtent {
+  std::string count; ///< C expression for the element count
+  std::string name;  ///< diagnostic name
+};
+
+static std::string trimAlias(const std::string &s) {
+  size_t b = s.find_first_not_of(" \t\n\r");
+  if (b == std::string::npos) return std::string();
+  size_t e = s.find_last_not_of(" \t\n\r");
+  return s.substr(b, e - b + 1);
+}
+
+static std::string sliceAlias(const std::string &src,
+                              const std::vector<Token> &toks, size_t from,
+                              size_t to) {
+  if (from >= to || from >= toks.size() || to > toks.size())
+    return std::string();
+  size_t b = toks[from].offset;
+  size_t e = toks[to - 1].offset + toks[to - 1].text.size();
+  return trimAlias(src.substr(b, e - b));
+}
+
+/// Skip a leading run of C casts `(type)` so an aliasing initialiser such as
+/// `p = (int *)v` resolves to `v`.
+static size_t skipAliasCasts(const TokenStream &ts, size_t from, size_t to) {
+  size_t i = from;
+  while (i < to && ts.isPunct(i, "(")) {
+    size_t p = i + 1, depth = 1;
+    while (p < to && depth) {
+      if (ts.isPunct(p, "(")) ++depth;
+      else if (ts.isPunct(p, ")")) --depth;
+      ++p;
+    }
+    if (depth) break;
+    bool typey = false;
+    for (size_t k = i + 1; k + 1 < p; ++k)
+      if (ts[k].kind == TokKind::Identifier || ts.isPunct(k, "*")) {
+        typey = true;
+        break;
+      }
+    if (!typey) break;
+    i = p;
+    while (i < to && ts.isTrivia(i)) ++i;
+  }
+  return i;
+}
+
+/// Index of the first top-level ',' or ';' in [from, limit), else `limit`.
+static size_t topLevelEnd(const TokenStream &ts, size_t from, size_t limit) {
+  int par = 0, brk = 0, brc = 0;
+  for (size_t i = from; i < limit; ++i) {
+    if (!ts.isPunct(i, "(") && !ts.isPunct(i, ")") && !ts.isPunct(i, "[") &&
+        !ts.isPunct(i, "]") && !ts.isPunct(i, "{") && !ts.isPunct(i, "}") &&
+        !ts.isPunct(i, ",") && !ts.isPunct(i, ";"))
+      continue;
+    if (ts.isPunct(i, "(")) ++par;
+    else if (ts.isPunct(i, ")")) { if (par > 0) --par; }
+    else if (ts.isPunct(i, "[")) ++brk;
+    else if (ts.isPunct(i, "]")) { if (brk > 0) --brk; }
+    else if (ts.isPunct(i, "{")) ++brc;
+    else if (ts.isPunct(i, "}")) { if (brc > 0) --brc; }
+    else if (par == 0 && brk == 0 && brc == 0) return i;
+  }
+  return limit;
+}
+
+/// Token range of argument `index` of the call whose '(' is `lp`.
+static std::pair<size_t, size_t> callArgRange(const TokenStream &ts, size_t lp,
+                                              size_t rp, unsigned index) {
+  unsigned arg = 0;
+  size_t start = ts.nextSig(lp);
+  int par = 0, brk = 0, brc = 0;
+  for (size_t i = start; i < rp; ++i) {
+    if (ts.isPunct(i, "(")) ++par;
+    else if (ts.isPunct(i, ")")) --par;
+    else if (ts.isPunct(i, "[")) ++brk;
+    else if (ts.isPunct(i, "]")) --brk;
+    else if (ts.isPunct(i, "{")) ++brc;
+    else if (ts.isPunct(i, "}")) --brc;
+    else if (ts.isPunct(i, ",") && par == 0 && brk == 0 && brc == 0) {
+      if (arg++ == index) return {start, i};
+      start = ts.nextSig(i);
+    }
+  }
+  if (arg == index && start < rp) return {start, rp};
+  return {kNPos, kNPos};
+}
+
+/// Derive an element count from an allocation argument expression.
+static std::string allocCount(const std::string &countText,
+                              const std::string &name, bool hasSizeof) {
+  std::string c = trimAlias(countText);
+  if (c.empty())
+    return std::string();
+  if (!hasSizeof)
+    return "((size_t)(" + c + ") / sizeof(*" + name + "))";
+  // `n * sizeof(T)` / `n*sizeof(T)`: take the factor before the last '*'
+  // that precedes sizeof.
+  size_t sp = c.find("sizeof");
+  size_t star = c.rfind('*', sp == std::string::npos ? c.size() : sp);
+  if (star != std::string::npos && star > 0)
+    return trimAlias(c.substr(0, star));
+  return c;
+}
+
+static bool resolveAliasExtent(
+    const std::string &src, const std::vector<Token> &toks,
+    const TokenStream &ts, size_t from, size_t end,
+    const std::map<std::string, AliasExtent> &facts,
+    const std::map<std::string, AliasExtent> &members,
+    const std::map<std::string, AliasExtent> &rows,
+    const std::map<std::string, std::string> &ptrAlias, AliasExtent &out) {
+  if (from >= end || from >= toks.size())
+    return false;
+  from = skipAliasCasts(ts, from, end);
+  if (from >= end)
+    return false;
+
+  // Trailing interior offset: `a + 4` / `a - 2`.
+  std::string adjust;
+  size_t last = ts.prevSig(end - 1);
+  if (last != kNPos && last > from && toks[last].kind == TokKind::Number) {
+    size_t op = ts.prevSig(last);
+    if (op != kNPos && op > from &&
+        (ts.isPunct(op, "+") || ts.isPunct(op, "-"))) {
+      adjust = std::string(ts.isPunct(op, "-") ? " - " : " + ") +
+               toks[last].text;
+      end = op;
+    }
+  }
+
+  bool found = false;
+  if (ts.isPunct(from, "&")) {
+    // `int **q = &p` : dereferencing q yields p's extent.
+    size_t nm = ts.nextSig(from);
+    if (nm < end && toks[nm].kind == TokKind::Identifier &&
+        ts.nextSig(nm) >= end) {
+      auto a = ptrAlias.find(toks[nm].text);
+      if (a != ptrAlias.end()) {
+        auto f = facts.find(a->second);
+        if (f != facts.end()) { out = f->second; found = true; }
+      }
+    }
+  } else if (toks[from].kind == TokKind::Identifier) {
+    const std::string name = toks[from].text;
+    if (ts.prevSig(end) == from) { // exactly one significant token
+      auto f = facts.find(name);
+      if (f != facts.end()) { out = f->second; found = true; }
+    }
+    if (!found) {
+      size_t op = ts.nextSig(from);
+      if (op < end && ts.isPunct(op, "[") && ts.nextSig(op) < end) {
+        // `m[i]` selects a row of a multidimensional array.
+        auto r = rows.find(name);
+        if (r != rows.end()) { out = r->second; found = true; }
+      }
+    }
+    if (!found) {
+      // Member access `s.a` / `s->a` / `o.in.x`.
+      size_t id = ts.prevSig(end - 1);
+      if (id != kNPos && toks[id].kind == TokKind::Identifier) {
+        size_t dot = ts.prevSig(id);
+        if (dot != kNPos && (ts.isPunct(dot, ".") || ts.isPunct(dot, "->"))) {
+          auto m = members.find(toks[id].text);
+          if (m != members.end()) { out = m->second; found = true; }
+        }
+      }
+    }
+  }
+  if (!found)
+    return false;
+  if (!adjust.empty()) {
+    out.count = "((" + out.count + ")" + adjust + ")";
+    out.name += adjust;
+  }
+  return true;
+}
+
+/// Collect runtime bounds sites for pointer aliases of tracked objects.
+static void collectAliasBoundsSites(
+    const std::string &src, const std::map<std::string, size_t> &arrayLengths,
+    const std::map<std::string, std::string> &vlaCounts,
+    std::vector<CheckedBoundsSite> &out) {
+  const std::vector<Token> toks = lexCPlus(src);
+  TokenStream ts(toks);
+  std::vector<size_t> sig;
+  for (size_t i = 0; i < toks.size(); ++i)
+    if (!isTriviaTok(toks[i]) && toks[i].kind != TokKind::EndOfFile)
+      sig.push_back(i);
+
+  std::map<std::string, AliasExtent> facts, members, rows;
+  std::map<std::string, std::string> ptrAlias;
+  std::map<std::string, std::string> typedefCounts;
+  std::set<std::string> countParams = {"n", "N", "count", "cnt", "len",
+                                       "length", "size", "num"};
+
+  // Fixed-size and member array declarations.
+  for (size_t si = 1; si < sig.size(); ++si) {
+    if (!ts.isPunct(sig[si], "["))
+      continue;
+    size_t prev = ts.prevSig(sig[si]);
+    if (prev == kNPos || toks[prev].kind != TokKind::Identifier)
+      continue;
+    if (!hasDeclarationPrefix(ts, prev))
+      continue;
+    size_t rb = ts.matchBracket(sig[si]);
+    if (rb == kNPos || rb == ts.nextSig(sig[si]))
+      continue;
+    const std::string count = sliceAlias(src, toks, ts.nextSig(sig[si]), rb);
+    if (count.empty())
+      continue;
+    const std::string name = toks[prev].text;
+    AliasExtent e{count, name};
+    facts[name] = e;
+    members[name] = e;
+    auto al = arrayLengths.find(name);
+    if (al != arrayLengths.end() && count.find_first_not_of("0123456789") !=
+                                        std::string::npos)
+      facts[name].count = std::to_string(al->second);
+    // `int m[2][3]` : m[i] is a row of 3 elements.
+    size_t rb2 = ts.nextSig(rb);
+    if (rb2 < toks.size() && ts.isPunct(rb2, "[")) {
+      size_t close2 = ts.matchBracket(rb2);
+      if (close2 != kNPos && close2 > rb2)
+        rows[name] =
+            AliasExtent{sliceAlias(src, toks, ts.nextSig(rb2), close2),
+                        name + "[]"};
+    }
+  }
+
+  // Typedef arrays: `typedef int I4[4]; I4 a;`
+  for (size_t si = 0; si + 1 < sig.size(); ++si) {
+    if (!ts.isIdent(sig[si], "typedef"))
+      continue;
+    for (size_t k = si + 1; k + 1 < sig.size(); ++k) {
+      if (toks[sig[k]].kind != TokKind::Identifier)
+        continue;
+      size_t lb = ts.nextSig(sig[k]);
+      if (lb >= toks.size() || !ts.isPunct(lb, "["))
+        continue;
+      size_t rb = ts.matchBracket(lb);
+      if (rb == kNPos || rb == ts.nextSig(lb))
+        continue;
+      typedefCounts[toks[sig[k]].text] =
+          sliceAlias(src, toks, ts.nextSig(lb), rb);
+      break;
+    }
+  }
+
+  // VLAs are lowered to cplus_alloc_array with a bound count temporary.
+  for (const auto &v : vlaCounts)
+    facts[v.first] = AliasExtent{v.second, v.first};
+
+  // Assignments and allocation calls.
+  for (size_t si = 0; si < sig.size(); ++si) {
+    size_t eq = sig[si];
+    if (!ts.isPunct(eq, "="))
+      continue;
+    size_t lhs = ts.prevSig(eq);
+    if (lhs == kNPos || toks[lhs].kind != TokKind::Identifier)
+      continue;
+    // Pointer-to-array declarator `int (*row)[3] = m`.
+    if (ts.isPunct(lhs, "]")) {
+      size_t k = lhs, star = ts.prevSig(k);
+      while (star != kNPos && !ts.isPunct(star, "*")) {
+        k = star;
+        star = ts.prevSig(k);
+      }
+      if (star != kNPos && toks[k].kind == TokKind::Identifier)
+        lhs = k;
+    }
+    if (toks[lhs].kind != TokKind::Identifier)
+      continue;
+    const std::string name = toks[lhs].text;
+    size_t semi = ts.statementEnd(eq);
+    if (semi == kNPos || semi > toks.size())
+      semi = toks.size();
+    size_t rhs = ts.nextSig(eq);
+    size_t rend = topLevelEnd(ts, rhs, semi);
+    if (rhs >= rend)
+      continue;
+
+    AliasExtent ext;
+    if (resolveAliasExtent(src, toks, ts, rhs, rend, facts, members, rows,
+                           ptrAlias, ext)) {
+      facts[name] = ext;
+      continue;
+    }
+    // `&p` pointer alias.
+    if (ts.isPunct(rhs, "&")) {
+      size_t id = ts.nextSig(rhs);
+      if (id < rend && toks[id].kind == TokKind::Identifier)
+        ptrAlias[name] = toks[id].text;
+      continue;
+    }
+    // Typedef array declarator `I4 a = ...`.
+    size_t before = ts.prevSig(lhs);
+    if (before != kNPos && toks[before].kind == TokKind::Identifier) {
+      auto td = typedefCounts.find(toks[before].text);
+      if (td != typedefCounts.end())
+        facts[name] = AliasExtent{td->second, name};
+    }
+    // Allocation helpers.
+    bool hasSizeof = false;
+    unsigned countArg = 0;
+    for (size_t i = rhs; i < rend; ++i) {
+      if (!ts.isIdent(i, "malloc") && !ts.isIdent(i, "calloc") &&
+          !ts.isIdent(i, "realloc") && !ts.isIdent(i, "cplus_alloc_array") &&
+          !ts.isIdent(i, "cplus_new_array"))
+        continue;
+      size_t lp = ts.nextSig(i);
+      if (lp >= rend || !ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos || rp >= rend)
+        continue;
+      if (ts.isIdent(i, "calloc")) { countArg = 0; hasSizeof = true; }
+      else if (ts.isIdent(i, "realloc")) { countArg = 1; }
+      else if (ts.isIdent(i, "cplus_alloc_array")) {
+        countArg = 0;
+        hasSizeof = true; // first argument is already an element count
+      } else if (ts.isIdent(i, "cplus_new_array")) {
+        countArg = 1;
+        hasSizeof = true; // (T, N): N is the element count
+      } else {
+        countArg = 0;
+        for (size_t q = lp; q < rp; ++q)
+          if (ts.isIdent(q, "sizeof")) hasSizeof = true;
+      }
+      auto ar = callArgRange(ts, lp, rp, countArg);
+      if (ar.first == kNPos)
+        break;
+      const std::string c = allocCount(sliceAlias(src, toks, ar.first, ar.second),
+                                       name, hasSizeof);
+      if (!c.empty())
+        facts[name] = AliasExtent{c, name};
+      break;
+    }
+  }
+
+  // Interior pointer increments: `p++` / `++p` / `p += K`.
+  for (size_t si = 0; si < sig.size(); ++si) {
+    size_t i = sig[si];
+    std::string name;
+    long long k = 1;
+    if (ts.isPunct(i, "++") || ts.isPunct(i, "--")) {
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos || toks[prev].kind != TokKind::Identifier)
+        continue;
+      name = toks[prev].text;
+      if (ts.isPunct(i, "--")) k = -1;
+    } else if (ts.isPunct(i, "+=") || ts.isPunct(i, "-=")) {
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos || toks[prev].kind != TokKind::Identifier)
+        continue;
+      name = toks[prev].text;
+      size_t nx = ts.nextSig(i);
+      if (nx < toks.size() && toks[nx].kind == TokKind::Number) {
+        try { k = std::stoll(toks[nx].text); } catch (...) { continue; }
+      }
+      if (ts.isPunct(i, "-=")) k = -k;
+    }
+    if (name.empty())
+      continue;
+    auto f = facts.find(name);
+    if (f != facts.end())
+      f->second.count = "((" + f->second.count + ")" +
+                        (k >= 0 ? " - " : " + ") +
+                        std::to_string(k >= 0 ? k : -k) + ")";
+  }
+
+  // Call-site argument propagation: `sum(a, n)` gives parameter `p` the
+  // extent of argument `a`.  Parameter names are recovered from definitions.
+  std::map<std::string, std::vector<std::string>> params;
+  for (size_t si = 0; si < sig.size(); ++si) {
+    if (!ts.isPunct(sig[si], "("))
+      continue;
+    size_t rp = ts.matchParen(sig[si]);
+    if (rp == kNPos || rp == ts.nextSig(sig[si]))
+      continue;
+    size_t after = ts.nextSig(rp);
+    if (after >= toks.size() || !ts.isPunct(after, "{"))
+      continue; // function definition only
+    std::vector<std::string> names;
+    for (size_t a = 0;; ++a) {
+      auto ar = callArgRange(ts, sig[si], rp, a);
+      if (ar.first == kNPos)
+        break;
+      size_t id = ar.first;
+      for (size_t q = ar.first; q < ar.second; ++q)
+        if (toks[q].kind == TokKind::Identifier) id = q;
+      names.push_back(toks[id].text);
+    }
+    // Companion count heuristic: a signature with a `n`/`len`/`count`
+    // parameter lends that extent to its other (pointer) parameter.  Names
+    // like the index `i` are deliberately excluded to avoid false guards.
+    std::string cparam;
+    for (const std::string &pn : names)
+      if (countParams.count(pn) != 0) cparam = pn;
+    if (!cparam.empty() && names.size() >= 2) {
+      for (const std::string &pn : names)
+        // A name-keyed companion guess must NEVER overwrite an extent that is
+        // already known from a declaration. In a TU with `int arr[N]` and
+        // `void count(int *arr, int size)`, overwriting facts["arr"] with
+        // "size" made the call site prime(arr) lend the bogus extent "size"
+        // to prime's parameter p, emitting __cplus_bounds_check(i, size)
+        // where `size` is not in scope (real_apps/prime_sieve DEFECT).
+        if (pn != cparam && facts.find(pn) == facts.end()) {
+          facts[pn] = AliasExtent{cparam, pn};
+          break;
+        }
+    }
+    // Record the parameter list under the preceding identifier (function
+    // name) for call-site propagation below.
+    size_t fn = ts.prevSig(sig[si]);
+    if (fn != kNPos && toks[fn].kind == TokKind::Identifier)
+      params[toks[fn].text] = names;
+  }
+  for (const auto &p : params) {
+    // Find calls `name(...)` outside the definition header.
+    for (size_t si = 0; si < sig.size(); ++si) {
+      if (!ts.isIdent(sig[si], p.first.c_str()))
+        continue;
+      size_t lp = ts.nextSig(sig[si]);
+      if (lp >= toks.size() || !ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos)
+        continue;
+      for (size_t a = 0; a < p.second.size(); ++a) {
+        auto ar = callArgRange(ts, lp, rp, a);
+        if (ar.first == kNPos)
+          continue;
+        AliasExtent ext;
+        if (resolveAliasExtent(src, toks, ts, ar.first, ar.second, facts,
+                               members, rows, ptrAlias, ext))
+          facts[p.second[a]] = ext;
+      }
+    }
+  }
+
+  // Emit subscript sites.  `guarded` keeps one guard per index expression;
+  // the fixed-array and VLA passes run earlier and are deduplicated by the
+  // caller through guardedIndexOffsets.
+  std::set<size_t> guarded;
+  auto addSite = [&](size_t indexBegin, size_t close, const AliasExtent &ext) {
+    if (indexBegin == kNPos || close == kNPos || close <= indexBegin)
+      return;
+    if (guarded.count(indexBegin))
+      return;
+    guarded.insert(indexBegin);
+    out.push_back(CheckedBoundsSite{indexBegin, close, close, ext.count,
+                                    ext.name});
+  };
+  for (size_t si = 0; si < sig.size(); ++si) {
+    size_t i = sig[si];
+    // p[i] / row[i] / s.a[i]
+    if (ts.isPunct(i, "[")) {
+      size_t close = ts.matchBracket(i);
+      if (close == kNPos || close == ts.nextSig(i))
+        continue;
+      AliasExtent ext;
+      size_t first = ts.nextSig(i);
+      if (first >= close)
+        continue;
+      if (toks[first].kind == TokKind::Number && ts.nextSig(first) >= close)
+        continue; // constant index: static checker handles it
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos)
+        continue;
+      // Declaration bracket: skip.
+      if (hasDeclarationPrefix(ts, prev))
+        continue;
+      // `row[1][i]`: second subscript uses the row extent.
+      if (ts.isPunct(prev, "]")) {
+        size_t depth = 0, k = prev + 1;
+        size_t open = kNPos;
+        for (; k > 0; --k) {
+          if (ts.isPunct(k - 1, "]")) ++depth;
+          else if (ts.isPunct(k - 1, "[")) {
+            if (--depth == 0) { open = k - 1; break; }
+          }
+        }
+        if (open != kNPos) {
+          size_t base = ts.prevSig(open);
+          // A multi-dimensional DECLARATOR (`static int grid[H][W]`,
+          // `int board[N][M]`) is not a subscript access. Guarding W here
+          // turns a fixed file-scope array into a VLA and breaks compilation.
+          if (base != kNPos && hasDeclarationPrefix(ts, base))
+            continue;
+          if (base != kNPos && toks[base].kind == TokKind::Identifier) {
+            auto r = rows.find(toks[base].text);
+            if (r != rows.end()) ext = r->second;
+          }
+        }
+      } else if (ts.isPunct(prev, ")")) {
+        // `(*q)[i]` : q is a pointer-to-pointer alias of a tracked object.
+        size_t depth = 0, k = prev + 1, open = kNPos;
+        for (; k > 0; --k) {
+          if (ts.isPunct(k - 1, ")")) ++depth;
+          else if (ts.isPunct(k - 1, "(")) {
+            if (--depth == 0) { open = k - 1; break; }
+          }
+        }
+        if (open != kNPos) {
+          size_t star = ts.nextSig(open);
+          size_t id = ts.nextSig(star);
+          if (ts.isPunct(star, "*") && id < toks.size() &&
+              toks[id].kind == TokKind::Identifier && ts.nextSig(id) >= prev) {
+            auto a = ptrAlias.find(toks[id].text);
+            if (a != ptrAlias.end()) {
+              auto f = facts.find(a->second);
+              if (f != facts.end()) ext = f->second;
+            }
+          }
+        }
+      } else if (toks[prev].kind == TokKind::Identifier) {
+        auto f = facts.find(toks[prev].text);
+        if (f != facts.end()) ext = f->second;
+      }
+      if (!ext.count.empty())
+        addSite(toks[first].offset, toks[close].offset, ext);
+      continue;
+    }
+    // `*(p + i)` : guard the integer operand once.
+    if (!ts.isPunct(i, "*"))
+      continue;
+    size_t lp = ts.nextSig(i);
+    if (lp >= toks.size() || !ts.isPunct(lp, "("))
+      continue;
+    size_t id = ts.nextSig(lp);
+    if (id >= toks.size() || toks[id].kind != TokKind::Identifier)
+      continue;
+    auto f = facts.find(toks[id].text);
+    if (f == facts.end())
+      continue;
+    size_t op = ts.nextSig(id);
+    if (op >= toks.size() || (!ts.isPunct(op, "+") && !ts.isPunct(op, "-")))
+      continue;
+    size_t idx = ts.nextSig(op), rp = ts.nextSig(idx);
+    if (rp >= toks.size() || !ts.isPunct(rp, ")"))
+      continue;
+    AliasExtent ext = f->second;
+    if (ts.isPunct(op, "-"))
+      ext.name += " (negative)";
+    addSite(toks[idx].offset, toks[rp].offset, ext);
+  }
+}
+
 } // namespace
 
 std::string instrumentDynamicArrayBounds(
@@ -3327,7 +3918,7 @@ std::string instrumentDynamicArrayBounds(
             .second)
       arith.push_back(std::move(s));
   }
-  const std::vector<CheckedBoundsSite> &bounds = checkedBoundsSites();
+  std::vector<CheckedBoundsSite> bounds = checkedBoundsSites();
   // RaiiLowering can emit `cplus_zero(&owner, sizeof(owner))` for an
   // explicitly invoked destructor.  Those TUs may otherwise have no safety
   // sites at all, so the declaration need must be part of the early-return
@@ -3345,6 +3936,10 @@ std::string instrumentDynamicArrayBounds(
   std::map<std::string, std::string> vlaCounts; // VLA name -> runtime count temp
   const bool haveVla =
       lowerVariableLengthArrays(source, vlaEdits, vlaCounts);
+  // Recover pointer-alias subscripts (arrays, VLAs, heap allocations, rows,
+  // interior pointers) from the lowered C; these are emitted by the same
+  // CheckedBoundsSite path as AST-recorded sites.
+  collectAliasBoundsSites(source, arrayLengths, vlaCounts, bounds);
   if (arrayLengths.empty() && arith.empty() && bounds.empty() &&
       checkedPointerSites().empty() && checkedAllocSites().empty() &&
       checkedFreeSites().empty() && nonnullSites.empty() && !needZeroDecl &&
@@ -3519,11 +4114,16 @@ std::string instrumentDynamicArrayBounds(
     if (idxEnd > source.size()) idxEnd = source.size();
     if (close < idxEnd) close = idxEnd;
     if (close > source.size()) close = source.size();
-    insertions.push_back({idxBegin, 0, 0,
+    // kNPos span keeps this the OUTERMOST wrapper at a shared offset: a
+    // smaller span let a checked-arithmetic prefix sort ahead and splice the
+    // guard into the helper's argument list (wrong arity).
+    insertions.push_back({idxBegin, kNPos, 0,
                           "__cplus_bounds_check((size_t)(", 0});
-    insertions.push_back({close, 0, 2,
-                          "), (size_t)(" + site.count + "), \"" + site.name +
-                              "\")", 0});
+    insertions.push_back({close, kNPos, 2,
+                          "), (size_t)(" +
+                              (site.count.empty() ? std::string("1")
+                                                  : site.count) +
+                              "), \"" + site.name + "\")", 0});
     guardedIndexOffsets.insert(idxBegin);
     haveBounds = true;
   }
@@ -3784,10 +4384,34 @@ std::string instrumentDynamicArrayBounds(
     insertions.push_back({site.end, span, 2,
                           "), " + bits + ", " + sgn + "))", 0});
   }
-  // Route ABI-visible malloc/free calls through the runtime side table.  The
-  // helper returns the same pointer value, so no source semantics change.
+  // Route ABI-visible malloc/calloc/realloc calls through the runtime side
+  // table.  Managed allocation helpers (cplus_realloc, cplus_realloc_registered,
+  // cplus_alloc/cplus_alloc_array/... ) already register or transfer the block
+  // inside the runtime: wrapping their result again makes the pointer "already
+  // a live C+ allocation" (rc=104).  Raw realloc remains handled by the
+  // isRealloc path below, which emits exactly one cplus_realloc_registered.
+  auto managedAllocIn = [](const std::string &text) {
+    static const char *names[] = {"cplus_alloc", "cplus_zalloc", "cplus_realloc",
+                                  "cplus_alloc_array", "cplus_new",
+                                  "cplus_new_array"};
+    auto ident = [](char c) {
+      return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+             (c >= '0' && c <= '9') || c == '_';
+    };
+    for (const char *n : names) {
+      size_t len = std::strlen(n);
+      for (size_t i = 0; i + len <= text.size(); ++i)
+        if (text.compare(i, len, n) == 0 && (i == 0 || !ident(text[i - 1])) &&
+            (i + len == text.size() || !ident(text[i + len])))
+          return true;
+    }
+    return false;
+  };
   const auto &allocSites = checkedAllocSites();
   for (const CheckedAllocSite &site : allocSites) {
+    if (managedAllocIn(sourceSlice(source, site.begin, site.end)) ||
+        managedAllocIn(site.argText))
+      continue; // runtime already owns the registration/transfer
     size_t span = site.end > site.begin ? site.end - site.begin : 0;
     if (span == 0) {
       // Degenerate/implicit extent: never silently drop a recorded site.
@@ -3944,6 +4568,19 @@ std::string instrumentDynamicArrayBounds(
   // Emit the helper declarations before the first #line directive so the
   // original source line numbers are preserved.
   std::string prelude;
+  // Opt-in "auto runtime": when the generated C is compiled with
+  // -DCPLUS_AUTO_RUNTIME=1, install a constructor that switches the runtime
+  // into catchable-violation mode before main runs.  The preprocessor guard
+  // keeps ordinary builds byte-for-byte unchanged (LEGACY never reaches this
+  // prelude at all), and placing this ahead of the first #line preserves the
+  // original source line numbers in every diagnostic.
+  prelude +=
+      "#if defined(CPLUS_AUTO_RUNTIME)\n"
+      "extern void cplus_set_auto_runtime(int);\n"
+      "static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {\n"
+      "  cplus_set_auto_runtime(1);\n"
+      "}\n"
+      "#endif\n";
   if (needZeroDecl)
     prelude += "#include <stddef.h>\n"
                "extern void cplus_zero(void *, size_t);\n";
@@ -4265,88 +4902,217 @@ size_t skipSpace(const std::string &s, size_t i) {
   return i;
 }
 
+bool isIdentCharC(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '_';
+}
+
+/// Advance past a string/char literal beginning at `i`.  A keyword such as
+/// `try`/`throw` or a brace inside a literal is data, not syntax; scanning it
+/// as code used to corrupt the generated C (unterminated strings, unbalanced
+/// braces, wrong `throw` operands).  Escape sequences and adjacent literals are
+/// handled so `";"` and `"\\\""` cannot terminate the scan early.
+size_t skipLiteralC(const std::string &s, size_t i) {
+  const char quote = s[i];
+  ++i;
+  while (i < s.size() && s[i] != quote) {
+    if (s[i] == '\\' && i + 1 < s.size()) { i += 2; continue; }
+    if (s[i] == '\n') break; // unterminated literal: resync at the newline
+    ++i;
+  }
+  if (i < s.size() && s[i] == quote) ++i;
+  return i;
+}
+
+/// Advance past a // or /* ... */ comment beginning at `i`.
+size_t skipCommentC(const std::string &s, size_t i) {
+  if (i + 1 >= s.size() || s[i] != '/')
+    return i;
+  if (s[i + 1] == '/') {
+    size_t nl = s.find('\n', i + 2);
+    return nl == std::string::npos ? s.size() : nl + 1;
+  }
+  if (s[i + 1] == '*') {
+    size_t end = s.find("*/", i + 2);
+    return end == std::string::npos ? s.size() : end + 2;
+  }
+  return i;
+}
+
+/// True if `s[i]` starts a // or /* comment.
+bool isCommentStart(const std::string &s, size_t i) {
+  return i + 1 < s.size() && s[i] == '/' &&
+         (s[i + 1] == '/' || s[i + 1] == '*');
+}
+
 size_t matchBrace(const std::string &s, size_t open) {
   int depth = 0;
-  bool str = false, chr = false;
-  for (size_t i = open; i < s.size(); ++i) {
+  for (size_t i = open; i < s.size();) {
     char c = s[i];
-    if (str) {
-      if (c == '\\') { ++i; continue; }
-      if (c == '"') str = false;
-      continue;
-    }
-    if (chr) {
-      if (c == '\\') { ++i; continue; }
-      if (c == '\'') chr = false;
-      continue;
-    }
-    if (c == '"') { str = true; continue; }
-    if (c == '\'') { chr = true; continue; }
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
     if (c == '{') ++depth;
     else if (c == '}') {
       if (--depth == 0)
         return i;
     }
+    ++i;
   }
   return std::string::npos;
 }
 
-std::string lowerThrows(const std::string &s) {
+/// Find the closing ')' for the '(' at `open`, ignoring literals/comments.
+size_t matchParenText(const std::string &s, size_t open) {
+  if (open >= s.size() || s[open] != '(')
+    return std::string::npos;
+  int depth = 0;
+  for (size_t i = open; i < s.size();) {
+    char c = s[i];
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
+    if (c == '(') ++depth;
+    else if (c == ')') {
+      if (--depth == 0) return i;
+    }
+    ++i;
+  }
+  return std::string::npos;
+}
+
+/// Find the next whole-word occurrence of `word` that is real C code (not
+/// inside a string/char literal or a comment).
+size_t findWordC(const std::string &s, size_t from, const char *word) {
+  for (size_t i = from; i < s.size();) {
+    char c = s[i];
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
+    if (c == word[0] && isWordAt(s, i, word)) return i;
+    ++i;
+  }
+  return std::string::npos;
+}
+
+/// Find the ';' that terminates a `throw` expression, skipping literals,
+/// comments and any nested (), [] or {} so a semicolon inside a string or a
+/// compound literal cannot truncate the operand.
+size_t findThrowSemicolon(const std::string &s, size_t from) {
+  int par = 0, brk = 0, brc = 0;
+  for (size_t i = from; i < s.size();) {
+    char c = s[i];
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
+    if (c == '(') ++par;
+    else if (c == ')') { if (par > 0) --par; }
+    else if (c == '[') ++brk;
+    else if (c == ']') { if (brk > 0) --brk; }
+    else if (c == '{') ++brc;
+    else if (c == '}') { if (brc > 0) --brc; }
+    else if (c == ';' && par == 0 && brk == 0 && brc == 0) return i;
+    ++i;
+  }
+  return std::string::npos;
+}
+
+std::string trimC(const std::string &s) {
+  size_t b = s.find_first_not_of(" \t\n\r");
+  if (b == std::string::npos) return std::string();
+  size_t e = s.find_last_not_of(" \t\n\r");
+  return s.substr(b, e - b + 1);
+}
+
+/// Extract a usable C identifier for a catch parameter.  The producer may
+/// spell `catch (Exception e)`, `catch (const Exception &e)`, `catch (Exception)`
+/// or add trailing whitespace; taking the last identifier (and rejecting C
+/// keywords) keeps the emitted `Exception <name> = ...;` valid C.
+std::string catchNameFromDecl(const std::string &decl) {
+  static const std::set<std::string> keywords = {
+      "Exception", "const", "volatile", "struct", "union", "enum",
+      "unsigned", "signed", "int", "long", "short", "char", "void",
+      "return", "if", "else", "while", "for", "do", "switch", "case"};
+  size_t end = decl.size();
+  while (end > 0 && !isIdentCharC(decl[end - 1])) --end;
+  size_t begin = end;
+  while (begin > 0 && isIdentCharC(decl[begin - 1])) --begin;
+  std::string name = decl.substr(begin, end - begin);
+  if (name.empty() || keywords.count(name) != 0 ||
+      (name[0] >= '0' && name[0] <= '9'))
+    return "ex";
+  return name;
+}
+
+std::string lowerThrows(const std::string &s, bool &changed) {
   std::string out;
   size_t pos = 0;
   while (pos < s.size()) {
-    size_t t = pos;
-    bool found = false;
-    while (t < s.size()) {
-      if (isWordAt(s, t, "throw")) { found = true; break; }
-      ++t;
-    }
-    if (!found) {
+    size_t t = findWordC(s, pos, "throw");
+    if (t == std::string::npos) {
       out += s.substr(pos);
       break;
     }
     out += s.substr(pos, t - pos);
-    size_t semi = s.find(';', t);
+    size_t semi = findThrowSemicolon(s, t + 5);
     if (semi == std::string::npos) {
-      out += s.substr(t);
+      // Malformed throw: keep the remaining bytes verbatim but remove the
+      // C+ keyword so the emitted C is still parseable.
+      out += s.substr(t + 5);
+      changed = true;
       break;
     }
-    std::string expr = s.substr(t + 5, semi - (t + 5));
-    expr = s.substr(skipSpace(s, t + 5),
-                    semi > skipSpace(s, t + 5) ? semi - skipSpace(s, t + 5) : 0);
-    std::string code = "1", msg = "0";
-    if (!expr.empty() && expr[0] == '"')
-      msg = expr;
-    else if (!expr.empty() && (expr[0] >= '0' && expr[0] <= '9'))
-      code = expr;
-    out += "cplus_exception_raise(" + code + ", " + msg +
-           ", __FILE__, __LINE__);";
+    const std::string expr = trimC(sourceSlice(s, skipSpace(s, t + 5), semi));
+    if (expr.empty()) {
+      // Bare `throw;` rethrows the exception captured on entry to the
+      // innermost active handler instead of silently raising code 1.
+      out += "cplus_exception_raise(cplus_rethrow_exc.code, "
+             "cplus_rethrow_exc.message, cplus_rethrow_exc.file, "
+             "cplus_rethrow_exc.line);";
+    } else {
+      // A call in the operand (`throw 4 print("x");`) means the source is
+      // malformed: consume the whole statement but raise a neutral code
+      // rather than splicing a call into an integer argument list.
+      bool callLike = false;
+      for (size_t k = 1; k < expr.size(); ++k)
+        if (expr[k] == '(' && isIdentCharC(expr[k - 1])) {
+          callLike = true;
+          break;
+        }
+      std::string code = "1", msg = "0";
+      if (!callLike && expr[0] == '"') {
+        msg = expr; // string throw: message, default code
+      } else if (!callLike) {
+        // Use the operand for the code, not just leading decimal digits.
+        // This preserves negative literals, parenthesised values and
+        // variables instead of silently turning them into `throw 1;`.
+        code = "(int)(" + expr + ")";
+      }
+      out += "cplus_exception_raise(" + code + ", " + msg +
+             ", __FILE__, __LINE__);";
+    }
+    changed = true;
     pos = semi + 1;
   }
   return out;
 }
 
-} // namespace
-
-std::string lowerExceptions(const std::string &source) {
+/// Recursive worker.  `counter` is shared across nesting so frame names are
+/// unique even for `try { try {...} ... try {...} }`; previously each recursive
+/// call restarted at 0 and could redeclare the same frame in one scope.
+std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
+                                bool &changed) {
   std::string out;
   size_t pos = 0;
-  unsigned counter = 0;
   while (pos < source.size()) {
-    size_t t = pos;
-    bool found = false;
-    while (t < source.size()) {
-      if (isWordAt(source, t, "try")) { found = true; break; }
-      ++t;
-    }
-    if (!found) {
+    size_t t = findWordC(source, pos, "try");
+    if (t == std::string::npos) {
       out += source.substr(pos);
       break;
     }
     size_t open = skipSpace(source, t + 3);
     if (open >= source.size() || source[open] != '{') {
-      out += source.substr(pos, (t - pos) + 3);
+      // Malformed `try` (no compound statement).  Drop the keyword rather than
+      // emitting it verbatim into C, where it is not a valid identifier.
+      out += source.substr(pos, t - pos);
       pos = t + 3;
+      changed = true;
       continue;
     }
     size_t close = matchBrace(source, open);
@@ -4354,53 +5120,117 @@ std::string lowerExceptions(const std::string &source) {
       out += source.substr(pos);
       break;
     }
-    size_t after = skipSpace(source, close + 1);
-    bool hasCatch = isWordAt(source, after, "catch");
-    size_t handlerOpen = std::string::npos, handlerClose = std::string::npos;
-    std::string catchName = "ex";
-    if (hasCatch) {
-      size_t lp = skipSpace(source, after + 5);
-      size_t rp = lp == std::string::npos ? std::string::npos
-                                          : source.find(')', lp);
-      if (rp != std::string::npos) {
-        std::string decl = source.substr(lp, rp - lp);
-        size_t sp = decl.find_last_of(" \t");
-        if (sp != std::string::npos)
-          catchName = decl.substr(sp + 1);
-        handlerOpen = skipSpace(source, rp + 1);
-        if (handlerOpen < source.size() && source[handlerOpen] == '{')
-          handlerClose = matchBrace(source, handlerOpen);
-      }
-    }
+    const std::string frame = "__cplus_exc_" + std::to_string(counter++);
+    changed = true;
     out += source.substr(pos, t - pos);
-    std::string frame = "__cplus_exc_" + std::to_string(counter++);
-    std::string body = lowerExceptions(lowerThrows(
-        source.substr(open + 1, close > open ? close - open - 1 : 0)));
-    std::string handler = handlerOpen != std::string::npos &&
-                                  handlerClose > handlerOpen
-                              ? lowerExceptions(lowerThrows(source.substr(
-                                    handlerOpen + 1,
-                                    handlerClose - handlerOpen - 1)))
-                              : std::string();
-    if (hasCatch && handlerOpen != std::string::npos &&
-        handlerClose != std::string::npos) {
-      out += "do { CPlusExceptionFrame " + frame + "; "
-             "if (setjmp(" + frame + ".env) == 0) { cplus_exception_enter(&" +
-             frame + "); " + body +
-             " cplus_exception_pop(); } else { Exception " + catchName +
-             " = " + frame + ".exc; " + handler + " } } while (0);";
-      pos = handlerClose + 1;
-    } else {
-      out += "do { CPlusExceptionFrame " + frame + "; "
-             "if (setjmp(" + frame + ".env) == 0) { cplus_exception_enter(&" +
-             frame + "); " + body +
-             " cplus_exception_pop(); } } while (0);";
-      pos = close + 1;
+    const std::string body = lowerExceptionsImpl(
+        lowerThrows(source.substr(open + 1, close - open - 1), changed),
+        counter, changed);
+
+    // C+ has a single `Exception` type, so extra catch clauses cannot be
+    // type-matched.  Consume them (so no `catch` syntax leaks into the C) but
+    // run only the first handler; emitting every handler sequentially was
+    // silent wrong behaviour.
+    std::string handlerCode;
+    size_t resume = close + 1;
+    size_t scan = skipSpace(source, resume);
+    bool firstHandler = true;
+    while (scan < source.size() && isWordAt(source, scan, "catch")) {
+      size_t lp = skipSpace(source, scan + 5);
+      if (lp >= source.size() || source[lp] != '(')
+        break;
+      size_t rp = matchParenText(source, lp);
+      if (rp == std::string::npos || rp <= lp)
+        break;
+      const std::string name =
+          catchNameFromDecl(source.substr(lp + 1, rp - lp - 1));
+      size_t ho = skipSpace(source, rp + 1);
+      if (ho >= source.size() || source[ho] != '{')
+        break;
+      size_t hc = matchBrace(source, ho);
+      if (hc == std::string::npos)
+        break;
+      if (firstHandler) {
+        const std::string handler = lowerExceptionsImpl(
+            lowerThrows(source.substr(ho + 1, hc - ho - 1), changed), counter,
+            changed);
+        handlerCode = " Exception " + name + " = " + frame + ".base.exc; " +
+                      handler;
+        firstHandler = false;
+      }
+      resume = hc + 1;
+      scan = skipSpace(source, resume);
     }
+
+    out += "do { CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; "
+           "if (setjmp(" + frame + ".base.env) == 0) { "
+           "cplus_exception_enter(&" + frame + ".base); " + body +
+           " " + frame + ".active = 0; cplus_exception_pop(); }";
+    if (!handlerCode.empty())
+      out += " else { " + frame + ".active = 0; cplus_rethrow_exc = " +
+             frame + ".base.exc; " + handlerCode + " }";
+    out += " } while (0);";
+    pos = resume;
   }
   // Throws outside a try block are lowered too: they become deterministic
   // "unhandled C+ exception" fatals at runtime rather than compile errors.
-  return lowerThrows(out);
+  return lowerThrows(out, changed);
+}
+
+} // namespace
+
+std::string lowerExceptions(const std::string &source) {
+  unsigned counter = 0;
+  bool changed = false;
+  std::string out = lowerExceptionsImpl(source, counter, changed);
+  if (!changed)
+    return out;
+  // Guard declarations so a source that includes "cplus/cplus.h" (which uses
+  // the same CPLUS_EXCEPTION_DEFINED guard) does not redefine the types, while
+  // a source that omits the header still emits valid C.  Placed before every
+  // #line so original source line numbers are preserved.
+  return "#ifndef CPLUS_EXCEPTION_DEFINED\n"
+         "#define CPLUS_EXCEPTION_DEFINED\n"
+         "#include <setjmp.h>\n"
+         "#include <stdint.h>\n"
+         "typedef struct Exception { int code; const char *message; "
+         "const char *file; int line; } Exception;\n"
+         "typedef struct CPlusExceptionFrame { jmp_buf env; "
+         "struct CPlusExceptionFrame *prev; Exception exc; "
+         "uint64_t generation; } CPlusExceptionFrame;\n"
+         "#endif\n"
+         "extern void cplus_exception_enter(CPlusExceptionFrame *);\n"
+         "extern void cplus_exception_pop(void);\n"
+         "extern void cplus_exception_raise(int, const char *, "
+         "const char *, int);\n"
+         // A bare `throw;` rethrows the most recently caught exception.  The
+         // runtime pops the active frame before longjmp, so handlers copy the
+         // exception into this slot on entry; a rethrow then raises it again.
+         "#if defined(__GNUC__) || defined(__clang__)\n"
+         "#  define CPLUS_EXC_TLS __thread\n"
+         "#else\n"
+         "#  define CPLUS_EXC_TLS\n"
+         "#endif\n"
+         "static CPLUS_EXC_TLS Exception cplus_rethrow_exc = "
+         "{1, 0, 0, 0};\n"
+         // Scope guard: `cplus_exception_pop()` on the setjmp==0 path alone
+         // left a stale runtime frame when a try was left by return/break/
+         // continue/goto.  A cleanup attribute pops on *every* exit edge.
+         // `active` is volatile so its value survives a longjmp; the catch
+         // path clears it because cplus_exception_raise() already popped the
+         // frame before jumping, which prevents a double pop.
+         "typedef struct CPlusExcGuard { CPlusExceptionFrame base; "
+         "volatile int active; } CPlusExcGuard;\n"
+         "static void cplus_exc_guard_cleanup(CPlusExcGuard *g) {\n"
+         "  if (g->active) { g->active = 0; cplus_exception_pop(); }\n"
+         "}\n"
+         "#if defined(__GNUC__) || defined(__clang__)\n"
+         "#  define CPLUS_EXC_FRAME(N) CPlusExcGuard N "
+         "__attribute__((cleanup(cplus_exc_guard_cleanup)))\n"
+         "#else\n"
+         "#  define CPLUS_EXC_FRAME(N) CPlusExcGuard N\n"
+         "#endif\n" +
+         out;
 }
 
 } // namespace cplus

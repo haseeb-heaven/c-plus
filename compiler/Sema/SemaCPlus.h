@@ -176,7 +176,10 @@ struct FrontendOptions {
   std::vector<std::string> extraArgs;
   std::string sysroot;
   std::string stdVersion = "c17";
-  bool warningsAsErrors = false;
+  // Issue #34: same default policy as the driver entry point. --legacy-c is
+  // the explicit opt-out unless -Werror was requested explicitly.
+  bool warningsAsErrors = true;
+  bool warningsAsErrorsExplicit = false;
   bool verbose = false;
 };
 

@@ -28,6 +28,19 @@ cplus_rewritten.c
 
 scratch
 
+# Root-level compiled test/demo artifacts (user-run, not shipped)
+# (ignore the file/dir name; git will ignore both files and dirs with these names)
+branch_free_null_ok
+case_CTRL_direct_null
+len_runtime_metadata
+init_all_branches
+null_outparam
+repro_shadow_return
+t
+
+# Dev scratch dir
+scratch
+
 benchmarks/out/
 
 examples/out/
@@ -37,6 +50,12 @@ examples/out/
 
 __pycache__/
 *.pyc
+
+# Transient test output (binaries + logs). Kept gitignored; do not commit.
+tests/out/
+tests/**/out/
+tests/**/bin/
+demos/**/out/
 
 # Transient perf-runner work directories (binaries/timing logs)
 tests/compiler/agent1/results_perf/work*/
@@ -92,3 +111,14 @@ tests/compiler/cross_compiler/results/core
 tests/compiler/input_safety/*.bin
 tests/compiler/exceptions/*.bin
 tests/compiler/exceptions/fuzz_work/
+
+# Regenerated scenario scratch/build artifacts
+tests/compiler/web_10000/scratch/
+tests/compiler/api_coverage/.scratch/
+tests/compiler/stdlib_api_coverage/build/
+tests/compiler/cert_rules_1000/scratch/
+tests/compiler/e2e_10k/*/scratch/
+tests/compiler/e2e_10k/*/generated/
+tests/compiler/auto_runtime/*.bin
+tests/compiler/borrow_escape/results/*.bin
+tests/compiler/default_policy/results/*.bin

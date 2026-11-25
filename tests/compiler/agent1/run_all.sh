@@ -102,8 +102,15 @@ run_source() {
   esac
   sanflag="--sanitize=none"
   [ "$kind" = "runtime_fail" ] && sanflag=""
-  cmd="$CPLUS $sourceflag $sanflag --emit-c \"$gen\" \"$src\" -o \"$OUT/$name.bin\""
-  run_timed "$TIMEOUT" $CPLUS $sourceflag $sanflag --emit-c "$gen" "$src" -o "$OUT/$name.bin" >"$out" 2>"$err"
+  # Issue #34: warnings are fatal by default. These two kinds exercise runtime
+  # behaviour and intentionally include programs with warning-level findings;
+  # --no-werror is the documented diagnostic-only opt-out. Rejection tests keep
+  # the default policy so warning-promoted failures stay covered.
+  wflag=""
+  [ "$kind" = "positive" ] && wflag="--no-werror"
+  [ "$kind" = "runtime_fail" ] && wflag="--no-werror"
+  cmd="$CPLUS $sourceflag $sanflag $wflag --emit-c \"$gen\" \"$src\" -o \"$OUT/$name.bin\""
+  run_timed "$TIMEOUT" $CPLUS $sourceflag $sanflag $wflag --emit-c "$gen" "$src" -o "$OUT/$name.bin" >"$out" 2>"$err"
   code=$?
   diag=$(grep -E 'error:|warning:' "$err" "$out" 2>/dev/null | head -1)
   expected=""
@@ -238,8 +245,8 @@ if want_category strict_positive; then
       multi_tu_resource_main.c) srcs="$src $ROOT/tests/core/positive/multi_tu_resource_a.c -I$ROOT/tests/core/positive" ;;
       *) srcs="$src" ;;
     esac
-    cmd="$CPLUS --strict --sanitize=none --emit-c \"$gen\" $srcs -o \"$OUT/$name.sp.bin\""
-    run_timed "$TIMEOUT" $CPLUS --strict --sanitize=none --emit-c "$gen" $srcs -o "$OUT/$name.sp.bin" >"$out" 2>"$err"
+    cmd="$CPLUS --strict --sanitize=none --no-werror --emit-c \"$gen\" $srcs -o \"$OUT/$name.sp.bin\""
+    run_timed "$TIMEOUT" $CPLUS --strict --sanitize=none --no-werror --emit-c "$gen" $srcs -o "$OUT/$name.sp.bin" >"$out" 2>"$err"
     code=$?
     if [ "$code" -eq 0 ]; then
       # quarantine_probe is a deliberate use-after-free probe. Run it with

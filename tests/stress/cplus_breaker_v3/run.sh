@@ -19,7 +19,7 @@ run_case() {
     if [ "$rc" -ne 0 ]; then echo "PASS [reject] $name"; PASS=$((PASS+1)); else echo "FAIL [accepted unsafe] $name"; FAIL=$((FAIL+1)); fi
     return
   fi
-  "$CPLUS_BIN" build "$source" -o "$exe" >"$OUT/$name.build.stdout" 2>"$OUT/$name.build.stderr" || rc=$?
+  "$CPLUS_BIN" build --no-werror "$source" -o "$exe" >"$OUT/$name.build.stdout" 2>"$OUT/$name.build.stderr" || rc=$?
   if [ "$rc" -ne 0 ]; then
     if [[ "$kind" == "trap" ]]; then echo "PASS [reject] $name (compile-time rejection)"; PASS=$((PASS+1));
     else echo "FAIL [compile] $name (see tests/out/stress/cplus_breaker_v3/$name.build.stderr)"; FAIL=$((FAIL+1));

@@ -64,15 +64,23 @@ struct DriverOptions {
   // disables all runtime sanitizers.
   Sanitizer sanitizer = Sanitizer::Undefined;
   bool sanitizerExplicit = false;
+  // Opt-in: runtime safety violations become catchable C+ exceptions inside
+  // try/catch and stay fatal when no handler exists. Driver option only; never
+  // forwarded as a pass-through token to the C backend.
+  bool autoRuntime = false;
   // DEFAULT (false): report proven errors, warn on unverified operations.
   // STRICT (true): reject unverified operations rather than warn.
   bool strict = false;
   bool verbose = false;
-  bool warningsAsErrors = false;
+  // Issue #34: every C+ warning is fatal by default. --legacy-c keeps plain-C
+  // behaviour unless -Werror is requested explicitly; -w never suppresses C+
+  // diagnostics in Safe mode.
+  bool warningsAsErrors = true;
+  bool warningsAsErrorsExplicit = false; // -Werror was requested explicitly
   bool keepTemp = false;
   bool logging = false;
   std::string logLevel = "warn";
-  bool disableWarnings = false;
+  bool disableWarnings = false; // -w; backend scope only in --legacy-c
   bool compileOnly = false;
   bool preprocessOnly = false;
   bool assemblyOnly = false;

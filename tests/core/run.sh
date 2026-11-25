@@ -11,7 +11,7 @@ bad() { echo "  FAIL $1: $2"; FAIL=$((FAIL+1)); }
 
 build_run() {
   name=$1; src=$2
-  if ! "$CPLUS" build "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
+  if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
     bad "$name" "build failed"; return
   fi
   if ! "$OUT/$name" >"$OUT/$name.stdout" 2>>"$OUT/$name.log"; then
@@ -22,7 +22,7 @@ build_run() {
 
 build_expect_stderr() {
   name=$1; src=$2; needle=$3
-  if ! "$CPLUS" build "$src" -o "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
+  if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
     bad "$name" "build failed"; return
   fi
   if ! grep -q "$needle" "$OUT/$name.stderr"; then
@@ -51,7 +51,7 @@ expect_strict_reject() {
 
 expect_trap() {
   name=$1; src=$2; code=$3
-  if ! "$CPLUS" build "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
+  if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
     bad "$name" "build failed"; return
   fi
   "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
@@ -271,7 +271,7 @@ expect_reject strncpy_overflow "$ROOT/tests/safety/strncpy_overflow.c"
 expect_reject snprintf_overflow "$ROOT/tests/safety/snprintf_overflow.c"
 expect_reject memcpy_null_source "$ROOT/tests/safety/memcpy_null_source.c"
 
-if "$CPLUS" build "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
+if "$CPLUS" build --no-werror "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
    -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \
    "$OUT/safe_memory_log" >"$OUT/safe_memory_log.stdout" 2>"$OUT/safe_memory_log.stderr" && \
    grep -q "c+ driver start" "$OUT/safe_memory_log.build"; then

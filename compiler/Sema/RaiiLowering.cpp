@@ -18,6 +18,12 @@ constexpr size_t kNPos = static_cast<size_t>(-1);
 const char *kOwnPrefix = "/*cplus$own:";
 const char *kMemPrefix = "/*cplus$mem:";
 
+/// One cleanup obligation.  Identity is the (scope, position) pair it occupies
+/// in `Lowering::scopes_`, never its source name: a shadowing declaration in an
+/// inner scope is a *different* obligation and must be destroyed on its own.
+/// Every piece of mutable per-binding state below used to live in a
+/// function-wide, name-keyed set, so an inner `R x` aliased the outer `x`'s
+/// moved/dropped flags.  Keeping it here makes the state die with its binding.
 struct OwnedVar {
   std::string name;
   std::string type;   // resource type (for drop generation)
@@ -25,15 +31,56 @@ struct OwnedVar {
   bool managed = false;
   bool isDefer = false;
   std::string deferText;
+  /// The handle was transferred away, by `cplus_move` or by `return owner;`.
+  /// A borrow of this binding is dead from here on.  (A `return` is not a
+  /// use-after-move: the token it names is the transfer itself.)
+  bool moved = false;
+  /// An explicit `cplus_move` named this binding, so later direct uses are
+  /// use-after-move.  Tracked separately from `moved` for exactly that reason.
+  bool movedByMove = false;
+  /// The moved-more-than-once warning has already been issued.
+  bool moveWarned = false;
+  /// A destructor call naming this binding was seen.  Only used for
+  /// duplicate-drop detection; the automatic drop stays (the explicit call is
+  /// guarded by `cplus_zero`, so it is a no-op instead of a double free).
+  bool explicitlyDropped = false;
+  /// The drop lives inside an unconditional `defer`, whose text IS the
+  /// scope-exit cleanup, so the generated drop must be suppressed.
+  bool deferDropped = false;
+  /// Offset of the declaration's first token.  A shadowing declaration needs a
+  /// saved address emitted just before it, while its name still refers to the
+  /// enclosing binding.
+  size_t declOffset = kNPos;
+  /// Emitted-C name of the saved address for this binding when the C compiler
+  /// can no longer resolve it by name (a return crossing a shadow boundary).
+  std::string escapeAlias;
   unsigned line = 0;
   unsigned column = 0;
+};
+
+/// A binding's address inside `Lowering::scopes_`: scope index plus position in
+/// that scope's `vars`.  Both are append-only, so a DeclId stays valid until
+/// its scope closes.  Used to say "destroy everything except THIS binding",
+/// which a bare name cannot express once the name is shadowed.
+struct DeclId {
+  size_t scope = kNPos;
+  size_t var = kNPos;
+  bool valid() const { return scope != kNPos; }
 };
 
 struct Scope {
   size_t closeOffset = 0;
   unsigned closeLine = 0;
   std::vector<OwnedVar> vars;
+  /// `T *p = &owner;` aliases declared in this scope, mapped to the owner name
+  /// they borrow.  Scoped, so a shadowed alias cannot outlive its block and a
+  /// borrow in one function is never visible in a sibling function.
+  std::map<std::string, std::string> borrows;
   bool functionBody = false;
+  /// A `try { ... }` or `catch (...) { ... }` body.  Owners declared inside
+  /// one of these are skipped by a `throw` (lowered to a longjmp); owners
+  /// declared before it survive and are cleaned up after the handler.
+  bool exceptionBlock = false;
 };
 
 struct LoopInfo {
@@ -102,6 +149,7 @@ public:
     globalNames_ = collectGlobals();
     collectControlFlowHelpers();
     collectTerminationMacros();
+    collectNoreturnDeclarations();
     scan();
     applyEdits();
 
@@ -206,7 +254,8 @@ private:
   /// see the limitation documented on collectControlFlowHelpers().
   bool isTerminationName(const std::string &name) const {
     return name == "exit" || name == "_Exit" || name == "abort" ||
-           name == "longjmp" || terminationHelpers_.count(name) != 0 ||
+           name == "quick_exit" || name == "_exit" || name == "longjmp" ||
+           terminationHelpers_.count(name) != 0 ||
            longjmpHelpers_.count(name) != 0;
   }
 
@@ -253,7 +302,7 @@ private:
         continue;
       size_t nm = nextSig(k);
       if (nm < rp && toks_[nm].kind == TokKind::Identifier &&
-          owned_.count(toks_[nm].text))
+          hasLiveOwner(toks_[nm].text))
         found = nm; // last match wins for multi-argument calls
     }
     return found;
@@ -398,13 +447,20 @@ private:
       return;
     }
     for (size_t k = i + 1; k < semi; ++k) {
-      if (toks_[k].kind == TokKind::Identifier &&
-          (toks_[k].text == "return" || toks_[k].text == "break" ||
-           toks_[k].text == "continue" || toks_[k].text == "goto")) {
-        errorAt("'" + toks_[k].text + "' cannot jump out of a defer cleanup",
-                toks_[k]);
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      const std::string &kw = toks_[k].text;
+      if (kw == "return" || kw == "break" || kw == "continue" || kw == "goto") {
+        errorAt("'" + kw + "' cannot jump out of a defer cleanup", toks_[k]);
         return;
       }
+      // A throw/longjmp/terminator in the body exits before the rest of the
+      // defer (and any pending owner cleanups) can run.  Throwing helpers are
+      // collected before scan(), so they are visible here too.
+      if (mode_ != Mode::LegacyC &&
+          (kw == "throw" || throwHelpers_.count(kw) != 0 ||
+           isTerminationName(kw) || terminationMacros_.count(kw) != 0))
+        errorAt("'" + kw + "' cannot jump out of a defer cleanup", toks_[k]);
     }
     OwnedVar v;
     v.name = "__cplus_defer_" + std::to_string(deferCounter_++);
@@ -579,6 +635,7 @@ private:
     OwnedVar v;
     if (!parseMarker(toks_[i].text, &v))
       return;
+    v.declOffset = toks_[i].offset;
     v.line = toks_[i].line;
     v.column = toks_[i].column;
     if (scopes_.empty()) {
@@ -591,19 +648,35 @@ private:
     ++removedMarkers_;
   }
 
+  /// Record one cleanup obligation in the innermost scope.  A declaration can
+  /// be discovered twice (resource-type scan and ownership marker), so the
+  /// same *name in the same scope* must not create two obligations.  The same
+  /// name in an enclosing scope is a distinct binding and is kept: that is the
+  /// shadowing case this scan used to skip entirely.
   void registerOwned(const OwnedVar &v) {
-    // A declaration can be discovered twice: once by the resource-type
-    // declaration scan and once by its ownership marker.  Keep exactly one
-    // cleanup obligation per variable per scope.
     for (auto &existing : scopes_.back().vars) {
-      if (existing.name == v.name) {
-        existing = v;
-        owned_[v.name] = v;
-        return;
+      if (existing.name != v.name)
+        continue;
+      // Merge rather than overwrite: the marker and the declaration each carry
+      // part of the metadata, and the live per-binding flags (moved, dropped,
+      // defer text) must survive a second discovery of the same declaration.
+      if (existing.drop.empty())
+        existing.drop = v.drop;
+      if (existing.type.empty())
+        existing.type = v.type;
+      existing.managed = existing.managed || v.managed;
+      existing.isDefer = existing.isDefer || v.isDefer;
+      if (existing.deferText.empty())
+        existing.deferText = v.deferText;
+      if (!existing.line) {
+        existing.line = v.line;
+        existing.column = v.column;
       }
+      return;
     }
     scopes_.back().vars.push_back(v);
-    owned_[v.name] = v;
+    const DeclId id{scopes_.size() - 1, scopes_.back().vars.size() - 1};
+    liveByName_[v.name].push_back(id);
     ++obligations_;
   }
 
@@ -657,11 +730,8 @@ private:
       if (p != kNPos && isPunct(p, ")")) {
         isFunction = true;
         inFunction_ = true;
-        owned_.clear();
-        borrows_.clear();
-        moved_.clear();
-        movedOwners_.clear();
-        explicitlyDropped_.clear();
+        // All ownership state is now scoped, so entering a function needs no
+        // reset: a sibling function's bindings can no longer be observed.
         doAwaitingWhile_ = false;
         // Parameters are out-param escape targets: storing a live owner into
         // one hands its lifetime to the caller.
@@ -679,6 +749,7 @@ private:
     s.closeOffset = t.offset;
     s.closeLine = t.line;
     s.functionBody = isFunction;
+    s.exceptionBlock = isFunction ? false : isExceptionBlockOpen(i);
     scopes_.push_back(std::move(s));
 
     if (loops_.size() > 0 && loops_.back().bodyPos < 0)
@@ -692,7 +763,7 @@ private:
     if (scopes_.empty())
       return;
     Scope &s = scopes_.back();
-    std::string drops = dropsFor(scopes_.size() - 1, scopes_.size(), {});
+    std::string drops = dropsFor(scopes_.size() - 1, scopes_.size(), DeclId{});
     if (!drops.empty())
       insertBefore(t, drops);
 
@@ -706,11 +777,16 @@ private:
         loops_.back().stackSizeAtKeyword == static_cast<size_t>(closedIndex))
       loops_.pop_back();
 
-    // A name declared in this scope no longer suppresses cleanup for a
-    // later, unrelated variable with the same name.
+    // Retire the live-binding entries of every obligation in this scope so an
+    // enclosing binding of the same name becomes visible again.
     for (const auto &v : s.vars) {
-      explicitlyDropped_.erase(v.name);
-      deferDropped_.erase(v.name);
+      auto it = liveByName_.find(v.name);
+      if (it == liveByName_.end() || it->second.empty())
+        continue;
+      // The stack is in declaration order, so this scope's entries are on top.
+      it->second.pop_back();
+      if (it->second.empty())
+        liveByName_.erase(it);
     }
     bool wasFunction = s.functionBody;
     scopes_.pop_back();
@@ -731,7 +807,8 @@ private:
     // a drop inside `if (cond)` leaked on the fall-through path.  We now keep
     // the automatic drop on every path and make the explicit drop idempotent by
     // zeroing the handle right after it (the same guard `cplus_move` uses).
-    // `explicitlyDropped_` is retained only to detect a second explicit drop.
+    // `OwnedVar::explicitlyDropped` is retained only to detect a second
+    // explicit drop.
     if (t.text.size() > 5 &&
         t.text.compare(t.text.size() - 5, 5, "_drop") == 0) {
       size_t lp = nextSig(i);
@@ -748,17 +825,24 @@ private:
             }
           if (ownerTok != kNPos) {
             const std::string &name = toks_[ownerTok].text;
-            if (!explicitlyDropped_.insert(name).second && strict_ &&
+            // The obligation is the innermost live binding of that name; the
+            // dropped flag is per binding, so dropping an inner shadow does
+            // not mark the outer owner as already released.
+            OwnedVar *owner = ownerAt(findLiveOwner(name));
+            if (owner && owner->explicitlyDropped && strict_ &&
                 mode_ != Mode::LegacyC)
               errorAt("resource '" + name +
                           "' is explicitly dropped more than once",
                       t, "release each owner exactly once; a second drop may "
                          "free already-freed memory");
+            if (owner)
+              owner->explicitlyDropped = true;
             if (defer && !defer->conditional) {
               // Unconditional defer: its text *is* the scope-exit cleanup, so
               // suppress the automatic drop.  No source edit is needed (the
               // defer span is deleted from the output).
-              deferDropped_.insert(name);
+              if (owner)
+                owner->deferDropped = true;
             } else if (defer) {
               // Conditional defer: the explicit drop runs on one branch only.
               // Keep the automatic drop and fold a zeroing guard into the
@@ -767,13 +851,8 @@ private:
                   " , (void)cplus_zero(&" + name + ", sizeof(" + name + "))";
               std::string text = joinTokensWithInsert(
                   defer->startTok, defer->endTok, rp, guard);
-              for (auto &s : scopes_)
-                for (auto &sv : s.vars)
-                  if (sv.name == defer->ownerName)
-                    sv.deferText = text;
-              auto it = owned_.find(defer->ownerName);
-              if (it != owned_.end())
-                it->second.deferText = text;
+              if (OwnedVar *guarded = ownerAt(findLiveOwner(defer->ownerName)))
+                guarded->deferText = text;
             } else {
               // `cplus_zero` is a no-op on an already empty handle, so the
               // automatic drop inserted at scope exit cannot double-free.
@@ -783,7 +862,7 @@ private:
             size_t amp = nextSig(lp);
             if (strict_ && mode_ != Mode::LegacyC && amp < toks_.size() &&
                 toks_[amp].kind == TokKind::Identifier &&
-                borrows_.count(toks_[amp].text))
+                !borrowOwner(toks_[amp].text).empty())
               errorAt("explicit drop through alias '" + toks_[amp].text +
                           "' is not supported",
                       t, "call the destructor with the owner's address "
@@ -797,13 +876,17 @@ private:
       if (isPunct(lp, "(")) {
         size_t arg = nextSig(lp);
         if (arg < toks_.size() && toks_[arg].kind == TokKind::Identifier &&
-            owned_.count(toks_[arg].text)) {
-          if (movedOwners_.count(toks_[arg].text))
+            hasLiveOwner(toks_[arg].text)) {
+          OwnedVar *owner = ownerAt(findLiveOwner(toks_[arg].text));
+          if (owner && owner->moveWarned)
             warningAt("resource '" + toks_[arg].text +
                           "' is moved more than once",
                       toks_[arg]);
-          movedOwners_.insert(toks_[arg].text);
-          moved_.insert(toks_[arg].text);
+          if (owner) {
+            owner->moveWarned = true;
+            owner->movedByMove = true;
+            owner->moved = true;
+          }
           skipMoveArg_ = arg;
         }
       }
@@ -815,7 +898,8 @@ private:
       atStmtStart_ = false;
       return;
     }
-    if (movedOwners_.count(t.text) && mode_ != Mode::LegacyC) {
+    const OwnedVar *used = ownerAt(findLiveOwner(t.text));
+    if (used && used->movedByMove && mode_ != Mode::LegacyC) {
       if (strict_)
         errorAt("use-after-move: use of moved-from resource '" + t.text + "'",
                 t, "the handle was zeroed by cplus_move");
@@ -823,14 +907,16 @@ private:
         warningAt("use of moved-from resource '" + t.text + "'", t,
                   "the handle was zeroed by cplus_move");
     }
-    auto borrow = borrows_.find(t.text);
-    if (borrow != borrows_.end() && moved_.count(borrow->second)) {
-      errorAt("borrow '" + t.text + "' of '" + borrow->second +
-                  "' is used after that resource was moved",
-              t, "re-borrow the new owner instead");
+    const std::string borrowedOwner = borrowOwner(t.text);
+    if (!borrowedOwner.empty()) {
+      const OwnedVar *owner = ownerAt(findLiveOwner(borrowedOwner));
+      if (owner && owner->moved)
+        errorAt("borrow '" + t.text + "' of '" + borrowedOwner +
+                    "' is used after that resource was moved",
+                t, "re-borrow the new owner instead");
     }
     if (t.text == "return") {
-      std::string exclude;
+      DeclId exclude;
       checkReturnValue(i, &exclude);
       std::string drops = dropsFor(0, scopes_.size(), exclude);
       if (!drops.empty())
@@ -852,7 +938,7 @@ private:
       // and also when the jump skips an owner declaration: the label is then
       // reached with an uninitialised handle that the scope-exit drop reads.
       // A plain goto with no cleanup obligations is untouched.
-      if (strict_ && mode_ != Mode::LegacyC && !owned_.empty())
+      if (strict_ && mode_ != Mode::LegacyC && hasLiveOwners())
         errorAt("'goto' bypasses C+ cleanup; destructors may not run", t,
                 "use structured control flow or an explicit cleanup call");
       else if (strict_ && mode_ != Mode::LegacyC && gotoSkipsOwner(i))
@@ -893,7 +979,32 @@ private:
       atStmtStart_ = false;
       return;
     }
+    if (t.text == "throw") {
+      // Exception lowering rewrites `throw` into cplus_exception_raise(), which
+      // longjmps to the enclosing try frame.  That non-local jump skips the
+      // scope-exit destructor of every owner declared inside that try block.
+      // Diagnose here, before lowerExceptions() hides the spelling.  An owner
+      // declared *before* the try survives to be cleaned up after the handler
+      // and is deliberately not flagged (throwSkipsOwner()).
+      if (mode_ != Mode::LegacyC && throwSkipsOwner())
+        errorAt("'throw' bypasses C+ cleanup; destructors may not run", t,
+                "release live owners before throwing, or declare the owner "
+                "outside the try region");
+      atStmtStart_ = false;
+      return;
+    }
+    // A helper that contains `throw` is a non-local jump in every caller that
+    // has an owner live inside its own try region, just like longjmpHelpers_.
+    if (throwHelpers_.count(t.text) && isPunct(nextSig(i), "(")) {
+      if (mode_ != Mode::LegacyC && throwSkipsOwner())
+        errorAt("call through '" + t.text +
+                    "' may throw and bypass C+ cleanup",
+                t, "release live owners before calling a throwing helper");
+      atStmtStart_ = false;
+      return;
+    }
     if ((t.text == "exit" || t.text == "_Exit" || t.text == "abort" ||
+         t.text == "quick_exit" || t.text == "_exit" ||
          (terminationHelpers_.count(t.text) && isPunct(nextSig(i), "("))) &&
         strict_ && mode_ != Mode::LegacyC && hasLiveOwners()) {
       // Terminating the process never runs scope-exit destructors.  Emit a
@@ -998,9 +1109,97 @@ private:
         Edit{toks_[semi].offset + toks_[semi].text.size(), 0, " }", seq_++});
   }
 
-  /// `owned_` accumulates for the whole function, so it cannot tell whether a
-  /// destructor is still pending at this point.  Consume the open scope stack
-  /// instead: only owners whose scope has not closed can be bypassed.
+  /// The innermost live binding named `name`, or an invalid DeclId.  The
+  /// per-name stack is pushed by registerOwned() and popped by closeScope(), so
+  /// a shadowing inner declaration hides the outer one exactly while its scope
+  /// is open and the outer binding is visible again once it closes.
+  DeclId findLiveOwner(const std::string &name) const {
+    auto it = liveByName_.find(name);
+    if (it == liveByName_.end() || it->second.empty())
+      return DeclId{};
+    return it->second.back();
+  }
+
+  /// True when a binding with the same name is live in a deeper scope, so its
+  /// name no longer denotes this binding at the current point.
+  bool isShadowed(DeclId id) const {
+    const OwnedVar *v = ownerAt(id);
+    if (!v)
+      return false;
+    auto it = liveByName_.find(v->name);
+    if (it == liveByName_.end() || it->second.empty())
+      return false;
+    const DeclId top = it->second.back();
+    return !(top.scope == id.scope && top.var == id.var);
+  }
+
+  /// Saved reference to a binding whose name is shadowed at the drop point.
+  /// A `return` inside a shadowing block must destroy the enclosing owner, but
+  /// the emitted C name resolves to the inner object, so the address is saved
+  /// at the point where the name still meant the outer binding.  Returns an
+  /// empty string when that is impossible (deferred cleanup text is copied
+  /// verbatim and cannot be rewritten to use a saved address).
+  std::string ensureEscapeAlias(DeclId id) {
+    OwnedVar *v = ownerAt(id);
+    if (!v)
+      return std::string();
+    if (!v->escapeAlias.empty())
+      return v->escapeAlias;
+    if (v->isDefer)
+      return std::string(); // deferText is verbatim; no rewritable reference
+    if (!v->managed && v->type.empty())
+      return std::string(); // no type name available to declare the address
+    // Emit the saved address immediately before the declaration that shadows
+    // this binding: at that offset `&name` still denotes this object.
+    auto it = liveByName_.find(v->name);
+    if (it == liveByName_.end())
+      return std::string();
+    const DeclId shadow = it->second.back();
+    const OwnedVar *inner = ownerAt(shadow);
+    if (!inner || inner->declOffset == kNPos)
+      return std::string();
+    std::string alias =
+        "__cplus_shadow_" + std::to_string(++shadowCounter_) + "_" + v->name;
+    std::string decl = v->managed
+                           ? "void *" + alias + " = (void *)" + v->name + "; "
+                           : v->type + " *" + alias + " = &" + v->name + "; ";
+    edits_.push_back(Edit{inner->declOffset, 0, decl, seq_++});
+    v->escapeAlias = alias;
+    return alias;
+  }
+
+  bool hasLiveOwner(const std::string &name) const {
+    return findLiveOwner(name).valid();
+  }
+
+  const OwnedVar *ownerAt(DeclId id) const {
+    if (!id.valid() || id.scope >= scopes_.size())
+      return nullptr;
+    const auto &vars = scopes_[id.scope].vars;
+    if (id.var >= vars.size())
+      return nullptr;
+    return &vars[id.var];
+  }
+
+  OwnedVar *ownerAt(DeclId id) {
+    return const_cast<OwnedVar *>(
+        static_cast<const Lowering *>(this)->ownerAt(id));
+  }
+
+  /// The owner a `T *p = &owner;` alias in scope `scopeIdx` borrows, or empty.
+  std::string borrowOwner(const std::string &alias) const {
+    for (size_t p = scopes_.size(); p > 0; --p) {
+      const auto &b = scopes_[p - 1].borrows;
+      auto it = b.find(alias);
+      if (it != b.end())
+        return it->second;
+    }
+    return std::string();
+  }
+
+  /// `hasLiveOwners` answers "is any destructor still pending?".  The scope
+  /// stack is the only record of ownership now; the old function-wide `owned_`
+  /// map kept entries for bindings whose scope had already closed.
   bool hasLiveOwners() const {
     for (const auto &s : scopes_)
       if (!s.vars.empty())
@@ -1008,30 +1207,87 @@ private:
     return false;
   }
 
+  /// Does the `{` at `openBrace` open a try/catch body?  Exception lowering
+  /// consumes these braces and turns them into a setjmp/longjmp frame, so
+  /// they are the boundary a `throw` unwinds out of.
+  bool isExceptionBlockOpen(size_t openBrace) const {
+    size_t p = prevSig(openBrace);
+    for (size_t steps = 0; p != kNPos && steps < 8; ++steps) {
+      if (isIdent(p, "try") || isIdent(p, "catch"))
+        return true;
+      if (isPunct(p, ";") || isPunct(p, "{") || isPunct(p, "}"))
+        return false;
+      p = prevSig(p);
+    }
+    return false;
+  }
+
+  /// True when a `throw` (or a call to a throwing helper) at this point would
+  /// skip a destructor that would otherwise run.  Owners declared inside the
+  /// innermost enclosing try/catch block are lost to the longjmp; an owner
+  /// declared before that block survives and is still cleaned up normally
+  /// after the handler, so it must not trigger a diagnostic.  With no
+  /// enclosing try the throw is unhandled and skips every live owner.
+  bool throwSkipsOwner() const {
+    size_t boundary = 0;
+    for (size_t p = scopes_.size(); p > 0; --p) {
+      if (scopes_[p - 1].exceptionBlock) {
+        boundary = p - 1;
+        break;
+      }
+    }
+    for (size_t p = boundary; p < scopes_.size(); ++p)
+      for (const auto &v : scopes_[p].vars)
+        if (!v.explicitlyDropped && !v.movedByMove)
+          return true;
+    return false;
+  }
+
   /// Cleanup calls for scopes [from, to), innermost first, and within one
-  /// scope in reverse declaration order.  `exclude` names a variable whose
-  /// ownership has been transferred and must not be destroyed here.
+  /// scope in reverse declaration order.  `exclude` names the single binding
+  /// whose ownership has been transferred and must not be destroyed here; it is
+  /// an identity, not a name, so the outer binding of a shadowed name is still
+  /// destroyed by its own scope exit.
   ///
   /// Explicit drops no longer suppress the automatic drop: a drop on only one
   /// branch must not leak on the other.  Instead the explicit drop is guarded
   /// with `cplus_zero`, so the automatic destructor sees an empty handle and
   /// becomes a no-op.  The only remaining suppression is for a drop embedded
   /// in `defer`, whose text is itself the scope-exit cleanup.
-  std::string dropsFor(size_t from, size_t to,
-                       const std::string &exclude) const {
+  std::string dropsFor(size_t from, size_t to, DeclId exclude) {
     std::string out;
     for (size_t p = to; p > from; --p) {
       const auto &vars = scopes_[p - 1].vars;
       for (size_t k = vars.size(); k > 0; --k) {
+        const DeclId id{p - 1, k - 1};
         const OwnedVar &v = vars[k - 1];
-        if (v.name == exclude || deferDropped_.count(v.name))
+        if ((exclude.valid() && exclude.scope == p - 1 &&
+             exclude.var == k - 1) ||
+            v.deferDropped)
           continue;
+        // At a scope exit the name may already denote an inner shadow, so the
+        // drop has to go through the saved address instead.  This only matters
+        // for a `return` that leaves several scopes at once; closeScope() and
+        // break/continue drops never cross a shadow boundary.
+        const bool shadowed = isShadowed(id);
+        const std::string alias = shadowed ? ensureEscapeAlias(id) : std::string();
+        if (shadowed && alias.empty()) {
+          // Cannot name the object and cannot save a usable reference: emitting
+          // a drop by name would destroy the INNER object.  Leak rather than
+          // corrupt, and say so.
+          warningAt("cleanup for shadowed owner '" + v.name +
+                        "' cannot be emitted at this exit",
+                    toks_[0]);
+          continue;
+        }
         if (v.isDefer)
           out += v.deferText + "; ";
         else if (v.managed)
-          out += "cplus_release(" + v.name + "); " + v.name + " = NULL; ";
+          out += shadowed ? "cplus_release(" + alias + "); "
+                          : "cplus_release(" + v.name + "); " + v.name +
+                                " = NULL; ";
         else
-          out += v.drop + "(&" + v.name + "); ";
+          out += v.drop + "(" + (shadowed ? alias : "&" + v.name) + "); ";
       }
     }
     return out;
@@ -1054,10 +1310,10 @@ private:
                                  : l.stackSizeAtKeyword;
     if (from > scopes_.size())
       from = scopes_.size();
-    return dropsFor(from, scopes_.size(), {});
+    return dropsFor(from, scopes_.size(), DeclId{});
   }
 
-  void checkReturnValue(size_t i, std::string *excluded) {
+  void checkReturnValue(size_t i, DeclId *excluded) {
     size_t v = nextSig(i);
     if (v >= toks_.size() || toks_[v].kind != TokKind::Identifier)
       return;
@@ -1066,21 +1322,20 @@ private:
     size_t after = nextSig(v);
     if (after < toks_.size() && !isPunct(after, ";"))
       return;
-    auto borrow = borrows_.find(toks_[v].text);
-    if (borrow != borrows_.end()) {
-      errorAt("borrow '" + borrow->first + "' of local '" + borrow->second +
-                  "' cannot escape the function",
-              toks_[v], "return the owner instead, or copy the borrowed data");
-      return;
-    }
-    auto it = owned_.find(toks_[v].text);
-    if (it == owned_.end())
+    // Borrow-escape checks moved to the AST return-expression analysis in
+    // AstSafetyCheck (issue #26).  The token-level form only recognized a bare
+    // `return b;` and was bypassed by casts, parentheses, conditionals and
+    // helper calls; keeping it here would also duplicate the semantic
+    // diagnostic for the direct form.
+    DeclId id = findLiveOwner(toks_[v].text);
+    OwnedVar *owner = ownerAt(id);
+    if (!owner)
       return;
 
-    if (it->second.managed) {
+    if (owner->managed) {
       Diag d;
       d.level = DiagLevel::Error;
-      d.message = "managed pointer '" + it->first +
+      d.message = "managed pointer '" + owner->name +
                   "' cannot escape its owning scope";
       d.file = filename_;
       d.line = toks_[v].line;
@@ -1095,8 +1350,8 @@ private:
     // local's normal scope-exit cleanup is unreachable after the return, so
     // no move expression is needed; emitting one would only add a memset on
     // every returned value and block optimisation of the caller's loop.
-    *excluded = it->first;
-    moved_.insert(it->first);
+    *excluded = id;
+    owner->moved = true;
   }
 
   void checkAssignment(size_t i) {
@@ -1121,15 +1376,16 @@ private:
     size_t lhs = prevSig(i);
     if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
       return;
-    auto it = owned_.find(toks_[lhs].text);
-    if (it == owned_.end()) {
+    DeclId lhsId = findLiveOwner(toks_[lhs].text);
+    OwnedVar *lhsOwner = ownerAt(lhsId);
+    if (!lhsOwner) {
       // Storing a live owner into a global or an out-parameter lets its
       // lifetime escape the scope that will release it.  `return owner;` is
       // checked separately (a return transfers ownership); an assignment does
       // not, so STRICT rejects it rather than emitting a later use-after-free.
       size_t rhs = nextSig(i);
       if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier &&
-          owned_.count(toks_[rhs].text) &&
+          hasLiveOwner(toks_[rhs].text) &&
           (globalNames_.count(toks_[lhs].text) ||
            currentParams_.count(toks_[lhs].text)) &&
           strict_ && mode_ != Mode::LegacyC)
@@ -1151,17 +1407,19 @@ private:
 
     size_t rhs = nextSig(i);
     if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier) {
-      auto rit = owned_.find(toks_[rhs].text);
-      if (rit != owned_.end()) {
-        errorAt("resource '" + it->first + "' cannot be copied from '" +
-                    rit->first + "'",
+      DeclId rhsId = findLiveOwner(toks_[rhs].text);
+      if (rhsId.valid()) {
+        const OwnedVar *rhsOwner = ownerAt(rhsId);
+        errorAt("resource '" + lhsOwner->name + "' cannot be copied from '" +
+                    rhsOwner->name + "'",
                 toks_[lhs],
-                "transfer ownership with cplus_move(" + rit->first + ")");
+                "transfer ownership with cplus_move(" + rhsOwner->name +
+                    ")");
         return;
       }
     }
-    if (it->second.managed) {
-      errorAt("managed pointer '" + it->first + "' cannot be reassigned",
+    if (lhsOwner->managed) {
+      errorAt("managed pointer '" + lhsOwner->name + "' cannot be reassigned",
               toks_[lhs],
               "managed memory is released exactly once at scope exit");
     }
@@ -1183,8 +1441,19 @@ private:
     if (isPunct(after, "("))
       return; // function returning a resource type; not a local
 
-    // Borrowed pointers and arrays are not owned by this scope.
-    if (isPunct(after, "*") || isPunct(after, "["))
+    // Borrowed pointers are not owned by this scope.  An array of owners is
+    // not tracked either (no per-element destructor is generated), so fail
+    // closed in STRICT instead of silently leaving every element undropped.
+    // DEFAULT only warns: a program that drops each element by hand is still
+    // accepted there, since the linear scan cannot prove the array is leaked.
+    if (isPunct(after, "[")) {
+      strictDiag("array of resource type '" + toks_[typeIdx].text +
+                     "' has no automatic element cleanup",
+                 toks_[nameIdx],
+                 "drop each element explicitly, or use a managed allocation");
+      return;
+    }
+    if (isPunct(after, "*"))
       return;
 
     size_t semi = statementEnd(nameIdx);
@@ -1192,8 +1461,11 @@ private:
       return;
 
     const std::string name = toks_[nameIdx].text;
-    if (owned_.count(name))
-      return;
+    // No "already owned" early return here: a declaration may not be skipped
+    // because an *enclosing* scope owns the same name.  registerOwned() still
+    // deduplicates the same declaration being discovered twice (type scan and
+    // ownership marker) inside one scope, so removing this guard cannot create
+    // a second obligation for one binding.
 
     // Multi-declarator statements are rejected: each owning variable must
     // have its own declaration so cleanup order is unambiguous.
@@ -1231,7 +1503,7 @@ private:
           if (rp != kNPos && rp <= semi) {
             for (size_t k = lp + 1; k < rp; ++k) {
               if (toks_[k].kind != TokKind::Identifier ||
-                  !owned_.count(toks_[k].text) || toks_[k].text == name)
+                  !hasLiveOwner(toks_[k].text) || toks_[k].text == name)
                 continue;
               size_t afterArg = nextSig(k);
               if (isPunct(afterArg, ".") || isPunct(afterArg, "->") ||
@@ -1260,6 +1532,7 @@ private:
     v.name = name;
     v.type = toks_[typeIdx].text;
     v.drop = v.type + "_drop";
+    v.declOffset = toks_[typeIdx].offset;
     v.line = toks_[nameIdx].line;
     v.column = toks_[nameIdx].column;
     registerOwned(v);
@@ -1285,9 +1558,9 @@ private:
     if (ownerIdx >= toks_.size() ||
         toks_[ownerIdx].kind != TokKind::Identifier)
       return false;
-    if (!owned_.count(toks_[ownerIdx].text))
+    if (!hasLiveOwner(toks_[ownerIdx].text))
       return false;
-    borrows_[toks_[name].text] = toks_[ownerIdx].text;
+    scopes_.back().borrows[toks_[name].text] = toks_[ownerIdx].text;
     return true;
   }
 
@@ -1524,23 +1797,71 @@ private:
         if (nm != kNPos && toks_[nm].kind == TokKind::Identifier)
           name = toks_[nm].text;
       }
-      bool jumps = false, terminates = false;
+      bool jumps = false, terminates = false, throws = false;
       for (size_t k = i + 1; k < end; ++k) {
         if (toks_[k].kind != TokKind::Identifier)
           continue;
         if (toks_[k].text == "longjmp")
           jumps = true;
+        // `throw` lowers to a longjmp as well; a helper containing one skips
+        // the scope-exit destructors of owners live at its call sites.
+        if (toks_[k].text == "throw")
+          throws = true;
         if (toks_[k].text == "exit" || toks_[k].text == "_Exit" ||
-            toks_[k].text == "abort")
+            toks_[k].text == "abort" || toks_[k].text == "quick_exit" ||
+            toks_[k].text == "_exit")
           terminates = true;
       }
       if (!name.empty()) {
         if (jumps)
           longjmpHelpers_.insert(name);
+        if (throws)
+          throwHelpers_.insert(name);
         if (terminates)
           terminationHelpers_.insert(name);
       }
       i = end;
+    }
+  }
+
+  /// A `_Noreturn` / `__attribute__((noreturn))` prototype can be declared in
+  /// a header and defined in another translation unit.  Its body is invisible
+  /// to collectControlFlowHelpers(), so record the declared name here and let
+  /// the existing termination check reject calls made with a live owner.
+  void collectNoreturnDeclarations() {
+    if (mode_ == Mode::LegacyC)
+      return;
+    // Marker-driven: only declarations that actually carry `noreturn` cost
+    // anything, so large translation units stay linear in practice.
+    for (size_t m = 0; m < toks_.size(); ++m) {
+      if (toks_[m].kind != TokKind::Identifier)
+        continue;
+      bool marker = isIdent(m, "_Noreturn");
+      if (isIdent(m, "noreturn")) {
+        size_t op = prevSig(m), oop = op == kNPos ? kNPos : prevSig(op);
+        marker = isPunct(op, "(") && isPunct(oop, "(") &&
+                 isPunct(nextSig(m), ")");
+      }
+      if (!marker)
+        continue;
+      size_t lo = m < 32 ? 0 : m - 32;
+      size_t hi = std::min(toks_.size(), m + 32);
+      for (size_t k = lo; k < hi; ++k) {
+        if (toks_[k].kind != TokKind::Identifier || !isPunct(nextSig(k), "("))
+          continue;
+        // The name must be in the same declaration as the marker.
+        size_t a = std::min(k, m), b = std::max(k, m);
+        bool sameDecl = true;
+        for (size_t q = a; q < b; ++q)
+          if (isPunct(q, ";") || isPunct(q, "{") || isPunct(q, "}")) {
+            sameDecl = false;
+            break;
+          }
+        if (sameDecl) {
+          terminationHelpers_.insert(toks_[k].text);
+          break;
+        }
+      }
     }
   }
 
@@ -2148,19 +2469,21 @@ private:
   bool strict_ = false;
 
   std::set<std::string> resourceTypes_;
-  std::map<std::string, OwnedVar> owned_;
-  std::map<std::string, std::string> borrows_;
-  std::set<std::string> moved_;
-  std::set<std::string> movedOwners_;
-  /// Every owner with an explicit destructor call (used for duplicate-drop
-  /// detection).  Does NOT suppress the automatic drop.
-  std::set<std::string> explicitlyDropped_;
-  /// The subset dropped inside `defer`; its text is the scope-exit cleanup,
-  /// so the automatically generated drop must be suppressed for these.
-  std::set<std::string> deferDropped_;
+  // Ownership state is fully derived from `scopes_`: each Scope holds its own
+  // bindings (with per-binding moved/dropped flags) and its own borrows.  There
+  // is deliberately no function-wide name-keyed owner *map*: that duplication
+  // was the cause of issue #28 (a shadowing inner binding was invisible).
+  // This index is only a name -> live binding stack used to resolve a name to
+  // the innermost declaration; it is pushed and popped with the scopes, so it
+  // carries no duplicated metadata.
+  std::map<std::string, std::vector<DeclId>> liveByName_;
+  unsigned shadowCounter_ = 0;
   std::set<std::string> globalNames_;
   std::set<std::string> currentParams_;
   std::set<std::string> longjmpHelpers_;
+  /// Functions whose definition contains `throw`; calling one is a non-local
+  /// jump that skips the caller's try-region owner destructors.
+  std::set<std::string> throwHelpers_;
   std::set<std::string> terminationHelpers_;
   /// Function-pointer variables whose last visible assignment was a
   /// terminator/longjmp (or a helper that contains one).

@@ -72,6 +72,13 @@ public:
     }
     collectLocalArrays();
     collectFunctions();
+    // A volatile object can change between reads: its initializer is NOT a
+    // compile-time fact.  Collect first so every constant-folding site can
+    // refuse to treat it as one (runtime_fail/bounds.c relies on the guard).
+    collectVolatileNames();
+    // Wave 4 (red finding): bounds on index parameters come from call sites,
+    // so they must be collected before any extent/index fact is used.
+    collectParamConstBounds();
     for (const auto &entry : funcs_)
       functionOpens_.insert(entry.second.bodyOpen);
     // Wave 2: struct-field extent chains are resolved before the token loop
@@ -94,11 +101,16 @@ public:
     collectOutParamAllocations();
     collectCallConstants();
     collectAllocations();
+    // A realloc result often reaches its final variable through `q = realloc(..);
+    // p = q;` — carry (or, for an unknown new size, invalidate) the extent so
+    // no stale extent is used for p's later subscripts.
+    propagateReallocAliases();
     collectReturnExtents();
     propagateReturnExtents();
     // Collect lightweight facts used by the bug-pattern checks below.  Each
     // collector is deliberately conservative so it cannot reject valid C.
     collectPointerNames();
+    collectByteCastAliases();
     collectRawAllocationPointers();
     collectSizeConstants();
     collectNegativeNames();
@@ -131,6 +143,9 @@ public:
         if (isIdent(i, "while"))
           checkWhileLoop(i); // induction bound past a known extent
         checkTrackedArrayPointer(i); // constant index / one-past / multi-dim
+        // Wave 4 (red finding): subscript/formed-deref through a pointer whose
+        // extent is proven but whose index is a call-site-bounded parameter.
+        checkParamIndexSubscript(i);
         checkPointerToPointerSubscript(i); // (*pp)[k] through &array-alias
         checkRecursiveArraySubscript(i); // unbounded parameter in a cycle
         checkRecursivePointerParamSubscript(i); // derived index via pointer param
@@ -469,6 +484,13 @@ private:
     for (size_t k = localArrays_.size(); k > 0; --k) {
       const ArrayShape &e = localArrays_[k - 1];
       if (e.name == name && e.pos <= pos) {
+        // A realloc with an unprovable new size replaces this extent; a
+        // stale extent must never drive an OOB diagnostic.
+        auto inv = reallocInvalidAt_.find(name);
+        if (inv != reallocInvalidAt_.end())
+          for (size_t at : inv->second)
+            if (at > e.pos && at <= pos)
+              return false;
         *shape = &e.dims;
         return true;
       }
@@ -638,6 +660,8 @@ private:
   }
 
   bool localConstAt(const std::string &name, size_t pos, long *out) const {
+    if (isVolatileName(name))
+      return false; // a volatile value is a runtime value, not a constant
     auto it = localConsts_.find(name);
     if (it == localConsts_.end())
       return false;
@@ -761,6 +785,38 @@ private:
     return false;
   }
 
+  /// Wave 4 (red finding): a VLA extent that is a parameter with a single,
+  /// unique call-site value folds to a static extent too (`int a[n]` in
+  /// `f(int n, int i)`, called only as `f(4,9)`).  A symbol with several
+  /// distinct call-site values is deliberately NOT folded: guessing one
+  /// extent would risk rejecting valid calls, so the runtime guard owns it.
+  bool foldExtentExpr(size_t from, size_t to, long *value) const {
+    if (indexExprValue(from, to, value))
+      return true;
+    size_t f = from, t = to;
+    trim(&f, &t);
+    if (f + 1 != t || toks_[f].kind != TokKind::Identifier)
+      return false;
+    if (isVolatileName(toks_[f].text))
+      return false;
+    const std::string *fn = enclosingFunction(f);
+    if (!fn)
+      return false;
+    auto fit = paramConstUnique_.find(*fn);
+    if (fit == paramConstUnique_.end())
+      return false;
+    const auto &params = funcs_.at(*fn).params;
+    for (size_t p = 0; p < params.size(); ++p)
+      if (params[p] == toks_[f].text) {
+        auto it = fit->second.find(p);
+        if (it == fit->second.end())
+          return false;
+        *value = it->second;
+        return true;
+      }
+    return false;
+  }
+
   /// A VLA extent that folds to a compile-time constant is a static extent.
   /// Register it as an array shape so a provably out-of-bounds constant
   /// subscript (`int n = 4; int a[n]; a[9];`) is rejected by the same constant
@@ -789,10 +845,16 @@ private:
         // the separator in a call argument list (`printf("...", b[3])`).
         // Walk back to a type keyword only through declarator tokens; if a
         // '(' or ';' is reached first this is an expression, not a VLA.
+        // Wave 4 (false-positive hardening): a ')' must also stop the walk.
+        // Without it, `f(sizeof(int), b[3])` walks back from the comma past
+        // the closing ')' of sizeof(int) and mistakes `int` for a declared
+        // type, registering `b` with the bogus extent 3.  A later valid
+        // `x = b[5]` is then rejected even though b really has 8 elements
+        // (the same class of call-argument bug as the original b[3] case).
         size_t k = prev;
         while (k != kNPos) {
-          if (isPunct(k, "(") || isPunct(k, ";") || isPunct(k, "{") ||
-              isPunct(k, "}"))
+          if (isPunct(k, "(") || isPunct(k, ")") || isPunct(k, ";") ||
+              isPunct(k, "{") || isPunct(k, "}"))
             break;
           bool typeTok = false;
           for (const char *t : kTypes)
@@ -803,17 +865,30 @@ private:
       }
       if (!declaration)
         continue;
-      size_t close = match(open, "[", "]");
-      if (close == kNPos || close == nextSig(open))
+      // Wave 4 (VLA hardening): register every dimension that folds to a
+      // compile-time constant, not just a single-dimensional VLA.  A
+      // multi-dimensional VLA whose extents fold (`int n=4; int a[n][n];`)
+      // has just as provable an out-of-bounds constant subscript as a fixed
+      // array; skipping it left `a[0][9]` silently accepted.  We only fold
+      // extents that are entirely constant, and we require every bracket to
+      // fold, so an unknown dimension never produces a guessed extent.
+      std::vector<size_t> dims;
+      size_t cursor = open;
+      while (isPunct(cursor, "[")) {
+        size_t close = match(cursor, "[", "]");
+        if (close == kNPos || close == nextSig(cursor))
+          break;
+        long value = 0;
+        if (!foldExtentExpr(cursor + 1, close, &value) || value <= 0)
+          break;
+        dims.push_back(static_cast<size_t>(value));
+        cursor = nextSig(close);
+      }
+      if (dims.empty() || isPunct(cursor, "[")) // an extent did not fold
         continue;
-      if (isPunct(nextSig(close), "[")) // multi-dimensional: not lowered
-        continue;
-      long value = 0;
-      if (!indexExprValue(open + 1, close, &value) || value <= 0)
-        continue;
-      localArrays_.push_back(
-          {i, toks_[i].text, {static_cast<size_t>(value)}});
+      localArrays_.push_back({i, toks_[i].text, dims});
       constantVlaNames_.insert(toks_[i].text);
+      constantVlaDeclPos_.insert(i); // precise declaration-site suppression
     }
   }
 
@@ -828,27 +903,41 @@ private:
     size_t lb = nextSig(i);
     if (!isPunct(lb, "["))
       return;
-    size_t rb = match(lb, "[", "]");
-    if (rb == kNPos)
+    // Wave 4: suppress only the exact declaration token (recorded when the
+    // extent was folded), not any name preceded by an identifier/comma.  The
+    // old heuristic also skipped real accesses such as `return a[9]`, and it
+    // read the declaration's count bracket as if it were an index.  `sizeof`
+    // operands are unevaluated, so a constant there is not an access.
+    if (constantVlaDeclPos_.count(i) || inUnevaluatedContext(i))
       return;
     const std::vector<size_t> *dims = nullptr;
     if (!findShape(toks_[i].text, i, &dims) || dims->empty())
       return;
-    // Skip the declaration itself: its bracket holds the count, not an index.
-    size_t prev = prevSig(i);
-    if (prev != kNPos &&
-        (toks_[prev].kind == TokKind::Identifier || isPunct(prev, ",")))
-      return;
-    long index = 0;
-    if (!indexExprValue(lb + 1, rb, &index))
-      return;
-    long extent = static_cast<long>(dims->front());
-    if (index < 0)
-      errorAt(toks_[lb], "negative array index " + std::to_string(index) +
-                             " on '" + toks_[i].text + "'");
-    else if (index >= extent)
-      reportConstantIndex(toks_[lb], index, toks_[i].text,
-                          static_cast<size_t>(extent));
+    // Walk the whole subscript chain so a constant past the extent in a
+    // non-leading dimension (`int a[n][n]; a[0][9];`) is diagnosed too.
+    size_t cursor = lb;
+    for (size_t d = 0; d < dims->size(); ++d) {
+      if (!isPunct(cursor, "["))
+        break;
+      size_t rb = match(cursor, "[", "]");
+      if (rb == kNPos)
+        break;
+      long index = 0;
+      if (indexExprValue(cursor + 1, rb, &index)) {
+        long extent = static_cast<long>((*dims)[d]);
+        if (index < 0 &&
+            hasNonNegativeGuard(toks_[nextSig(cursor)].text, i))
+          continue;
+        if (index < 0)
+          errorAt(toks_[cursor], "negative array index " +
+                                     std::to_string(index) + " on '" +
+                                     toks_[i].text + "'");
+        else if (index >= extent)
+          reportConstantIndex(toks_[cursor], index, toks_[i].text,
+                              static_cast<size_t>(extent));
+      }
+      cursor = nextSig(rb);
+    }
   }
 
   /// Record every write to a name with the value (or "invalid").  A fact is
@@ -858,6 +947,8 @@ private:
       if (toks_[i].kind != TokKind::Identifier)
         continue;
       const std::string name = toks_[i].text;
+      if (isVolatileName(name))
+        continue; // never record a volatile initializer as a constant fact
       size_t n = nextSig(i);
       if (isPunct(n, "=")) {
         long v = 0;
@@ -907,6 +998,8 @@ private:
   std::map<std::string, std::vector<std::pair<size_t, long>>> phiConsts_;
 
   bool phiConstAt(const std::string &name, size_t pos, long *out) const {
+    if (isVolatileName(name))
+      return false;
     auto it = phiConsts_.find(name);
     if (it == phiConsts_.end()) return false;
     long value = kInvalidConst;
@@ -1737,7 +1830,22 @@ private:
             else
               return; // index field not provable: stay silent
           } else if (!constantIndexAt(idx, rb, &index)) {
-            return;
+            // Wave 4 (red finding): `void w(struct S *s, int i){ s->a[i]=777; }`
+            // called as `w(&s, 9)` — the field extent is known and the index
+            // is bounded by the call site, so the OOB is provable.
+            if (!paramIndexUpperBound(idx, rb, &index))
+              return;
+            const std::string *fn = enclosingFunction(i);
+            if (fn) {
+              bool guarded = false;
+              for (size_t k = idx; k < rb; ++k)
+                if (toks_[k].kind == TokKind::Identifier &&
+                    hasFoldedUpperGuard(funcs_.at(*fn), toks_[k].text, i,
+                                        extent))
+                  guarded = true;
+              if (guarded)
+                return;
+            }
           }
           if (index < 0 || index >= extent) {
             errorAtSafeBounds(toks_[after], "out-of-bounds access: index " +
@@ -1896,6 +2004,8 @@ private:
       }
     }
     if (e == r + 1 && toks_[r].kind == TokKind::Identifier) {
+      if (isVolatileName(toks_[r].text))
+        return false; // a volatile index cannot be folded from its init
       for (size_t k = r; k > 0; --k) {
         if (!isPunct(k, "=")) continue;
         size_t lhs = prevSig(k);
@@ -1905,6 +2015,63 @@ private:
         if (novelIndexValue(rhs, stmtEnd(rhs), out)) return true;
         break; // most recent assignment is not novel: stop looking
       }
+    }
+    return false;
+  }
+
+  /// True when the nearest enclosing `if` condition proves `name >= 0`
+  /// before the subscript at `pos`.  A value folded from its initializer can
+  /// be negative at declaration yet guarded before every use
+  /// (`prev = j - 1; if (prev >= 0 && tmp[prev] == x)`); reporting -1 there
+  /// rejected valid plain C (c_apps/game_2048).
+  bool hasNonNegativeGuard(const std::string &name, size_t pos) const {
+    size_t ifPos = kNPos;
+    int braces = 0;
+    for (size_t k = pos; k > 0; --k) {
+      size_t p = k - 1;
+      if (isPunct(p, ";"))
+        break;
+      // The guarded use may be inside the `if` body; allow a small number of
+      // brace crossings to reach the condition, but never scan past a
+      // statement boundary or into an unrelated outer scope.
+      if (isPunct(p, "{") || isPunct(p, "}")) {
+        if (++braces > 3)
+          break;
+      }
+      if (isIdent(p, "if")) { ifPos = p; break; }
+    }
+    if (ifPos == kNPos)
+      return false;
+    size_t lp = nextSig(ifPos);
+    if (lp == kNPos || !isPunct(lp, "("))
+      return false;
+    size_t rp = match(lp, "(", ")");
+    if (rp == kNPos)
+      return false;
+    // The guarded subscript can itself be part of the `if` condition, in
+    // which case rp is after `pos`; that is the common `p && a[i]` form.
+    for (size_t k = nextSig(lp); k < rp; ++k) {
+      if (toks_[k].kind != TokKind::Identifier || toks_[k].text != name)
+        continue;
+      size_t op = nextSig(k);
+      if (op != kNPos && op < rp && isPunct(op, ">=")) {
+        size_t z = nextSig(op);
+        if (z != kNPos && z < rp && toks_[z].kind == TokKind::Number &&
+            toks_[z].text == "0")
+          return true;
+      }
+    }
+    // `0 <= name` form.
+    for (size_t k = nextSig(lp); k < rp; ++k) {
+      if (toks_[k].kind != TokKind::Number || toks_[k].text != "0")
+        continue;
+      size_t op = nextSig(k);
+      if (op == kNPos || op >= rp || !isPunct(op, "<="))
+        continue;
+      size_t n = nextSig(op);
+      if (n != kNPos && n < rp && toks_[n].kind == TokKind::Identifier &&
+          toks_[n].text == name)
+        return true;
     }
     return false;
   }
@@ -1919,6 +2086,7 @@ private:
     if (!findShape(toks_[i].text, i, &dims) || dims->empty()) return;
     long index = 0;
     if (!novelIndexValue(lb + 1, rb, &index)) return;
+    if (index < 0 && hasNonNegativeGuard(toks_[nextSig(lb)].text, i)) return;
     long extent = static_cast<long>(dims->front());
     if (index < 0)
       errorAt(toks_[lb], "negative array index " + std::to_string(index) +
@@ -2446,6 +2614,8 @@ private:
     // A name proved negative elsewhere is enough to establish the sign; use
     // -1 as a conservative representative (the rule only needs "< 0").
     if (from + 1 == to && toks_[from].kind == TokKind::Identifier) {
+      if (isVolatileName(toks_[from].text))
+        return false; // volatile sign is not a compile-time fact
       const std::set<std::string> *neg = negativeFactsAt(from);
       if (neg && neg->count(toks_[from].text) &&
           !guardedNegative(from, toks_[from].text)) {
@@ -2569,6 +2739,21 @@ private:
         out->dims = *dims;
         out->offset = 0;
         return true;
+      }
+      // Wave 4 (red finding): `int *p = s.a;` where `a` is a fixed array
+      // field.  Without this the alias is invisible and a call-site-bounded
+      // `p[i]` (the canary overwrites) stays uninstrumented and unrejected.
+      auto vit = varStruct_.find(toks_[rhs].text);
+      if (vit != varStruct_.end()) {
+        auto sit = structFields_.find(vit->second);
+        if (sit != structFields_.end())
+          for (const auto &f : sit->second)
+            if (f.name == field && f.extent > 0) {
+              out->array = toks_[rhs].text + "." + field;
+              out->dims.push_back(f.extent);
+              out->offset = 0;
+              return true;
+            }
       }
     }
     if (toks_[rhs].kind != TokKind::Identifier)
@@ -2779,6 +2964,416 @@ private:
       errorAtSafeBounds(toks_[lb], "array index " + std::to_string(idx) +
           " reaches past array '" + it->second.array +
           "' via pointer-to-pointer parameter '" + toks_[i].text + "'");
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Wave 4 — call-site-bounded pointer indices (red-team spatial finding).
+  //
+  // Rationale: the red suite drives OOB through a pointer alias with a
+  // non-constant index (`void w(int i){ int a[4]; int *p=a; p[i]=777; } w(4);`,
+  // `*(p+i)`, VLA aliases, realloc shrink, ptr-to-ptr, row pointers).  The
+  // index is not a literal, so the constant-only checks stay silent, yet a
+  // single call site proves the exact value.  These rules fire ONLY when a)
+  // the base extent is provable (stack/heap/VLA/allocation/array alias) and
+  // b) the index is provably bounded by call-site constants.  A genuinely
+  // runtime-unknown index (getchar/argv/volatile) yields no bound here, so
+  // no valid C is blanked; the Rewriter owner wires the runtime guard for
+  // that case.  Guard-suppressed accesses stay silent.
+  //===--------------------------------------------------------------------===//
+
+  /// Wave 4 regression fix: a volatile-qualified object's initializer is a
+  /// runtime value, never a constant fact.  Record every declarator named in
+  /// a `volatile` declaration so no folding site (local constants, phi,
+  /// novel indices, call-site bounds) can turn it into a compile-time bound.
+  std::set<std::string> volatileNames_;
+
+  void collectVolatileNames() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "volatile"))
+        continue;
+      size_t k = nextSig(i);
+      while (k < toks_.size() && !isPunct(k, ";") && !isPunct(k, "{") &&
+             !isPunct(k, "}")) {
+        if (toks_[k].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[k].text) && !isIdent(k, "volatile")) {
+          volatileNames_.insert(toks_[k].text);
+          int paren = 0, bracket = 0;
+          while (k < toks_.size()) {
+            if (isPunct(k, "(")) ++paren;
+            else if (isPunct(k, ")")) --paren;
+            else if (isPunct(k, "[")) ++bracket;
+            else if (isPunct(k, "]")) --bracket;
+            else if (paren == 0 && bracket == 0 &&
+                     (isPunct(k, ",") || isPunct(k, ";")))
+              break;
+            ++k;
+          }
+          ++k; // step past ',' to the next declarator (or ';' out of loop)
+          continue;
+        }
+        ++k;
+      }
+    }
+  }
+
+  bool isVolatileName(const std::string &name) const {
+    return volatileNames_.count(name) != 0;
+  }
+
+  void collectParamConstBounds() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (toks_[i].kind != TokKind::Identifier)
+        continue;
+      auto fit = funcs_.find(toks_[i].text);
+      if (fit == funcs_.end())
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{"))
+        continue; // a definition, not a call
+      auto args = splitArgs(lp + 1, rp);
+      const auto &params = fit->second.params;
+      for (size_t p = 0; p < params.size() && p < args.size(); ++p) {
+        // A conditional argument is folded to its MAX by indexExprValue;
+        // using that as a proven bound could reject the always-taken safe
+        // branch, so leave the guard/runtime path to handle it.
+        bool conditional = false;
+        for (size_t k = args[p].first; k < args[p].second; ++k) {
+          if (isPunct(k, "?")) conditional = true;
+          if (toks_[k].kind == TokKind::Identifier &&
+              isVolatileName(toks_[k].text))
+            conditional = true; // volatile arg is not a constant bound
+        }
+        if (conditional)
+          continue;
+        long v = 0;
+        if (!indexExprValue(args[p].first, args[p].second, &v))
+          continue;
+        auto &seen = paramConstSeen_[toks_[i].text];
+        auto &mx = paramConstMax_[toks_[i].text][p];
+        if (!seen.count(p)) {
+          mx = v;
+          paramConstUnique_[toks_[i].text][p] = v;
+          seen.insert(p);
+        } else {
+          if (v > mx)
+            mx = v;
+          auto uit = paramConstUnique_[toks_[i].text].find(p);
+          if (uit != paramConstUnique_[toks_[i].text].end() && uit->second != v)
+            paramConstUnique_[toks_[i].text].erase(uit);
+        }
+      }
+    }
+  }
+
+  /// Upper bound of an index expression whose value comes from a call-site
+  /// constant parameter (bare parameter or parameter +/- constant delta).
+  /// Constants and genuinely dynamic expressions return false: the former
+  /// are handled by the existing literal checks (avoiding duplicate
+  /// diagnostics), the latter by the Rewriter's runtime guard.
+  bool paramIndexUpperBound(size_t from, size_t to, long *high) const {
+    size_t f = from, t = to;
+    trim(&f, &t);
+    if (f >= t)
+      return false;
+    const std::string *fn = enclosingFunction(f);
+    if (!fn)
+      return false;
+    auto fit = paramConstMax_.find(*fn);
+    if (fit == paramConstMax_.end())
+      return false;
+    const FuncSig &sig = funcs_.at(*fn);
+    size_t paramTok = kNPos, paramPos = kNPos;
+    for (size_t k = f; k < t; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      for (size_t p = 0; p < sig.params.size(); ++p)
+        if (sig.params[p] == toks_[k].text) {
+          paramTok = k;
+          paramPos = p;
+          break;
+        }
+      if (paramTok != kNPos)
+        break;
+    }
+    if (paramTok == kNPos)
+      return false;
+    auto pit = fit->second.find(paramPos);
+    if (pit == fit->second.end())
+      return false;
+    long base = pit->second;
+    if (f + 1 == t) {
+      *high = base;
+      return true;
+    }
+    if (paramTok == f && f + 2 < t &&
+        (isPunct(f + 1, "+") || isPunct(f + 1, "-"))) {
+      long d = 0;
+      if (!indexExprValue(f + 2, t, &d))
+        return false;
+      *high = isPunct(f + 1, "+") ? base + d : base - d;
+      return true;
+    }
+    if (paramTok + 1 < t && isPunct(paramTok, "+")) {
+      long d = 0;
+      if (!indexExprValue(paramTok + 2, t, &d))
+        return false;
+      *high = base + d;
+      return true;
+    }
+    if (paramTok > f && isPunct(paramTok - 1, "+")) {
+      long d = 0;
+      if (!indexExprValue(f, paramTok - 1, &d))
+        return false;
+      *high = base + d;
+      return true;
+    }
+    return false;
+  }
+
+  /// Provable element count and constant offset behind a subscript base at
+  /// `dim`: tracked alias, pointer-to-pointer parameter, fixed/heap/VLA
+  /// shape, or a pointer parameter whose extent a call site supplied.
+  bool baseExtentForCheck(size_t pos, const std::string &name, size_t dim,
+                          long *count, long *offset) const {
+    *offset = 0;
+    auto fromAlias = [&](const TrackedArrayPointer &tp) {
+      if (tp.dims.empty())
+        return false;
+      if (tp.rowPointer) {
+        if (dim >= tp.dims.size())
+          return false;
+        *count = static_cast<long>(tp.dims[dim]);
+        *offset = (dim == 0) ? tp.offset : 0;
+      } else {
+        long long total = 1;
+        for (size_t d : tp.dims)
+          total *= static_cast<long long>(d);
+        *count = static_cast<long>(total);
+        *offset = tp.offset;
+      }
+      return *count > 0;
+    };
+    auto it = arrayPtrs_.find(name);
+    if (it != arrayPtrs_.end() && pos >= it->second.pos &&
+        fromAlias(it->second))
+      return true;
+    auto pt = ptr2Params_.find(name);
+    if (pt != ptr2Params_.end() && fromAlias(pt->second))
+      return true;
+    const std::vector<size_t> *dims = nullptr;
+    if (findShape(name, pos, &dims) && !dims->empty()) {
+      *count = static_cast<long>((*dims)[std::min(dim, dims->size() - 1)]);
+      return *count > 0;
+    }
+    const std::string *fn = enclosingFunction(pos);
+    if (!fn)
+      return false;
+    auto eit = paramExtents_.find(*fn);
+    if (eit == paramExtents_.end())
+      return false;
+    const auto &params = funcs_.at(*fn).params;
+    for (size_t p = 0; p < params.size(); ++p)
+      if (params[p] == name) {
+        auto e = eit->second.find(p);
+        if (e == eit->second.end() || e->second == 0)
+          return false;
+        *count = static_cast<long>(e->second);
+        return true;
+      }
+    return false;
+  }
+
+  /// An explicit `if (idx >= X) return;`-style guard folded through local or
+  /// call-site constants makes the continuing index provably bounded.
+  bool hasFoldedUpperGuard(const FuncSig &sig, const std::string &var,
+                           size_t at, long extent) const {
+    if (hasUpperGuard(sig, var, at, extent))
+      return true;
+    for (size_t k = sig.bodyOpen; k < at; ++k) {
+      if (!isIdent(k, "if"))
+        continue;
+      size_t lp = nextSig(k);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = matchIn(lp, at, "(", ")");
+      if (rp == kNPos)
+        continue;
+      size_t v = kNPos;
+      for (size_t q = lp + 1; q < rp; ++q)
+        if (toks_[q].kind == TokKind::Identifier && toks_[q].text == var) {
+          v = q;
+          break;
+        }
+      if (v == kNPos)
+        continue;
+      size_t op = nextSig(v);
+      size_t nv = nextSig(op);
+      if (nv >= rp || !(isPunct(op, ">=") || isPunct(op, ">")))
+        continue;
+      long n = 0;
+      if (!indexExprValue(nv, rp, &n))
+        continue;
+      size_t body = nextSig(rp);
+      size_t end = isPunct(body, "{") ? matchIn(body, at, "{", "}")
+                                      : stmtEnd(body);
+      if (end == kNPos || end >= at)
+        continue;
+      for (size_t q = body; q <= end; ++q)
+        if (isIdent(q, "return")) {
+          long reach = isPunct(op, ">") ? n : n - 1;
+          if (reach < extent)
+            return true;
+        }
+    }
+    return false;
+  }
+
+  /// A byte-like pointee (char/void/8-bit) reinterprets an element count as
+  /// a byte count, so the token-level extent is in the wrong unit.  Exclude
+  /// such bases from the call-site-index rule to avoid false positives on
+  /// valid code (`int a[4]; char *q=(char*)a; q[9];`).  The AST byte-accurate
+  /// check still covers literal indices there.
+  std::set<std::string> byteCastAliases_;
+
+  void collectByteCastAliases() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "="))
+        continue;
+      size_t lhs = prevSig(i);
+      if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
+        continue;
+      size_t r = nextSig(i);
+      if (!isPunct(r, "(")) {
+        // `char *p = malloc(4*sizeof(int))`: no cast, but the extent folded
+        // from the allocation is in ints while p counts bytes.
+        size_t star = prevSig(lhs);
+        size_t typeTok =
+            (star != kNPos && isPunct(star, "*")) ? prevSig(star) : kNPos;
+        if (typeTok != kNPos && toks_[typeTok].kind == TokKind::Identifier) {
+          const std::string &t = toks_[typeTok].text;
+          if (t == "char" || t == "void" || t == "int8_t" || t == "uint8_t")
+            byteCastAliases_.insert(toks_[lhs].text);
+        }
+        continue;
+      }
+      size_t close = match(r, "(", ")");
+      if (close == kNPos)
+        continue;
+      bool byte = false, star = false;
+      for (size_t k = r + 1; k < close; ++k) {
+        if (isPunct(k, "*")) star = true;
+        if (toks_[k].kind == TokKind::Identifier) {
+          const std::string &t = toks_[k].text;
+          if (t == "char" || t == "void" || t == "int8_t" || t == "uint8_t")
+            byte = true;
+        }
+      }
+      if (star && byte)
+        byteCastAliases_.insert(toks_[lhs].text);
+    }
+  }
+
+  void checkParamIndexSubscript(size_t i) {
+    if (inUnevaluatedContext(i))
+      return;
+    // Formed dereference `*(base + idx)` (or `idx + base`).
+    if (isPunct(i, "*")) {
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        return;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos)
+        return;
+      size_t base = nextSig(lp);
+      if (base >= rp || toks_[base].kind != TokKind::Identifier)
+        return;
+      if (byteCastAliases_.count(toks_[base].text))
+        return; // element unit is bytes, not the folded element count
+      size_t op = nextSig(base);
+      if (!isPunct(op, "+"))
+        return; // backward motion cannot be bounded above by a max index
+      long high = 0;
+      if (!paramIndexUpperBound(op + 1, rp, &high))
+        return;
+      long extent = 0, offset = 0;
+      if (!baseExtentForCheck(base, toks_[base].text, 0, &extent, &offset))
+        return;
+      // Compare the ABSOLUTE index (offset included): a negative subscript on
+      // an interior pointer (`q = a+4; q[-1]`) is a valid earlier element.
+      if (high + offset < 0 || high + offset >= extent)
+        errorAtSafeBounds(toks_[i], "pointer index " + std::to_string(high) +
+            " from call site is out of bounds of '" + toks_[base].text +
+            "' of extent " + std::to_string(extent));
+      return;
+    }
+    if (toks_[i].kind != TokKind::Identifier)
+      return;
+    const std::string baseName = toks_[i].text;
+    if (byteCastAliases_.count(baseName))
+      return; // byte-granular alias: folded extent is in the wrong unit
+    size_t lb = nextSig(i);
+    if (isPunct(lb, ")") && isPunct(prevSig(i), "*"))
+      lb = nextSig(lb); // `(*q)[k]`: q is tracked in ptr2Params_
+    if (!isPunct(lb, "["))
+      return;
+    // The bracket of a declaration holds the extent, not an index.  In
+    // particular `int a[n]` with n call-site-bounded must not be read as
+    // `a[n]` OOB.  Reuse the declaration-shape test from checkSubscriptChain.
+    if (constantVlaDeclPos_.count(i))
+      return;
+    size_t close = match(lb, "[", "]");
+    if (close != kNPos) {
+      size_t after = nextSig(close);
+      bool declTail = isPunct(after, ";") || isPunct(after, ",") ||
+                      isPunct(after, "=") || isPunct(after, "{");
+      size_t prev = prevSig(i);
+      bool declHead = isPunct(prev, ",") ||
+                      (prev != kNPos && toks_[prev].kind == TokKind::Identifier &&
+                       (isTypeWord(toks_[prev].text) ||
+                        isIdent(prev, "struct") || isIdent(prev, "union")));
+      if (declTail && declHead)
+        return;
+    }
+    long extent = 0, offset = 0;
+    if (!baseExtentForCheck(i, baseName, 0, &extent, &offset))
+      return;
+    const std::string *fn = enclosingFunction(i);
+    size_t cursor = lb;
+    for (size_t dim = 0; cursor < toks_.size() && isPunct(cursor, "[");
+         ++dim) {
+      size_t rb = match(cursor, "[", "]");
+      if (rb == kNPos)
+        break;
+      long high = 0;
+      if (paramIndexUpperBound(cursor + 1, rb, &high)) {
+        long dimExtent = extent, dimOffset = offset;
+        if (dim > 0 &&
+            !baseExtentForCheck(i, baseName, dim, &dimExtent, &dimOffset))
+          break;
+        bool guarded = false;
+        if (fn)
+          for (size_t k = cursor + 1; k < rb; ++k)
+            if (toks_[k].kind == TokKind::Identifier) {
+              if (hasFoldedUpperGuard(funcs_.at(*fn), toks_[k].text, i,
+                                      dimExtent)) {
+                guarded = true;
+                break;
+              }
+            }
+        if (!guarded &&
+            (high + dimOffset < 0 || high + dimOffset >= dimExtent)) {
+          errorAtSafeBounds(toks_[cursor],
+              "pointer index " + std::to_string(high) +
+              " from call site is out of bounds of '" + baseName +
+              "' of extent " + std::to_string(dimExtent));
+          return;
+        }
+      }
+      cursor = nextSig(rb);
+    }
   }
 
   /// Rules (negative index, one-past pointer, multi-dimensional bounds):
@@ -3525,7 +4120,7 @@ private:
   void collectAllocations() {
     static const char *const kAllocators[] = {
         "cplus_alloc", "cplus_zalloc", "cplus_realloc", "cplus_new_array",
-        "cplus_new"};
+        "cplus_new", "realloc"};
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (toks_[i].kind != TokKind::Identifier)
         continue;
@@ -3591,13 +4186,42 @@ private:
       } else {
         auto args = splitArgs(lp + 1, rp);
         size_t from = lp + 1, to = rp;
-        if (toks_[i].text == "cplus_realloc") {
-          if (args.size() < 2)
+        // Wave 4 (red finding): realloc gives the result a NEW extent; the
+        // caller's old extent is stale.  cplus_realloc and raw realloc are
+        // handled identically (size is arg #1).  A bare byte count is
+        // converted using the destination's element size.
+        bool isRealloc = (toks_[i].text == "cplus_realloc" ||
+                          toks_[i].text == "realloc");
+        if (isRealloc) {
+          if (args.size() < 2) {
+            reallocResultNames_.insert(toks_[name].text);
+            reallocInvalidAt_[toks_[name].text].push_back(i);
             continue;
+          }
           from = args[1].first;
           to = args[1].second;
         }
-        if (!allocationCount(from, to, &count))
+        if (!allocationCount(from, to, &count) && isRealloc) {
+          long bytes = 0;
+          size_t starTok = prevSig(name);
+          size_t typeTok = (starTok != kNPos && isPunct(starTok, "*"))
+                               ? prevSig(starTok) : kNPos;
+          std::string ty;
+          if (typeTok != kNPos && toks_[typeTok].kind == TokKind::Identifier)
+            ty = toks_[typeTok].text;
+          size_t es = typeSize(ty);
+          if (es && constantFactor(from, to, &bytes) && bytes > 0 &&
+              bytes % static_cast<long>(es) == 0)
+            count = static_cast<size_t>(bytes / static_cast<long>(es));
+        }
+        if (isRealloc) {
+          // Register the result name even when the new size is unknown: the
+          // alias-transfer pass must invalidate the old extent at `p = q`.
+          reallocResultNames_.insert(toks_[name].text);
+          if (count == 0)
+            reallocInvalidAt_[toks_[name].text].push_back(i);
+        }
+        if (count == 0)
           continue;
       }
       if (count > 0) {
@@ -3607,6 +4231,39 @@ private:
         allocated.dims.push_back(count);
         localArrays_.push_back(allocated);
       }
+    }
+  }
+
+  /// Wave 4 regression fix: carry a realloc result's extent through the common
+  /// `int *q = cplus_realloc(p, N); p = q;` (and `p = q + 0`) idiom.  If the new
+  /// size could not be folded, invalidate p's old extent instead so no stale
+  /// bound is used.  Restricted to realloc result names, so ordinary pointer
+  /// assignments cannot introduce new extents or false positives.
+  void propagateReallocAliases() {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "="))
+        continue;
+      size_t lhs = prevSig(i);
+      if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
+        continue;
+      size_t rhs = stripCast(nextSig(i), toks_.size());
+      if (rhs >= toks_.size() || toks_[rhs].kind != TokKind::Identifier ||
+          !reallocResultNames_.count(toks_[rhs].text))
+        continue;
+      size_t end = stmtEnd(rhs);
+      size_t p = nextSig(rhs);
+      if (p < end && (isPunct(p, "+") || isPunct(p, "-"))) {
+        long d = 0;
+        if (!constantIndexAt(nextSig(p), end, &d) || d != 0)
+          continue; // a real offset change is a different object
+      } else if (p != end && p != kNPos) {
+        continue; // not a bare alias
+      }
+      const std::vector<size_t> *dims = nullptr;
+      if (findShape(toks_[rhs].text, i, &dims) && !dims->empty())
+        localArrays_.push_back({i, toks_[lhs].text, *dims});
+      else
+        reallocInvalidAt_[toks_[lhs].text].push_back(i);
     }
   }
 
@@ -4587,6 +5244,17 @@ private:
   std::vector<ArrayShape> localArrays_;
   std::map<std::string, FuncSig> funcs_;
   std::map<std::string, long> constants_;
+  // Wave 4 (red finding).  Per-function, per-parameter constant bounds
+  // gathered from call sites.  Max is the provable worst case for an OOB
+  // proof; Unique is used when an exact value is required (VLA extents).
+  std::map<std::string, std::map<size_t, long>> paramConstMax_;
+  std::map<std::string, std::map<size_t, long>> paramConstUnique_;
+  std::map<std::string, std::set<size_t>> paramConstSeen_;
+  std::set<size_t> constantVlaDeclPos_;
+  // A realloc/cplus_realloc whose new size cannot be folded replaces a known
+  // extent with an unknown one; positions here invalidate older shapes.
+  std::map<std::string, std::vector<size_t>> reallocInvalidAt_;
+  std::set<std::string> reallocResultNames_; // vars assigned a realloc result
   std::set<std::string> conflict_;
   std::map<std::string, size_t> returnExtents_;
   std::set<std::string> globals_;

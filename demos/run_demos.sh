@@ -40,7 +40,7 @@ build() {
   if [ ! -f "$src" ]; then
     src="$ROOT/demos/$name.cp"
   fi
-  "$CPLUS" build "$src" -o "$OUT/$name" \
+  "$CPLUS" build --no-werror "$src" -o "$OUT/$name" \
     >"$OUT/$name.build.log" 2>&1
 }
 
