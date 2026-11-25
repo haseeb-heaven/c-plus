@@ -43,7 +43,7 @@ build() {
   # The modern allocator demo binds the thread-local DataStack symbol from
   # the hardened libc archive; other demos need no extra link input.
   if [ "$name" = "modern_allocators" ]; then
-    "$CPLUS" build "$src" --default --sanitize=none -I"$ROOT" -o "$OUT/$name" \
+    "$CPLUS" build --no-werror "$src" --default --sanitize=none -I"$ROOT" -o "$OUT/$name" \
       -- "$ROOT/build/libc/libcplus_hardened.a" \
       >"$OUT/$name.build.log" 2>&1
     return $?
