@@ -45,7 +45,11 @@ build() {
   if [ "$name" = "modern_allocators" ]; then
     # CI may run demos before the hardened archive exists.
     if [ ! -f "$ROOT/build/libc/libcplus_hardened.a" ]; then
-      timeout 180 sh "$ROOT/tests/libc/build_libc.sh" >"$OUT/libc_build.log" 2>&1
+      if ! timeout 300 sh "$ROOT/tests/libc/build_libc.sh" >"$OUT/libc_build.log" 2>&1; then
+        echo "FAIL modern_allocators: hardened libc build failed"
+        tail -20 "$OUT/libc_build.log" 2>/dev/null || true
+        return 1
+      fi
     fi
     if "$CPLUS" build --no-werror "$src" --default --sanitize=none -I"$ROOT" \
          -o "$OUT/$name" -- "$ROOT/build/libc/libcplus_hardened.a" \
