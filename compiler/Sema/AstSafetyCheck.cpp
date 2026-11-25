@@ -5075,6 +5075,15 @@ public:
       // -Wreturn-stack-address no longer sees `return &buf[0]`. Detect a
       // local array ADDRESS in the AST so check and build agree. Returning
       // an element value (`return row[0]`) stays legal.
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              s->getRetValue()->IgnoreParenImpCasts()))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (vd->getNameAsString() == "self" ||
+              vd->getNameAsString() == "this")
+            reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
+                        "address of local instance '" + vd->getNameAsString() +
+                            "' cannot escape the method",
+                        "return a copied value or use an explicit owner", true);
       const VarDecl *owner = localStackOwner(s->getRetValue());
       if (owner && owner->hasLocalStorage() &&
           (owner->getType()->isArrayType() ||
@@ -5725,6 +5734,19 @@ public:
 
   bool VisitBinaryOperator(BinaryOperator *op) {
     noteAssignedValueSource(op);
+    // `r.ptr = &local; return r;` stores a frame address in a struct field.
+    // The aggregate-initializer check in VisitVarDecl cannot see this form,
+    // so record the same obligation when the store is an assignment.
+    if (op->isAssignmentOp()) {
+      const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
+      if (const auto *me = dyn_cast<MemberExpr>(lhs)) {
+        if (const auto *ref = dyn_cast<DeclRefExpr>(
+                me->getBase()->IgnoreParenImpCasts()))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+            if (exprContainsLocalAddress(op->getRHS()))
+              structLocalAddrVars_.insert(vd->getNameAsString());
+      }
+    }
     if (report_ && op->isAssignmentOp()) {
       // `q = realloc(...)` (as opposed to an initializer) also makes q a
       // realloc-result variable, so a later `p = q` can transfer its extent.
