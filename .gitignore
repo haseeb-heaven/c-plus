@@ -124,3 +124,4 @@ tests/compiler/borrow_escape/results/*.bin
 tests/compiler/default_policy/results/*.bin
 tests/compiler/pointer_provenance/results/*.bin
 tests/compiler/ast_identity/results/*.bin
+tests/compiler/data_race/results/*.bin

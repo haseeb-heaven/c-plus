@@ -1,0 +1,33 @@
+Data-race regression suite
+macOS-27.2.1-arm64-arm-64bit
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+unsafe_helper_global             PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_helper_global.c
+  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_helper_global.c:6:58: error: [CPLUS-FFI] multiple threads mutate shared global \'g\' without synchronization\n  int main(void){ pthread_t a,b; pthread_create(&a,0,w,0); pthread_create(&b,0,w,0); pthread_join(a,0); pthread_join(b,0); printf("%d\\n",g); return 0; }\n                                                           ^~~~~~~~~~~~~~\n'
+unsafe_missing_unlock            PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_missing_unlock.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_missing_unlock.c:4:64: error: [CPLUS-FFI] mutex 'm' is still held on this return path; unlock before returning\n  static void *w(void *p){ (void)p; pthread_mutex_lock(&m); g++; return 0; }\n                                                                 ^~~~~~\n"
+unsafe_early_return_locked       PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_early_return_locked.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_early_return_locked.c:4:56: error: [CPLUS-FFI] mutex 'm' is still held on this return path; unlock before returning\n  static void *w(void *p){ pthread_mutex_lock(&m); if(p) return 0; g++; pthread_mutex_unlock(&m); return 0; }\n                                                         ^~~~~~\n"
+unsafe_lock_order_inversion      PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_lock_order_inversion.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/unsafe_lock_order_inversion.c:5:59: error: [CPLUS-FFI] inconsistent lock order: 'a' and 'b' are acquired in opposite orders by different functions; potential deadlock\n  static void *w2(void*p){ (void)p; pthread_mutex_lock(&b); pthread_mutex_lock(&a); pthread_mutex_unlock(&a); pthread_mutex_unlock(&b); return 0; }\n                                                            ^~~~~~~~~~~~~~~~~~\n"
+safe_helper_global_locked        PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_helper_global_locked.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_helper_global_locked.c ok\n' err=''
+safe_locked_global               PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_locked_global.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_locked_global.c ok\n' err=''
+safe_nested_lock_same_order      PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_nested_lock_same_order.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_nested_lock_same_order.c ok\n' err=''
+safe_atomic_counter              PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_atomic_counter.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_atomic_counter.c ok\n' err=''
+safe_early_return_after_unlock   PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_early_return_after_unlock.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/data_race/cases/safe_early_return_after_unlock.c ok\n' err=''
+
+cases=9 passed=9 failed=0

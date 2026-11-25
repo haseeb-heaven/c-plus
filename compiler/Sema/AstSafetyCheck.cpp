@@ -173,13 +173,30 @@ struct GlobalWriteFinder : RecursiveASTVisitor<GlobalWriteFinder> {
   const std::set<std::string> &globals;
   std::set<std::string> written;
   std::set<std::string> freed;
-  explicit GlobalWriteFinder(const std::set<std::string> &g) : globals(g) {}
+  std::set<const FunctionDecl *> seen_;
+  explicit GlobalWriteFinder(const std::set<std::string> &g,
+                             const FunctionDecl *entry = nullptr)
+      : globals(g) {
+    if (entry)
+      seen_.insert(entry->getCanonicalDecl());
+  }
 
   bool synchronized = false;
 
   bool VisitCallExpr(CallExpr *c) {
     if (!c->getDirectCallee())
       return true;
+    // Thread functions frequently delegate the actual mutation to a helper.
+    // A name-only check on the entry body would miss that write entirely and
+    // report a clean check. Follow same-TU helper bodies with a visited set;
+    // declarations without a body stay opaque (no invented effect summary).
+    if (const FunctionDecl *callee = c->getDirectCallee()) {
+      const FunctionDecl *canon = callee->getCanonicalDecl();
+      if (callee->getBody() && !seen_.count(canon)) {
+        seen_.insert(canon);
+        TraverseStmt(const_cast<Stmt *>(callee->getBody()));
+      }
+    }
     std::string n = c->getDirectCallee()->getNameAsString();
     // A lock/unlock pair in the thread entry means the global writes are
     // protected; suppress the may-race report for that function.
@@ -582,6 +599,26 @@ public:
     const auto *ref = dyn_cast<DeclRefExpr>(e);
     const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
     return vd ? vd->getNameAsString() : std::string();
+  }
+
+  /// Mutex arguments are normally `&m`; resolve the underlying declaration
+  /// rather than relying on the token spelling of the address expression.
+  std::string lockNameOf(const Expr *expr) const {
+    if (!expr)
+      return std::string();
+    const Expr *e = expr->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(e))
+      if (uo->getOpcode() == UO_AddrOf)
+        e = uo->getSubExpr()->IgnoreParenImpCasts();
+    return varNameOf(e);
+  }
+
+  static bool isMutexLockCall(llvm::StringRef n) {
+    return n.contains("mutex_lock") && !n.contains("unlock") &&
+           !n.contains("trylock") && !n.contains("timedlock");
+  }
+  static bool isMutexUnlockCall(llvm::StringRef n) {
+    return n.contains("mutex_unlock");
   }
 
   /// Like varNameOf, but also looks through explicit C-style casts and
@@ -4027,7 +4064,12 @@ public:
             nonZeroVars_.insert(vd);
             invalidatedNonZero_.erase(vd);
           }
+    // Lock state on the fall-through path is the state before the branch:
+    // an unlock or return inside one arm must not be applied to code after
+    // the if. A return inside an arm is still diagnosed while it holds a lock.
+    std::map<std::string, unsigned> savedLocks = heldLocks_;
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
+    heldLocks_ = savedLocks;
     if (ifGuardVar && !containsReturn(s->getThen()))
       nonZeroVars_.erase(ifGuardVar);
     guardedSnprintf_ = savedGuarded;
@@ -4244,6 +4286,8 @@ public:
   bool TraverseFunctionDecl(FunctionDecl *fd) {
     std::string previousFunction = currentFunction_;
     std::set<std::string> previousNulls = nullVars_;
+    std::map<std::string, unsigned> previousLocks = heldLocks_;
+    heldLocks_.clear(); // lock state is per function, never inherited
     currentFunction_ = fd->getNameAsString();
     currentFnDecl_ = fd;
     stringPtrs_.clear(); // names are function-scoped, not TU-scoped
@@ -4539,8 +4583,14 @@ public:
       }
     }
     bool result = RecursiveASTVisitor::TraverseFunctionDecl(fd);
+    if (report_ && fd->getBody() && !heldLocks_.empty())
+      for (const auto &held : heldLocks_)
+        warnAt(fd->getEndLoc(), "mutex '" + held.first +
+                                    "' is never unlocked on this path; add "
+                                    "an unlock on every exit");
     currentFunction_ = previousFunction;
     nullVars_ = previousNulls;
+    heldLocks_ = previousLocks;
     return result;
   }
 
@@ -4761,6 +4811,15 @@ public:
   }
 
   bool VisitReturnStmt(ReturnStmt *s) {
+    if (report_ && !heldLocks_.empty())
+      for (const auto &held : heldLocks_)
+        warnAt(s->getBeginLoc(), "mutex '" + held.first +
+                                     "' is still held on this return path; "
+                                     "unlock before returning");
+    // A return ends this path. Clear the linear-traversal lock state so code
+    // that follows in the AST (but is unreachable on this path) is not
+    // mistaken for a second unlock of the same mutex.
+    heldLocks_.clear();
     if (report_ && s->getRetValue()) {
       const Expr *value = s->getRetValue()->IgnoreParenImpCasts();
       if (const auto *ref = dyn_cast<DeclRefExpr>(value))
@@ -6557,6 +6616,45 @@ public:
     std::string rawName = callee ? callee->getNameAsString() : std::string();
     std::string name = normalizeFortifyName(rawName);
 
+    // Lock discipline. State is per function; an unlock without a matching
+    // lock and opposite nesting orders across functions are diagnosed in
+    // STRICT. This is static analysis only: no runtime concurrency service is
+    // introduced and the C ABI is untouched.
+    if (report_ && call->getNumArgs() >= 1) {
+      const std::string mutex = lockNameOf(call->getArg(0));
+      if (!mutex.empty()) {
+        if (isMutexLockCall(rawName)) {
+          for (const auto &held : heldLocks_) {
+            if (held.first == mutex)
+              continue;
+            auto order = std::make_pair(held.first, mutex);
+            auto reverse = std::make_pair(mutex, held.first);
+            auto rit = lockOrders_.find(reverse);
+            // The opposite order may have been recorded by an earlier function
+            // (or by this function in a previous traversal); either direction
+            // is evidence of a lock-order inversion.
+            if (rit != lockOrders_.end() && rit->second != currentFunction_)
+              warnAt(call->getBeginLoc(),
+                     "inconsistent lock order: '" + mutex + "' and '" +
+                         held.first +
+                         "' are acquired in opposite orders by different "
+                         "functions; potential deadlock");
+            if (!lockOrders_.count(order))
+              lockOrders_[order] = currentFunction_;
+          }
+          ++heldLocks_[mutex];
+        } else if (isMutexUnlockCall(rawName)) {
+          auto it = heldLocks_.find(mutex);
+          if (it == heldLocks_.end())
+            warnAt(call->getBeginLoc(),
+                   "mutex '" + mutex + "' is unlocked without a matching "
+                                        "lock in this function");
+          else if (--it->second == 0)
+            heldLocks_.erase(it);
+        }
+      }
+    }
+
     // F2: a stale integer-laundered alias must not reach a release. Checked
     // before any early return so indirect releases and wrappers are covered.
     checkStaleIntegerAliasArgs(call, name, callee);
@@ -8305,6 +8403,11 @@ private:
   std::map<std::string, unsigned> maybeReleaseLines_;
   std::set<std::string> guardedFromConst_;
   std::string nonNullBranch_;
+  // Lock discipline: mutexes currently held in the traversed function and
+  // the nesting orders observed across functions (outer -> inner). The latter
+  // catches opposite acquisition orders, a classic lock-order deadlock.
+  std::map<std::string, unsigned> heldLocks_;
+  std::map<std::pair<std::string, std::string>, std::string> lockOrders_;
   std::set<std::string> provenanceInts_;
   // Interprocedural allocation extents: callee name -> param index -> bytes,
   // gathered from call sites whose argument is a tracked allocation.
@@ -8744,7 +8847,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
     finder.TraverseDecl(raceCtx.getTranslationUnitDecl());
     if (!entryFn || !entryFn->getBody())
       continue;
-    GlobalWriteFinder gw(collect.allGlobals());
+    GlobalWriteFinder gw(collect.allGlobals(), entryFn);
     gw.TraverseStmt(entryFn->getBody());
     if (gw.synchronized)
       continue;
