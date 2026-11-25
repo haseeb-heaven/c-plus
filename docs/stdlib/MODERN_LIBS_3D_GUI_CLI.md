@@ -8,13 +8,34 @@ never invents a number for an artifact that has not landed. Every missing
 artifact is marked **PENDING** with the exact command that produces or verifies
 it.
 
+## Current verified apps (post-move — authoritative)
+
+The three app suites formerly under `examples/{games3d,gui_app,cli_app}` are
+now real applications in `apps/`; the old `examples/.../run.sh` entries are
+compatibility shims only. Each verdict below is the owning runner's exact final
+line, and each screenshot is rendered from that runner's actual stdout.
+
+| App | Runner | Verified verdict | Screenshot | App README |
+| --- | --- | --- | --- | --- |
+| games3d — 3D scene app | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../../proof/all_apps_games_screenshots/screenshots/games3d.svg) | [apps/games3d](../../apps/games3d/README.md) |
+| gui_app — GUI app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg) | [apps/gui_app](../../apps/gui_app/README.md) |
+| cli_app — calculator CLI | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg) | [apps/cli_app](../../apps/cli_app/README.md) |
+
+The historical aggregate transcript in §1 and the PENDING notes in §§3–7 below
+are retained as a trace of the earlier capture; this section and the linked
+app/proof pages supersede them. Windows PE32+ execution evidence is in
+[proof/real_apps_cross_platform](../../proof/real_apps_cross_platform/README.md)
+(`CROSS_PROOF 58 58 0`), host/engine-specific and not a portability guarantee.
+
 ## 0. Honest scope (read this first)
 
 - The evidence collected here is **fixed-seed, deterministic edge-case evidence
   produced on this host** (macOS, `/usr/bin/clang`, C+ driver). It is **not** a
   full safety proof.
-- **Windows RUNTIME is BLOCKED.** Only PE compile/verify is in scope for the
-  cross suite; no Windows runtime success is claimed.
+- **Windows runtime in the historical aggregate capture was BLOCKED** (PE
+  compile/verify only). The current host/engine-specific Highball/Wine
+  evidence is `CROSS_PROOF 58 58 0` (§4 and the "Current verified apps"
+  section); no general Windows portability claim is made.
 - There is **no claim of Rust equivalence** and **no claim of 100% memory
   safety**.
 - A `PASS` below means "the named runner exited 0 with its own documented
@@ -49,7 +70,9 @@ runner's non-zero status.
 > State note: an early transcript captured during sibling editing showed a
 > transient `mesh3d` FAIL caused by a root-path bug in that sibling's runner
 > (`.../tests/build/c+`); the sibling corrected the root to `$DIR/../../..`.
-> The transcript below is the later, corrected re-run.
+> The transcript below is the later, corrected re-run. Suite labels and
+> runner paths are normalized to the current `apps/` locations; the original
+> capture used pre-move `demo_*` labels under `examples/`.
 
 ```text
 SUITE            RUNNER                                       STATUS       RC  LOG
@@ -59,10 +82,10 @@ scene3d          tests/stdlib/scene3d/run.sh                  PASS          0  b
 mesh3d           tests/stdlib/mesh3d/run.sh                   PASS          0  build/modern_libs/mesh3d.log
 widgets          tests/stdlib/widgets/run.sh                  PASS          0  build/modern_libs/widgets.log
 cli              tests/stdlib/cli/run.sh                      PASS          0  build/modern_libs/cli.log
-demo_games3d     examples/games3d/run.sh                      PASS          0  build/modern_libs/demo_games3d.log
-demo_gui_app     examples/gui_app/run.sh                      PENDING       -  MISSING (no log)
-  PENDING command: timeout 900 sh examples/gui_app/run.sh
-demo_cli_app     examples/cli_app/run.sh                      PASS          0  build/modern_libs/demo_cli_app.log
+games3d           apps/games3d/run.sh                         PASS          0  build/modern_libs/demo_games3d.log
+gui_app           apps/gui_app/run.sh                         PENDING       -  MISSING (no log)
+  PENDING command: timeout 900 sh apps/gui_app/run.sh
+cli_app           apps/cli_app/run.sh                         PASS          0  build/modern_libs/demo_cli_app.log
 cross            tests/modern_libs_cross/run.sh               PENDING       -  MISSING (no log)
   PENDING command: timeout 900 sh tests/modern_libs_cross/run.sh
 TOTALS           -                                            -             -  total=9 pass=7 fail=0 timeout=0 pending=2
@@ -77,8 +100,9 @@ EXIT=1
 |---:|---:|---:|---:|---:|
 | 9 | 7 | 0 | 0 | 2 |
 
-The two PENDING rows are `demo_gui_app` and `cross`; each is listed with its
-exact command in §7.
+The two historical PENDING rows are `gui_app` and `cross`; each is listed with
+its exact command in §7. Both have since been verified — see "Current verified
+apps" above and [proof/real_apps_cross_platform](../../proof/real_apps_cross_platform/README.md).
 
 ## 2. Per-library results
 
@@ -139,66 +163,69 @@ Covers layout determinism, hit testing, exact serialization sizing and bounded
 refusals with `error *` diagnostics. (An earlier intermediate snapshot showed
 `WIDGETS 137 0`; the sibling expanded the suite to 144 before finalizing.)
 
-## 3. Per-demo results
+## 3. Per-app results (current; supersedes the historical capture)
 
-| Demo | Path | Status | Evidence |
-|---|---|---|---|
-| games3d | `examples/games3d/` | PASS | `build/modern_libs/demo_games3d.log` |
-| gui_app | `examples/gui_app/` | PENDING | `examples/gui_app/run.sh` not present at capture time |
-| cli_app | `examples/cli_app/` | PASS (host) / PE compile FAIL | `build/modern_libs/demo_cli_app.log` |
+These are real verified applications in `apps/`, not demos. The
+`examples/{games3d,gui_app,cli_app}/run.sh` entries are compatibility shims.
+
+| App | Runner | Verified verdict | Screenshot | Evidence |
+|---|---|---|---|---|
+| games3d | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../../proof/all_apps_games_screenshots/screenshots/games3d.svg) | [app README](../../apps/games3d/README.md) |
+| gui_app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg) | [app README](../../apps/gui_app/README.md) |
+| cli_app | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg) | [app README](../../apps/cli_app/README.md) |
 
 ### 3.1 cli_app
 
-`examples/cli_app/run.sh` exited 0 in the aggregate (runner rc 0). Its own log
-reports:
-
-```text
-BUILD ok
-PASS empty / add / mul / help / unknown_cmd / unknown_opt / too_many_args /
-     too_long / empty_token / tag_no_value / verbose_eq / negative_token /
-     bad_int / few_args / overflow / verbose / tag
-CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=fail
-```
-
-**17 cases passed, 0 failed.** Honest caveat: the demo's Windows PE
-cross-compile check **failed** (`MINGW COMPILEFAIL`: the generated temporary
-`cplus-hp-*.h` header was missing when `stdlib/cli.hp` was included). The
-runner still exits 0 because PE cross-compile is a compile-only bonus check;
-this document records the PE failure explicitly and makes **no Windows runtime
-claim**.
+`apps/cli_app/run.sh` verifies 17 exact stdout/exit-code cases and finishes
+with `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok`. The earlier
+capture recorded `wincross=fail` (`MINGW COMPILEFAIL`: a generated temporary
+`cplus-hp-*.h` header was missing); the current runner's PE compile check
+passes, and this runner still makes no Windows runtime claim. The separate
+[cross-platform proof](../../proof/real_apps_cross_platform/README.md)
+(`CROSS_PROOF 58 58 0`) does execute PE32+ builds under Highball/Wine.
 
 ### 3.2 games3d
 
-`examples/games3d/run.sh` exited 0. Its final line is
-`SCENE3D 1 4 0 13` — 4 program checks passed, 0 failed, 13 refusal cases.
-The runner additionally asserted: build ok; built-in run exit 0 with empty
-stderr; exact stdout match against `expected/transcript.expected`; two runs
-byte-identical; checksum line `CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40`.
-All 13 refusal probes returned the expected distinct error code (`E_NONFINITE`,
-`E_INDEX`, `E_BOUNDS`, `E_CYCLE`, `E_PARSE`).
+`apps/games3d/run.sh` finishes with `SCENE3D 1 4 0 13` — 4 program checks
+passed, 0 failed, 13 refusal cases. The runner asserts build ok; built-in run
+exit 0 with empty stderr; exact stdout match against
+`apps/games3d/expected/transcript.expected`; two byte-identical runs; and the
+checksum `CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40`. All 13 refusal probes
+return the expected distinct error code (`E_NONFINITE`, `E_INDEX`, `E_BOUNDS`,
+`E_CYCLE`, `E_PARSE`).
 
-### 3.3 gui_app — PENDING
+### 3.3 gui_app — verified
 
-`examples/gui_app/` contained in-progress sources (`smoke.cp`, `smoke2.cp`)
-but no runner at capture time, so no result is claimed.
+`apps/gui_app/run.sh` finishes with `GUI_APP 30 6 0 24` — 30 scenarios,
+6 successes, 24 defined refusals, 0 failures. It builds the SDL3-backed app,
+runs each case under `timeout 30` with `SDL_VIDEODRIVER=dummy`, and checks
+byte-exact stdout (twice) with empty stderr. The earlier capture had no runner
+at that time; that PENDING status is superseded here.
 
-Exact command to produce/verify the demo result:
+Reproduce all three:
 
 ```sh
-sh examples/gui_app/run.sh
+sh apps/games3d/run.sh
+sh apps/gui_app/run.sh
+sh apps/cli_app/run.sh
 ```
 
 ## 4. Cross-platform results (macOS + Windows PE + hostile)
 
-**PENDING.** `tests/modern_libs_cross/RESULTS.md` had not landed at capture
-time. No macOS, Windows PE or hostile-input count is asserted here; in
-particular, **Windows runtime remains BLOCKED** and only PE compile/verify is
-in scope.
+**Current:** the historical PENDING status is superseded by
+[proof/real_apps_cross_platform](../../proof/real_apps_cross_platform/README.md),
+which reports `CROSS_PROOF 58 58 0` for eight programs: genuine Mach-O arm64
+and PE32+ x86-64 binaries, executed on this host (macOS arm64 and
+Highball/Wine engine `x64-crossover26.3-r27`) with exact markers and exit 0.
+The older compile-only campaign is recorded in
+[tests/modern_libs_cross/RESULTS.md](../../tests/modern_libs_cross/RESULTS.md).
+This remains host/engine-specific evidence, not a portability guarantee.
 
-Exact command to produce/verify the artifact:
+Reproduce:
 
 ```sh
-sh tests/modern_libs_cross/run.sh   # expects tests/modern_libs_cross/RESULTS.md
+sh proof/real_apps_cross_platform/run.sh
+sh tests/modern_libs_cross/run.sh
 ```
 
 ## 5. Coverage cross-check
@@ -261,21 +288,24 @@ scene3d.hp                0       10    0.0%
 ## 6. Limitations / non-claims
 
 1. Fixed-seed edge evidence on this host only; not a full safety proof.
-2. Windows **runtime** is BLOCKED — PE compile/verify only.
+2. Windows **runtime** was BLOCKED in the historical capture; the current
+   host/engine-specific Highball/Wine evidence is `CROSS_PROOF 58 58 0` (§4).
+   No general Windows portability claim is made.
 3. No Rust equivalence claim; no 100% memory-safety claim.
 4. Coverage is a static call-site heuristic with known discovery blind spots
    (§5), not execution coverage.
 5. Runner PASS means the suite's own bounded checks passed; broad API
    correctness, platform portability and live-game behaviour are out of scope.
-6. PENDING rows are unresolved artifacts, not failures and not passes; they
-   make the aggregate exit nonzero because verification is incomplete.
+6. Historical PENDING rows were unresolved artifacts at capture time, not
+   failures and not passes; they made that aggregate exit nonzero. Both are
+   now verified (§§3–4).
 
-## 7. PENDING artifact register
+## 7. Historical PENDING register (now resolved)
 
-| Artifact | Exact command |
+| Historical artifact | Current status |
 |---|---|
-| `examples/gui_app/run.sh` + result | `sh examples/gui_app/run.sh` |
-| `tests/modern_libs_cross/RESULTS.md` | `sh tests/modern_libs_cross/run.sh` |
+| `apps/gui_app/run.sh` + result | Verified: `GUI_APP 30 6 0 24` ([app README](../../apps/gui_app/README.md)) |
+| `tests/modern_libs_cross/RESULTS.md` | Verified: see §4 and [proof/real_apps_cross_platform](../../proof/real_apps_cross_platform/README.md) (`CROSS_PROOF 58 58 0`) |
 
 ## UPDATE — Windows runtime now verified on this host
 

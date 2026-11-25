@@ -11,7 +11,7 @@ to this repository during the modern-stdlib work.
 
 | Path | What it is |
 | --- | --- |
-| `binaries/scene3d_demo` | 3D game demo — mesh + scene graph + quaternion transforms |
+| `binaries/scene3d_demo` | 3D scene app (now in `apps/games3d`) — mesh + scene graph + quaternion transforms |
 | `binaries/gui_app` | GUI app — widget layout, hit-test, serialization + headless SDL3 frame |
 | `binaries/cli_calc` | CLI app — command registry, bounded argv parsing, dispatch |
 | `binaries/SHA256SUMS.txt` | SHA-256 of every binary |
@@ -42,9 +42,24 @@ gui_app       GUI_RESULT render:0,0,0 REFUSED 108           EXIT=0 (defined refu
 cli_calc      CLI add 2 3 5 / CLI mul 6 7 42                EXIT=0
 ```
 
-Full transcripts are in `transcripts/`. The 3D demo's transcript includes
+Full transcripts are in `transcripts/`. The 3D app's transcript includes
 `CHECKSUM fnv1a32=b61bdf2b bytes=1779 lines=40`, matched byte-for-byte against
-`examples/games3d/expected/transcript.expected`.
+`apps/games3d/expected/transcript.expected`.
+
+The canonical apps and their runners now live in `apps/`; the corresponding
+`examples/{games3d,gui_app,cli_app}/run.sh` entries are compatibility shims.
+Their exact verified verdicts and screenshots:
+
+| App | Runner | Verified verdict | Screenshot |
+| --- | --- | --- | --- |
+| 3D scene app | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg) |
+| GUI app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg) |
+| Calculator CLI | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../all_apps_games_screenshots/screenshots/cli_app.svg) |
+
+Per-app screenshot/transcript pages:
+[games3d](../all_apps_games_screenshots/games3d.md),
+[gui_app](../all_apps_games_screenshots/gui_app.md),
+[cli_app](../all_apps_games_screenshots/cli_app.md).
 
 ## Reproduce
 
@@ -55,7 +70,7 @@ sh proof/games_apps/run.sh
 The verifier recomputes SHA-256 for all three binaries and re-runs each one,
 checking for its exact marker line and expected exit code. To rebuild from
 source, use the exact commands in `transcripts/*.build.log` (or the owning
-`examples/<app>/run.sh`).
+`apps/<app>/run.sh`).
 
 ## Honest scope
 

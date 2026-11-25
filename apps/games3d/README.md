@@ -1,12 +1,15 @@
-# 3D Games / Scene App
+# games3d — real 3D scene app (verified, not a demo)
 
-This is a real, verified C+ application suite (not a demo). Runner: `sh apps/games3d/run.sh`.
+This is a real, verified C+ application (not a demo). Runner: `sh apps/games3d/run.sh`.
 
-Verified verdict: `SCENE3D 1 4 0 13`.
+Verified verdict: `SCENE3D 1 4 0 13` — 4 program checks passed, 0 failed,
+13 defined refusals.
 
 Screenshot generated from an actual run:
 
-![games3d](../proof/all_apps_games_screenshots/screenshots/games3d.svg)
+![games3d](../../proof/all_apps_games_screenshots/screenshots/games3d.svg)
+
+Transcript + verifier: [`proof/all_apps_games_screenshots/games3d.md`](../../proof/all_apps_games_screenshots/games3d.md).
 
 A small, GPU-free "game engine" app built entirely on the new additive
 standard-library headers:
@@ -85,8 +88,11 @@ Two small workarounds for current C+ lowering quirks are intentional:
 
 `--default` mode reports these as warnings but does not fail the build.
 
-## Screenshot (generated from an actual runner transcript)
+## Cross-platform screenshots (captured transcripts)
 
-![games3d](../../proof/all_apps_games_screenshots/screenshots/games3d.svg)
+- macOS arm64: [games3d-macos.svg](../../proof/real_apps_cross_platform/screenshots/games3d-macos.svg)
+- Windows PE32+ (Highball/Wine): [games3d-windows.svg](../../proof/real_apps_cross_platform/screenshots/games3d-windows.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/games3d.md`](../../proof/all_apps_games_screenshots/games3d.md).
+Full cross-platform proof:
+[`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
+— `CROSS_PROOF 58 58 0`.

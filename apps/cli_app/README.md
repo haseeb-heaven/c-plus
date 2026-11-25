@@ -1,12 +1,15 @@
-# CLI Application Suite
+# cli_app — real calculator CLI app (verified, not a demo)
 
-This is a real, verified C+ application suite (not a demo). Runner: `sh apps/cli_app/run.sh`.
+This is a real, verified C+ application (not a demo). Runner: `sh apps/cli_app/run.sh`.
 
-Verified verdict: `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok`.
+Verified verdict: `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok`
+— 17 exact stdout/exit-code cases passed, 0 failed.
 
 Screenshot generated from an actual run:
 
-![cli_app](../proof/all_apps_games_screenshots/screenshots/cli_app.svg)
+![cli_app](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg)
+
+Transcript + verifier: [`proof/all_apps_games_screenshots/cli_app.md`](../../proof/all_apps_games_screenshots/cli_app.md).
 
 A deterministic calculator CLI that exercises the full `cli.hp` surface:
 command/option registration, `cli_parse`, status-code refusals, `cli_run`
@@ -54,11 +57,17 @@ overflow and both valid command paths.
 
 `x86_64-w64-mingw32-gcc -x c -c -std=gnu17` compiles the same source text and
 the real `stdlib/cli.hp` to an `Intel amd64 COFF` object. This is a compile-only
-check. Highball/Wine execution is **blocked** in this environment, so no
-Windows runtime success is claimed.
+check; no Windows runtime success is claimed by this runner. A separate pack
+does execute a PE32+ build of this app under Highball/Wine:
+[`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
+reports `CROSS_PROOF 58 58 0` with `CLI add 2 3 5` (exit 0) on both platforms.
+That is host/engine-specific evidence, not a portability guarantee.
 
-## Screenshot (generated from an actual runner transcript)
+## Cross-platform screenshots (captured transcripts)
 
-![cli_app](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg)
+- macOS arm64: [cli_app-macos.svg](../../proof/real_apps_cross_platform/screenshots/cli_app-macos.svg)
+- Windows PE32+ (Highball/Wine): [cli_app-windows.svg](../../proof/real_apps_cross_platform/screenshots/cli_app-windows.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/cli_app.md`](../../proof/all_apps_games_screenshots/cli_app.md).
+Full cross-platform proof:
+[`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
+— `CROSS_PROOF 58 58 0`.

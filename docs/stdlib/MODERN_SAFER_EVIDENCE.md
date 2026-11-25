@@ -12,12 +12,24 @@ toolchain PATH (`/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`),
 | `sh proof/games_apps/run.sh` | `PROOF_GAMES 10 0` |
 | `sh proof/real_apps_cross_platform/run.sh` (8 apps, Mach-O + PE32+) | `CROSS_PROOF 58 58 0` |
 | `sh proof/goose_samples/run.sh` (16 modern-C ports, binaries committed) | `GOOSE_PORT 16 16 0` |
-| `sh examples/games3d/run.sh` | `SCENE3D 1 4 0 13` |
-| `sh examples/gui_app/run.sh` | `GUI_APP 30 6 0 24` (Windows runtime conservative/BLOCKED in `-v`) |
-| `sh examples/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` |
+| `sh apps/games3d/run.sh` (real app, not a demo) | `SCENE3D 1 4 0 13` |
+| `sh apps/gui_app/run.sh` (real app, not a demo) | `GUI_APP 30 6 0 24` (this runner's Windows `-v` capture is conservative/BLOCKED) |
+| `sh apps/cli_app/run.sh` (real app, not a demo) | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` |
 | `sh tests/run_modern_safer_evidence.sh` | one-command aggregate for the above: `GAMEAPP_EVIDENCE 9 9 0` |
 
-Fixed during this verification: `examples/cli_app/cli_calc.cp:55` now seeds the
+The three suites above were moved from `examples/{games3d,gui_app,cli_app}` into
+`apps/`; the old `examples/.../run.sh` entries are compatibility shims only.
+Their screenshots, rendered from actual runner stdout:
+[games3d.svg](../../proof/all_apps_games_screenshots/screenshots/games3d.svg),
+[gui_app.svg](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg),
+[cli_app.svg](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg).
+The separate cross-platform pack
+[`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
+captures genuine PE32+ runs under Highball/Wine (`CROSS_PROOF 58 58 0`); that
+is host/engine-specific evidence and does not change the app runners' own
+Windows scope.
+
+Fixed during this verification: `apps/cli_app/cli_calc.cp:55` now seeds the
 `strtol` end pointer before dereferencing, which clears the strict
 null-pointer diagnostic.
 

@@ -49,14 +49,26 @@ platform. Every listed run exited 0 and printed the exact marker shown
 | mesh3d | `tests/stdlib/mesh3d/test_mesh3d.cp` | `drop 1 1` (all checks 1, exit 0) | `drop 1 1` (all checks 1, exit 0) | `binaries/macos/mesh3d`, `binaries/windows/mesh3d.exe` | `transcripts/macos/mesh3d.txt`, `transcripts/windows/mesh3d.txt` | `screenshots/mesh3d-macos.svg`, `screenshots/mesh3d-windows.svg` |
 | widgets | `tests/stdlib/widgets/test_widgets.cp` | `WIDGETS 144 0` (exit 0) | `WIDGETS 144 0` (exit 0) | `binaries/macos/widgets`, `binaries/windows/widgets.exe` | `transcripts/macos/widgets.txt`, `transcripts/windows/widgets.txt` | `screenshots/widgets-macos.svg`, `screenshots/widgets-windows.svg` |
 | cli | `tests/stdlib/cli/test_cli.cp` | `CLI_TEST 27 27 0` (exit 0) | `CLI_TEST 27 27 0` (exit 0) | `binaries/macos/cli`, `binaries/windows/cli.exe` | `transcripts/macos/cli.txt`, `transcripts/windows/cli.txt` | `screenshots/cli-macos.svg`, `screenshots/cli-windows.svg` |
-| games3d | `examples/games3d/scene3d_demo.cp` | `SCENE_DONE status=OK nodes=7 meshes=3` (exit 0) | `SCENE_DONE status=OK nodes=7 meshes=3` (exit 0) | `binaries/macos/games3d`, `binaries/windows/games3d.exe` | `transcripts/macos/games3d.txt`, `transcripts/windows/games3d.txt` | `screenshots/games3d-macos.svg`, `screenshots/games3d-windows.svg` |
-| gui_app | `examples/gui_app/gui_app.cp` | `GUI_RESULT describe:0,0,0 OK` (`describe 0`, exit 0) | `GUI_RESULT describe:0,0,0 OK` (`describe 0`, exit 0); default no-arg run gives `GUI_RESULT describe:0,0,0 REFUSED 108` | `binaries/macos/gui_app`, `binaries/windows/gui_app.exe` | `transcripts/macos/gui_app.txt`, `transcripts/windows/gui_app_describe0.txt`, `transcripts/windows/gui_app.txt` | `screenshots/gui_app-macos.svg`, `screenshots/gui_app-windows.svg` |
-| cli_app | `examples/cli_app/cli_calc.cp` | `CLI add 2 3 5` (`add 2 3`, exit 0) | `CLI add 2 3 5` (`add 2 3`, exit 0) | `binaries/macos/cli_app`, `binaries/windows/cli_app.exe` | `transcripts/macos/cli_app.txt`, `transcripts/windows/cli_app.txt` | `screenshots/cli_app-macos.svg`, `screenshots/cli_app-windows.svg` |
+| games3d | `apps/games3d/scene3d_demo.cp` | `SCENE_DONE status=OK nodes=7 meshes=3` (exit 0) | `SCENE_DONE status=OK nodes=7 meshes=3` (exit 0) | `binaries/macos/games3d`, `binaries/windows/games3d.exe` | `transcripts/macos/games3d.txt`, `transcripts/windows/games3d.txt` | `screenshots/games3d-macos.svg`, `screenshots/games3d-windows.svg` |
+| gui_app | `apps/gui_app/gui_app.cp` | `GUI_RESULT describe:0,0,0 OK` (`describe 0`, exit 0) | `GUI_RESULT describe:0,0,0 OK` (`describe 0`, exit 0); default no-arg run gives `GUI_RESULT describe:0,0,0 REFUSED 108` | `binaries/macos/gui_app`, `binaries/windows/gui_app.exe` | `transcripts/macos/gui_app.txt`, `transcripts/windows/gui_app_describe0.txt`, `transcripts/windows/gui_app.txt` | `screenshots/gui_app-macos.svg`, `screenshots/gui_app-windows.svg` |
+| cli_app | `apps/cli_app/cli_calc.cp` | `CLI add 2 3 5` (`add 2 3`, exit 0) | `CLI add 2 3 5` (`add 2 3`, exit 0) | `binaries/macos/cli_app`, `binaries/windows/cli_app.exe` | `transcripts/macos/cli_app.txt`, `transcripts/windows/cli_app.txt` | `screenshots/cli_app-macos.svg`, `screenshots/cli_app-windows.svg` |
 
 Short per-app notes with APIs, exact markers and binary/transcript names live
 in `math3d.md`, `scene3d.md`, `mesh3d.md`, `widgets.md`, `cli.md`, `games3d.md`,
 `gui_app.md` and `cli_app.md` beside this file.  Summary sheets:
 `transcripts/macos/RESULTS.md` and `transcripts/windows/RESULTS.md`.
+
+### Verified verdicts for the three moved apps
+
+The `games3d`, `gui_app` and `cli_app` runners now live in `apps/` (the old
+`examples/...` runners are compatibility shims). Their own bounded runners
+print these exact final lines; each screenshot is rendered from real stdout.
+
+| App | Runner | Verified verdict | Screenshot | App README |
+| --- | --- | --- | --- | --- |
+| games3d | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg) | [apps/games3d](../../apps/games3d/README.md) |
+| gui_app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg) | [apps/gui_app](../../apps/gui_app/README.md) |
+| cli_app | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../all_apps_games_screenshots/screenshots/cli_app.svg) | [apps/cli_app](../../apps/cli_app/README.md) |
 
 ### gui_app invocation note
 
@@ -89,9 +101,10 @@ was stale bottle state, not the absence of verbose mode.  Only
   Highball/Wine with engine `x64-crossover26.3-r27`, bottle `Games` and
   renderer `dxvk` on this host.  This is **not** a claim about all Windows
   configurations, native Windows hardware, or other Wine versions/bottles.
-- **No live-game claim:** `games3d` is a deterministic, headless 3D scene demo
-  built from `math3d.hp`/`mesh3d.hp`/`scene3d.hp`; it is not a game and does not
-  touch a GPU.  No retail game or live-game behaviour is asserted here.
+- **No live-game claim:** `games3d` is a real, deterministic, headless 3D
+  scene app built from `math3d.hp`/`mesh3d.hp`/`scene3d.hp`; it is not an
+  interactive game and does not touch a GPU.  No retail game or live-game
+  behaviour is asserted here.
 - **No full memory-safety proof:** exact marker lines and clean refusals are
   evidence for the listed deterministic inputs only.  They are not a proof of
   absence of memory errors, and are not a substitute for the dedicated

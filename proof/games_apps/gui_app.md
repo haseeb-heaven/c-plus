@@ -1,6 +1,6 @@
 # GUI app — `binaries/gui_app`
 
-Source: `examples/gui_app/gui_app.cp`
+Source: `apps/gui_app/gui_app.cp` (real verified app, not a demo)
 Libraries used: `stdlib/widgets.hp` + SDL3 3.4.18 (dummy/hidden video driver)
 
 ## What it proves
@@ -26,16 +26,20 @@ GUI_REFUSED tag=describe:999,0,0 category=2 code=101 message=scenario: id out of
 GUI_RESULT describe:999,0,0 REFUSED 101
 ```
 
-The owning suite (`examples/gui_app/run.sh`) runs 30 scenarios with byte-exact
-expected outputs: 6 successes and 24 defined refusals, 0 failures.
+The owning app runner (`apps/gui_app/run.sh`) runs 30 scenarios with byte-exact
+expected outputs: 6 successes and 24 defined refusals, 0 failures. Verified
+verdict: `GUI_APP 30 6 0 24`. Screenshot:
+[gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg).
 
 ## Reproduce
 
 ```sh
-sh examples/gui_app/run.sh
+sh apps/gui_app/run.sh
 SDL_VIDEODRIVER=dummy proof/games_apps/binaries/gui_app describe 0
 sh proof/games_apps/run.sh
 ```
 
 Headless/dummy driver only — this is a deterministic GUI-logic proof, not an
-interactive rendering benchmark. No Windows runtime claim.
+interactive rendering benchmark. This runner makes no Windows runtime claim;
+the separate [cross-platform proof](../real_apps_cross_platform/README.md)
+(`CROSS_PROOF 58 58 0`) does capture PE32+ runs under Highball/Wine.

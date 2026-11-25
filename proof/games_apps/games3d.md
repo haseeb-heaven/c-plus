@@ -1,6 +1,6 @@
-# 3D game demo — `binaries/scene3d_demo`
+# 3D scene app — `binaries/scene3d_demo`
 
-Source: `examples/games3d/scene3d_demo.cp`
+Source: `apps/games3d/scene3d_demo.cp` (real verified app, not a demo)
 Libraries used: `stdlib/math3d.hp`, `stdlib/scene3d.hp`, `stdlib/mesh3d.hp`
 
 ## What it proves
@@ -24,16 +24,18 @@ EXIT=0
 ```
 
 The full transcript is byte-identical to
-`examples/games3d/expected/transcript.expected`.
+`apps/games3d/expected/transcript.expected`. Verified verdict from the owning
+app runner: `SCENE3D 1 4 0 13`. Screenshot:
+[games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg).
 
-Refusal cases exercised by the owning suite (`examples/games3d/run.sh`, 13
+Refusal cases exercised by the owning app runner (`apps/games3d/run.sh`, 13
 cases): `NAN`/`INF` → `E_NONFINITE`, bad indices → `E_INDEX`, `NODE 9` →
 `E_BOUNDS`, `CYCLE` → `E_CYCLE`, malformed tokens → `E_PARSE`.
 
 ## Reproduce
 
 ```sh
-sh examples/games3d/run.sh
+sh apps/games3d/run.sh
 sh proof/games_apps/run.sh
 ```
 

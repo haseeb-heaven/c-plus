@@ -1,17 +1,20 @@
-# GUI Application Suite
+# gui_app — real GUI application (verified, not a demo)
 
-This is a real, verified C+ application suite (not a demo). Runner: `sh apps/gui_app/run.sh`.
+This is a real, verified C+ application (not a demo). Runner: `sh apps/gui_app/run.sh`.
 
-Verified verdict: `GUI_APP 30 6 0 24`.
+Verified verdict: `GUI_APP 30 6 0 24` — 6 successes, 24 defined refusals,
+0 failures.
 
 Screenshot generated from an actual run:
 
-![gui_app](../proof/all_apps_games_screenshots/screenshots/gui_app.svg)
+![gui_app](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg)
+
+Transcript + verifier: [`proof/all_apps_games_screenshots/gui_app.md`](../../proof/all_apps_games_screenshots/gui_app.md).
 
 A small, deterministic GUI **app** built on the new `stdlib/widgets.hp`
-headless widget core and a real SDL3 window/renderer. It is a teaching example
-with a reproducible refusal transcript, not a production window application
-and not a memory-safety proof.
+headless widget core and a real SDL3 window/renderer. It is a real verified
+application with a reproducible refusal transcript, not a production window
+application and not a memory-safety proof.
 
 ## What it actually does
 
@@ -94,9 +97,14 @@ and run natively to prove its CRC32 equals the app's (`a52b03af`), then
 cross-compiled with `x86_64-w64-mingw32-gcc -c` and checked with `file` to be a
 genuine COFF object.
 
-**No Windows runtime success is claimed.** Highball/Wine runtime is BLOCKED in
-this repository; no Windows artifact is executed. `runtime=BLOCKED` in the
-final line is a scope statement, not a failure.
+**No Windows runtime success is claimed by this runner.** Its `-v` capture is
+conservative and the final line's `runtime=BLOCKED` is a scope statement, not a
+failure. A separate pack *does* execute PE32+ builds of this app under
+Highball/Wine with the two MinGW runtime DLLs in place:
+[`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
+reports `CROSS_PROOF 58 58 0` and records `GUI_RESULT describe:0,0,0 OK` on
+both platforms. That evidence is host/engine-specific and does not change this
+runner's compile-only Windows scope.
 
 ## Non-claims
 
@@ -110,8 +118,11 @@ final line is a scope statement, not a failure.
   renderer backend is claimed to behave identically.
 - No Rust equivalence is claimed; Rust is not used here.
 
-## Screenshot (generated from an actual runner transcript)
+## Cross-platform screenshots (captured transcripts)
 
-![gui_app](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg)
+- macOS arm64: [gui_app-macos.svg](../../proof/real_apps_cross_platform/screenshots/gui_app-macos.svg)
+- Windows PE32+ (Highball/Wine): [gui_app-windows.svg](../../proof/real_apps_cross_platform/screenshots/gui_app-windows.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/gui_app.md`](../../proof/all_apps_games_screenshots/gui_app.md).
+Full cross-platform proof:
+[`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
+— `CROSS_PROOF 58 58 0`.
