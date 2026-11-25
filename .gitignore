@@ -131,3 +131,9 @@ tests/compiler/ast_identity/results/*.bin
 /null_outparam
 /app_dump.db
 /out/
+
+# Generated benchmark logs/artifacts (never commit; source + scripts stay).
+benchmarks/**/*.log
+benchmarks/**/*.err
+benchmarks/**/*.profraw
+benchmarks/**/*.profdata

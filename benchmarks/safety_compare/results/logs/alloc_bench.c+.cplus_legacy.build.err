@@ -1,7 +1,0 @@
-clang: warning: -lyyjson: 'linker' input unused [-Wunused-command-line-argument]
-clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/ext' [-Wunused-command-line-argument]
-In file included from /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/benchmarks/safety_compare/alloc_bench.cp:35:
-./stdlib/error.hp:472:10: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
-  472 |     for (int sh = 15; sh >= 0; --sh) {
-      |          ^
-1 warning generated.
