@@ -129,6 +129,7 @@ for t in tests/libc/test_*.c; do
   else
     fail=$((fail + 1))
     echo "FAIL BUILD $(basename "$t")"
+    tail -12 "$b.build.log" 2>/dev/null || true
   fi
 done
 "$PROFDATA" merge -sparse "$OUT"/*.profraw -o "$OUT/libc.profdata"

@@ -36,6 +36,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
+
+#ifndef TIME_UTC
+#define TIME_UTC 1  /* glibc hides C11 TIME_UTC under strict C99 */
+#endif
 #include <unistd.h>
 
 #include "install-include/cplus_libc.h"
