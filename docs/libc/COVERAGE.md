@@ -39,7 +39,7 @@ This file was reconciled against the test runners and the machine-readable inven
 | Compile-time safety | `sh tests/stdlib/compile_time/run_compile_time.sh` | **7 manifests** (`tests/stdlib/compile_time/*.json`), **46 cases** (9 REJECT, 17 ACCEPT, 20 RUNTIME). RUNTIME cases are documented compiler capability gaps that still need runtime-suite coverage; results are reported separately from runtime safety. |
 | Deep stdlib regression | `sh tests/stdlib/run_deep_tests.sh` | **15** `tests/stdlib/deep_*.cp` sources x 3 modes (default, strict-none, ubsan) = **45 variants**; runner reports pass/fail/skip per mode. |
 | End-to-end integration | `sh tests/integration/run_integration.sh` | **8 checks** (both library builds, driver lower+link, exit 0, `integration: ok` stdout, logging/refusal diagnostics, compiler rejection of `contract_probe.c`, expected diagnostic substring). Local macOS only; see `tests/integration/README.md`. |
-| C+ compiler tests | `sh tests/run_tests.sh` | **148 tests**: 148 pass, 0 fail (measured with `sh tests/run_tests.sh` on 2026-11-25; the former warning-only fixture is no longer present). |
+| C+ compiler tests | `sh tests/run_tests.sh` | **149 tests**: 149 pass, 0 fail (measured with `sh tests/run_tests.sh` on 2026-11-25; the former warning-only fixture is no longer present). |
 | Complete evidence aggregate | `sh tests/run_all_evidence.sh` | Single entry point that runs all runners above and prints one summary line per suite. |
 
 ### Telemetry (per-API counters)
