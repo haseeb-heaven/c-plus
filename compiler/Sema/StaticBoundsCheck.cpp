@@ -29,6 +29,10 @@ struct ArrayShape {
   size_t pos;
   std::string name;
   std::vector<size_t> dims;
+  // Token index of the closing brace of the block that declared this array.
+  // A fact from an inner block must not be used after that block closes.
+  // kNPos means file scope or a shape inherited from the rewriter.
+  size_t scopeEnd = kNPos;
 };
 
 /// A pointer whose value is a provable constant offset (in elements) from a
@@ -475,14 +479,38 @@ private:
         cursor = nextSig(close);
       }
       if (!dims.empty())
-        localArrays_.push_back({i, toks_[i].text, dims});
+        localArrays_.push_back(
+            {i, toks_[i].text, dims, enclosingScopeEnd(i)});
     }
+  }
+
+  /// Closing brace of the innermost block enclosing `pos`, found by matching
+  /// braces backwards. This is a scope fence for name-keyed facts: without it
+  /// an inner `int a[4]` silently replaces an outer `int a[8]` after the
+  /// inner block closes.
+  size_t enclosingScopeEnd(size_t pos) const {
+    unsigned depth = 0;
+    for (size_t k = pos; k > 0; --k) {
+      size_t j = k - 1;
+      if (isPunct(j, "}"))
+        ++depth;
+      else if (isPunct(j, "{")) {
+        if (depth == 0)
+          return match(j, "{", "}");
+        --depth;
+      }
+    }
+    return kNPos;
   }
 
   bool findShape(const std::string &name, size_t pos,
                  const std::vector<size_t> **shape) const {
     for (size_t k = localArrays_.size(); k > 0; --k) {
       const ArrayShape &e = localArrays_[k - 1];
+      // A declaration from a block that has already closed is dead: do not
+      // let its smaller extent reject an access to the outer object.
+      if (e.scopeEnd != kNPos && pos > e.scopeEnd)
+        continue;
       if (e.name == name && e.pos <= pos) {
         // A realloc with an unprovable new size replaces this extent; a
         // stale extent must never drive an OOB diagnostic.
@@ -886,7 +914,7 @@ private:
       }
       if (dims.empty() || isPunct(cursor, "[")) // an extent did not fold
         continue;
-      localArrays_.push_back({i, toks_[i].text, dims});
+      localArrays_.push_back({i, toks_[i].text, dims, enclosingScopeEnd(i)});
       constantVlaNames_.insert(toks_[i].text);
       constantVlaDeclPos_.insert(i); // precise declaration-site suppression
     }
