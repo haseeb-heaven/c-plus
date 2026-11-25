@@ -22,7 +22,10 @@ check_case() {
     expected="examples/ctl_demo/expected/$name.txt"
     echo "== $name =="
 
-    if timeout 180 "$CPLUS" build "$src" --default --sanitize=none \
+    if # CTL is vendored plain C with raw realloc and known UBSan-visible UB in its
+# vector.h.  Build the host programs in legacy-C mode: the C+ safety/sanitizer
+# layer is not a claim about third_party code (see CTL_ADOPTION_MATRIX.md).
+timeout 180 "$CPLUS" build "$src" --legacy-c --sanitize=none \
         -I. -Ithird_party/ctl -o "$OUT/$name" \
         -- build/libc/libcplus_hardened.a >"$OUT/$name.build.log" 2>&1; then
 

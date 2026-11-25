@@ -62,6 +62,20 @@ else
     fail=$((fail + 1))
 fi
 
+# Hardened libc + differential coverage (issue #22) and the bounded hang
+# diagnostic self-test for the corpus that timed out on Linux CI.
+for suite in tests/libc/run_libc_tests.sh tests/libc/run_corpus_uninit_watchdog.sh; do
+    cases=$((cases + 1))
+    if timeout 900 sh "$suite" >"build/edge1000/$(basename "$suite").log" 2>&1; then
+        pass=$((pass + 1))
+    else
+        rc=$?
+        echo "EDGE1000 FAIL suite $suite rc=$rc"
+        tail -6 "build/edge1000/$(basename "$suite").log" 2>/dev/null || true
+        fail=$((fail + 1))
+    fi
+done
+
 # Safer core + ABI preservation: the safety layer must be ABI-neutral.
 # (1) stdc_abi: ordinary C symbol sets are byte-identical in plain/safe builds.
 cases=$((cases + 1))

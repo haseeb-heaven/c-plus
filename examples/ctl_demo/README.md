@@ -150,3 +150,10 @@ double_drop`; `ctl_goose_hybrid` adds `HYBRID edge_empty_window` and
 `HYBRID edge_bump_missing` (a `bump` on a missing id is a no-op). Verdict:
 `CTL_DEMO 2 2 0`. Run `sh tests/ctl/run_ctl_demo_coverage.sh` for an
 aggregate end-to-end coverage pass.
+
+## Build mode (2026-11-25 update)
+
+The runner builds these programs with `--legacy-c`: vendored CTL is plain C and
+its vector header trips UBSan (`applying zero offset to null pointer`). The C+
+safety/sanitizer layer is not a claim about third_party code; see
+`docs/stdlib/CTL_ADOPTION_MATRIX.md`. `third_party/` was not edited.
