@@ -1,0 +1,15 @@
+case cond_phi_variable [conditionals] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c:2:76: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index -1 chosen by conditional expression is out of bounds of 'a' of length 4
+  int main(void){ int a[4]={1,2,3,4}; int f=1; int i=f?-1:2; printf("%d\n", a[i]); return 0; }
+                                                                             ^
+help: use C+ managed allocations and cplus_* helpers
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c:2:76: error: [CPLUS-BOUNDS] negative array index -1 on 'a'
+  int main(void){ int a[4]={1,2,3,4}; int f=1; int i=f?-1:2; printf("%d\n", a[i]); return 0; }
+                                                                             ^
+help: use C+ managed allocations and cplus_* helpers
+

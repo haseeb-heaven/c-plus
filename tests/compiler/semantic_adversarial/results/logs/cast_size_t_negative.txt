@@ -1,0 +1,10 @@
+case cast_size_t_negative [casts] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_size_t_negative.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_size_t_negative.c:3:73: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'a'
+  int main(void){ int a[4]={1,2,3,4}; size_t i=(size_t)-1; printf("%d\n", a[i]); return 0; }
+                                                                          ^
+

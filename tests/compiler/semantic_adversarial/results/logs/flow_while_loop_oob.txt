@@ -1,0 +1,10 @@
+case flow_while_loop_oob [dataflow] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_while_loop_oob.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_while_loop_oob.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4
+  int main(void){ int a[4]={0}; int i=0; while(i<10) a[i++]=1; printf("%d\n", a[0]); return 0; }
+                                                     ^
+

@@ -1,0 +1,14 @@
+case cond_negative_branch [conditionals] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c:2:64: error: [CPLUS-BOUNDS] constant array index -1 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; int f=0; printf("%d\n", a[f?-1:0]); return 0; }
+                                                                 ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c:2:61: error: [CPLUS-FFI] out-of-bounds access: index -1 reaches past array 'a' of length 4
+  int main(void){ int a[4]={1,2,3,4}; int f=0; printf("%d\n", a[f?-1:0]); return 0; }
+                                                              ^
+

@@ -1,0 +1,14 @@
+case launder_union [laundering] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c:4:65: error: [CPLUS-BOUNDS] pointer arithmetic more than one past the end of 'a'
+  int main(void){ int a[4]={1,2,3,4}; union U x; x.u=(uintptr_t)a + 9*sizeof(int); printf("%d\n", x.p[0]); return 0; }
+                                                                  ^
+help: use C+ managed allocations and cplus_* helpers
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c:4:97: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven
+  int main(void){ int a[4]={1,2,3,4}; union U x; x.u=(uintptr_t)a + 9*sizeof(int); printf("%d\n", x.p[0]); return 0; }
+                                                                                                  ^~~
+

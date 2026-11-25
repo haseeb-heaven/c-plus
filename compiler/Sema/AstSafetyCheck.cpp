@@ -637,9 +637,38 @@ public:
     if (!e)
       return std::string();
     e = e->IgnoreParenImpCasts();
-    if (const auto *cast = dyn_cast<CastExpr>(e))
+    // Macro expansions reach the AST as statement expressions (and sometimes
+    // as identity helpers). Peel those wrappers so the provenance integer
+    // inside the macro is still visible; do not strip explicit casts here,
+    // they are the laundering shape we are looking for.
+    if (const auto *se = dyn_cast<StmtExpr>(e)) {
+      const CompoundStmt *cs = se->getSubStmt();
+      if (cs && cs->size() != 0)
+        if (const auto *last = dyn_cast<Expr>(cs->body_back()))
+          return pointerSourceOf(last);
+    }
+    if (const auto *cast = dyn_cast<CastExpr>(e)) {
       if (cast->getType()->isIntegerType())
         return castedVarName(cast->getSubExpr());
+      // A pointer cast is transparent only when its operand jumped through an
+      // integer: `(int *)(uintptr_t)p`. A plain `(int *)p` alias is handled by
+      // the ordinary name/alias paths and must not acquire a new source here.
+      if (cast->getType()->isPointerType()) {
+        const Expr *sub = cast->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *ice = dyn_cast<CastExpr>(sub))
+          if (ice->getType()->isIntegerType())
+            return pointerSourceOf(sub);
+      }
+    }
+    if (const auto *call = dyn_cast<CallExpr>(e))
+      for (const auto &n : calleeNames(call, call->getDirectCallee())) {
+        auto rp = returnedParam_.find(n);
+        if (rp != returnedParam_.end() && rp->second < call->getNumArgs()) {
+          std::string src = pointerSourceOf(call->getArg(rp->second));
+          if (!src.empty())
+            return src;
+        }
+      }
     if (const auto *bo = dyn_cast<BinaryOperator>(e))
       if (bo->isBitwiseOp() || bo->isAdditiveOp()) {
         // Tagged (`u | 2`) and re-based (`u + 8`) integer views of p keep p's
@@ -654,6 +683,45 @@ public:
           return it->second;
       }
     return std::string();
+  }
+
+  /// True when `e` is a pointer produced by a pointer->integer->pointer
+  /// round-trip, e.g. the `(int *)(uintptr_t)a` inside the LAUNDER macro.
+  /// Plain pointer casts (`(int *)p`) and plain pointer arithmetic do not
+  /// qualify, so existing alias/offset rules keep handling those shapes.
+  static bool isCastLaunderedPointer(const Expr *e, unsigned depth = 0) {
+    if (!e || depth > 8)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    while (const auto *ce = dyn_cast<ExplicitCastExpr>(x)) {
+      if (ce->getType()->isPointerType()) {
+        x = ce->getSubExpr()->IgnoreParenImpCasts();
+        continue;
+      }
+      if (ce->getType()->isIntegerType())
+        return true;
+      break;
+    }
+    return false;
+  }
+
+  /// Byte extent of the object named by a provenance source, whether it came
+  /// from a fixed stack array or from a tracked allocation.
+  long long provenanceByteExtent(const std::string &src) const {
+    if (src.empty())
+      return -1;
+    auto sit = stackArrayExtents_.find(src);
+    if (sit != stackArrayExtents_.end() && sit->second > 0)
+      return sit->second;
+    auto hit = heapAllocs_.find(src);
+    if (hit != heapAllocs_.end() && hit->second.bytes > 0)
+      return hit->second.bytes;
+    auto vit = namedVars_.find(src);
+    if (vit != namedVars_.end())
+      if (const HeapAllocState *st = heapStateOfVar(vit->second))
+        if (st->bytes > 0)
+          return st->bytes;
+    return -1;
   }
 
   /// True when `e` is an integer expression that carries pointer provenance:
@@ -2868,6 +2936,12 @@ public:
   bool evalIndexValue(const Expr *idx, long long &out) const {
     if (!idx)
       return false;
+    // A postfix/prefix increment used as a subscript (`a[i++]`) yields the
+    // counter's current value. Resolve it through the enclosing loop's
+    // induction override instead of treating it as an opaque expression.
+    if (const auto *uo = dyn_cast<UnaryOperator>(idx->IgnoreParenImpCasts()))
+      if (uo->isIncrementDecrementOp())
+        return evalIndexValue(uo->getSubExpr(), out);
     // `idx + K` (or `K + idx`): resolve the induction variable then add the
     // constant offset, so `arr[idx + 1]` in a counted loop is checked.
     if (const auto *bo = dyn_cast<BinaryOperator>(idx->IgnoreParenImpCasts())) {
@@ -2972,6 +3046,160 @@ public:
       return false;
     vd = ivd;
     return true;
+  }
+
+  /// Recognise `while (i < N)` / `while (i <= N)` with a constant bound, a
+  /// constant starting value and a unit increment in the body. The worst-case
+  /// value of the induction variable is then used for subscripts in the body.
+  bool parseWhileLoopBound(const WhileStmt *s, const VarDecl *&vd,
+                           long long &maxIndex) const {
+    if (!s || !s->getCond())
+      return false;
+    const auto *bo =
+        dyn_cast<BinaryOperator>(s->getCond()->IgnoreParenImpCasts());
+    if (!bo || (bo->getOpcode() != BO_LT && bo->getOpcode() != BO_LE))
+      return false;
+    const auto *ref =
+        dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+    const auto *ivd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!ivd || !ivd->getType()->isIntegerType())
+      return false;
+    llvm::APSInt bv;
+    if (!knownConst(bo->getRHS(), bv) || !fits64(bv))
+      return false;
+    long long bound =
+        bv.isNegative() ? bv.getSExtValue() : (long long)bv.getZExtValue();
+    long long lower = 0;
+    if (ivd->getInit()) {
+      Expr::EvalResult ir;
+      if (!ivd->getInit()->EvaluateAsInt(ir, ctx_) || !ir.Val.isInt() ||
+          !fits64(ir.Val.getInt()))
+        return false;
+      lower = ir.Val.getInt().getSExtValue();
+    } else {
+      auto lit = loopLowerBound_.find(ivd);
+      if (lit == loopLowerBound_.end())
+        return false;
+      lower = lit->second;
+    }
+    if (bound < 0 || lower < 0 || lower >= bound)
+      return false;
+    maxIndex = (bo->getOpcode() == BO_LT) ? bound - 1 : bound;
+    if (maxIndex < lower || !bodyHasUnitIncrement(s->getBody(), ivd))
+      return false;
+    vd = ivd;
+    return true;
+  }
+
+  /// True when the loop body increments `vd` by one (`i++`, `++i`, `i += 1`),
+  /// including an increment nested in a subscript's index expression.
+  bool bodyHasUnitIncrement(const Stmt *body, const VarDecl *vd,
+                            unsigned depth = 0) const {
+    if (!body || !vd || depth > 12)
+      return false;
+    if (const auto *e = dyn_cast<Expr>(body)) {
+      const Expr *x = e->IgnoreParenImpCasts();
+      if (const auto *uo = dyn_cast<UnaryOperator>(x))
+        if (uo->isIncrementOp())
+          if (const auto *ref = dyn_cast<DeclRefExpr>(
+                  uo->getSubExpr()->IgnoreParenImpCasts()))
+            if (ref->getDecl() == vd)
+              return true;
+      if (const auto *bo = dyn_cast<BinaryOperator>(x))
+        if (bo->getOpcode() == BO_AddAssign) {
+          Expr::EvalResult sr;
+          if (bo->getRHS()->EvaluateAsInt(sr, ctx_) && sr.Val.isInt() &&
+              sr.Val.getInt() == 1)
+            if (const auto *ref = dyn_cast<DeclRefExpr>(
+                    bo->getLHS()->IgnoreParenImpCasts()))
+              if (ref->getDecl() == vd)
+                return true;
+        }
+    }
+    for (const Stmt *c : body->children())
+      if (bodyHasUnitIncrement(c, vd, depth + 1))
+        return true;
+    return false;
+  }
+
+  /// True when an index expression mentions an induction variable whose value
+  /// is supplied by loopIndexOverride_ (`a[i++]`, `a[i + 1]`, ...).
+  bool indexMentionsLoopOverride(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 12)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (loopIndexOverride_.count(vd) != 0)
+          return true;
+    for (const Stmt *c : x->children())
+      if (const auto *ce = dyn_cast<Expr>(c))
+        if (indexMentionsLoopOverride(ce, depth + 1))
+          return true;
+    return false;
+  }
+
+  /// Collect the constant values of every possibly-selected arm of a
+  /// conditional index. A literal condition selects one arm; any condition
+  /// that is not an integer constant expression keeps both arms so STRICT
+  /// fails closed on an out-of-bounds arm.
+  void collectConditionalIndexArms(const Expr *e, std::vector<long long> &out,
+                                   unsigned depth) const {
+    if (!e || depth > 8)
+      return;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *co = dyn_cast<ConditionalOperator>(x)) {
+      Expr::EvalResult r;
+      if (co->getCond() && co->getCond()->EvaluateAsInt(r, ctx_) &&
+          r.Val.isInt())
+        collectConditionalIndexArms(
+            r.Val.getInt().isZero() ? co->getFalseExpr() : co->getTrueExpr(),
+            out, depth + 1);
+      else {
+        collectConditionalIndexArms(co->getTrueExpr(), out, depth + 1);
+        collectConditionalIndexArms(co->getFalseExpr(), out, depth + 1);
+      }
+      return;
+    }
+    long long v = 0;
+    if (evalIndexValue(x, v))
+      out.push_back(v);
+  }
+
+  /// STRICT rejects a subscript whose conditional index has a constant arm
+  /// outside the addressed object, including nested conditionals.
+  void checkConditionalIndexArms(const ArraySubscriptExpr *sub) {
+    if (!sub)
+      return;
+    std::vector<long long> arms;
+    collectConditionalIndexArms(sub->getIdx(), arms, 0);
+    if (arms.empty())
+      return;
+    const Expr *base = sub->getBase()->IgnoreParenImpCasts();
+    unsigned long long count = 0;
+    if (const auto *at = ctx_.getAsConstantArrayType(base->getType()))
+      count = at->getSize().getZExtValue();
+    else if (const HeapAllocState *st = heapStateOf(base)) {
+      const auto *pt = base->getType()->getAs<PointerType>();
+      unsigned es =
+          pt ? (unsigned)(ctx_.getTypeSize(pt->getPointeeType()) / 8u) : 0;
+      if (es && st->bytes > 0)
+        count = (unsigned long long)st->bytes / es;
+    }
+    if (!count)
+      return;
+    std::string name = varNameOf(base);
+    if (name.empty())
+      name = "array";
+    for (long long v : arms) {
+      if (v < 0 || (unsigned long long)v >= count) {
+        report(sub->getBeginLoc(),
+               "out-of-bounds access: index " + std::to_string(v) +
+                   " reaches past array '" + name + "' of length " +
+                   std::to_string(count));
+        return;
+      }
+    }
   }
 
   /// Reject array subscripts / pointer offsets beyond a tracked heap extent.
@@ -4179,7 +4407,24 @@ public:
           isConstCharParam(nb))
         nulTraversal_.insert({nb, ni});
     }
+    // A counted `while` loop has no dedicated `inc` slot like `for`, so the
+    // induction override must be installed here. Without it `a[i++]` inside
+    // `while (i < N)` is opaque to evalIndexValue() and an OOB access escapes.
+    const VarDecl *induction = nullptr;
+    long long worstIndex = 0;
+    bool haveBound = report_ && parseWhileLoopBound(s, induction, worstIndex);
+    auto oldIt = loopIndexOverride_.find(induction);
+    bool hadOld = oldIt != loopIndexOverride_.end();
+    long long saved = hadOld ? oldIt->second : 0;
+    if (haveBound)
+      loopIndexOverride_[induction] = worstIndex;
     bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
+    if (haveBound) {
+      if (hadOld)
+        loopIndexOverride_[induction] = saved;
+      else
+        loopIndexOverride_.erase(induction);
+    }
     if (report_)
       nulTraversal_ = savedNul;
     if (guardVar)
@@ -6002,6 +6247,26 @@ public:
               report(op->getBeginLoc(), "pointer arithmetic outside array '" +
                                             arrayVar->getNameAsString() + "'");
           }
+        }
+      }
+      // Integer-laundered pointer arithmetic, e.g. the LAUNDER macro's
+      // `(int *)(uintptr_t)a + 9`: the integer round-trip hides the source
+      // extent from the ordinary pointer-arithmetic rule above. Recover the
+      // source through pointerSourceOf() and fail closed when the offset
+      // leaves that object; the back-cast cannot be proven safe.
+      if (op->getOpcode() == BO_Add && isCastLaunderedPointer(lhs)) {
+        long long off = 0;
+        if (evalIndexValue(rhs, off) && off >= 0) {
+          const auto *pt = lhs->getType()->getAs<PointerType>();
+          unsigned es =
+              pt && !pt->getPointeeType()->isVoidType()
+                  ? (unsigned)(ctx_.getTypeSize(pt->getPointeeType()) / 8u)
+                  : 0;
+          long long bytes = provenanceByteExtent(pointerSourceOf(lhs));
+          if (es && bytes > 0 && off >= bytes / (long long)es)
+            warnAt(op->getBeginLoc(),
+                   "pointer created from integer value has unverifiable "
+                   "provenance");
         }
       }
     }
@@ -8014,6 +8279,10 @@ public:
             return true;
           }
     }
+    // A conditional index is safe only when every possibly-selected constant
+    // arm is in bounds; STRICT fails closed on a runtime condition with an
+    // out-of-bounds constant arm (including nested conditionals).
+    checkConditionalIndexArms(subscript);
     // A subscript through a pointer parameter with no proven extent is not
     // safe by default. STRICT rejects it; DEFAULT warns. One-past pointer
     // formation remains legal because this only checks actual subscripts.
@@ -8165,6 +8434,16 @@ public:
       std::string name = varNameOf(subscript->getBase());
       if (name.empty())
         name = lvalueKey(subscript->getBase());
+      // A loop induction value is worst-case, not a source-level constant.
+      // Name it as an out-of-bounds access rather than a literal index so the
+      // diagnostic stays accurate for `a[i++]` inside a counted while loop.
+      if (indexMentionsLoopOverride(subscript->getIdx())) {
+        report(subscript->getBeginLoc(),
+               "out-of-bounds access: index " + std::to_string(value) +
+                   " reaches past array '" + name + "' of length " +
+                   std::to_string(extent));
+        return true;
+      }
       Diag d;
       d.level = DiagLevel::Error;
       d.message = "[CPLUS-SAFE-BOUNDS] constant array index " +

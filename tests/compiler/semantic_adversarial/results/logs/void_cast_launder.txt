@@ -1,0 +1,11 @@
+case void_cast_launder [casts] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/void_cast_launder.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/void_cast_launder.c:2:69: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'
+  int main(void){ int a[4]={1,2,3,4}; void *v=a; int *p=(int*)v + 9; *p=7; printf("%d\n", *p); return 0; }
+                                                                      ^
+help: array contains 4 elements; valid indices are 0..3
+

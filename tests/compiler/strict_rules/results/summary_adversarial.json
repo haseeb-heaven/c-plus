@@ -1,0 +1,361 @@
+{
+  "generated_utc": "2026-11-25T17:39:09.691803+00:00",
+  "spec_version": "0.1",
+  "kind": "adversarial addition: one mutation (must reject) + one near-miss (must accept) per covered rule",
+  "compiler_binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "mode": "STRICT (--strict --sanitize=none)",
+  "hard_timeout_s": 45,
+  "run_command": "CPLUS_BIN=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ python3 tests/compiler/strict_rules/run_adversarial.py",
+  "rules_covered": [
+    "ARITH-OVERFLOW",
+    "BOUNDS-FIXED",
+    "LIFETIME-DOUBLE-FREE",
+    "LIFETIME-UAF",
+    "THREAD-RACE"
+  ],
+  "totals": {
+    "rules_covered": 5,
+    "cases_total": 10,
+    "mutations_total": 5,
+    "near_misses_total": 5,
+    "cases_passed": 10,
+    "cases_failed": 0,
+    "timeouts": 0,
+    "false_positives": 0,
+    "false_negatives": 0
+  },
+  "false_positives": [],
+  "false_negatives": [],
+  "records": [
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_arith_overflow_cast.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_arith_overflow_cast.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_arith_overflow_cast.c:2:46: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void) { int x = 2147483647; int y = x + (int)1u; return y == 0; }\n                                               ^\n",
+        "timed_out": false,
+        "duration_s": 0.698
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_arith_overflow_cast.c:2:46: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void) { int x = 2147483647; int y = x + (int)1u; return y == 0; }\n                                               ^\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "ARITH-OVERFLOW",
+      "role": "mutation",
+      "bypass": "cast: launder the overflowing +1 literal through (int)1u",
+      "require": [
+        "signed integer overflow in addition"
+      ],
+      "forbid": []
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/near_arith_overflow_boundary.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_arith_overflow_boundary.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_arith_overflow_boundary.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.706
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_arith_overflow_boundary.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "ARITH-OVERFLOW",
+      "role": "near_miss",
+      "bypass": "boundary: 2147483646 + 1 reaches INT_MAX exactly, no overflow",
+      "require": [],
+      "forbid": [
+        "error:"
+      ]
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c:2:53: error: [CPLUS-BOUNDS] out-of-bounds access: index 5 reaches past array 'a' via pointer 'p'\n  int main(void) { int a[3] = {1, 2, 3}; int *p = a; p[5] = 9; return 0; }\n                                                      ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 5 reaches past array 'p' of length 3\n  int main(void) { int a[3] = {1, 2, 3}; int *p = a; p[5] = 9; return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c:2:52: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds stack array 'p' of 12 bytes\n  int main(void) { int a[3] = {1, 2, 3}; int *p = a; p[5] = 9; return 0; }\n                                                     ^\n",
+        "timed_out": false,
+        "duration_s": 0.603
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c:2:53: error: [CPLUS-BOUNDS] out-of-bounds access: index 5 reaches past array 'a' via pointer 'p'\n  int main(void) { int a[3] = {1, 2, 3}; int *p = a; p[5] = 9; return 0; }\n                                                      ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 5 reaches past array 'p' of length 3\n  int main(void) { int a[3] = {1, 2, 3}; int *p = a; p[5] = 9; return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c:2:52: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds stack array 'p' of 12 bytes\n  int main(void) { int a[3] = {1, 2, 3}; int *p = a; p[5] = 9; return 0; }\n                                                     ^\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "BOUNDS-FIXED",
+      "role": "mutation",
+      "bypass": "alias: index p[5] through int *p = a instead of a[5]",
+      "require": [
+        "reaches past array 'a' via pointer 'p'"
+      ],
+      "forbid": []
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/near_bounds_fixed_sizeof.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_bounds_fixed_sizeof.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_bounds_fixed_sizeof.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.725
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_bounds_fixed_sizeof.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "BOUNDS-FIXED",
+      "role": "near_miss",
+      "bypass": "equivalent form: sizeof(a)/sizeof(a[0]) - 1 is the last valid index",
+      "require": [],
+      "forbid": [
+        "error:"
+      ]
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c:3:101: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'q'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; int *q = p; cplus_release(p); cplus_check_live(q); return 0; }\n                                                                                                      ^~~~~~~~~~~~~~~~\nhelp: suggested correction: do not dereference after release; copy the data or transfer ownership with cplus_move()\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_check_live', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 0.925
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c:3:101: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'q'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; int *q = p; cplus_release(p); cplus_check_live(q); return 0; }\n                                                                                                      ^~~~~~~~~~~~~~~~\nhelp: suggested correction: do not dereference after release; copy the data or transfer ownership with cplus_move()\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_check_live', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "LIFETIME-UAF",
+      "role": "mutation",
+      "bypass": "alias: cplus_check_live(q) where q aliases released owner p",
+      "require": [
+        "use-after-free"
+      ],
+      "forbid": []
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c ok\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 1.045
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c ok\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "LIFETIME-UAF",
+      "role": "near_miss",
+      "bypass": "fresh owner: release p, then use a separately allocated q",
+      "require": [],
+      "forbid": [
+        "error:"
+      ]
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c:3:101: error: [CPLUS-OWNER] double free of 'q'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; int *q = p; cplus_release(p); cplus_release(q); return 0; }\n                                                                                                      ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 1.222
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c:3:101: error: [CPLUS-OWNER] double free of 'q'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; int *q = p; cplus_release(p); cplus_release(q); return 0; }\n                                                                                                      ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "LIFETIME-DOUBLE-FREE",
+      "role": "mutation",
+      "bypass": "alias: release(p) then release(q) where q aliases p (OWNER-DOUBLE-FREE)",
+      "require": [
+        "double free"
+      ],
+      "forbid": []
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c ok\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 0.979
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c ok\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "LIFETIME-DOUBLE-FREE",
+      "role": "near_miss",
+      "bypass": "linear per path: if/else each release p exactly once",
+      "require": [],
+      "forbid": [
+        "error:"
+      ]
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_thread_race_helper.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_thread_race_helper.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_thread_race_helper.c:6:68: error: [CPLUS-FFI] multiple threads mutate shared global 'shared_counter' without synchronization\n  int main(void) { pthread_t a, b; pthread_create(&a, 0, worker, 0); pthread_create(&b, 0, worker, 0); pthread_join(a, 0); pthread_join(b, 0); return 0; }\n                                                                     ^~~~~~~~~~~~~~\n",
+        "timed_out": false,
+        "duration_s": 0.761
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_thread_race_helper.c:6:68: error: [CPLUS-FFI] multiple threads mutate shared global 'shared_counter' without synchronization\n  int main(void) { pthread_t a, b; pthread_create(&a, 0, worker, 0); pthread_create(&b, 0, worker, 0); pthread_join(a, 0); pthread_join(b, 0); return 0; }\n                                                                     ^~~~~~~~~~~~~~\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "THREAD-RACE",
+      "role": "mutation",
+      "bypass": "function boundary: worker calls helper bump() that writes shared global",
+      "require": [
+        "multiple threads mutate shared global 'shared_counter' without synchronization"
+      ],
+      "forbid": []
+    },
+    {
+      "fixture": "tests/compiler/strict_rules/fixtures/near_thread_race_mutex.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_thread_race_mutex.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_thread_race_mutex.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 1.03
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_thread_race_mutex.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": "",
+      "rule_id": "THREAD-RACE",
+      "role": "near_miss",
+      "bypass": "synchronized equivalent: same shared write under pthread_mutex lock/unlock",
+      "require": [],
+      "forbid": [
+        "error:"
+      ]
+    }
+  ]
+}

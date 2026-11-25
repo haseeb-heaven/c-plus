@@ -1,0 +1,97 @@
+{
+  "spec_version": "0.1",
+  "kind": "adversarial addition: one mutation (must reject) + one near-miss (must accept) per covered rule",
+  "description": "Table-driven extension of the 20-rule base suite. It does not modify rules.json or run_strict_rules.py. Each mutation attempts a cast/alias/equivalent-form bypass of the named rule and must still be rejected with the exact diagnostic substring; each near-miss is a legal boundary form that must be accepted. Coverage is a representative five-rule subset.",
+  "cases": [
+    {
+      "rule_id": "ARITH-OVERFLOW",
+      "role": "mutation",
+      "bypass": "cast: launder the overflowing +1 literal through (int)1u",
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_arith_overflow_cast.c",
+      "mode": "check",
+      "expect": "reject",
+      "require": ["signed integer overflow in addition"]
+    },
+    {
+      "rule_id": "ARITH-OVERFLOW",
+      "role": "near_miss",
+      "bypass": "boundary: 2147483646 + 1 reaches INT_MAX exactly, no overflow",
+      "fixture": "tests/compiler/strict_rules/fixtures/near_arith_overflow_boundary.c",
+      "mode": "check",
+      "expect": "accept",
+      "forbid": ["error:"]
+    },
+    {
+      "rule_id": "BOUNDS-FIXED",
+      "role": "mutation",
+      "bypass": "alias: index p[5] through int *p = a instead of a[5]",
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c",
+      "mode": "check",
+      "expect": "reject",
+      "require": ["reaches past array 'a' via pointer 'p'"]
+    },
+    {
+      "rule_id": "BOUNDS-FIXED",
+      "role": "near_miss",
+      "bypass": "equivalent form: sizeof(a)/sizeof(a[0]) - 1 is the last valid index",
+      "fixture": "tests/compiler/strict_rules/fixtures/near_bounds_fixed_sizeof.c",
+      "mode": "check",
+      "expect": "accept",
+      "forbid": ["error:"]
+    },
+    {
+      "rule_id": "LIFETIME-UAF",
+      "role": "mutation",
+      "bypass": "alias: cplus_check_live(q) where q aliases released owner p",
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c",
+      "mode": "check",
+      "expect": "reject",
+      "require": ["use-after-free"]
+    },
+    {
+      "rule_id": "LIFETIME-UAF",
+      "role": "near_miss",
+      "bypass": "fresh owner: release p, then use a separately allocated q",
+      "fixture": "tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c",
+      "mode": "check",
+      "expect": "accept",
+      "forbid": ["error:"]
+    },
+    {
+      "rule_id": "LIFETIME-DOUBLE-FREE",
+      "role": "mutation",
+      "bypass": "alias: release(p) then release(q) where q aliases p (OWNER-DOUBLE-FREE)",
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c",
+      "mode": "check",
+      "expect": "reject",
+      "require": ["double free"]
+    },
+    {
+      "rule_id": "LIFETIME-DOUBLE-FREE",
+      "role": "near_miss",
+      "bypass": "linear per path: if/else each release p exactly once",
+      "fixture": "tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c",
+      "mode": "check",
+      "expect": "accept",
+      "forbid": ["error:"]
+    },
+    {
+      "rule_id": "THREAD-RACE",
+      "role": "mutation",
+      "bypass": "function boundary: worker calls helper bump() that writes shared global",
+      "fixture": "tests/compiler/strict_rules/fixtures/mut_thread_race_helper.c",
+      "mode": "check",
+      "expect": "reject",
+      "require": ["multiple threads mutate shared global 'shared_counter' without synchronization"]
+    },
+    {
+      "rule_id": "THREAD-RACE",
+      "role": "near_miss",
+      "bypass": "synchronized equivalent: same shared write under pthread_mutex lock/unlock",
+      "fixture": "tests/compiler/strict_rules/fixtures/near_thread_race_mutex.c",
+      "mode": "check",
+      "expect": "accept",
+      "forbid": ["error:"]
+    }
+  ]
+}

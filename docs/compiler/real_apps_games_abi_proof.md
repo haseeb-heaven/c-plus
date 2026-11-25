@@ -26,12 +26,23 @@ downloaded over HTTPS and its SHA-256 checked before use. No upstream source is
 redistributed in this repository.
 
 ```
-counts: cases=10 configs=120 pass=68 safe_mode_rule=46
+counts: cases=10 configs=120 pass=53 safe_mode_rule=61
         reference_rejected=6 failed=0 mismatch_entries=0
 source preservation: 38/38 LEGACY configs byte-identical after #line
-symbols: LEGACY exact 38/38; safe-mode application symbols 30/30
+symbols: LEGACY exact 38/38; safe-mode application symbols 15/15
 strict rejections: 34 (SAFE_MODE_RULE=34 DEFECT=0)
 ```
+
+The `PASS`/`SAFE_MODE_RULE` split changed from 68/46 to 53/61; `configs=120`,
+`reference_rejected=6`, `failed=0` and `mismatch_entries=0` are unchanged. The
+increase is a policy outcome, not an ABI failure: warnings are errors by default
+in the safe modes (`--default`/`--strict`, issue #34), so warning-only
+diagnostics that `--legacy-c` accepts become hard rejections under STRICT and
+are recorded as `SAFE_MODE_RULE` with their exact diagnostics. No new ABI,
+layout or symbol failure was found — the 38 LEGACY configs still match
+clang/gcc with byte-identical source and exact symbols. This is not a claim
+that every configuration compiles or that all C is proven safe; see "Honest
+scope" below.
 
 Each config is run in LEGACY/DEFAULT/STRICT with `--sanitize=none` under
 `-std=c89/c99/c11/c17`, and compared byte-for-byte (stdout, exit status, emitted

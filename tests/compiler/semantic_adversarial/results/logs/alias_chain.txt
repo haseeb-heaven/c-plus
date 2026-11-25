@@ -1,0 +1,17 @@
+case alias_chain [aliases] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:73: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'q'
+  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf("%d\n", q[9]); return 0; }
+                                                                          ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:72: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'q' of length 4
+  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf("%d\n", q[9]); return 0; }
+                                                                         ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:72: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'q' of 16 bytes
+  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf("%d\n", q[9]); return 0; }
+                                                                         ^
+

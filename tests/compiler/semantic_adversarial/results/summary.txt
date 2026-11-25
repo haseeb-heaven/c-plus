@@ -1,0 +1,68 @@
+Semantic-adversarial suite (issue #29, compiler portion)
+generated: 2026-11-25T17:10:04.964038+00:00
+binary: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+flags: check/build --strict --sanitize=none ; timeouts check=30s build=90s run=15s
+counts: total=58 PASS=58 FAIL=0 reject_expectations=38 run_expectations=20 reject_failures=0 run_failures=0
+
+cast_index_long                    PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c
+cast_index_safe                    PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_safe.c
+cast_size_t_negative               PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_size_t_negative.c
+cast_alias_ptr                     PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c
+cast_alias_safe                    PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_safe.c
+byte_cast_oob                      PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c
+byte_cast_safe                     PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_safe.c
+void_cast_launder                  PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/void_cast_launder.c
+typedef_alias                      PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c
+typedef_alias_safe                 PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias_safe.c
+macro_literal_index                PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c
+macro_literal_index_safe           PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index_safe.c
+macro_subscript_body               PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c
+macro_extent                       PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c
+macro_double_expand                PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c
+macro_ptr_offset                   PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_ptr_offset.c
+macro_cast_launder                 PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_cast_launder.c
+macro_multi_statement              PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_multi_statement.c
+alias_direct                       PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c
+alias_one_past_deref               PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_one_past_deref.c
+alias_chain                        PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c
+alias_reassigned_safe              PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_reassigned_safe.c
+alias_struct_field                 PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field.c
+alias_struct_field_safe            PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field_safe.c
+alias_row_pointer                  PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c
+alias_row_pointer_safe             PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer_safe.c
+alias_pointer_to_pointer           PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_pointer_to_pointer.c
+alias_paren_pointer                PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c
+scope_inner_shadow_safe            PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c
+scope_outer_after_inner            PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c
+scope_param_shadows_global         PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_shadows_global.c
+scope_param_bigger_array           PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_bigger_array.c
+scope_param_name_like_global       PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c
+scope_local_shadows_global_safe    PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_local_shadows_global_safe.c
+scope_nested_oob                   PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c
+scope_scalar_shadow_safe           PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_scalar_shadow_safe.c
+cond_negative_branch               PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c
+cond_phi_variable                  PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c
+cond_parenthesized_oob             PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_parenthesized_oob.c
+cond_nested_oob                    PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_nested_oob.c
+cond_constant_safe                 PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_constant_safe.c
+cond_both_branches_safe            PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_both_branches_safe.c
+expr_paren_literal                 PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c
+expr_arith_literal                 PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c
+expr_comma_safe                    PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_safe.c
+expr_comma_oob                     PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c
+expr_comma_call_args               PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c
+expr_paren_lvalue_safe             PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c
+launder_uintptr_add                PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_uintptr_add.c
+launder_tag_or                     PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_tag_or.c
+launder_add_variable               PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_add_variable.c
+launder_xor                        PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c
+launder_union                      PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c
+launder_long_cast                  PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_long_cast.c
+flow_for_loop_oob                  PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c
+flow_while_loop_oob                PASS reject        /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_while_loop_oob.c
+flow_volatile_index_safe           PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_volatile_index_safe.c
+flow_helper_index_safe             PASS run           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_helper_index_safe.c
+
+FAILURES (0)
+
+commands are recorded verbatim per case in summary.json (row.commands) and results/logs/<id>.txt

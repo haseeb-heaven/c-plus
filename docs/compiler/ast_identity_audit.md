@@ -4,6 +4,8 @@
 `RaiiLowering.cpp`, `AstSafetyCheck.cpp`. **Mode:** read-only inventory plus
 targeted AST conversions; no check was weakened to make a test pass. **C ABI:**
 unchanged — all work is compile-time analysis or source lowering.
+Reconciled 2026-11-25 against the current suite summaries; this document edit
+changed no compiler source and ran no suite.
 
 ## What counts as a defect here
 
@@ -53,6 +55,15 @@ Those checks are skipped by this audit.
   provenance` gate.
 - **Union type punning records a `provenanceLost` fact** for pointer members of
   the same union; STRICT rejects a later subscript or dereference.
+- **Fixed-array shape facts are scope-fenced** (`StaticBoundsCheck.cpp`:
+  `ArrayShape::scopeEnd`, `enclosingScopeEnd`, checked in `findShape`). A shape
+  declared in an inner block is ignored once the token position is past that
+  block's closing brace, so a dead inner `int a[4]` no longer rejects an access
+  to an outer `int a[8]`. This is a **token-scope fence, not declaration
+  identity**: two same-named objects that are both live still share a spelling.
+  Evidence: `tests/compiler/ast_identity/` 9/9 and the
+  `scope_outer_after_inner` / `scope_inner_shadow_safe` cases in
+  `tests/compiler/semantic_adversarial/`.
 
 ## Remaining token/name-based decisions (OPEN, not claimed safe)
 
@@ -61,11 +72,23 @@ listed with their concrete defeat so the gap is measurable. They are **not**
 marked supported by STRICT; where an AST rule above covers the same source
 shape, the AST rule is authoritative.
 
+For `AstSafetyCheck.cpp`, heap-provenance facts that used to be only name-keyed
+(`heapAllocs_`) now have a parallel `identityAllocs_` view keyed by canonical
+`VarDecl*`/`FieldDecl*` (`identityKeyForDecl`, `identityKey`, `namedVars_`);
+`heapStateOf` prefers the name-keyed entry only when it still belongs to the
+same canonical declaration. Those facts are therefore **not** listed as fully
+OPEN here. The name-keyed decisions that remain in the token passes are below.
+
 ### `StaticBoundsCheck.cpp`
 
-- Shape lookup (`findShape`/`findExtent`, `localArrays_`) picks the most recent
-  earlier same-spelling declaration and has no scope: shadowed arrays can be
-  bound to the wrong extent.
+- Shape lookup (`findShape`/`findExtent`, `localArrays_`) is still name-keyed:
+  it picks the most recent earlier same-spelling declaration. It is now
+  **scope-fenced** (`scopeEnd` / `enclosingScopeEnd`, see "Converted in this
+  change"), so a shape from an already-closed inner block is skipped, but the
+  fence is positional, not declaration identity. **KNOWN_OPEN:** two same-named
+  objects that are both live (for example a parameter shadowing a global:
+  `scope_param_shadows_global` in the adversarial suite) can still bind to the
+  wrong extent, and the byte/element distinction is not modelled here.
 - Struct shape/type maps (`varStruct_`, `fieldFacts_`) are global by spelling;
   same-named locals of different struct tags contaminate each other.
 - Constant maps (`localConstAt`, `phiConstAt`) and volatile-name suppression
@@ -116,7 +139,11 @@ rejections). See the individual `compile_fail/classic_bug*` fixtures.
 Already-proven RAII paths are skipped: identity-based resource shadowing,
 conditional defer, explicit drop with a single cast, early-return ordering,
 basic move/double-move/borrow-after-move, same-TU `setjmp` with owner, and
-throw-in-try rejection (evidence listed in the table above).
+throw-in-try rejection (evidence listed in the table above). Multi-declarator
+owning declarations are now rejected in STRICT with `declare one owning
+resource per statement` (`RaiiLowering.cpp`, 4617c7c); control-flow cleanup and
+destructor order are pinned by `tests/compiler/raii_cleanup/` 21/21. The
+token-scan limits for non-local exits above remain KNOWN_OPEN.
 
 ### `CPlusRewriter.cpp`
 
@@ -138,7 +165,18 @@ checked-arithmetic emission internals and side-table fallback are covered by
 Every AST conversion in this change is backed by a negative fixture (must be
 rejected in STRICT with the asserted diagnostic substring) and a positive
 fixture (must build and run with exact stdout). Exact commands, exit codes,
-stdout and stderr are recorded in
-`tests/compiler/pointer_provenance/results/summary.txt`. Remaining token-only
-decisions are reported as OPEN here rather than presented as compiler
-guarantees.
+stdout and stderr are recorded in each suite's `results/summary.{txt,json}`.
+Current counts (2026-11-25) are fixture evidence, not a completeness claim:
+
+| Suite | Current result | Scope pinned |
+| --- | --- | --- |
+| `tests/compiler/pointer_provenance/` | 14/14 PASS | declaration-identity provenance: struct/union fields, field arithmetic, conditional aliases, integer round-trips, identity helpers |
+| `tests/compiler/ast_identity/` | 9/9 PASS | scope fence, typedef arrays, macro indices, cast aliases, function-pointer calls, conjunctive guards, realloc via a field, template shapes |
+| `tests/compiler/data_race/` | 9/9 PASS | helper-global races and lock discipline in `AstSafetyCheck.cpp` |
+| `tests/compiler/raii_cleanup/` | 21/21 PASS | multi-declarator owner rejection; goto/setjmp/longjmp limits; destructor-counter order |
+
+Remaining token-only decisions are reported as OPEN above, not presented as
+compiler guarantees. The adversarial suite now reports **0 FAILs** in 58
+cases (`tests/compiler/semantic_adversarial/results/summary.txt`); see
+`docs/compiler/semantic_safety_inventory.md` §3 for the measured evidence and
+the remaining KNOWN_OPEN token decisions listed above.

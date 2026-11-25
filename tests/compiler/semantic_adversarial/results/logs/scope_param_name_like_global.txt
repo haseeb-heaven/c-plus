@@ -1,0 +1,21 @@
+case scope_param_name_like_global [scopes] expectation=run
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c
+rc=0 note=
+stdout:
+check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c ok
+
+stderr:
+
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_name_like_global
+rc=0 note=
+stdout:
+
+stderr:
+
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_name_like_global
+rc=0 note=
+stdout:
+42
+
+stderr:
+

@@ -1,0 +1,197 @@
+{
+  "purpose": "evidence that cross-TU incompatible ownership declarations are NOT diagnosed (KNOWN_OPEN, issue #4 / Bug 35)",
+  "generated_utc": "2026-11-25T16:44:50.279952+00:00",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "ref_cc": "/usr/bin/clang",
+  "runtime_lib": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a",
+  "tu_a": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c",
+  "tu_b": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c",
+  "workdir": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work",
+  "steps": [
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c",
+        "--legacy-c",
+        "--sanitize=none",
+        "-c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.legacy-c.o"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "timed_out": false,
+      "step": "compile_legacy-c_tu0"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c",
+        "--legacy-c",
+        "--sanitize=none",
+        "-c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.legacy-c.o"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "timed_out": false,
+      "step": "compile_legacy-c_tu1"
+    },
+    {
+      "command": [
+        "/usr/bin/clang",
+        "-std=gnu11",
+        "-O1",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.legacy-c.o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.legacy-c.o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.legacy-c"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "timed_out": false,
+      "step": "link_legacy-c"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.legacy-c"
+      ],
+      "rc": 0,
+      "stdout": "no cross-TU diagnostic\n",
+      "stderr": "",
+      "timed_out": false,
+      "step": "run_legacy-c"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c",
+        "--default",
+        "--sanitize=none",
+        "-c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.default.o"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "timed_out": false,
+      "step": "compile_default_tu0"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c",
+        "--default",
+        "--sanitize=none",
+        "-c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.default.o"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "timed_out": false,
+      "step": "compile_default_tu1"
+    },
+    {
+      "command": [
+        "/usr/bin/clang",
+        "-std=gnu11",
+        "-O1",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.default.o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.default.o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.default"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "timed_out": false,
+      "step": "link_default"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.default"
+      ],
+      "rc": 0,
+      "stdout": "no cross-TU diagnostic\n",
+      "stderr": "",
+      "timed_out": false,
+      "step": "run_default"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c",
+        "--strict",
+        "--sanitize=none",
+        "-c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.strict.o"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "timed_out": false,
+      "step": "compile_strict_tu0"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c",
+        "--strict",
+        "--sanitize=none",
+        "-c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.strict.o"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'resource_acquire', 'resource_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "timed_out": false,
+      "step": "compile_strict_tu1"
+    },
+    {
+      "command": [
+        "/usr/bin/clang",
+        "-std=gnu11",
+        "-O1",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.strict.o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.strict.o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.strict"
+      ],
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "timed_out": false,
+      "step": "link_strict"
+    },
+    {
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.strict"
+      ],
+      "rc": 0,
+      "stdout": "no cross-TU diagnostic\n",
+      "stderr": "",
+      "timed_out": false,
+      "step": "run_strict"
+    }
+  ],
+  "problems": [],
+  "verdict": "KNOWN_OPEN"
+}

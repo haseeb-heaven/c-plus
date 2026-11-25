@@ -22,6 +22,16 @@ CASES = {
     "calc_repl": "1+2*3\n4*4\nq\n",
 }
 
+# Fixtures whose C+ warnings are intentional/incidental to their plain-C89
+# source.  tetris_mini uses `goto next;` purely as loop control; the C+ warning
+# "'goto' bypasses C+ cleanup; destructors may not run" does not apply because
+# the fixture owns no C+ resources/destructors.  Per docs/LANGUAGE.md,
+# --no-werror is a documented diagnostic-only opt-out from warning promotion:
+# it does not disable any C+ safety analysis or runtime check, so DEFAULT and
+# STRICT still exercise the full safety policy.  Keep this set minimal and
+# never apply the flag globally to every fixture.
+WERROR_OPT_OUT = {"tetris_mini"}
+
 
 def run(cmd, data=None):
     return subprocess.run(cmd, input=(data.encode() if data else None),
@@ -55,7 +65,11 @@ def main():
         modes = {}
         for mode in ("--default", "--strict"):
             sx = os.path.join(RES, name + mode[2:] + ".full.bin")
-            b = run([BIN, "build", mode, "--sanitize=none", src, "-o", sx])
+            cmd = [BIN, "build", mode, "--sanitize=none"]
+            if name in WERROR_OPT_OUT:
+                cmd.append("--no-werror")  # diagnostic-only; safety checks stay on
+            cmd += [src, "-o", sx]
+            b = run(cmd)
             r = run([sx], stdin) if b.returncode == 0 else None
             ok = bool(r and r.returncode == rr.returncode and r.stdout == rr.stdout)
             modes[mode] = {"build_rc": b.returncode, "run_rc": r.returncode if r else None,

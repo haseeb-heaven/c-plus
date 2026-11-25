@@ -1,0 +1,18 @@
+case scope_outer_after_inner [scopes] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:80: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf("%d\n", a[9]); return 0; }
+                                                                                 ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:79: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4
+  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf("%d\n", a[9]); return 0; }
+                                                                                ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:79: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf("%d\n", a[9]); return 0; }
+                                                                                ^
+help: array contains 4 elements; valid indices are 0..3
+

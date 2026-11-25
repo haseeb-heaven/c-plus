@@ -1,0 +1,18 @@
+case launder_xor [laundering] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c:3:92: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'
+  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a ^ 8; u ^= 8; int *p=(int*)u; p[9]=7; printf("%d\n", p[9]); return 0; }
+                                                                                             ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c:3:115: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'
+  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a ^ 8; u ^= 8; int *p=(int*)u; p[9]=7; printf("%d\n", p[9]); return 0; }
+                                                                                                                    ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c:3:82: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a ^ 8; u ^= 8; int *p=(int*)u; p[9]=7; printf("%d\n", p[9]); return 0; }
+                                                                                   ^
+

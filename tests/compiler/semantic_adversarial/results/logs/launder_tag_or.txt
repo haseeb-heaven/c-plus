@@ -1,0 +1,10 @@
+case launder_tag_or [laundering] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_tag_or.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_tag_or.c:3:74: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=((uintptr_t)a)|1; int *p=(int*)(u & ~(uintptr_t)1); p[9]=7; printf("%d\n", p[9]); return 0; }
+                                                                           ^
+

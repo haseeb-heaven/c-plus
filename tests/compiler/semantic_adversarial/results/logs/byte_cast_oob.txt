@@ -1,0 +1,17 @@
+case byte_cast_oob [casts] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:56: error: [CPLUS-BOUNDS] out-of-bounds access: index 36 reaches past array 'a' via pointer 'b'
+  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf("%d\n", a[0]); return 0; }
+                                                         ^
+help: array contains 16 elements; valid indices are 0..15
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:55: error: [CPLUS-FFI] out-of-bounds access: index 36 reaches past array 'b' of length 16
+  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf("%d\n", a[0]); return 0; }
+                                                        ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:55: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 36 exceeds stack array 'b' of 16 bytes
+  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf("%d\n", a[0]); return 0; }
+                                                        ^
+

@@ -1,0 +1,14 @@
+case alias_row_pointer [aliases] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c:2:83: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'r'
+  int main(void){ int a[2][4]={{1,2,3,4},{5,6,7,8}}; int (*r)[4]=a; printf("%d\n", r[9][0]); return 0; }
+                                                                                    ^
+help: array contains 2 elements; valid indices are 0..1
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c:2:82: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'r' of length 2
+  int main(void){ int a[2][4]={{1,2,3,4},{5,6,7,8}}; int (*r)[4]=a; printf("%d\n", r[9][0]); return 0; }
+                                                                                   ^
+

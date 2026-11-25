@@ -42,9 +42,71 @@ Evidence: `tests/compiler/abi_link_flags/results/summary.{txt,json}`.
 
 ## OPEN / not claimed
 
+### KNOWN_OPEN: incompatible cross-TU ownership declarations (issue #4 residual gap)
+
+**Still OPEN.** A single-TU compiler cannot compare declarations of the same
+external symbol in different translation units, so an owner-side release
+boundary declared with an incompatible ownership/pointer signature is **not
+diagnosed** in any mode. This is the residual diagnosis gap of issue #4
+(duplicate `.hp` symbols were fixed; the declaration-mismatch diagnosis was
+not); also `docs/LIMITATIONS.md` Bug 35. No compiler code was changed to
+produce the evidence below.
+
+Fixture (two real TUs, unchanged native C ABI — `int *` and `long *` are both
+plain 8-byte LP64 object pointers; no new type, token or wrapper):
+
+- `tests/known_gaps/abi_mismatch/cross_tu_owner_def.c` — TU A **defines**
+  `void resource_release(int *)`, releasing the owned pointer with
+  `cplus_release`; `resource_acquire` obtains it from `cplus_alloc`.
+- `tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c` — TU B **declares the
+  same symbol** as `void resource_release(long *)` (incompatible pointer /
+  ownership signature) and calls it.
+
+Reproduce with the **prebuilt** compiler only (no rebuild). Let `$C` be
+`<repo>/build/c+`, `$R` be `<repo>/tests/known_gaps/abi_mismatch`, and `$RT` be
+`<repo>/build/libcplus_runtime.a`:
+
+```sh
+$C build $R/cross_tu_owner_def.c  --strict --sanitize=none -c -o $R/results/work/cross_tu_owner_def.strict.o
+$C build $R/cross_tu_owner_decl.c --strict --sanitize=none -c -o $R/results/work/cross_tu_owner_decl.strict.o
+/usr/bin/clang -std=gnu11 -O1 \
+  $R/results/work/cross_tu_owner_def.strict.o \
+  $R/results/work/cross_tu_owner_decl.strict.o $RT \
+  -o $R/results/work/prog.strict
+$R/results/work/prog.strict
+```
+
+Observed output (STRICT; `--legacy-c` and `--default` produce the same clean
+result, with no note at all):
+
+```
+build cross_tu_owner_def.c  --strict ... -> rc=0
+  note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions
+        'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in
+        this TU; cross-TU control/data flow is not safety-checked here
+build cross_tu_owner_decl.c --strict ... -> rc=0
+  note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions
+        'resource_acquire', 'resource_release' have no definition in this TU;
+        cross-TU control/data flow is not safety-checked here
+clang ... -o prog.strict                 -> rc=0
+./prog.strict                            -> rc=0
+  no cross-TU diagnostic
+```
+
+`nm -g` confirms both objects use the **same** symbol: TU A has `T
+_resource_release`, TU B has `U _resource_release`. Neither TU emits an
+`error:` or `warning:` about the conflicting ownership/pointer type, the link
+succeeds, and the program prints the sentinel. The only STRICT output is the
+`[CPLUS-MULTITU]` note, which explicitly discloses that cross-TU flow is not
+safety-checked. **This confirms the gap remains OPEN: there is no compiler-side
+diagnosis of incompatible cross-TU ownership declarations.** Verbatim
+absolute-path commands, per-step rc/stdout/stderr and the `verdict: KNOWN_OPEN`
+self-check are in `tests/known_gaps/abi_mismatch/results/summary.{txt,json}`;
+regenerate with `python3 tests/known_gaps/abi_mismatch/run.py`.
+
 - Wrong or missing ABI declarations across TUs (e.g. `int` vs `double`)
-  cannot be detected by a per-TU analysis; recorded in
-  `tests/known_gaps/abi_mismatch/` and `docs/LIMITATIONS.md` (Bug 35).
+  cannot be detected by a per-TU analysis; the ownership-declaration instance
+  is reproduced above and in `tests/known_gaps/abi_mismatch/` (Bug 35).
 - Cross-TU allocation paired with release in another TU still requires an
   explicit validated contract; STRICT rejects it, it does not prove it.
 - Shared-library symbol interposition at runtime, opaque-handle misuse

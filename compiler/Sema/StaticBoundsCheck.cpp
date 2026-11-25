@@ -33,6 +33,10 @@ struct ArrayShape {
   // A fact from an inner block must not be used after that block closes.
   // kNPos means file scope or a shape inherited from the rewriter.
   size_t scopeEnd = kNPos;
+  // Byte width of one element, read from the declaration's type word.  Needed
+  // for byte-cast aliases (char*/void*), where a subscript counts bytes while
+  // dims count elements.  0 means unknown: byte-unit checks then stay silent.
+  size_t elemBytes = 0;
 };
 
 /// A pointer whose value is a provable constant offset (in elements) from a
@@ -54,6 +58,10 @@ class Checker {
   struct FuncSig {
     std::vector<std::string> params;
     std::vector<bool> outParam; // `T **out`: an allocation written via *out
+    // Token position of each parameter's name.  A parameter shadows an outer
+    // name-keyed extent for the whole body; a declaration at/after this token
+    // (e.g. `void f(int a[8])`) still describes the parameter itself.
+    std::map<std::string, size_t> paramDeclPos;
     size_t bodyOpen = 0;
     size_t bodyClose = 0;
   };
@@ -478,9 +486,26 @@ private:
           break;
         cursor = nextSig(close);
       }
+      // A comma means a second declarator (`int a[4], b[8]`); walk back to
+      // the shared type word so both shapes get the same element width.
+      size_t typeTok = prev;
+      if (isPunct(prev, ",")) {
+        for (size_t k = prev; k > 0; --k) {
+          size_t j = k - 1;
+          if (isPunct(j, ";") || isPunct(j, "{") || isPunct(j, "}"))
+            break;
+          if (toks_[j].kind != TokKind::Identifier)
+            continue;
+          bool isType = false;
+          for (const char *t : kTypes)
+            if (toks_[j].text == t) { isType = true; break; }
+          if (isType) { typeTok = j; break; }
+        }
+      }
       if (!dims.empty())
-        localArrays_.push_back(
-            {i, toks_[i].text, dims, enclosingScopeEnd(i)});
+        localArrays_.push_back({i, toks_[i].text, dims,
+                                enclosingScopeEnd(i),
+                                typeSize(toks_[typeTok].text)});
     }
   }
 
@@ -505,12 +530,30 @@ private:
 
   bool findShape(const std::string &name, size_t pos,
                  const std::vector<size_t> **shape) const {
+    // Name-keyed extent facts are collected over the whole token stream, but
+    // a function parameter with the same name shadows an outer/file-scope
+    // object for the entire function body.  Otherwise
+    // `static int a[4]; void f(int *a){ a[9]; }` is checked against the
+    // global array.  Only shapes declared at or after the parameter token
+    // can describe the parameter itself (`void f(int a[8])`).
+    size_t shadowDecl = kNPos;
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (pos < sig.bodyOpen || pos > sig.bodyClose)
+        continue;
+      auto pit = sig.paramDeclPos.find(name);
+      if (pit != sig.paramDeclPos.end() && pit->second <= pos &&
+          (shadowDecl == kNPos || pit->second > shadowDecl))
+        shadowDecl = pit->second;
+    }
     for (size_t k = localArrays_.size(); k > 0; --k) {
       const ArrayShape &e = localArrays_[k - 1];
       // A declaration from a block that has already closed is dead: do not
       // let its smaller extent reject an access to the outer object.
       if (e.scopeEnd != kNPos && pos > e.scopeEnd)
         continue;
+      if (shadowDecl != kNPos && e.pos < shadowDecl)
+        continue; // shadowed by a parameter of the same name
       if (e.name == name && e.pos <= pos) {
         // A realloc with an unprovable new size replaces this extent; a
         // stale extent must never drive an OOB diagnostic.
@@ -533,6 +576,21 @@ private:
 
     *extent = dims->front();
     return true;
+  }
+
+  /// Byte width of one element of the array behind a byte-cast alias.  The
+  /// width comes from the declaration's type word; 0 means unknown, in which
+  /// case a byte-unit check must stay silent instead of guessing a bound.
+  size_t arrayElemBytes(const std::string &name, size_t pos) const {
+    for (size_t k = localArrays_.size(); k > 0; --k) {
+      const ArrayShape &e = localArrays_[k - 1];
+      if (e.name != name || e.pos > pos || e.elemBytes == 0)
+        continue;
+      if (e.scopeEnd != kNPos && pos > e.scopeEnd)
+        continue;
+      return e.elemBytes;
+    }
+    return 0;
   }
 
   struct Interval {
@@ -712,6 +770,24 @@ private:
     trim(&from, &to);
     if (from >= to)
       return false;
+    // The comma operator's value is its last operand.  Only top-level commas
+    // are operators here: commas inside `(...)` separate call arguments and
+    // are consumed by splitArgs before this helper sees them.  This folds
+    // `(0, 9, 1)` to 1 instead of guessing from an earlier operand.
+    {
+      size_t lastComma = kNPos;
+      int paren = 0, bracket = 0;
+      for (size_t k = from; k < to; ++k) {
+        if (isPunct(k, "(")) ++paren;
+        else if (isPunct(k, ")")) --paren;
+        else if (isPunct(k, "[")) ++bracket;
+        else if (isPunct(k, "]")) --bracket;
+        else if (isPunct(k, ",") && paren == 0 && bracket == 0)
+          lastComma = k;
+      }
+      if (lastComma != kNPos)
+        return indexExprValue(lastComma + 1, to, out);
+    }
     // Wave 2: fold a top-level `a + b` / `a - b` before the unary case.  This
     // is what makes chained pointer formation (`q = a + 3 + 4`) and derived
     // recursive indices (`p[i + 9]`) provable.  Doing it first keeps
@@ -1089,6 +1165,24 @@ private:
     const std::vector<size_t> *dims = nullptr;
     if (!findShape(toks_[i].text, i, &dims) || dims->empty()) return;
     long extent = (long)dims->front();
+    // A compile-time constant condition selects exactly one arm; the other
+    // arm is never evaluated and must not reject valid C such as
+    // `a[0 ? 9 : 1]`.  indexExprValue already folds the selected arm.  Only
+    // literal conditions qualify: a folded local is not a constant expression
+    // and the both-arm rule below must still catch e.g. `f ? -1 : 0`.
+    long cond = 0;
+    bool literalCond = indexExprValue(from, q, &cond);
+    for (size_t k = from; literalCond && k < q; ++k)
+      if (toks_[k].kind == TokKind::Identifier)
+        literalCond = false;
+    if (literalCond) {
+      long value = 0;
+      if (indexExprValue(from, to, &value) &&
+          (value < 0 || value >= extent))
+        reportConstantIndex(toks_[q], value, toks_[i].text,
+                            static_cast<size_t>(extent));
+      return;
+    }
     std::vector<std::pair<size_t, size_t>> branches = {
         {q + 1, colon}, {colon + 1, to}};
     for (const auto &br : branches) {
@@ -3419,6 +3513,26 @@ private:
     if (tp.dims.empty())
       return;
 
+    // A byte-granular alias (char*/void* cast or declaration) counts BYTES,
+    // while the tracked dims count elements of the underlying array.  Reuse
+    // the same byteCastAliases_ fact as checkParamIndexSubscript and
+    // checkPointerToPointerSubscript and convert the extent once, so
+    // `int a[4]; char *b=(char*)a; b[4]` stays in bounds while `b[36]` is
+    // still rejected.  An unknown element width suppresses the diagnostic
+    // rather than guessing; the AST byte-accurate check still covers those
+    // sites.  Row pointers keep their row-count unit.
+    long long total = 1;
+    for (size_t dim : tp.dims)
+      total *= static_cast<long long>(dim);
+    bool byteUnit = false;
+    if (!tp.rowPointer && byteCastAliases_.count(toks_[i].text)) {
+      size_t elemBytes = arrayElemBytes(tp.array, i);
+      if (elemBytes == 0)
+        return; // no provable byte bound
+      byteUnit = true;
+      total *= static_cast<long long>(elemBytes);
+    }
+
     size_t lb = nextSig(i);
     // `(*pp)[k]`: the tracked pointer is the dereferenced operand, so the
     // subscript follows the closing parenthesis rather than the identifier.
@@ -3448,7 +3562,7 @@ private:
         }
       } else {
         // Element pointer: its absolute index is offset + subscript, checked
-        // against the total number of elements in the flattened array.
+        // against the total number of elements (or bytes for a byte alias).
         size_t rb = match(lb, "[", "]");
         if (rb == kNPos)
           return;
@@ -3459,9 +3573,6 @@ private:
         if (isPunct(prevSig(i), "&"))
           return;
         long absolute = tp.offset + idx;
-        long long total = 1;
-        for (size_t dim : tp.dims)
-          total *= static_cast<long long>(dim);
         if (absolute < 0)
           reportNegativeAliasIndex(toks_[lb], absolute, tp.array,
                                    toks_[i].text);
@@ -3486,12 +3597,12 @@ private:
          isPunct(before, ",") || isPunct(before, "*")))
       return;
     long absolute = tp.rowPointer ? 0 : tp.offset;
-    size_t extent = tp.dims[0];
+    long long extent = byteUnit ? total : static_cast<long long>(tp.dims[0]);
     if (absolute < 0)
       reportNegativeAliasIndex(toks_[i], absolute, tp.array, toks_[i].text);
-    else if (static_cast<size_t>(absolute) >= extent)
-      reportAliasOutOfBounds(toks_[i], absolute, tp.array, extent,
-                             toks_[i].text);
+    else if (static_cast<long long>(absolute) >= extent)
+      reportAliasOutOfBounds(toks_[i], absolute, tp.array,
+                             static_cast<size_t>(extent), toks_[i].text);
   }
 
   /// One-past rule for the direct spelling `*(array + N)`: forming `array + N`
@@ -4014,6 +4125,7 @@ private:
         continue;
       std::vector<std::string> params;
       std::vector<bool> outFlags;
+      std::map<std::string, size_t> declPos;
       for (const auto &part : parts) {
         size_t last = kNPos;
         int stars = 0;
@@ -4025,10 +4137,13 @@ private:
         }
         params.push_back(last == kNPos ? std::string() : toks_[last].text);
         outFlags.push_back(stars >= 2);
+        if (last != kNPos)
+          declPos[toks_[last].text] = last;
       }
       FuncSig sig;
       sig.params = params;
       sig.outParam = outFlags;
+      sig.paramDeclPos = declPos;
       sig.bodyOpen = nextSig(rp);
       sig.bodyClose = match(sig.bodyOpen, "{", "}");
       funcs_[toks_[i].text] = sig;

@@ -1,10 +1,14 @@
-# Semantic safety inventory: token rewriting vs semantic analysis (v1)
+# Semantic safety inventory: token rewriting vs semantic analysis (v2)
 
-Version 1, 2026-11-24. Scope: issue #29 compiler portion, branch `agent/core-safety`.
-Evidence binary: `build/c+` (`C+ 0.1.0`, sha256 prefix `f92946cb0483c125684c4958`,
-mtime 12:27 > both source files below, so it includes the working-tree edits).
-Source read: `compiler/Sema/StaticBoundsCheck.cpp` (5226 lines) and
-`compiler/Sema/CPlusRewriter.cpp` (5195 lines). No compiler source was changed.
+Version 2, 2026-11-25 (reconciled to current measured evidence). Scope: issue
+#29 compiler portion, branch `agent/core-safety` at 4617c7c.
+Evidence binary: `build/c+` (`C+ 0.1.0`, sha256 prefix `1ea8c30d2d291c5035a00aa`,
+mtime 2026-11-25T14:01:29+0530 > all source files below, so it includes the
+working-tree edits). The generated suite in §3 names this same binary path.
+Source read: `compiler/Sema/StaticBoundsCheck.cpp` (5319 lines) and
+`compiler/Sema/CPlusRewriter.cpp` (5236 lines), plus
+`compiler/Sema/AstSafetyCheck.cpp` for the declaration-identity view.
+No compiler source was changed by this inventory.
 
 Notation for "needs": **S** = identifier spelling / token adjacency only;
 **P** = source-position-keyed name facts (same token model, with invalidation);
@@ -68,26 +72,32 @@ The tables name every safety-critical check; related checks are grouped by row.
 ## 3. Measured residual risks (do not claim these are fixed)
 
 Suite: `tests/compiler/semantic_adversarial/run_suite.py`, 58 cases,
-CPLUS_BIN=$PWD/build/c+, `--strict --sanitize=none`, hard timeouts 30/90/15 s:
-**51 PASS / 7 FAIL** (reject expectations 34/38, run expectations 17/20).
-Raw evidence: `tests/compiler/semantic_adversarial/results/summary.{txt,json}`.
+CPLUS_BIN=$PWD/build/c+, `--strict --sanitize=none`, hard timeouts 30/90/15 s,
+generated 2026-11-25T16:17:12Z:
+**58 PASS / 0 FAIL** (reject expectations 38/38, run expectations 20/20;
+reject_failures=0, run_failures=0).
+Raw evidence: `tests/compiler/semantic_adversarial/results/summary.{txt,json}`
+(counts block and verbatim FAILURES list). Corroborating suites are in §4.
 
-1. **Macro + integer laundering evades both token bounds and provenance checks**
-   (`macro_cast_launder`): `LAUNDER(x) ((int*)(uintptr_t)(x) + 9)` is accepted;
-   run exits 0 with stdout `1\n` (silent OOB read). Needs E + T + F, not token adjacency.
-   Other direct integer-laundering cases *are* rejected (`launder_*`, 6/6 PASS).
-2. **Parenthesized / nested ternary OOB branches are missed**
-   (`cond_parenthesized_oob`, `cond_nested_oob`): accepted; runtime aborts with
-   `C+ error: index 20 ...` / `index 99 ...` (rc=-6). The token ternary parser
-   only recognises a top-level `?` inside `[]`. Needs real expression structure.
-   Symmetrically, `cond_constant_safe` (`a[0?9:1]`) is a **false positive**:
-   rejected although only index 1 is reachable.
-3. **Name-keyed extents ignore declaration identity and byte/element type**
-   (`scope_param_shadows_global`): parameter `int *a` called with `int b[64]`
-   is rejected as index 9 past global `a[4]`. `byte_cast_safe` (`char* b = a; b[4]`)
-   is rejected as index 4 past `a[4]` although 4 bytes are in range. Needs D + T.
-4. **Loop induction OOB is only runtime-enforced** (`flow_while_loop_oob`):
-   `while(i<10) a[i++]` accepted, runtime aborts at index 4. The `for` form is
-   rejected, so the two loop shapes disagree. Needs C + F.
+Previously measured failures are now closed in source and pinned by fixtures:
+macro integer laundering, parenthesized/nested conditional indices, counted
+`while` induction, byte-cast element units, live parameter shadowing, constant
+condition/comma folding and the comma-instrumentation warning. The suite is
+evidence for its 58 fixtures only, not a completeness or soundness claim.
 
-All 7 FAILs are listed verbatim in the suite summary; none is skipped or hidden.
+## 4. Corroborating suites (current evidence, not proof of completeness)
+
+These suites ran against the same `build/c+` binary; counts are from their
+`results/summary.txt`, and each case records exact commands, exit codes, stdout
+and stderr with hard timeouts and no skips:
+
+| Suite | Current result | What it pins |
+| --- | --- | --- |
+| `tests/compiler/pointer_provenance/` | 14/14 PASS | canonical `VarDecl*`/`FieldDecl*` provenance through struct/union fields, field arithmetic, conditional aliases, integer round-trips and identity helpers |
+| `tests/compiler/ast_identity/` | 9/9 PASS | scope-fenced shadowed arrays, typedef arrays, macro indices, cast aliases, function-pointer calls, conjunctive guards, realloc via a struct field and template-shaped sources |
+| `tests/compiler/data_race/` | 9/9 PASS | AST-based helper-global races and lock discipline in `AstSafetyCheck.cpp`; locked/atomic/consistent-order safe cases |
+| `tests/compiler/raii_cleanup/` | 21/21 PASS | multi-declarator owner rejection; goto/setjmp/longjmp diagnostics; exact destructor-counter order for loops, switches, returns, moves and generated owner chains |
+
+A green suite is evidence for its fixtures only. The token-based inventory in §1 and the OPEN items in
+`docs/compiler/ast_identity_audit.md` remain KNOWN_OPEN; none of these tables
+should be read as a completeness or soundness claim.
