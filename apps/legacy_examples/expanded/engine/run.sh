@@ -2,13 +2,13 @@
 # Build and run the three deterministic engine examples from the repository
 # root, then byte-compare each transcript against expected/*.out.
 #
-#   sh examples/expanded/engine/run.sh
+#   sh apps/legacy_examples/expanded/engine/run.sh
 #
 # Final line: ENGINE_EXAMPLES <apps> <passed> <failed>
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd) || exit 1
-HERE="$ROOT/examples/expanded/engine"
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd) || exit 1
+HERE="$ROOT/apps/legacy_examples/expanded/engine"
 BUILD_DIR="$HERE/.build"
 CPLUS="$ROOT/build/c+"
 

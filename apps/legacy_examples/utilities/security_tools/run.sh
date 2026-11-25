@@ -14,7 +14,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../../.." && pwd)
 cd "$ROOT" || exit 2
 
-DIR=examples/utilities/security_tools
+DIR=apps/legacy_examples/utilities/security_tools
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/util-security.XXXXXX") || exit 2
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 

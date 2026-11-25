@@ -6,7 +6,7 @@
  * byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games/cores/maze.cp \
+ *   ./build/c+ build apps/legacy_examples/expanded/games/cores/maze.cp \
  *       --strict --sanitize=none -I. -o build/maze_core
  *
  * Run:

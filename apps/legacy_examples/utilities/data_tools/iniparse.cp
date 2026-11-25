@@ -1,9 +1,9 @@
 /* iniparse.cp -- fixed INI fixture parser with strict refusals.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/data_tools/iniparse.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/data_tools/iniparse.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/utilities/data_tools/.run/iniparse
+ *     -o apps/legacy_examples/utilities/data_tools/.run/iniparse
  *
  * Usage:
  *   iniparse <ini-path> get <section> <key>

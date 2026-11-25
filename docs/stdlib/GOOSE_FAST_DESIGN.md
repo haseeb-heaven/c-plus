@@ -36,12 +36,12 @@ pointers, and compile-time-proven bounds checks eliminated (`checkfree`).
 
 ## Measured evidence
 
-`examples/goose_memory/` contains real workloads with exact logs proving:
+`apps/legacy_examples/goose_memory/` contains real workloads with exact logs proving:
 - `stdlib_scratch_scope` restores the data-stack top with one store;
 - `stdlib_slot_pool` refs remain stable and stale refs are refused;
 - allocator-aware C+ containers run on the data stack.
 
-`examples/ctl_demo/` combines CTL typed containers (persistent) with the
+`apps/legacy_examples/ctl_demo/` combines CTL typed containers (persistent) with the
 Goose-style scratch data stack (transient).
 
 ## Non-claims

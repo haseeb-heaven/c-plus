@@ -1,7 +1,7 @@
 # games_4 — deterministic board-game cores
 
 Three single-file C+ `.cp` programs, each a non-interactive logic core plus a
-plain-text CLI driver. All files live only in `examples/expanded/games_4/`.
+plain-text CLI driver. All files live only in `apps/legacy_examples/expanded/games_4/`.
 
 | File | Model | Board |
 | --- | --- | --- |
@@ -92,28 +92,28 @@ category=... detail=...` line on stdout and one
 This is a description of check placement in the source, not a verified
 property. A rule bug outside the exercised sequences could still exist.
 
-## How these differ from `examples/games/*.c`
+## How these differ from `apps/legacy_examples/games/*.c`
 
 Those are interactive C17 compatibility demos built by
-`examples/build_examples.sh` and not run in automated verification because they
+`apps/legacy_examples/build_examples.sh` and not run in automated verification because they
 need a terminal. These cores are C+ regression fixtures built in strict mode and
 executed under `timeout 30`, with exit codes, repeat-run byte equality and
 argv-vs-stdin byte equality checked by `run.sh`.
 
 | Existing example | It is | These cores instead |
 | --- | --- | --- |
-| `examples/games/2048.c` | ncurses UI, raw keyboard, ANSI colours, `time`/`usleep`/`rand()` spawns | `connect4.cp` / `checkers.cp` / `chesslite.cp`: no curses, no clock, no randomness; plain-text transcript only |
-| `examples/games/tetris.c` | ncurses falling pieces, real-time gravity, wall kicks, key handling | fixed 6x7/8x8 boards, one deterministic transcript from argv/stdin; no graphics or gravity |
-| `examples/games/tiles.c` | termios raw mode, `rand()` spawns, interactive WASD sliding puzzle | no raw terminal mode, no `rand()`, no hidden spawn state |
-| `examples/games/snake.c` | POSIX termios + `select()` `_kbhit`, `time.h`, arrow keys | no key polling, no clock; every move is an explicit token |
+| `apps/legacy_examples/games/2048.c` | ncurses UI, raw keyboard, ANSI colours, `time`/`usleep`/`rand()` spawns | `connect4.cp` / `checkers.cp` / `chesslite.cp`: no curses, no clock, no randomness; plain-text transcript only |
+| `apps/legacy_examples/games/tetris.c` | ncurses falling pieces, real-time gravity, wall kicks, key handling | fixed 6x7/8x8 boards, one deterministic transcript from argv/stdin; no graphics or gravity |
+| `apps/legacy_examples/games/tiles.c` | termios raw mode, `rand()` spawns, interactive WASD sliding puzzle | no raw terminal mode, no `rand()`, no hidden spawn state |
+| `apps/legacy_examples/games/snake.c` | POSIX termios + `select()` `_kbhit`, `time.h`, arrow keys | no key polling, no clock; every move is an explicit token |
 | Common style | raw C arrays, C17, libcurses/termios | C+ `class`, `vector`/`string`/`error` from the checked stdlib, `--strict --sanitize=none -I.` |
 
 ## Exact build commands and result (from the repository root)
 
 ```sh
-./build/c+ build examples/expanded/games_4/connect4.cp  --strict --sanitize=none -I. -o examples/expanded/games_4/bin/connect4
-./build/c+ build examples/expanded/games_4/checkers.cp  --strict --sanitize=none -I. -o examples/expanded/games_4/bin/checkers
-./build/c+ build examples/expanded/games_4/chesslite.cp --strict --sanitize=none -I. -o examples/expanded/games_4/bin/chesslite
+./build/c+ build apps/legacy_examples/expanded/games_4/connect4.cp  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_4/bin/connect4
+./build/c+ build apps/legacy_examples/expanded/games_4/checkers.cp  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_4/bin/checkers
+./build/c+ build apps/legacy_examples/expanded/games_4/chesslite.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_4/bin/chesslite
 ```
 
 All three exited 0 with **no compiler diagnostics** in strict mode.
@@ -121,7 +121,7 @@ All three exited 0 with **no compiler diagnostics** in strict mode.
 ## Exact runner command and verbatim output
 
 ```sh
-$ timeout 120 sh examples/expanded/games_4/run.sh
+$ timeout 120 sh apps/legacy_examples/expanded/games_4/run.sh
 BUILD ok connect4
 REFUSE ok connect4/col7 code=2 name=E_RANGE
 REFUSE ok connect4/colminus1 code=2 name=E_RANGE
@@ -147,14 +147,14 @@ Runner exit status: **0**. `GAMES_4 <games> <passed> <failed> <refused>` =
 `3` cores, `3` passed, `0` failed, `12` hostile refusals correctly observed.
 Every individual run is wrapped in `timeout 30`. `run.sh` also saves the full
 verbatim argv, repeat-argv and stdin transcripts and all refusal logs in
-`examples/expanded/games_4/bin/`.
+`apps/legacy_examples/expanded/games_4/bin/`.
 
 ## Exact fixed-input runs (verbatim excerpts from the saved transcripts)
 
 ### connect4
 
 ```sh
-$ timeout 30 examples/expanded/games_4/bin/connect4 3 2 3 2 3 2 3
+$ timeout 30 apps/legacy_examples/expanded/games_4/bin/connect4 3 2 3 2 3 2 3
 CONNECT4 rows=6 cols=7 moves=7
 INITIAL
   0123456
@@ -178,14 +178,14 @@ RESULT win detail=vertical step=7
 FINAL result=win played=7 moves=7 r=4 y=3
 ```
 
-Full 67-line transcript: `examples/expanded/games_4/bin/connect4.argv.out`.
+Full 67-line transcript: `apps/legacy_examples/expanded/games_4/bin/connect4.argv.out`.
 `connect4 3232323` (compact) and `printf '3 2 3 2 3 2 3\n' | connect4 -` were
 byte-identical to the argv run.
 
 ### checkers
 
 ```sh
-$ timeout 30 examples/expanded/games_4/bin/checkers 2130 5041 1021 4132 2334 3223 0110 2301
+$ timeout 30 apps/legacy_examples/expanded/games_4/bin/checkers 2130 5041 1021 4132 2334 3223 0110 2301
 CHECKERS size=8 moves=8
 INITIAL
   01234567
@@ -213,14 +213,14 @@ RESULT incomplete detail=none step=8
 FINAL result=incomplete plies=8 moves=8 side=red red=11 white=12
 ```
 
-Full 93-line transcript: `examples/expanded/games_4/bin/checkers.argv.out`.
+Full 93-line transcript: `apps/legacy_examples/expanded/games_4/bin/checkers.argv.out`.
 Move 8 is a jump (`capture=1`) and a white promotion (`promote=1`, `w` -> `W`).
 The compact and stdin forms were byte-identical to the argv run.
 
 ### chesslite (SUBSET)
 
 ```sh
-$ timeout 30 examples/expanded/games_4/bin/chesslite 0120 6343 1323 6151 0625 6757 2544 6656 1434 4334
+$ timeout 30 apps/legacy_examples/expanded/games_4/bin/chesslite 0120 6343 1323 6151 0625 6757 2544 6656 1434 4334
 CHESSLITE subset=pawn,rook,knight size=8 moves=10
 INITIAL
   01234567
@@ -248,7 +248,7 @@ RESULT incomplete detail=none step=10
 FINAL result=incomplete plies=10 moves=10 side=white white=15 black=16 captures=1
 ```
 
-Full 113-line transcript: `examples/expanded/games_4/bin/chesslite.argv.out`.
+Full 113-line transcript: `apps/legacy_examples/expanded/games_4/bin/chesslite.argv.out`.
 Move 10 is a pawn capture. The compact and stdin forms were byte-identical.
 
 ## Exact hostile cases (all REFUSED, exit 2 each)
@@ -305,7 +305,7 @@ REFUSE step=1 code=2 name=E_RANGE errcode=101 category=5 detail=invalid move tok
 chesslite: error code=101 category=5 message=invalid move token
 ```
 
-`bin/` above means `examples/expanded/games_4/bin`. The stderr line may appear
+`bin/` above means `apps/legacy_examples/expanded/games_4/bin`. The stderr line may appear
 before the stdout line when a terminal interleaves the two streams; `run.sh`
 captures both into one file with `>... 2>&1` and checks the stable `REFUSE`
 fields, not the interleaving order.
@@ -322,15 +322,15 @@ Additional manual probes (not part of the 12 counted refusals) also exited 2:
   (`cmp -s`); stdin runs byte-identical to argv (`cmp -s`).
 - Twelve hostile runs: exit 2, expected `code`/`name` present in stdout.
 - `run.sh`: `GAMES_4 3 3 0 12`, exit status 0.
-- Only files under `examples/expanded/games_4/` were created or modified.
+- Only files under `apps/legacy_examples/expanded/games_4/` were created or modified.
   Nothing was staged, committed, or built outside that directory.
 
 ## Reproduction
 
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
-sh -n examples/expanded/games_4/run.sh
-timeout 120 sh examples/expanded/games_4/run.sh
+sh -n apps/legacy_examples/expanded/games_4/run.sh
+timeout 120 sh apps/legacy_examples/expanded/games_4/run.sh
 ```
 
 Environment observed: macOS arm64, Apple clang via `./build/c+` (`C+ 0.1.0`),

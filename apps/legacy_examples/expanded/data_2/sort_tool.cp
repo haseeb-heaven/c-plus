@@ -4,8 +4,8 @@
  * no user paths, no shelling out.  Identical argv yields byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/data_2/sort_tool.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/data_2/.run/sort_tool
+ *   ./build/c+ build apps/legacy_examples/expanded/data_2/sort_tool.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/data_2/.run/sort_tool
  *
  * Usage:
  *   sort_tool int asc  <n1> <n2> ...

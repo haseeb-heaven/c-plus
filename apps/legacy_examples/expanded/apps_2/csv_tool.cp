@@ -1,9 +1,9 @@
 /* csv_tool.cp -- deterministic CSV column aggregate with refusal proofs.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/apps_2/csv_tool.cp \
+ *   ./build/c+ build apps/legacy_examples/expanded/apps_2/csv_tool.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/expanded/apps_2/.run/csv_tool
+ *     -o apps/legacy_examples/expanded/apps_2/.run/csv_tool
  *
  * Usage:
  *   csv_tool <path> <column> <sum|avg>

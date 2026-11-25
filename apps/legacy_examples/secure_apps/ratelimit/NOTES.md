@@ -36,7 +36,7 @@ the level covers the cost, otherwise `DENY` without debiting.
 ## Exact build command (from repo root)
 
 ```
-./build/c+ build examples/secure_apps/ratelimit/ratelimit.cp --strict --sanitize=none -I. -o <bin>
+./build/c+ build apps/legacy_examples/secure_apps/ratelimit/ratelimit.cp --strict --sanitize=none -I. -o <bin>
 ```
 
 Observed: build exits `0`, no diagnostics. (`--sanitize=none` is required by
@@ -45,7 +45,7 @@ the task; refusals are intentional, so no sanitizer trap is wanted.)
 ## Exact run command and output
 
 ```
-$ timeout 120 sh examples/secure_apps/ratelimit/run.sh
+$ timeout 120 sh apps/legacy_examples/secure_apps/ratelimit/run.sh
 SECURE_RATELIMIT 19 19 0 15
 ```
 
@@ -131,7 +131,7 @@ complete `SECURE_RL_CONFIG ... SECURE_RL_DONE` transcript or exactly one
 ## Verification performed
 
 1. Built with the exact command above (`--strict --sanitize=none`), rc 0.
-2. Ran `timeout 120 sh examples/secure_apps/ratelimit/run.sh` -> `SECURE_RATELIMIT 19 19 0 15`, rc 0.
+2. Ran `timeout 120 sh apps/legacy_examples/secure_apps/ratelimit/run.sh` -> `SECURE_RATELIMIT 19 19 0 15`, rc 0.
 3. Individually exercised every refusal code (1-8) and both ALLOW and DENY
    paths, plus both overflow sub-paths ("refill multiply", "bucket add"), and
    the maximum accepted boundary values (capacity/refill = 1000000).

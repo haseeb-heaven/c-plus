@@ -53,7 +53,7 @@ tutorial example, **not** a statement of TrapC's license.
   recorded — `not_null`/`owner` live in `pointers`).
 - **SaferCPlusPlus**: `include/{msepointerbasics,msescope,mseregistered,
   mserefcounting,msemsevector,mseasyncshared}.h` and
-  `examples/msetl_example/{msevector_test.h,msetl_example_defs.h}`. The brief's
+  `apps/legacy_examples/msetl_example/{msevector_test.h,msetl_example_defs.h}`. The brief's
   `msl/*` paths are stale; real headers are flat in `include/`.
 - **Secure CRT/safeclib**: Microsoft Learn pages for security features,
   parameter validation, `strcpy_s`, `strncpy_s`, truncation, `fopen_s`,

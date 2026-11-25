@@ -1,9 +1,9 @@
 /* csvstat.cp -- CSV statistics with overflow-safe arithmetic and refusals.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/data_tools/csvstat.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/data_tools/csvstat.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/utilities/data_tools/.run/csvstat
+ *     -o apps/legacy_examples/utilities/data_tools/.run/csvstat
  *
  * Usage:
  *   csvstat <csv-path> stats|count|sum|min|max

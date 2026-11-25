@@ -1,9 +1,9 @@
 /* vault.cp -- deterministic in-memory password vault with refusal proofs.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/apps_2/vault.cp \
+ *   ./build/c+ build apps/legacy_examples/expanded/apps_2/vault.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/expanded/apps_2/.run/vault
+ *     -o apps/legacy_examples/expanded/apps_2/.run/vault
  *
  * Commands (argv only; "--" chains several commands in one process):
  *   vault add <service> <password>

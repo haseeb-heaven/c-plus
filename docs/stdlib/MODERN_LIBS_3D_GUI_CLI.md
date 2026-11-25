@@ -10,8 +10,8 @@ it.
 
 ## Current verified apps (post-move — authoritative)
 
-The three app suites formerly under `examples/{games3d,gui_app,cli_app}` are
-now real applications in `apps/`; the old `examples/.../run.sh` entries are
+The three app suites formerly under `apps/legacy_examples/{games3d,gui_app,cli_app}` are
+now real applications in `apps/`; the old `apps/legacy_examples/.../run.sh` entries are
 compatibility shims only. Each verdict below is the owning runner's exact final
 line, and each screenshot is rendered from that runner's actual stdout.
 
@@ -72,7 +72,7 @@ runner's non-zero status.
 > (`.../tests/build/c+`); the sibling corrected the root to `$DIR/../../..`.
 > The transcript below is the later, corrected re-run. Suite labels and
 > runner paths are normalized to the current `apps/` locations; the original
-> capture used pre-move `demo_*` labels under `examples/`.
+> capture used pre-move `demo_*` labels under `apps/legacy_examples/`.
 
 ```text
 SUITE            RUNNER                                       STATUS       RC  LOG
@@ -166,7 +166,7 @@ refusals with `error *` diagnostics. (An earlier intermediate snapshot showed
 ## 3. Per-app results (current; supersedes the historical capture)
 
 These are real verified applications in `apps/`, not demos. The
-`examples/{games3d,gui_app,cli_app}/run.sh` entries are compatibility shims.
+`apps/legacy_examples/{games3d,gui_app,cli_app}/run.sh` entries are compatibility shims.
 
 | App | Runner | Verified verdict | Screenshot | Evidence |
 |---|---|---|---|---|
@@ -278,7 +278,7 @@ scene3d.hp                0       10    0.0%
   declaration count, not a tool-reported number, and is labelled as such.
 - The `0.0%` figures are a **source-discovery limitation**, not evidence that
   the new libraries were never called. `gather_sources()` only scans
-  `tests/stdlib/*.cp`, `multi_tu/`, `examples/`, `upstream_reuse/`,
+  `tests/stdlib/*.cp`, `multi_tu/`, `apps/legacy_examples/`, `upstream_reuse/`,
   `allocator/` and `system_safety/support/`; the new suite sources live in
   nested directories (`tests/stdlib/<lib>/`) that are not scanned. The
   new-library suites have their own observed PASS results in §2.

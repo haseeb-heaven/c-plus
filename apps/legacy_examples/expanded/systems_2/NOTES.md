@@ -30,10 +30,10 @@ databases, operating-system schedulers, message brokers or device drivers.
 ## Build (exact commands, from the repository root)
 
 ```sh
-./build/c+ build examples/expanded/systems_2/lru_cache.cp   --strict --sanitize=none -I. -o examples/expanded/systems_2/results/lru_cache
-./build/c+ build examples/expanded/systems_2/scheduler.cp   --strict --sanitize=none -I. -o examples/expanded/systems_2/results/scheduler
-./build/c+ build examples/expanded/systems_2/event_bus.cp   --strict --sanitize=none -I. -o examples/expanded/systems_2/results/event_bus
-./build/c+ build examples/expanded/systems_2/ring_buffer.cp --strict --sanitize=none -I. -o examples/expanded/systems_2/results/ring_buffer
+./build/c+ build apps/legacy_examples/expanded/systems_2/lru_cache.cp   --strict --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/lru_cache
+./build/c+ build apps/legacy_examples/expanded/systems_2/scheduler.cp   --strict --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/scheduler
+./build/c+ build apps/legacy_examples/expanded/systems_2/event_bus.cp   --strict --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/event_bus
+./build/c+ build apps/legacy_examples/expanded/systems_2/ring_buffer.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/ring_buffer
 ```
 
 All four build cleanly in `--strict` mode with **no diagnostics** (verified
@@ -44,7 +44,7 @@ a build failure.
 ## Run everything (exact command and exact output)
 
 ```sh
-sh examples/expanded/systems_2/run.sh
+sh apps/legacy_examples/expanded/systems_2/run.sh
 ```
 
 Verbatim output of the final run:
@@ -83,7 +83,7 @@ under `timeout -k 5 30` with stdin from `/dev/null`, and requires:
 * stdout of run 1 byte-identical to stdout of run 2 (determinism).
 
 The expected files are checked in under `expected/` (the repository's
-`.gitignore` ignores `examples/expanded/**/results/`, so goldens cannot live
+`.gitignore` ignores `apps/legacy_examples/expanded/**/results/`, so goldens cannot live
 there).
 
 ## Per-app transcripts (byte-exact)
@@ -92,7 +92,7 @@ there).
 
 Fixed argv (flow):
 ```sh
-./examples/expanded/systems_2/results/lru_cache \
+./apps/legacy_examples/expanded/systems_2/results/lru_cache \
   cap 3 -- put alpha 1 -- put beta 2 -- put gamma 3 -- get alpha \
   -- put delta 4 -- dump -- expect alpha 1 -- expect gamma 3 -- expect delta 4
 ```
@@ -121,7 +121,7 @@ recently used). `dump` lists most-recent first: delta, alpha, gamma.
 
 Fixed argv (hostile, 8 refusals):
 ```sh
-./examples/expanded/systems_2/results/lru_cache \
+./apps/legacy_examples/expanded/systems_2/results/lru_cache \
   cap 0 -- cap 99 -- put k v -- put aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa v \
   -- put k bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb -- put '' v \
   -- get missing -- bogus
@@ -143,7 +143,7 @@ LRU_SUMMARY 8 0 8 0
 
 Fixed argv (flow):
 ```sh
-./examples/expanded/systems_2/results/scheduler \
+./apps/legacy_examples/expanded/systems_2/results/scheduler \
   capacity 3 -- arrive net 0 2 -- arrive disk 1 1 -- arrive ui 0 1 \
   -- expect net 2 -- expect disk 1 -- run 4 -- dump
 ```
@@ -198,7 +198,7 @@ SCH_SUMMARY 13 3 10 0
 
 Fixed argv (flow):
 ```sh
-./examples/expanded/systems_2/results/event_bus \
+./apps/legacy_examples/expanded/systems_2/results/event_bus \
   topic room -- sub room alice -- sub room bob -- pub room hello \
   -- expect room alice -- unsub room bob -- pub room bye -- dump
 ```
@@ -247,7 +247,7 @@ EB_SUMMARY 10 2 8 0
 
 Fixed argv (flow):
 ```sh
-./examples/expanded/systems_2/results/ring_buffer \
+./apps/legacy_examples/expanded/systems_2/results/ring_buffer \
   cap 4 -- push 1 2 3 4 -- pop 2 -- push 5 6 -- dump -- expect 4 3 4 5 6 -- peek 2
 ```
 Output (`expected/rb_flow.expected`):
@@ -328,7 +328,7 @@ because refusal is the expected outcome of a hostile case; only a failed
 ## Files
 
 ```
-examples/expanded/systems_2/
+apps/legacy_examples/expanded/systems_2/
   lru_cache.cp  scheduler.cp  event_bus.cp  ring_buffer.cp
   run.sh            build + run all scenarios, print SYSTEMS_2 verdict
   NOTES.md          this file

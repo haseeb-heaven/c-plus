@@ -15,9 +15,9 @@
  *     overwriting or reading uninitialised data
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/database/kv_store.cp --strict --sanitize=none -I. -o examples/expanded/database/kv_store
+ *   ./build/c+ build apps/legacy_examples/expanded/database/kv_store.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/database/kv_store
  * Run with argv commands (preferred) or with one command per stdin line:
- *   ./examples/expanded/database/kv_store insert alpha one get alpha list
+ *   ./apps/legacy_examples/expanded/database/kv_store insert alpha one get alpha list
  */
 #include <errno.h>
 #include <limits.h>

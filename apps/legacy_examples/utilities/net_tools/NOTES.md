@@ -18,7 +18,7 @@ a guarantee about untested inputs. The built-in hostile cases have expected
 codes asserted at runtime; a wrong code or an unexpected acceptance increments
 the `failed` field of the summary and makes the process exit 1.
 
-## Files (all under `examples/utilities/net_tools/`)
+## Files (all under `apps/legacy_examples/utilities/net_tools/`)
 
 | file | purpose |
 | --- | --- |
@@ -43,11 +43,11 @@ Run from the repository root
 `agent/modern-stdlib`. `results/` was created before building.
 
 ```sh
-./build/c+ build examples/utilities/net_tools/urlcheck.cp --strict --sanitize=none -I. -o examples/utilities/net_tools/results/urlcheck
-./build/c+ build examples/utilities/net_tools/emailcheck.cp --strict --sanitize=none -I. -o examples/utilities/net_tools/results/emailcheck
-./build/c+ build examples/utilities/net_tools/ipcheck.cp --strict --sanitize=none -I. -o examples/utilities/net_tools/results/ipcheck
-./build/c+ build examples/utilities/net_tools/portcheck.cp --strict --sanitize=none -I. -o examples/utilities/net_tools/results/portcheck
-./build/c+ build examples/utilities/net_tools/httpline.cp --strict --sanitize=none -I. -o examples/utilities/net_tools/results/httpline
+./build/c+ build apps/legacy_examples/utilities/net_tools/urlcheck.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/net_tools/results/urlcheck
+./build/c+ build apps/legacy_examples/utilities/net_tools/emailcheck.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/net_tools/results/emailcheck
+./build/c+ build apps/legacy_examples/utilities/net_tools/ipcheck.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/net_tools/results/ipcheck
+./build/c+ build apps/legacy_examples/utilities/net_tools/portcheck.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/net_tools/results/portcheck
+./build/c+ build apps/legacy_examples/utilities/net_tools/httpline.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/net_tools/results/httpline
 ```
 
 All five builds produced empty stdout/stderr and exit code 0. (An initial
@@ -60,7 +60,7 @@ the no-port branch, which was fixed before the successful build above.)
 ### urlcheck
 
 ```sh
-timeout 30 ./examples/utilities/net_tools/results/urlcheck https://good.example:443/x ftp://bad/
+timeout 30 ./apps/legacy_examples/utilities/net_tools/results/urlcheck https://good.example:443/x ftp://bad/
 ```
 
 ```
@@ -89,7 +89,7 @@ port, a leading-dot host, a `..` path and an oversized input.
 ### emailcheck
 
 ```sh
-timeout 30 ./examples/utilities/net_tools/results/emailcheck good@site.org bad@@x.com
+timeout 30 ./apps/legacy_examples/utilities/net_tools/results/emailcheck good@site.org bad@@x.com
 ```
 
 ```
@@ -119,7 +119,7 @@ one-character TLD, a dash-led label, an over-long local and an over-long total.
 ### ipcheck
 
 ```sh
-timeout 30 ./examples/utilities/net_tools/results/ipcheck 10.0.0.1 256.1.1.1
+timeout 30 ./apps/legacy_examples/utilities/net_tools/results/ipcheck 10.0.0.1 256.1.1.1
 ```
 
 ```
@@ -147,7 +147,7 @@ Exit 0, stderr empty. Octet accumulation refuses before the multiply can pass
 ### portcheck
 
 ```sh
-timeout 30 ./examples/utilities/net_tools/results/portcheck 80 65536
+timeout 30 ./apps/legacy_examples/utilities/net_tools/results/portcheck 80 65536
 ```
 
 ```
@@ -175,7 +175,7 @@ executing signed/unsigned overflow.
 ### httpline
 
 ```sh
-timeout 30 ./examples/utilities/net_tools/results/httpline 'GET /a HTTP/1.1' 'BREW /x HTTP/1.1'
+timeout 30 ./apps/legacy_examples/utilities/net_tools/results/httpline 'GET /a HTTP/1.1' 'BREW /x HTTP/1.1'
 ```
 
 ```
@@ -203,7 +203,7 @@ HTTP/1.0 or HTTP/1.1 are accepted; the path must be absolute and printable.
 ## Aggregate runner — exact command and output
 
 ```sh
-sh examples/utilities/net_tools/run.sh
+sh apps/legacy_examples/utilities/net_tools/run.sh
 ```
 
 The runner rebuilds each tool, runs it twice under `timeout 30` with the fixed

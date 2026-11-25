@@ -11,7 +11,7 @@ stable-slot game entity table. They exercise the real headers
 From the repository root:
 
 ```sh
-sh examples/goose_memory/run.sh
+sh apps/legacy_examples/goose_memory/run.sh
 ```
 
 `run.sh` is POSIX `sh`, builds each example with a 180 s timeout, runs it with
@@ -27,11 +27,11 @@ Equivalent manual build for either example (`name` = `goose_stack` or
 
 ```sh
 env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
-  ./build/c+ build examples/goose_memory/$name.cp --default --sanitize=none \
-  -I. -o examples/goose_memory/results/$name -- \
+  ./build/c+ build apps/legacy_examples/goose_memory/$name.cp --default --sanitize=none \
+  -I. -o apps/legacy_examples/goose_memory/results/$name -- \
   build/libc/libcplus_hardened.a
 env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
-  ./examples/goose_memory/results/$name
+  ./apps/legacy_examples/goose_memory/results/$name
 ```
 
 ## 1. `goose_stack.cp` — per-frame transient workload
@@ -127,4 +127,4 @@ behaviour.
 (`nested_scope_drop_restores`), and `SUMMARY 10 10 0` in the expected output.
 
 `sh tests/ctl/run_ctl_demo_coverage.sh` runs all new runners plus
-`examples/ctl_demo`; printed verdict is `COVERAGE_RUNNER 4 4 0` on 2026-11-24.
+`apps/legacy_examples/ctl_demo`; printed verdict is `COVERAGE_RUNNER 4 4 0` on 2026-11-24.

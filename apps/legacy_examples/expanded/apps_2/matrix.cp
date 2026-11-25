@@ -1,9 +1,9 @@
 /* matrix.cp -- deterministic small integer matrix ops with refusal proofs.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/apps_2/matrix.cp \
+ *   ./build/c+ build apps/legacy_examples/expanded/apps_2/matrix.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/expanded/apps_2/.run/matrix
+ *     -o apps/legacy_examples/expanded/apps_2/.run/matrix
  *
  * Usage (row-major, comma-separated integers):
  *   matrix add       <r1> <c1> <data1> <r2> <c2> <data2>

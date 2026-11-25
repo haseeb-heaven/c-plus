@@ -5,8 +5,8 @@
  * argv yields byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/data_2/regex_lite.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/data_2/.run/regex_lite
+ *   ./build/c+ build apps/legacy_examples/expanded/data_2/regex_lite.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/data_2/.run/regex_lite
  *
  * Usage:
  *   regex_lite                 run the built-in fixed pattern/text table

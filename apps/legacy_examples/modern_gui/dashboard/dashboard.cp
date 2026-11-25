@@ -25,7 +25,7 @@
  * input is involved.
  *
  * Build (from the repository root, after libnuklear.a exists in build/ext):
- *   ./build/c+ build examples/modern_gui/dashboard/dashboard.cp --strict \
+ *   ./build/c+ build apps/legacy_examples/modern_gui/dashboard/dashboard.cp --strict \
  *     --sanitize=none -I. $(pkg-config --cflags --libs sdl3) \
  *     -Ithird_party/nuklear -Lbuild/ext -lnuklear -o <bin>
  * Run:

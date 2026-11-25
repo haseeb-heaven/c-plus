@@ -1,0 +1,4 @@
+client received: HTTP/1.0 200 OK
+listening on 127.0.0.1:63290
+server received: GET / HTTP/1.0
+server closing connection

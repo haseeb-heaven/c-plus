@@ -357,7 +357,7 @@ recent hashes (newest first) for the parent to reference:
 | `f233fa9` | Add modern Nuklear/SDL3 GUI apps, secure apps, and real-world utilities |
 | `e71b7fd` | Add runtime hostile-evidence and dual ABI preservation docs |
 | `b5bc37d` | Add three-way runtime-safety comparison: Rust / Fil-C / Trap-C |
-| `c1bd15e` | Add screenshot evidence in examples/ showing stdlib safety refusals |
+| `c1bd15e` | Add screenshot evidence in apps/legacy_examples/ showing stdlib safety refusals |
 | `4cddcfb` | Add final verification docs and new games_2 sources |
 | `f4b64ee` | Finalize expanded Rust comparisons: CLI/games 9/9, DB/engine/safety 10/10 MATCH |
 | `c6195a0` | Finalize expanded examples adversarial suite: 135 cases, 135 refusals, 0 failures |

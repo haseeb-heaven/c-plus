@@ -5,8 +5,8 @@
  * from one stdin line; the same input always yields byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_4/connect4.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_4/bin/connect4
+ *   ./build/c+ build apps/legacy_examples/expanded/games_4/connect4.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_4/bin/connect4
  *
  * Run:
  *   bin/connect4 3 3 4 4 5 5 6 6           # columns 0..6 as argv tokens

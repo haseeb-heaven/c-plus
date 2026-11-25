@@ -1,8 +1,8 @@
 /* numconv.cp -- overflow-safe number base conversion (dec / hex / bin).
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/dev_tools/numconv.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/dev_tools/numconv
+ *   ./build/c+ build apps/legacy_examples/utilities/dev_tools/numconv.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/numconv
  *
  * Usage:
  *   numconv <value> <from> <to>       from,to in {dec,hex,bin}

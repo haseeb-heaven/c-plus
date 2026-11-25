@@ -9,9 +9,9 @@
 # scenario matched its expected exit code AND its exact stdout transcript.
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-SRC=examples/secure_apps/ratelimit/ratelimit.cp
+SRC=apps/legacy_examples/secure_apps/ratelimit/ratelimit.cp
 
 BIN=$(mktemp "${TMPDIR:-/tmp}/ratelimit.XXXXXX") || exit 1
 trap 'rm -f "$BIN"' EXIT HUP INT TERM

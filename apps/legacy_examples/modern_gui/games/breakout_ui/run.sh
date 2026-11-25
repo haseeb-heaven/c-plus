@@ -14,7 +14,7 @@
 # Final line: GFX_BREAKOUT <scenarios> <passed> <failed> <refused>
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../../" && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../../../" && pwd)
 cd "$ROOT" || exit 1
 
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
@@ -26,7 +26,7 @@ elif [ -x /usr/bin/clang ]; then
 else
   CXX=clang
 fi
-DIR=examples/modern_gui/games/breakout_ui
+DIR=apps/legacy_examples/modern_gui/games/breakout_ui
 BIN=$DIR/bin
 SRC=$DIR/breakout_ui.cp
 mkdir -p "$BIN"

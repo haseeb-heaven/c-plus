@@ -5,8 +5,8 @@
  * no randomness.  A monotonic operation counter (not time) supplies recency.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/systems_2/lru_cache.cp --strict \
- *       --sanitize=none -I. -o examples/expanded/systems_2/results/lru_cache
+ *   ./build/c+ build apps/legacy_examples/expanded/systems_2/lru_cache.cp --strict \
+ *       --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/lru_cache
  *
  * Commands (one argv segment each, separated by "--"):
  *   cap N            set capacity (1..LRU_MAX_CAP); 0 or too large is REFUSED

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deterministic build-and-run harness for the four expanded CLI examples.
 #
-#   sh examples/expanded/cli/run.sh
+#   sh apps/legacy_examples/expanded/cli/run.sh
 #
 # Every compiler and program invocation is bounded by `timeout 30`. Fixtures
 # are generated here with fixed bytes; no clock, network, interactive prompt

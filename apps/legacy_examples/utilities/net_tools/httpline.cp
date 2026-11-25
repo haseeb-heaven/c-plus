@@ -15,9 +15,9 @@
  * C+ stdlib, NOT a formal safety proof. All builds use --sanitize=none.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/net_tools/httpline.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/net_tools/httpline.cp \
  *       --strict --sanitize=none -I. \
- *       -o examples/utilities/net_tools/results/httpline
+ *       -o apps/legacy_examples/utilities/net_tools/results/httpline
  */
 #include <stddef.h>
 #include <string.h>

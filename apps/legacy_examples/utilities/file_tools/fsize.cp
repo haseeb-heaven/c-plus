@@ -6,9 +6,9 @@
  * byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/file_tools/fsize.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/file_tools/fsize.cp \
  *       --strict --sanitize=none -I. \
- *       -o examples/utilities/file_tools/.run/fsize
+ *       -o apps/legacy_examples/utilities/file_tools/.run/fsize
  *
  * Usage:
  *   fsize <dir> <rel1> [<rel2> ...]

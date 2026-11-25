@@ -18,7 +18,7 @@ The "safety" shown here is **observed refusal evidence, not a proof**:
   memory errors for all possible inputs, nor any formal memory-safety claim.
 
 No `git add`, commit, or edit to any file outside
-`examples/expanded/games_3/` was made by this work. (A stray directory created
+`apps/legacy_examples/expanded/games_3/` was made by this work. (A stray directory created
 by an early `run.sh` path bug outside the repository was removed.)
 
 ## The three cores
@@ -40,9 +40,9 @@ against their range **before** any multiply or array access.
 ## Exact build commands (from the repository root)
 
 ```
-./build/c+ build examples/expanded/games_3/sudoku.cp --strict --sanitize=none -I. -o examples/expanded/games_3/bin/sudoku
-./build/c+ build examples/expanded/games_3/minesweeper.cp --strict --sanitize=none -I. -o examples/expanded/games_3/bin/minesweeper
-./build/c+ build examples/expanded/games_3/nim.cp --strict --sanitize=none -I. -o examples/expanded/games_3/bin/nim
+./build/c+ build apps/legacy_examples/expanded/games_3/sudoku.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_3/bin/sudoku
+./build/c+ build apps/legacy_examples/expanded/games_3/minesweeper.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_3/bin/minesweeper
+./build/c+ build apps/legacy_examples/expanded/games_3/nim.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_3/bin/nim
 ```
 
 All three build with exit 0 and **zero bytes** on stdout/stderr (the `.build.log`
@@ -52,12 +52,12 @@ mode.
 ## Valid runs (exit 0, deterministic)
 
 ```
-timeout 30 examples/expanded/games_3/bin/sudoku                 # default solve
-timeout 30 examples/expanded/games_3/bin/sudoku P 0 2 4 V       # argv place + validate
-timeout 30 examples/expanded/games_3/bin/minesweeper            # default clear-the-board
-timeout 30 examples/expanded/games_3/bin/minesweeper R 4 4 V    # argv reveal + status
-timeout 30 examples/expanded/games_3/bin/nim                    # default A vs B game
-timeout 30 examples/expanded/games_3/bin/nim O T 0 1 O T 1 1 S  # argv moves + status
+timeout 30 apps/legacy_examples/expanded/games_3/bin/sudoku                 # default solve
+timeout 30 apps/legacy_examples/expanded/games_3/bin/sudoku P 0 2 4 V       # argv place + validate
+timeout 30 apps/legacy_examples/expanded/games_3/bin/minesweeper            # default clear-the-board
+timeout 30 apps/legacy_examples/expanded/games_3/bin/minesweeper R 4 4 V    # argv reveal + status
+timeout 30 apps/legacy_examples/expanded/games_3/bin/nim                    # default A vs B game
+timeout 30 apps/legacy_examples/expanded/games_3/bin/nim O T 0 1 O T 1 1 S  # argv moves + status
 ```
 
 Exact final lines observed:
@@ -136,7 +136,7 @@ exit.
 ## `run.sh` — full verification
 
 ```
-sh examples/expanded/games_3/run.sh
+sh apps/legacy_examples/expanded/games_3/run.sh
 ```
 
 It rebuilds all three cores from the repo root, runs each default and argv
@@ -149,13 +149,13 @@ GAMES_3 3 3 0 18
 
 (3 games, 3 passed, 0 failed, 18 hostile cases refused.) The script exits 0.
 All intermediate logs and transcripts are kept in
-`examples/expanded/games_3/bin/`.
+`apps/legacy_examples/expanded/games_3/bin/`.
 
 ## Re-verification from a clean state
 
 ```
-rm -f examples/expanded/games_3/bin/*
-sh examples/expanded/games_3/run.sh
+rm -f apps/legacy_examples/expanded/games_3/bin/*
+sh apps/legacy_examples/expanded/games_3/run.sh
 ```
 
 Expected: build lines for all three, `GAME ok` for all three, 18 `REFUSE ok`

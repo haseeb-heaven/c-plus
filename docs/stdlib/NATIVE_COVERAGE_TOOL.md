@@ -241,7 +241,7 @@ the repository layout (no working-tree files were added). Comparison results:
   `LC_ALL=C sort` the ordering and membership match; paths containing spaces
   are not supported by the shell path list.
 - Only the three documented source globs are read. API calls that live only
-  in `demos/`, `scratch/`, or generated files are invisible to both tools.
+  in `apps/legacy_demos/`, `scratch/`, or generated files are invisible to both tools.
 - Fixed buffers (16 MiB of concatenated source text, 4 MiB per header,
   2048 paths) cover the current tree comfortably; exceeding them truncates
   input rather than growing. This is a practical limit, not a semantic change

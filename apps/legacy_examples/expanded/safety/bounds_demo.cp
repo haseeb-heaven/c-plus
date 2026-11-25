@@ -10,8 +10,8 @@
  * base), stale generation key REFUSED (after a transfer bumps the generation).
  *
  * Build (from repo root):
- *   ./build/c+ build examples/expanded/safety/bounds_demo.cp \
- *     --strict --sanitize=none -I. -o examples/expanded/safety/bounds_demo
+ *   ./build/c+ build apps/legacy_examples/expanded/safety/bounds_demo.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/expanded/safety/bounds_demo
  */
 #include <stdio.h>
 #include <string.h>

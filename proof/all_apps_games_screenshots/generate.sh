@@ -30,11 +30,11 @@ run_name() {
 run_name webserver apps/webserver/run.sh
 run_name sqldb apps/sqldb/run.sh
 run_name gameeng apps/gameeng/run.sh
-run_name games3d examples/games3d/run.sh
-run_name gui_app examples/gui_app/run.sh
-run_name cli_app examples/cli_app/run.sh
-run_name goose_memory examples/goose_memory/run.sh
-run_name ctl_demo examples/ctl_demo/run.sh
+run_name games3d apps/games3d/run.sh
+run_name gui_app apps/gui_app/run.sh
+run_name cli_app apps/cli_app/run.sh
+run_name goose_memory apps/legacy_examples/goose_memory/run.sh
+run_name ctl_demo apps/legacy_examples/ctl_demo/run.sh
 run_name nuklear proof/games_gui_nuklear/run.sh
 run_name goose_ports proof/goose_samples/run.sh
 echo "SCREENSHOTS $(find "$D/screenshots" -name '*.svg' | wc -l | tr -d ' ')"

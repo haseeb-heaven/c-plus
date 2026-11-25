@@ -125,7 +125,7 @@ Class `file` layout (must not change): `FILE *stream; int owns;`.
 | `FILE *native(void)` | `file.hp:29` | borrowed `FILE*` returned | caller must not close an owned stream through this | n/a | none | none stated | MEM | I | 34 files, e.g. `deep_file_lifecycle.cp`, `deep_cross_family.cp` |
 | `int read(char *buf, size_t size, error *err)` | `file.hp:33` | stream position | caller owns `buf`; `buf==NULL \|\| size==0` → FAIL; null handle → FAIL | `fread` 0 + `ferror` → FAIL; 0 + EOF → `STDLIB_EOF`; else OK | none | not thread-safe (stdio stream shared); no claim | MEM | H0 | name-ambiguous with `connection::read`; verified via `file` receivers, e.g. `deep_file_lifecycle.cp` |
 | `int read_line(char *buf, size_t size, error *err)` | `file.hp:55` | stream position | caller owns `buf`; null/zero → FAIL; `size>INT_MAX` → FAIL; null handle → FAIL | EOF / stream error / overlong (buffer cleared) → `STDLIB_FAIL`/`STDLIB_EOF` | overlong remainder drained | no claim | MEM | I | 23 files, e.g. `deep_file_lines.cp`, `deep_file_lifecycle.cp`, `multi_tu/part_b.cp` |
-| `int write(const char *text)` | `file.hp:156` | stream position | `text` borrowed; null handle or `text==NULL` → returns 0 | `fputs==EOF` → 0 | none | no claim | MEM | I | 112 files for name `write`; file receivers e.g. `examples/file_demo.cp` |
+| `int write(const char *text)` | `file.hp:156` | stream position | `text` borrowed; null handle or `text==NULL` → returns 0 | `fputs==EOF` → 0 | none | no claim | MEM | I | 112 files for name `write`; file receivers e.g. `apps/legacy_examples/file_demo.cp` |
 | `int write_bytes(const char *data, size_t size, error *err)` | `file.hp:162` | stream position | `data` borrowed; `size>0 && data==NULL` → FAIL; null handle → FAIL | short `fwrite` → FAIL | none | no claim | MEM | I | 26 files, e.g. `deep_file_lifecycle.cp`, `safety_regressions.cp`, `negative.cp` |
 | `int seek(long offset, int whence, error *err)` | `file.hp:179` | stream position | null handle → FAIL | `fseek != 0` → FAIL | none | no claim | MEM | I | 14 files, e.g. `deep_file_lifecycle.cp`, `deep_cross_family.cp` |
 | `int flush(error *err)` | `file.hp:192` | stream buffers | null handle → FAIL | `fflush != 0` → FAIL | none | no claim | MEM | I | 17 files, e.g. `deep_file_lifecycle.cp`, `compile_time/file_valid.cp` |
@@ -190,7 +190,7 @@ lives. `write()`-returned buffers are the caller's and are released by
 | `int add_int(const char *key, int value, error *err)` | `json.hp:224` | owned mutable document | `key` borrowed; `!valid() \|\| key==NULL` → FAIL | yyjson failure → `MEMORY` | none | no claim | MEM | I | 14 files for name; e.g. `json_test.cp`, `deep_json_task5.cp` |
 | `int add_double(const char *key, double value, error *err)` | `json.hp:239` | same | same + non-finite → `RANGE` | yyjson failure → `MEMORY` | none | no claim | MEM | I | 8 files, e.g. `json_test.cp`, `deep_json_types.cp` |
 | `int add_bool(const char *key, int value, error *err)` | `json.hp:259` | same | `value != 0` coercion | yyjson failure → `MEMORY` | none | no claim | MEM | I | 8 files, e.g. `json_test.cp`, `deep_json_types.cp` |
-| `int add_string(const char *key, const char *value, error *err)` | `json.hp:275` | same | `value` borrowed; yyjson copies it | yyjson failure → `MEMORY` | none | no claim | MEM | H1 | 10 files, e.g. `deep_cross_family.cp`, `json_test.cp`, `examples/json_demo.cp` |
+| `int add_string(const char *key, const char *value, error *err)` | `json.hp:275` | same | `value` borrowed; yyjson copies it | yyjson failure → `MEMORY` | none | no claim | MEM | H1 | 10 files, e.g. `deep_cross_family.cp`, `json_test.cp`, `apps/legacy_examples/json_demo.cp` |
 | `char *write(size_t *length)` | `json.hp:290` | `yyjson_mut_write` allocation | returned buffer caller-owned, `json_free` it | invalid builder → NULL | caller must free | no claim | MEM | I | receiver-verified `json_test.cp:65`, `deep_cross_family.cp:465` |
 | `void drop(void)` | `json.hp:296` | owned document + root | nulls both; idempotent | none | `yyjson_mut_doc_free` | no claim | MEM | H0 | class-token credit, e.g. `fuzz/f100_json_drop.cp` |
 
@@ -206,15 +206,15 @@ invalid unless owned. No error record is taken by the constructors or
 |---|---|---|---|---|---|---|---|---|---|
 | `connection(int descriptor)` | `net.hp:24` | socket fd | owns iff `descriptor >= 0` | descriptor < 0 → inert handle | `drop()` | no claim | MEM | H0 | verified `safety_regressions.cp:95`, `stdlib_hardening_test.cp:40` |
 | `int is_valid(void)` | `net.hp:31` | none | none | `fd >= 3 \|\| (owns && fd >= 0)` | none | no claim | MEM | H1 | 28 files for name; net receivers e.g. `deep_net.cp`, `net_test.cp` |
-| `int descriptor(void)` | `net.hp:35` | none | none | returns raw fd, even -1 | none | no claim | MEM | I | 27 files, e.g. `deep_net.cp`, `net_test.cp`, `examples/net_demo.cp` |
-| `int read(char *buf, size_t capacity, error *err)` | `net.hp:41` | socket fd | `buf` caller-owned; invalid handle, `buf==NULL`, `capacity==0` → FAIL; capacity clamped to `INT_MAX` | socket error → FAIL; 0 bytes → `STDLIB_EOF`; retries `EINTR` | none | no claim | MEM | H1 | receiver-verified `net_valid.cp:13`, `examples/net_demo.cp:43` |
-| `int write(const char *data, size_t length, error *err)` | `net.hp:64` | socket fd | `data` borrowed; invalid handle or `data==NULL` → FAIL | send loop: EINTR retried, 0 progress/error → FAIL; partial sends retried | none | no claim | MEM | H1 | receiver-verified `net_valid.cp:15`, `examples/net_demo.cp:51` |
+| `int descriptor(void)` | `net.hp:35` | none | none | returns raw fd, even -1 | none | no claim | MEM | I | 27 files, e.g. `deep_net.cp`, `net_test.cp`, `apps/legacy_examples/net_demo.cp` |
+| `int read(char *buf, size_t capacity, error *err)` | `net.hp:41` | socket fd | `buf` caller-owned; invalid handle, `buf==NULL`, `capacity==0` → FAIL; capacity clamped to `INT_MAX` | socket error → FAIL; 0 bytes → `STDLIB_EOF`; retries `EINTR` | none | no claim | MEM | H1 | receiver-verified `net_valid.cp:13`, `apps/legacy_examples/net_demo.cp:43` |
+| `int write(const char *data, size_t length, error *err)` | `net.hp:64` | socket fd | `data` borrowed; invalid handle or `data==NULL` → FAIL | send loop: EINTR retried, 0 progress/error → FAIL; partial sends retried | none | no claim | MEM | H1 | receiver-verified `net_valid.cp:15`, `apps/legacy_examples/net_demo.cp:51` |
 | `void drop(void)` | `net.hp:93` | owned socket fd | closes only if `owns && fd>=0`, then sets fd=-1/owns=0 | none | idempotent | no claim | MEM | H0 | class-token credit, e.g. `compile_time/net_double_close.cp` |
 | `listener(int port)` | `net.hp:106` | listening TCP socket on loopback | owns on success; invalid port → inert handle | create/bind/listen failure closes fd and leaves inert (`fd=-1`) | `drop()` | no claim | MEM | H1 | verified `deep_net.cp:182,206,215-216` |
 | `int is_valid(void)` | `net.hp:132` | none | none | same fd rule as connection | none | no claim | MEM | H1 | covered by `is_valid` above |
 | `int descriptor(void)` | `net.hp:136` | none | none | returns raw fd | none | no claim | MEM | I | covered by `descriptor` above |
-| `int bound_port(void)` | `net.hp:140` | socket via `getsockname` | none | invalid handle or `getsockname` failure → 0 | none | no claim | MEM | I | 8 files, e.g. `deep_net.cp`, `net_test.cp`, `examples/net_demo.cp` |
-| `connection accept(void)` | `net.hp:150` | accepted socket fd | returned connection owns fd; invalid listener → inert connection; EINTR retried | no error record | caller `drop()` | no claim | MEM | I | receiver-verified `deep_net.cp`, `net_test.cp`, `examples/net_demo.cp` |
+| `int bound_port(void)` | `net.hp:140` | socket via `getsockname` | none | invalid handle or `getsockname` failure → 0 | none | no claim | MEM | I | 8 files, e.g. `deep_net.cp`, `net_test.cp`, `apps/legacy_examples/net_demo.cp` |
+| `connection accept(void)` | `net.hp:150` | accepted socket fd | returned connection owns fd; invalid listener → inert connection; EINTR retried | no error record | caller `drop()` | no claim | MEM | I | receiver-verified `deep_net.cp`, `net_test.cp`, `apps/legacy_examples/net_demo.cp` |
 | `void drop(void)` | `net.hp:161` | owned listening socket | closes only if owned, then nulls | none | idempotent | no claim | MEM | H0 | class-token credit |
 | `listener listener_borrow(int fd)` | `net.hp:170` | borrowed fd | `owns=0`; `drop()` never closes it | none | none | no claim | SIL | H1 | 8 files, e.g. `deep_net.cp`, `net_test.cp`, `compile_time/net_valid_borrow.cp` |
 | `connection connection_borrow(int fd)` | `net.hp:177` | borrowed fd | `owns=0`; `drop()` never closes it | none | none | no claim | SIL | H1 | 13 files, e.g. `deep_net.cp`, `deep_net_task5.cp`, `net_test.cp` |
@@ -452,7 +452,7 @@ they are OBSERVED, not UNTESTED.
   coverage, or runtime behaviour is made here.
 * The search corpus is exactly `tests/stdlib/`, `tests/libc/` and
   `tests/crt/unit/`, as requested. Tests elsewhere (e.g. `tests/cases/`,
-  `tests/runtime_fail/`, `tests/native/`, `examples/` outside `tests/`) were not
+  `tests/runtime_fail/`, `tests/native/`, `apps/legacy_examples/` outside `tests/`) were not
   searched; an API marked UNTESTED is untested **within these three trees**.
 * `tests/stdlib/agent2_audit/**/*.md` was excluded from call-site counting
   because it is documentation. Transient `.cplus-tmp-*` files produced by other

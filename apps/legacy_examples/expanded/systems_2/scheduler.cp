@@ -6,8 +6,8 @@
  * round-robin order, re-enqueuing a task that still has cycles left.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/systems_2/scheduler.cp --strict \
- *       --sanitize=none -I. -o examples/expanded/systems_2/results/scheduler
+ *   ./build/c+ build apps/legacy_examples/expanded/systems_2/scheduler.cp --strict \
+ *       --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/scheduler
  *
  * Commands (one argv segment each, separated by "--"):
  *   capacity N            bound the total waiting queue (1..SCH_MAX_Q)

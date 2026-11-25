@@ -1,6 +1,6 @@
 # Expanded CLI apps 2 (C+ checked stdlib) -- deterministic refusals
 
-Four NEW single-file CLI apps under `examples/expanded/apps_2/`. Every app is
+Four NEW single-file CLI apps under `apps/legacy_examples/expanded/apps_2/`. Every app is
 driven only by fixed argv (CSV additionally reads fixed fixture files); there is
 no clock, no network, no interactive prompt, no user path and no shelling out.
 All builds use the repository C+ driver from the repo root in strict,
@@ -22,15 +22,15 @@ reproducible.
 Run from `/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib`:
 
 ```sh
-./build/c+ build examples/expanded/apps_2/vault.cp --strict --sanitize=none -I. \
-  -o examples/expanded/apps_2/.run/vault
-./build/c+ build examples/expanded/apps_2/json_query.cp --strict --sanitize=none -I. \
+./build/c+ build apps/legacy_examples/expanded/apps_2/vault.cp --strict --sanitize=none -I. \
+  -o apps/legacy_examples/expanded/apps_2/.run/vault
+./build/c+ build apps/legacy_examples/expanded/apps_2/json_query.cp --strict --sanitize=none -I. \
   -Ithird_party/yyjson -Lbuild/ext -lyyjson \
-  -o examples/expanded/apps_2/.run/json_query
-./build/c+ build examples/expanded/apps_2/csv_tool.cp --strict --sanitize=none -I. \
-  -o examples/expanded/apps_2/.run/csv_tool
-./build/c+ build examples/expanded/apps_2/matrix.cp --strict --sanitize=none -I. \
-  -o examples/expanded/apps_2/.run/matrix
+  -o apps/legacy_examples/expanded/apps_2/.run/json_query
+./build/c+ build apps/legacy_examples/expanded/apps_2/csv_tool.cp --strict --sanitize=none -I. \
+  -o apps/legacy_examples/expanded/apps_2/.run/csv_tool
+./build/c+ build apps/legacy_examples/expanded/apps_2/matrix.cp --strict --sanitize=none -I. \
+  -o apps/legacy_examples/expanded/apps_2/.run/matrix
 ```
 
 All four builds exited 0. The JSON compile step prints two harmless clang
@@ -41,7 +41,7 @@ and the binary runs.
 ## Harness command and exact output
 
 ```sh
-sh examples/expanded/apps_2/run.sh
+sh apps/legacy_examples/expanded/apps_2/run.sh
 ```
 
 ```
@@ -111,7 +111,7 @@ Chained commands are separated by `--` so a whole scenario runs in one process
 against one in-memory vault.
 
 ```sh
-B=examples/expanded/apps_2/.run/vault
+B=apps/legacy_examples/expanded/apps_2/.run/vault
 timeout 30 "$B" add mail s3cr3t -- add notes opensesame -- get mail -- list \
   -- delete mail -- list
 ```
@@ -153,7 +153,7 @@ No arguments gives `VAULT error usage` with exit 2.
 ### json_query.cp
 
 ```sh
-B=examples/expanded/apps_2/.run/json_query
+B=apps/legacy_examples/expanded/apps_2/.run/json_query
 F='{"user":{"name":"ada","age":36,"active":true},"items":[{"tag":"x"},{"tag":"y"}],"n":7}'
 timeout 30 "$B" "$F" user.name
 timeout 30 "$B" "$F" items.1.tag
@@ -190,7 +190,7 @@ JSON error bad-index
 ### csv_tool.cp
 
 ```sh
-D=examples/expanded/apps_2/.run
+D=apps/legacy_examples/expanded/apps_2/.run
 printf '10,20,30\n4,5,6\n7,8,9\n' > "$D/good.csv"
 B="$D/csv_tool"
 timeout 30 "$B" "$D/good.csv" 0 sum
@@ -232,7 +232,7 @@ A missing file gives `CSV error cannot-open` (exit 1); wrong argv count gives
 ### matrix.cp
 
 ```sh
-B=examples/expanded/apps_2/.run/matrix
+B=apps/legacy_examples/expanded/apps_2/.run/matrix
 timeout 30 "$B" add 2 2 1,2,3,4 2 2 5,6,7,8
 timeout 30 "$B" determinant 2 2 1,2,3,4
 ```

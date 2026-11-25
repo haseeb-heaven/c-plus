@@ -1,10 +1,10 @@
 /* jsonfmt.cp -- deterministic, budgeted JSON pretty-printer.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/data_tools/jsonfmt.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/data_tools/jsonfmt.cp \
  *     --strict --sanitize=none -I. \
  *     -Ithird_party/yyjson -Lbuild/ext -lyyjson \
- *     -o examples/utilities/data_tools/.run/jsonfmt
+ *     -o apps/legacy_examples/utilities/data_tools/.run/jsonfmt
  *
  * Usage:
  *   jsonfmt <json-text>

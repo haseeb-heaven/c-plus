@@ -23,10 +23,10 @@ accepts a single fixed line from stdin). Output is byte-for-byte reproducible.
 Run from the repository root (`/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib`):
 
 ```sh
-./build/c+ build examples/expanded/cli/todo.cp        --strict --sanitize=none -I. -o examples/expanded/cli/.run/todo
-./build/c+ build examples/expanded/cli/calculator.cp  --strict --sanitize=none -I. -o examples/expanded/cli/.run/calculator
-./build/c+ build examples/expanded/cli/text_tools.cp  --strict --sanitize=none -I. -o examples/expanded/cli/.run/text_tools
-./build/c+ build examples/expanded/cli/file_tools.cp  --strict --sanitize=none -I. -o examples/expanded/cli/.run/file_tools
+./build/c+ build apps/legacy_examples/expanded/cli/todo.cp        --strict --sanitize=none -I. -o apps/legacy_examples/expanded/cli/.run/todo
+./build/c+ build apps/legacy_examples/expanded/cli/calculator.cp  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/cli/.run/calculator
+./build/c+ build apps/legacy_examples/expanded/cli/text_tools.cp  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/cli/.run/text_tools
+./build/c+ build apps/legacy_examples/expanded/cli/file_tools.cp  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/cli/.run/file_tools
 ```
 
 All four builds exited 0 with empty stdout and empty stderr.
@@ -34,7 +34,7 @@ All four builds exited 0 with empty stdout and empty stderr.
 ## Harness command and exact output
 
 ```sh
-sh examples/expanded/cli/run.sh
+sh apps/legacy_examples/expanded/cli/run.sh
 ```
 
 ```
@@ -83,14 +83,14 @@ Commands are separated by `--` so a whole scenario runs in one process with
 one in-memory vector state:
 
 ```sh
-B=examples/expanded/cli/.run/todo
-F=examples/expanded/cli/.run/todo.db
+B=apps/legacy_examples/expanded/cli/.run/todo
+F=apps/legacy_examples/expanded/cli/.run/todo.db
 rm -f "$F"
 timeout 30 "$B" add 1 buy_milk -- add 2 call_dad -- done 1 -- list \
   -- save "$F" -- remove 2 -- list -- load "$F"
 ```
 
-Output (`$F` expands to `examples/expanded/cli/.run/todo.db` from the repo root):
+Output (`$F` expands to `apps/legacy_examples/expanded/cli/.run/todo.db` from the repo root):
 
 ```
 TODO add 1 buy_milk
@@ -99,11 +99,11 @@ TODO done 1
 TODO item 1 buy_milk 1
 TODO item 2 call_dad 0
 TODO list 2
-TODO save 2 examples/expanded/cli/.run/todo.db
+TODO save 2 apps/legacy_examples/expanded/cli/.run/todo.db
 TODO remove 2
 TODO item 1 buy_milk 1
 TODO list 1
-TODO load 1 examples/expanded/cli/.run/todo.db
+TODO load 1 apps/legacy_examples/expanded/cli/.run/todo.db
 TODO item 1 buy_milk 1
 TODO item 2 call_dad 0
 TODO list 2
@@ -137,7 +137,7 @@ TODO error usage
 ### calculator.cp
 
 ```sh
-B=examples/expanded/cli/.run/calculator
+B=apps/legacy_examples/expanded/cli/.run/calculator
 timeout 30 "$B" "1+2*3"
 ```
 ```
@@ -202,9 +202,9 @@ CALC ops 2
 Fixture:
 
 ```sh
-printf 'alpha beta gamma\ndelta alpha\nomega\n' > examples/expanded/cli/.run/text.in
-B=examples/expanded/cli/.run/text_tools
-F=examples/expanded/cli/.run/text.in
+printf 'alpha beta gamma\ndelta alpha\nomega\n' > apps/legacy_examples/expanded/cli/.run/text.in
+B=apps/legacy_examples/expanded/cli/.run/text_tools
+F=apps/legacy_examples/expanded/cli/.run/text.in
 ```
 
 ```sh
@@ -249,7 +249,7 @@ TEXT find hits 0
 Missing file (exit 1):
 
 ```sh
-timeout 30 "$B" examples/expanded/cli/.run/does-not-exist words
+timeout 30 "$B" apps/legacy_examples/expanded/cli/.run/does-not-exist words
 ```
 ```
 TEXT error cannot-open
@@ -260,7 +260,7 @@ TEXT error cannot-open
 Fixtures:
 
 ```sh
-D=examples/expanded/cli/.run
+D=apps/legacy_examples/expanded/cli/.run
 printf 'hello file tools\n' > "$D/src.txt"
 printf 'different\n'       > "$D/other.txt"
 head -c 1024 /dev/zero    > "$D/exact.bin"   # exact fit for FT_CAP = 1024

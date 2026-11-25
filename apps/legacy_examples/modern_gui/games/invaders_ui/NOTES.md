@@ -40,11 +40,11 @@ static library inside `bin/` (never writing outside this example's directory).
 pkg-config --cflags --libs sdl3
 # -I/opt/homebrew/include -L/opt/homebrew/lib -Wl,-rpath,/opt/homebrew/lib -lSDL3
 
-./build/c+ build examples/modern_gui/games/invaders_ui/invaders_ui.cp \
+./build/c+ build apps/legacy_examples/modern_gui/games/invaders_ui/invaders_ui.cp \
   --sanitize=none \
   $(pkg-config --cflags --libs sdl3) \
   -I. -Ithird_party/nuklear -Lbuild/ext -lnuklear \
-  -o examples/modern_gui/games/invaders_ui/bin/invaders_ui
+  -o apps/legacy_examples/modern_gui/games/invaders_ui/bin/invaders_ui
 ```
 
 Exit status 0.  The C backend emits five harmless `clang` warnings that the
@@ -60,7 +60,7 @@ example's file ownership; the unsanitized build is clean.
 ## Exact runner command and output
 
 ```sh
-$ examples/modern_gui/games/invaders_ui/run.sh
+$ apps/legacy_examples/modern_gui/games/invaders_ui/run.sh
 BUILD ok invaders_ui
 RUN ok compact
 RUN ok argv

@@ -14,7 +14,7 @@
  *   SAFETY_SUMMARY <cases> <refused> <canary_ok> <failed>
  *
  * Build:
- *   ./build/c+ build examples/expanded/database/safety_demo.cp --strict --sanitize=none -I. -o examples/expanded/database/safety_demo
+ *   ./build/c+ build apps/legacy_examples/expanded/database/safety_demo.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/database/safety_demo
  */
 #include <limits.h>
 #include <stdio.h>

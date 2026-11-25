@@ -12,8 +12,8 @@
  * exit), not the output of a proof engine.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_3/nim.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_3/bin/nim
+ *   ./build/c+ build apps/legacy_examples/expanded/games_3/nim.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_3/bin/nim
  *
  * Run:
  *   bin/nim                       # full built-in A(optimal) vs B(take-away) game

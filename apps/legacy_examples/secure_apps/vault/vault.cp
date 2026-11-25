@@ -6,9 +6,9 @@
  * or real credential is involved.  Secrets are synthetic argv tokens.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/secure_apps/vault/vault.cp \
+ *   ./build/c+ build apps/legacy_examples/secure_apps/vault/vault.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/secure_apps/vault/vault
+ *     -o apps/legacy_examples/secure_apps/vault/vault
  *
  * Commands (argv only; "--" chains several commands inside one process so a
  * whole transcript is one deterministic run):

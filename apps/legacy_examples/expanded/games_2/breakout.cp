@@ -6,8 +6,8 @@
  * fixed command sequence.  Identical input yields byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_2/breakout.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_2/bin/breakout
+ *   ./build/c+ build apps/legacy_examples/expanded/games_2/breakout.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_2/bin/breakout
  *
  * Run:
  *   bin/breakout R L S R F ...     # commands as separate argv tokens

@@ -10,8 +10,8 @@
  * time (an error record plus a nonzero exit), not derived by a proof engine.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_3/sudoku.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_3/bin/sudoku
+ *   ./build/c+ build apps/legacy_examples/expanded/games_3/sudoku.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_3/bin/sudoku
  *
  * Run:
  *   bin/sudoku                    # built-in fixed solve sequence

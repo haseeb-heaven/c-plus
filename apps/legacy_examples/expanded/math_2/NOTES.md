@@ -40,10 +40,10 @@ macro separates arguments with a space, hence `code= 101` rather than
 Run from `/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib`:
 
 ```sh
-./build/c+ build examples/expanded/math_2/bigint.cp   --strict --sanitize=none -I. -o examples/expanded/math_2/.run/bigint
-./build/c+ build examples/expanded/math_2/prng.cp     --strict --sanitize=none -I. -o examples/expanded/math_2/.run/prng
-./build/c+ build examples/expanded/math_2/checksum.cp --strict --sanitize=none -I. -o examples/expanded/math_2/.run/checksum
-./build/c+ build examples/expanded/math_2/base64.cp   --strict --sanitize=none -I. -o examples/expanded/math_2/.run/base64
+./build/c+ build apps/legacy_examples/expanded/math_2/bigint.cp   --strict --sanitize=none -I. -o apps/legacy_examples/expanded/math_2/.run/bigint
+./build/c+ build apps/legacy_examples/expanded/math_2/prng.cp     --strict --sanitize=none -I. -o apps/legacy_examples/expanded/math_2/.run/prng
+./build/c+ build apps/legacy_examples/expanded/math_2/checksum.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/math_2/.run/checksum
+./build/c+ build apps/legacy_examples/expanded/math_2/base64.cp   --strict --sanitize=none -I. -o apps/legacy_examples/expanded/math_2/.run/base64
 ```
 
 All four builds exited 0 with empty stdout and empty stderr.
@@ -51,7 +51,7 @@ All four builds exited 0 with empty stdout and empty stderr.
 ## Harness command and exact output
 
 ```sh
-sh examples/expanded/math_2/run.sh
+sh apps/legacy_examples/expanded/math_2/run.sh
 ```
 
 ```
@@ -100,7 +100,7 @@ hostile scenarios correctly refused.
 
 ## Per-app commands and exact outputs
 
-Let `B=examples/expanded/math_2/.run/<app>` (built above).
+Let `B=apps/legacy_examples/expanded/math_2/.run/<app>` (built above).
 
 ### bigint.cp
 

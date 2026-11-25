@@ -6,8 +6,8 @@
  * block.  Every case is argv-selected and uses fixed sizes and offsets.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/utilities/security_tools/bounds_check.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/security_tools/bounds_check
+ *   ./build/c+ build apps/legacy_examples/utilities/security_tools/bounds_check.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/bounds_check
  *
  * Usage:
  *   bounds_check exact | one-over | interior | stale

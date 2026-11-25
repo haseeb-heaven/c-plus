@@ -6,8 +6,8 @@
  * tokens and too many tokens are all REFUSED before a transcript is printed.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/utilities/security_tools/safe_token.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/security_tools/safe_token \
+ *   ./build/c+ build apps/legacy_examples/utilities/security_tools/safe_token.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/safe_token \
  *     -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
  *
  * Usage:

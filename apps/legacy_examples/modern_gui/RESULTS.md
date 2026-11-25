@@ -1,6 +1,6 @@
 # Modern Nuklear / gfx GUI examples — aggregate results
 
-Recorded from a **real run** of `sh examples/modern_gui/run_all.sh` from the
+Recorded from a **real run** of `sh apps/legacy_examples/modern_gui/run_all.sh` from the
 repository root on the toolchain below. This is a snapshot, not a promise: any
 group that had not landed at snapshot time would be marked **PENDING** with its
 exact reproduction command. Nothing in this file is fabricated or inferred from
@@ -23,7 +23,7 @@ a build alone.
 | `CPLUS_CLANG` | `/usr/bin/clang` |
 | `SDL_VIDEODRIVER` | `dummy` (forced by the aggregate for every group) |
 
-Verification performed before the run: `sh -n examples/modern_gui/run_all.sh`
+Verification performed before the run: `sh -n apps/legacy_examples/modern_gui/run_all.sh`
 → `sh -n: OK`. The aggregate runner uses no Python and no success-override
 (`|| true`) masking, and continues after failures.
 
@@ -90,16 +90,16 @@ From the repository root:
 
 ```sh
 # Syntax check first
-sh -n examples/modern_gui/run_all.sh
+sh -n apps/legacy_examples/modern_gui/run_all.sh
 
 # Full aggregate run (the exact command recorded above)
-sh examples/modern_gui/run_all.sh
+sh apps/legacy_examples/modern_gui/run_all.sh
 
 # Individual groups, if a single row needs re-checking
-sh examples/modern_gui/dashboard/run.sh
-sh examples/modern_gui/settings/run.sh
-sh examples/modern_gui/games/breakout_ui/run.sh
-sh examples/modern_gui/games/invaders_ui/run.sh
+sh apps/legacy_examples/modern_gui/dashboard/run.sh
+sh apps/legacy_examples/modern_gui/settings/run.sh
+sh apps/legacy_examples/modern_gui/games/breakout_ui/run.sh
+sh apps/legacy_examples/modern_gui/games/invaders_ui/run.sh
 
 # Raw per-runner logs and captured final lines
 cat build/modern_gui/final_lines.txt
@@ -108,7 +108,7 @@ cat build/modern_gui/final_lines.txt
 No group was PENDING at snapshot time, so there are no deferred exact commands.
 If a group is later removed or its `run.sh` stops landing, the aggregate will
 print a `PENDING` row with `PENDING - no runner reported <TOKEN>` and exit 1;
-re-run the corresponding `sh examples/modern_gui/<group>/run.sh` after it lands.
+re-run the corresponding `sh apps/legacy_examples/modern_gui/<group>/run.sh` after it lands.
 
 ## Non-claims
 

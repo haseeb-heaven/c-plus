@@ -5,9 +5,9 @@
  * fixture bytes yield byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/file_tools/fcopy.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/file_tools/fcopy.cp \
  *       --strict --sanitize=none -I. \
- *       -o examples/utilities/file_tools/.run/fcopy
+ *       -o apps/legacy_examples/utilities/file_tools/.run/fcopy
  *
  * Usage:
  *   fcopy <src> <dst>

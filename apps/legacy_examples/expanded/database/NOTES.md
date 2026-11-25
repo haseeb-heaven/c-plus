@@ -41,9 +41,9 @@ All commands below were run from the repository root
 ### Build (one command per example)
 
 ```sh
-./build/c+ build examples/expanded/database/kv_store.cp --strict --sanitize=none -I. -o examples/expanded/database/results/kv_store
-./build/c+ build examples/expanded/database/table_query.cp --strict --sanitize=none -I. -o examples/expanded/database/results/table_query
-./build/c+ build examples/expanded/database/safety_demo.cp --strict --sanitize=none -I. -o examples/expanded/database/results/safety_demo
+./build/c+ build apps/legacy_examples/expanded/database/kv_store.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/database/results/kv_store
+./build/c+ build apps/legacy_examples/expanded/database/table_query.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/database/results/table_query
+./build/c+ build apps/legacy_examples/expanded/database/safety_demo.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/database/results/safety_demo
 ```
 
 Result: no output, exit 0 in all three cases.
@@ -51,7 +51,7 @@ Result: no output, exit 0 in all three cases.
 ### `kv_store` (fixed argv sequence)
 
 ```sh
-timeout 30 ./examples/expanded/database/results/kv_store \
+timeout 30 ./apps/legacy_examples/expanded/database/results/kv_store \
   insert alpha one insert beta two insert alpha duplicate \
   get alpha get gamma update alpha ALPHA delete beta list expect_size 1
 ```
@@ -78,7 +78,7 @@ line) also works via the built-in stdin fallback.
 ### `table_query` (fixed argv sequence)
 
 ```sh
-timeout 30 ./examples/expanded/database/results/table_query \
+timeout 30 ./apps/legacy_examples/expanded/database/results/table_query \
   row 1 10 100 row 2 10 200 row 3 20 300 row 4 20 400 row 2 10 999 \
   eq grp 10 range amt 200 400 count grp 10 sum grp 10 \
   expect_count grp 10 2 expect_sum grp 10 300 \
@@ -122,7 +122,7 @@ overflow `int`; the two rows themselves are valid data and remain in the table.
 ### `safety_demo` (no arguments)
 
 ```sh
-timeout 30 ./examples/expanded/database/results/safety_demo
+timeout 30 ./apps/legacy_examples/expanded/database/results/safety_demo
 ```
 
 Exact stdout:
@@ -157,7 +157,7 @@ back as `one`, and the live record count is still 1.
 ### Aggregate runner
 
 ```sh
-./examples/expanded/database/run.sh
+./apps/legacy_examples/expanded/database/run.sh
 ```
 
 Result: rebuilds each example, runs it twice under `timeout 30`, compares the
@@ -168,7 +168,7 @@ stderr and the expected summary line, and finishes with:
 DB_EXAMPLES 3 3 0
 ```
 
-Exit 0. Logs and binaries are written to `examples/expanded/database/results/`.
+Exit 0. Logs and binaries are written to `apps/legacy_examples/expanded/database/results/`.
 
 ## Refusal codes used
 

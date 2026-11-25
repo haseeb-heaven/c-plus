@@ -15,10 +15,10 @@
  * proof of GUI correctness, memory safety, or freedom from all invalid states.
  *
  * Build (from repo root, after build/ext/libnuklear.a exists):
- *   ./build/c+ build examples/modern_gui/settings/settings_panel.cp \
+ *   ./build/c+ build apps/legacy_examples/modern_gui/settings/settings_panel.cp \
  *     --strict --sanitize=none -I. $(pkg-config --cflags sdl3) \
  *     -Ithird_party/nuklear -Lbuild/ext -lnuklear $(pkg-config --libs sdl3) \
- *     -o examples/modern_gui/settings/settings_panel
+ *     -o apps/legacy_examples/modern_gui/settings/settings_panel
  */
 #include <stdio.h>
 #include <string.h>

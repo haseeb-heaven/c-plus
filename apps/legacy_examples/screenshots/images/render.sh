@@ -19,7 +19,7 @@ CAPTURES_DIR=${CAPTURES_DIR:-${1:-}}
 # Search order: explicit override, sibling agent's captures, our own captures.
 DIRS=""
 [ -n "$CAPTURES_DIR" ] && DIRS="$CAPTURES_DIR"
-DIRS="$DIRS $ROOT/examples/screenshots/captures $HERE/captures"
+DIRS="$DIRS $ROOT/apps/legacy_examples/screenshots/captures $HERE/captures"
 
 NAMES="unsafe_vs_safe_memcpy bounds_query lifetime_refusal sync_double_destroy"
 

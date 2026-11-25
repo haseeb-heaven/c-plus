@@ -11,8 +11,8 @@ unset CPLUS_CLANG
 cases=0; pass=0; fail=0
 for suite in apps/run_all.sh proof/games_apps/run.sh \
              proof/real_apps_cross_platform/run.sh proof/goose_samples/run.sh \
-             examples/games3d/run.sh examples/gui_app/run.sh \
-             examples/cli_app/run.sh benchmarks/goose_fast/run.sh \
+             apps/games3d/run.sh apps/gui_app/run.sh \
+             apps/cli_app/run.sh benchmarks/goose_fast/run.sh \
              benchmarks/goose_modern/run.sh \
              tests/stdlib/upstream_reuse/run_memory_safety.sh \
              tests/docs/run_doc_check.sh tests/runtime/run_print_test.sh \

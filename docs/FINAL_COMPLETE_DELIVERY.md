@@ -40,7 +40,7 @@ default Homebrew clang 23.1.6 has a broken `MacOSX27.sdk`; all green runs pin
 | `benchmarks/example_rust_compare/MORE_EXAMPLES.md` | 25 new comparisons / 105 cases |
 | `benchmarks/example_rust_compare/MODERN_SECURE_CATALOGUE.md` | 8 modern GUI + secure apps |
 | `benchmarks/example_rust_compare/utilities/RESULTS.md` | 30 utilities vs safe Rust |
-| `examples/utilities/RESULTS.md` | 6/6 utility runners PASS |
+| `apps/legacy_examples/utilities/RESULTS.md` | 6/6 utility runners PASS |
 | `external_projects/{cli_app,game_a,game_b}/ORIGINAL_EVIDENCE.md` + `game_a/cplus/CONVERSION.md` | 3 real upstream projects + 1 C+ conversion |
 | `docs/security/RED_BLUE_BATTLE_FINAL.md` | **[PENDING]** — not on disk |
 | `tests/c_standards/RESULTS.md`, `STD_SUPPORT_MATRIX.md` | **[PENDING]** — directories exist (`c89/c99/c11/c17/c23`), result docs absent |
@@ -202,7 +202,7 @@ different units; this is an inventory, **not** a behavioral grand total.
 - Modern GUI + secure apps: **8 MATCH / 0 DIFFERENT / 0 BLOCKED / 0 PENDING**, 82 fixed cases.
 - Utilities vs safe Rust: **30 MATCH / 0 DIFFERENT / 0 BLOCKED / 0 PENDING**, 83 fixed
   invocations; exit-status semantics verified with negative controls.
-- `examples/utilities` runner aggregate: **6/6 runners PASS**, 65 passed units,
+- `apps/legacy_examples/utilities` runner aggregate: **6/6 runners PASS**, 65 passed units,
   146 refused hostile inputs, exit 0.
 - All safe-Rust models use **no `unsafe`, no FFI, no raw pointers, no external crates**.
 
@@ -240,7 +240,7 @@ different units; this is an inventory, **not** a behavioral grand total.
 | More examples vs Rust | **25 MATCH / 0 DIFFERENT**, 105 fixed cases | all 3 scripts exit 0 |
 | Modern GUI + secure apps | **8 MATCH**, 82 fixed cases | headless teaching apps |
 | Utilities vs Rust | **30 MATCH / 0 DIFFERENT**, 83 invocations | all scripts exit 0 |
-| Utilities aggregate | **6/6 runners PASS**, 65 units, 146 refusals, exit 0 | `examples/utilities` |
+| Utilities aggregate | **6/6 runners PASS**, 65 units, 146 refusals, exit 0 | `apps/legacy_examples/utilities` |
 | Resource exhaustion | **156 executions (78 checks × 2 modes) / 0 failures**, exit 0 | 8 harnesses; 1 declared SKIP |
 | Hostile inputs | **143 checks × 2 modes / 0 failures** (exit 2 = 1 BLOCKED mode) | strict-none + workaround-UBSan |
 | Security aggregate | **15 invocations / 15 PASS / 0 other**, exit 0 | stdlib 2, hostile_inputs 5, resource_exhaustion 8 |

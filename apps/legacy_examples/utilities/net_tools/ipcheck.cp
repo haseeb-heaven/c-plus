@@ -15,9 +15,9 @@
  * C+ stdlib, NOT a formal safety proof. All builds use --sanitize=none.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/net_tools/ipcheck.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/net_tools/ipcheck.cp \
  *       --strict --sanitize=none -I. \
- *       -o examples/utilities/net_tools/results/ipcheck
+ *       -o apps/legacy_examples/utilities/net_tools/results/ipcheck
  */
 #include <stddef.h>
 #include <string.h>

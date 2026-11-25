@@ -8,8 +8,8 @@
  * both outcomes are observed at run time.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/expanded/safety/memcpy_s_demo.cp \
- *     --strict --sanitize=none -I. -o examples/expanded/safety/memcpy_s_demo \
+ *   ./build/c+ build apps/legacy_examples/expanded/safety/memcpy_s_demo.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/expanded/safety/memcpy_s_demo \
  *     -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
  *
  * Output: deterministic "memcpy_s <case> OK|REFUSED <detail>" lines.

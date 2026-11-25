@@ -1,10 +1,10 @@
 #!/bin/sh
-# Aggregate runner for every expanded C+ example group under examples/expanded/.
+# Aggregate runner for every expanded C+ example group under apps/legacy_examples/expanded/.
 #
-#   sh examples/expanded/run_all.sh
+#   sh apps/legacy_examples/expanded/run_all.sh
 #
 # Discovery: every run.sh at depth 2 (<group>/run.sh) or depth 3
-# (<group>/<subgroup>/run.sh) below examples/expanded/ is a runner.  Each is
+# (<group>/<subgroup>/run.sh) below apps/legacy_examples/expanded/ is a runner.  Each is
 # invoked from the repository root under `timeout -k 10 300` with a restricted
 # PATH and CPLUS_CLANG pinned to /usr/bin/clang.  Nothing from the caller's
 # PATH leaks into the child (except the directories that actually provide the

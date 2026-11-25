@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deterministic build-and-run harness for the four math/encoding apps.
 #
-#   sh examples/expanded/math_2/run.sh
+#   sh apps/legacy_examples/expanded/math_2/run.sh
 #
 # Every compiler and program invocation is bounded by `timeout 30`. Each
 # scenario must match exit code, empty stderr and byte-exact stdout. Refusal

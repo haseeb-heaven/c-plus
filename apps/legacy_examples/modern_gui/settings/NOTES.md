@@ -57,23 +57,23 @@ is absent, using `pkg-config --cflags sdl3` and `-I third_party/nuklear`.
 # Exact build command used (pkg-config values on this host:
 #   cflags: -I/opt/homebrew/include
 #   libs:   -L/opt/homebrew/lib -Wl,-rpath,/opt/homebrew/lib -lSDL3)
-./build/c+ build examples/modern_gui/settings/settings_panel.cp \
+./build/c+ build apps/legacy_examples/modern_gui/settings/settings_panel.cp \
   --strict --sanitize=none -I. \
   -I/opt/homebrew/include -Ithird_party/nuklear \
   -Lbuild/ext -lnuklear \
   -L/opt/homebrew/lib -Wl,-rpath,/opt/homebrew/lib -lSDL3 \
-  -o examples/modern_gui/settings/settings_panel
+  -o apps/legacy_examples/modern_gui/settings/settings_panel
 
 # One fixed scenario per process (run.sh performs exactly these six):
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/settings/settings_panel apply
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/settings/settings_panel text_oversize
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/settings/settings_panel slider_range
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/settings/settings_panel null_context
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/settings/settings_panel null_text
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/settings/settings_panel invalid_utf8
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/settings/settings_panel apply
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/settings/settings_panel text_oversize
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/settings/settings_panel slider_range
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/settings/settings_panel null_context
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/settings/settings_panel null_text
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/settings/settings_panel invalid_utf8
 
 # All-in-one driver:
-examples/modern_gui/settings/run.sh
+apps/legacy_examples/modern_gui/settings/run.sh
 ```
 
 The C+ driver emits five benign `clang: warning: ... unused ... argument`
@@ -86,7 +86,7 @@ pass); the final link succeeds and the binary is produced (checked with
 Build: no diagnostics other than the five benign warnings listed above;
 `build_exit=0`.
 
-`examples/modern_gui/settings/run.sh` output:
+`apps/legacy_examples/modern_gui/settings/run.sh` output:
 
 ```text
 SETTINGS apply APPLIED code=0 cat=ok field=text len=5 max=31 text=guest slider=42 flags=3 frames=2 windows=2 surface=320x240

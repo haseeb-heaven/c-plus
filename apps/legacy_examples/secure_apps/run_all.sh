@@ -1,9 +1,9 @@
 #!/bin/sh
-# Aggregate runner for every secure-app group under examples/secure_apps/.
+# Aggregate runner for every secure-app group under apps/legacy_examples/secure_apps/.
 #
-#   sh examples/secure_apps/run_all.sh
+#   sh apps/legacy_examples/secure_apps/run_all.sh
 #
-# Discovery: every <group>/run.sh at depth 2 below examples/secure_apps/ is a
+# Discovery: every <group>/run.sh at depth 2 below apps/legacy_examples/secure_apps/ is a
 # runner.  Each is invoked from the repository root under `timeout -k 10 300`
 # with a restricted PATH and CPLUS_CLANG pinned to /usr/bin/clang.  SDL_VIDEODRIVER
 # is also set to dummy for parity with the companion GUI tree (none of these apps

@@ -16,13 +16,13 @@ passed=0
 failed=0
 
 echo "== build =="
-if ./build/c+ build examples/expanded/games/snake/snake_core.cp --strict --sanitize=none -I. -o examples/expanded/games/snake/.build/snake_core; then
+if ./build/c+ build apps/legacy_examples/expanded/games/snake/snake_core.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/snake/.build/snake_core; then
     echo "build snake_core OK"
 else
     echo "build snake_core FAIL"
     failed=$((failed + 1))
 fi
-if ./build/c+ build examples/expanded/games/snake/snake_cli.cp --strict --sanitize=none -I. -o examples/expanded/games/snake/.build/snake_cli; then
+if ./build/c+ build apps/legacy_examples/expanded/games/snake/snake_cli.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/snake/.build/snake_cli; then
     echo "build snake_cli OK"
 else
     echo "build snake_cli FAIL"

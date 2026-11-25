@@ -1,6 +1,6 @@
 # Real-world utilities — aggregate results
 
-Recorded from a **real run** of `sh examples/utilities/run_all.sh` from the
+Recorded from a **real run** of `sh apps/legacy_examples/utilities/run_all.sh` from the
 repository root on the toolchain below. This is a snapshot, not a promise: no
 result here is inferred from a build alone, and a category that had not landed
 would be marked **PENDING** with its exact reproduction command. Nothing in
@@ -22,7 +22,7 @@ this file is fabricated.
 | Build mode used by every category | `--strict --sanitize=none -I.` (security tools additionally link the archived checked libraries) |
 
 Verification performed before/around the snapshot:
-`sh -n examples/utilities/run_all.sh` → `sh -n: OK`. Two consecutive real runs
+`sh -n apps/legacy_examples/utilities/run_all.sh` → `sh -n: OK`. Two consecutive real runs
 produced **byte-identical stdout and byte-identical (empty) stderr**; the
 aggregate process exited `0` both times. The aggregate uses no Python and no
 success-override (`|| true`) masking, and continues after failures.
@@ -98,20 +98,20 @@ From the repository root:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
 
-sh -n examples/utilities/run_all.sh     # syntax check
-sh examples/utilities/run_all.sh        # full aggregate; exit 0 expected
+sh -n apps/legacy_examples/utilities/run_all.sh     # syntax check
+sh apps/legacy_examples/utilities/run_all.sh        # full aggregate; exit 0 expected
 ```
 
 Run a single category directly (exact command per token):
 
 | Token | Category | Exact command |
 | --- | --- | --- |
-| `UTIL_FILE` | `file_tools` | `sh examples/utilities/file_tools/run.sh` |
-| `UTIL_TEXT` | `text_tools` | `sh examples/utilities/text_tools/run.sh` |
-| `UTIL_DATA` | `data_tools` | `sh examples/utilities/data_tools/run.sh` |
-| `UTIL_SECURITY` | `security_tools` | `sh examples/utilities/security_tools/run.sh` |
-| `UTIL_DEV` | `dev_tools` | `sh examples/utilities/dev_tools/run.sh` |
-| `UTIL_NET` | `net_tools` | `sh examples/utilities/net_tools/run.sh` |
+| `UTIL_FILE` | `file_tools` | `sh apps/legacy_examples/utilities/file_tools/run.sh` |
+| `UTIL_TEXT` | `text_tools` | `sh apps/legacy_examples/utilities/text_tools/run.sh` |
+| `UTIL_DATA` | `data_tools` | `sh apps/legacy_examples/utilities/data_tools/run.sh` |
+| `UTIL_SECURITY` | `security_tools` | `sh apps/legacy_examples/utilities/security_tools/run.sh` |
+| `UTIL_DEV` | `dev_tools` | `sh apps/legacy_examples/utilities/dev_tools/run.sh` |
+| `UTIL_NET` | `net_tools` | `sh apps/legacy_examples/utilities/net_tools/run.sh` |
 
 Each category owns its own build commands and per-case evidence in its `NOTES.md`;
 the aggregate does not rebuild examples itself. Generated artifacts from the
@@ -130,26 +130,26 @@ stderr, and exits 1. Recovery command for any such token:
 
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
-sh examples/utilities/<category>/run.sh   # use the table above for <category>
-sh examples/utilities/run_all.sh          # refresh the whole table
+sh apps/legacy_examples/utilities/<category>/run.sh   # use the table above for <category>
+sh apps/legacy_examples/utilities/run_all.sh          # refresh the whole table
 ```
 
 ## Screenshot / captured-evidence pointer
 
 Separate from the 30 utilities, a safety-demo campaign captured real terminal
-transcripts and rendered SVG evidence under [`examples/screenshots/`](../screenshots/):
+transcripts and rendered SVG evidence under [`apps/legacy_examples/screenshots/`](../screenshots/):
 
 - Manifest with reproduction commands and exact observed lines:
-  [`examples/screenshots/MANIFEST.md`](../screenshots/MANIFEST.md).
+  [`apps/legacy_examples/screenshots/MANIFEST.md`](../screenshots/MANIFEST.md).
 - Captured terminal transcripts (verbatim stdout+stderr of real binaries under
   `/usr/bin/timeout 30`):
-  `examples/screenshots/captures/unsafe_vs_safe_memcpy.txt`,
+  `apps/legacy_examples/screenshots/captures/unsafe_vs_safe_memcpy.txt`,
   `bounds_query.txt`, `lifetime_refusal.txt`, `sync_double_destroy.txt`,
   `database_safety_refusals.txt`, `stdc_hostile_refusals.txt`.
-- Rendered SVGs: `examples/screenshots/images/unsafe_vs_safe_memcpy.svg`,
+- Rendered SVGs: `apps/legacy_examples/screenshots/images/unsafe_vs_safe_memcpy.svg`,
   `bounds_query.svg`, `lifetime_refusal.svg`, `sync_double_destroy.svg`.
-- Harnesses: `examples/screenshots/capture.sh` and
-  `examples/screenshots/images/render.sh`.
+- Harnesses: `apps/legacy_examples/screenshots/capture.sh` and
+  `apps/legacy_examples/screenshots/images/render.sh`.
 
 That campaign's last full run was recorded as
 `2026-11-23T06:28:17Z`, exit `0`,

@@ -13,11 +13,11 @@
 #       3. too many commands (129 one-character tokens > the 128-tick limit).
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 cd "$ROOT" || exit 1
 
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-DIR=examples/expanded/games_2
+DIR=apps/legacy_examples/expanded/games_2
 BIN=$DIR/bin
 mkdir -p "$BIN"
 

@@ -98,6 +98,46 @@ The runner never uses `|| true` and never converts an unbuildable sanitizer into
 a pass: a sanitizer is `PASS` only when its probe both compiles and runs on the
 host. Missing scripts are recorded `NOT FOUND` / `NOT_TESTED`, never fabricated.
 
+## UPDATE — Linux `test_corpus_uninit` exit 70 root cause (2026-11-25)
+
+The long-standing `linux-crt` exit 70 in `test_corpus_uninit` was **not** a
+watchdog hang. A local glibc reproduction (Ubuntu glibc 2.39, aarch64, GCC 13,
+`build_libc.sh` + the corpus binary) gives:
+
+```
+corpus_uninit case 1
+Fatal glibc error: ../iconv/loop.c:309 (internal_ascii_loop_single): assertion failed: (state->__count & 7) <= sizeof (state->__value)
+FINDING: corpus_uninit crash at case 1 cat=1 variant=1 idx=1 signal=6
+```
+
+`signal=6` is SIGABRT from a glibc fatal assertion, not SIGALRM (14). The test
+had filled an `mbstate_t` with `0xFF` (and another with random bytes). That is
+not a valid representation of the type: glibc's iconv asserts that its recorded
+byte count fits `__value` and aborts. macOS/libiconv tolerates the bytes, hence
+the 0.34s local run versus the immediate Linux exit 70. The test never reached
+the 120s alarm; both handlers use exit code 70, which made the symptom look like
+the watchdog.
+
+Two fixes, both test-side (no library change):
+
+1. `tests/libc/test_corpus_uninit.c` now builds its four hostile `mbstate_t`
+   states from the initial state and three genuine partial states captured from
+   real 2/3/4-byte UTF-8 lead conversions. All 760 cases and every assertion are
+   unchanged. Both signal handlers now report the exact case descriptor to
+   stderr with `write(2)` (async-signal-safe, immediately flushed) instead of
+   `snprintf`.
+2. `tests/libc/run_libc_tests.sh` captured child status with `rc=$?` after a
+   failing command in an `if` **body**. Under `set -e` that aborted the runner
+   before the `FAIL` block, leaking the child's rc (70) as the step exit code and
+   suppressing all diagnostics. Status is now captured in `if` conditions, and
+   the `FINDING:` lines are echoed beside `FAIL` before the full trace.
+
+Verification: the patched binary runs all 760 cases and prints
+`corpus_uninit: 760 cases ok` under glibc in both `C` and `C.utf8` locales;
+`CORPUS_WATCHDOG 3 3 0`; local runner final line `libc tests: 109 passed, 0 failed`.
+The x86-64 CI runner itself was not available locally, so a CI rerun is still
+required to confirm the remote job.
+
 ## UPDATE — Windows runtime now verified on this host
 
 Earlier notes in this document recorded Windows runtime as BLOCKED. That is

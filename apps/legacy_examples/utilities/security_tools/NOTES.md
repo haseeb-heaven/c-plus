@@ -30,31 +30,31 @@ an unexpected state (e.g. accepted one-over, corrupted canary, unknown case).
 
 ```sh
 # 1-4 need the safeclib-backed checked string/memory archive.
-./build/c+ build examples/utilities/security_tools/checksum.cp \
-  --strict --sanitize=none -I. -o examples/utilities/security_tools/checksum \
+./build/c+ build apps/legacy_examples/utilities/security_tools/checksum.cp \
+  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/checksum \
   -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
 
-./build/c+ build examples/utilities/security_tools/pwdcheck.cp \
-  --strict --sanitize=none -I. -o examples/utilities/security_tools/pwdcheck \
+./build/c+ build apps/legacy_examples/utilities/security_tools/pwdcheck.cp \
+  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/pwdcheck \
   -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
 
-./build/c+ build examples/utilities/security_tools/safe_copy.cp \
-  --strict --sanitize=none -I. -o examples/utilities/security_tools/safe_copy \
+./build/c+ build apps/legacy_examples/utilities/security_tools/safe_copy.cp \
+  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/safe_copy \
   -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
 
-./build/c+ build examples/utilities/security_tools/safe_token.cp \
-  --strict --sanitize=none -I. -o examples/utilities/security_tools/safe_token \
+./build/c+ build apps/legacy_examples/utilities/security_tools/safe_token.cp \
+  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/safe_token \
   -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
 
 # 5 uses pure header helpers, no extra archive.
-./build/c+ build examples/utilities/security_tools/bounds_check.cp \
-  --strict --sanitize=none -I. -o examples/utilities/security_tools/bounds_check
+./build/c+ build apps/legacy_examples/utilities/security_tools/bounds_check.cp \
+  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/bounds_check
 ```
 
 The harmless `clang: warning: ... 'linker' input unused` lines come from a
 non-link pass of `c+`; `run.sh` explicitly checks that each binary exists.
 
-## Exact observed outputs (from `examples/utilities/security_tools/run.sh`)
+## Exact observed outputs (from `apps/legacy_examples/utilities/security_tools/run.sh`)
 
 The vendored safeclib ignore handler emits lines such as
 `IGNORE CONSTRAINT HANDLER: (406) memcpy_s: slen exceeds max` on a refusal;
@@ -147,14 +147,14 @@ Direct invocations that do **not** satisfy the harness expectations still
 return nonzero, so `run.sh` cannot report a fabricated pass:
 
 ```text
-$ ./examples/utilities/security_tools/safe_copy nope
+$ ./apps/legacy_examples/utilities/security_tools/safe_copy nope
 SAFECOPY unknown_case REFUSED code=108 reason=unknown-case
 rc=1
-$ ./examples/utilities/security_tools/checksum
+$ ./apps/legacy_examples/utilities/security_tools/checksum
 CHECKSUM selfcheck OK fnv=0x4f9f2cab crc=0xcbf43926
 CHECKSUM usage REFUSED code=108 cat=1 reason=missing-input
 rc=2
-$ ./examples/utilities/security_tools/pwdcheck ''
+$ ./apps/legacy_examples/utilities/security_tools/pwdcheck ''
 PWCHECK selfcheck OK fixed-dummy-rules-ok
 PWCHECK too_short REFUSED code=101 cat=2 reason=input-too-short
 rc=2

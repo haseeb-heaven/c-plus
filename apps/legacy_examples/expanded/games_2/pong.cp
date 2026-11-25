@@ -7,8 +7,8 @@
  * input always produces byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_2/pong.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_2/bin/pong
+ *   ./build/c+ build apps/legacy_examples/expanded/games_2/pong.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_2/bin/pong
  *
  * Run:
  *   bin/pong R L S R R          # commands as separate argv tokens

@@ -1,8 +1,8 @@
 /* ttr.cp -- bounded character transliteration with fixed from/to sets.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/text_tools/ttr.cp --strict \
- *     --sanitize=none -I. -o examples/utilities/text_tools/.run/ttr
+ *   ./build/c+ build apps/legacy_examples/utilities/text_tools/ttr.cp --strict \
+ *     --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/ttr
  *
  * Usage:
  *   ttr <path> <from> <to>

@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     }
     print("probe", argc, b, udiv(17u, 3u));
     {
-        file f = file("examples/README.md", "r");
+        file f = file("apps/legacy_examples/README.md", "r");
         if (f.is_open()) {
             while (n < sizeof(buf)) {
                 rc = f.read(one, 1, &err);

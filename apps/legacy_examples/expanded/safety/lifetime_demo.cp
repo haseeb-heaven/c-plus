@@ -9,8 +9,8 @@
  * lifetime-safety proof.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/expanded/safety/lifetime_demo.cp \
- *     --strict --sanitize=none -I. -o examples/expanded/safety/lifetime_demo
+ *   ./build/c+ build apps/legacy_examples/expanded/safety/lifetime_demo.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/expanded/safety/lifetime_demo
  */
 #include <stdio.h>
 #include <string.h>

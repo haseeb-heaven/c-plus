@@ -1,8 +1,8 @@
 /* hexdump.cp -- deterministic bounded hex + ASCII dump of a fixed input file.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/dev_tools/hexdump.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/dev_tools/hexdump
+ *   ./build/c+ build apps/legacy_examples/utilities/dev_tools/hexdump.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/hexdump
  *
  * Usage:
  *   hexdump <path>

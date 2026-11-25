@@ -6,7 +6,7 @@ Host: macOS arm64, Apple clang 16, C+ 0.1.0, `--default --sanitize=none -I.`.
 
 | App | Build cmd | Build rc / diagnostics | Run rc | Exact stdout | stderr | 10x distinct outputs |
 |---|---|---:|---:|---|---:|---:|
-| game_engine | `./build/c+ build examples/real_world/game_engine.cp --default --sanitize=none -I. -o <bin>` | 0 / 0 bytes | 0 | `GAME_ENGINE 1 70 1 -1 -1 -1` | 0 | 1 |
+| game_engine | `./build/c+ build apps/legacy_examples/real_world/game_engine.cp --default --sanitize=none -I. -o <bin>` | 0 / 0 bytes | 0 | `GAME_ENGINE 1 70 1 -1 -1 -1` | 0 | 1 |
 | snake_game | same pattern | 0 / 0 bytes | 0 | `SNAKE_GAME 28 -1` | 0 | 1 |
 | desktop_app | same pattern | 0 / 0 bytes | 0 | `DESKTOP_APP 8 2 -1` | 0 | 1 |
 | web_app | same pattern | 0 / 0 bytes | 0 | `WEB_APP 200 204 404 404` | 0 | 1 |

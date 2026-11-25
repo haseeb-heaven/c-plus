@@ -210,7 +210,7 @@ per-item reason is invented here.
 
 | Example | Reason recorded |
 |:--|:--|
-| `K_state_class` | **C+ strict build failed (rc=1):** `demos/K_state_class.c:17:30: error: [CPLUS-ARITH] division by zero cannot be excluded`. The strict checker rejects the divide-by-zero guard at compile time, so **no strict C+ binary exists to compare**; the Rust source builds and runs. |
+| `K_state_class` | **C+ strict build failed (rc=1):** `apps/legacy_demos/K_state_class.c:17:30: error: [CPLUS-ARITH] division by zero cannot be excluded`. The strict checker rejects the divide-by-zero guard at compile time, so **no strict C+ binary exists to compare**; the Rust source builds and runs. |
 
 ### 5.4 Withheld / externally blocked configurations (not scored as passes)
 

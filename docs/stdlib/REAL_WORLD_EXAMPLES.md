@@ -1,6 +1,6 @@
 # Real-world C+ examples (game engine, games, desktop/web/server, database)
 
-`examples/real_world/` contains deterministic, runnable C+ examples showing
+`apps/legacy_examples/real_world/` contains deterministic, runnable C+ examples showing
 the modern library layer in realistic shapes:
 
 | Program | Demonstrates | Safety contract shown |

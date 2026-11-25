@@ -1,8 +1,8 @@
 /* thead.cp -- bounded "first N lines" utility.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/text_tools/thead.cp --strict \
- *     --sanitize=none -I. -o examples/utilities/text_tools/.run/thead
+ *   ./build/c+ build apps/legacy_examples/utilities/text_tools/thead.cp --strict \
+ *     --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/thead
  *
  * Usage:
  *   thead <path> <N>

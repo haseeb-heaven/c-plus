@@ -8,9 +8,9 @@
  *
  * Build (from repo root):
  *   /usr/bin/clang -std=c99 -D_POSIX_C_SOURCE=200809L -I. -Ilibc/install-include \
- *     examples/expanded/safety/sync_demo.c \
+ *     apps/legacy_examples/expanded/safety/sync_demo.c \
  *     build/libc/libcplus_hardened.a -pthread \
- *     -o examples/expanded/safety/sync_demo
+ *     -o apps/legacy_examples/expanded/safety/sync_demo
  *
  * Output: deterministic "sync <case> OK|REFUSED <detail>" lines.
  * Exit 0 iff every expected refusal was observed (EINVAL on the repeat/NULL

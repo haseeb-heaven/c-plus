@@ -23,7 +23,7 @@ marketing.
 | CTL functional suite | `sh tests/ctl/run_ctl_tests.sh` → `ctl tests: 11 passed, 0 failed` |
 | CTL usable from C+ | build with `-Ithird_party/ctl`, run prints `CTL 2 9` |
 | Goose-style native memory model | `stdlib/datastack.hp` VM bump stack + single-store `stdlib_scratch_scope`; `stdlib/mempool.hp` stable `slot_pool` |
-| Demos | `examples/goose_memory/`, `examples/ctl_demo/` (see their `README.md` and exact logs) |
+| Demos | `apps/legacy_examples/goose_memory/`, `apps/legacy_examples/ctl_demo/` (see their `README.md` and exact logs) |
 | Component adoption analysis | `docs/stdlib/CTL_ADOPTION_MATRIX.md` |
 
 ## Contract boundary
@@ -39,8 +39,8 @@ marketing.
 
 ```sh
 sh tests/ctl/run_ctl_tests.sh
-sh examples/goose_memory/run.sh
-sh examples/ctl_demo/run.sh
+sh apps/legacy_examples/goose_memory/run.sh
+sh apps/legacy_examples/ctl_demo/run.sh
 ```
 
 ## Non-claims

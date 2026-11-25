@@ -18,12 +18,12 @@ library layer: a checked, additive C API that keeps the ordinary C ABI.
 | Modern 3D/GUI/CLI libraries | [stdlib/MODERN_LIBS_3D_GUI_CLI.md](stdlib/MODERN_LIBS_3D_GUI_CLI.md) |
 | Modern/safer measured evidence | [stdlib/MODERN_SAFER_EVIDENCE.md](stdlib/MODERN_SAFER_EVIDENCE.md) |
 | Edge-case campaigns | [stdlib/EDGE100_FINAL.md](stdlib/EDGE100_FINAL.md) |
-| Captured runtime demonstrations | [../examples/screenshots/README.md](../examples/screenshots/README.md) |
+| Captured runtime demonstrations | [../apps/legacy_examples/screenshots/README.md](../apps/legacy_examples/screenshots/README.md) |
 
 ## Verified apps (real programs, not demos)
 
-The three formerly under `examples/{games3d,gui_app,cli_app}` are now real apps
-in `apps/`. `examples/.../run.sh` entries are only compatibility shims. Every
+The three formerly under `apps/legacy_examples/{games3d,gui_app,cli_app}` are now real apps
+in `apps/`. `apps/legacy_examples/.../run.sh` entries are only compatibility shims. Every
 verdict below is the owning runner's exact final line; every screenshot is
 rendered from real captured stdout.
 

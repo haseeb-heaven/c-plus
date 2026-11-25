@@ -12,7 +12,7 @@ and exercised by `run.sh` against fixed fixtures in a private temp directory.
 | `ttr.cp` | fixed from/to character transliteration | `file::read_line`, `string::append`, `error` |
 | `tbase64.cp` | base64 encode/decode, byte-exact | `file::read`, `string`, `error` |
 
-No file outside `examples/utilities/text_tools/` was created or modified.
+No file outside `apps/legacy_examples/utilities/text_tools/` was created or modified.
 
 ## Exact build commands
 
@@ -20,11 +20,11 @@ Run from the repository root
 `/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib`:
 
 ```sh
-./build/c+ build examples/utilities/text_tools/twc.cp --strict --sanitize=none -I. -o examples/utilities/text_tools/.run/twc
-./build/c+ build examples/utilities/text_tools/tgrep.cp --strict --sanitize=none -I. -o examples/utilities/text_tools/.run/tgrep
-./build/c+ build examples/utilities/text_tools/thead.cp --strict --sanitize=none -I. -o examples/utilities/text_tools/.run/thead
-./build/c+ build examples/utilities/text_tools/ttr.cp --strict --sanitize=none -I. -o examples/utilities/text_tools/.run/ttr
-./build/c+ build examples/utilities/text_tools/tbase64.cp --strict --sanitize=none -I. -o examples/utilities/text_tools/.run/tbase64
+./build/c+ build apps/legacy_examples/utilities/text_tools/twc.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/twc
+./build/c+ build apps/legacy_examples/utilities/text_tools/tgrep.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/tgrep
+./build/c+ build apps/legacy_examples/utilities/text_tools/thead.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/thead
+./build/c+ build apps/legacy_examples/utilities/text_tools/ttr.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/ttr
+./build/c+ build apps/legacy_examples/utilities/text_tools/tbase64.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/tbase64
 ```
 
 All five exited 0 with **empty build logs** (no compiler diagnostics).  The
@@ -33,7 +33,7 @@ harness issues exactly these commands, each wrapped in `timeout -k 5 30`.
 ## Exact run command and output
 
 ```sh
-sh examples/utilities/text_tools/run.sh
+sh apps/legacy_examples/utilities/text_tools/run.sh
 ```
 
 Observed stdout (harness exit code 0):

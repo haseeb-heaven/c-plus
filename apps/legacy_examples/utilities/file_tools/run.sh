@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deterministic build-and-run harness for the five file_tools CLI utilities.
 #
-#   sh examples/utilities/file_tools/run.sh
+#   sh apps/legacy_examples/utilities/file_tools/run.sh
 #
 # All compiler and program invocations are bounded by `timeout 30`.  Fixtures
 # are regenerated with fixed bytes by fixtures/generate.sh into a scratch

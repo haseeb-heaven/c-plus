@@ -1,8 +1,8 @@
 /* todo.cp -- deterministic in-memory task list CLI built on the C+ stdlib.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/cli/todo.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/cli/.run/todo
+ *   ./build/c+ build apps/legacy_examples/expanded/cli/todo.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/cli/.run/todo
  *
  * Commands (all arguments are fixed; no prompts, no clock, no shell):
  *   todo add <id> <title>

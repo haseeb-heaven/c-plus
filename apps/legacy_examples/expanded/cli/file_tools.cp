@@ -1,8 +1,8 @@
 /* file_tools.cp -- deterministic file utilities with bounds-checked reads.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/cli/file_tools.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/cli/.run/file_tools
+ *   ./build/c+ build apps/legacy_examples/expanded/cli/file_tools.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/cli/.run/file_tools
  *
  * Usage:
  *   file_tools size <path>

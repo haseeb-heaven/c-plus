@@ -42,7 +42,7 @@ follow apply to both columns.
 
 - **Neither guarantees:** raw pointer provenance for blocks from another allocator, arbitrary alias/lifetime safety, or detection of a stale alias whose address was re-issued (the recent-free cache is bounded — `safe_alloc.h:33-37`). A raw `free(p)` twice is still UB; `tests/adversarial/provenance_attack_NOTES.md:42-58` documents a diagnostic-attribution nuance, not a provenance break.
 - **Compiler-side (Agent 1):** compile-time double-free/moved-value/use-after-free detection and ownership-transfer checking (`compiler/Analysis/OwnershipAnalysis.cpp`, `compiler/Sema/StaticBoundsCheck.cpp`); allocation-size/return OOB diagnostics (`tests/compile_fail/alloc_size_oob.c`, `alloc_return_oob.c`). The library's metadata is *runtime* diagnosis only.
-- **Examples/tests:** `examples/crt/malloc_s.c`, `free_s.c` (double free safely refused at line 7); `examples/crt/calloc_s.c`, `realloc_s.c`; `tests/libc/test_alloc_metadata.c`, `tests/libc/test_provenance_attack.c`, `tests/libc/test_libc_safe_api.c`.
+- **Examples/tests:** `apps/legacy_examples/crt/malloc_s.c`, `free_s.c` (double free safely refused at line 7); `apps/legacy_examples/crt/calloc_s.c`, `realloc_s.c`; `tests/libc/test_alloc_metadata.c`, `tests/libc/test_provenance_attack.c`, `tests/libc/test_libc_safe_api.c`.
 
 ### 1.2 Memory
 
@@ -52,7 +52,7 @@ follow apply to both columns.
 
 - **Neither guarantees:** a caller-supplied wrong `n` passed to the raw spelling, provenance of a foreign pointer, alias/lifetime safety, or protection after memory has already been corrupted. `CPLUS_SAFE_OBJ_SIZE` is `(size_t)-1` for genuinely unknown capacity; default mode then preserves raw-C behaviour with a warning and makes **no** safety claim (`safe_memory.h:55-67`, `docs/libc/ORDINARY_C_SAFETY.md:49-51`).
 - **Compiler-side (Agent 1):** constant/loop OOB rejection and `CPLUS-SAFE-BOUNDS` class diagnostics (`tests/compile_fail/constant_oob.c`, `loop_oob.c`, `multidim_bounds.c`, `compiler/Analysis/BoundsAnalysis.cpp`); strict-aliasing/type-confusion and VLA-`sizeof` rules are language/compiler responsibilities (`docs/libc/C_BUG_CLASS_MATRIX.md:40,42`).
-- **Examples/tests:** `examples/crt/memcpy_s.c` (line 10: `cplus_memcpy_s(dst, 3, src, sizeof(src))` must fail), `memset_s.c`, `memmove_s.c`, `memcmp_s.c`, `memzero_s.c`; `tests/crt/memory_ops.c`, `tests/libc/test_memory_attack.c`, `tests/libc/test_libc_safe_api.c:21-35` (interior pointer and one-past-end refusal with `errno == ERANGE`).
+- **Examples/tests:** `apps/legacy_examples/crt/memcpy_s.c` (line 10: `cplus_memcpy_s(dst, 3, src, sizeof(src))` must fail), `memset_s.c`, `memmove_s.c`, `memcmp_s.c`, `memzero_s.c`; `tests/crt/memory_ops.c`, `tests/libc/test_memory_attack.c`, `tests/libc/test_libc_safe_api.c:21-35` (interior pointer and one-past-end refusal with `errno == ERANGE`).
 
 ### 1.3 String
 
@@ -62,7 +62,7 @@ follow apply to both columns.
 
 - **Neither guarantees:** an unterminated buffer passed to the ordinary `strcpy`/`strlen`, provenance/capacity of a pointer that is neither a tracked block nor a stack/global object of known size, or alias/lifetime safety. `cplus_strcpy_bounded` explicitly leaves an unterminated source as caller UB (`libc/src/string/bounded.c:99-101`).
 - **Compiler-side (Agent 1):** constant-length/terminator checks (`tests/cases/classic_bug8_terminator.c`, `tests/known_gaps/missing_terminator.c`), static bounds diagnostics, and format-literal enforcement. `cplus_safe_len(ptr)` is a metadata query, not a compiler proof.
-- **Examples/tests:** `examples/crt/strcpy_s.c` (line 9: copy into `char small[4]` must fail), `strncpy_s.c`, `strcat_s.c`, `strncat_s.c`, `strnlen_s.c` (bounded length in `[0, smax]`, `NULL` → 0); `tests/crt/string_ops.c`, `tests/crt/strncpy_ops.c`, `tests/libc/test_string_extra*.c`.
+- **Examples/tests:** `apps/legacy_examples/crt/strcpy_s.c` (line 9: copy into `char small[4]` must fail), `strncpy_s.c`, `strcat_s.c`, `strncat_s.c`, `strnlen_s.c` (bounded length in `[0, smax]`, `NULL` → 0); `tests/crt/string_ops.c`, `tests/crt/strncpy_ops.c`, `tests/libc/test_string_extra*.c`.
 
 ### 1.4 stdio / format
 
@@ -72,7 +72,7 @@ follow apply to both columns.
 
 - **Neither guarantees:** format validity (argument count/type agreement) for an arbitrary runtime format, the actual capacity of a raw `FILE*` buffer, concurrent access to a shared `FILE*`, or alias/lifetime safety. On Apple Clang 16 the **wide** `format(wprintf/wscanf, ...)` attributes are ignored (`-Wignored-attributes`), so there is no static wide-format checking on this host.
 - **Compiler-side (Agent 1):** narrow-format `format(printf/scanf, m, n)` diagnostics for literal formats, full static taint/literal enforcement for `_s` formats (`safe_format.h:19-20`), and compile-fail evidence such as `tests/compile_fail/classic_bug16_format_string.c` and `classic_bug32_fread.c`.
-- **Examples/tests:** `examples/crt/fopen_s.c`, `fclose_s.c` (double close detected), `fread_s.c` (line 11 passes `sizeof(buf)` as `bmax`), `fwrite_s.c`, `printf_s.c`, `snprintf_s.c` (line 8 truncation reports required length), `sprintf_s.c`, `vsnprintf_s.c`, `fprintf_s.c`, `scanf_s.c`, `fscanf_s.c`; `tests/crt/format_ops.c`, `tests/crt/test_safe_format.c`, `tests/adversarial/format_attack_NOTES.md`.
+- **Examples/tests:** `apps/legacy_examples/crt/fopen_s.c`, `fclose_s.c` (double close detected), `fread_s.c` (line 11 passes `sizeof(buf)` as `bmax`), `fwrite_s.c`, `printf_s.c`, `snprintf_s.c` (line 8 truncation reports required length), `sprintf_s.c`, `vsnprintf_s.c`, `fprintf_s.c`, `scanf_s.c`, `fscanf_s.c`; `tests/crt/format_ops.c`, `tests/crt/test_safe_format.c`, `tests/adversarial/format_attack_NOTES.md`.
 
 ### 1.5 Conversion
 
@@ -82,7 +82,7 @@ follow apply to both columns.
 
 - **Neither guarantees:** that a caller's `endptr` or base is meaningful, that a string is NUL-terminated, provenance/capacity for arbitrary pointers, or alias/lifetime safety. Host-specific `errno` details are delegated, not reimplemented (`docs/libc/C_BUG_CLASS_MATRIX.md:30`).
 - **Compiler-side (Agent 1):** constant-overflow rejection (`tests/runtime_fail/classic_bug9_overflow.c`), signed-overflow/divide-by-zero treatment (`C_BUG_CLASS_MATRIX.md:31,39`), and `format(scanf, m, n)` diagnostics for scan conversions.
-- **Examples/tests:** no conversion example in `examples/crt/` (the checked entries there are `strnlen_s.c`); `tests/methods/hundred_conversion.c`, `tests/methods/methods_conversion.c`, `tests/rust_vs_cplus/conversion_c.c`, `tests/conformance/case_*.rs`, `tests/family_gaps/string_checked.c`.
+- **Examples/tests:** no conversion example in `apps/legacy_examples/crt/` (the checked entries there are `strnlen_s.c`); `tests/methods/hundred_conversion.c`, `tests/methods/methods_conversion.c`, `tests/rust_vs_cplus/conversion_c.c`, `tests/conformance/case_*.rs`, `tests/family_gaps/string_checked.c`.
 
 ### 1.6 Time / wide
 
@@ -92,7 +92,7 @@ follow apply to both columns.
 
 - **Neither guarantees:** general format validity (Tier 2 is a `%n` deny-list, not a validator), buffer capacity, wall-clock/timezone values (host is the source of truth), shared `struct tm`/`mbstate_t` synchronisation, raw pointer provenance or alias/lifetime safety.
 - **Compiler-side (Agent 1):** none is available for wide formats on this host — Apple Clang ignores the wide `format(wprintf/wscanf, ...)` attributes and the narrow kinds cannot apply to `const wchar_t *`, so the annotations are documentary only (`WIDE_FORMAT_CONTRACT.md:84-104`). Format-literal/static taint checking for narrow formats is the only compiler-side format guarantee.
-- **Examples/tests:** no time/wide example in `examples/crt/`; `tests/libc/test_wchar_format.c` (Tier-1 `L"ab%n"` writes through the sentinel as the host does; Tier-2 refusals assert `-1`, `errno == EINVAL`, unchanged sentinel/destination, and logging parity), `tests/family_gaps/time_checked.c`, `tests/family_gaps/wchar_checked.c`, `tests/methods/hundred_time_fenv.c`, `tests/methods/hundred_wchar.c`.
+- **Examples/tests:** no time/wide example in `apps/legacy_examples/crt/`; `tests/libc/test_wchar_format.c` (Tier-1 `L"ab%n"` writes through the sentinel as the host does; Tier-2 refusals assert `-1`, `errno == EINVAL`, unchanged sentinel/destination, and logging parity), `tests/family_gaps/time_checked.c`, `tests/family_gaps/wchar_checked.c`, `tests/methods/hundred_time_fenv.c`, `tests/methods/hundred_wchar.c`.
 
 ---
 
@@ -262,14 +262,14 @@ check and never grants safety:
 
 | Family | Examples | Tests |
 |---|---|---|
-| Allocation | `examples/crt/malloc_s.c`, `calloc_s.c`, `realloc_s.c`, `free_s.c` | `tests/libc/test_alloc_metadata.c`, `test_provenance_attack.c`, `tests/crt/alloc.c` |
-| Memory | `examples/crt/memcpy_s.c`, `memmove_s.c`, `memset_s.c`, `memcmp_s.c`, `memzero_s.c` | `tests/crt/memory_ops.c`, `memset_ops.c`, `tests/libc/test_memory_attack.c`, `test_libc_safe_api.c` |
-| String | `examples/crt/strcpy_s.c`, `strncpy_s.c`, `strcat_s.c`, `strncat_s.c`, `strnlen_s.c` | `tests/crt/string_ops.c`, `strncpy_ops.c`, `tests/libc/test_string_extra*.c` |
-| stdio/format | `examples/crt/fopen_s.c`, `fclose_s.c`, `fread_s.c`, `fwrite_s.c`, `printf_s.c`, `fprintf_s.c`, `sprintf_s.c`, `snprintf_s.c`, `vsnprintf_s.c`, `scanf_s.c`, `fscanf_s.c` | `tests/crt/format_ops.c`, `stdio_ops.c`, `printf_ops.c`, `test_safe_format.c`, `tests/adversarial/format_attack_NOTES.md`, `tests/adversarial/stdio_attack_NOTES.md` |
-| Conversion | `examples/crt/strnlen_s.c` (bounded helper) | `tests/methods/hundred_conversion.c`, `tests/family_gaps/string_checked.c`, `tests/rust_vs_cplus/conversion_c.c` |
+| Allocation | `apps/legacy_examples/crt/malloc_s.c`, `calloc_s.c`, `realloc_s.c`, `free_s.c` | `tests/libc/test_alloc_metadata.c`, `test_provenance_attack.c`, `tests/crt/alloc.c` |
+| Memory | `apps/legacy_examples/crt/memcpy_s.c`, `memmove_s.c`, `memset_s.c`, `memcmp_s.c`, `memzero_s.c` | `tests/crt/memory_ops.c`, `memset_ops.c`, `tests/libc/test_memory_attack.c`, `test_libc_safe_api.c` |
+| String | `apps/legacy_examples/crt/strcpy_s.c`, `strncpy_s.c`, `strcat_s.c`, `strncat_s.c`, `strnlen_s.c` | `tests/crt/string_ops.c`, `strncpy_ops.c`, `tests/libc/test_string_extra*.c` |
+| stdio/format | `apps/legacy_examples/crt/fopen_s.c`, `fclose_s.c`, `fread_s.c`, `fwrite_s.c`, `printf_s.c`, `fprintf_s.c`, `sprintf_s.c`, `snprintf_s.c`, `vsnprintf_s.c`, `scanf_s.c`, `fscanf_s.c` | `tests/crt/format_ops.c`, `stdio_ops.c`, `printf_ops.c`, `test_safe_format.c`, `tests/adversarial/format_attack_NOTES.md`, `tests/adversarial/stdio_attack_NOTES.md` |
+| Conversion | `apps/legacy_examples/crt/strnlen_s.c` (bounded helper) | `tests/methods/hundred_conversion.c`, `tests/family_gaps/string_checked.c`, `tests/rust_vs_cplus/conversion_c.c` |
 | Time/wide | — (no checked example; see tests) | `tests/libc/test_wchar_format.c`, `tests/family_gaps/time_checked.c`, `wchar_checked.c`, `tests/methods/hundred_time_fenv.c` |
 
-Build for the examples: `examples/crt/README.md` and `scripts/build_safecrt.sh`;
+Build for the examples: `apps/legacy_examples/crt/README.md` and `scripts/build_safecrt.sh`;
 run the checked suites with `tests/crt/run_safecrt_tests.sh` and
 `tests/libc/run_libc_tests.sh`.
 

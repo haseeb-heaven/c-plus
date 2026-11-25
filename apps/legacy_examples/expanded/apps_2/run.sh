@@ -1,7 +1,7 @@
 #!/bin/sh
-# Deterministic build-and-run harness for examples/expanded/apps_2.
+# Deterministic build-and-run harness for apps/legacy_examples/expanded/apps_2.
 #
-#   sh examples/expanded/apps_2/run.sh
+#   sh apps/legacy_examples/expanded/apps_2/run.sh
 #
 # Every compiler and program invocation is bounded by `timeout 30`. All inputs
 # are fixed argv values or fixed fixture bytes generated here; no clock, no

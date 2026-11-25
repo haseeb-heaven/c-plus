@@ -8,9 +8,9 @@ apps/                 real applications and game suites (verified runners)
   webserver/          HTTP app on stdlib/web.hp (heap-free stack server)
   sqldb/              SQL-like DB app on stdlib/sqldb.hp
   gameeng/            headless game engine app on stdlib/gameeng.hp
-  games3d/           3D game/scene app suite (moved from examples/)
-  gui_app/           GUI app suite (moved from examples/)
-  cli_app/           CLI app suite (moved from examples/)
+  games3d/           3D game/scene app suite (moved from apps/legacy_examples/)
+  gui_app/           GUI app suite (moved from apps/legacy_examples/)
+  cli_app/           CLI app suite (moved from apps/legacy_examples/)
 benchmarks/           measured speed evidence (goose_fast, goose_modern)
 compiler/ runtime/   C+ compiler and runtime (Agent 1 owned)
 libc/ stdlib/        checked libc and C+ standard/safer libraries
@@ -28,9 +28,9 @@ docs/                authoritative docs; CORE_PHILOSOPHY.md is normative
 
 ## Compatibility (temporary)
 
-- `examples/{games3d,gui_app,cli_app}/run.sh` are 3-line shims forwarding to
+- `apps/legacy_examples/{games3d,gui_app,cli_app}/run.sh` are 3-line shims forwarding to
   `apps/...`; they exist only so older CI/docs references keep working.
-- `demos/` is the legacy compiler-demo suite, still referenced by compiler CI.
+- `apps/legacy_demos/` is the legacy compiler-demo suite, still referenced by compiler CI.
 - `scratch/` is ignored working storage (bug-catalog fixtures were removed from
   tracking; local copies may remain).
 

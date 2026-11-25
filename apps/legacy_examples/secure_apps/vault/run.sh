@@ -1,5 +1,5 @@
 #!/bin/sh
-# Deterministic runtime verification for examples/secure_apps/vault/vault.cp.
+# Deterministic runtime verification for apps/legacy_examples/secure_apps/vault/vault.cp.
 #
 # Builds once under --strict --sanitize=none -I., then runs a fixed set of
 # argv-driven scenarios. Each individual program run is bounded by `timeout 30`.
@@ -12,11 +12,11 @@
 #             outputs (a runtime count, not a predicted number).
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 cd "$ROOT" || exit 1
 
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-DIR=examples/secure_apps/vault
+DIR=apps/legacy_examples/secure_apps/vault
 BIN=$DIR/.run
 mkdir -p "$BIN"
 

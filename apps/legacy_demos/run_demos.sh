@@ -8,9 +8,9 @@
 
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 CPLUS=${CPLUS_BIN:-"$ROOT/build/c+"}
-OUT="$ROOT/demos/out"
+OUT="$ROOT/apps/legacy_demos/out"
 PASS=0
 FAIL=0
 FAILED=""
@@ -36,9 +36,9 @@ fail() {
 
 build() {
   name=$1
-  src="$ROOT/demos/$name.c"
+  src="$ROOT/apps/legacy_demos/$name.c"
   if [ ! -f "$src" ]; then
-    src="$ROOT/demos/$name.cp"
+    src="$ROOT/apps/legacy_demos/$name.cp"
   fi
   # The modern allocator demo binds the thread-local DataStack symbol from
   # the hardened libc archive; other demos need no extra link input.
@@ -64,7 +64,7 @@ expect_ok() {
     fail "$name" "build failed; see demos/out/$name.build.log"
     return
   fi
-  stdin_file="$ROOT/demos/$name.stdin"
+  stdin_file="$ROOT/apps/legacy_demos/$name.stdin"
   if [ -f "$stdin_file" ]; then
     "$OUT/$name" <"$stdin_file" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
   else

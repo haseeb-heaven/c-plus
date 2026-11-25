@@ -7,8 +7,8 @@
  * byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_2/invaders.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_2/bin/invaders
+ *   ./build/c+ build apps/legacy_examples/expanded/games_2/invaders.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_2/bin/invaders
  *
  * Run:
  *   bin/invaders L F R F S F       # commands as separate argv tokens

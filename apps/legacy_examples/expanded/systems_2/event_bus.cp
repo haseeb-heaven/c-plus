@@ -6,8 +6,8 @@
  * in-memory fan-out in subscription order; no callbacks, threads or I/O.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/systems_2/event_bus.cp --strict \
- *       --sanitize=none -I. -o examples/expanded/systems_2/results/event_bus
+ *   ./build/c+ build apps/legacy_examples/expanded/systems_2/event_bus.cp --strict \
+ *       --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/event_bus
  *
  * Commands (one argv segment each, separated by "--"):
  *   topic NAME          register a topic (duplicate / oversize is REFUSED)

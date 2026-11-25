@@ -1,13 +1,13 @@
 # data_2 — four deterministic data-processing apps (C+ stdlib)
 
-Four NEW single-file apps in `examples/expanded/data_2/`. Every input is fixed
+Four NEW single-file apps in `apps/legacy_examples/expanded/data_2/`. Every input is fixed
 argv; there is no clock, network, interactive prompt, user path or shelling out
 from inside an app. Identical argv produces byte-identical stdout. Every
 refusal is a single deterministic stdout line carrying the C+ stdlib error code
 and exit status 2, with empty stderr.
 
 This directory is **self-contained**: it does not modify any existing example
-or any file outside `examples/expanded/data_2/`.
+or any file outside `apps/legacy_examples/expanded/data_2/`.
 
 ## Files
 
@@ -26,10 +26,10 @@ Run from the repository root
 `/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib`:
 
 ```sh
-./build/c+ build examples/expanded/data_2/sort_tool.cp  --strict --sanitize=none -I. -o examples/expanded/data_2/.run/sort_tool
-./build/c+ build examples/expanded/data_2/hash_tool.cp  --strict --sanitize=none -I. -o examples/expanded/data_2/.run/hash_tool
-./build/c+ build examples/expanded/data_2/rle.cp        --strict --sanitize=none -I. -o examples/expanded/data_2/.run/rle
-./build/c+ build examples/expanded/data_2/regex_lite.cp --strict --sanitize=none -I. -o examples/expanded/data_2/.run/regex_lite
+./build/c+ build apps/legacy_examples/expanded/data_2/sort_tool.cp  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/data_2/.run/sort_tool
+./build/c+ build apps/legacy_examples/expanded/data_2/hash_tool.cp  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/data_2/.run/hash_tool
+./build/c+ build apps/legacy_examples/expanded/data_2/rle.cp        --strict --sanitize=none -I. -o apps/legacy_examples/expanded/data_2/.run/rle
+./build/c+ build apps/legacy_examples/expanded/data_2/regex_lite.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/data_2/.run/regex_lite
 ```
 
 Each command used exactly the form
@@ -39,7 +39,7 @@ with empty stdout and empty stderr. All four binaries were produced.
 ## Harness command and exact output
 
 ```sh
-sh examples/expanded/data_2/run.sh
+sh apps/legacy_examples/expanded/data_2/run.sh
 ```
 
 ```
@@ -97,12 +97,12 @@ every run.
 ## Per-app exact commands and outputs
 
 All commands below were run from the repository root with the binaries in
-`examples/expanded/data_2/.run`.
+`apps/legacy_examples/expanded/data_2/.run`.
 
 ### sort_tool — stable sort
 
 ```sh
-./examples/expanded/data_2/.run/sort_tool int asc 5 3 9 3 1
+./apps/legacy_examples/expanded/data_2/.run/sort_tool int asc 5 3 9 3 1
 ```
 ```
 SORT app=sort_tool mode=int order=asc n=5 max_items=24 max_token=24
@@ -127,7 +127,7 @@ order-weighted checksum (independently recomputed as
 `1*1+3*2+3*3+5*4+9*5 = 81`).
 
 ```sh
-./examples/expanded/data_2/.run/sort_tool str desc banana apple cherry apple
+./apps/legacy_examples/expanded/data_2/.run/sort_tool str desc banana apple cherry apple
 ```
 ```
 SORT app=sort_tool mode=str order=desc n=4 max_items=24 max_token=24
@@ -147,24 +147,24 @@ SORT done
 Hostile cases (all exit 2, empty stderr):
 
 ```sh
-./examples/expanded/data_2/.run/sort_tool int asc 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
+./apps/legacy_examples/expanded/data_2/.run/sort_tool int asc 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
 # SORT error code=101 reason=too-many-items
-./examples/expanded/data_2/.run/sort_tool str asc <65-char token> ok
+./apps/legacy_examples/expanded/data_2/.run/sort_tool str asc <65-char token> ok
 # SORT error code=101 reason=token-too-long
-./examples/expanded/data_2/.run/sort_tool int asc 3 abc 1
+./apps/legacy_examples/expanded/data_2/.run/sort_tool int asc 3 abc 1
 # SORT error code=108 reason=invalid-integer
-./examples/expanded/data_2/.run/sort_tool int asc 999999999999
+./apps/legacy_examples/expanded/data_2/.run/sort_tool int asc 999999999999
 # SORT error code=101 reason=integer-overflow
-./examples/expanded/data_2/.run/sort_tool str asc "$(printf 'a\001b')" ok
+./apps/legacy_examples/expanded/data_2/.run/sort_tool str asc "$(printf 'a\001b')" ok
 # SORT error code=108 reason=invalid-string
-./examples/expanded/data_2/.run/sort_tool bogus asc 1 2
+./apps/legacy_examples/expanded/data_2/.run/sort_tool bogus asc 1 2
 # SORT error code=108 reason=bad-mode
 ```
 
 ### hash_tool — FNV-1a/32
 
 ```sh
-./examples/expanded/data_2/.run/hash_tool hello abc OpenAI
+./apps/legacy_examples/expanded/data_2/.run/hash_tool hello abc OpenAI
 ```
 ```
 HASH app=hash_tool alg=FNV-1a-32 offset=0x811c9dc5 prime=0x01000193 max_len=64 selfcheck=ok n=3
@@ -184,18 +184,18 @@ input; a mismatch is an immediate refusal. The 64-byte boundary case hashes 64
 Hostile cases (all exit 2):
 
 ```sh
-./examples/expanded/data_2/.run/hash_tool <65-char token>
+./apps/legacy_examples/expanded/data_2/.run/hash_tool <65-char token>
 # HASH error code=101 reason=input-too-long
-./examples/expanded/data_2/.run/hash_tool a a a a a a a a a a a a a a a a a
+./apps/legacy_examples/expanded/data_2/.run/hash_tool a a a a a a a a a a a a a a a a a
 # HASH error code=101 reason=too-many-inputs
-./examples/expanded/data_2/.run/hash_tool "$(printf 'a\001b')"
+./apps/legacy_examples/expanded/data_2/.run/hash_tool "$(printf 'a\001b')"
 # HASH error code=108 reason=invalid-byte
 ```
 
 ### rle — run-length encode/decode
 
 ```sh
-./examples/expanded/data_2/.run/rle enc aaabbc
+./apps/legacy_examples/expanded/data_2/.run/rle enc aaabbc
 ```
 ```
 RLE app=rle op=enc max_raw=64 max_run=99 magic=RLE1;
@@ -209,7 +209,7 @@ RLE done
 ```
 
 ```sh
-./examples/expanded/data_2/.run/rle dec 'RLE1;a03;b02;c01'
+./apps/legacy_examples/expanded/data_2/.run/rle dec 'RLE1;a03;b02;c01'
 ```
 ```
 RLE app=rle op=dec max_raw=64 max_run=99 magic=RLE1;
@@ -232,24 +232,24 @@ to the single group `RLE1;a64`.
 Hostile cases (all exit 2):
 
 ```sh
-./examples/expanded/data_2/.run/rle enc <65-char token>
+./apps/legacy_examples/expanded/data_2/.run/rle enc <65-char token>
 # RLE app=rle op=enc ...
 # RLE in_len=65 in=...
 # RLE error code=101 reason=raw-too-long
-./examples/expanded/data_2/.run/rle dec 'BAD1;a03'
+./apps/legacy_examples/expanded/data_2/.run/rle dec 'BAD1;a03'
 # RLE error code=108 reason=bad-magic
-./examples/expanded/data_2/.run/rle dec 'RLE1;aXY'
+./apps/legacy_examples/expanded/data_2/.run/rle dec 'RLE1;aXY'
 # RLE error code=108 reason=malformed-stream
-./examples/expanded/data_2/.run/rle dec 'RLE1;a99;b99;c99;d99;e99;f99;g99'
+./apps/legacy_examples/expanded/data_2/.run/rle dec 'RLE1;a99;b99;c99;d99;e99;f99;g99'
 # RLE error code=101 reason=decoded-overflow
-./examples/expanded/data_2/.run/rle dec 'RLE1;a03;'
+./apps/legacy_examples/expanded/data_2/.run/rle dec 'RLE1;a03;'
 # RLE error code=108 reason=malformed-stream
 ```
 
 ### regex_lite — bounded wildcard match
 
 ```sh
-./examples/expanded/data_2/.run/regex_lite
+./apps/legacy_examples/expanded/data_2/.run/regex_lite
 ```
 ```
 REGEX app=regex_lite max_pat=64 max_text=128 max_steps=256 selfcheck=ok cases=6
@@ -263,7 +263,7 @@ REGEX done cases=6
 ```
 
 ```sh
-./examples/expanded/data_2/.run/regex_lite 'a*b?c' aaabcc
+./apps/legacy_examples/expanded/data_2/.run/regex_lite 'a*b?c' aaabcc
 ```
 ```
 REGEX pattern=a*b?c text=aaabcc match=1 steps=9 backtracks=2 plen=5 tlen=6
@@ -278,15 +278,15 @@ exceeded — a refused case is never reported as a match.
 Hostile cases (all exit 2):
 
 ```sh
-./examples/expanded/data_2/.run/regex_lite <65-char pattern> abc
+./apps/legacy_examples/expanded/data_2/.run/regex_lite <65-char pattern> abc
 # REGEX error code=101 reason=pattern-too-long
-./examples/expanded/data_2/.run/regex_lite 'a*' <129-char text>
+./apps/legacy_examples/expanded/data_2/.run/regex_lite 'a*' <129-char text>
 # REGEX error code=101 reason=text-too-long
-./examples/expanded/data_2/.run/regex_lite "$(printf '*a%.0s' 1 2 3 ... 20)" "<120 a's>b"
+./apps/legacy_examples/expanded/data_2/.run/regex_lite "$(printf '*a%.0s' 1 2 3 ... 20)" "<120 a's>b"
 # REGEX error code=107 reason=step-budget-exhausted
-./examples/expanded/data_2/.run/regex_lite "$(printf 'a\001b')" abc
+./apps/legacy_examples/expanded/data_2/.run/regex_lite "$(printf 'a\001b')" abc
 # REGEX error code=108 reason=invalid-pattern
-./examples/expanded/data_2/.run/regex_lite onlyone
+./apps/legacy_examples/expanded/data_2/.run/regex_lite onlyone
 # REGEX error code=108 reason=usage
 ```
 

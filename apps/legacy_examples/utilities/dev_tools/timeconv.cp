@@ -1,8 +1,8 @@
 /* timeconv.cp -- epoch seconds -> fixed UTC date/time using arithmetic only.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/dev_tools/timeconv.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/dev_tools/timeconv
+ *   ./build/c+ build apps/legacy_examples/utilities/dev_tools/timeconv.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/timeconv
  *
  * Usage:
  *   timeconv <epoch-seconds>

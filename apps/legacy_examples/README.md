@@ -2,15 +2,15 @@
 
 These are larger programs than `demos/`, included to show that C+ compiles
 real applications unchanged. Most are **interactive** and are therefore only
-built by `./examples/build_examples.sh`, never run in automated verification.
+built by `./apps/legacy_examples/build_examples.sh`, never run in automated verification.
 
 ## Build
 
 ```sh
-./examples/build_examples.sh
+./apps/legacy_examples/build_examples.sh
 ```
 
-Binaries are written to `examples/out/`.
+Binaries are written to `apps/legacy_examples/out/`.
 
 ## Examples
 

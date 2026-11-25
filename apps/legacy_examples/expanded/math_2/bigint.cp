@@ -1,8 +1,8 @@
 /* bigint.cp -- fixed-width big integer arithmetic with explicit refusal.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/math_2/bigint.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/math_2/.run/bigint
+ *   ./build/c+ build apps/legacy_examples/expanded/math_2/bigint.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/math_2/.run/bigint
  *
  * Invariants (all enforced at run time, all observable in the transcript):
  *   - values are little-endian base-10 digit arrays with at most BI_CAP digits;

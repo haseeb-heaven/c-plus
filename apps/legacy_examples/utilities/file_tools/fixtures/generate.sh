@@ -1,7 +1,7 @@
 #!/bin/sh
-# Deterministic fixture generator for examples/utilities/file_tools.
+# Deterministic fixture generator for apps/legacy_examples/utilities/file_tools.
 #
-#   sh examples/utilities/file_tools/fixtures/generate.sh <target-dir>
+#   sh apps/legacy_examples/utilities/file_tools/fixtures/generate.sh <target-dir>
 #
 # Creates every fixed-byte fixture used by run.sh inside <target-dir>.  No
 # clock, network, user home path or external input is involved: the same

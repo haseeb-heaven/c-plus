@@ -24,7 +24,7 @@
  * threat model and the exact build / run commands.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/secure_apps/ratelimit/ratelimit.cp --strict --sanitize=none -I. -o /tmp/ratelimit
+ *   ./build/c+ build apps/legacy_examples/secure_apps/ratelimit/ratelimit.cp --strict --sanitize=none -I. -o /tmp/ratelimit
  */
 #include "cplus/cplus.h"
 

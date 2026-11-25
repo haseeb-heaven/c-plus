@@ -8,8 +8,8 @@
  * direction, no clocks and no randomness.  Fixed argv/stdin moves only.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_4/checkers.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_4/bin/checkers
+ *   ./build/c+ build apps/legacy_examples/expanded/games_4/checkers.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_4/bin/checkers
  *
  * Run (a move is exactly four digits: from-row from-col to-row to-col):
  *   bin/checkers 2130 5041 1021 4132 2334 3223 0110 2301

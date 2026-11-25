@@ -31,27 +31,27 @@ unexpected success or on corruption of the demo process's own canary.
 
 ```sh
 # 1. memcpy_s: needs the safeclib-backed checked memory archive.
-./build/c+ build examples/expanded/safety/memcpy_s_demo.cp \
+./build/c+ build apps/legacy_examples/expanded/safety/memcpy_s_demo.cp \
   --strict --sanitize=none -I. \
-  -o examples/expanded/safety/memcpy_s_demo \
+  -o apps/legacy_examples/expanded/safety/memcpy_s_demo \
   -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
 
 # 2. bounds (pure header helpers, no extra archive).
-./build/c+ build examples/expanded/safety/bounds_demo.cp \
-  --strict --sanitize=none -I. -o examples/expanded/safety/bounds_demo
+./build/c+ build apps/legacy_examples/expanded/safety/bounds_demo.cp \
+  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/safety/bounds_demo
 
 # 3. lifetime (pure header helpers, no extra archive).
-./build/c+ build examples/expanded/safety/lifetime_demo.cp \
-  --strict --sanitize=none -I. -o examples/expanded/safety/lifetime_demo
+./build/c+ build apps/legacy_examples/expanded/safety/lifetime_demo.cp \
+  --strict --sanitize=none -I. -o apps/legacy_examples/expanded/safety/lifetime_demo
 
 # 4. sync: C99 plus the hardened libc archive.
 /usr/bin/clang -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra \
   -I. -Ilibc/install-include \
-  examples/expanded/safety/sync_demo.c build/libc/libcplus_hardened.a \
-  -pthread -o examples/expanded/safety/sync_demo
+  apps/legacy_examples/expanded/safety/sync_demo.c build/libc/libcplus_hardened.a \
+  -pthread -o apps/legacy_examples/expanded/safety/sync_demo
 ```
 
-Each binary was run as `timeout 30 ./examples/expanded/safety/<name>`.
+Each binary was run as `timeout 30 ./apps/legacy_examples/expanded/safety/<name>`.
 
 ## Exact outputs (observed, not fabricated)
 
@@ -140,7 +140,7 @@ exit=0
 ### `run.sh` aggregate
 
 ```text
-$ examples/expanded/safety/run.sh
+$ apps/legacy_examples/expanded/safety/run.sh
 ...
 SAFETY_DEMOS 4 4 0
 ```

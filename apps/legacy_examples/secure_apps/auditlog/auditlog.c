@@ -12,7 +12,7 @@
  *
  * Build (from the repository root):
  *   /usr/bin/clang -std=c99 -pthread -Ilibc/install-include \
- *     examples/secure_apps/auditlog/auditlog.c \
+ *     apps/legacy_examples/secure_apps/auditlog/auditlog.c \
  *     build/libc/libcplus_hardened.a -o <bin>
  * Run:
  *   timeout 30 <bin> <log-path-in-a-temp-dir>

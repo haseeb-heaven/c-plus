@@ -5,9 +5,9 @@
  * fixture bytes yield byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/file_tools/fcat.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/file_tools/fcat.cp \
  *       --strict --sanitize=none -I. \
- *       -o examples/utilities/file_tools/.run/fcat
+ *       -o apps/legacy_examples/utilities/file_tools/.run/fcat
  *
  * Usage:
  *   fcat <path>

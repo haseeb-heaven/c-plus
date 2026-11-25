@@ -266,7 +266,7 @@ the original `.c` file and line, not to the generated temporary. Use
 `--emit-c FILE` to inspect the exact C that was compiled:
 
 ```sh
-c+ build demos/C_resource.c --emit-c /tmp/lowered.c --keep-temp -o demo
+c+ build apps/legacy_demos/C_resource.c --emit-c /tmp/lowered.c --keep-temp -o demo
 ```
 
 `#line` directives also mean `__FILE__` and `__LINE__` in your source keep

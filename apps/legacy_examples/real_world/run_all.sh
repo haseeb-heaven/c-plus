@@ -2,11 +2,11 @@
 # Build and run all real-world C+ examples with bounded timeouts and exact
 # exit checks; then run 100 deterministic hostile-input variants end-to-end.
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$ROOT"
 export PATH="$ROOT/build:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 unset SDKROOT || true
-D=examples/real_world
+D=apps/legacy_examples/real_world
 OUT=$D/out
 mkdir -p "$OUT"
 sh "$D/generate.sh" >/dev/null

@@ -1,9 +1,9 @@
 /* uriparse.cp -- bounded URL parser with strict refusals.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/data_tools/uriparse.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/data_tools/uriparse.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/utilities/data_tools/.run/uriparse
+ *     -o apps/legacy_examples/utilities/data_tools/.run/uriparse
  *
  * Usage:
  *   uriparse <url>

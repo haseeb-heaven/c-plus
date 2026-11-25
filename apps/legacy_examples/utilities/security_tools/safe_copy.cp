@@ -7,8 +7,8 @@
  * uses the checked cplus_memcpy_s API in this process.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/utilities/security_tools/safe_copy.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/security_tools/safe_copy \
+ *   ./build/c+ build apps/legacy_examples/utilities/security_tools/safe_copy.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/safe_copy \
  *     -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
  *
  * Usage:

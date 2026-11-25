@@ -1,8 +1,8 @@
 /* prng.cp -- deterministic xorshift32 PRNG with capacity/overflow refusal.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/math_2/prng.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/math_2/.run/prng
+ *   ./build/c+ build apps/legacy_examples/expanded/math_2/prng.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/math_2/.run/prng
  *
  * Usage:
  *   prng                     fixed seed 305419896 (0x12345678), 16 values

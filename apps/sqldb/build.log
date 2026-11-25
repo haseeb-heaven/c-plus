@@ -1,0 +1,9 @@
+./stdlib/sqldb.hp:117:9: warning: FILE* 'f' leaks on this return path (no matching fclose)
+      for (i = 0; i < db->count; i++)
+          ^
+help: free/close the resource on every return path, or use a C+ managed allocation
+./stdlib/sqldb.hp:134:9: warning: FILE* 'f' leaks on this return path (no matching fclose)
+      while (fgets(line, sizeof(line), f) != (char *)0) {
+          ^
+help: free/close the resource on every return path, or use a C+ managed allocation
+clang: warning: /tmp/resolve2/build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

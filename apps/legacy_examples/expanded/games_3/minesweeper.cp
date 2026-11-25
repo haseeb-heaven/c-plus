@@ -9,8 +9,8 @@
  * nonzero exit); no proof engine certifies the grid accesses.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_3/minesweeper.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_3/bin/minesweeper
+ *   ./build/c+ build apps/legacy_examples/expanded/games_3/minesweeper.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_3/bin/minesweeper
  *
  * Run:
  *   bin/minesweeper                 # built-in fixed clear-the-board sequence

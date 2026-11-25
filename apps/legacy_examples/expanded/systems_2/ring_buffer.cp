@@ -6,8 +6,8 @@
  * before it touches the backing array.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/systems_2/ring_buffer.cp --strict \
- *       --sanitize=none -I. -o examples/expanded/systems_2/results/ring_buffer
+ *   ./build/c+ build apps/legacy_examples/expanded/systems_2/ring_buffer.cp --strict \
+ *       --sanitize=none -I. -o apps/legacy_examples/expanded/systems_2/results/ring_buffer
  *
  * Commands (one argv segment each, separated by "--"):
  *   cap N              set capacity (1..RB_MAX_CAP); 0 / too big REFUSED

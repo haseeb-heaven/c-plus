@@ -6,8 +6,8 @@
  * freed memory.  All failures are reported through the recoverable error* API.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/engine/resource_cache.cp --strict \
- *       --sanitize=none -I. -o examples/expanded/engine/.build/resource_cache
+ *   ./build/c+ build apps/legacy_examples/expanded/engine/resource_cache.cp --strict \
+ *       --sanitize=none -I. -o apps/legacy_examples/expanded/engine/.build/resource_cache
  */
 #include <stdio.h>
 #include <string.h>

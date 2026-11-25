@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deterministic build-and-run harness for the four systems_2 teaching models.
 #
-#   sh examples/expanded/systems_2/run.sh
+#   sh apps/legacy_examples/expanded/systems_2/run.sh
 #
 # Each app is built from the repository root with the supported C+ driver in
 # strict mode.  Every compiler/program invocation is bounded by `timeout 30`.

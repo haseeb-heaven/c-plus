@@ -1,10 +1,10 @@
 /* json_query.cp -- deterministic JSON field extraction with budget refusals.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/apps_2/json_query.cp \
+ *   ./build/c+ build apps/legacy_examples/expanded/apps_2/json_query.cp \
  *     --strict --sanitize=none -I. \
  *     -Ithird_party/yyjson -Lbuild/ext -lyyjson \
- *     -o examples/expanded/apps_2/.run/json_query
+ *     -o apps/legacy_examples/expanded/apps_2/.run/json_query
  *
  * Usage:
  *   json_query <json-text> <dotted-path>

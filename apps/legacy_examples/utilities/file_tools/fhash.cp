@@ -5,9 +5,9 @@
  * fixture bytes always produce byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/file_tools/fhash.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/file_tools/fhash.cp \
  *       --strict --sanitize=none -I. \
- *       -o examples/utilities/file_tools/.run/fhash
+ *       -o apps/legacy_examples/utilities/file_tools/.run/fhash
  *
  * Usage:
  *   fhash <path>

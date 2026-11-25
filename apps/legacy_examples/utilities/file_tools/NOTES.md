@@ -24,11 +24,11 @@ Run from the repository root
 (`/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib`):
 
 ```sh
-./build/c+ build examples/utilities/file_tools/fhash.cp  --strict --sanitize=none -I. -o examples/utilities/file_tools/.run/fhash
-./build/c+ build examples/utilities/file_tools/fdiff.cp  --strict --sanitize=none -I. -o examples/utilities/file_tools/.run/fdiff
-./build/c+ build examples/utilities/file_tools/fcat.cp   --strict --sanitize=none -I. -o examples/utilities/file_tools/.run/fcat
-./build/c+ build examples/utilities/file_tools/fsize.cp  --strict --sanitize=none -I. -o examples/utilities/file_tools/.run/fsize
-./build/c+ build examples/utilities/file_tools/fcopy.cp  --strict --sanitize=none -I. -o examples/utilities/file_tools/.run/fcopy
+./build/c+ build apps/legacy_examples/utilities/file_tools/fhash.cp  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/file_tools/.run/fhash
+./build/c+ build apps/legacy_examples/utilities/file_tools/fdiff.cp  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/file_tools/.run/fdiff
+./build/c+ build apps/legacy_examples/utilities/file_tools/fcat.cp   --strict --sanitize=none -I. -o apps/legacy_examples/utilities/file_tools/.run/fcat
+./build/c+ build apps/legacy_examples/utilities/file_tools/fsize.cp  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/file_tools/.run/fsize
+./build/c+ build apps/legacy_examples/utilities/file_tools/fcopy.cp  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/file_tools/.run/fcopy
 ```
 
 All five builds exited 0 with empty stdout and empty stderr (each
@@ -37,7 +37,7 @@ All five builds exited 0 with empty stdout and empty stderr (each
 ## Harness command and exact output
 
 ```sh
-sh examples/utilities/file_tools/run.sh
+sh apps/legacy_examples/utilities/file_tools/run.sh
 ```
 
 ```
@@ -92,7 +92,7 @@ with fixed bytes on every run.
 ## Fixture generator
 
 ```sh
-sh examples/utilities/file_tools/fixtures/generate.sh <target-dir>
+sh apps/legacy_examples/utilities/file_tools/fixtures/generate.sh <target-dir>
 ```
 
 | Fixture | Content / size |
@@ -113,16 +113,16 @@ sh examples/utilities/file_tools/fixtures/generate.sh <target-dir>
 | `tree/sub/c.bin` | 30 bytes |
 
 All paths below are relative to the repo root; `$F` denotes
-`examples/utilities/file_tools/.run/fixtures` and each binary lives in
-`examples/utilities/file_tools/.run/`.
+`apps/legacy_examples/utilities/file_tools/.run/fixtures` and each binary lives in
+`apps/legacy_examples/utilities/file_tools/.run/`.
 
 ## Per-tool commands and exact outputs
 
 ### fhash.cp
 
 ```sh
-B=examples/utilities/file_tools/.run/fhash
-F=examples/utilities/file_tools/.run/fixtures
+B=apps/legacy_examples/utilities/file_tools/.run/fhash
+F=apps/legacy_examples/utilities/file_tools/.run/fixtures
 timeout 30 "$B" "$F/hello.txt"
 ```
 ```
@@ -166,8 +166,8 @@ FHASH error bad-path code=109
 ### fdiff.cp
 
 ```sh
-B=examples/utilities/file_tools/.run/fdiff
-F=examples/utilities/file_tools/.run/fixtures
+B=apps/legacy_examples/utilities/file_tools/.run/fdiff
+F=apps/legacy_examples/utilities/file_tools/.run/fixtures
 timeout 30 "$B" "$F/alpha.txt" "$F/alpha2.txt"
 ```
 ```
@@ -195,8 +195,8 @@ FDIFF error bad-path code=109
 ### fcat.cp
 
 ```sh
-B=examples/utilities/file_tools/.run/fcat
-F=examples/utilities/file_tools/.run/fixtures
+B=apps/legacy_examples/utilities/file_tools/.run/fcat
+F=apps/legacy_examples/utilities/file_tools/.run/fixtures
 timeout 30 "$B" "$F/alpha.txt"
 ```
 ```
@@ -218,8 +218,8 @@ FCAT error bad-path code=109
 ### fsize.cp
 
 ```sh
-B=examples/utilities/file_tools/.run/fsize
-F=examples/utilities/file_tools/.run/fixtures
+B=apps/legacy_examples/utilities/file_tools/.run/fsize
+F=apps/legacy_examples/utilities/file_tools/.run/fixtures
 timeout 30 "$B" "$F/tree" a.bin b.bin sub/c.bin
 ```
 ```
@@ -242,8 +242,8 @@ FSIZE error missing-entry code=109
 ### fcopy.cp
 
 ```sh
-B=examples/utilities/file_tools/.run/fcopy
-F=examples/utilities/file_tools/.run/fixtures
+B=apps/legacy_examples/utilities/file_tools/.run/fcopy
+F=apps/legacy_examples/utilities/file_tools/.run/fixtures
 timeout 30 "$B" "$F/alpha.txt" "$F/dst.txt"
 ```
 ```
@@ -293,7 +293,7 @@ FCOPY error bad-destination code=109
   path emptiness is tested with `strlen(path) == 0` instead.
 * Passing a 2-D line buffer as a function parameter also loses provable extent,
   so `fdiff` uses two loaders that touch their own fixed globals directly
-  (the same pattern as `examples/expanded/cli/text_tools.cp`).
+  (the same pattern as `apps/legacy_examples/expanded/cli/text_tools.cp`).
 * `error`, `file`, `string` and the POSIX-style `fs_*` helpers all come from the
   checked stdlib headers. Reads use `file::read` / `file::read_line` with an
   `error *`; writes use `file::write_bytes`; sizes use `fs_size`; path joining

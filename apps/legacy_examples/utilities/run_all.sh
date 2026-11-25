@@ -1,9 +1,9 @@
 #!/bin/sh
-# Aggregate runner for every real-world utility group under examples/utilities/.
+# Aggregate runner for every real-world utility group under apps/legacy_examples/utilities/.
 #
-#   sh examples/utilities/run_all.sh
+#   sh apps/legacy_examples/utilities/run_all.sh
 #
-# Discovery: every <category>/run.sh at depth 2 below examples/utilities/ is a
+# Discovery: every <category>/run.sh at depth 2 below apps/legacy_examples/utilities/ is a
 # runner.  Each is invoked from the repository root under `timeout -k 10 300`
 # with a restricted PATH and CPLUS_CLANG pinned to /usr/bin/clang.  Nothing from
 # the caller's PATH leaks into the child except the directories that actually

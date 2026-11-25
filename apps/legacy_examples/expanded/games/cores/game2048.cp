@@ -7,7 +7,7 @@
  * regression fixture.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games/cores/game2048.cp \
+ *   ./build/c+ build apps/legacy_examples/expanded/games/cores/game2048.cp \
  *       --strict --sanitize=none -I. -o build/game2048_core
  *
  * Run:

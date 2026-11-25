@@ -31,7 +31,7 @@ All inputs are fixed argv scenarios. Output is byte-identical across runs.
 | `run.sh` | builds and runs 17 fixed scenarios (valid + hostile), checks exit codes, exact lines, empty stderr and run-to-run determinism; prints `GUI_DASHBOARD <scenarios> <passed> <failed> <refused>` |
 | `NOTES.md` | this file |
 
-Generated outputs and the binary land in `examples/modern_gui/dashboard/results/`.
+Generated outputs and the binary land in `apps/legacy_examples/modern_gui/dashboard/results/`.
 
 ## Build
 
@@ -44,7 +44,7 @@ than fabricating a pass.
 Exact build command (the one that works):
 
 ```sh
-./build/c+ build examples/modern_gui/dashboard/dashboard.cp --strict --sanitize=none -I. $(pkg-config --cflags --libs sdl3) -Ithird_party/nuklear -Lbuild/ext -lnuklear -o examples/modern_gui/dashboard/dashboard
+./build/c+ build apps/legacy_examples/modern_gui/dashboard/dashboard.cp --strict --sanitize=none -I. $(pkg-config --cflags --libs sdl3) -Ithird_party/nuklear -Lbuild/ext -lnuklear -o apps/legacy_examples/modern_gui/dashboard/dashboard
 ```
 
 Result: exit 0, binary created. The only compiler diagnostics are benign clang
@@ -80,7 +80,7 @@ demonstrated outcomes, not unhandled failures.
 ### Pure core, with no display environment at all
 
 ```sh
-env -u SDL_VIDEODRIVER timeout 30 ./examples/modern_gui/dashboard/dashboard describe 2
+env -u SDL_VIDEODRIVER timeout 30 ./apps/legacy_examples/modern_gui/dashboard/dashboard describe 2
 ```
 
 stdout:
@@ -96,7 +96,7 @@ never calls `SDL_Init`.
 ### One real headless frame
 
 ```sh
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/dashboard/dashboard render 640 480 0
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/dashboard/dashboard render 640 480 0
 ```
 
 stdout:
@@ -114,7 +114,7 @@ the handles were dropped. stderr empty, exit 0.
 ### Refusals (runtime evidence)
 
 ```sh
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/dashboard/dashboard refuse null-context
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/dashboard/dashboard refuse null-context
 ```
 
 stdout:
@@ -125,7 +125,7 @@ DASH_RESULT refuse null-context REFUSED 108
 ```
 
 ```sh
-SDL_VIDEODRIVER=dummy timeout 30 ./examples/modern_gui/dashboard/dashboard render 100000 100000 0
+SDL_VIDEODRIVER=dummy timeout 30 ./apps/legacy_examples/modern_gui/dashboard/dashboard render 100000 100000 0
 ```
 
 stdout:
@@ -158,7 +158,7 @@ wrapper, with `--sanitize=none`.
 ### Aggregate runner
 
 ```sh
-sh examples/modern_gui/dashboard/run.sh
+sh apps/legacy_examples/modern_gui/dashboard/run.sh
 ```
 
 It rebuilds the binary, runs 17 scenarios (5 success descriptions/renders, 11
@@ -170,7 +170,7 @@ finishes with:
 GUI_DASHBOARD 17 6 0 11
 ```
 
-Exit 0. Full per-scenario stdout is in `examples/modern_gui/dashboard/results/`.
+Exit 0. Full per-scenario stdout is in `apps/legacy_examples/modern_gui/dashboard/results/`.
 
 ## Refusal codes used
 

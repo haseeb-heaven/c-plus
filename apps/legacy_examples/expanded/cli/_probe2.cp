@@ -48,7 +48,7 @@ int main(void) {
     error_fail(&err, CPLUS_EXIT_UNSUPPORTED, "divide by zero");
     print("err", err.ok(), err.failed_now(), err.category(), err.code(), err.what());
     {
-        file f = file("examples/README.md", "r");
+        file f = file("apps/legacy_examples/README.md", "r");
         int rc = f.read_line(line, sizeof(line), &err);
         print("rl", rc, err.ok(), line);
         f.drop();

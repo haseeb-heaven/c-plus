@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deterministic build-and-run harness for the five real-world text utilities.
 #
-#   sh examples/utilities/text_tools/run.sh
+#   sh apps/legacy_examples/utilities/text_tools/run.sh
 #
 # Every compiler and program invocation is bounded by `timeout 30`.  Fixtures
 # are generated here from fixed bytes in a private temp directory; no clock,

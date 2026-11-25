@@ -4,8 +4,8 @@
  * no user paths, no shelling out.  Identical argv yields byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/data_2/rle.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/data_2/.run/rle
+ *   ./build/c+ build apps/legacy_examples/expanded/data_2/rle.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/data_2/.run/rle
  *
  * Usage:
  *   rle enc <raw>        raw bytes: printable ASCII except ';' (1..64)

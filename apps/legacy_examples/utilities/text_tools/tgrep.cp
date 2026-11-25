@@ -1,8 +1,8 @@
 /* tgrep.cp -- bounded substring / regex-lite line search.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/text_tools/tgrep.cp --strict \
- *     --sanitize=none -I. -o examples/utilities/text_tools/.run/tgrep
+ *   ./build/c+ build apps/legacy_examples/utilities/text_tools/tgrep.cp --strict \
+ *     --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/tgrep
  *
  * Usage:
  *   tgrep <path> <pattern>

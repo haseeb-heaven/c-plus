@@ -11,8 +11,8 @@
  *     integer overflow in SUM (the sum is checked before it is committed)
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/database/table_query.cp --strict --sanitize=none -I. -o examples/expanded/database/table_query
- * Run: ./examples/expanded/database/table_query row 1 10 100 eq grp 10
+ *   ./build/c+ build apps/legacy_examples/expanded/database/table_query.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/database/table_query
+ * Run: ./apps/legacy_examples/expanded/database/table_query row 1 10 100 eq grp 10
  */
 #include <errno.h>
 #include <limits.h>

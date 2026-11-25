@@ -32,19 +32,19 @@ Exit status: **0** for valid input (including a completed win/goal/draw),
 **2** for invalid input (bad token, out-of-range cell, occupied cell, too many
 moves, or `-` with extra arguments).
 
-## How they differ from `examples/games/*.c`
+## How they differ from `apps/legacy_examples/games/*.c`
 
 The existing games are interactive C compatibility demos; these cores are
 non-interactive C+ regression fixtures:
 
 | existing example | it is | this core instead |
 | --- | --- | --- |
-| `examples/games/2048.c` | ncurses UI, raw keyboard, ANSI colours, `time`/`usleep`/`rand()` tile spawns, C17 | `game2048.cp`: C+ `class`, fixed seed, plain-text transcript + final board/score, no curses/time |
-| `examples/games/tetris.c` | ncurses/PDCurses falling-piece game, real-time gravity, wall kicks, key handling | `maze.cp` / `tictactoe.cp`: no graphics, no gravity/timing, one deterministic transcript from a fixed move list |
-| `examples/games/tiles.c` | termios raw mode, `rand()` spawns, interactive WASD sliding puzzle | `game2048.cp`: no raw terminal mode, no `rand()`, deterministic spawn from the fixed seed |
-| `examples/games/snake.c` | POSIX termios + `select()` `_kbhit` shim, `time.h`, interactive arrow keys | all three cores: no key polling, no clock, argv/stdin only |
+| `apps/legacy_examples/games/2048.c` | ncurses UI, raw keyboard, ANSI colours, `time`/`usleep`/`rand()` tile spawns, C17 | `game2048.cp`: C+ `class`, fixed seed, plain-text transcript + final board/score, no curses/time |
+| `apps/legacy_examples/games/tetris.c` | ncurses/PDCurses falling-piece game, real-time gravity, wall kicks, key handling | `maze.cp` / `tictactoe.cp`: no graphics, no gravity/timing, one deterministic transcript from a fixed move list |
+| `apps/legacy_examples/games/tiles.c` | termios raw mode, `rand()` spawns, interactive WASD sliding puzzle | `game2048.cp`: no raw terminal mode, no `rand()`, deterministic spawn from the fixed seed |
+| `apps/legacy_examples/games/snake.c` | POSIX termios + `select()` `_kbhit` shim, `time.h`, interactive arrow keys | all three cores: no key polling, no clock, argv/stdin only |
 
-The existing games are built by `examples/build_examples.sh` and are
+The existing games are built by `apps/legacy_examples/build_examples.sh` and are
 **not run** in automated verification because they need a terminal. These
 cores are built and executed under a 30-second bound by `run.sh`, with exit
 codes and argv-vs-stdin output equality checked.
@@ -52,9 +52,9 @@ codes and argv-vs-stdin output equality checked.
 ## Exact build commands (from the repository root)
 
 ```sh
-./build/c+ build examples/expanded/games/cores/game2048.cp --strict --sanitize=none -I. -o examples/expanded/games/cores/bin/game2048
-./build/c+ build examples/expanded/games/cores/maze.cp --strict --sanitize=none -I. -o examples/expanded/games/cores/bin/maze
-./build/c+ build examples/expanded/games/cores/tictactoe.cp --strict --sanitize=none -I. -o examples/expanded/games/cores/bin/tictactoe
+./build/c+ build apps/legacy_examples/expanded/games/cores/game2048.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/cores/bin/game2048
+./build/c+ build apps/legacy_examples/expanded/games/cores/maze.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/cores/bin/maze
+./build/c+ build apps/legacy_examples/expanded/games/cores/tictactoe.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/cores/bin/tictactoe
 ```
 
 All three compile with no diagnostics in strict mode.
@@ -62,7 +62,7 @@ All three compile with no diagnostics in strict mode.
 ## Exact runner command and output
 
 ```sh
-$ examples/expanded/games/cores/run.sh
+$ apps/legacy_examples/expanded/games/cores/run.sh
 BUILD ok game2048
 RUN ok game2048
 BUILD ok maze
@@ -79,7 +79,7 @@ GAME_CORES 3 3 0
 ### 2048
 
 ```sh
-$ timeout 30 examples/expanded/games/cores/bin/game2048 R D L U R D
+$ timeout 30 apps/legacy_examples/expanded/games/cores/bin/game2048 R D L U R D
 GAME2048 seed=0x9E3779B97F4A7C15 moves= 6
 START score=0
      2    0    0    0
@@ -129,7 +129,7 @@ FINAL_BOARD
 ### maze
 
 ```sh
-$ timeout 30 examples/expanded/games/cores/bin/maze U D D D D R R R R R
+$ timeout 30 apps/legacy_examples/expanded/games/cores/bin/maze U D D D D R R R R R
 MAZE 9x7 start=(1,1) goal=(5,6)
 INITIAL
   #########
@@ -229,7 +229,7 @@ STOP reason=goal at step=10
 ### tic-tac-toe
 
 ```sh
-$ timeout 30 examples/expanded/games/cores/bin/tictactoe 0 1 4 5 8
+$ timeout 30 apps/legacy_examples/expanded/games/cores/bin/tictactoe 0 1 4 5 8
 TICTACTOE players=X:fixed,O:fixed moves= 5
 INITIAL
   . | . | .

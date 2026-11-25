@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build and verify both CTL/C+ examples.  No Python, no network, no game data.
 set -u
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$ROOT"
 
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
@@ -18,8 +18,8 @@ cases=2
 
 check_case() {
     name=$1
-    src="examples/ctl_demo/$name.cp"
-    expected="examples/ctl_demo/expected/$name.txt"
+    src="apps/legacy_examples/ctl_demo/$name.cp"
+    expected="apps/legacy_examples/ctl_demo/expected/$name.txt"
     echo "== $name =="
 
     if # CTL is vendored plain C with raw realloc and known UBSan-visible UB in its

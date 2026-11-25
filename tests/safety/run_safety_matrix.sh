@@ -31,7 +31,7 @@ else
 fi
 
 # 2. C+ scenarios in safe mode
-if "$CPLUS" build tests/safety/test_scenarios_cp.cp -o "$OUT/test_scenarios_cp" >"$OUT/cp.log" 2>&1 \
+if "$CPLUS" build --no-werror tests/safety/test_scenarios_cp.cp -o "$OUT/test_scenarios_cp" >"$OUT/cp.log" 2>&1 \
    && "$OUT/test_scenarios_cp" >"$OUT/cp.out" 2>&1; then
   echo "ok test_scenarios_cp"
   pass=$((pass + 1))

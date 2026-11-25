@@ -1,10 +1,10 @@
 #!/bin/sh
-# Aggregate runner for every modern Nuklear/gfx GUI group under examples/modern_gui/.
+# Aggregate runner for every modern Nuklear/gfx GUI group under apps/legacy_examples/modern_gui/.
 #
-#   sh examples/modern_gui/run_all.sh
+#   sh apps/legacy_examples/modern_gui/run_all.sh
 #
 # Discovery: every run.sh at depth 2 (<group>/run.sh) or depth 3
-# (<group>/<subgroup>/run.sh) below examples/modern_gui/ is a runner.  Each is
+# (<group>/<subgroup>/run.sh) below apps/legacy_examples/modern_gui/ is a runner.  Each is
 # invoked from the repository root under `timeout -k 10 300` with a restricted
 # PATH and CPLUS_CLANG pinned to /usr/bin/clang.  Nothing from the caller's
 # PATH leaks into the child (except the directories that actually provide the

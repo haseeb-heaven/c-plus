@@ -1,8 +1,8 @@
 /* calculator.cp -- deterministic integer expression evaluator in C+.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/cli/calculator.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/cli/.run/calculator
+ *   ./build/c+ build apps/legacy_examples/expanded/cli/calculator.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/cli/.run/calculator
  *
  * Usage:
  *   calculator "1+2*3"

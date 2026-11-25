@@ -1,4 +1,4 @@
-# Secure audit-log example (`examples/secure_apps/auditlog/`)
+# Secure audit-log example (`apps/legacy_examples/secure_apps/auditlog/`)
 
 ## Teaching model — NOT a safety proof
 
@@ -33,7 +33,7 @@ The other six refusals are genuine API codes: `EINVAL` (NULL/empty path,
 NULL/empty kind) and `EBADF` (event while the log is closed).
 
 No `git add`, commit, or edit to any file outside
-`examples/secure_apps/auditlog/` was made by this work. Build and run artifacts
+`apps/legacy_examples/secure_apps/auditlog/` was made by this work. Build and run artifacts
 go to a `mktemp -d` directory that `run.sh` removes via an `EXIT` trap.
 
 ## Files
@@ -50,7 +50,7 @@ Mandated form (verified, exits 0):
 
 ```
 /usr/bin/clang -std=c99 -pthread -Ilibc/install-include \
-  examples/secure_apps/auditlog/auditlog.c \
+  apps/legacy_examples/secure_apps/auditlog/auditlog.c \
   build/libc/libcplus_hardened.a -o <bin>
 ```
 
@@ -62,7 +62,7 @@ symbols is `build/libc/violation_log.o` inside `libcplus_hardened.a`.
 ## Exact run command
 
 ```
-sh examples/secure_apps/auditlog/run.sh
+sh apps/legacy_examples/secure_apps/auditlog/run.sh
 ```
 
 `run.sh` creates a fresh temp directory, passes `<tempdir>/audit.log` as argv[1]
@@ -70,7 +70,7 @@ sh examples/secure_apps/auditlog/run.sh
 transcript, then prints the summary. Exit status 0 requires process rc == 0,
 `failed == 0`, `passed == scenarios`, and exactly 7 refusals.
 
-## Exact output of `sh examples/secure_apps/auditlog/run.sh`
+## Exact output of `sh apps/legacy_examples/secure_apps/auditlog/run.sh`
 
 ```
 BUILD ok auditlog

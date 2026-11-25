@@ -1,9 +1,9 @@
 #!/bin/sh
 # Generate the remaining deterministic real-world C+ example programs.
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$ROOT"
-D=examples/real_world
+D=apps/legacy_examples/real_world
 
 # --- playable deterministic game: snake board logic -----------------------
 cat > "$D/snake_game.cp" <<'EOF'

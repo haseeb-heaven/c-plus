@@ -35,13 +35,13 @@ Local audit citations use the path that actually exists on this branch:
 | 5 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/include/msl/saferpointerarray.h` | **404** | Task-suggested. No `include/msl/` directory. |
 | 6 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/include/msepointer.h` | **404** | Task-suggested. Real file is `include/msepointerbasics.h`. |
 | 7 | `https://api.github.com/repos/duneroadrunner/SaferCPlusPlus` | **SUCCESS** | `default_branch: master`, `license: {key: bsl-1.0, spdx_id: BSL-1.0}`, `pushed_at: 2026-10-12`, `updated_at: 2026-11-10`. |
-| 8 | `https://api.github.com/repos/duneroadrunner/SaferCPlusPlus/contents/` | **SUCCESS** | Root has `LICENSE_1_0.txt`, `README.md`, `README2.md`, `examples/`, `include/`, `msetl.vcxproj`. |
+| 8 | `https://api.github.com/repos/duneroadrunner/SaferCPlusPlus/contents/` | **SUCCESS** | Root has `LICENSE_1_0.txt`, `README.md`, `README2.md`, `apps/legacy_examples/`, `include/`, `msetl.vcxproj`. |
 | 9 | `https://api.github.com/repos/duneroadrunner/SaferCPlusPlus/contents/include?ref=master` | **SUCCESS** | 30 flat `include/mse*.h` files; **no `msl/`, no `msepointer.h`, no `secalloc.h`, no `saferpointerarray.h`, no `scope.h`**. Relevant: `msepointerbasics.h` (117,694 B), `msescope.h` (213,715 B), `msenorad.h` (84,092 B), `mseregistered.h` (55,173 B), `mserefcounting.h` (149,204 B), `msemsearray.h` (832,525 B), `msemsevector.h` (465,581 B), `msemstdarray.h`, `msemstdvector.h`, `mseivector.h`, `mseasyncshared.h` (207,440 B), `msescopeatomic.h`, `msestaticimmutable.h`, `mseslta.h`, `mseany.h`, `msethreadlocal.h`, `msesuppresschecks.h`. |
 | 10 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/LICENSE_1_0.txt` | **SUCCESS** | Full BSL-1.0 text quoted in §1. |
 | 11 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/include/msepointerbasics.h` | **SUCCESS** | 2,558 lines; webfetch displayed 1–1088 and saved the full text to a tool-output file; complete file re-read from clone. |
-| 12 | `https://api.github.com/repos/duneroadrunner/SaferCPlusPlus/git/trees/master?recursive=1` | **SUCCESS** | Tree SHA `5edaf67…`; **no `tests/` directory**; test-like sources live under `examples/msetl_example/` (`msetl_example.cpp`, `msetl_example2.cpp`, `msetl_example3.cpp`, `msevector_test.h`, `msetl_example_defs.h`). |
-| 13 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/examples/msetl_example/msetl_example_defs.h` | **SUCCESS** | Compile-time directive documentation; `#define MSE_SELF_TESTS`. |
-| 14 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/examples/msetl_example/msevector_test.h` | **SUCCESS** | 2,325-line upstream unit test; basis for §7. |
+| 12 | `https://api.github.com/repos/duneroadrunner/SaferCPlusPlus/git/trees/master?recursive=1` | **SUCCESS** | Tree SHA `5edaf67…`; **no `tests/` directory**; test-like sources live under `apps/legacy_examples/msetl_example/` (`msetl_example.cpp`, `msetl_example2.cpp`, `msetl_example3.cpp`, `msevector_test.h`, `msetl_example_defs.h`). |
+| 13 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/apps/legacy_examples/msetl_example/msetl_example_defs.h` | **SUCCESS** | Compile-time directive documentation; `#define MSE_SELF_TESTS`. |
+| 14 | `https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/apps/legacy_examples/msetl_example/msevector_test.h` | **SUCCESS** | 2,325-line upstream unit test; basis for §7. |
 | 15 | local `git clone --depth 1` (URL from API `clone_url`) | **SUCCESS** | Used only for line-accurate reading of headers/test files; clone lives outside this repository and no local file other than this report was created. |
 
 All five source URLs suggested by the brief (rows 1–6) are stale: upstream flattened `include/msl/*`
@@ -53,7 +53,7 @@ into `include/mse*.h` and renamed the license. Row 9/12 prove the replacements.
 
 Every inspected upstream header carries this notice **[SRC]** (`msepointerbasics.h:1-3`,
 `msescope.h:1-3`, `msenorad.h:1-3`, `msemsearray.h:1-3`, `msenorad.h:1-3`,
-`examples/msetl_example/msevector_test.h:1-3`):
+`apps/legacy_examples/msetl_example/msevector_test.h:1-3`):
 
 > Copyright (c) 2015 Noah Lopez
 > Use, modification, and distribution is subject to the Boost Software
@@ -285,7 +285,7 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
   defined as `exit(-11)` **[SRC]** (`msepointerbasics.h:113-116`). The sample config documents the
   override explicitly: "[The following will result in program termination instead of exceptions
   being thrown when an invalid memory access is attempted]" **[SRC]**
-  (`examples/msetl_example/msetl_example_defs.h:44-47`).
+  (`apps/legacy_examples/msetl_example/msetl_example_defs.h:44-47`).
 - Thrown types and representative **exact messages seen in source** **[SRC]**:
   - `primitives_null_dereference_error("attempt to dereference null pointer - mse::TNoradPointer")`
     (`msenorad.h:273-278`);
@@ -315,9 +315,9 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
 ## 7. Inspected upstream tests / cases
 
 - The repository has **no `tests/` directory** **[SRC]** (recursive tree, row 12). `MSE_SELF_TESTS`
-  is defined in `examples/msetl_example/msetl_example_defs.h:77` and gates in-header test code in
+  is defined in `apps/legacy_examples/msetl_example/msetl_example_defs.h:77` and gates in-header test code in
   e.g. `mseslta.h:22-24` and `msemstdarray.h:814-881`.
-- **`examples/msetl_example/msevector_test.h` (fetched, row 14)** is the main inspected test
+- **`apps/legacy_examples/msetl_example/msevector_test.h` (fetched, row 14)** is the main inspected test
   source. It defines `class msevector_test` with `run_all()` invoking 40+ methods
   (`msevec_test_1…7`, `capacity`, `at`, `pointer`, `auto_ref`, `iterators`, `ebo`, `bvec1`,
   `msevec_test_m1…m7`, `_i1…i7`, `_s1…s7`, `_ss1…ss7`, `_mt1…mt7`) across `msevector`, `ivector`,

@@ -6,11 +6,11 @@
 # and every hostile case is refused with exit 2 and the expected REFUSE code.
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 cd "$ROOT" || exit 1
 
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-DIR=examples/expanded/games_4
+DIR=apps/legacy_examples/expanded/games_4
 BIN=$DIR/bin
 mkdir -p "$BIN" || exit 1
 

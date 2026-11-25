@@ -3,10 +3,10 @@
 #
 # Builds the existing safety demos with their documented flags (no source
 # edits), runs each resulting binary under /usr/bin/timeout 30, and writes the
-# verbatim stdout+stderr transcripts into examples/screenshots/captures/.
+# verbatim stdout+stderr transcripts into apps/legacy_examples/screenshots/captures/.
 #
-# Strict scope: this script ONLY writes under examples/screenshots/.  Build
-# outputs and logs land in examples/screenshots/captures/tmp/, and TMPDIR is
+# Strict scope: this script ONLY writes under apps/legacy_examples/screenshots/.  Build
+# outputs and logs land in apps/legacy_examples/screenshots/captures/tmp/, and TMPDIR is
 # redirected there too.  No checked-in demo binary, test output, or source
 # file is modified.
 #
@@ -139,11 +139,11 @@ BIN_SYNC="$TMP/sync_demo"
 BIN_DB="$TMP/database_safety_demo"
 BIN_HOSTILE="$TMP/hostile_checked"
 
-CMD_MEMCPY_BUILD="$CPLUS build examples/expanded/safety/memcpy_s_demo.cp --strict --sanitize=none -I. -o \"$BIN_MEMCPY\" -- $SAFECRT $HARDENED"
-CMD_BOUNDS_BUILD="$CPLUS build examples/expanded/safety/bounds_demo.cp --strict --sanitize=none -I. -o \"$BIN_BOUNDS\""
-CMD_LIFETIME_BUILD="$CPLUS build examples/expanded/safety/lifetime_demo.cp --strict --sanitize=none -I. -o \"$BIN_LIFETIME\""
-CMD_SYNC_BUILD="$CC -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -I. -Ilibc/install-include examples/expanded/safety/sync_demo.c $HARDENED -pthread -o \"$BIN_SYNC\""
-CMD_DB_BUILD="$CPLUS build examples/expanded/database/safety_demo.cp --strict --sanitize=none -I. -o \"$BIN_DB\""
+CMD_MEMCPY_BUILD="$CPLUS build apps/legacy_examples/expanded/safety/memcpy_s_demo.cp --strict --sanitize=none -I. -o \"$BIN_MEMCPY\" -- $SAFECRT $HARDENED"
+CMD_BOUNDS_BUILD="$CPLUS build apps/legacy_examples/expanded/safety/bounds_demo.cp --strict --sanitize=none -I. -o \"$BIN_BOUNDS\""
+CMD_LIFETIME_BUILD="$CPLUS build apps/legacy_examples/expanded/safety/lifetime_demo.cp --strict --sanitize=none -I. -o \"$BIN_LIFETIME\""
+CMD_SYNC_BUILD="$CC -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -I. -Ilibc/install-include apps/legacy_examples/expanded/safety/sync_demo.c $HARDENED -pthread -o \"$BIN_SYNC\""
+CMD_DB_BUILD="$CPLUS build apps/legacy_examples/expanded/database/safety_demo.cp --strict --sanitize=none -I. -o \"$BIN_DB\""
 INC="-I. -Istdlib/safe -Ilibc -Ilibc/install-include -Ithird_party/safeclib/include -Ithird_party/intel-safestringlib/include"
 CFLAGS="-O0 -fno-builtin -std=c99 -Wall -Wextra -Wno-format-nonliteral -Wno-fortify-source -Wno-builtin-memcpy-chk-size"
 CMD_HOSTILE_BUILD="$CC $CFLAGS $INC -include stdlib/safe/safe_c.h tests/abi/stdc_safety/hostile.c $SAFECRT $HARDENED -lm -pthread -o \"$BIN_HOSTILE\""
@@ -156,25 +156,25 @@ CMD_DB_RUN="$TIMEOUT 30 $BIN_DB"
 CMD_HOSTILE_RUN="$TIMEOUT 30 $BIN_HOSTILE $TMP/hostile-out"
 
 build_one memcpy_s_demo "$BIN_MEMCPY" \
-    "$CPLUS" build examples/expanded/safety/memcpy_s_demo.cp \
+    "$CPLUS" build apps/legacy_examples/expanded/safety/memcpy_s_demo.cp \
     --strict --sanitize=none -I. -o "$BIN_MEMCPY" \
     -- "$SAFECRT" "$HARDENED"
 
 build_one bounds_demo "$BIN_BOUNDS" \
-    "$CPLUS" build examples/expanded/safety/bounds_demo.cp \
+    "$CPLUS" build apps/legacy_examples/expanded/safety/bounds_demo.cp \
     --strict --sanitize=none -I. -o "$BIN_BOUNDS"
 
 build_one lifetime_demo "$BIN_LIFETIME" \
-    "$CPLUS" build examples/expanded/safety/lifetime_demo.cp \
+    "$CPLUS" build apps/legacy_examples/expanded/safety/lifetime_demo.cp \
     --strict --sanitize=none -I. -o "$BIN_LIFETIME"
 
 build_one sync_demo "$BIN_SYNC" \
     "$CC" -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra \
     -I. -Ilibc/install-include \
-    examples/expanded/safety/sync_demo.c "$HARDENED" -pthread -o "$BIN_SYNC"
+    apps/legacy_examples/expanded/safety/sync_demo.c "$HARDENED" -pthread -o "$BIN_SYNC"
 
 build_one database_safety_demo "$BIN_DB" \
-    "$CPLUS" build examples/expanded/database/safety_demo.cp \
+    "$CPLUS" build apps/legacy_examples/expanded/database/safety_demo.cp \
     --strict --sanitize=none -I. -o "$BIN_DB"
 
 mkdir -p "$TMP/hostile-out"

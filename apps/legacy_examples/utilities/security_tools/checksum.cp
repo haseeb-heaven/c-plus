@@ -5,8 +5,8 @@
  * fixed argv; no files, clock, network or secrets are used.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/utilities/security_tools/checksum.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/security_tools/checksum \
+ *   ./build/c+ build apps/legacy_examples/utilities/security_tools/checksum.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/checksum \
  *     -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
  *
  * Usage:

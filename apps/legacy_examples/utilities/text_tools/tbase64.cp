@@ -1,8 +1,8 @@
 /* tbase64.cp -- bounded, byte-exact base64 encode / decode.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/text_tools/tbase64.cp --strict \
- *     --sanitize=none -I. -o examples/utilities/text_tools/.run/tbase64
+ *   ./build/c+ build apps/legacy_examples/utilities/text_tools/tbase64.cp --strict \
+ *     --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/tbase64
  *
  * Usage:
  *   tbase64 enc <path>     read raw bytes, print the base64 token

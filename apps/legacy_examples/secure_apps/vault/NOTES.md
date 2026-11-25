@@ -1,4 +1,4 @@
-# Secure vault example (`examples/secure_apps/vault/`)
+# Secure vault example (`apps/legacy_examples/secure_apps/vault/`)
 
 ## Explicit scope statement
 
@@ -58,18 +58,18 @@ was refused, **2** for the no-argument usage case.
 ## Exact build command and output (from the repository root)
 
 ```sh
-$ ./build/c+ build examples/secure_apps/vault/vault.cp --strict --sanitize=none -I. -o examples/secure_apps/vault/vault
+$ ./build/c+ build apps/legacy_examples/secure_apps/vault/vault.cp --strict --sanitize=none -I. -o apps/legacy_examples/secure_apps/vault/vault
 $ echo $?
 0
 ```
 
 The command succeeds with **no diagnostics** on stdout or stderr.
-`run.sh` uses the same flags with the output path `examples/secure_apps/vault/.run/vault`.
+`run.sh` uses the same flags with the output path `apps/legacy_examples/secure_apps/vault/.run/vault`.
 
 ## Exact runner command and output
 
 ```sh
-$ examples/secure_apps/vault/run.sh
+$ apps/legacy_examples/secure_apps/vault/run.sh
 BUILD ok vault
 PASS happy
 PASS duplicate
@@ -91,7 +91,7 @@ SECURE_VAULT 12 12 0 15
 12 scenarios, 12 passed, 0 failed, and 15 `VAULT refuse` lines were counted in
 the captured transcripts. The runner was executed twice and produced
 byte-identical output (`cmp -s`); the `happy` transcript was also byte-identical
-across the two runs. `examples/secure_apps/vault/.run/build.log` is 0 bytes.
+across the two runs. `apps/legacy_examples/secure_apps/vault/.run/build.log` is 0 bytes.
 
 ## Exact scenario commands
 

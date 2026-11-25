@@ -13,8 +13,8 @@
  * Steps are bounded (SNAKE_MAX_STEPS / MAX_DIRS), so this never loops on input.
  *
  * Build:
- *   ./build/c+ build examples/expanded/games/snake/snake_cli.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games/snake/.build/snake_cli
+ *   ./build/c+ build apps/legacy_examples/expanded/games/snake/snake_cli.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/snake/.build/snake_cli
  */
 #define SNAKE_CORE_EMBEDDED 1
 #include "cplus/cplus.h"

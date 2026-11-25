@@ -16,8 +16,8 @@ cd "$ROOT" || exit 2
 
 CPLUS=${CPLUS_BIN:-"$ROOT/build/c+"}
 CXX=${CPLUS_CLANG:-clang}
-SRC=examples/modern_gui/settings/settings_panel.cp
-BIN=examples/modern_gui/settings/settings_panel
+SRC=apps/legacy_examples/modern_gui/settings/settings_panel.cp
+BIN=apps/legacy_examples/modern_gui/settings/settings_panel
 EXT="$ROOT/build/ext"
 SCENARIOS="apply text_oversize slider_range null_context null_text invalid_utf8"
 

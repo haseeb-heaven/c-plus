@@ -1,6 +1,6 @@
 # Expanded examples — aggregate results
 
-Recorded from a **real run** of `sh examples/expanded/run_all.sh` from the
+Recorded from a **real run** of `sh apps/legacy_examples/expanded/run_all.sh` from the
 repository root on the toolchain below. This is a snapshot, not a promise: a
 group that had not landed at snapshot time is marked **PENDING** with its exact
 reproduction command. Nothing in this file is fabricated or inferred from a
@@ -19,7 +19,7 @@ build alone.
 | Child PATH | `/usr/bin:/bin:/usr/sbin:/sbin` plus only the directories that actually provide `c+`, `rustc`, `perl`, `awk` |
 | `CPLUS_CLANG` | `/usr/bin/clang` (Homebrew clang deliberately kept off the child PATH) |
 
-Verification performed before the run: `sh -n examples/expanded/run_all.sh`
+Verification performed before the run: `sh -n apps/legacy_examples/expanded/run_all.sh`
 → `sh -n: OK`. The aggregate runner uses no Python and no success-override
 (`|| true`) masking.
 
@@ -89,8 +89,8 @@ Whole campaign (discovers every `<group>/*/run.sh` and `<group>/run.sh`):
 
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
-sh -n examples/expanded/run_all.sh
-sh examples/expanded/run_all.sh
+sh -n apps/legacy_examples/expanded/run_all.sh
+sh apps/legacy_examples/expanded/run_all.sh
 ```
 
 The runner applies this environment to every child automatically; to reproduce
@@ -100,7 +100,7 @@ a single group under the same environment:
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:"$(dirname "$(command -v c+)")" \
 CPLUS_CLANG=/usr/bin/clang LC_ALL=C \
-  timeout 300 sh examples/expanded/cli/run.sh
+  timeout 300 sh apps/legacy_examples/expanded/cli/run.sh
 ```
 
 Replace `cli` with `database`, `engine`, `games/cores` or `games/snake` for the
@@ -117,18 +117,18 @@ is claimed for it. Re-run after it lands:
 ```sh
 cd /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
 
-find examples/expanded/safety -type f | sort
-sh examples/expanded/safety/run.sh
+find apps/legacy_examples/expanded/safety -type f | sort
+sh apps/legacy_examples/expanded/safety/run.sh
 
 # Refresh the whole table (all six tokens then present):
-sh examples/expanded/run_all.sh
+sh apps/legacy_examples/expanded/run_all.sh
 ```
 
 ## Rust comparison mirrors
 
 `benchmarks/example_rust_compare/expanded_cli_games/compare.sh` and
 `benchmarks/example_rust_compare/expanded_db_engine/compare.sh` are sibling-owned
-comparison harnesses and are **not** run by `examples/expanded/run_all.sh`.
+comparison harnesses and are **not** run by `apps/legacy_examples/expanded/run_all.sh`.
 Their own protocol is `EXAMPLE_COMPARE <name> MATCH|DIFFERENT|BLOCKED <reason>`
 and their own evidence lives under `benchmarks/example_rust_compare/`:
 

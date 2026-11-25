@@ -22,11 +22,11 @@
 #   invariant: scenarios = passed + refused + failed
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 cd "$ROOT" || exit 1
 
 CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-DIR=examples/secure_apps/firewall
+DIR=apps/legacy_examples/secure_apps/firewall
 BIN=$DIR/bin
 mkdir -p "$BIN"
 

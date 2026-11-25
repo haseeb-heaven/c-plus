@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deterministic build-and-run harness for the five data/config utilities.
 #
-#   sh examples/utilities/data_tools/run.sh
+#   sh apps/legacy_examples/utilities/data_tools/run.sh
 #
 # Every compiler and program invocation is bounded by `timeout 30`. Fixtures
 # are regenerated here from fixed bytes; no clock, network, interactive prompt

@@ -4,7 +4,7 @@
 #
 # Cross-platform build verification + security edge audit for the modern C+
 # standard libraries (math3d.hp, scene3d.hp, mesh3d.hp, widgets.hp, cli.hp)
-# and their demos (examples/games3d, examples/gui_app, examples/cli_app).
+# and their demos (apps/games3d, apps/gui_app, apps/cli_app).
 #
 #   PART A  macOS: build every .cp test/demo with the project's C+ driver and
 #           run each under a 30 s bound; require an exact expected final line
@@ -65,9 +65,9 @@ src_for()   { case "$1" in
     mesh3d)  echo tests/stdlib/mesh3d/test_mesh3d.cp ;;
     widgets) echo tests/stdlib/widgets/test_widgets.cp ;;
     cli)     echo tests/stdlib/cli/test_cli.cp ;;
-    games3d) echo examples/games3d/scene3d_demo.cp ;;
-    gui_app) echo examples/gui_app/gui_app.cp ;;
-    cli_app) echo examples/cli_app/cli_calc.cp ;;
+    games3d) echo apps/games3d/scene3d_demo.cp ;;
+    gui_app) echo apps/gui_app/gui_app.cp ;;
+    cli_app) echo apps/cli_app/cli_calc.cp ;;
 esac; }
 
 expect_for() { case "$1" in

@@ -14,10 +14,10 @@
  * not merely assumed.  The text transcript mirrors those same fixed lines.
  *
  * Build (from the repository root, after build/ext/libnuklear.a exists):
- *   ./build/c+ build examples/modern_gui/games/invaders_ui/invaders_ui.cp \
+ *   ./build/c+ build apps/legacy_examples/modern_gui/games/invaders_ui/invaders_ui.cp \
  *       $(pkg-config --cflags --libs sdl3) \
  *       -I. -Ithird_party/nuklear -Lbuild/ext -lnuklear \
- *       -o examples/modern_gui/games/invaders_ui/bin/invaders_ui
+ *       -o apps/legacy_examples/modern_gui/games/invaders_ui/bin/invaders_ui
  *
  * Run (headless):
  *   SDL_VIDEODRIVER=dummy bin/invaders_ui L R F S F

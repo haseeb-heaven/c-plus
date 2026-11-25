@@ -10,8 +10,8 @@
  * clock; identical input always yields byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games_4/chesslite.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games_4/bin/chesslite
+ *   ./build/c+ build apps/legacy_examples/expanded/games_4/chesslite.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games_4/bin/chesslite
  *
  * Run (a move is exactly four digits: from-row from-col to-row to-col):
  *   bin/chesslite 0120 6343 1323 6151 0625 6757 2544 6656 1434 4334

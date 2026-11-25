@@ -5,8 +5,8 @@
  * logged.  Input comes only from fixed argv; the password is never echoed.
  *
  * Build (from repo root):
- *   ./build/c+ build examples/utilities/security_tools/pwdcheck.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/security_tools/pwdcheck \
+ *   ./build/c+ build apps/legacy_examples/utilities/security_tools/pwdcheck.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/security_tools/pwdcheck \
  *     -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a
  *
  * Usage:

@@ -13,10 +13,10 @@
 # Exit status is 0 only when the process exited 0 and every expectation held.
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." && pwd)
 cd "$ROOT" || exit 1
 
-DIR=examples/secure_apps/auditlog
+DIR=apps/legacy_examples/secure_apps/auditlog
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/secure_audit.XXXXXX") || exit 1
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 BIN=$WORK/auditlog

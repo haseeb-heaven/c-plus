@@ -1,8 +1,8 @@
 /* twc.cp -- bounded, deterministic wc-like word/line/byte counter.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/text_tools/twc.cp --strict \
- *     --sanitize=none -I. -o examples/utilities/text_tools/.run/twc
+ *   ./build/c+ build apps/legacy_examples/utilities/text_tools/twc.cp --strict \
+ *     --sanitize=none -I. -o apps/legacy_examples/utilities/text_tools/.run/twc
  *
  * Usage:
  *   twc <path>

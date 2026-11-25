@@ -1,6 +1,6 @@
 # Secure apps — aggregate results
 
-Recorded from a **real run** of `sh examples/secure_apps/run_all.sh` from the
+Recorded from a **real run** of `sh apps/legacy_examples/secure_apps/run_all.sh` from the
 repository root on the toolchain below. This is a snapshot, not a promise: any
 group that had not landed at snapshot time would be marked **PENDING** with its
 exact reproduction command. Nothing in this file is fabricated or inferred from
@@ -20,7 +20,7 @@ a build alone.
 | `CPLUS_CLANG` | `/usr/bin/clang` (Homebrew clang deliberately kept off the child PATH) |
 | Hardened libc archive | `build/libc/libcplus_hardened.a` (used by `auditlog`) |
 
-Verification performed before the run: `sh -n examples/secure_apps/run_all.sh`
+Verification performed before the run: `sh -n apps/legacy_examples/secure_apps/run_all.sh`
 → `sh -n: OK`. The aggregate runner uses no Python and no success-override
 (`|| true`) masking, and continues after failures.
 
@@ -86,16 +86,16 @@ From the repository root:
 
 ```sh
 # Syntax check first
-sh -n examples/secure_apps/run_all.sh
+sh -n apps/legacy_examples/secure_apps/run_all.sh
 
 # Full aggregate run (the exact command recorded above)
-sh examples/secure_apps/run_all.sh
+sh apps/legacy_examples/secure_apps/run_all.sh
 
 # Individual groups, if a single row needs re-checking
-sh examples/secure_apps/vault/run.sh
-sh examples/secure_apps/firewall/run.sh
-sh examples/secure_apps/ratelimit/run.sh
-sh examples/secure_apps/auditlog/run.sh
+sh apps/legacy_examples/secure_apps/vault/run.sh
+sh apps/legacy_examples/secure_apps/firewall/run.sh
+sh apps/legacy_examples/secure_apps/ratelimit/run.sh
+sh apps/legacy_examples/secure_apps/auditlog/run.sh
 
 # Raw per-runner logs and captured final lines
 cat build/secure_apps/final_lines.txt
@@ -104,7 +104,7 @@ cat build/secure_apps/final_lines.txt
 No group was PENDING at snapshot time, so there are no deferred exact commands.
 If a group is later removed or its `run.sh` stops landing, the aggregate will
 print a `PENDING` row with `PENDING - no runner reported <TOKEN>` and exit 1;
-re-run the corresponding `sh examples/secure_apps/<group>/run.sh` after it
+re-run the corresponding `sh apps/legacy_examples/secure_apps/<group>/run.sh` after it
 lands.
 
 ## Non-claims
@@ -117,7 +117,7 @@ lands.
   are synthetic and all workloads are bounded by compile-time constants.
 - Results apply to **macOS arm64 / Apple clang 16.0.0 (`/usr/bin/clang`) only**.
   SDL3 3.4.18 is the version on this verification host and is referenced by
-  the companion `examples/modern_gui` tree; none of these four secure apps uses
+  the companion `apps/legacy_examples/modern_gui` tree; none of these four secure apps uses
   SDL3. No other platform, toolchain or SDL3 version is claimed to behave
   identically.
 - A clean build or local run is not live-deployment success and does not

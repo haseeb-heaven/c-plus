@@ -8,7 +8,7 @@
  * always yields byte-identical stdout.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/games/cores/tictactoe.cp \
+ *   ./build/c+ build apps/legacy_examples/expanded/games/cores/tictactoe.cp \
  *       --strict --sanitize=none -I. -o build/tictactoe_core
  *
  * Run:

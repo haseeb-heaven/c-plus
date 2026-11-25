@@ -32,7 +32,7 @@ changes `compiler/Analysis`, `compiler/Sema`, `compiler/Driver`,
 `tests/compiler`, `tests/safety`, `tests/core`, `tests/compile_fail`,
 `tests/runtime_fail`; `agent/modern-stdlib` (PR AGENT 2) changes
 `libc/src/`, `libc/install-include/`, `stdlib/safe/`, `third_party/safeclib`,
-plus `tests/libc`, `tests/crt`, `tests/abi`, `examples/` and `benchmarks/`.
+plus `tests/libc`, `tests/crt`, `tests/abi`, `apps/legacy_examples/` and `benchmarks/`.
 
 | Area | Owned paths | Primary branch / agent | Required evidence |
 | --- | --- | --- | --- |
@@ -147,7 +147,7 @@ review and not a release verdict**): an end-to-end invocation with
 `PR33_GATE_TIMEOUT=30` failed at the merge step for the two default branches.
 The conflict set in `PR33_GATE_OUT/merge.log` was concentrated in the shared
 hot spots identified in section 1 — `.gitignore`, `compiler/Driver/Driver.cpp`,
-`demos/run_demos.sh`, `docs/STATUS.md`, `sonar-project.properties`,
+`apps/legacy_demos/run_demos.sh`, `docs/STATUS.md`, `sonar-project.properties`,
 `tests/compile_fail/*.err` and `tests/runtime_fail/bounds.stderr`. The temporary
 worktree and throwaway branch were removed by the trap. The verifier must
 resolve these shared-file conflicts, then re-run the gate and link the new log

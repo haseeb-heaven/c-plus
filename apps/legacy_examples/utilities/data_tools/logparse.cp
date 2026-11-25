@@ -1,9 +1,9 @@
 /* logparse.cp -- bounded log parser with level filtering and refusals.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/data_tools/logparse.cp \
+ *   ./build/c+ build apps/legacy_examples/utilities/data_tools/logparse.cp \
  *     --strict --sanitize=none -I. \
- *     -o examples/utilities/data_tools/.run/logparse
+ *     -o apps/legacy_examples/utilities/data_tools/.run/logparse
  *
  * Usage:
  *   logparse <log-path> TRACE|DEBUG|INFO|WARN|ERROR|FATAL|all

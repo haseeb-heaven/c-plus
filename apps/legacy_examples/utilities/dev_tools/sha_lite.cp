@@ -1,8 +1,8 @@
 /* sha_lite.cp -- deterministic 32-bit FNV-1a hash of a bounded argv string.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/dev_tools/sha_lite.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/dev_tools/sha_lite
+ *   ./build/c+ build apps/legacy_examples/utilities/dev_tools/sha_lite.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/sha_lite
  *
  * Usage:
  *   sha_lite <input-string>

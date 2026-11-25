@@ -1,8 +1,8 @@
 /* base64.cp -- RFC 4648 base64 with bounded input and byte-exact roundtrip.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/math_2/base64.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/math_2/.run/base64
+ *   ./build/c+ build apps/legacy_examples/expanded/math_2/base64.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/math_2/.run/base64
  *
  * Usage:
  *   base64                    built-in RFC vectors + decode/roundtrip

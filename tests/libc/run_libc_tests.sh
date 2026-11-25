@@ -41,14 +41,26 @@ for t in tests/libc/test_*.c; do
     fi
   fi
   # safecrt archive before libc+ so undefined refs resolve in one pass on GNU ld.
-  "$CC" -O2 -Wall -Wextra -pedantic -std=c99 $PLATFORM_CFLAGS \
+  # NOTE: `set -e` is active.  A failing command in the *body* of an if (not its
+  # condition) aborts the whole runner before `brc=$?` / the FAIL block, so the
+  # child's exit code leaks out as the runner's exit code and its diagnostics are
+  # never printed.  That is why a Linux corpus_uninit watchdog exit 70 ended the
+  # CI step with rc=70 and no case name.  Always capture status inside an if
+  # condition, where errexit does not apply.
+  if "$CC" -O2 -Wall -Wextra -pedantic -std=c99 $PLATFORM_CFLAGS \
         -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC "$t" \
         $EXTRA_LIB "$LIB" -lm -pthread $PLATFORM_LIBS -o "$b" \
-        >/tmp/libc_build.out 2>&1
-  brc=$?
+        >/tmp/libc_build.out 2>&1; then
+    brc=0
+  else
+    brc=$?
+  fi
   if [ "$brc" -eq 0 ]; then
-    $RUN_CMD >/tmp/libc_test.out 2>&1
-    rc=$?
+    if $RUN_CMD >/tmp/libc_test.out 2>&1; then
+      rc=0
+    else
+      rc=$?
+    fi
   else
     rc=99
   fi
@@ -57,8 +69,12 @@ for t in tests/libc/test_*.c; do
   else
     echo "FAIL $(basename "$t") (build=$brc run=$rc limit=${LIMIT:-n/a})"
     if [ "$t" = "tests/libc/test_corpus_uninit.c" ]; then
-        # Full traced output: the last "corpus_uninit case N" line pins the
-        # case that hangs on CI hosts.
+        # The test's signal handlers write the exact active case to stderr with
+        # write(2) (immediate flush).  Echo those lines right after FAIL so a
+        # CI log names the case even if the full trace is truncated, then show
+        # the full trace: its last "corpus_uninit case N" line is the fallback
+        # pin for a host that dies without running a handler.
+        grep -E 'FINDING:|corpus_uninit case ' /tmp/libc_test.out 2>/dev/null | tail -4 || true
         cat /tmp/libc_test.out 2>/dev/null || true
     else
         tail -20 /tmp/libc_test.out 2>/dev/null || true

@@ -25,9 +25,9 @@ count, so output is a deterministic transcript that can be diffed.
 Build each program:
 
 ```sh
-./build/c+ build examples/expanded/engine/ecs.cp --strict --sanitize=none -I. -o examples/expanded/engine/.build/ecs
-./build/c+ build examples/expanded/engine/engine_loop.cp --strict --sanitize=none -I. -o examples/expanded/engine/.build/engine_loop
-./build/c+ build examples/expanded/engine/resource_cache.cp --strict --sanitize=none -I. -o examples/expanded/engine/.build/resource_cache
+./build/c+ build apps/legacy_examples/expanded/engine/ecs.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/engine/.build/ecs
+./build/c+ build apps/legacy_examples/expanded/engine/engine_loop.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/engine/.build/engine_loop
+./build/c+ build apps/legacy_examples/expanded/engine/resource_cache.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/engine/.build/resource_cache
 ```
 
 All three builds exit **0** with empty stdout/stderr.
@@ -36,9 +36,9 @@ Run each program under a 30 s timeout (engine_loop uses the fixed 12-token
 input queue `N N N N N N F F F F N N`):
 
 ```sh
-timeout 30 ./examples/expanded/engine/.build/ecs
-timeout 30 ./examples/expanded/engine/.build/engine_loop N N N N N N F F F F N N
-timeout 30 ./examples/expanded/engine/.build/resource_cache
+timeout 30 ./apps/legacy_examples/expanded/engine/.build/ecs
+timeout 30 ./apps/legacy_examples/expanded/engine/.build/engine_loop N N N N N N F F F F N N
+timeout 30 ./apps/legacy_examples/expanded/engine/.build/resource_cache
 ```
 
 All three runs exit **0**. The full byte-exact transcripts are in
@@ -70,7 +70,7 @@ SUMMARY used= 4 index= 2
 Aggregate runner (builds from scratch, runs, byte-compares):
 
 ```sh
-sh examples/expanded/engine/run.sh
+sh apps/legacy_examples/expanded/engine/run.sh
 ```
 
 Exact output:

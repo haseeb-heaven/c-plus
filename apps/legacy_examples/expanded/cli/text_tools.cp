@@ -1,8 +1,8 @@
 /* text_tools.cp -- deterministic text utilities built on the C+ stdlib.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/cli/text_tools.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/cli/.run/text_tools
+ *   ./build/c+ build apps/legacy_examples/expanded/cli/text_tools.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/cli/.run/text_tools
  *
  * Usage:
  *   text_tools <path> words

@@ -5,8 +5,8 @@
  * recoverable errors are reported when a lookup cannot be satisfied.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/engine/ecs.cp --strict --sanitize=none \
- *       -I. -o examples/expanded/engine/.build/ecs
+ *   ./build/c+ build apps/legacy_examples/expanded/engine/ecs.cp --strict --sanitize=none \
+ *       -I. -o apps/legacy_examples/expanded/engine/.build/ecs
  */
 #include <stdio.h>
 #include <string.h>

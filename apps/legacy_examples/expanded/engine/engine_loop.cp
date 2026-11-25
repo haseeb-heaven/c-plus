@@ -9,8 +9,8 @@
  *   tokens: N = no input, L = move left, R = move right, F = fire
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/engine/engine_loop.cp --strict \
- *       --sanitize=none -I. -o examples/expanded/engine/.build/engine_loop
+ *   ./build/c+ build apps/legacy_examples/expanded/engine/engine_loop.cp --strict \
+ *       --sanitize=none -I. -o apps/legacy_examples/expanded/engine/.build/engine_loop
  */
 #include <stdio.h>
 #include <string.h>

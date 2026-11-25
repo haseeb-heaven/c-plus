@@ -1,8 +1,8 @@
 /* envfilter.cp -- filter KEY=VALUE style lines by a key prefix.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/utilities/dev_tools/envfilter.cp \
- *     --strict --sanitize=none -I. -o examples/utilities/dev_tools/envfilter
+ *   ./build/c+ build apps/legacy_examples/utilities/dev_tools/envfilter.cp \
+ *     --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/envfilter
  *
  * Usage:
  *   envfilter <prefix> <KEY=VALUE> [KEY=VALUE ...]

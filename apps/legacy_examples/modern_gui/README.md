@@ -19,7 +19,7 @@ with the supported `./build/c+` driver and the vendored
 ## Run all groups
 
 ```sh
-sh examples/modern_gui/run_all.sh
+sh apps/legacy_examples/modern_gui/run_all.sh
 ```
 
 The aggregate runner discovers `<group>/run.sh` at depth 2 and
@@ -75,41 +75,41 @@ individual build commands may obtain SDL3 flags from `pkg-config sdl3`.
 
 | | |
 | --- | --- |
-| Source | `examples/modern_gui/dashboard/dashboard.cp` |
+| Source | `apps/legacy_examples/modern_gui/dashboard/dashboard.cp` |
 | One-line purpose | Render a fixed three-label / three-button overview, operations or diagnostics panel through a real Nuklear context and emit one headless SDL3 frame. |
 | APIs | `stdlib/window.hp` (`sdl`/`window`/`renderer` ctor, `*_native`, `*_drop`); `stdlib/graphics.hp`; `stdlib/gui.hp` (`gui_ctor`, `gui_label`, `window_begin`/`window_end`, `gui_render`); `stdlib/error.hp` (`error_fail_cat`, `error_reset`, `stdlib_set_error_callback`); `NK_EDIT`/Nuklear labels and buttons via `gui::native()`. |
 | Safety refusals | Zero or negative window dimensions, dimensions above `DASH_MAX_DIM` (4096), out-of-range scenario id, null GUI context, unknown `refuse` case, unknown command. Each prints a stable `DASH_REFUSED ... category <n> code <n> message ...` line. |
-| Build | `./build/c+ build examples/modern_gui/dashboard/dashboard.cp --strict --sanitize=none -I. $(pkg-config --cflags --libs sdl3) -Ithird_party/nuklear -Lbuild/ext -lnuklear -o examples/modern_gui/dashboard/results/dashboard` |
+| Build | `./build/c+ build apps/legacy_examples/modern_gui/dashboard/dashboard.cp --strict --sanitize=none -I. $(pkg-config --cflags --libs sdl3) -Ithird_party/nuklear -Lbuild/ext -lnuklear -o apps/legacy_examples/modern_gui/dashboard/results/dashboard` |
 
 ### Settings panel — `GUI_SETTINGS` (`settings/run.sh`)
 
 | | |
 | --- | --- |
-| Source | `examples/modern_gui/settings/settings_panel.cp` |
+| Source | `apps/legacy_examples/modern_gui/settings/settings_panel.cp` |
 | One-line purpose | Drive a real Nuklear settings panel (text field, check boxes, slider) headlessly; validate every input before any state is written. |
 | APIs | `stdlib/window.hp`, `stdlib/graphics.hp`, `stdlib/gui.hp` (`gui::slider`, borrowed Nuklear context from `gui::native()`, `nk_edit_string_zero_terminated`); `stdlib/string.hp` (`string_view`, checked length/copy); `stdlib/error.hp` (`error_fail_cat` with `STDLIB_CATEGORY_BOUNDS/IO/MEMORY/UTF8/INVALID/RANGE`, `error_reset`). |
 | Safety refusals | Oversized/unterminated text, out-of-range slider value, invalid flags bitmask, bad UTF-8, null window or renderer context — each leaves state at its sentinel and returns a typed `error *` with a stable category and `cplus_exit_code`. |
-| Build | `./build/c+ build examples/modern_gui/settings/settings_panel.cp --strict --sanitize=none -I. $(pkg-config --cflags sdl3) -Ithird_party/nuklear -Lbuild/ext -lnuklear $(pkg-config --libs sdl3) -o examples/modern_gui/settings/settings_panel` |
+| Build | `./build/c+ build apps/legacy_examples/modern_gui/settings/settings_panel.cp --strict --sanitize=none -I. $(pkg-config --cflags sdl3) -Ithird_party/nuklear -Lbuild/ext -lnuklear $(pkg-config --libs sdl3) -o apps/legacy_examples/modern_gui/settings/settings_panel` |
 
 ### Breakout HUD — `GFX_BREAKOUT` (`games/breakout_ui/run.sh`)
 
 | | |
 | --- | --- |
-| Source | `examples/modern_gui/games/breakout_ui/breakout_ui.cp` |
+| Source | `apps/legacy_examples/modern_gui/games/breakout_ui/breakout_ui.cp` |
 | One-line purpose | Step a fixed-seed Breakout model with a bounded brick pool, render a real SDL3 playfield plus a Nuklear HUD, and echo the same score/bricks/paddle transcript. |
 | APIs | `stdlib/window.hp`, `stdlib/graphics.hp` (`renderer_set_color`, `renderer_clear`, `renderer_present`, `renderer_read` pixel probe), `stdlib/gui.hp` (`gui_label`, `window_begin`/`window_end`), `stdlib/vector.hp` (bounded bricks), `stdlib/string.hp` (checked token parsing), `stdlib/error.hp`. |
 | Safety refusals | `--probe-null` guards a null surface and null Nuklear context; bad grid dimensions (`4<=W<=32`, `1<=H<=8`, `W*H<=256`), oversized command token (>64 chars), too many ticks (>128), unknown command. Each is a clean exit 2 with a `REFUSED ... code ... category ...` line. |
-| Build | The group `run.sh` first builds the backend locally when absent: `/usr/bin/clang -c third_party/nuklear/nuklear_impl.c -o examples/modern_gui/games/breakout_ui/bin/nuklear.o -O2 -Ithird_party/nuklear $(pkg-config --cflags sdl3)` then `ar rcs examples/modern_gui/games/breakout_ui/bin/libnuklear.a examples/modern_gui/games/breakout_ui/bin/nuklear.o`; then `./build/c+ build examples/modern_gui/games/breakout_ui/breakout_ui.cp --strict --sanitize=none -I. $(pkg-config --cflags sdl3) $(pkg-config --libs sdl3) -Ithird_party/nuklear -Lexamples/modern_gui/games/breakout_ui/bin -lnuklear -o examples/modern_gui/games/breakout_ui/bin/breakout_ui` |
+| Build | The group `run.sh` first builds the backend locally when absent: `/usr/bin/clang -c third_party/nuklear/nuklear_impl.c -o apps/legacy_examples/modern_gui/games/breakout_ui/bin/nuklear.o -O2 -Ithird_party/nuklear $(pkg-config --cflags sdl3)` then `ar rcs apps/legacy_examples/modern_gui/games/breakout_ui/bin/libnuklear.a apps/legacy_examples/modern_gui/games/breakout_ui/bin/nuklear.o`; then `./build/c+ build apps/legacy_examples/modern_gui/games/breakout_ui/breakout_ui.cp --strict --sanitize=none -I. $(pkg-config --cflags sdl3) $(pkg-config --libs sdl3) -Ithird_party/nuklear -Lapps/legacy_examples/modern_gui/games/breakout_ui/bin -lnuklear -o apps/legacy_examples/modern_gui/games/breakout_ui/bin/breakout_ui` |
 
 ### Invaders HUD — `GFX_INVADERS` (`games/invaders_ui/run.sh`)
 
 | | |
 | --- | --- |
-| Source | `examples/modern_gui/games/invaders_ui/invaders_ui.cp` |
+| Source | `apps/legacy_examples/modern_gui/games/invaders_ui/invaders_ui.cp` |
 | One-line purpose | Step a fixed-seed space-invaders model with a bounded bullet pool, sample two real SDL3 surface pixels, and reproduce the same fixed HUD lines in the transcript. |
 | APIs | `stdlib/window.hp` (`sdl_ctor`, `window_ctor`, `renderer_ctor`, `window_native`, `renderer_native`, `*_drop`), `stdlib/graphics.hp` (`renderer_set_color`, `renderer_clear`, `renderer_read`, `renderer_present`), `stdlib/gui.hp` (`gui_ctor`, `gui_label`, `gui_input_begin`/`gui_input_end`, `gui_render`, `gui_drop`), `stdlib/error.hp` (`error_ctor`, `error_fail`, `error_code`/`error_category`/`error_what`). |
 | Safety refusals | `--null-surface` and `--null-context` fault injection, oversized token, unknown command, invalid `--bullets` capacity (1..16); each is a clean exit 2 with a `REFUSED ... code ... category ...` line. |
-| Build | `./build/c+ build examples/modern_gui/games/invaders_ui/invaders_ui.cp --sanitize=none $(pkg-config --cflags --libs sdl3) -I. -Ithird_party/nuklear -Lbuild/ext -lnuklear -o examples/modern_gui/games/invaders_ui/bin/invaders_ui` (the group builds a local `bin/libnuklear_local.a` and uses that `-L` path instead only if `build/ext/libnuklear.a` is absent) |
+| Build | `./build/c+ build apps/legacy_examples/modern_gui/games/invaders_ui/invaders_ui.cp --sanitize=none $(pkg-config --cflags --libs sdl3) -I. -Ithird_party/nuklear -Lbuild/ext -lnuklear -o apps/legacy_examples/modern_gui/games/invaders_ui/bin/invaders_ui` (the group builds a local `bin/libnuklear_local.a` and uses that `-L` path instead only if `build/ext/libnuklear.a` is absent) |
 
 ## Non-claims
 

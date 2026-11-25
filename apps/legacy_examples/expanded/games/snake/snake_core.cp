@@ -15,10 +15,10 @@
  * by snake_cli.cp, and valid C+ when it is built on its own.
  *
  * Build standalone (self-test):
- *   ./build/c+ build examples/expanded/games/snake/snake_core.cp \
- *       --strict --sanitize=none -I. -o examples/expanded/games/snake/.build/snake_core
+ *   ./build/c+ build apps/legacy_examples/expanded/games/snake/snake_core.cp \
+ *       --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/snake/.build/snake_core
  *
- * The interactive game this models lives at examples/games/snake.c.
+ * The interactive game this models lives at apps/legacy_examples/games/snake.c.
  */
 #ifndef SNAKE_CORE_EMBEDDED
 #include "cplus/cplus.h"

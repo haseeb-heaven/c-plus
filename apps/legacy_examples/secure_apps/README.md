@@ -18,7 +18,7 @@ against `build/libc/libcplus_hardened.a`).
 ## Run all groups
 
 ```sh
-sh examples/secure_apps/run_all.sh
+sh apps/legacy_examples/secure_apps/run_all.sh
 ```
 
 The aggregate runner discovers `<group>/run.sh` at depth 2 below this
@@ -67,41 +67,41 @@ mode, except `auditlog` which is a C99 translation unit compiled directly with
 
 | | |
 | --- | --- |
-| Source | `examples/secure_apps/vault/vault.cp` |
+| Source | `apps/legacy_examples/secure_apps/vault/vault.cp` |
 | One-line purpose | In-memory credential vault whose safety comes from typed refusals: store/get/list/peek/delete over fixed-capacity tables with a bounded audit buffer and a 64-byte canary. |
 | APIs | `stdlib/string.hp` (`string::len`, `string::substr` into fixed-size storage, measured lengths); `stdlib/error.hp` (`error *`, `error_fail_cat`, `error_reset`, `stdlib_set_error_callback(NULL)` so no secret-bearing callback exists); `__builtin_memcpy` for `argv` slots under `--strict`. |
 | Safety refusals | `duplicate-service`, `empty-name`, `empty-secret`, `oversized-name`, `oversized-secret`, `missing-service`, `index-out-of-range`, `vault-full`, `secret-logging-forbidden` (`debug` command), `audit-overflow` (17th append refused, buffer unchanged), `bad-args`, `unknown-command`, `usage` — each prints `VAULT refuse <reason> code <n> cat <name>`. Secrets are emitted only by `get`; the canary is checked on every exit. |
-| Build | `./build/c+ build examples/secure_apps/vault/vault.cp --strict --sanitize=none -I. -o examples/secure_apps/vault/vault` |
+| Build | `./build/c+ build apps/legacy_examples/secure_apps/vault/vault.cp --strict --sanitize=none -I. -o apps/legacy_examples/secure_apps/vault/vault` |
 
 ### Input-validation firewall — `SECURE_FIREWALL` (`firewall/run.sh`)
 
 | | |
 | --- | --- |
-| Source | `examples/secure_apps/firewall/firewall.cp` |
+| Source | `apps/legacy_examples/secure_apps/firewall/firewall.cp` |
 | One-line purpose | Deterministic allow-list model that contrasts what an unchecked `strcpy` would do with what the checked stdlib layer does for four token policies (`token`, `pathseg`, `sqlsafe`, `text`). |
 | APIs | `stdlib/string.hp` (checked length/copy, bounded scans); `stdlib/error.hp` (typed `error *` refusals with stable code/category); fixed compile-time capacities (`FW_SCAN_CAP` 512, `FW_MAX_LEN` 256, `FW_NAIVE_BUF` 32). |
 | Safety refusals | Overlong tokens, path-traversal segments, SQL-injection-shaped tokens, embedded/encoded NUL markers (`%00`, `\0`, `\x00`) and control-byte input. Each prints a `FIREWALL verdict=... rule=... code=... errcode=...` line; a `CONTRAST ...` line shows the real consequence on the unchecked path. |
-| Build | `./build/c+ build examples/secure_apps/firewall/firewall.cp --strict --sanitize=none -I. -o examples/secure_apps/firewall/firewall` |
+| Build | `./build/c+ build apps/legacy_examples/secure_apps/firewall/firewall.cp --strict --sanitize=none -I. -o apps/legacy_examples/secure_apps/firewall/firewall` |
 
 ### Token-bucket rate limiter — `SECURE_RATELIMIT` (`ratelimit/run.sh`)
 
 | | |
 | --- | --- |
-| Source | `examples/secure_apps/ratelimit/ratelimit.cp` |
+| Source | `apps/legacy_examples/secure_apps/ratelimit/ratelimit.cp` |
 | One-line purpose | Deterministic bounded token bucket: supply capacity, refill and a fixed list of tick/cost pairs; every request is ALLOW/DENY plus a first-class refusal event. |
 | APIs | C+ checked scalar parsing helpers over `cplus/cplus.h` (no wall clock — ticks are argv integers); bounded arrays and bounded loops (`RL_MAX_REQUESTS` 64, capacity/refill <= 1,000,000); explicit refusal codes returned as the process exit status. |
 | Safety refusals | `RL_ERR_ARGS` (wrong arity), `RL_ERR_PARSE`, `RL_ERR_CAPACITY`, `RL_ERR_REFILL`, `RL_ERR_COUNT`, `RL_ERR_TICK` (negative or decreasing), `RL_ERR_COST`, `RL_ERR_OVERFLOW`. Each prints `REFUSED <code> <NAME> <detail>` and exits with that code. |
-| Build | `./build/c+ build examples/secure_apps/ratelimit/ratelimit.cp --strict --sanitize=none -I. -o examples/secure_apps/ratelimit/ratelimit` |
+| Build | `./build/c+ build apps/legacy_examples/secure_apps/ratelimit/ratelimit.cp --strict --sanitize=none -I. -o apps/legacy_examples/secure_apps/ratelimit/ratelimit` |
 
 ### Audit log — `SECURE_AUDIT` (`auditlog/run.sh`)
 
 | | |
 | --- | --- |
-| Source | `examples/secure_apps/auditlog/auditlog.c` |
+| Source | `apps/legacy_examples/secure_apps/auditlog/auditlog.c` |
 | One-line purpose | Exercise the additive `cplus_violation_log_*` API with synthetic events (code/kind/pointer/size): open, append, re-open, read back, and refuse hostile inputs. |
 | APIs | `cplus_violation_log.h` / `libc/src/runtime/violation_log.c`: `cplus_violation_log_open`, `_event`, `_count`, `_close` (safe no-op when already closed); linked with `build/libc/libcplus_hardened.a`; compiled with `-std=c99 -Wall -Wextra -pedantic -pthread -Ilibc/install-include`. |
 | Safety refusals | `event_before_open`, `event_after_close` (real `EINVAL`/`EBADF` from the API), `open_null_path`, `open_empty_path` (real `EINVAL`), `event_null_kind`, `event_empty_kind` (real `EINVAL`), and `event_oversized_kind` — an **application-policy** refusal because the backend silently truncates `kind` at 96 bytes (`VIO_KIND_CAP`), which would corrupt an audit record. Seven refusals total. |
-| Build | `/usr/bin/clang -std=c99 -Wall -Wextra -pedantic -pthread -Ilibc/install-include examples/secure_apps/auditlog/auditlog.c build/libc/libcplus_hardened.a -o <bin>` |
+| Build | `/usr/bin/clang -std=c99 -Wall -Wextra -pedantic -pthread -Ilibc/install-include apps/legacy_examples/secure_apps/auditlog/auditlog.c build/libc/libcplus_hardened.a -o <bin>` |
 
 ## Non-claims
 

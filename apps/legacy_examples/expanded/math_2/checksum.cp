@@ -1,8 +1,8 @@
 /* checksum.cp -- CRC32 + Adler32 over bounded, fixed byte strings.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/expanded/math_2/checksum.cp --strict --sanitize=none -I. \
- *       -o examples/expanded/math_2/.run/checksum
+ *   ./build/c+ build apps/legacy_examples/expanded/math_2/checksum.cp --strict --sanitize=none -I. \
+ *       -o apps/legacy_examples/expanded/math_2/.run/checksum
  *
  * Usage:
  *   checksum                 built-in deterministic vectors

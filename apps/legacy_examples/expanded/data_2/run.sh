@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deterministic build-and-run harness for the four data_2 apps.
 #
-#   sh examples/expanded/data_2/run.sh
+#   sh apps/legacy_examples/expanded/data_2/run.sh
 #
 # Every compiler and program invocation is bounded by `timeout 30`. All input
 # is fixed argv, generated here from fixed bytes. No clock, network, interactive

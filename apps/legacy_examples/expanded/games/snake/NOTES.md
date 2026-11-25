@@ -9,8 +9,8 @@ randomness anywhere in this directory. Given the same seed and the same
 direction sequence, every run produces byte-for-byte identical output.
 
 The interactive terminal game this models is
-[`examples/games/snake.c`](../../../games/snake.c) (repo path:
-`examples/games/snake.c`). That file is an interactive ncurses-free C program
+[`apps/legacy_examples/games/snake.c`](../../../games/snake.c) (repo path:
+`apps/legacy_examples/games/snake.c`). That file is an interactive ncurses-free C program
 with raw terminal input; do not confuse it with the deterministic core here.
 
 ## Files
@@ -33,25 +33,25 @@ Board glyphs: `.` empty, `O` head, `o` body, `F` food.
 These are the commands `run.sh` issues:
 
 ```sh
-./build/c+ build examples/expanded/games/snake/snake_core.cp --strict --sanitize=none -I. -o examples/expanded/games/snake/.build/snake_core
-./build/c+ build examples/expanded/games/snake/snake_cli.cp --strict --sanitize=none -I. -o examples/expanded/games/snake/.build/snake_cli
-timeout 30 examples/expanded/games/snake/.build/snake_core
-timeout 30 examples/expanded/games/snake/.build/snake_cli growth R
-timeout 30 examples/expanded/games/snake/.build/snake_cli wall RRRRRRRRRR
-timeout 30 examples/expanded/games/snake/.build/snake_cli self RULD
+./build/c+ build apps/legacy_examples/expanded/games/snake/snake_core.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/snake/.build/snake_core
+./build/c+ build apps/legacy_examples/expanded/games/snake/snake_cli.cp --strict --sanitize=none -I. -o apps/legacy_examples/expanded/games/snake/.build/snake_cli
+timeout 30 apps/legacy_examples/expanded/games/snake/.build/snake_core
+timeout 30 apps/legacy_examples/expanded/games/snake/.build/snake_cli growth R
+timeout 30 apps/legacy_examples/expanded/games/snake/.build/snake_cli wall RRRRRRRRRR
+timeout 30 apps/legacy_examples/expanded/games/snake/.build/snake_cli self RULD
 ```
 
 One-shot verification:
 
 ```sh
-examples/expanded/games/snake/run.sh
+apps/legacy_examples/expanded/games/snake/run.sh
 ```
 
 Both builds are clean under `--strict --sanitize=none` (no warnings, no errors).
 `argv` is read through a `__builtin_memcpy` slot accessor because the strict
 checker cannot prove the extent of a direct `argv[i]` subscript.
 
-## Exact output: `examples/expanded/games/snake/run.sh`
+## Exact output: `apps/legacy_examples/expanded/games/snake/run.sh`
 
 ```
 == build ==
@@ -70,7 +70,7 @@ Exit code: `0`. The self-test binary prints `SNAKE_CORE_SELFTEST 6 0` and exits 
 
 ## Exact output: one full deterministic transcript (growth)
 
-`timeout 30 examples/expanded/games/snake/.build/snake_cli growth R`
+`timeout 30 apps/legacy_examples/expanded/games/snake/.build/snake_cli growth R`
 (44 lines, 988 bytes; a second identical invocation produced a byte-identical
 file, verified with `cmp`):
 
@@ -156,7 +156,7 @@ SCENARIO self score 0 over 1 reason self ok 1
 With no direction arguments, directions are read from stdin (bounded to 256):
 
 ```sh
-printf 'R' | timeout 30 examples/expanded/games/snake/.build/snake_cli growth
+printf 'R' | timeout 30 apps/legacy_examples/expanded/games/snake/.build/snake_cli growth
 # ... final lines:
 # FINAL score 1
 # SCENARIO growth score 1 over 0 reason none ok 1

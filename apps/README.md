@@ -1,7 +1,7 @@
 # Apps (real programs, not demos)
 
 Verified C+ applications live here. Each runner is bounded and prints an exact
-final verdict. The former `examples/{games3d,gui_app,cli_app}` directories now
+final verdict. The former `apps/legacy_examples/{games3d,gui_app,cli_app}` directories now
 contain compatibility shims only; the real apps are below.
 
 | App | Runner | Verified verdict | Screenshot | Evidence |

@@ -17,8 +17,8 @@ toolchain PATH (`/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`),
 | `sh apps/cli_app/run.sh` (real app, not a demo) | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` |
 | `sh tests/run_modern_safer_evidence.sh` | one-command aggregate for the above: `GAMEAPP_EVIDENCE 9 9 0` |
 
-The three suites above were moved from `examples/{games3d,gui_app,cli_app}` into
-`apps/`; the old `examples/.../run.sh` entries are compatibility shims only.
+The three suites above were moved from `apps/legacy_examples/{games3d,gui_app,cli_app}` into
+`apps/`; the old `apps/legacy_examples/.../run.sh` entries are compatibility shims only.
 Their screenshots, rendered from actual runner stdout:
 [games3d.svg](../../proof/all_apps_games_screenshots/screenshots/games3d.svg),
 [gui_app.svg](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg),

@@ -8,7 +8,7 @@ Goose-inspired scratch allocator.
 Run everything with:
 
 ```sh
-sh examples/ctl_demo/run.sh
+sh apps/legacy_examples/ctl_demo/run.sh
 ```
 
 The runner sets `PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`, leaves
@@ -31,12 +31,12 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 export PATH
 unset SDKROOT CPLUS_CLANG
 
-./build/c+ build examples/ctl_demo/ctl_collections.cp \
+./build/c+ build apps/legacy_examples/ctl_demo/ctl_collections.cp \
   --default --sanitize=none -I. -Ithird_party/ctl \
   -o ctl_collections -- build/libc/libcplus_hardened.a
 ./ctl_collections
 
-./build/c+ build examples/ctl_demo/ctl_goose_hybrid.cp \
+./build/c+ build apps/legacy_examples/ctl_demo/ctl_goose_hybrid.cp \
   --default --sanitize=none -I. -Ithird_party/ctl \
   -o ctl_goose_hybrid -- build/libc/libcplus_hardened.a
 ./ctl_goose_hybrid

@@ -10,15 +10,15 @@
  * fixed `HUD ...` lines, so the overlay is real but deterministic.
  *
  * Build (from the repository root):
- *   ./build/c+ build examples/modern_gui/games/breakout_ui/breakout_ui.cp \
+ *   ./build/c+ build apps/legacy_examples/modern_gui/games/breakout_ui/breakout_ui.cp \
  *     --strict --sanitize=none -I. \
  *     $(pkg-config --cflags --libs sdl3) \
  *     -Ithird_party/nuklear build/ext/libnuklear.a \
- *     -o examples/modern_gui/games/breakout_ui/bin/breakout_ui
+ *     -o apps/legacy_examples/modern_gui/games/breakout_ui/bin/breakout_ui
  *
  * Run (headless):
  *   SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
- *     examples/modern_gui/games/breakout_ui/bin/breakout_ui [OPTIONS] [CMDS]
+ *     apps/legacy_examples/modern_gui/games/breakout_ui/bin/breakout_ui [OPTIONS] [CMDS]
  *
  * Options (before commands):
  *   --grid WxH     brick grid, 4<=W<=32, 1<=H<=8, W*H<=256 (default 16x4)

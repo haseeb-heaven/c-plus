@@ -16,8 +16,8 @@ only** — not full memory/lifetime/thread safety.
 ## Regenerate
 
 ```sh
-./examples/screenshots/capture.sh          # rebuild demos, rewrite transcripts
-cd examples/screenshots/images && ./render.sh   # rewrite SVGs
+./apps/legacy_examples/screenshots/capture.sh          # rebuild demos, rewrite transcripts
+cd apps/legacy_examples/screenshots/images && ./render.sh   # rewrite SVGs
 ```
 
 All build output goes to `captures/tmp/` (gitignored). Each transcript records

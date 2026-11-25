@@ -27,11 +27,11 @@ toolchain in `--strict --sanitize=none` mode.
 Each binary is produced with exactly the required command shape:
 
 ```sh
-./build/c+ build examples/utilities/dev_tools/hexdump.cp   --strict --sanitize=none -I. -o examples/utilities/dev_tools/hexdump
-./build/c+ build examples/utilities/dev_tools/numconv.cp   --strict --sanitize=none -I. -o examples/utilities/dev_tools/numconv
-./build/c+ build examples/utilities/dev_tools/sha_lite.cp  --strict --sanitize=none -I. -o examples/utilities/dev_tools/sha_lite
-./build/c+ build examples/utilities/dev_tools/envfilter.cp --strict --sanitize=none -I. -o examples/utilities/dev_tools/envfilter
-./build/c+ build examples/utilities/dev_tools/timeconv.cp  --strict --sanitize=none -I. -o examples/utilities/dev_tools/timeconv
+./build/c+ build apps/legacy_examples/utilities/dev_tools/hexdump.cp   --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/hexdump
+./build/c+ build apps/legacy_examples/utilities/dev_tools/numconv.cp   --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/numconv
+./build/c+ build apps/legacy_examples/utilities/dev_tools/sha_lite.cp  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/sha_lite
+./build/c+ build apps/legacy_examples/utilities/dev_tools/envfilter.cp --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/envfilter
+./build/c+ build apps/legacy_examples/utilities/dev_tools/timeconv.cp  --strict --sanitize=none -I. -o apps/legacy_examples/utilities/dev_tools/timeconv
 ```
 
 All five builds succeed with no diagnostics. `run.sh` issues these commands
@@ -243,7 +243,7 @@ cross-checks, not values copied from the implementation.
 ## Aggregate run
 
 ```text
-$ examples/utilities/dev_tools/run.sh
+$ apps/legacy_examples/utilities/dev_tools/run.sh
 UTIL_BUILD hexdump OK
 UTIL_BUILD numconv OK
 UTIL_BUILD sha_lite OK
@@ -333,4 +333,4 @@ NEG_SCRIPT_RC=1
   are initialized at declaration, as strict lifetime analysis requires.
 - `--sanitize=none` is used exactly as required; the evidence here is explicit
   runtime refusal, not sanitizer diagnostics.
-- No files outside `examples/utilities/dev_tools/` were created or modified.
+- No files outside `apps/legacy_examples/utilities/dev_tools/` were created or modified.

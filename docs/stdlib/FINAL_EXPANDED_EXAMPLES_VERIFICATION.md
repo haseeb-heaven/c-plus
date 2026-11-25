@@ -37,7 +37,7 @@ env -u SDKROOT \
 
 | Suite (prescribed command) | Final line (verbatim) | Exit | Interpretation |
 | --- | --- | --- | --- |
-| `sh examples/expanded/run_all.sh` | `expanded-agg: runners=6 reported=6 pass=6 blocked=0 fail=0 hard_fail=0` (last group line: `SAFETY_DEMOS 4 4 0`) | **0** | All six group runners reported PASS with zero failed cases; no `BLOCKED`, no `PENDING`, no timeout. |
+| `sh apps/legacy_examples/expanded/run_all.sh` | `expanded-agg: runners=6 reported=6 pass=6 blocked=0 fail=0 hard_fail=0` (last group line: `SAFETY_DEMOS 4 4 0`) | **0** | All six group runners reported PASS with zero failed cases; no `BLOCKED`, no `PENDING`, no timeout. |
 | `sh tests/expanded_examples_adversarial/run_all.sh` | `ADV_EXPANDED_TOTAL 110 110 0 0` | **0** | 110 hostile-input cases executed; all 110 exited with a refusal/REFUSE sentinel; 0 crashed, 0 unexpected acceptance, 0 build failures. |
 | `sh benchmarks/example_rust_compare/expanded_cli_games/compare.sh` | `EXPANDED_COMPARE snake_cli MATCH stdout+exit identical for 3 fixed case(s)` (stderr summary: `SUMMARY different=0 inconclusive(BLOCKED+PENDING)=0`) | **0** | 9/9 CLI-and-game examples matched their safe-Rust models byte-for-byte on stdout and identically on exit status; no `DIFFERENT`, no `BLOCKED`/`PENDING`. |
 | `sh benchmarks/example_rust_compare/expanded_db_engine/compare.sh` | `benchmarks/example_rust_compare/expanded_db_engine/compare.sh: line 140: argv[@]: unbound variable` | **1** | **Nonzero exit — see below.** The prescribed `sh` interpreter is bash 3.2, which errors when `"${argv[@]}"` is expanded under `set -u` for a case with no `.args` file. Only two cases (`kv_store`, `table_query`) printed `MATCH` before the aborted expansion. |
@@ -130,9 +130,9 @@ deterministic CLI scenarios (growth / wall / self) exercised over two programs,
 | `safety/sync_demo.c` | C99 checked destroy/join wrappers from `build/libc/libcplus_hardened.a` (the one non-C++ source in the campaign). |
 
 **Out of scope at verification time:** a sibling agent was still adding
-`examples/expanded/games_2/` (`breakout.cp`, `invaders.cp`, `pong.cp`) with no
+`apps/legacy_examples/expanded/games_2/` (`breakout.cp`, `invaders.cp`, `pong.cp`) with no
 `run.sh` at the moment of this run, so those sources were not discovered by
-`examples/expanded/run_all.sh` and are not counted above. `cli/_probe.cp` and
+`apps/legacy_examples/expanded/run_all.sh` and are not counted above. `cli/_probe.cp` and
 `cli/_probe2.cp` are scratch probes, not catalogue entries.
 
 ## Non-claims
