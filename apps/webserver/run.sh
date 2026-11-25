@@ -17,7 +17,8 @@ pass=0; fail=0
 
 timeout 12 "$D/app" >"$D/run_out.txt" 2>&1 &
 APP=$!
-sleep 1
+# Give the C+ driver time to start and bind; the app uses unbuffered stdout.
+sleep 2
 curl -s -m 2 http://127.0.0.1:18099/health -o "$D/health.out"
 sleep 0.5
 curl -s -m 2 http://127.0.0.1:18099/other -o "$D/other.out"

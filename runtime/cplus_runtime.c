@@ -473,14 +473,16 @@ void cplus_tls_free(void *s) { (void)s; }
  * without a format string.
  * ------------------------------------------------------------------------- */
 
-/* Each `print(...)` invocation owns one output buffer.  Values are appended
- * to it and flushed by cplus_print_end(), so arguments evaluated while printing
- * (for example a function call) can never interleave with this invocation's
- * own output. */
+/* Each `print(...)` invocation owns one output buffer. Values are appended to
+ * it and flushed by cplus_print_end(), so arguments evaluated while printing
+ * can never interleave with this invocation's own output. The buffer grows on
+ * demand (no silent truncation); if growth fails, the pending bytes and the
+ * new chunk are written directly, which preserves data at the cost of the
+ * interleaving guarantee in that out-of-memory case. */
 #define CPLUS_PRINT_MAX_DEPTH 64
-#define CPLUS_PRINT_BUF_SIZE 1024
 
-static char cplus_print_buf[CPLUS_PRINT_MAX_DEPTH][CPLUS_PRINT_BUF_SIZE];
+static char *cplus_print_buf[CPLUS_PRINT_MAX_DEPTH];
+static size_t cplus_print_cap[CPLUS_PRINT_MAX_DEPTH];
 static size_t cplus_print_len[CPLUS_PRINT_MAX_DEPTH];
 static int cplus_print_first[CPLUS_PRINT_MAX_DEPTH];
 static int cplus_print_depth = 0;
@@ -494,12 +496,30 @@ void cplus_print_begin(void) {
 }
 
 static void cplus_print_append(int d, const char *text, size_t n) {
-  size_t avail = CPLUS_PRINT_BUF_SIZE - cplus_print_len[d] - 1;
-  size_t take = n < avail ? n : (avail > 0 ? avail : 0);
-  if (take > 0) {
-    memcpy(cplus_print_buf[d] + cplus_print_len[d], text, take);
-    cplus_print_len[d] += take;
+  if (n == 0)
+    return;
+  if (cplus_print_len[d] + n + 1 > cplus_print_cap[d]) {
+    size_t want = cplus_print_len[d] + n + 1;
+    size_t cap = cplus_print_cap[d] ? cplus_print_cap[d] : 128;
+    char *grown;
+    while (cap < want) {
+      if (cap > (size_t)-1 / 2) { cap = want; break; }
+      cap *= 2;
+    }
+    grown = (char *)realloc(cplus_print_buf[d], cap);
+    if (!grown) {
+      /* Last-resort direct write: never drop caller data silently. */
+      if (cplus_print_len[d] > 0)
+        fwrite(cplus_print_buf[d], 1, cplus_print_len[d], stdout);
+      cplus_print_len[d] = 0;
+      fwrite(text, 1, n, stdout);
+      return;
+    }
+    cplus_print_buf[d] = grown;
+    cplus_print_cap[d] = cap;
   }
+  memcpy(cplus_print_buf[d] + cplus_print_len[d], text, n);
+  cplus_print_len[d] += n;
   cplus_print_buf[d][cplus_print_len[d]] = '\0';
 }
 
@@ -558,8 +578,12 @@ void cplus_print_value(cplus_print_kind kind, ...) {
     break;
   case CPLUS_PRINT_STR: {
     const char *text = va_arg(ap, const char *);
-    snprintf(numbuf, sizeof(numbuf), "%s", text ? text : "(null)");
-    break;
+    /* Append strings directly: they can be arbitrarily long, unlike the
+     * numeric scratch buffer below. */
+    cplus_print_append(d, text ? text : "(null)",
+                       text ? strlen(text) : 7u);
+    va_end(ap);
+    return;
   }
   default:
     snprintf(numbuf, sizeof(numbuf), "%s", "<unprintable>");

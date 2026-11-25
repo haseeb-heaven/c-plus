@@ -13,7 +13,8 @@
 #define WEB_SERVE_MAX 4
 
 int main(void) {
-    web_server srv;   /* stack storage: no heap allocation in this app */
+    web_server srv;
+    setvbuf(stdout, (char *)0, _IONBF, 0); /* keep proof logs on abrupt exit */   /* stack storage: no heap allocation in this app */
     web_conn c;
     int accepted = 0;
     int i;

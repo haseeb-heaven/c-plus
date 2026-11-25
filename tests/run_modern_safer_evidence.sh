@@ -15,7 +15,7 @@ for suite in apps/run_all.sh proof/games_apps/run.sh \
              examples/cli_app/run.sh benchmarks/goose_fast/run.sh \
              benchmarks/goose_modern/run.sh \
              tests/stdlib/upstream_reuse/run_memory_safety.sh \
-             tests/docs/run_doc_check.sh; do
+             tests/docs/run_doc_check.sh tests/runtime/run_print_test.sh; do
     cases=$((cases + 1))
     if timeout 1800 sh "$suite" >/dev/null 2>&1; then
         pass=$((pass + 1))
