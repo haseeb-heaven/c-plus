@@ -34,6 +34,11 @@ for t in tests/libc/test_*.c; do
     LIMIT=60
     case "$t" in *test_corpus_*) LIMIT=180 ;; esac
     RUN_CMD="timeout $LIMIT $b"
+    if [ "$t" = "tests/libc/test_corpus_uninit.c" ]; then
+      # Linux CI once hung in this corpus for the full bound. Trace cases and
+      # arm an alarm so a hang reports its exact case instead of silence.
+      RUN_CMD="env CPLUS_CORPUS_TRACE=1 CPLUS_CORPUS_WATCHDOG=120 timeout $LIMIT $b"
+    fi
   fi
   # safecrt archive before libc+ so undefined refs resolve in one pass on GNU ld.
   "$CC" -O2 -Wall -Wextra -pedantic -std=c99 $PLATFORM_CFLAGS \

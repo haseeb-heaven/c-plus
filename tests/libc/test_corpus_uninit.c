@@ -38,6 +38,7 @@
 #include <locale.h>
 #include <signal.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 /* cplus_* prototypes (kept local so the test stays standalone). */
 extern size_t cplus_mbrtowc(wchar_t *, const char *, size_t, mbstate_t *);
@@ -97,6 +98,26 @@ static void crash_handler(int sig) {
         num[--pos] = '-';
     (void)write(STDERR_FILENO, pfx, sizeof(pfx) - 1);
     (void)write(STDERR_FILENO, num + pos, sizeof(num) - pos);
+    _exit(70);
+}
+
+/* Optional bounded hang diagnostics for slower CI hosts (off by default):
+ *   CPLUS_CORPUS_WATCHDOG=<seconds>  alarm() bound, reports the active case
+ *   CPLUS_CORPUS_TRACE=1             print each case index before dispatch
+ *   CPLUS_CORPUS_HANG_AT=<index>     diagnostic hook: sleep(5) at that case
+ * The last two are off unless explicitly requested; the shipped corpus run
+ * still prints exactly "corpus_uninit: 760 cases ok".
+ */
+static volatile sig_atomic_t g_active_case = -1;
+static int g_hang_at = -1;
+
+static void hang_handler(int sig) {
+    char msg[96];
+    int n = snprintf(msg, sizeof(msg),
+                     "FINDING: corpus_uninit hang at case %d (signal %d)\n",
+                     (int)g_active_case, sig);
+    if (n > 0)
+        (void)write(STDERR_FILENO, msg, (size_t)n);
     _exit(70);
 }
 
@@ -505,6 +526,8 @@ static void positive_control(void) {
     cplus_free(p);
 }
 
+static int trace_cases = 0;
+
 int main(void) {
     int i;
     if (setlocale(LC_ALL, "en_US.UTF-8") == NULL)
@@ -513,11 +536,35 @@ int main(void) {
     build_table();
     init_mb_bases();
     positive_control();
+    {
+        const char *wd = getenv("CPLUS_CORPUS_WATCHDOG");
+        const char *tr = getenv("CPLUS_CORPUS_TRACE");
+        const char *hg = getenv("CPLUS_CORPUS_HANG_AT");
+        if (wd != (const char *)0) {
+            long secs = strtol(wd, (char **)0, 10);
+            if (secs > 0 && secs <= 3600) {
+                signal(SIGALRM, hang_handler);
+                alarm((unsigned int)secs);
+            }
+        }
+        if (hg != (const char *)0)
+            g_hang_at = atoi(hg);
+        if (tr != (const char *)0 && tr[0] == '1')
+            trace_cases = 1;
+    }
 
     for (i = 0; i < N_CASES; ++i) {
+        g_active_case = (sig_atomic_t)i;
+        if (trace_cases) {
+            printf("corpus_uninit case %d\n", i);
+            fflush(stdout);
+        }
+        if (i == g_hang_at)
+            sleep(5);                 /* diagnostic hook, off by default */
         assert(g_cases[i].cat >= CAT_MB && g_cases[i].cat <= CAT_EP);
         g_fns[g_cases[i].cat](&g_cases[i]);
     }
+    alarm(0);
 
     printf("corpus_uninit: %d cases ok\n", N_CASES);
     return 0;
