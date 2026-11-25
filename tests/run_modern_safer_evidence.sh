@@ -17,7 +17,9 @@ for suite in apps/run_all.sh proof/games_apps/run.sh \
              tests/stdlib/upstream_reuse/run_memory_safety.sh \
              tests/docs/run_doc_check.sh tests/runtime/run_print_test.sh \
              proof/games_gui_nuklear/run.sh \
-             tests/stdlib/goose_mem/run.sh; do
+             tests/stdlib/goose_mem/run.sh \
+             tests/stdlib/no_heap/run.sh \
+             proof/all_apps_games_screenshots/run.sh; do
     cases=$((cases + 1))
     if timeout 1800 sh "$suite" >/dev/null 2>&1; then
         pass=$((pass + 1))

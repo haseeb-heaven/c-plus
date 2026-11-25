@@ -1,0 +1,24 @@
+== build: examples/cli_app/cli_calc.cp (--default --no-werror --sanitize=none) ==
+BUILD ok
+== deterministic argv cases (timeout 30s each) ==
+PASS empty            rc=2 out=CLI no-command|
+PASS add              rc=0 out=CLI add 2 3 5|
+PASS mul              rc=0 out=CLI mul 6 7 42|
+PASS help             rc=0 out=Commands:|  add - add two integers (id=1)|  mul - multiply two integers (id=2)|  help - print help text (id=3)|Options:|  --verbose|  --tag=value|
+PASS unknown_cmd      rc=2 out=CLI refuse unknown command 7|
+PASS unknown_opt      rc=2 out=CLI refuse unknown option 6|
+PASS too_many_args    rc=2 out=CLI refuse too many arguments 8|
+PASS too_long         rc=2 out=CLI refuse name or token too long 3|
+PASS empty_token      rc=2 out=CLI refuse invalid argument 2|
+PASS tag_no_value     rc=2 out=CLI refuse invalid argument 2|
+PASS verbose_eq       rc=2 out=CLI refuse invalid argument 2|
+PASS negative_token   rc=2 out=CLI refuse unknown option 6|
+PASS bad_int          rc=1 out=CLI bad-int|
+PASS few_args         rc=1 out=CLI args 1|
+PASS overflow         rc=1 out=CLI overflow|
+PASS verbose          rc=0 out=CLI add 4 5 9|CLI verbose 1|
+PASS tag              rc=0 out=CLI mul 3 4 12|CLI tag hello|
+== Windows PE cross-compile (compile-only, no runtime claim) ==
+MINGW compile ok: examples/cli_app/out/cli_calc.win.o
+  examples/cli_app/out/cli_calc.win.o: Intel amd64 COFF object file, no line number info, not stripped, 7 sections, symbol offset=0x20b8, 62 symbols, 1st section name ".text"
+CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok
