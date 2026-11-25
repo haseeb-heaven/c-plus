@@ -1469,7 +1469,7 @@ private:
 
     // Multi-declarator statements are rejected: each owning variable must
     // have its own declaration so cleanup order is unambiguous.
-    int paren = 0, bracket = 0;
+    int paren = 0, bracket = 0, brace = 0;
     size_t eq = kNPos;
     for (size_t k = nameIdx + 1; k < semi; ++k) {
       if (isPunct(k, "("))
@@ -1480,10 +1480,19 @@ private:
         ++bracket;
       else if (isPunct(k, "]"))
         --bracket;
-      else if (isPunct(k, "=") && paren == 0 && bracket == 0) {
-        eq = k;
-        break;
-      } else if (isPunct(k, ",") && paren == 0 && bracket == 0) {
+      // A comma inside an aggregate initializer (`Outer x = {{1}, 10};`) is
+      // a field separator, not a second declarator.
+      else if (isPunct(k, "{"))
+        ++brace;
+      else if (isPunct(k, "}"))
+        --brace;
+      else if (isPunct(k, "=") && paren == 0 && bracket == 0 && brace == 0) {
+        // Record the first initializer but KEEP scanning: a comma after it
+        // is still a second declarator. Breaking here let `R a={1}, b={2};`
+        // through with neither destructor emitted.
+        if (eq == kNPos)
+          eq = k;
+      } else if (isPunct(k, ",") && paren == 0 && bracket == 0 && brace == 0) {
         errorAt("declare one owning resource per statement", toks_[k]);
         return;
       }

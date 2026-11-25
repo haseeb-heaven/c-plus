@@ -129,3 +129,4 @@ tests/compiler/abi_link_flags/results/*.bin
 tests/compiler/abi_link_flags/cases/*.o
 tests/compiler/abi_link_flags/cases/*.a
 tests/compiler/abi_link_flags/cases/*.dylib
+tests/compiler/raii_cleanup/results/*.bin
