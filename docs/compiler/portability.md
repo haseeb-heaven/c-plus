@@ -47,11 +47,18 @@ are hard requirements and fail the job if broken.
 
 ## Experimental and unsupported targets
 
-- **Windows (x64 and arm64): UNSUPPORTED.** No CI job is defined. The toolchain
-  path is undefined: CMake generator, LLVM/Clang discovery, MSVC vs clang-cl
-  ABI, install layout (`bin`/`lib`/`include`/`share`), path separators, runtime
-  linker and sanitizer runtimes have not been validated on any Windows runner.
-  The public label `windows-11-arm` exists but is deliberately not added here.
+- **Windows (x64 and arm64): UNSUPPORTED as a host compiler.** No CI job is
+  defined. The toolchain path is undefined: CMake generator, LLVM/Clang
+  discovery, MSVC vs clang-cl ABI, install layout (`bin`/`lib`/`include`/
+  `share`), path separators, runtime linker and sanitizer runtimes have not
+  been validated on any Windows runner. The public label `windows-11-arm`
+  exists but is deliberately not added here.
+- **Windows x86-64 target smoke: EXPERIMENTAL (local evidence).** A C+ source
+  was analysed with host `c+ --strict`, lowered to C, cross-compiled with
+  MinGW-w64 GCC 16.2.0 to a PE32+ executable and run under Highball 0.10.22 /
+  its Wine engine with exact stdout and exit 0. This does **not** make Windows
+  a supported host or validate the runtime library, CRT, sanitizers or CI.
+  Evidence: `docs/compiler/windows_wine_highball_evidence.md`.
 - **macOS x86-64 (`macos-15-intel`): experimental / unvalidated.** No job;
   success of `macos-arm64-cplus` does not imply Intel macOS support.
 - **Ubuntu 22.04 and other glibc/musl distributions: unvalidated.** No job.
