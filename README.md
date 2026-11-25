@@ -209,3 +209,29 @@ Codex and Gemini assisted with implementation. Heaven created the language desig
 ## 🤝 Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [LICENSE](LICENSE).
+
+## ⚡ Benchmarks and proof — faster + safer standard/safer libs
+
+All figures below are **measured on this host** with bounded runners; they are
+not language-equivalence claims. Full narrative:
+[`docs/stdlib/MODERN_SAFER_EVIDENCE.md`](docs/stdlib/MODERN_SAFER_EVIDENCE.md).
+
+| Measurement | Result | Meaning |
+|---|---|---|
+| Goose-style data-stack bump vs checked heap (`sh benchmarks/goose_fast/run.sh`) | **86 ns/op vs 261 ns/op** (~3.0× lower allocation latency) | `stdlib/datastack.hp` bump + one-store scope release beats per-object checked-heap allocation. Gate `GOOSE_BENCH 4 4 0`. |
+| Modern libs on scratch (`sh benchmarks/goose_modern/run.sh`) | **60 ns/op bump vs 162 ns/op heap** (~2.7×); full sqldb+gameeng+scratch workload 557 ns/op | Real app-shaped workload, gate `GOOSE_MODERN_BENCH 3 3 0`. |
+| Checked-heap tracking ON/OFF | 2.59× median overhead (79.91 vs 30.85 ns/op) | Cost of the live-allocation side table; the reason hot paths use arenas/pools instead. |
+| Rust-vs-C+ runtime outcomes (`sh tests/rust_vs_cplus/run_compare.sh`) | 473 matched, 119 documented differences, 8 both-skip, **0 failures** | Outcome parity on valid inputs is evidence of behavior, **not** a speed or safety proof. |
+| Fil-C-style liveness / SoftBound / GSL / lifetime (`sh tests/stdlib/upstream_reuse/run_memory_safety.sh`) | `MEMSAFE 5 5 0` (26 + 51 + 80 + 25 checks) | Adapted side-table/bounds techniques only; no Fil-C compiler, GC or capability ABI, and no timing comparison. |
+| Adversarial refusals | `EDGE1000 24797 24797 0`, `libc 109/109`, attack 22/22, fuzz 4800 cases | Counts of exercised refusal/boundary cases — not a 100% safety proof. |
+
+**Real apps/games, end to end:** `APPS 3 3 0` (web server via curl, SQL-like
+DB, headless game engine), `GAME_SUITE 4 4 0` (snake, maze, Nuklear UI + SVG
+screenshots), `CROSS_PROOF 58 58 0` (Mach-O + PE32+), `GOOSE_PORT 16 16 0`.
+Screenshots and per-app proof pages:
+[`proof/all_apps_games_screenshots/README.md`](proof/all_apps_games_screenshots/README.md).
+
+The core rule is documented in
+[`docs/CORE_PHILOSOPHY.md`](docs/CORE_PHILOSOPHY.md): arena-first, one-store
+release, no moving live data, refuse-don't-trust, opt-in no-heap mode, and
+measurement instead of equivalence claims.
