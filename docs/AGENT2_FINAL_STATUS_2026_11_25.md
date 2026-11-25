@@ -47,3 +47,8 @@ stdlib/io.hp, the ABI fingerprint baseline was regenerated from a clean build,
 and the safecrt coverage link/gap was fixed. `ctest` is now 100% green and the
 combined gate passes. The remaining independent human review is still pending. PR #17 must not be merged to
 `develop` until the combined gate and independent review pass.
+
+## PR pipeline follow-up (2026-11-25)
+
+- GCC build error on `agent/core-safety` (`StringRef::starts_with('@')`) fixed on that branch at `d59625c` with the user-granted compiler ownership.
+- Still blocking merge: Linux `test_corpus_uninit` watchdog timeout (exit 70; macOS 0.34s) and the independent human review line.
