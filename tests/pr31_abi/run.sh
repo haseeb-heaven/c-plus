@@ -212,14 +212,24 @@ inner() {
     else
         record_ok no_cxx_name_mangling
     fi
-    # No arena/slab/pool allocator is exported by libc+: document as a
-    # not-exported boundary rather than inventing a pairing for it.
+    # No arena/slab/pool allocator is exported by libc+: verify explicitly.
     if $NM -gU "$ARCHIVE" 2>/dev/null | grep -Eiq 'arena|slab|pool'; then
         record_fail no_arena_slab_pool_exported
     else
         record_ok no_arena_slab_pool_exported
     fi
-
+    # Source-level arena/slot-pool allocator pairings (no exported symbols):
+    # build and run a C+ probe that allocates and releases via the same API.
+    build_step allocator_pairing_build 30 ./build/c+ build \
+        tests/pr31_abi/allocator_pairing.cp --default --sanitize=none \
+        -I"$ROOT" -o "$OUT/allocator_pairing" -- "$ARCHIVE"
+    if [ -x "$OUT/allocator_pairing" ] && timeout 10 "$OUT/allocator_pairing" \
+            >"$OUT/allocator_pairing.stdout" 2>"$OUT/allocator_pairing.stderr" &&
+       grep -Eq '^ALLOC_PAIRING [0-9]+ 0$' "$OUT/allocator_pairing.stdout"; then
+        record_ok arena_slab_pool_allocator_pairings_source_level
+    else
+        record_fail arena_slab_pool_allocator_pairings_source_level
+    fi
     # ---- reuse the existing ABI checkers (no new checker invented)
     if CPLUS_FP_OUT="$OUT/abi_compare" timeout 30 \
             sh tools/abi_compare/run.sh compare \
@@ -260,7 +270,6 @@ inner() {
     record_nt windows_msvc_uCRT_runtime
     record_nt linux_glibc_runtime
     record_nt duplicate_identical_runtime_dlmopen_namespaces
-    record_nt arena_slab_pool_allocator_pairings_not_exported
     # Real second-compiler object interop: host `gcc` is a clang wrapper, but
     # Homebrew/System gcc-N builds are genuine GCC. Produce TU A with GCC and
     # link it with the clang-built consumer, then run the same cross-module
