@@ -65,6 +65,7 @@ expect_ok() {
   expected=$2
   if ! build "$name"; then
     fail "$name" "build failed; see demos/out/$name.build.log"
+    tail -20 "$OUT/$name.build.log" 2>/dev/null || true
     return
   fi
   stdin_file="$ROOT/apps/legacy_demos/$name.stdin"
