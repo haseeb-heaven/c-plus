@@ -2,7 +2,7 @@
 # PR32 libc+ portability runner (POSIX sh only; no interpreter or success-fallback shorthands).
 # Runs the local probes, continues after any failure, and always prints:
 #   PR32_LIBC <checks> <pass> <fail> <not_tested>
-# Bounded by a global 120s timeout when the timeout utility is available.
+# Bounded by a global 260s timeout when the timeout utility is available.
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
@@ -19,10 +19,10 @@ if [ -z "${PR32_LIBC_WRAPPED:-}" ]; then
     if TMO=$(command -v timeout 2>/dev/null); then
         PR32_LIBC_WRAPPED=1
         export PR32_LIBC_WRAPPED
-        printf 'PR32_LIBC_BOUND: global 120s via %s\n' "$TMO" >&2
-        exec "$TMO" 120 sh "$0" "$@"
+        printf 'PR32_LIBC_BOUND: global 260s via %s\n' "$TMO" >&2
+        exec "$TMO" 260 sh "$0" "$@"
     fi
-    printf 'PR32_LIBC_BOUND: WARNING: no timeout utility; 120s global bound NOT enforced\n' >&2
+    printf 'PR32_LIBC_BOUND: WARNING: no timeout utility; 260s global bound NOT enforced\n' >&2
 fi
 
 mkdir -p "$OUT"
@@ -69,7 +69,7 @@ run_probe() {
     shift 2
     printf '=== probe %s: $ sh tests/pr32_portability/%s %s ===\n' "$label" "$script" "$*" >> "$OUT/run.log"
     if TMO=$(command -v timeout 2>/dev/null); then
-        "$TMO" 30 sh "$HERE/$script" "$@" >> "$OUT/run.log" 2>&1
+        "$TMO" 150 sh "$HERE/$script" "$@" >> "$OUT/run.log" 2>&1
         rc=$?
     else
         sh "$HERE/$script" "$@" >> "$OUT/run.log" 2>&1

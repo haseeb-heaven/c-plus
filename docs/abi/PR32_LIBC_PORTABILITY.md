@@ -83,7 +83,8 @@ PR32_LIBC 10 8 0 2
   that runtime is NOT TESTED. It never invokes the game or Wine.
 
 All three jobs have `timeout-minutes` caps; the runner enforces a further
-60-second global bound with a 30-second per-probe bound.
+260-second global bound with bounded probes (150s each); the host
+was observed to need ~100s per SDK/install smoke probe under CI-like load.
 
 ## 5. Reproduce locally
 

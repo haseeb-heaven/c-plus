@@ -4,7 +4,7 @@
 # POSIX sh only.  No Python, no `|| true`, no source-tree writes: all generated
 # artifacts live under tests/pr31_abi/out/ (plus the gitignored build/ tree when
 # the existing tools are reused).  Each binary is bounded by `timeout`, and the
-# whole run is bounded by a 58s outer timeout.  Failures are recorded and the
+# whole run is bounded by a 170s outer timeout (reused checker builds can be slow on loaded hosts).  Failures are recorded and the
 # runner continues; the final line is always printed:
 #
 #   PR31_LIBC <checks> <pass> <fail> <not_tested>
@@ -18,6 +18,9 @@ set -u
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$ROOT" || exit 2
+# The reused ABI checkers select clang themselves; an inherited CPLUS_CLANG
+# makes tests/abi/run_abi_layouts.sh hang on this host.
+unset CPLUS_CLANG
 
 CC=/usr/bin/clang
 AR=/usr/bin/ar
@@ -218,7 +221,7 @@ inner() {
     fi
 
     # ---- reuse the existing ABI checkers (no new checker invented)
-    if CPLUS_FP_OUT="$OUT/abi_compare" timeout 15 \
+    if CPLUS_FP_OUT="$OUT/abi_compare" timeout 30 \
             sh tools/abi_compare/run.sh compare \
             tests/abi/fingerprints/baseline.txt > "$OUT/abi_compare.log" 2>&1; then
         if grep -q 'MATCHES baseline' "$OUT/abi_compare.log"; then
@@ -230,8 +233,7 @@ inner() {
         record_fail reuse_abi_fingerprint_compare
     fi
 
-    if CPLUS_CLANG=/usr/bin/clang timeout 22 \
-            sh tests/abi/run_abi_layouts.sh > "$OUT/abi_layouts.log" 2>&1; then
+    if timeout 45 sh tests/abi/run_abi_layouts.sh > "$OUT/abi_layouts.log" 2>&1; then
         record_ok reuse_run_abi_layouts
     elif grep -q 'CPLUS-LIFETIME' "$OUT/abi_layouts.log" 2>/dev/null; then
         # Compiler-side lifetime analysis rejects system math.h; Agent 1 scope.
@@ -240,7 +242,7 @@ inner() {
     else
         record_fail reuse_run_abi_layouts
     fi
-    if timeout 30 sh tests/abi/run_abi_compat.sh \
+    if timeout 120 sh tests/abi/run_abi_compat.sh \
             > "$OUT/abi_compat.log" 2>&1; then
         record_ok reuse_run_abi_compat
     elif grep -q '__cplus_checked_add_i64' "$OUT/abi_compat.log" 2>/dev/null || \
@@ -259,7 +261,35 @@ inner() {
     record_nt linux_glibc_runtime
     record_nt duplicate_identical_runtime_dlmopen_namespaces
     record_nt arena_slab_pool_allocator_pairings_not_exported
-    record_nt other_compiler_produced_objects_gcc_objects
+    # Real second-compiler object interop: host `gcc` is a clang wrapper, but
+    # Homebrew/System gcc-N builds are genuine GCC. Produce TU A with GCC and
+    # link it with the clang-built consumer, then run the same cross-module
+    # ownership fixture.
+    GCC_BIN=""
+    for cand in /opt/homebrew/bin/gcc-14 /usr/local/bin/gcc-14 gcc-14 \
+                /opt/homebrew/bin/gcc-13 gcc-13 /opt/homebrew/bin/gcc-12 gcc-12; do
+        if [ -x "$cand" ] && "$cand" --version 2>/dev/null | head -1 \
+                | grep -qiE 'gcc|GCC'; then
+            GCC_BIN=$cand
+            break
+        fi
+    done
+    if [ -n "$GCC_BIN" ]; then
+        build_step gcc_object_producer 20 "$GCC_BIN" -O1 -std=c11 -Wall -Wextra \
+            -fPIC $INC -c tests/pr31_abi/tu_a.c -o "$OUT/tu_a_gcc.o"
+        build_step gcc_object_link 20 $CC -O1 -std=c11 -Wall -Wextra $INC \
+            tests/pr31_abi/driver.c "$OUT/tu_a_gcc.o" "$OUT/tu_b.o" "$ARCHIVE" \
+            -lm -pthread -o "$OUT/pr31_gcc"
+        if [ -x "$OUT/pr31_gcc" ] && timeout 10 "$OUT/pr31_gcc" \
+                >"$OUT/gcc_object.stdout" 2>"$OUT/gcc_object.stderr" &&
+           grep -Eq '^PR31_FIXTURE_RESULT [0-9]+ 0$' "$OUT/gcc_object.stdout"; then
+            record_ok other_compiler_produced_objects_gcc_objects
+        else
+            record_fail other_compiler_produced_objects_gcc_objects
+        fi
+    else
+        record_nt other_compiler_produced_objects_gcc_objects
+    fi
     record_nt non_arm64_targets
 
     finish
@@ -269,7 +299,7 @@ if [ "${1:-}" = "--inner" ]; then
     inner
 fi
 
-timeout 58 sh "$0" --inner
+timeout 170 sh "$0" --inner
 rc=$?
 if [ "$rc" -eq 124 ]; then
     read -r p f n < "$STATE"

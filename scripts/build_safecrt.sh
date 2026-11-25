@@ -120,16 +120,18 @@ for f in \
   "$SC"/src/extstr/strcmp_s.c \
   "$SC"/src/cplus_sc_wrappers.c; do
   base=$(basename "$f" .c)
-  "$CC" $CFLAGS_SC -c "$f" -o "$OUT/sc_$base.o"
+  o="$OUT/sc_$base.o"
+  if [ ! -f "$o" ] || [ "$f" -nt "$o" ]; then "$CC" $CFLAGS_SC -c "$f" -o "$o"; fi
 done
 
 # Intel safestringlib retained in third_party for provenance/reference only; not compiled/linked.
 
-"$CC" -O2 -Wall -Wextra -std=c11 -I"$ROOT/third_party/exceptions4c" -c "$ROOT/third_party/exceptions4c/exceptions4c.c" -o "$OUT/e4c_exceptions4c.o"
+if [ ! -f "$OUT/e4c_exceptions4c.o" ]; then "$CC" -O2 -Wall -Wextra -std=c11 -I"$ROOT/third_party/exceptions4c" -c "$ROOT/third_party/exceptions4c/exceptions4c.c" -o "$OUT/e4c_exceptions4c.o"; fi
 
 for f in "$ROOT"/stdlib/safe/src/*.c; do
   base=$(basename "$f" .c)
-  "$CC" $CFLAGS_W -I$SC/include -c "$f" -o "$OUT/w_$base.o"
+  o="$OUT/w_$base.o"
+  if [ ! -f "$o" ] || [ "$f" -nt "$o" ]; then "$CC" $CFLAGS_W -I$SC/include -c "$f" -o "$o"; fi
 done
 
 # Already-made safeclib functions included verbatim via the preprocessor with
@@ -138,7 +140,8 @@ done
 for f in "$ROOT"/libc/src/safecrt_vendor/*.c; do
   [ -f "$f" ] || continue
   base=$(basename "$f" .c)
-  "$CC" $CFLAGS_SC -Wno-macro-redefined -c "$f" -o "$OUT/v_$base.o"
+  o="$OUT/v_$base.o"
+  if [ ! -f "$o" ] || [ "$f" -nt "$o" ]; then "$CC" $CFLAGS_SC -Wno-macro-redefined -c "$f" -o "$o"; fi
 done
 
 ar rcs "$OUT/libcplus_safecrt.a" "$OUT"/sc_*.o "$OUT"/up_*.o "$OUT"/w_*.o "$OUT"/v_*.o "$OUT"/e4c_*.o

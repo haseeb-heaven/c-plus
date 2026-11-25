@@ -30,7 +30,7 @@ if [ ! -f "$ROOT/$REL" ]; then
 fi
 
 if TMO=$(command -v timeout 2>/dev/null); then
-    "$TMO" 25 sh "$ROOT/$REL" >> "$F" 2>&1
+    "$TMO" 150 sh "$ROOT/$REL" >> "$F" 2>&1
     rc=$?
 else
     sh "$ROOT/$REL" >> "$F" 2>&1
@@ -41,7 +41,7 @@ log "exit_code: $rc"
 if [ "$rc" -eq 0 ]; then
     printf 'PASS %s exited 0\n' "$REL" > "$OUT/$NAME.status"
 elif [ "$rc" -eq 124 ]; then
-    printf 'FAIL %s timed out under 25s\n' "$REL" > "$OUT/$NAME.status"
+    printf 'FAIL %s timed out under 150s\n' "$REL" > "$OUT/$NAME.status"
 elif [ "$NAME" = install_smoke ] && grep -qiE 'CPLUS-FFI|CPLUS-LIFETIME|CPLUS-BOUNDS' /tmp/libc_contracts_check.log 2>/dev/null; then
     # The C+ compiler driver rejects its own contract-validator source; that is
     # Agent 1 (compiler) scope, not a libc+ portability defect. Exact compiler

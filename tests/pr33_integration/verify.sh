@@ -77,8 +77,8 @@ rerun() {
     runner=$3
     out="$td/$label.out"
     s=$(date +%s)
-    # Must exceed each runner's own global bound (pr32 uses 120s).
-    run_bounded 180 sh "$runner" > "$out" 2>&1
+    # Must exceed each runner's own global bound (pr32 uses 260s).
+    run_bounded 300 sh "$runner" > "$out" 2>&1
     rc=$?
     e=$(date +%s)
     final=$(grep -E "$regex" "$out" | tail -1)
