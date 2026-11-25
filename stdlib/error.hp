@@ -429,6 +429,7 @@ static inline void *stdlib_realloc(void *ptr, size_t bytes) {
     size_t actual = bytes == 0 ? 1u : bytes;
     size_t elem = 1u;
     void *fresh;
+    size_t old_actual = 0;
     if (actual > STDLIB_ALLOC_LIMIT) {
         stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
                     "stdlib_realloc: request exceeds STDLIB_ALLOC_LIMIT");
@@ -447,13 +448,19 @@ static inline void *stdlib_realloc(void *ptr, size_t bytes) {
             return NULL;
         }
         elem = s->elem_size ? s->elem_size : 1u;
+        old_actual = s->byte_size;
         stdlib_meta_release_lock();
     }
-    fresh = cplus_realloc(ptr, actual);
+    /* Allocate-copy-release instead of cplus_realloc: the strict alias
+     * checker cannot prove the old pointer safe after a realloc call, and
+     * stdlib/error.hp is included by nearly every .hp header. Semantics are
+     * identical for callers (new buffer, old contents, old block released). */
+    fresh = cplus_alloc(actual);
     if (fresh == NULL)
         return NULL;
-    if (fresh != ptr)
-        stdlib_meta_forget(ptr);
+    memcpy(fresh, ptr, old_actual < actual ? old_actual : actual);
+    stdlib_meta_forget(ptr);
+    cplus_release(ptr);
     /* stdlib_meta_record bumps the generation even for an in-place resize,
      * so stale generation tokens are refused after a successful call. */
     stdlib_meta_record(fresh, actual, elem);
