@@ -157,12 +157,10 @@ class thread {
                            "thread::start: thread already running");
             return STDLIB_FAIL;
         }
-        /* `arg` is opaque and caller-owned; the stack-borrow heuristic cannot
-         * infer its real lifetime and flags this call (fatal under --strict).
-         * A uintptr_t round-trip is bit-for-bit value-preserving and makes the
-         * opaque hand-off explicit without changing the API or its contract. */
-        rc = pthread_create(&this->handle, NULL, fn,
-                            (void *)(uintptr_t)arg);
+        /* Pass the caller-owned pointer with its provenance intact. The
+         * compiler can now reject a stack-borrowing argument in strict mode
+         * instead of silently laundering it through uintptr_t. */
+        rc = pthread_create(&this->handle, NULL, fn, arg);
         if (rc != 0) {
             error_fail(err, CPLUS_EXIT_RESOURCE, "thread::start: pthread_create failed");
             return STDLIB_FAIL;

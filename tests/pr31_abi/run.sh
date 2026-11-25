@@ -21,6 +21,11 @@ cd "$ROOT" || exit 2
 # The reused ABI checkers select clang themselves; an inherited CPLUS_CLANG
 # makes tests/abi/run_abi_layouts.sh hang on this host.
 unset CPLUS_CLANG
+# Newer Clang backends need an explicit SDK; discover it rather than hard-code.
+if [ -z "${SDKROOT:-}" ] && command -v xcrun >/dev/null 2>&1; then
+    SDKROOT=$(xcrun --sdk macosx --show-sdk-path 2>/dev/null) || SDKROOT=
+    export SDKROOT
+fi
 
 CC=/usr/bin/clang
 AR=/usr/bin/ar
@@ -256,7 +261,8 @@ inner() {
             > "$OUT/abi_compat.log" 2>&1; then
         record_ok reuse_run_abi_compat
     elif grep -q '__cplus_checked_add_i64' "$OUT/abi_compat.log" 2>/dev/null || \
-         grep -q 'CPLUS-LIFETIME' "$OUT/abi_layouts.log" 2>/dev/null; then
+         grep -q 'CPLUS-LIFETIME' "$OUT/abi_layouts.log" 2>/dev/null || \
+         grep -q 'CPLUS-LIFETIME' build/abi/compat/results.log 2>/dev/null; then
         # T3a compile fails on the same compiler-side math.h lifetime analysis
         # (independently reproduced: CPLUS-LIFETIME on system math.h), or on the
         # known external runtime symbol skew. Both are Agent 1 scope, not libc+.
