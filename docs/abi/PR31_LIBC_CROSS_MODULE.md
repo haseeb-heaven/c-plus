@@ -219,10 +219,11 @@ PR31_LIBC <checks> <pass> <fail> <not_tested>
 Final measured run:
 
 ```
-PR31_LIBC 109 101 0 8
+PR31_LIBC 109 103 0 6
 ```
 
-Exit status `1` is caused solely by the two reused compiler-side tools above.
+Exit status is nonzero solely because six boundaries remain documented as
+`NOT_TESTED`; there are **0** FAIL results.
 
 ---
 
