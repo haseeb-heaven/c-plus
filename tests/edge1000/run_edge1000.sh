@@ -68,7 +68,7 @@ for suite in tests/libc/run_libc_tests.sh tests/libc/run_corpus_uninit_watchdog.
              tests/stdlib/upstream_reuse/run_memory_safety.sh \
              proof/goose_samples/run.sh tests/runtime/run_print_test.sh \
              tests/ctl/run_ctl_span.sh tests/stdlib/nuklear_adapt/run.sh \
-             proof/games_gui_nuklear/run.sh; do
+             proof/games_gui_nuklear/run.sh tests/stdlib/goose_mem/run.sh; do
     cases=$((cases + 1))
     if timeout 900 sh "$suite" >"build/edge1000/$(basename "$suite").log" 2>&1; then
         pass=$((pass + 1))
