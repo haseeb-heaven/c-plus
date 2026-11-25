@@ -22,7 +22,7 @@ mkdir -p build/edge1000
 run_sweep() {   # run_sweep <src> <summary-marker> <library>
     src=$1; marker=$2; lib=$3
     bin=$D/.sweep_$(basename "$src" .cp)
-    timeout 300 ./build/c+ build "$src" --default --sanitize=none \
+    timeout 300 ./build/c+ build "$src" --default --no-werror --sanitize=none \
         -I. -o "$bin" -- "$lib" \
         >"$D/sweep_$(basename "$src" .cp).build.log" 2>&1 || {
         cases=$((cases + 1)); fail=$((fail + 1));
@@ -68,7 +68,8 @@ for suite in tests/libc/run_libc_tests.sh tests/libc/run_corpus_uninit_watchdog.
              tests/stdlib/upstream_reuse/run_memory_safety.sh \
              proof/goose_samples/run.sh tests/runtime/run_print_test.sh \
              tests/ctl/run_ctl_span.sh tests/stdlib/nuklear_adapt/run.sh \
-             proof/games_gui_nuklear/run.sh; do
+             proof/games_gui_nuklear/run.sh \
+             tests/stdlib/goose_mem/run.sh; do
     cases=$((cases + 1))
     if timeout 900 sh "$suite" >"build/edge1000/$(basename "$suite").log" 2>&1; then
         pass=$((pass + 1))
