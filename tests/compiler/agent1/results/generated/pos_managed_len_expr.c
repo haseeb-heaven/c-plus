@@ -1,12 +1,11 @@
-extern void cplus_check_nonnull(const void *, const char *, int, const char *);
-#if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
-  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
-  __cplus_nn_p; })
-#else
-#define CPLUS_NONNULL(P) \
-  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
 #endif
+#include <stddef.h>
+extern size_t __cplus_bounds_check(size_t, size_t, const char *);
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
 #  define CPLUS_STATIC_INLINE __attribute__((unused)) static
@@ -154,8 +153,8 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 int main(void) {
    int *xs = cplus_new_array(int, 7); 
   if (((7)) != 7) { __typeof__(1) __cplus_ret = (1); cplus_release(xs); xs = NULL;  return __cplus_ret;; }
-  for (__typeof__( 0) i = 0; i < ((7)); CPLUS_INC(add, i, int, 32, 1, 1, 1)) CPLUS_NONNULL(xs)[i] = i + 1;
-  { __typeof__(CPLUS_NONNULL(xs) [ 6 ] == 7 ? 0 : 2) __cplus_ret = (CPLUS_NONNULL(xs) [ 6 ] == 7 ? 0 : 2); cplus_release(xs); xs = NULL;  return __cplus_ret;; }
+  for (__typeof__( 0) i = 0; i < ((7)); CPLUS_INC(add, i, int, 32, 1, 1, 1)) xs[__cplus_bounds_check((size_t)(i), (size_t)(7), "xs")] = i + 1;
+  { __typeof__(xs [ 6 ] == 7 ? 0 : 2) __cplus_ret = (xs [ 6 ] == 7 ? 0 : 2); cplus_release(xs); xs = NULL;  return __cplus_ret;; }
 cplus_release(xs); xs = NULL; 
 #line 8 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/managed_len_expr.cp"
 }

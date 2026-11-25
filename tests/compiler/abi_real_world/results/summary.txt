@@ -5,7 +5,7 @@ version      : C+ 0.1.0
 oracle       : /usr/bin/clang (Apple clang version 16.0.0 (clang-1600.0.26.6))
 oracle stds  : -std=gnu17, -std=c99
 platform     : Darwin/arm64 (symbol prefix '_')
-generated    : 2026-11-23T16:16:12
+generated    : 2026-11-25T23:05:53
 modes        : --legacy-c, --default, --strict
 backend flags: --sanitize=none (no sanitizer instrumentation; ABI only)
 timeout      : 90s build/nm, 30s execution

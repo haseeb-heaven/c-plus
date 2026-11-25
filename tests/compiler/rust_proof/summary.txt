@@ -15,14 +15,14 @@ BY CLASSIFICATION: AGREE_COMPILE=10, AGREE_TRAP=1, CPLUS_STRICTER=3
 === PER-SCENARIO ===
 [PASS] const_oob          AGREE_COMPILE    constant out-of-bounds array read
     C   check_rc=1 build_rc=1 runtime_rc=None
-    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'
     Rust compile_rc=1 codes=['E0080'] runtime_rc=None
     Rust diag: error[E0080]: index out of bounds: the length is 4 but the index is 7
 [PASS] dyn_oob            AGREE_TRAP       runtime-determined out-of-bounds array read
     C   check_rc=0 build_rc=0 runtime_rc=-6
     C   diag: C+ error: index 100 is outside the bounds of 'a' (length 4)
     Rust compile_rc=0 codes=[] runtime_rc=101
-    Rust diag: thread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19: | index out of bounds: the len is 4 but the index is 100
+    Rust diag: thread 'main' (6899868) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19: | index out of bounds: the len is 4 but the index is 100
 [PASS] uaf                CPLUS_STRICTER   use-after-free: dereference a released allocation
     C   check_rc=1 build_rc=1 runtime_rc=None
     C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2:62: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'
@@ -39,7 +39,7 @@ BY CLASSIFICATION: AGREE_COMPILE=10, AGREE_TRAP=1, CPLUS_STRICTER=3
     C   check_rc=1 build_rc=1 runtime_rc=None
     C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c:1:31: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference
     Rust compile_rc=0 codes=[] runtime_rc=-6
-    Rust diag: thread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18: | null pointer dereference occurred
+    Rust diag: thread 'main' (6900409) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18: | null pointer dereference occurred
     why: C+ emits the named [CPLUS-SAFE-LIFETIME] null pointer dereference diagnostic at compile time. A literal null dereference has no safe Rust spelling; the equivalent needs `unsafe`, so rustc accepts and the trap happens at runtime (panic/abort). Intentional difference in enforcement point; not faked as agreement.
 [PASS] signed_overflow    AGREE_COMPILE    signed integer overflow at i32::MAX + 1
     C   check_rc=1 build_rc=1 runtime_rc=None

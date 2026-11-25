@@ -1,11 +1,8 @@
-extern void cplus_check_nonnull(const void *, const char *, int, const char *);
-#if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
-  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
-  __cplus_nn_p; })
-#else
-#define CPLUS_NONNULL(P) \
-  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
 #endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
@@ -159,11 +156,11 @@ int main(void) {
         size_t size = 3;
         arr = (int *)cplus_alloc(sizeof(int) * size);
         for (int i = 0; i < 3; CPLUS_INC(add, i, int, 32, 1, 1, 1))
-            CPLUS_NONNULL(arr)[i] = ((int)__cplus_inline_mul_i64((int64_t)((i + 1) ), (int64_t)( 10), 32, 1));
+            arr[i] = ((int)__cplus_inline_mul_i64((int64_t)((i + 1) ), (int64_t)( 10), 32, 1));
     }
     /* `size` is out of scope here: .len must use the runtime query. */
     for (size_t idx = 0; idx < cplus_alloc_count(arr, sizeof(*arr)); CPLUS_INC(add, idx, unsigned long, 64, 0, 1, 1))
-        printf("%d\t", CPLUS_NONNULL(arr)[idx]);
+        printf("%d\t", arr[idx]);
     printf("\n");
     cplus_release(arr);
     return 0;

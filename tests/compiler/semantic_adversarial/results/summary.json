@@ -20,13 +20,13 @@
       "--sanitize=none"
     ]
   },
-  "generated": "2026-11-25T17:10:04.964038+00:00",
+  "generated": "2026-11-25T19:09:02.966380+00:00",
   "results": [
     {
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(int)(long)9]); return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(int)(long)9]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(int)(long)9]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -98,7 +98,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:69: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:68: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'p' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:68: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                     ^\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:69: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:68: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                     ^\n",
         "stdout": ""
       },
       "commands": {
@@ -151,7 +151,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:56: error: [CPLUS-BOUNDS] out-of-bounds access: index 36 reaches past array 'a' via pointer 'b'\n  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf(\"%d\\n\", a[0]); return 0; }\n                                                         ^\nhelp: array contains 16 elements; valid indices are 0..15\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:55: error: [CPLUS-FFI] out-of-bounds access: index 36 reaches past array 'b' of length 16\n  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf(\"%d\\n\", a[0]); return 0; }\n                                                        ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:55: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 36 exceeds stack array 'b' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf(\"%d\\n\", a[0]); return 0; }\n                                                        ^\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:56: error: [CPLUS-BOUNDS] out-of-bounds access: index 36 reaches past array 'a' via pointer 'b'\n  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf(\"%d\\n\", a[0]); return 0; }\n                                                         ^\nhelp: array contains 16 elements; valid indices are 0..15\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:55: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 36 exceeds stack array 'b' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf(\"%d\\n\", a[0]); return 0; }\n                                                        ^\n",
         "stdout": ""
       },
       "commands": {
@@ -223,7 +223,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c:3:61: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; IP p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                              ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c:3:60: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'p' of length 4\n  int main(void){ int a[4]={1,2,3,4}; IP p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                             ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c:3:60: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; IP p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                             ^\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c:3:61: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; IP p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                              ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c:3:60: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; IP p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                             ^\n",
         "stdout": ""
       },
       "commands": {
@@ -276,7 +276,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c:3:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[NINE]); return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[NINE]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[NINE]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -329,7 +329,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c:3:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", AT(a,9)); return 0; }\n                                                     ^~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", AT(a,9)); return 0; }\n                                                     ^~\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", AT(a,9)); return 0; }\n                                                     ^~\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -348,7 +348,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c:3:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[N]={1,2,3,4}; printf(\"%d\\n\", a[9]); return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[N]={1,2,3,4}; printf(\"%d\\n\", a[9]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[N]={1,2,3,4}; printf(\"%d\\n\", a[9]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -367,7 +367,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c:4:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", A); return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c:4:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", A); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c:4:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", A); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -443,7 +443,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c:2:63: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c:2:62: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'p' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                               ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c:2:62: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                               ^\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c:2:63: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c:2:62: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                               ^\n",
         "stdout": ""
       },
       "commands": {
@@ -481,7 +481,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:73: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'q'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf(\"%d\\n\", q[9]); return 0; }\n                                                                          ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:72: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'q' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf(\"%d\\n\", q[9]); return 0; }\n                                                                         ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:72: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'q' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf(\"%d\\n\", q[9]); return 0; }\n                                                                         ^\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:73: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'q'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf(\"%d\\n\", q[9]); return 0; }\n                                                                          ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:72: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'q' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf(\"%d\\n\", q[9]); return 0; }\n                                                                         ^\n",
         "stdout": ""
       },
       "commands": {
@@ -587,7 +587,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c:2:83: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'r'\n  int main(void){ int a[2][4]={{1,2,3,4},{5,6,7,8}}; int (*r)[4]=a; printf(\"%d\\n\", r[9][0]); return 0; }\n                                                                                    ^\nhelp: array contains 2 elements; valid indices are 0..1\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c:2:82: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'r' of length 2\n  int main(void){ int a[2][4]={{1,2,3,4},{5,6,7,8}}; int (*r)[4]=a; printf(\"%d\\n\", r[9][0]); return 0; }\n                                                                                   ^\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c:2:83: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'r'\n  int main(void){ int a[2][4]={{1,2,3,4},{5,6,7,8}}; int (*r)[4]=a; printf(\"%d\\n\", r[9][0]); return 0; }\n                                                                                    ^\nhelp: array contains 2 elements; valid indices are 0..1\n",
         "stdout": ""
       },
       "commands": {
@@ -659,7 +659,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c:2:64: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'p' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int *p=(a); printf(\"%d\\n\", (p)[9]); return 0; }\n                                                                 ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c:2:64: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=(a); printf(\"%d\\n\", (p)[9]); return 0; }\n                                                                 ^\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c:2:64: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=(a); printf(\"%d\\n\", (p)[9]); return 0; }\n                                                                 ^\n",
         "stdout": ""
       },
       "commands": {
@@ -712,7 +712,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:80: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf(\"%d\\n\", a[9]); return 0; }\n                                                                                 ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:79: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf(\"%d\\n\", a[9]); return 0; }\n                                                                                ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:79: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf(\"%d\\n\", a[9]); return 0; }\n                                                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:80: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf(\"%d\\n\", a[9]); return 0; }\n                                                                                 ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:79: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf(\"%d\\n\", a[9]); return 0; }\n                                                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -867,7 +867,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c:2:57: error: [CPLUS-BOUNDS] constant array index 12 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { { printf(\"%d\\n\", a[12]); } } return 0; }\n                                                          ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c:2:56: error: [CPLUS-FFI] out-of-bounds access: index 12 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; { { printf(\"%d\\n\", a[12]); } } return 0; }\n                                                         ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c:2:56: error: [CPLUS-SAFE-BOUNDS] constant array index 12 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { { printf(\"%d\\n\", a[12]); } } return 0; }\n                                                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c:2:57: error: [CPLUS-BOUNDS] constant array index 12 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { { printf(\"%d\\n\", a[12]); } } return 0; }\n                                                          ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c:2:56: error: [CPLUS-SAFE-BOUNDS] constant array index 12 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { { printf(\"%d\\n\", a[12]); } } return 0; }\n                                                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -1064,7 +1064,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[((9))]); return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[((9))]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[((9))]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -1083,7 +1083,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:53: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[1+8]); return 0; }\n                                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[1+8]); return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[1+8]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:53: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[1+8]); return 0; }\n                                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[1+8]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -1136,7 +1136,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(1,9)]); return 0; }\n                                                     ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(1,9)]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(1,9)]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {
@@ -1155,7 +1155,7 @@
       "check": {
         "note": "",
         "rc": 1,
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:60: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", f(a[1],a[9])); return 0; }\n                                                             ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:59: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", f(a[1],a[9])); return 0; }\n                                                            ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:59: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", f(a[1],a[9])); return 0; }\n                                                            ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:60: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", f(a[1],a[9])); return 0; }\n                                                             ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:59: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", f(a[1],a[9])); return 0; }\n                                                            ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "stdout": ""
       },
       "commands": {

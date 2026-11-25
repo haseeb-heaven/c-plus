@@ -4,9 +4,6 @@ rc=1 note=
 stdout:
 
 stderr:
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c:2:64: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'p' of length 4
-  int main(void){ int a[4]={1,2,3,4}; int *p=(a); printf("%d\n", (p)[9]); return 0; }
-                                                                 ^
 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c:2:64: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes
   int main(void){ int a[4]={1,2,3,4}; int *p=(a); printf("%d\n", (p)[9]); return 0; }
                                                                  ^

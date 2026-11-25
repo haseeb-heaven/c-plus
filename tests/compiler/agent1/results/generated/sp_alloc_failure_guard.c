@@ -1,12 +1,11 @@
-extern void cplus_check_nonnull(const void *, const char *, int, const char *);
-#if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
-  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
-  __cplus_nn_p; })
-#else
-#define CPLUS_NONNULL(P) \
-  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
 #endif
+#include <stddef.h>
+extern size_t __cplus_bounds_check(size_t, size_t, const char *);
 #include <stddef.h>
 extern void *cplus_register_allocation(void *, size_t, const char *, int);
 extern void cplus_free_registered(void *, const char *, int);
@@ -176,7 +175,7 @@ int main(void) {
   int initial[] = {10, 40, 50, 60};
   memcpy(arr, initial, sizeof(initial));
   printf("Ptr is %d\n", *ptr);
-  for (int i = 0; i < 5; CPLUS_INC(add, i, int, 32, 1, 1, 1)) printf("%d ", CPLUS_NONNULL(arr)[i]);
+  for (int i = 0; i < 5; CPLUS_INC(add, i, int, 32, 1, 1, 1)) printf("%d ", arr[__cplus_bounds_check((size_t)(i), (size_t)(sizeof(int) * 5), "arr")]);
   printf("\n");
   cplus_free_registered(arr, __FILE__, __LINE__);
   return 0;

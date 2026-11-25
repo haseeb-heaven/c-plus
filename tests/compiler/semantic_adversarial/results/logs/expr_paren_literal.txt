@@ -4,9 +4,6 @@ rc=1 note=
 stdout:
 
 stderr:
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4
-  int main(void){ int a[4]={1,2,3,4}; printf("%d\n", a[((9))]); return 0; }
-                                                     ^
 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'
   int main(void){ int a[4]={1,2,3,4}; printf("%d\n", a[((9))]); return 0; }
                                                      ^

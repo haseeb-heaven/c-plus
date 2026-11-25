@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-11-23T20:58:34.945432+00:00",
+  "generated_utc": "2026-11-24T21:51:14.166835+00:00",
   "cplus_bin": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "cplus_version": "C+ 0.1.0\nLanguage: C+ (C with memory safety, deterministic RAII, lightweight classes)\nBackend: host Clang/LLVM",
   "rustc_version": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
@@ -33,9 +33,9 @@
       "rust_requires_unsafe": false,
       "c": {
         "check_rc": 1,
-        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "check_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "build_rc": 1,
-        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "build_diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
         "runtime_rc": null,
         "runtime_diagnostic": "",
         "runtime_stdout": "",
@@ -51,7 +51,7 @@
             ],
             "rc": 1,
             "stdout": "",
-            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
             "timeout": false,
             "error": null
           },
@@ -63,11 +63,11 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-const_oob-7vajiktk/const_oob.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-const_oob-kloivbpp/const_oob.c.bin"
             ],
             "rc": 1,
             "stdout": "",
-            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+            "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
             "timeout": false,
             "error": null
           },
@@ -103,7 +103,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-const_oob-7vajiktk/const_oob.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-const_oob-kloivbpp/const_oob.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -173,7 +173,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ioktg4zw/dyn_oob.c.bin"
             ],
             "rc": 0,
             "stdout": "",
@@ -183,7 +183,7 @@
           },
           "runtime": {
             "cmd": [
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ioktg4zw/dyn_oob.c.bin"
             ],
             "rc": -6,
             "stdout": "",
@@ -199,10 +199,10 @@
         "compile_error_message": "",
         "compile_diagnostic": "",
         "runtime_rc": 101,
-        "runtime_panic": "thread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100",
-        "runtime_diagnostic": "\nthread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+        "runtime_panic": "thread 'main' (6899868) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100",
+        "runtime_diagnostic": "\nthread 'main' (6899868) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
         "runtime_stdout": "",
-        "runtime_stderr": "\nthread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+        "runtime_stderr": "\nthread 'main' (6899868) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
         "raw": {
           "compile": {
             "cmd": [
@@ -213,7 +213,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ioktg4zw/dyn_oob.rs.bin"
             ],
             "rc": 0,
             "stdout": "",
@@ -223,11 +223,11 @@
           },
           "runtime": {
             "cmd": [
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ouq_b_f7/dyn_oob.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dyn_oob-ioktg4zw/dyn_oob.rs.bin"
             ],
             "rc": 101,
             "stdout": "",
-            "stderr": "\nthread 'main' (27518829) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+            "stderr": "\nthread 'main' (6899868) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19:\nindex out of bounds: the len is 4 but the index is 100\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
             "timeout": false,
             "error": null
           }
@@ -284,7 +284,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-a33xk6ts/uaf.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-fiyqxr5o/uaf.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -322,7 +322,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-a33xk6ts/uaf.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-fiyqxr5o/uaf.rs.bin"
             ],
             "rc": 0,
             "stdout": "",
@@ -332,7 +332,7 @@
           },
           "runtime": {
             "cmd": [
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-a33xk6ts/uaf.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uaf-fiyqxr5o/uaf.rs.bin"
             ],
             "rc": 0,
             "stdout": "3\n",
@@ -393,7 +393,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-v8igkggq/double_free.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-5lsespt9/double_free.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -431,7 +431,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-v8igkggq/double_free.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-5lsespt9/double_free.rs.bin"
             ],
             "rc": 0,
             "stdout": "",
@@ -441,7 +441,7 @@
           },
           "runtime": {
             "cmd": [
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-v8igkggq/double_free.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-double_free-5lsespt9/double_free.rs.bin"
             ],
             "rc": -5,
             "stdout": "",
@@ -502,7 +502,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-axuf28c9/null_deref.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-pe70on6g/null_deref.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -526,10 +526,10 @@
         "compile_error_message": "",
         "compile_diagnostic": "",
         "runtime_rc": -6,
-        "runtime_panic": "thread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred",
-        "runtime_diagnostic": "\nthread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+        "runtime_panic": "thread 'main' (6900409) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred",
+        "runtime_diagnostic": "\nthread 'main' (6900409) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
         "runtime_stdout": "",
-        "runtime_stderr": "\nthread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+        "runtime_stderr": "\nthread 'main' (6900409) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
         "raw": {
           "compile": {
             "cmd": [
@@ -540,7 +540,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-axuf28c9/null_deref.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-pe70on6g/null_deref.rs.bin"
             ],
             "rc": 0,
             "stdout": "",
@@ -550,11 +550,11 @@
           },
           "runtime": {
             "cmd": [
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-axuf28c9/null_deref.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-null_deref-pe70on6g/null_deref.rs.bin"
             ],
             "rc": -6,
             "stdout": "",
-            "stderr": "\nthread 'main' (27519300) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+            "stderr": "\nthread 'main' (6900409) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
             "timeout": false,
             "error": null
           }
@@ -611,7 +611,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-signed_overflow-os7ij641/signed_overflow.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-signed_overflow-n73u9jq1/signed_overflow.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -649,7 +649,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-signed_overflow-os7ij641/signed_overflow.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-signed_overflow-n73u9jq1/signed_overflow.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -718,7 +718,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-div_zero-ypsj0o88/div_zero.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-div_zero-6o_yzqno/div_zero.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -756,7 +756,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-div_zero-ypsj0o88/div_zero.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-div_zero-6o_yzqno/div_zero.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -825,7 +825,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-invalid_shift-oiu292xt/invalid_shift.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-invalid_shift-n29ddrsg/invalid_shift.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -863,7 +863,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-invalid_shift-oiu292xt/invalid_shift.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-invalid_shift-n29ddrsg/invalid_shift.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -932,7 +932,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uninit_read-fnhkjt9n/uninit_read.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uninit_read-r9h9whay/uninit_read.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -972,7 +972,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uninit_read-fnhkjt9n/uninit_read.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-uninit_read-r9h9whay/uninit_read.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1041,7 +1041,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-use_after_move-6dzon86p/use_after_move.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-use_after_move-qpb_lcyh/use_after_move.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1081,7 +1081,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-use_after_move-6dzon86p/use_after_move.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-use_after_move-qpb_lcyh/use_after_move.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1150,7 +1150,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-exclusive_borrow-3x8a27xk/exclusive_borrow.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-exclusive_borrow-2b23xg42/exclusive_borrow.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1190,7 +1190,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-exclusive_borrow-3x8a27xk/exclusive_borrow.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-exclusive_borrow-2b23xg42/exclusive_borrow.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1259,7 +1259,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dangling_stack-ikhch_pj/dangling_stack.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dangling_stack-ly3ldpma/dangling_stack.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1299,7 +1299,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dangling_stack-ikhch_pj/dangling_stack.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-dangling_stack-ly3ldpma/dangling_stack.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1368,7 +1368,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-format_string-u_tgvu0r/format_string.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-format_string-01w7tuzy/format_string.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1406,7 +1406,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-format_string-u_tgvu0r/format_string.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-format_string-01w7tuzy/format_string.rs.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1475,7 +1475,7 @@
               "--sanitize=none",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-enum_switch-vc30ri36/enum_switch.c.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-enum_switch-r6bwt_rb/enum_switch.c.bin"
             ],
             "rc": 1,
             "stdout": "",
@@ -1515,7 +1515,7 @@
               "overflow-checks=on",
               "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.rs",
               "-o",
-              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-enum_switch-vc30ri36/enum_switch.rs.bin"
+              "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/rust-proof-enum_switch-r6bwt_rb/enum_switch.rs.bin"
             ],
             "rc": 1,
             "stdout": "",

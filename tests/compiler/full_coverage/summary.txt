@@ -1,7 +1,7 @@
 FULL-COVERAGE RUNNER (permanent suite)
 c+ = /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+   timeout = 30s   clang = /opt/homebrew/opt/llvm/bin/clang   sdk = /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 
-COUNTS: discovered=220 executed=220 passed=43 failed=0 observed=177 unavailable=0
+COUNTS: discovered=223 executed=223 passed=44 failed=0 observed=179 unavailable=0
 
 BY CATEGORY (total / PASS / FAIL / OBSERVED / UNAVAILABLE):
   fnptr_bounds         4 /   1 /   0 /   3 /   0
@@ -10,14 +10,14 @@ BY CATEGORY (total / PASS / FAIL / OBSERVED / UNAVAILABLE):
   p0new               40 /  40 /   0 /   0 /   0
   runtime_crashes     15 /   0 /   0 /  15 /   0
   rust_compare_c      20 /   0 /   0 /  20 /   0
-  safety             108 /   1 /   0 / 107 /   0
+  safety             111 /   2 /   0 / 109 /   0
   sanitizer           19 /   1 /   0 /  18 /   0
 
 === FAIL (0) ===
 
 === TOOLCHAIN_UNAVAILABLE (0) ===
 
-=== PASS (43) ===
+=== PASS (44) ===
 fnptr_bounds           tests/safety/fnptr_bounds/safe_indices.c
     expectation: filename convention: accept/safe
     reasons    : STRICT check accepts (rc=0) (rc=0) [OK]
@@ -28,9 +28,9 @@ fnptr_bounds           tests/safety/fnptr_bounds/safe_indices.c
 p0new                  tests/safety/p0new/p0new_arena_cursor_wrap.c
     expectation: embedded // EXPECT: reject; embedded // DIAG: outside the bounds
     reasons    : STRICT check rejects (rc!=0) (rc=1) [OK] | embedded DIAG substring present ('outside the bounds') [OK]
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_arena_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 16 is outsid]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_arena_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 16 is outsid]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_arena_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 16 is outsid]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_arena_cursor_wrap.c:13:10: error: [CPLUS-BOUNDS] constant array index 4294967312 is ou]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_arena_cursor_wrap.c:13:10: error: [CPLUS-BOUNDS] constant array index 4294967312 is ou]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_arena_cursor_wrap.c:13:10: error: [CPLUS-BOUNDS] constant array index 4294967312 is ou]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 p0new                  tests/safety/p0new/p0new_arena_cursor_wrap_ok.c
     expectation: embedded // EXPECT: accept
@@ -182,9 +182,9 @@ p0new                  tests/safety/p0new/p0new_pkt_copy_underflow_ok.c
 p0new                  tests/safety/p0new/p0new_pkt_payload_underflow.c
     expectation: embedded // EXPECT: reject; embedded // DIAG: negative array index
     reasons    : STRICT check rejects (rc!=0) (rc=1) [OK] | embedded DIAG substring present ('negative array index') [OK]
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_pkt_payload_underflow.c:13:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_pkt_payload_underflow.c:13:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_pkt_payload_underflow.c:13:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_pkt_payload_underflow.c:13:10: error: [CPLUS-BOUNDS] negative array index -4 on 'frame]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_pkt_payload_underflow.c:13:10: error: [CPLUS-BOUNDS] negative array index -4 on 'frame]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_pkt_payload_underflow.c:13:10: error: [CPLUS-BOUNDS] negative array index -4 on 'frame]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 p0new                  tests/safety/p0new/p0new_pkt_payload_underflow_ok.c
     expectation: embedded // EXPECT: accept
@@ -224,9 +224,9 @@ p0new                  tests/safety/p0new/p0new_realloc_old_after_grow.c
 p0new                  tests/safety/p0new/p0new_ring_cursor_wrap.c
     expectation: embedded // EXPECT: reject; embedded // DIAG: constant array index
     reasons    : STRICT check rejects (rc!=0) (rc=1) [OK] | embedded DIAG substring present ('constant array index') [OK]
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 260 is outsid]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 260 is outsid]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 260 is outsid]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_cursor_wrap.c:13:9: error: [CPLUS-BOUNDS] constant array index 260 is outside the]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_cursor_wrap.c:13:9: error: [CPLUS-BOUNDS] constant array index 260 is outside the]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_cursor_wrap.c:13:9: error: [CPLUS-BOUNDS] constant array index 260 is outside the]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 p0new                  tests/safety/p0new/p0new_ring_cursor_wrap_ok.c
     expectation: embedded // EXPECT: accept
@@ -252,9 +252,9 @@ p0new                  tests/safety/p0new/p0new_ring_signed_wrap_ok.c
 p0new                  tests/safety/p0new/p0new_s2u_capacity_trick.c
     expectation: embedded // EXPECT: reject; embedded // DIAG: negative array index
     reasons    : STRICT check rejects (rc!=0) (rc=1) [OK] | embedded DIAG substring present ('negative array index') [OK]
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_capacity_trick.c:13:33: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array i]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_capacity_trick.c:13:33: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array i]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_capacity_trick.c:13:33: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array i]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_capacity_trick.c:13:39: error: [CPLUS-BOUNDS] negative array index -2 on 'window'\]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_capacity_trick.c:13:39: error: [CPLUS-BOUNDS] negative array index -2 on 'window'\]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_capacity_trick.c:13:39: error: [CPLUS-BOUNDS] negative array index -2 on 'window'\]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 p0new                  tests/safety/p0new/p0new_s2u_capacity_trick_ok.c
     expectation: embedded // EXPECT: accept
@@ -266,9 +266,9 @@ p0new                  tests/safety/p0new/p0new_s2u_capacity_trick_ok.c
 p0new                  tests/safety/p0new/p0new_s2u_guard_bypass.c
     expectation: embedded // EXPECT: reject; embedded // DIAG: negative array index
     reasons    : STRICT check rejects (rc!=0) (rc=1) [OK] | embedded DIAG substring present ('negative array index') [OK]
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_guard_bypass.c:12:45: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array ind]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_guard_bypass.c:12:45: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array ind]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_guard_bypass.c:12:45: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array ind]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_guard_bypass.c:12:49: error: [CPLUS-BOUNDS] negative array index -1 on 'lane'\n   ]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_guard_bypass.c:12:49: error: [CPLUS-BOUNDS] negative array index -1 on 'lane'\n   ]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_s2u_guard_bypass.c:12:49: error: [CPLUS-BOUNDS] negative array index -1 on 'lane'\n   ]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 p0new                  tests/safety/p0new/p0new_s2u_guard_bypass_ok.c
     expectation: embedded // EXPECT: accept
@@ -312,6 +312,13 @@ safety                 tests/safety/classic_bug34_longjmp.c
     cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/classic_bug34_longjmp.c:5:42: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n ]
     cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/classic_bug34_longjmp.c:5:42: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n ]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
+safety                 tests/safety/longjmp_owner_reject.cp
+    expectation: filename convention: reject
+    reasons    : STRICT check rejects (rc!=0) (rc=1) [OK]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/longjmp_owner_reject.cp:8:28: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n ]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/longjmp_owner_reject.cp:8:28: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n ]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/longjmp_owner_reject.cp:8:28: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n ]
+    cmd runtime_strict   rc=None timeout=False out=[] err=[]
 sanitizer              tests/safety/sanitizer/static_reject.c
     expectation: filename convention: reject
     reasons    : STRICT check rejects (rc!=0) (rc=1) [OK]
@@ -324,7 +331,7 @@ sanitizer              tests/safety/sanitizer/static_reject.c
     cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/static_reject.c:5:3: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds hea]
     cmd runtime_ubsan    rc=None timeout=False out=[] err=[]
 
-=== OBSERVED (177) ===
+=== OBSERVED (179) ===
 fnptr_bounds           tests/safety/fnptr_bounds/const_oob_3.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
@@ -357,7 +364,7 @@ integration            tests/safety/integration/int_main.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
     cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/integration/int_main.c ok\n] err=[]
-    cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/integration/int_main.c ok\n] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/integration/int_main.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: function]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/integration/int_main.c: error: [CPLUS-FFI] function 'int_fill' has safety-relevant pointer effects]
     cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/integration/int_main.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: function]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 known_gaps             tests/known_gaps/abi_mismatch/file1.c
@@ -372,7 +379,7 @@ known_gaps             tests/known_gaps/abi_mismatch/file2.c
     reasons    : documented-gap corpus: divergent .err checks above are expected/absent, classification forced to OBSERVED
     cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/file2.c ok\n] err=[]
     cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/file2.c ok\n] err=[]
-    cmd build_strict     rc=1    timeout=False out=[] err=[Undefined symbols for architecture arm64:\n  "_shared_value", referenced from:\n      _main in cplus-80630-0.o\nld: symbol(s) not found for architecture arm64\n]
+    cmd build_strict     rc=1    timeout=False out=[] err=[Undefined symbols for architecture arm64:\n  "_shared_value", referenced from:\n      _main in cplus-56193-0.o\nld: symbol(s) not found for architecture arm64\n]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 known_gaps             tests/known_gaps/allocator_reuse.c
     expectation: documented gap (README.md): adjacent .err is a known-absent diagnostic, recorded as OBSERVED
@@ -448,13 +455,13 @@ runtime_crashes        tests/safety/runtime_crashes/rc01.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
     cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc01.c ok\n] err=[]
-    cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc01.c ok\n] err=[]
-    cmd build_strict     rc=0    timeout=False out=[] err=[]
-    cmd runtime_strict   rc=1    timeout=False out=[count: ] err=[]
-    cmd build_asan       rc=0    timeout=False out=[] err=[]
-    cmd runtime_asan     rc=1    timeout=False out=[count: ] err=[]
-    cmd build_ubsan      rc=0    timeout=False out=[] err=[]
-    cmd runtime_ubsan    rc=1    timeout=False out=[count: ] err=[]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc01.c:8:231: error: [CPLUS-FFI] arithmetic in a macro expansion cannot be instrum]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc01.c:8:231: error: [CPLUS-FFI] arithmetic in a macro expansion cannot be instrum]
+    cmd runtime_strict   rc=None timeout=False out=[] err=[]
+    cmd build_asan       rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc01.c:8:231: error: [CPLUS-FFI] arithmetic in a macro expansion cannot be instrum]
+    cmd runtime_asan     rc=None timeout=False out=[] err=[]
+    cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc01.c:8:231: error: [CPLUS-FFI] arithmetic in a macro expansion cannot be instrum]
+    cmd runtime_ubsan    rc=None timeout=False out=[] err=[]
 runtime_crashes        tests/safety/runtime_crashes/rc02.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
@@ -535,13 +542,13 @@ runtime_crashes        tests/safety/runtime_crashes/rc08.c
 runtime_crashes        tests/safety/runtime_crashes/rc09.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:60: error: [CPLUS-OWNER] variable-length stack allocation has no bounds c]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:60: error: [CPLUS-OWNER] variable-length stack allocation has no bounds c]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:60: error: [CPLUS-OWNER] variable-length stack allocation has no bounds c]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:98: error: [CPLUS-FFI] incompatible pointer to integer conversion returni]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:98: error: [CPLUS-FFI] incompatible pointer to integer conversion returni]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:98: error: [CPLUS-FFI] incompatible pointer to integer conversion returni]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
-    cmd build_asan       rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:60: error: [CPLUS-OWNER] variable-length stack allocation has no bounds c]
+    cmd build_asan       rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:98: error: [CPLUS-FFI] incompatible pointer to integer conversion returni]
     cmd runtime_asan     rc=None timeout=False out=[] err=[]
-    cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:60: error: [CPLUS-OWNER] variable-length stack allocation has no bounds c]
+    cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/runtime_crashes/rc09.c:4:98: error: [CPLUS-FFI] incompatible pointer to integer conversion returni]
     cmd runtime_ubsan    rc=None timeout=False out=[] err=[]
 runtime_crashes        tests/safety/runtime_crashes/rc10.c
     expectation: none (no adjacent expectation artifact)
@@ -619,9 +626,9 @@ rust_compare_c         tests/safety/rust_compare/c/bad_format.c
 rust_compare_c         tests/safety/rust_compare/c/const_oob.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/const_oob.c:5:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the ]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/const_oob.c:5:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the ]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/const_oob.c:5:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the ]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/const_oob.c:5:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bound]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/const_oob.c:5:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bound]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/const_oob.c:5:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bound]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 rust_compare_c         tests/safety/rust_compare/c/dangling_stack.c
     expectation: none (no adjacent expectation artifact)
@@ -682,10 +689,10 @@ rust_compare_c         tests/safety/rust_compare/c/leak_on_return.c
 rust_compare_c         tests/safety/rust_compare/c/mutable_alias.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/mutable_alias.c ok\n] err=[]
-    cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/mutable_alias.c ok\n] err=[]
-    cmd build_strict     rc=0    timeout=False out=[] err=[]
-    cmd runtime_strict   rc=2    timeout=False out=[] err=[]
+    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/mutable_alias.c ok\n] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/mutable_alias.c:6:24: warning: [CPLUS-BORROW] exclusive mutable borrow violated: ar]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/mutable_alias.c:6:24: error: [CPLUS-BORROW] exclusive mutable borrow violated: argu]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/mutable_alias.c:6:24: error: [CPLUS-BORROW] exclusive mutable borrow violated: argu]
+    cmd runtime_strict   rc=None timeout=False out=[] err=[]
 rust_compare_c         tests/safety/rust_compare/c/null_deref.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
@@ -745,10 +752,10 @@ rust_compare_c         tests/safety/rust_compare/c/unsigned_overflow.c
 rust_compare_c         tests/safety/rust_compare/c/vla_unbounded.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/vla_unbounded.c:5:64: error: [CPLUS-OWNER] variable-length stack allocation has no ]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/vla_unbounded.c:5:64: error: [CPLUS-OWNER] variable-length stack allocation has no ]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/vla_unbounded.c:5:64: error: [CPLUS-OWNER] variable-length stack allocation has no ]
-    cmd runtime_strict   rc=None timeout=False out=[] err=[]
+    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/vla_unbounded.c ok\n] err=[]
+    cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/rust_compare/c/vla_unbounded.c ok\n] err=[]
+    cmd build_strict     rc=0    timeout=False out=[] err=[]
+    cmd runtime_strict   rc=1    timeout=False out=[] err=[]
 safety                 tests/safety/alias_borrow_escape.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
@@ -815,9 +822,9 @@ safety                 tests/safety/bounds_loop.c
 safety                 tests/safety/bounds_var_index.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/bounds_var_index.c:1:45: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds o]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/bounds_var_index.c:1:45: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds o]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/bounds_var_index.c:1:45: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds o]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/bounds_var_index.c:1:46: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'a']
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/bounds_var_index.c:1:46: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'a']
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/bounds_var_index.c:1:46: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'a']
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 safety                 tests/safety/branch_double_free.c
     expectation: none (no adjacent expectation artifact)
@@ -857,10 +864,10 @@ safety                 tests/safety/double_release.cp
 safety                 tests/safety/double_release_after_realloc.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c ok\n] err=[]
-    cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c ok\n] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: ]
-    cmd build_strict     rc=0    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: ]
-    cmd runtime_strict   rc=104  timeout=False out=[] err=[C+ runtime error: double free: managed memory released twice\n]
+    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c ok\n] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c:4:12: warning: [CPLUS-ALIAS] realloc result and original pointer re]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c:4:12: error: [CPLUS-ALIAS] realloc result and original pointer requ]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/double_release_after_realloc.c:4:12: error: [CPLUS-ALIAS] realloc result and original pointer requ]
+    cmd runtime_strict   rc=None timeout=False out=[] err=[]
 safety                 tests/safety/double_release_from_alias.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
@@ -927,7 +934,7 @@ safety                 tests/safety/fmt25_fmt07.c
 safety                 tests/safety/fmt25_fmt08.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt08.c ok\n] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt08.c:2:38: warning: [CPLUS-FFI] format string in printf is not a string literal (CWE-134;]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt08.c:2:38: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; a]
     cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt08.c:2:38: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; a]
     cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt08.c:2:38: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; a]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
@@ -941,7 +948,7 @@ safety                 tests/safety/fmt25_fmt09.c
 safety                 tests/safety/fmt25_fmt10.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt10.c ok\n] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt10.c:2:92: warning: [CPLUS-FFI] format string in printf is not a string literal (CWE-134;]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt10.c:2:92: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; a]
     cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt10.c:2:92: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; a]
     cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/fmt25_fmt10.c:2:92: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; a]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
@@ -1263,9 +1270,16 @@ safety                 tests/safety/moved_from_warning.cp
 safety                 tests/safety/multi_dim_negative.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/multi_dim_negative.c:1:37: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/multi_dim_negative.c:1:37: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/multi_dim_negative.c:1:37: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/multi_dim_negative.c:1:38: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of ']
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/multi_dim_negative.c:1:38: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of ']
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/multi_dim_negative.c:1:38: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of ']
+    cmd runtime_strict   rc=None timeout=False out=[] err=[]
+safety                 tests/safety/mutable_borrow_alias.c
+    expectation: none (no adjacent expectation artifact)
+    reasons    : no adjacent expectation; outcomes recorded as observed
+    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/mutable_borrow_alias.c ok\n] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/mutable_borrow_alias.c:4:29: warning: [CPLUS-BORROW] exclusive mutable borrow violated: arguments ]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/mutable_borrow_alias.c:4:29: error: [CPLUS-BORROW] exclusive mutable borrow violated: arguments 0 ]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/mutable_borrow_alias.c:4:29: error: [CPLUS-BORROW] exclusive mutable borrow violated: arguments 0 ]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 safety                 tests/safety/null_assignment_deref.cp
     expectation: none (no adjacent expectation artifact)
@@ -1378,6 +1392,13 @@ safety                 tests/safety/snprintf_overflow.c
     cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/snprintf_overflow.c:2:29: warning: [CPLUS-FFI] 'snprintf' will always overflow; destination buffer]
     cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/snprintf_overflow.c:2:29: error: [CPLUS-FFI] 'snprintf' will always overflow; destination buffer h]
     cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/snprintf_overflow.c:2:29: error: [CPLUS-FFI] 'snprintf' will always overflow; destination buffer h]
+    cmd runtime_strict   rc=None timeout=False out=[] err=[]
+safety                 tests/safety/stale_int_alias_free.c
+    expectation: none (no adjacent expectation artifact)
+    reasons    : no adjacent expectation; outcomes recorded as observed
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/stale_int_alias_free.c:10:3: error: [CPLUS-LIFETIME] stale integer-laundered alias passed to free\]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/stale_int_alias_free.c:10:3: error: [CPLUS-LIFETIME] stale integer-laundered alias passed to free\]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/stale_int_alias_free.c:10:3: error: [CPLUS-LIFETIME] stale integer-laundered alias passed to free\]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
 safety                 tests/safety/strcat_overflow.c
     expectation: none (no adjacent expectation artifact)
@@ -1528,7 +1549,7 @@ sanitizer              tests/safety/sanitizer/cplus_alloc_overflow.c
     cmd build_strict     rc=0    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/cplus_alloc_overflow.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit]
     cmd runtime_strict   rc=0    timeout=False out=[] err=[]
     cmd build_asan       rc=0    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/cplus_alloc_overflow.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit]
-    cmd runtime_asan     rc=-6   timeout=False out=[] err=[=================================================================\n==82310==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000954 at pc 0x0001]
+    cmd runtime_asan     rc=-6   timeout=False out=[] err=[=================================================================\n==57809==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000954 at pc 0x0001]
     cmd build_ubsan      rc=0    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/cplus_alloc_overflow.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit]
     cmd runtime_ubsan    rc=0    timeout=False out=[] err=[]
 sanitizer              tests/safety/sanitizer/double_free.c
@@ -1550,31 +1571,31 @@ sanitizer              tests/safety/sanitizer/flex_array_overflow.c
     cmd build_strict     rc=0    timeout=False out=[] err=[]
     cmd runtime_strict   rc=0    timeout=False out=[] err=[]
     cmd build_asan       rc=0    timeout=False out=[] err=[]
-    cmd runtime_asan     rc=-6   timeout=False out=[] err=[=================================================================\n==82380==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000095d at pc 0x0001]
+    cmd runtime_asan     rc=-6   timeout=False out=[] err=[=================================================================\n==57879==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000095d at pc 0x0001]
     cmd build_ubsan      rc=0    timeout=False out=[] err=[]
     cmd runtime_ubsan    rc=0    timeout=False out=[] err=[]
 sanitizer              tests/safety/sanitizer/global_overflow.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/global_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past ]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/global_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past ]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/global_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past ]
-    cmd runtime_strict   rc=None timeout=False out=[] err=[]
-    cmd build_asan       rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/global_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past ]
-    cmd runtime_asan     rc=None timeout=False out=[] err=[]
-    cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/global_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past ]
-    cmd runtime_ubsan    rc=None timeout=False out=[] err=[]
+    cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/global_overflow.c ok\n] err=[]
+    cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/global_overflow.c ok\n] err=[]
+    cmd build_strict     rc=0    timeout=False out=[] err=[]
+    cmd runtime_strict   rc=-6   timeout=False out=[] err=[C+ error: index 4 is outside the bounds of 'global_array' (length 4)\n]
+    cmd build_asan       rc=0    timeout=False out=[] err=[]
+    cmd runtime_asan     rc=-6   timeout=False out=[] err=[C+ error: index 4 is outside the bounds of 'global_array' (length 4)\n]
+    cmd build_ubsan      rc=0    timeout=False out=[] err=[]
+    cmd runtime_ubsan    rc=-6   timeout=False out=[] err=[C+ error: index 4 is outside the bounds of 'global_array' (length 4)\n]
 sanitizer              tests/safety/sanitizer/heap_overflow.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
     cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/heap_overflow.c ok\n] err=[]
     cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/heap_overflow.c ok\n] err=[]
     cmd build_strict     rc=0    timeout=False out=[] err=[]
-    cmd runtime_strict   rc=-10  timeout=False out=[] err=[]
+    cmd runtime_strict   rc=-6   timeout=False out=[] err=[C+ error: index 5 is outside the bounds of 'p' (length 4)\n]
     cmd build_asan       rc=0    timeout=False out=[] err=[]
-    cmd runtime_asan     rc=-6   timeout=False out=[] err=[=================================================================\n==82449==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000964 at pc 0x0001]
+    cmd runtime_asan     rc=-6   timeout=False out=[] err=[C+ error: index 5 is outside the bounds of 'p' (length 4)\n]
     cmd build_ubsan      rc=0    timeout=False out=[] err=[]
-    cmd runtime_ubsan    rc=-9   timeout=False out=[] err=[UndefinedBehaviorSanitizer:DEADLYSIGNAL\n==82465==ERROR: UndefinedBehaviorSanitizer: BUS on unknown address (pc 0x00018b31cdb8 bp 0x00016d4b6340 sp 0x00016d4b62]
+    cmd runtime_ubsan    rc=-6   timeout=False out=[] err=[C+ error: index 5 is outside the bounds of 'p' (length 4)\n]
 sanitizer              tests/safety/sanitizer/invalid_indirect_call.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
@@ -1618,7 +1639,7 @@ sanitizer              tests/safety/sanitizer/misaligned.c
     cmd build_asan       rc=0    timeout=False out=[] err=[]
     cmd runtime_asan     rc=0    timeout=False out=[] err=[]
     cmd build_ubsan      rc=0    timeout=False out=[] err=[]
-    cmd runtime_ubsan    rc=-6   timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/misaligned.c:4:3: runtime error: store to misaligned address 0x00016f03a3a9 for type 'in]
+    cmd runtime_ubsan    rc=-6   timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/misaligned.c:4:3: runtime error: store to misaligned address 0x00016d9bdd09 for type 'in]
 sanitizer              tests/safety/sanitizer/null_deref.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
@@ -1645,23 +1666,23 @@ sanitizer              tests/safety/sanitizer/runtime_dependent_heap_overflow.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
     cmd check_default    rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/runtime_dependent_heap_overflow.c ok\n] err=[]
-    cmd check_strict     rc=0    timeout=False out=[check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/runtime_dependent_heap_overflow.c ok\n] err=[]
-    cmd build_strict     rc=0    timeout=False out=[] err=[]
-    cmd runtime_strict   rc=105  timeout=False out=[] err=[C+ runtime error: invalid free at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/runtime_dependent_heap_overflow.c:28: pointer was not ]
-    cmd build_asan       rc=0    timeout=False out=[] err=[]
-    cmd runtime_asan     rc=-6   timeout=False out=[] err=[=================================================================\n==82742==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x6060000001e0 at pc 0x0001]
-    cmd build_ubsan      rc=0    timeout=False out=[] err=[]
-    cmd runtime_ubsan    rc=0    timeout=False out=[] err=[]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/runtime_dependent_heap_overflow.c:17:5: error: [CPLUS-FFI] arithmetic in a macro expansi]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/runtime_dependent_heap_overflow.c:17:5: error: [CPLUS-FFI] arithmetic in a macro expansi]
+    cmd runtime_strict   rc=None timeout=False out=[] err=[]
+    cmd build_asan       rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/runtime_dependent_heap_overflow.c:17:5: error: [CPLUS-FFI] arithmetic in a macro expansi]
+    cmd runtime_asan     rc=None timeout=False out=[] err=[]
+    cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/runtime_dependent_heap_overflow.c:17:5: error: [CPLUS-FFI] arithmetic in a macro expansi]
+    cmd runtime_ubsan    rc=None timeout=False out=[] err=[]
 sanitizer              tests/safety/sanitizer/stack_overflow.c
     expectation: none (no adjacent expectation artifact)
     reasons    : no adjacent expectation; outcomes recorded as observed
-    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past a]
-    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past a]
-    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past a]
+    cmd check_default    rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:3: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds st]
+    cmd check_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:3: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds st]
+    cmd build_strict     rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:3: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds st]
     cmd runtime_strict   rc=None timeout=False out=[] err=[]
-    cmd build_asan       rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past a]
+    cmd build_asan       rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:3: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds st]
     cmd runtime_asan     rc=None timeout=False out=[] err=[]
-    cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:4: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past a]
+    cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/stack_overflow.c:6:3: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds st]
     cmd runtime_ubsan    rc=None timeout=False out=[] err=[]
 sanitizer              tests/safety/sanitizer/ubsan_overflow.c
     expectation: none (no adjacent expectation artifact)
@@ -1697,4 +1718,4 @@ sanitizer              tests/safety/sanitizer/use_after_free.c
     cmd build_ubsan      rc=1    timeout=False out=[] err=[/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/sanitizer/use_after_free.c:7:3: error: [CPLUS-FFI] indirect call passes heap pointer 'p' to an unr]
     cmd runtime_ubsan    rc=None timeout=False out=[] err=[]
 
-OBSERVED cases are listed explicitly above (count=177) and are never silently skipped.
+OBSERVED cases are listed explicitly above (count=179) and are never silently skipped.

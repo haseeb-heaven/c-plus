@@ -5,7 +5,5 @@ timed_out: False
 --- stdout ---
 
 --- stderr ---
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.strict.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'lib_apply', 'lib_mul', 'lib_pair', 'lib_scale' have no definition in this TU; cross-TU control/data flow is not safety-checked here
-clang: warning: -lstatic_library_interop_strict: 'linker' input unused [-Wunused-command-line-argument]
-clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'lib_apply', 'lib_mul', 'lib_pair', 'lib_scale' have no definition in this TU; cross-TU control/data flow is not safety-checked here
 

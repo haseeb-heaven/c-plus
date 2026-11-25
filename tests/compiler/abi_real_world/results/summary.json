@@ -1,6 +1,6 @@
 {
   "suite": "abi_real_world",
-  "generated_at": "2026-11-23T16:16:12",
+  "generated_at": "2026-11-25T23:05:53",
   "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "binary_version": [
     "C+ 0.1.0"
@@ -3437,7 +3437,7 @@
       "symbols": {
         "result": {
           "rc": 0,
-          "stdout": "0000000100003834 T ___cplus_bounds_check\n0000000100003dc0 T ___cplus_checked_add_i64\n00000001000041dc T ___cplus_checked_div_i64\n0000000100004178 T ___cplus_checked_mul_i64\n00000001000046c8 T ___cplus_checked_narrow_i64\n00000001000043a8 T ___cplus_checked_rem_i64\n00000001000043e8 T ___cplus_checked_shl_i64\n0000000100004688 T ___cplus_checked_shr_i64\n0000000100004118 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100006094 T _cplus_address_retired\n000000010000562c T _cplus_alloc\n000000010000578c T _cplus_alloc_array\n0000000100005ec4 T _cplus_alloc_bytes\n00000001000060fc T _cplus_alloc_count\n0000000100005fd0 T _cplus_allocation_generation\n0000000100003ab4 T _cplus_check_bounds\n000000010000619c T _cplus_check_index\n0000000100005ddc T _cplus_check_live\n0000000100003cc8 T _cplus_check_nonnull\n0000000100003bd8 T _cplus_check_ptr_formation\n0000000100006064 T _cplus_epoch\n00000001000038ec T _cplus_fatal\n000000010000c068 S _cplus_fatal_hook\n0000000100005420 T _cplus_free_registered\n00000001000066dc T _cplus_mutex_free\n00000001000065ec T _cplus_mutex_lock\n0000000100006544 T _cplus_mutex_new\n0000000100006664 T _cplus_mutex_unlock\n0000000100006c9c T _cplus_print_end\n0000000100006904 T _cplus_print_value\n000000010000594c T _cplus_realloc\n0000000100005098 T _cplus_realloc_registered\n0000000100004ab0 T _cplus_register_allocation\n0000000100005a98 T _cplus_release\n00000001000049b8 T _cplus_resource_check_borrow\n000000010000c010 D _cplus_runtime_log_level\n0000000100006cc0 T _cplus_scan_value\n0000000100006420 T _cplus_scope_cleanup\n0000000100006310 T _cplus_scope_push\n00000001000068b0 T _cplus_tls_free\n00000001000067d4 T _cplus_tls_get\n000000010000672c T _cplus_tls_new\n000000010000682c T _cplus_tls_set\n0000000100005718 T _cplus_zalloc\n0000000100005d18 T _cplus_zero\n0000000100003654 T _main\n0000000100003508 T _rw_add_exported\n000000010000c000 D _rw_glob_counter\n000000010000c008 D _rw_glob_name\n",
+          "stdout": "0000000100001cd8 T ___cplus_bounds_check\n0000000100002114 T ___cplus_checked_add_i64\n0000000100002530 T ___cplus_checked_div_i64\n0000000100002d0c T ___cplus_checked_f2i_i64\n00000001000024cc T ___cplus_checked_mul_i64\n0000000100002a1c T ___cplus_checked_narrow_i64\n00000001000026fc T ___cplus_checked_rem_i64\n000000010000273c T ___cplus_checked_shl_i64\n00000001000029dc T ___cplus_checked_shr_i64\n0000000100003094 T ___cplus_checked_size_mul\n000000010000246c T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100004efc T _cplus_address_retired\n0000000100004408 T _cplus_alloc\n0000000100004568 T _cplus_alloc_array\n0000000100004d2c T _cplus_alloc_bytes\n0000000100004f94 T _cplus_alloc_count\n0000000100004e38 T _cplus_allocation_generation\n0000000100001e08 T _cplus_check_bounds\n0000000100005034 T _cplus_check_index\n0000000100004c44 T _cplus_check_live\n000000010000201c T _cplus_check_nonnull\n0000000100001f2c T _cplus_check_ptr_formation\n0000000100004ecc T _cplus_epoch\n00000001000016d0 T _cplus_exception_enter\n00000001000017a0 T _cplus_exception_pop\n000000010000185c T _cplus_exception_raise\n0000000100001dc4 T _cplus_fatal\n000000010000c0c8 S _cplus_fatal_hook\n0000000100004214 T _cplus_free_registered\n0000000100005574 T _cplus_mutex_free\n0000000100005484 T _cplus_mutex_lock\n00000001000053dc T _cplus_mutex_new\n00000001000054fc T _cplus_mutex_unlock\n0000000100005b34 T _cplus_print_end\n000000010000579c T _cplus_print_value\n0000000100004728 T _cplus_realloc\n0000000100003ad0 T _cplus_realloc_registered\n00000001000032f4 T _cplus_register_allocation\n00000001000048b0 T _cplus_release\n0000000100003188 T _cplus_resource_check_borrow\n0000000100004f64 T _cplus_retired_ledger_full\n000000010000c010 D _cplus_runtime_log_level\n000000010000682c T _cplus_scan_value\n0000000100005b58 T _cplus_scan_value_at\n00000001000052b8 T _cplus_scope_cleanup\n00000001000051a8 T _cplus_scope_push\n0000000100001d90 T _cplus_set_auto_runtime\n0000000100005748 T _cplus_tls_free\n000000010000566c T _cplus_tls_get\n00000001000055c4 T _cplus_tls_new\n00000001000056c4 T _cplus_tls_set\n00000001000044f4 T _cplus_zalloc\n0000000100004b80 T _cplus_zero\n00000001000014f0 T _main\n00000001000013a4 T _rw_add_exported\n000000010000c000 D _rw_glob_counter\n000000010000c008 D _rw_glob_name\n",
           "stderr": "",
           "timed_out": false,
           "command": [
@@ -3460,7 +3460,7 @@
         "undefined": {
           "result": {
             "rc": 0,
-            "stdout": "__Exit\n___chkstk_darwin\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_malloc\n_printf\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_vfprintf\n",
+            "stdout": "__Exit\n___chkstk_darwin\n___error\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n__tlv_bootstrap\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_longjmp\n_malloc\n_malloc_size\n_printf\n_pthread_atfork\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_strtoll\n_strtoull\n_vfprintf\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -3472,6 +3472,7 @@
           "raw": [
             "__Exit",
             "___chkstk_darwin",
+            "___error",
             "___memcpy_chk",
             "___memset_chk",
             "___snprintf_chk",
@@ -3479,6 +3480,7 @@
             "___stack_chk_guard",
             "___stderrp",
             "___stdoutp",
+            "__tlv_bootstrap",
             "_abort",
             "_calloc",
             "_fflush",
@@ -3487,8 +3489,11 @@
             "_fputs",
             "_free",
             "_getenv",
+            "_longjmp",
             "_malloc",
+            "_malloc_size",
             "_printf",
+            "_pthread_atfork",
             "_pthread_getspecific",
             "_pthread_key_create",
             "_pthread_key_delete",
@@ -3500,6 +3505,8 @@
             "_putchar",
             "_scanf",
             "_strlen",
+            "_strtoll",
+            "_strtoull",
             "_vfprintf"
           ]
         }
@@ -3955,7 +3962,7 @@
       "symbols": {
         "result": {
           "rc": 0,
-          "stdout": "0000000100003834 T ___cplus_bounds_check\n0000000100003dc0 T ___cplus_checked_add_i64\n00000001000041dc T ___cplus_checked_div_i64\n0000000100004178 T ___cplus_checked_mul_i64\n00000001000046c8 T ___cplus_checked_narrow_i64\n00000001000043a8 T ___cplus_checked_rem_i64\n00000001000043e8 T ___cplus_checked_shl_i64\n0000000100004688 T ___cplus_checked_shr_i64\n0000000100004118 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100006094 T _cplus_address_retired\n000000010000562c T _cplus_alloc\n000000010000578c T _cplus_alloc_array\n0000000100005ec4 T _cplus_alloc_bytes\n00000001000060fc T _cplus_alloc_count\n0000000100005fd0 T _cplus_allocation_generation\n0000000100003ab4 T _cplus_check_bounds\n000000010000619c T _cplus_check_index\n0000000100005ddc T _cplus_check_live\n0000000100003cc8 T _cplus_check_nonnull\n0000000100003bd8 T _cplus_check_ptr_formation\n0000000100006064 T _cplus_epoch\n00000001000038ec T _cplus_fatal\n000000010000c068 S _cplus_fatal_hook\n0000000100005420 T _cplus_free_registered\n00000001000066dc T _cplus_mutex_free\n00000001000065ec T _cplus_mutex_lock\n0000000100006544 T _cplus_mutex_new\n0000000100006664 T _cplus_mutex_unlock\n0000000100006c9c T _cplus_print_end\n0000000100006904 T _cplus_print_value\n000000010000594c T _cplus_realloc\n0000000100005098 T _cplus_realloc_registered\n0000000100004ab0 T _cplus_register_allocation\n0000000100005a98 T _cplus_release\n00000001000049b8 T _cplus_resource_check_borrow\n000000010000c010 D _cplus_runtime_log_level\n0000000100006cc0 T _cplus_scan_value\n0000000100006420 T _cplus_scope_cleanup\n0000000100006310 T _cplus_scope_push\n00000001000068b0 T _cplus_tls_free\n00000001000067d4 T _cplus_tls_get\n000000010000672c T _cplus_tls_new\n000000010000682c T _cplus_tls_set\n0000000100005718 T _cplus_zalloc\n0000000100005d18 T _cplus_zero\n0000000100003654 T _main\n0000000100003508 T _rw_add_exported\n000000010000c000 D _rw_glob_counter\n000000010000c008 D _rw_glob_name\n",
+          "stdout": "0000000100001cd8 T ___cplus_bounds_check\n0000000100002114 T ___cplus_checked_add_i64\n0000000100002530 T ___cplus_checked_div_i64\n0000000100002d0c T ___cplus_checked_f2i_i64\n00000001000024cc T ___cplus_checked_mul_i64\n0000000100002a1c T ___cplus_checked_narrow_i64\n00000001000026fc T ___cplus_checked_rem_i64\n000000010000273c T ___cplus_checked_shl_i64\n00000001000029dc T ___cplus_checked_shr_i64\n0000000100003094 T ___cplus_checked_size_mul\n000000010000246c T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100004efc T _cplus_address_retired\n0000000100004408 T _cplus_alloc\n0000000100004568 T _cplus_alloc_array\n0000000100004d2c T _cplus_alloc_bytes\n0000000100004f94 T _cplus_alloc_count\n0000000100004e38 T _cplus_allocation_generation\n0000000100001e08 T _cplus_check_bounds\n0000000100005034 T _cplus_check_index\n0000000100004c44 T _cplus_check_live\n000000010000201c T _cplus_check_nonnull\n0000000100001f2c T _cplus_check_ptr_formation\n0000000100004ecc T _cplus_epoch\n00000001000016d0 T _cplus_exception_enter\n00000001000017a0 T _cplus_exception_pop\n000000010000185c T _cplus_exception_raise\n0000000100001dc4 T _cplus_fatal\n000000010000c0c8 S _cplus_fatal_hook\n0000000100004214 T _cplus_free_registered\n0000000100005574 T _cplus_mutex_free\n0000000100005484 T _cplus_mutex_lock\n00000001000053dc T _cplus_mutex_new\n00000001000054fc T _cplus_mutex_unlock\n0000000100005b34 T _cplus_print_end\n000000010000579c T _cplus_print_value\n0000000100004728 T _cplus_realloc\n0000000100003ad0 T _cplus_realloc_registered\n00000001000032f4 T _cplus_register_allocation\n00000001000048b0 T _cplus_release\n0000000100003188 T _cplus_resource_check_borrow\n0000000100004f64 T _cplus_retired_ledger_full\n000000010000c010 D _cplus_runtime_log_level\n000000010000682c T _cplus_scan_value\n0000000100005b58 T _cplus_scan_value_at\n00000001000052b8 T _cplus_scope_cleanup\n00000001000051a8 T _cplus_scope_push\n0000000100001d90 T _cplus_set_auto_runtime\n0000000100005748 T _cplus_tls_free\n000000010000566c T _cplus_tls_get\n00000001000055c4 T _cplus_tls_new\n00000001000056c4 T _cplus_tls_set\n00000001000044f4 T _cplus_zalloc\n0000000100004b80 T _cplus_zero\n00000001000014f0 T _main\n00000001000013a4 T _rw_add_exported\n000000010000c000 D _rw_glob_counter\n000000010000c008 D _rw_glob_name\n",
           "stderr": "",
           "timed_out": false,
           "command": [
@@ -3978,7 +3985,7 @@
         "undefined": {
           "result": {
             "rc": 0,
-            "stdout": "__Exit\n___chkstk_darwin\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_malloc\n_printf\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_vfprintf\n",
+            "stdout": "__Exit\n___chkstk_darwin\n___error\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n__tlv_bootstrap\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_longjmp\n_malloc\n_malloc_size\n_printf\n_pthread_atfork\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_strtoll\n_strtoull\n_vfprintf\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -3990,6 +3997,7 @@
           "raw": [
             "__Exit",
             "___chkstk_darwin",
+            "___error",
             "___memcpy_chk",
             "___memset_chk",
             "___snprintf_chk",
@@ -3997,6 +4005,7 @@
             "___stack_chk_guard",
             "___stderrp",
             "___stdoutp",
+            "__tlv_bootstrap",
             "_abort",
             "_calloc",
             "_fflush",
@@ -4005,8 +4014,11 @@
             "_fputs",
             "_free",
             "_getenv",
+            "_longjmp",
             "_malloc",
+            "_malloc_size",
             "_printf",
+            "_pthread_atfork",
             "_pthread_getspecific",
             "_pthread_key_create",
             "_pthread_key_delete",
@@ -4018,6 +4030,8 @@
             "_putchar",
             "_scanf",
             "_strlen",
+            "_strtoll",
+            "_strtoull",
             "_vfprintf"
           ]
         }
@@ -4288,7 +4302,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "clang: warning: -lextern_signatures_legacy_c: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -4637,7 +4651,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "clang: warning: -lextern_signatures_default: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -4693,7 +4707,7 @@
         "helper_nm": {
           "result": {
             "rc": 0,
-            "stdout": "\nextern_signatures.default.helper.o:\n0000000000000000 T _ext_add\n00000000000001ac T _ext_double\n000000000000014c T _ext_long\n00000000000001ec T _ext_pair\n00000000000001d4 T _ext_ptr\n",
+            "stdout": "\nextern_signatures.default.helper.o:\n0000000000000000 T _ext_add\n00000000000001ac T _ext_double\n000000000000014c T _ext_long\n0000000000000224 T _ext_pair\n00000000000001d4 T _ext_ptr\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -4986,7 +5000,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.strict.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'ext_add', 'ext_double', 'ext_long', 'ext_pair', 'ext_ptr' have no definition in this TU; cross-TU control/data flow is not safety-checked here\nclang: warning: -lextern_signatures_strict: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'ext_add', 'ext_double', 'ext_long', 'ext_pair', 'ext_ptr' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -5042,7 +5056,7 @@
         "helper_nm": {
           "result": {
             "rc": 0,
-            "stdout": "\nextern_signatures.strict.helper.o:\n0000000000000000 T _ext_add\n00000000000001ac T _ext_double\n000000000000014c T _ext_long\n00000000000001ec T _ext_pair\n00000000000001d4 T _ext_ptr\n",
+            "stdout": "\nextern_signatures.strict.helper.o:\n0000000000000000 T _ext_add\n00000000000001ac T _ext_double\n000000000000014c T _ext_long\n0000000000000224 T _ext_pair\n00000000000001d4 T _ext_ptr\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -6236,7 +6250,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "clang: warning: -lstatic_library_interop_legacy_c: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -6575,7 +6589,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "clang: warning: -lstatic_library_interop_default: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -6914,7 +6928,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.strict.c: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'lib_apply', 'lib_mul', 'lib_pair', 'lib_scale' have no definition in this TU; cross-TU control/data flow is not safety-checked here\nclang: warning: -lstatic_library_interop_strict: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'lib_apply', 'lib_mul', 'lib_pair', 'lib_scale' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",

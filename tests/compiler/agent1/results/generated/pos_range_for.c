@@ -1,14 +1,11 @@
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
+#endif
 #include <stddef.h>
 extern size_t __cplus_bounds_check(size_t, size_t, const char *);
-extern void cplus_check_nonnull(const void *, const char *, int, const char *);
-#if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
-  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
-  __cplus_nn_p; })
-#else
-#define CPLUS_NONNULL(P) \
-  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
-#endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
 #  define CPLUS_STATIC_INLINE __attribute__((unused)) static
@@ -164,12 +161,12 @@ int main(void) {
 
      int *heap = cplus_new_array(int, 3); 
     int i = 0;
-    for (size_t __cplus_range_i1 = 0; __cplus_range_i1 < ((3)); CPLUS_INC(add, __cplus_range_i1, unsigned long, 64, 0, 1, 1)) { __typeof__(CPLUS_NONNULL(heap)[__cplus_range_i1]) x = CPLUS_NONNULL(heap)[__cplus_range_i1]; {
-        CPLUS_NONNULL(heap)[i] = i + 1;
+    for (size_t __cplus_range_i1 = 0; __cplus_range_i1 < ((3)); CPLUS_INC(add, __cplus_range_i1, unsigned long, 64, 0, 1, 1)) { __typeof__(heap[__cplus_bounds_check((size_t)(__cplus_range_i1), (size_t)(3), "heap")]) x = heap[__cplus_bounds_check((size_t)(__cplus_range_i1), (size_t)(3), "heap")]; {
+        heap[__cplus_bounds_check((size_t)(i), (size_t)(3), "heap")] = i + 1;
         (void)x;
         CPLUS_INC(add, i, int, 32, 1, 1, 1);
     }}
-    print("heap", CPLUS_NONNULL(heap)[0], CPLUS_NONNULL(heap)[1], CPLUS_NONNULL(heap)[2], "len", ((3)));
+    print("heap", heap[0], heap[1], heap[2], "len", ((3)));
     { __typeof__(0) __cplus_ret = (0); cplus_release(heap); heap = NULL;  return __cplus_ret;; }
 cplus_release(heap); heap = NULL; 
 #line 21 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/range_for.c"

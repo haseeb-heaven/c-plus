@@ -5,6 +5,7 @@ timed_out: False
 --- stdout ---
 __Exit
 ___chkstk_darwin
+___error
 ___memcpy_chk
 ___memset_chk
 ___snprintf_chk
@@ -12,6 +13,7 @@ ___stack_chk_fail
 ___stack_chk_guard
 ___stderrp
 ___stdoutp
+__tlv_bootstrap
 _abort
 _calloc
 _fflush
@@ -20,8 +22,11 @@ _fputc
 _fputs
 _free
 _getenv
+_longjmp
 _malloc
+_malloc_size
 _printf
+_pthread_atfork
 _pthread_getspecific
 _pthread_key_create
 _pthread_key_delete
@@ -33,6 +38,8 @@ _pthread_setspecific
 _putchar
 _scanf
 _strlen
+_strtoll
+_strtoull
 _vfprintf
 
 --- stderr ---

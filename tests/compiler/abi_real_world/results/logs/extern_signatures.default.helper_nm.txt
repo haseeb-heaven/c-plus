@@ -8,7 +8,7 @@ extern_signatures.default.helper.o:
 0000000000000000 T _ext_add
 00000000000001ac T _ext_double
 000000000000014c T _ext_long
-00000000000001ec T _ext_pair
+0000000000000224 T _ext_pair
 00000000000001d4 T _ext_ptr
 
 --- stderr ---

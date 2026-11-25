@@ -8,9 +8,6 @@ stderr:
   int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf("%d\n", p[9]); return 0; }
                                                                       ^
 help: array contains 4 elements; valid indices are 0..3
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:68: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'p' of length 4
-  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf("%d\n", p[9]); return 0; }
-                                                                     ^
 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:68: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes
   int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf("%d\n", p[9]); return 0; }
                                                                      ^

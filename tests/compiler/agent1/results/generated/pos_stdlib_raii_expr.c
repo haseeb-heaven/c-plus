@@ -1,3 +1,9 @@
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
+#endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
 #  define CPLUS_STATIC_INLINE __attribute__((unused)) static
@@ -141,8 +147,8 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 #define CPLUS_NEG(X, T, BT, SG) \
   ((T)__cplus_inline_sub_i64(0, (int64_t)(X), (BT), (SG)))
 #line 1 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/cases/stdlib_raii_expr.cp"
-#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-58510-0.h"
-#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-58510-1.h"
+#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-66220-0.h"
+#include "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus-hp-66220-1.h"
 int main(void) {
   String s = String_ctor("hello");
   IntVec v = IntVec_ctor();

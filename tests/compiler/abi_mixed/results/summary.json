@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-23T20:59:32.063439+00:00",
+  "generated": "2026-11-25T18:40:35.990347+00:00",
   "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "clang": "/usr/bin/clang",
   "source": "tests/compiler/real_world_c/cache/hash_crc32.c (verbatim functions)",
@@ -7,12 +7,12 @@
     {
       "step": "helper.clang.o",
       "rc": 0,
-      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_tzyt9dju/helper.c:11:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   11 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning g"
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_rp18_hwe/helper.c:11:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   11 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning g"
     },
     {
       "step": "helper.cplus.o",
       "rc": 0,
-      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_tzyt9dju/helper.c:11:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   11 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning g"
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_rp18_hwe/helper.c:11:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   11 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning g"
     },
     {
       "step": "caller.clang.o",

@@ -3166,10 +3166,23 @@ public:
       out.push_back(v);
   }
 
+  static bool indexHasConditional(const Expr *e, unsigned depth = 0) {
+    if (!e || depth > 8)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (isa<ConditionalOperator>(x))
+      return true;
+    for (const Stmt *child : x->children())
+      if (const auto *ce = dyn_cast<Expr>(child))
+        if (indexHasConditional(ce, depth + 1))
+          return true;
+    return false;
+  }
+
   /// STRICT rejects a subscript whose conditional index has a constant arm
   /// outside the addressed object, including nested conditionals.
   void checkConditionalIndexArms(const ArraySubscriptExpr *sub) {
-    if (!sub)
+    if (!sub || !indexHasConditional(sub->getIdx()))
       return;
     std::vector<long long> arms;
     collectConditionalIndexArms(sub->getIdx(), arms, 0);
