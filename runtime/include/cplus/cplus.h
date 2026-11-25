@@ -293,6 +293,7 @@ typedef enum {
  * through varargs, so no association is type-checked against the wrong C
  * type the way separate overloaded functions would be. */
 void cplus_print_value(cplus_print_kind kind, ...);
+void cplus_print_begin(void);
 void cplus_print_end(void);
 void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
 
@@ -375,6 +376,7 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
 
 #define print(...)                                                            \
   do {                                                                        \
+    cplus_print_begin();                                                     \
     __VA_OPT__(CPLUS_PICK16(__VA_ARGS__, CPLUS_P16, CPLUS_P15, CPLUS_P14,      \
                             CPLUS_P13, CPLUS_P12, CPLUS_P11, CPLUS_P10,       \
                             CPLUS_P9, CPLUS_P8, CPLUS_P7, CPLUS_P6,           \

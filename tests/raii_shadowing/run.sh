@@ -14,7 +14,7 @@ CASES="control_nonowning repro_shadow_basic repro_shadow_deep repro_shadow_branc
 pass=0; fail=0
 
 for c in $CASES; do
-    if ! timeout 180 "$CPLUS" build "$D/$c.cp" --default --sanitize=none -I. \
+    if ! timeout 180 "$CPLUS" build "$D/$c.cp" -I. \
             -o "$OUT/$c" >"$OUT/$c.build.log" 2>&1; then
         printf 'RAII_CASE FAIL %s build\n' "$c"
         fail=$((fail+1))
@@ -37,11 +37,10 @@ for c in $CASES; do
 done
 
 # Cross-TU case: resource type owned locally, factory + destructor in a second TU.
-if timeout 180 "$CPLUS" build "$D/repro_shadow_crosstu.cp" --default --sanitize=none \
-        -I. -I"$D" -c -o "$OUT/repro_shadow_crosstu.o" >"$OUT/crosstu_b.log" 2>&1 \
-   && timeout 180 "$CPLUS" build "$D/raii_shared.cp" --default --sanitize=none \
-        -I. -I"$D" -c -o "$OUT/raii_shared.o" >"$OUT/crosstu_a.log" 2>&1 \
-   && /usr/bin/clang "$OUT/repro_shadow_crosstu.o" "$OUT/raii_shared.o" \
+if timeout 180 "$CPLUS" build "$D/repro_shadow_crosstu.cp" -I. -I"$D" -c -o "$OUT/repro_shadow_crosstu.o" >"$OUT/crosstu_b.log" 2>&1 \
+   && timeout 180 "$CPLUS" build "$D/raii_shared.cp" -I. -I"$D" -c -o "$OUT/raii_shared.o" >"$OUT/crosstu_a.log" 2>&1 \
+   && /usr/bin/clang -fsanitize=undefined -fno-sanitize-recover=all \
+        "$OUT/repro_shadow_crosstu.o" "$OUT/raii_shared.o" \
         build/libcplus_runtime.a build/libc/libcplus_hardened.a \
         build/safe/libcplus_safecrt.a -lm -pthread \
         -o "$OUT/repro_shadow_crosstu" >>"$OUT/crosstu_b.log" 2>&1; then

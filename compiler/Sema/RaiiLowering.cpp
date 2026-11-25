@@ -18,6 +18,12 @@ constexpr size_t kNPos = static_cast<size_t>(-1);
 const char *kOwnPrefix = "/*cplus$own:";
 const char *kMemPrefix = "/*cplus$mem:";
 
+/// A borrow records which owned declaration a borrowed pointer refers to.
+struct Borrow {
+  size_t ownerId = kNPos;
+  std::string ownerName;
+};
+
 struct OwnedVar {
   std::string name;
   std::string type;   // resource type (for drop generation)
@@ -27,13 +33,17 @@ struct OwnedVar {
   std::string deferText;
   unsigned line = 0;
   unsigned column = 0;
+  size_t id = 0;      // stable declaration identity
+  std::string capture; // stable address capture to avoid name shadowing
 };
 
 struct Scope {
   size_t closeOffset = 0;
   unsigned closeLine = 0;
+  size_t openTok = 0;
   std::vector<OwnedVar> vars;
   bool functionBody = false;
+  bool cleanedByReturn = false;
 };
 
 struct LoopInfo {
@@ -173,6 +183,7 @@ private:
     }
     OwnedVar v;
     v.name = "__cplus_defer_" + std::to_string(deferCounter_++);
+    v.id = nextDeclId_++;
     v.isDefer = true;
     v.deferText = joinTokens(i + 1, semi);
     v.line = toks_[i].line;
@@ -299,7 +310,15 @@ private:
       errorAt("ownership marker outside a function scope", toks_[i]);
       return;
     }
+    if (!v.managed && v.capture.empty())
+      v.capture = "__cplus_raii_" + std::to_string(nextDeclId_);
     registerOwned(v);
+    if (!v.managed) {
+      // Capture pointer so cleanup is stable under shadowing.
+      size_t insertAt = toks_[i].offset + toks_[i].text.size();
+      std::string cap = " " + v.type + " *" + v.capture + " = &" + v.name + ";";
+      edits_.push_back(Edit{insertAt, 0, cap, seq_++});
+    }
     edits_.push_back(
         Edit{toks_[i].offset, toks_[i].text.size(), std::string(), seq_++});
     ++removedMarkers_;
@@ -308,17 +327,43 @@ private:
   void registerOwned(const OwnedVar &v) {
     // A declaration can be discovered twice: once by the resource-type
     // declaration scan and once by its ownership marker.  Keep exactly one
-    // cleanup obligation per variable per scope.
-    for (auto &existing : scopes_.back().vars) {
-      if (existing.name == v.name) {
-        existing = v;
-        owned_[v.name] = v;
-        return;
+    // cleanup obligation per variable per scope.  Shadowed bindings in nested
+    // scopes are distinct declarations and get their own obligation.
+    Scope &s = scopes_.back();
+    for (auto &existing : s.vars) {
+      if (existing.name != v.name)
+        continue;
+      size_t keepId = existing.id;
+      existing = v;
+      existing.id = keepId;
+      return;
+    }
+    OwnedVar e = v;
+    e.id = nextDeclId_++;
+    s.vars.push_back(e);
+    ++obligations_;
+  }
+
+  /// Innermost live owned binding named `name`, searching innermost scope
+  /// first so shadowed bindings resolve to their own declaration.
+  const OwnedVar *findLive(const std::string &name) const {
+    for (size_t p = scopes_.size(); p-- > 0; ) {
+      for (const auto &v : scopes_[p].vars) {
+        if (v.name == name)
+          return &v;
       }
     }
-    scopes_.back().vars.push_back(v);
-    owned_[v.name] = v;
-    ++obligations_;
+    return nullptr;
+  }
+
+  /// True when the innermost scope declares `name` (a same-scope
+  /// redeclaration), which is not a shadowing situation.
+  bool redeclaredInCurrentScope(const std::string &name) const {
+    for (const auto &v : scopes_.back().vars) {
+      if (v.name == name)
+        return true;
+    }
+    return false;
   }
 
   void handlePunct(size_t i, const Token &t) {
@@ -364,7 +409,6 @@ private:
       if (p != kNPos && isPunct(p, ")")) {
         isFunction = true;
         inFunction_ = true;
-        owned_.clear();
         borrows_.clear();
         moved_.clear();
       }
@@ -373,6 +417,7 @@ private:
     Scope s;
     s.closeOffset = t.offset;
     s.closeLine = t.line;
+    s.openTok = i;
     s.functionBody = isFunction;
     scopes_.push_back(std::move(s));
 
@@ -387,9 +432,11 @@ private:
     if (scopes_.empty())
       return;
     Scope &s = scopes_.back();
-    std::string drops = dropsFor(scopes_.size() - 1, scopes_.size(), {});
-    if (!drops.empty())
-      insertBefore(t, drops);
+    if (!s.cleanedByReturn) {
+      std::string drops = dropsFor(scopes_.size() - 1, scopes_.size(), {});
+      if (!drops.empty())
+        insertBefore(t, drops);
+    }
 
     if (loops_.size() > 0 &&
         loops_.back().bodyPos == static_cast<int>(scopes_.size()) - 1)
@@ -414,25 +461,25 @@ private:
       size_t lp = nextSig(i);
       if (isPunct(lp, "(")) {
         size_t arg = nextSig(lp);
-        if (arg < toks_.size() && toks_[arg].kind == TokKind::Identifier &&
-            owned_.count(toks_[arg].text))
-          moved_.insert(toks_[arg].text);
+        if (arg < toks_.size() && toks_[arg].kind == TokKind::Identifier) {
+          const OwnedVar *owner = findLive(toks_[arg].text);
+          if (owner)
+            moved_.insert(owner->id);
+        }
       }
       atStmtStart_ = false;
       return;
     }
     auto borrow = borrows_.find(t.text);
-    if (borrow != borrows_.end() && moved_.count(borrow->second)) {
-      errorAt("borrow '" + t.text + "' of '" + borrow->second +
+    if (borrow != borrows_.end() && moved_.count(borrow->second.ownerId)) {
+      errorAt("borrow '" + t.text + "' of '" + borrow->second.ownerName +
                   "' is used after that resource was moved",
               t, "re-borrow the new owner instead");
     }
     if (t.text == "return") {
-      std::string exclude;
-      checkReturnValue(i, &exclude);
-      std::string drops = dropsFor(0, scopes_.size(), exclude);
-      if (!drops.empty())
-        insertReturnCleanup(i, drops);
+      size_t excludeId = kNPos;
+      checkReturnValue(i, &excludeId);
+      emitReturnCleanups(i, excludeId);
       atStmtStart_ = false;
       return;
     }
@@ -515,23 +562,28 @@ private:
   }
 
   /// Cleanup calls for scopes [from, to), innermost first, and within one
-  /// scope in reverse declaration order.  `exclude` names a variable whose
-  /// ownership has been transferred and must not be destroyed here.
-  std::string dropsFor(size_t from, size_t to,
-                       const std::string &exclude) const {
+  /// scope in reverse declaration order.  `exclude` is the declaration id of
+  /// a variable whose ownership has been transferred and must not be
+  /// destroyed here.
+  std::string dropsFor(size_t from, size_t to, size_t exclude = kNPos) const {
     std::string out;
     for (size_t p = to; p > from; --p) {
       const auto &vars = scopes_[p - 1].vars;
       for (size_t k = vars.size(); k > 0; --k) {
         const OwnedVar &v = vars[k - 1];
-        if (v.name == exclude)
+        if (v.id == exclude)
           continue;
+        if (!v.isDefer && !v.managed && moved_.count(v.id))
+          continue; // moved-from: ownership already transferred
         if (v.isDefer)
           out += v.deferText + "; ";
-        else if (v.managed)
-          out += "cplus_release(" + v.name + "); " + v.name + " = NULL; ";
-        else
-          out += v.drop + "(&" + v.name + "); ";
+        else if (v.managed) {
+          std::string ref = v.capture.empty() ? v.name : ("(*" + v.capture + ")");
+          out += "cplus_release(" + ref + "); " + ref + " = NULL; ";
+        } else {
+          std::string ref = v.capture.empty() ? ("&" + v.name) : v.capture;
+          out += v.drop + "(" + ref + "); ";
+        }
       }
     }
     return out;
@@ -548,7 +600,44 @@ private:
     return dropsFor(from, scopes_.size(), {});
   }
 
-  void checkReturnValue(size_t i, std::string *excluded) {
+  /// Emit return-time cleanup.  Emit drops for every live owning scope at the
+  /// return site and mark those scopes cleanedByReturn so their normal close-
+  /// brace cleanup is suppressed.  This keeps cleanup at a syntactically valid
+  /// location (immediately before the return) and avoids double-emission.
+  void emitReturnCleanups(size_t retIdx, size_t excludeId) {
+    size_t semi = statementEnd(retIdx);
+    if (semi == kNPos) {
+      warningAt("cannot place cleanup before this statement", toks_[retIdx]);
+      return;
+    }
+
+    std::string drops;
+    for (size_t idx = scopes_.size(); idx-- > 0; ) {
+      std::string d = dropsFor(idx, idx + 1, excludeId);
+      if (!d.empty()) {
+        drops += d;
+        scopes_[idx].cleanedByReturn = true;
+      }
+    }
+    if (drops.empty())
+      return;
+
+    size_t exprStart = nextSig(retIdx);
+    if (exprStart >= semi) {
+      insertStatementCleanup(retIdx, drops);
+    } else {
+      std::string expr = joinTokens(exprStart, semi);
+      std::string replacement =
+          "{ __typeof__(" + expr + ") __cplus_ret = (" + expr + "); " + drops +
+          " return __cplus_ret; }";
+      edits_.push_back(Edit{toks_[retIdx].offset,
+                            toks_[semi].offset + toks_[semi].text.size() -
+                                toks_[retIdx].offset,
+                            replacement, seq_++});
+    }
+  }
+
+  void checkReturnValue(size_t i, size_t *excludedId) {
     size_t v = nextSig(i);
     if (v >= toks_.size() || toks_[v].kind != TokKind::Identifier)
       return;
@@ -559,19 +648,19 @@ private:
       return;
     auto borrow = borrows_.find(toks_[v].text);
     if (borrow != borrows_.end()) {
-      errorAt("borrow '" + borrow->first + "' of local '" + borrow->second +
-                  "' cannot escape the function",
+      errorAt("borrow '" + toks_[v].text + "' of local '" +
+                  borrow->second.ownerName + "' cannot escape the function",
               toks_[v], "return the owner instead, or copy the borrowed data");
       return;
     }
-    auto it = owned_.find(toks_[v].text);
-    if (it == owned_.end())
+    const OwnedVar *owner = findLive(toks_[v].text);
+    if (!owner)
       return;
 
-    if (it->second.managed) {
+    if (owner->managed) {
       Diag d;
       d.level = DiagLevel::Error;
-      d.message = "managed pointer '" + it->first +
+      d.message = "managed pointer '" + toks_[v].text +
                   "' cannot escape its owning scope";
       d.file = filename_;
       d.line = toks_[v].line;
@@ -586,16 +675,16 @@ private:
     // local's normal scope-exit cleanup is unreachable after the return, so
     // no move expression is needed; emitting one would only add a memset on
     // every returned value and block optimisation of the caller's loop.
-    *excluded = it->first;
-    moved_.insert(it->first);
+    *excludedId = owner->id;
+    moved_.insert(owner->id);
   }
 
   void checkAssignment(size_t i) {
     size_t lhs = prevSig(i);
     if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
       return;
-    auto it = owned_.find(toks_[lhs].text);
-    if (it == owned_.end())
+    const OwnedVar *owner = findLive(toks_[lhs].text);
+    if (!owner)
       return;
 
     // `*p = ...` and `p->field = ...` modify the pointee, not the owner.
@@ -607,17 +696,17 @@ private:
 
     size_t rhs = nextSig(i);
     if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier) {
-      auto rit = owned_.find(toks_[rhs].text);
-      if (rit != owned_.end()) {
-        errorAt("resource '" + it->first + "' cannot be copied from '" +
-                    rit->first + "'",
+      const OwnedVar *src = findLive(toks_[rhs].text);
+      if (src) {
+        errorAt("resource '" + owner->name + "' cannot be copied from '" +
+                    src->name + "'",
                 toks_[lhs],
-                "transfer ownership with cplus_move(" + rit->first + ")");
+                "transfer ownership with cplus_move(" + src->name + ")");
         return;
       }
     }
-    if (it->second.managed) {
-      errorAt("managed pointer '" + it->first + "' cannot be reassigned",
+    if (owner->managed) {
+      errorAt("managed pointer '" + owner->name + "' cannot be reassigned",
               toks_[lhs],
               "managed memory is released exactly once at scope exit");
     }
@@ -648,7 +737,9 @@ private:
       return;
 
     const std::string name = toks_[nameIdx].text;
-    if (owned_.count(name))
+    // Shadowed bindings in nested scopes are distinct declarations; only a
+    // redeclaration inside the same scope is a duplicate obligation.
+    if (redeclaredInCurrentScope(name))
       return;
 
     // Multi-declarator statements are rejected: each owning variable must
@@ -685,7 +776,15 @@ private:
     v.drop = v.type + "_drop";
     v.line = toks_[nameIdx].line;
     v.column = toks_[nameIdx].column;
+    v.capture = "__cplus_raii_" + std::to_string(nextDeclId_);
     registerOwned(v);
+    // Capture address at declaration so cleanup remains correct even when the
+    // name is shadowed by a later declaration at a return/exit site.
+    edits_.push_back(Edit{toks_[semi].offset + toks_[semi].text.size(), 0,
+                          " " + v.type + " *__cplus_raii_" +
+                              std::to_string(nextDeclId_ - 1) + " = &" + name +
+                              ";",
+                          seq_++});
   }
 
   /// Record `T *p = &owner;` and `T *p = managed_owner;` as borrows of a
@@ -708,9 +807,13 @@ private:
     if (ownerIdx >= toks_.size() ||
         toks_[ownerIdx].kind != TokKind::Identifier)
       return false;
-    if (!owned_.count(toks_[ownerIdx].text))
+    const OwnedVar *owner = findLive(toks_[ownerIdx].text);
+    if (!owner)
       return false;
-    borrows_[toks_[name].text] = toks_[ownerIdx].text;
+    Borrow b;
+    b.ownerId = owner->id;
+    b.ownerName = toks_[ownerIdx].text;
+    borrows_[toks_[name].text] = b;
     return true;
   }
 
@@ -745,9 +848,9 @@ private:
   Mode mode_;
 
   std::set<std::string> resourceTypes_;
-  std::map<std::string, OwnedVar> owned_;
-  std::map<std::string, std::string> borrows_;
-  std::set<std::string> moved_;
+  std::map<std::string, Borrow> borrows_;
+  std::set<size_t> moved_;
+  size_t nextDeclId_ = 0;
 
   std::vector<Scope> scopes_;
   std::vector<LoopInfo> loops_;
