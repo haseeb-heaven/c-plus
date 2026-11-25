@@ -581,6 +581,16 @@ public:
 
 private:
   void checkRead(const Stmt *s, const Expr *e) {
+    // System headers are trusted input. Apple's math.h defines unions whose
+    // alternate members are deliberately never initialized; treating those
+    // as definite-initialization violations rejects valid unchanged C.
+    if (s) {
+      SourceLocation loc = s->getBeginLoc();
+      if (loc.isMacroID())
+        loc = ctx_.getSourceManager().getExpansionLoc(loc);
+      if (loc.isValid() && ctx_.getSourceManager().isInSystemHeader(loc))
+        return;
+    }
     SubKey k;
     if (!subKeyOf(ctx_, e, k) || !tracked_.count(k.base))
       return;

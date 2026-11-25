@@ -1,1 +1,1 @@
-variable-length stack allocation has no bounds check; use cp
+sizeof on a VLA evaluates the expression at run time

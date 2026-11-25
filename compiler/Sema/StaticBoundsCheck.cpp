@@ -2507,16 +2507,45 @@ private:
     if (!isIdent(i, "sizeof"))
       return;
     size_t lp = nextSig(i);
-    if (!isPunct(lp, "("))
+    size_t rp = kNPos;
+    if (isPunct(lp, "(")) {
+      rp = match(lp, "(", ")");
+      if (rp == kNPos)
+        return;
+      bool bracket = false;
+      for (size_t k = lp + 1; k < rp; ++k) {
+        if (isPunct(k, "[")) bracket = true;
+        if (bracket && (isPunct(k, "++") || isPunct(k, "--")))
+          errorAt(toks_[i], "sizeof on a VLA evaluates the expression at run time");
+      }
+    } else if (toks_[lp].kind != TokKind::Identifier) {
+      return; // `sizeof(type)` without parentheses is not a VLA name here
+    }
+    // `int a[n++]; size_t s = sizeof a;` has the same run-time side effect,
+    // but the increment lives in the declaration, not inside sizeof. Handle
+    // both `sizeof a` and `sizeof(a)`.
+    size_t id = isPunct(lp, "(") ? nextSig(lp) : lp;
+    if (isPunct(lp, "(") && (id >= rp || toks_[id].kind != TokKind::Identifier ||
+                             nextSig(id) != rp))
       return;
-    size_t rp = match(lp, "(", ")");
-    if (rp == kNPos)
-      return;
-    bool bracket = false;
-    for (size_t k = lp + 1; k < rp; ++k) {
-      if (isPunct(k, "[")) bracket = true;
-      if (bracket && (isPunct(k, "++") || isPunct(k, "--")))
-        errorAt(toks_[i], "sizeof on a VLA evaluates the expression at run time");
+    const std::string &name = toks_[id].text;
+    for (size_t k = id; k > 0; --k) {
+      size_t decl = k - 1;
+      if (toks_[decl].kind != TokKind::Identifier || toks_[decl].text != name)
+        continue;
+      size_t ob = nextSig(decl);
+      if (!isPunct(ob, "["))
+        continue;
+      size_t cb = match(ob, "[", "]");
+      if (cb == kNPos)
+        continue;
+      for (size_t j = ob + 1; j < cb; ++j)
+        if (isPunct(j, "++") || isPunct(j, "--")) {
+          errorAt(toks_[i],
+                  "sizeof on a VLA evaluates the expression at run time");
+          return;
+        }
+      break;
     }
   }
 

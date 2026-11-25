@@ -5069,6 +5069,21 @@ public:
   }
 
   bool VisitReturnStmt(ReturnStmt *s) {
+    if (report_ && s->getRetValue() &&
+        s->getRetValue()->getType()->isPointerType()) {
+      // Lowered C rewrites a VLA into cplus_alloc_array, so the backend's
+      // -Wreturn-stack-address no longer sees `return &buf[0]`. Detect a
+      // local array ADDRESS in the AST so check and build agree. Returning
+      // an element value (`return row[0]`) stays legal.
+      const VarDecl *owner = localStackOwner(s->getRetValue());
+      if (owner && owner->hasLocalStorage() &&
+          (owner->getType()->isArrayType() ||
+           ctx_.getAsVariableArrayType(owner->getType())))
+        reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
+                    "address of stack memory associated with local variable '" +
+                        owner->getNameAsString() + "' cannot escape",
+                    "copy the data or heap-allocate it before returning", true);
+    }
     if (report_ && !heldLocks_.empty())
       for (const auto &held : heldLocks_)
         warnAt(s->getBeginLoc(), "mutex '" + held.first +
@@ -6945,6 +6960,27 @@ public:
       int slot = paramIndexOf(call->getArg(0));
       if (slot >= 0)
         userFrees_[currentFunction_].insert(slot);
+      // `free(*pp)` / `free(pp[0])` releases the object the pointer
+      // parameter POINTS TO, not the parameter itself. Record that shape
+      // separately so a caller passing `&p` can be tainted at the call site.
+      const Expr *ae = call->getArg(0)->IgnoreParenImpCasts();
+      const Expr *inner = nullptr;
+      if (const auto *uo = dyn_cast<UnaryOperator>(ae))
+        if (uo->getOpcode() == UO_Deref)
+          inner = uo->getSubExpr()->IgnoreParenImpCasts();
+      if (!inner)
+        if (const auto *ase = dyn_cast<ArraySubscriptExpr>(ae)) {
+          Expr::EvalResult r;
+          if (ase->getIdx()->EvaluateAsInt(r, ctx_) && r.Val.isInt() &&
+              r.Val.getInt().isZero())
+            inner = ase->getBase()->IgnoreParenImpCasts();
+        }
+      if (const auto *ref = inner ? dyn_cast<DeclRefExpr>(inner) : nullptr)
+        if (const auto *pv = dyn_cast<ParmVarDecl>(ref->getDecl()))
+          if (pv->getDeclContext() ==
+              static_cast<const DeclContext *>(currentFnDecl_))
+            userFreesPointee_[currentFunction_].insert(
+                (int)pv->getFunctionScopeIndex());
     }
     if (!report_ && isReleaseName(name) && call->getNumArgs() >= 1) {
       const std::string g = varNameOf(call->getArg(0));
@@ -8168,6 +8204,38 @@ public:
             markReleased(an);
         }
       }
+      // Pointer-to-pointer release (`sneak_free(&p)` where the callee does
+      // `free(*pp)`): the caller's pointee, not the address expression,
+      // becomes dangling. Keep the same double-free policy as direct relays.
+      for (const auto &target : calleeNames(call, callee)) {
+        auto pit = userFreesPointee_.find(target);
+        if (pit == userFreesPointee_.end() || pit->second.empty())
+          continue;
+        for (int idx : pit->second) {
+          if (idx < 0 || (unsigned)idx >= call->getNumArgs())
+            continue;
+          const Expr *arg = call->getArg((unsigned)idx)->IgnoreParenImpCasts();
+          const auto *addr = dyn_cast<UnaryOperator>(arg);
+          if (!addr || addr->getOpcode() != UO_AddrOf)
+            continue;
+          const auto *ref = dyn_cast<DeclRefExpr>(
+              addr->getSubExpr()->IgnoreParenImpCasts());
+          if (!ref)
+            continue;
+          const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+          if (!vd)
+            continue;
+          const std::string pn = vd->getNameAsString();
+          if (pn.empty())
+            continue;
+          if (releasedVars_.count(pn) || isReleased(addr->getSubExpr()))
+            report(call->getBeginLoc(),
+                   "double free after call to '" + target +
+                       "' which frees the pointee of its argument");
+          else if (conditionalDepth_ == 0)
+            markReleased(pn);
+        }
+      }
       // Out-parameter summaries: `make(&q)` where make does `*out = malloc(N)`
       // or `*out = p` gives q the allocation extent / release state of p
       // (S3/S9/S17).
@@ -8771,6 +8839,10 @@ public:
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
+  // Callees that release the POINTEE of a pointer parameter (`free(*pp)`).
+  // The caller passes `&p`, so ownership of p must be transferred at the
+  // call site even though the callee never names p.
+  std::map<std::string, std::set<int>> userFreesPointee_;
   // Function -> function names it returns as a function pointer
   // (`void (*get(void))(void *) { return free; }`).
   std::map<std::string, std::set<std::string>> returnedFnPtr_;
@@ -9090,6 +9162,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
       collect.hasLockCalls());
   check.setParamWriteSlots(collect.paramWriteSlots());
   check.userFrees_ = collect.userFrees_;
+  check.userFreesPointee_ = collect.userFreesPointee_;
   check.setGlobalPointsTo(collect.globalPointsTo());
   check.setUnionVars(collect.unionVars());
   check.setFnPtrVarTargets(collect.fnPtrVarTargets());
