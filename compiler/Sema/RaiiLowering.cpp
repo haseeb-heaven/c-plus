@@ -150,6 +150,8 @@ public:
     collectControlFlowHelpers();
     collectTerminationMacros();
     collectNoreturnDeclarations();
+    collectFunctionPointers();
+    collectExternalDeclarations();
     scan();
     applyEdits();
 
@@ -723,6 +725,45 @@ private:
     atStmtStart_ = false;
   }
 
+  /// Issue #48: a resource-type parameter passed by value is a second owner
+  /// of the same handle.  The callee's parameter has no independent copy of
+  /// the resource, so emitting a destructor there would double-free the
+  /// caller's still-live handle; silently ignoring it leaks the handle.  The
+  /// only sound lowering is to prohibit the by-value signature and require a
+  /// pointer (borrow) or an explicit ownership transfer at the call site.
+  /// Only top-level parameters are inspected: a resource type nested inside a
+  /// function-pointer parameter belongs to a function defined elsewhere.
+  void checkResourceParameters(size_t open, size_t close) {
+    if (mode_ == Mode::LegacyC)
+      return;
+    int depth = 0;
+    for (size_t k = open + 1; k < close; ++k) {
+      if (isPunct(k, "(") || isPunct(k, "[") || isPunct(k, "{")) {
+        ++depth;
+        continue;
+      }
+      if (isPunct(k, ")") || isPunct(k, "]") || isPunct(k, "}")) {
+        --depth;
+        continue;
+      }
+      if (depth != 0 || toks_[k].kind != TokKind::Identifier ||
+          !resourceTypes_.count(toks_[k].text))
+        continue;
+      size_t nm = nextSig(k);
+      if (nm >= close || toks_[nm].kind != TokKind::Identifier)
+        continue;
+      bool byValue = true;
+      for (size_t q = k + 1; q < nm; ++q)
+        if (isPunct(q, "*") || isPunct(q, "&"))
+          byValue = false;
+      if (!byValue)
+        continue;
+      errorAt("resource type '" + toks_[k].text + "' parameter '" +
+                  toks_[nm].text + "' cannot be passed by value",
+              toks_[nm], "pass a pointer, or transfer ownership explicitly");
+    }
+  }
+
   void openScope(size_t i, const Token &t) {
     bool isFunction = false;
     if (!inFunction_) {
@@ -741,6 +782,7 @@ private:
           for (size_t k = open + 1; k < p; ++k)
             if (toks_[k].kind == TokKind::Identifier)
               currentParams_.insert(toks_[k].text);
+          checkResourceParameters(open, p);
         }
       }
     }
@@ -1000,6 +1042,45 @@ private:
         errorAt("call through '" + t.text +
                     "' may throw and bypass C+ cleanup",
                 t, "release live owners before calling a throwing helper");
+      atStmtStart_ = false;
+      return;
+    }
+    // Issue #47: the same non-local jump through a function pointer.  The
+    // alias is recorded when the pointer is assigned a helper whose body
+    // contains `throw`, so the call site sees the same evidence as a direct
+    // call and is diagnosed in every non-legacy mode.
+    if (throwAliases_.count(t.text) && isPunct(nextSig(i), "(")) {
+      if (mode_ != Mode::LegacyC && throwSkipsOwner())
+        errorAt("call through function pointer '" + t.text +
+                    "' may throw and bypass C+ cleanup",
+                t, "release live owners before calling a throwing helper");
+      atStmtStart_ = false;
+      return;
+    }
+    // An indirect call whose target cannot be resolved from this translation
+    // unit may also throw.  STRICT fails closed while an owner inside a try
+    // region is live; DEFAULT keeps accepting ordinary callbacks because it
+    // makes no soundness claim.
+    if (strict_ && mode_ != Mode::LegacyC &&
+        functionPointerVars_.count(t.text) && isPunct(nextSig(i), "(") &&
+        throwSkipsOwner()) {
+      errorAt("indirect call through '" + t.text +
+                  "' may throw and bypass C+ cleanup",
+              t, "call a known non-throwing function, or release live owners "
+                 "before the indirect call");
+      atStmtStart_ = false;
+      return;
+    }
+    // A function declared `extern` here is defined (if at all) in another
+    // translation unit: its body, and so its ability to throw, is invisible.
+    // STRICT rejects such a call while a try-region owner is still live.
+    if (strict_ && mode_ != Mode::LegacyC &&
+        externalFunctions_.count(t.text) && isPunct(nextSig(i), "(") &&
+        throwSkipsOwner()) {
+      errorAt("call to external function '" + t.text +
+                  "' may throw and bypass C+ cleanup",
+              t, "declare a non-throwing contract, or release live owners "
+                 "before the call");
       atStmtStart_ = false;
       return;
     }
@@ -1370,6 +1451,15 @@ private:
           terminationAliases_.insert(toks_[target].text);
         else
           terminationAliases_.erase(toks_[target].text);
+        // A function pointer bound to a helper whose body contains `throw`
+        // has the same non-local-jump effect at its call site (issue #47).
+        // Reassignment to a normal function clears the alias, so ordinary
+        // callbacks are not flagged.
+        if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier &&
+            throwHelpers_.count(toks_[rhs].text))
+          throwAliases_.insert(toks_[target].text);
+        else
+          throwAliases_.erase(toks_[target].text);
       }
     }
 
@@ -1870,6 +1960,70 @@ private:
           terminationHelpers_.insert(toks_[k].text);
           break;
         }
+      }
+    }
+  }
+
+  /// Function-pointer variables (`void (*fp)(void)`).  A call through one is
+  /// indirect: in STRICT mode its callee cannot be proven non-throwing, so a
+  /// call with a try-region owner still live is rejected (issue #47).  The
+  /// recognizer is deliberately limited to the plain C declarator shape; an
+  /// alias assigned a known throwing helper is tracked separately in
+  /// checkAssignment() and diagnosed in every non-legacy mode.
+  void collectFunctionPointers() {
+    if (mode_ == Mode::LegacyC)
+      return;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isPunct(i, "("))
+        continue;
+      size_t star = nextSig(i);
+      if (!isPunct(star, "*"))
+        continue;
+      size_t name = nextSig(star);
+      if (name >= toks_.size() || toks_[name].kind != TokKind::Identifier)
+        continue;
+      size_t groupClose = nextSig(name);
+      if (!isPunct(groupClose, ")") || !isPunct(nextSig(groupClose), "("))
+        continue;
+      functionPointerVars_.insert(toks_[name].text);
+    }
+  }
+
+  /// Functions explicitly declared `extern` in this translation unit but not
+  /// defined here: their bodies (and therefore their ability to throw) are
+  /// invisible to collectControlFlowHelpers().  STRICT rejects a call to one
+  /// while an owner inside a try region would be skipped by an exception
+  /// (issue #47).  Runtime declarations emitted by the rewriter are excluded:
+  /// they are not source-level calls and their behaviour is a runtime
+  /// contract, not a user function.
+  void collectExternalDeclarations() {
+    if (mode_ == Mode::LegacyC)
+      return;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "extern"))
+        continue;
+      size_t semi = statementEnd(i);
+      if (semi == kNPos || semi <= i + 1)
+        continue;
+      bool definition = false;
+      for (size_t k = i + 1; k < semi; ++k)
+        if (isPunct(k, "{")) {
+          definition = true;
+          break;
+        }
+      if (definition)
+        continue;
+      for (size_t k = i + 1; k < semi; ++k) {
+        if (!isPunct(k, "("))
+          continue;
+        size_t nm = prevSig(k);
+        if (nm == kNPos || nm <= i ||
+            toks_[nm].kind != TokKind::Identifier)
+          break;
+        const std::string &name = toks_[nm].text;
+        if (!startsWith(name, "cplus_"))
+          externalFunctions_.insert(name);
+        break;
       }
     }
   }
@@ -2493,6 +2647,13 @@ private:
   /// Functions whose definition contains `throw`; calling one is a non-local
   /// jump that skips the caller's try-region owner destructors.
   std::set<std::string> throwHelpers_;
+  /// Function-pointer variables last assigned a helper containing `throw`.
+  std::set<std::string> throwAliases_;
+  /// Variables declared with a function-pointer declarator.  A call through
+  /// one is indirect and cannot be proven non-throwing in this TU.
+  std::set<std::string> functionPointerVars_;
+  /// Functions declared `extern` without a definition in this TU.
+  std::set<std::string> externalFunctions_;
   std::set<std::string> terminationHelpers_;
   /// Function-pointer variables whose last visible assignment was a
   /// terminator/longjmp (or a helper that contains one).

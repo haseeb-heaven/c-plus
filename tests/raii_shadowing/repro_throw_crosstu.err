@@ -1,0 +1,1 @@
+call to external function 'throwing_helper' may throw and bypass C+ cleanup
