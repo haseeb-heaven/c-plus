@@ -9,12 +9,12 @@ POS={
  'struct_member':'''#include <stdio.h>
 class Counter { int val; void inc(void){ this->val++; } int get(void){ return this->val; } };
 struct Wrapper { Counter c; };
-int main(void){ struct Wrapper w; w.c.inc(); printf("%d\\n", w.c.get()); return 0; }
+int main(void){ struct Wrapper w; w.c.val=0; w.c.inc(); printf("%d\\n", w.c.get()); return 0; }
 ''',
  'class_member':'''#include <stdio.h>
 class Counter { int val; void inc(void){ this->val++; } int get(void){ return this->val; } };
 class Outer { Counter c; void bump(void){ this->c.inc(); } int get(void){ return this->c.get(); } };
-int main(void){ Outer o; o.bump(); printf("%d\\n", o.get()); return 0; }
+int main(void){ Outer o; o.c.val=0; o.bump(); printf("%d\\n", o.get()); return 0; }
 '''}
 def run(argv,t=60):
  try:
