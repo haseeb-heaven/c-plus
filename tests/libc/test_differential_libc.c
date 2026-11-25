@@ -1,6 +1,7 @@
 /* Differential tests: compare cplus_* memory, string, and numeric
  * primitives against host C library behaviour on randomized valid inputs. */
 #include <assert.h>
+#include <ctype.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,6 +16,15 @@ static uint32_t next_u32(void) {
 }
 
 static int sgn(int x) { return (x > 0) - (x < 0); }
+
+extern long cplus_strtol(const char *, char **, int);
+extern unsigned long cplus_strtoul(const char *, char **, int);
+extern double cplus_strtod(const char *, char **);
+extern int cplus_snprintf(char *, size_t, const char *, ...);
+extern int cplus_isalpha(int);
+extern int cplus_isdigit(int);
+extern int cplus_toupper(int);
+extern int cplus_tolower(int);
 
 int main(void) {
     unsigned char buf_a[128], buf_b[128], src[128];
@@ -113,6 +123,41 @@ int main(void) {
         assert(ll1.quot == ll2.quot && ll1.rem == ll2.rem);
         assert(cplus_llabs(-42LL) == llabs(-42LL));
         assert(cplus_atoll("-9876543210") == atoll("-9876543210"));
+    }
+
+    /* 4. Numeric conversion, snprintf and ctype vs host libc (valid inputs).
+     * Random inputs are formatted from valid integers first, so no undefined
+     * input behavior is compared or reported as a difference. */
+    for (int round = 0; round < 500; ++round) {
+        char txt[48];
+        char hbuf[160], cbuf[160];
+        long v = (long)(next_u32() % 1000000u);
+        unsigned long uv = (unsigned long)(next_u32() % 1000000u);
+        char *he = (char *)0, *ce = (char *)0;
+        int hn, cn;
+
+        if (next_u32() & 1u) v = -v;
+        snprintf(txt, sizeof(txt), "%ld", v);
+        assert(strtol(txt, &he, 10) == cplus_strtol(txt, &ce, 10));
+        assert((he - txt) == (ce - txt));
+
+        snprintf(txt, sizeof(txt), "%lu", uv);
+        assert(strtoul(txt, &he, 10) == cplus_strtoul(txt, &ce, 10));
+        assert((he - txt) == (ce - txt));
+
+        snprintf(txt, sizeof(txt), "%lu.25", uv);
+        assert(strtod(txt, &he) == cplus_strtod(txt, &ce));
+        assert((he - txt) == (ce - txt));
+
+        hn = snprintf(hbuf, sizeof(hbuf), "%ld %s %.2f", v, txt, 1.25);
+        cn = cplus_snprintf(cbuf, sizeof(cbuf), "%ld %s %.2f", v, txt, 1.25);
+        assert(hn == cn && strcmp(hbuf, cbuf) == 0);
+    }
+    for (int ch = 0; ch < 128; ++ch) {
+        assert(cplus_isalpha(ch) == isalpha(ch));
+        assert(cplus_isdigit(ch) == isdigit(ch));
+        assert(cplus_toupper(ch) == toupper(ch));
+        assert(cplus_tolower(ch) == tolower(ch));
     }
 
     puts("test_differential_libc: ok");
