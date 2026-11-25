@@ -56,7 +56,13 @@ for t in tests/libc/test_*.c; do
     echo "ok $(basename "$t")"; pass=$((pass+1))
   else
     echo "FAIL $(basename "$t") (build=$brc run=$rc limit=${LIMIT:-n/a})"
-    tail -20 /tmp/libc_test.out 2>/dev/null || true
+    if [ "$t" = "tests/libc/test_corpus_uninit.c" ]; then
+        # Full traced output: the last "corpus_uninit case N" line pins the
+        # case that hangs on CI hosts.
+        cat /tmp/libc_test.out 2>/dev/null || true
+    else
+        tail -20 /tmp/libc_test.out 2>/dev/null || true
+    fi
     tail -10 /tmp/libc_build.out 2>/dev/null || true
     fail=$((fail+1))
   fi
