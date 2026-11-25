@@ -161,7 +161,7 @@ haseeb-mir@Haseebs-MacBook-Pro scratch %
 ```sh
 cmake -S . -B build
 cmake --build build --target c+ -- -j4
-./build/c+ build demos/A_hello.c -o hello
+./build/c+ build apps/legacy_demos/A_hello.c -o hello
 ./hello
 ```
 
@@ -196,7 +196,7 @@ cmake --build build --target c+ -- -j4
 
 ```sh
 ./tests/run_tests.sh
-./demos/run_demos.sh
+./apps/legacy_demos/run_demos.sh
 ./benchmarks/run_bench.sh
 ```
 
@@ -218,8 +218,8 @@ not language-equivalence claims. Full narrative:
 
 | Measurement | Result | Meaning |
 |---|---|---|
-| Goose-style data-stack bump vs checked heap (`sh benchmarks/goose_fast/run.sh`) | **86 ns/op vs 261 ns/op** (~3.0× lower allocation latency) | `stdlib/datastack.hp` bump + one-store scope release beats per-object checked-heap allocation. Gate `GOOSE_BENCH 4 4 0`. |
-| Modern libs on scratch (`sh benchmarks/goose_modern/run.sh`) | **60 ns/op bump vs 162 ns/op heap** (~2.7×); full sqldb+gameeng+scratch workload 557 ns/op | Real app-shaped workload, gate `GOOSE_MODERN_BENCH 3 3 0`. |
+| Goose-style data-stack bump vs checked heap (`sh benchmarks/goose_fast/run.sh`) | **30 ns/op vs 328 ns/op** in the committed evidence run (~10.9× lower allocation latency) | [binary + raw output + screenshot](proof/benchmarks/README.md). `stdlib/datastack.hp` bump + one-store scope release. Gate `GOOSE_BENCH 4 4 0`. |
+| Modern libs on scratch (`sh benchmarks/goose_modern/run.sh`) | **23 ns/op bump vs 206 ns/op heap** (~9.0×); full workload 146 ns/op in the [committed evidence](proof/benchmarks/README.md) | Real app-shaped workload, gate `GOOSE_MODERN_BENCH 3 3 0`. |
 | Checked-heap tracking ON/OFF | 2.59× median overhead (79.91 vs 30.85 ns/op) | Cost of the live-allocation side table; the reason hot paths use arenas/pools instead. |
 | Rust-vs-C+ runtime outcomes (`sh tests/rust_vs_cplus/run_compare.sh`) | 473 matched, 119 documented differences, 8 both-skip, **0 failures** | Outcome parity on valid inputs is evidence of behavior, **not** a speed or safety proof. |
 | Fil-C-style liveness / SoftBound / GSL / lifetime (`sh tests/stdlib/upstream_reuse/run_memory_safety.sh`) | `MEMSAFE 5 5 0` (26 + 51 + 80 + 25 checks) | Adapted side-table/bounds techniques only; no Fil-C compiler, GC or capability ABI, and no timing comparison. |
