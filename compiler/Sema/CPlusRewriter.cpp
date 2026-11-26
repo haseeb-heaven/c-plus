@@ -5302,9 +5302,19 @@ std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
         const std::string handler = lowerExceptionsImpl(
             lowerThrows(source.substr(ho + 1, hc - ho - 1), changed), counter,
             changed);
-        handlerCode = " Exception " + name + " = " + frame + ".base.exc; " +
-                      handler;
+        // Preserve the outer handler's rethrow exception: a nested try/catch
+        // inside a catch must not overwrite the TLS value it will rethrow.
+        handlerCode = " Exception __cplus_prev_rethrow_" + frame +
+                      " = cplus_rethrow_exc; Exception " + name + " = " +
+                      frame + ".base.exc; " + handler +
+                      " cplus_rethrow_exc = __cplus_prev_rethrow_" + frame +
+                      ";";
         firstHandler = false;
+      } else {
+        // Fail closed instead of silently discarding a handler. Since this
+        // lowering has no DiagnosticEngine, emit a compile-time assertion in
+        // the generated C; check and build both reject the source.
+        out += "\n_Static_assert(0, \"multiple catch clauses are not supported\");\n";
       }
       resume = hc + 1;
       scan = skipSpace(source, resume);
