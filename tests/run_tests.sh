@@ -119,10 +119,8 @@ for src in "$ROOT"/tests/compile_fail/*.c "$ROOT"/tests/compile_fail/*.cp; do
       # (or an unchecked run-time bound); compiler/ is owned by another agent,
       # so report the blocker rather than fabricate a compile-time rejection.
       # See tests/known_gaps/README.md.
-      if { timeout 60 "$CPLUS" build "$src" --legacy-c \
-              -o "$OUT/$name.lowered" >>"$OUT/$name.log" 2>&1 ||
-           timeout 60 "$CPLUS" build --no-werror -w "$src" \
-              -o "$OUT/$name.lowered" >>"$OUT/$name.log" 2>&1; } &&
+      if timeout 60 "$CPLUS" build --no-werror -w "$src" \
+              -o "$OUT/$name.lowered" >>"$OUT/$name.log" 2>&1 &&
          timeout 10 "$OUT/$name.lowered" >>"$OUT/$name.runlog" 2>&1; then
         gap "$name (VLA compiles and runs, but is NOT rejected by the compiler)"
         printf '  blocker: %s\n' \
