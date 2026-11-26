@@ -3217,7 +3217,20 @@ public:
 
   /// Reject array subscripts / pointer offsets beyond a tracked heap extent.
   void checkHeapSubscript(const ArraySubscriptExpr *sub, SourceLocation loc) {
-    const HeapAllocState *st = heapStateOf(sub->getBase());
+    const Expr *baseExpr = sub->getBase()->IgnoreParenImpCasts();
+    const HeapAllocState *st = heapStateOf(baseExpr);
+    unsigned long long fieldOffsetBytes = 0;
+    // A downcast member access (`((Large *)small)->payload[3]`) hides the
+    // allocation extent behind a MemberExpr. Resolve the underlying object
+    // and account for the field's byte offset before comparing extents.
+    if (const auto *me = dyn_cast<MemberExpr>(baseExpr)) {
+      if (const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl()))
+        fieldOffsetBytes =
+            (unsigned long long)(ctx_.getFieldOffset(fd) / 8u);
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              me->getBase()->IgnoreParenImpCasts()))
+        st = heapStateOf(ref);
+    }
     if (!st)
       return;
     if (st->provenanceLost) {
@@ -3263,7 +3276,8 @@ public:
       elemSize = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
     if (elemSize == 0)
       return;
-    unsigned long long off = (unsigned long long)idx * elemSize;
+    unsigned long long off =
+        fieldOffsetBytes + (unsigned long long)idx * elemSize;
     if (off >= (unsigned long long)st->bytes)
       report(loc, "array index " + std::to_string(idx) + " exceeds " +
                       extentLabel(st->origin) + " '" + name + "' of " +
@@ -3719,6 +3733,12 @@ public:
       for (const auto &alias : it->second)
         if (releasedFields_.count(alias) || releasedVars_.count(alias))
           return true;
+    // Reverse direction: a local alias loaded from a field/array element
+    // (`int *q = a[0]`) is dangling when that element is released.
+    for (const auto &kv : fieldAliases_)
+      if (kv.second.count(name) &&
+          (releasedFields_.count(kv.first) || releasedVars_.count(kv.first)))
+        return true;
     // Integer-laundered pointer: `(int *)u` where u came from freed p.
     auto pit = provenanceSource_.find(cname);
     if (pit != provenanceSource_.end() && releasedVars_.count(pit->second))
@@ -4551,6 +4571,8 @@ public:
     stringPtrs_.clear(); // names are function-scoped, not TU-scoped
     localParamAliases_.clear(); // per-function alias -> parameter slot map
     forgedUnionVars_.clear();    // compile-time union-punning provenance
+    unprovenPtrOffset_.clear();
+    arrayDerivedPtr_.clear();
     forgedPointerVars_.clear();  // locals copied from a forged union pointer
     structLocalAddrVars_.clear(); // structs initialized with `&local`
     if (report_) {
@@ -5227,6 +5249,11 @@ public:
     recordHeapAllocation(vd);
     if (report_ && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      if (vd->getType()->isPointerType())
+        if (const auto *ref = dyn_cast<DeclRefExpr>(init))
+          if (const auto *base = dyn_cast<VarDecl>(ref->getDecl()))
+            if (base->getType()->isArrayType())
+              arrayDerivedPtr_.insert(vd->getCanonicalDecl());
       // Use the shared provenance-shape predicate so integer locals seeded by
       // `(uintptr_t)p`, tagged/offset forms (`u | 2`, `u + 8`) and further
       // copies are all tracked. The old ad-hoc predicate only handled bitwise
@@ -5542,7 +5569,9 @@ public:
     if (report_ && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenCasts();
       const std::string fkey = lvalueKey(init);
-      if (!fkey.empty() && fkey.find('.') != std::string::npos &&
+      if (!fkey.empty() &&
+          (fkey.find('.') != std::string::npos ||
+           fkey.find('[') != std::string::npos) &&
           vd->getType()->isPointerType()) {
         linkAlias(vd->getNameAsString(), fkey);
         // Read side of a struct-pointer-field alias: `int *d = b.p;` makes
@@ -5836,6 +5865,30 @@ public:
           }
         }
       }
+    }
+    if (report_ && op->isAssignmentOp()) {
+      // `p = array + runtime_offset` has no static proof and no dynamic
+      // instrumentation. Remember it so a later `*p` fails closed in STRICT.
+      const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
+      if (const auto *bo = dyn_cast<BinaryOperator>(rhs))
+        if (bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) {
+          const Expr *base = bo->getLHS()->IgnoreParenImpCasts();
+          const Expr *off = bo->getRHS()->IgnoreParenImpCasts();
+          Expr::EvalResult r;
+          bool isConst = off->EvaluateAsInt(r, ctx_) && r.Val.isInt();
+          if (!isConst) {
+            const auto *ref = dyn_cast<DeclRefExpr>(base);
+            const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+            bool fromArray = vd && vd->getType()->isArrayType();
+            if (vd && arrayDerivedPtr_.count(vd->getCanonicalDecl()))
+              fromArray = true;
+            if (fromArray)
+              if (const auto *lref = dyn_cast<DeclRefExpr>(
+                      op->getLHS()->IgnoreParenImpCasts()))
+                if (const auto *lvd = dyn_cast<VarDecl>(lref->getDecl()))
+                  unprovenPtrOffset_.insert(lvd->getCanonicalDecl());
+          }
+        }
     }
     if (report_ && op->isAssignmentOp()) {
       // Kill guard-derived non-zero / lower-bound facts on a definite
@@ -6394,6 +6447,15 @@ public:
   }
 
   bool VisitUnaryOperator(UnaryOperator *op) {
+    if (report_ && op->getOpcode() == UO_Deref) {
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              op->getSubExpr()->IgnoreParenImpCasts()))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (unprovenPtrOffset_.count(vd->getCanonicalDecl()))
+            report(op->getBeginLoc(),
+                   "dereference of pointer formed with an unproven runtime "
+                   "offset; STRICT cannot prove it is in bounds");
+    }
     // A local whose address is taken can be written by an output parameter
     // (scanf, read, memcpy, ...), so it must never be folded as a constant.
     if (op->getOpcode() == UO_AddrOf) {
@@ -8499,6 +8561,33 @@ public:
         }
       }
     }
+    // Struct downcast: a pointer to a smaller allocation is cast to a larger
+    // struct and a non-FAM field is indexed. FAMs are handled above.
+    if (const auto *me = dyn_cast<MemberExpr>(
+            subscript->getBase()->IgnoreParenImpCasts())) {
+      const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl());
+      if (fd && !ctx_.getAsIncompleteArrayType(fd->getType())) {
+        const auto *ref = dyn_cast<DeclRefExpr>(
+            me->getBase()->IgnoreParenImpCasts());
+        const HeapAllocState *hs = ref ? heapStateOf(ref) : nullptr;
+        long long idx = 0;
+        if (hs && hs->bytes > 0 && evalIndexValue(subscript->getIdx(), idx) &&
+            idx >= 0) {
+          QualType ft = fd->getType();
+          const auto *cat = ctx_.getAsConstantArrayType(ft);
+          QualType elem = cat ? cat->getElementType() : ft;
+          unsigned long long es = ctx_.getTypeSize(elem) / 8u;
+          unsigned long long field =
+              (unsigned long long)(ctx_.getFieldOffset(fd) / 8u);
+          if (es && field + (unsigned long long)idx * es >=
+                        (unsigned long long)hs->bytes)
+            report(subscript->getBeginLoc(),
+                   "field index " + std::to_string(idx) + " exceeds heap "
+                   "allocation '" + varNameOf(ref) + "' of " +
+                   std::to_string(hs->bytes) + " bytes");
+        }
+      }
+    }
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
     unsigned long long compExtent = 0;
     if (const auto *cle = dyn_cast<CompoundLiteralExpr>(base))
@@ -8764,6 +8853,9 @@ private:
   std::set<const VarDecl *> heapWritten_;
   std::set<const VarDecl *> heapInterior_;
   std::set<const VarDecl *> onePastEnd_;
+  // Pointers formed from a fixed array with a runtime (unproven) offset.
+  std::set<const VarDecl *> unprovenPtrOffset_;
+  std::set<const VarDecl *> arrayDerivedPtr_;
   std::map<const VarDecl *, std::string> strlenSized_;
   std::map<const VarDecl *, long long> loopIndexOverride_;
   std::map<std::string, llvm::APSInt> constLocals_;

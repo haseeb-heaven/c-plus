@@ -2016,6 +2016,50 @@ private:
       for (size_t k = openParen + 1; k < closeParen; ++k)
         if (toks_[k].kind == TokKind::Identifier)
           params.insert(toks_[k].text);
+      // A by-value resource/class parameter is owned by the callee: its
+      // destructor must run at function exit, just like a local owner.
+      size_t start = openParen + 1;
+      int depth = 0;
+      for (size_t k = openParen + 1; k <= closeParen; ++k) {
+        bool end = k == closeParen;
+        if (!end && isPunct(k, "(")) ++depth;
+        if (!end && isPunct(k, ")")) --depth;
+        if (!end && !(isPunct(k, ",") && depth == 0))
+          continue;
+        if (k > start) {
+          size_t nameIdx = kNPos, typeIdx = kNPos;
+          bool pointer = false;
+          for (size_t j = start; j < k; ++j) {
+            if (isPunct(j, "*"))
+              pointer = true;
+            if (toks_[j].kind == TokKind::Identifier) {
+              nameIdx = j;
+              if (typeIdx == kNPos &&
+                  std::find(resourceTypes_.begin(), resourceTypes_.end(),
+                            toks_[j].text) != resourceTypes_.end())
+                typeIdx = j;
+            }
+          }
+          if (!pointer && nameIdx != kNPos && typeIdx != kNPos &&
+              nameIdx != typeIdx) {
+            OwnedVar v;
+            v.name = toks_[nameIdx].text;
+            v.type = toks_[typeIdx].text;
+            v.drop = v.type + "_drop";
+            v.declOffset = typeIdx;
+            v.line = toks_[typeIdx].line;
+            v.column = toks_[typeIdx].column;
+            // analyzePlainC() runs before scan() and has no owner scope yet;
+            // emit the callee-side destructor directly at the function's
+            // closing brace. scan() does not track by-value parameters.
+            if (closeIdx < toks_.size())
+              edits_.push_back(Edit{toks_[closeIdx].offset, 0,
+                                    "  " + v.drop + "(&" + v.name + "); ",
+                                    seq_++});
+          }
+        }
+        start = k + 1;
+      }
     }
 
     std::vector<std::map<std::string, LocalVar>> scopes(1);
