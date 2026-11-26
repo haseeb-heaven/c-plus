@@ -995,7 +995,8 @@ private:
     }
     // A helper that contains `throw` is a non-local jump in every caller that
     // has an owner live inside its own try region, just like longjmpHelpers_.
-    if (throwHelpers_.count(t.text) && isPunct(nextSig(i), "(")) {
+    if ((throwHelpers_.count(t.text) || throwAliases_.count(t.text)) &&
+        isPunct(nextSig(i), "(")) {
       if (mode_ != Mode::LegacyC && throwSkipsOwner())
         errorAt("call through '" + t.text +
                     "' may throw and bypass C+ cleanup",
@@ -1365,11 +1366,20 @@ private:
         size_t rhs = nextSig(i);
         if (isPunct(rhs, "&"))
           rhs = nextSig(rhs);
-        if (rhs < toks_.size() && toks_[rhs].kind == TokKind::Identifier &&
-            isTerminationName(toks_[rhs].text))
+        bool terminator = rhs < toks_.size() &&
+                          toks_[rhs].kind == TokKind::Identifier &&
+                          isTerminationName(toks_[rhs].text);
+        bool thrower = rhs < toks_.size() &&
+                       toks_[rhs].kind == TokKind::Identifier &&
+                       throwHelpers_.count(toks_[rhs].text) != 0;
+        if (terminator)
           terminationAliases_.insert(toks_[target].text);
         else
           terminationAliases_.erase(toks_[target].text);
+        if (thrower)
+          throwAliases_.insert(toks_[target].text);
+        else
+          throwAliases_.erase(toks_[target].text);
       }
     }
 
@@ -2541,6 +2551,7 @@ private:
   /// Function-pointer variables whose last visible assignment was a
   /// terminator/longjmp (or a helper that contains one).
   std::set<std::string> terminationAliases_;
+  std::set<std::string> throwAliases_;
   /// Macro name -> function-like?  Macros hiding a terminator in their body.
   std::map<std::string, bool> terminationMacros_;
   std::vector<DeferInfo> defers_;
