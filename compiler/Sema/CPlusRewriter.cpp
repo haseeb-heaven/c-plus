@@ -783,6 +783,12 @@ private:
     const FuncDefaults &f = funcsWithDefaults_[it->second];
     if (f.nameIdx == i)
       return false;
+    size_t prevDefault = ts.prevSig(i);
+    if (prevDefault != kNPos &&
+        (ts.isPunct(prevDefault, ".") || ts.isPunct(prevDefault, "->")))
+      return false; // obj.method() / p->method() is not the free function
+    if (i + 1 < ts.size() && ts.isPunct(ts.nextSig(i), "{"))
+      return false; // function definition, not a call site
     size_t lp = ts.nextSig(i);
     if (!ts.isPunct(lp, "("))
       return false;
@@ -830,7 +836,23 @@ private:
       return;
     }
     if (ctorBody_ && ts.isPunct(i, "->")) {
-      out_ += ".";
+      // Only `this->member` / `self->member` uses the lowered receiver's dot
+      // access. Rewriting every arrow breaks pointer parameters/locals.
+      size_t prev = ts.prevSig(i);
+      if (prev != kNPos &&
+          (ts.isIdent(prev, "this") || ts.isIdent(prev, "self") ||
+           ts.isIdent(prev, "_cplus_self"))) {
+        out_ += ".";
+        return;
+      }
+    }
+    if (ts[i].kind == TokKind::Number &&
+        ts[i].text.find('\'') != std::string::npos) {
+      // C23 digit separators are lexed as one number but gnu17 cannot parse
+      // them; emit the plain value.
+      std::string plain = ts[i].text;
+      plain.erase(std::remove(plain.begin(), plain.end(), '\''), plain.end());
+      out_ += plain;
       return;
     }
     out_ += ts[i].text;
@@ -1557,11 +1579,18 @@ private:
 
   /// `T(args)` calls a synthesized constructor for class T.
   bool tryEmitCtorCall(size_t i) {
+    size_t prevCtor = ts.prevSig(i);
+    if (prevCtor != kNPos &&
+        (ts.isPunct(prevCtor, ".") || ts.isPunct(prevCtor, "->")))
+      return false; // member call named after a class, not a constructor
     if (ts[i].kind != TokKind::Identifier ||
         !classNamesWithCtor_.count(ts[i].text))
       return false;
     size_t lp = ts.nextSig(i);
     if (!ts.isPunct(lp, "("))
+      return false;
+    // `file (*opener)(...)` is a function-pointer declarator, not a call.
+    if (ts.isPunct(ts.nextSig(lp), "*"))
       return false;
     emit(ts[i].text + "_ctor");
     skipTo_ = i;

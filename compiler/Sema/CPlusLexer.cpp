@@ -89,9 +89,13 @@ std::vector<Token> lexCPlus(const std::string &src) {
     }
 
     // String literals (including prefixes) and char literals.
-    if (c == '"' || c == '\'' ||
-        ((c == 'u' || c == 'u8' || c == 'U' || c == 'L') && i + 1 < n &&
-         (src[i + 1] == '"' || src[i + 1] == '\''))) {
+    bool prefixedLiteral =
+        (c == 'u' || c == 'U' || c == 'L') && i + 1 < n &&
+        (src[i + 1] == '"' || src[i + 1] == '\'');
+    if (!prefixedLiteral && c == 'u' && i + 2 < n && src[i + 1] == '8' &&
+        (src[i + 2] == '"' || src[i + 2] == '\''))
+      prefixedLiteral = true; // u8"..." / u8'...'
+    if (c == '"' || c == '\'' || prefixedLiteral) {
       size_t start = i;
       char quote;
       if (c == '"' || c == '\'') {
@@ -141,6 +145,10 @@ std::vector<Token> lexCPlus(const std::string &src) {
         if (std::isalnum(static_cast<unsigned char>(d)) || d == '.' ||
             d == '_') {
           advance(1);
+        } else if (d == '\'' && i > start && i + 1 < n &&
+                   (std::isalnum(static_cast<unsigned char>(src[i + 1])) ||
+                    src[i + 1] == '_')) {
+          advance(1); // C23 digit separator: 1'000'000
         } else if ((d == '+' || d == '-') && i > start &&
                    (src[i - 1] == 'e' || src[i - 1] == 'E' ||
                     src[i - 1] == 'p' || src[i - 1] == 'P')) {

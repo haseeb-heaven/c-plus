@@ -386,9 +386,18 @@ private:
     size_t lbl = nextSig(i);
     if (lbl >= toks_.size() || toks_[lbl].kind != TokKind::Identifier)
       return false;
+    // A forward goto may leave several nested blocks; only the end of the
+    // enclosing function stops the search. Brace balance avoids matching a
+    // label in a different function.
+    int depth = 0;
     for (size_t k = lbl + 1; k < toks_.size(); ++k) {
-      if (isPunct(k, "}"))
-        return false;
+      if (isPunct(k, "{"))
+        ++depth;
+      else if (isPunct(k, "}")) {
+        if (depth == 0)
+          return false;
+        --depth;
+      }
       if (toks_[k].kind == TokKind::Identifier &&
           toks_[k].text == toks_[lbl].text && isPunct(nextSig(k), ":"))
         return jumpSkipsOwnerInit(lbl + 1, k);
@@ -410,8 +419,30 @@ private:
       if (isPunct(k, "{") || isPunct(k, "}") || isPunct(k, ";"))
         break;
     }
-    if (kw == kNPos)
+    if (kw == kNPos) {
+      // `int rc = setjmp(env); if (rc == 0) { ... }` -- the setjmp result is
+      // stored first, so the protected block is the following if-statement.
+      size_t semi = statementEnd(i);
+      for (size_t k = semi, steps = 0;
+           k != kNPos && k < toks_.size() && steps < 24;
+           k = nextSig(k), ++steps) {
+        if (isIdent(k, "if")) {
+          size_t lp2 = nextSig(k);
+          if (!isPunct(lp2, "("))
+            break;
+          size_t rp2 = matchingParen(lp2);
+          if (rp2 == kNPos)
+            break;
+          size_t body2 = nextSig(rp2);
+          if (isPunct(body2, "{") && matchingBrace(body2) != kNPos)
+            return body2;
+          break;
+        }
+        if (isPunct(k, "}") || isPunct(k, ";"))
+          continue;
+      }
       return kNPos;
+    }
     size_t lp = nextSig(kw);
     if (!isPunct(lp, "("))
       return kNPos;

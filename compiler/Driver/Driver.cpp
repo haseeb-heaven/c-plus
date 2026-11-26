@@ -1055,16 +1055,26 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   }
   std::vector<std::string> flags;
   addSanitizerFlags(flags, bit);
-  std::string cmd = "'" + clang + "' -std=gnu17 -g";
+  auto sq = [](const std::string &s) {
+    std::string out = "'";
+    for (char c : s) {
+      if (c == '\'')
+        out += "'\\''";
+      else
+        out += c;
+    }
+    return out + "'";
+  };
+  std::string cmd = sq(clang) + " -std=gnu17 -g";
   for (const auto &a : extra)
-    cmd += " '" + a + "'";
+    cmd += " " + sq(a);
   for (const auto &f : flags)
     if (f.rfind("-fsanitize=", 0) == 0 || f == "-fno-sanitize-trap=cfi" ||
         f == "-flto" || f == "-fvisibility=hidden")
-      cmd += " '" + f + "'";
+      cmd += " " + sq(f);
   std::string compileLog = std::string(srcPath.str()) + ".compile.log";
-  cmd += " -o '" + std::string(exePath.str()) + "' '" + std::string(srcPath.str()) +
-         "' > '" + compileLog + "' 2>&1";
+  cmd += " -o " + sq(std::string(exePath.str())) + " " +
+         sq(std::string(srcPath.str())) + " > " + sq(compileLog) + " 2>&1";
   int rc = system(cmd.c_str());
   if (rc != 0) {
     llvm::sys::fs::remove(srcPath);
@@ -1073,9 +1083,9 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   }
   std::string runLog = std::string(exePath.str()) + ".log";
   std::string runCmd = "exec 2>/dev/null; "
-                       "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 '" +
-                       std::string(exePath.str()) + "' > /dev/null 2> '" +
-                       runLog + "'";
+                       "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 " +
+                       sq(std::string(exePath.str())) + " > /dev/null 2> " +
+                       sq(runLog);
   (void)system(runCmd.c_str());
   std::ifstream log(runLog);
   std::stringstream buf;

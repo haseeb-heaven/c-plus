@@ -20,6 +20,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 /* C+ exception frames. The stack is thread-local and holds only ordinary C
  * pointers; raising with no active try is a deterministic fatal error.
@@ -899,7 +902,13 @@ static void cplus_retired_insert(const void *p, uint64_t generation) {
 
 /* Called with the allocator lock held. */
 static void cplus_live_grow(void) {
-  size_t cap = cplus_live_cap ? cplus_live_cap * 2 : CPLUS_LIVE_INITIAL;
+  /* Tombstone churn (allocate/free one pointer in a loop) must rehash at the
+   * same capacity instead of doubling forever (unbounded OOM). */
+  size_t cap = cplus_live_cap;
+  if (cap != 0 && cplus_live_count + 1 <= cap / 2)
+    cap = cplus_live_cap;
+  else
+    cap = cplus_live_cap ? cplus_live_cap * 2 : CPLUS_LIVE_INITIAL;
   cplus_live_slot *fresh = (cplus_live_slot *)calloc(cap, sizeof(*fresh));
   if (!fresh) {
     cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
@@ -1047,6 +1056,16 @@ void *cplus_alloc(size_t size) {
                       "managed allocation failed");
   }
   cplus_alloc_lock();
+  /* Match cplus_register_allocation(): an allocator that hands back a live
+   * or stale-retired address must fail closed instead of registering a second
+   * owner that a later single release cannot retire. */
+  if (cplus_find_live(p) || cplus_retired_address_stale(p)) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", NULL,
+                      0, "allocator returned a live or retired address");
+  }
+  cplus_quarantine_drop(p);
+  size = cplus_clamp_registered_size(p, size);
   uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
@@ -1380,6 +1399,61 @@ void cplus_tls_free(void *slotp) {
   pthread_key_delete(s->key);
   free(s);
 }
+#elif defined(_WIN32)
+/* Windows has no pthreads; use CRITICAL_SECTION and the Win32 TLS API so
+ * locks are real and TLS slots are per-thread rather than silent no-ops. */
+typedef struct {
+  CRITICAL_SECTION cs;
+} cplus_win_mutex;
+typedef struct {
+  DWORD key;
+} cplus_win_tls;
+
+void *cplus_mutex_new(void) {
+  cplus_win_mutex *m = (cplus_win_mutex *)malloc(sizeof(*m));
+  if (!m)
+    return NULL;
+  InitializeCriticalSection(&m->cs);
+  return m;
+}
+void cplus_mutex_lock(void *m) {
+  if (m)
+    EnterCriticalSection(&((cplus_win_mutex *)m)->cs);
+}
+void cplus_mutex_unlock(void *m) {
+  if (m)
+    LeaveCriticalSection(&((cplus_win_mutex *)m)->cs);
+}
+void cplus_mutex_free(void *m) {
+  if (!m)
+    return;
+  DeleteCriticalSection(&((cplus_win_mutex *)m)->cs);
+  free(m);
+}
+void *cplus_tls_new(void) {
+  cplus_win_tls *s = (cplus_win_tls *)malloc(sizeof(*s));
+  if (!s)
+    return NULL;
+  s->key = TlsAlloc();
+  if (s->key == TLS_OUT_OF_INDEXES) {
+    free(s);
+    return NULL;
+  }
+  return s;
+}
+void *cplus_tls_get(void *slot) {
+  return slot ? TlsGetValue(((cplus_win_tls *)slot)->key) : NULL;
+}
+void cplus_tls_set(void *slot, void *v) {
+  if (slot)
+    (void)TlsSetValue(((cplus_win_tls *)slot)->key, v);
+}
+void cplus_tls_free(void *slot) {
+  if (!slot)
+    return;
+  TlsFree(((cplus_win_tls *)slot)->key);
+  free(slot);
+}
 #else
 void *cplus_mutex_new(void) { return NULL; }
 void cplus_mutex_lock(void *m) { (void)m; }
@@ -1408,11 +1482,18 @@ void cplus_tls_free(void *s) { (void)s; }
  * interleaving guarantee in that out-of-memory case. */
 #define CPLUS_PRINT_MAX_DEPTH 64
 
-static char *cplus_print_buf[CPLUS_PRINT_MAX_DEPTH];
-static size_t cplus_print_cap[CPLUS_PRINT_MAX_DEPTH];
-static size_t cplus_print_len[CPLUS_PRINT_MAX_DEPTH];
-static int cplus_print_first[CPLUS_PRINT_MAX_DEPTH];
-static int cplus_print_depth = 0;
+/* print() nests across calls on one thread; a process-global stack races and
+ * can hand a buffer to another thread after a longjmp. */
+#if defined(_MSC_VER)
+#define CPLUS_THREAD_LOCAL __declspec(thread)
+#else
+#define CPLUS_THREAD_LOCAL __thread
+#endif
+static CPLUS_THREAD_LOCAL char *cplus_print_buf[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_THREAD_LOCAL size_t cplus_print_cap[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_THREAD_LOCAL size_t cplus_print_len[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_THREAD_LOCAL int cplus_print_first[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_THREAD_LOCAL int cplus_print_depth = 0;
 
 void cplus_print_begin(void) {
   if (cplus_print_depth < CPLUS_PRINT_MAX_DEPTH) {
