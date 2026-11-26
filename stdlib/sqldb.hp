@@ -121,13 +121,14 @@ static int sqldb_save(sqldb *db, const char *path) {
     f = fopen(path, "w");
     if (f == (FILE *)0)
         return -1;
-    for (i = 0; i < db->count; i++)
-        if (db->rows[i].used)
-            /* Hex-encode names so spaces/newlines cannot inject records. */
-            fprintf(f, "row %d %d ", db->rows[i].id, db->rows[i].age);
-            for (k = 0; db->rows[i].name[k] != 0 && k < SQLDB_NAME_LEN; ++k)
-                fprintf(f, "%02x", (unsigned char)db->rows[i].name[k]);
-            fprintf(f, "\n");
+    for (i = 0; i < db->count; i++) {
+        if (!db->rows[i].used) continue;
+        /* Hex-encode names so spaces/newlines cannot inject records. */
+        fprintf(f, "row %d %d ", db->rows[i].id, db->rows[i].age);
+        for (k = 0; db->rows[i].name[k] != 0 && k < SQLDB_NAME_LEN; ++k)
+            fprintf(f, "%02x", (unsigned char)db->rows[i].name[k]);
+        fprintf(f, "\n");
+    }
     fclose(f);
     return 0;
 }
