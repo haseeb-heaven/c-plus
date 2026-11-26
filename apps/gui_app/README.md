@@ -1,4 +1,4 @@
-# gui_app — real GUI application (verified, not a demo)
+# gui_app — headless GUI-command suite (NOT a native GUI) — real GUI application (verified, not a demo)
 
 This is a real, verified C+ application (not a demo). Runner: `sh apps/gui_app/run.sh`.
 
@@ -126,3 +126,5 @@ runner's compile-only Windows scope.
 Full cross-platform proof:
 [`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
 — `CROSS_PROOF 58 58 0`.
+
+This runner verifies CLI-driven GUI command behavior only; no native window, widgets, textbox, list or dropdown is present. Screenshots are SVG transcript renderings.
