@@ -11,7 +11,7 @@ toolchain PATH (`/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`),
 | `sh apps/run_all.sh` (web server via curl, SQL-like DB, headless game engine) | `APPS 3 3 0` |
 | `sh proof/games_apps/run.sh` | `PROOF_GAMES 10 0` |
 | `sh proof/real_apps_cross_platform/run.sh` (8 apps, Mach-O + PE32+) | `CROSS_PROOF 58 58 0` |
-| `sh proof/modern_c_ports/run.sh` (16 modern-C ports, binaries committed) | `PORTS_MODERN_C 16 16 0` |
+| `sh examples/modern_c_ports/run.sh` (16 modern-C ports, binaries committed) | `PORTS_MODERN_C 16 16 0` |
 | `sh apps/games3d/run.sh` (real app, not a demo) | `SCENE3D 1 4 0 13` |
 | `sh apps/gui_app/run.sh` (real app, not a demo) | `GUI_APP 30 6 0 24` (this runner's Windows `-v` capture is conservative/BLOCKED) |
 | `sh apps/cli_app/run.sh` (real app, not a demo) | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` |

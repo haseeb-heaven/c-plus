@@ -2,8 +2,8 @@
 
 Scope: the 123 example programs present under `examples/` when this task began
 (`90 .cp`, `33 .c`). Four additional example files appeared later from parallel
-agents (`examples/cli_app/cli_calc.cp`, `examples/games3d/scene3d_demo.cp`,
-`examples/gui_app/gui_app.cp`, `examples/gui_app/win_portability_probe.c`) and are
+agents (`apps/cli_app/cli_calc.cp`, `apps/games3d/scene3d_demo.cp`,
+`apps/gui_app/gui_app.cp`, `apps/gui_app/win_portability_probe.c`) and are
 deliberately outside this locked scope.
 
 Every row below is built by `run.sh` from the repo root with the listed flags

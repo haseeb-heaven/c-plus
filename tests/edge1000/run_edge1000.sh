@@ -66,7 +66,7 @@ fi
 # diagnostic self-test for the corpus that timed out on Linux CI.
 for suite in tests/libc/run_libc_tests.sh tests/libc/run_corpus_uninit_watchdog.sh \
              tests/stdlib/upstream_reuse/run_memory_safety.sh \
-             proof/modern_c_ports/run.sh tests/runtime/run_print_test.sh \
+             examples/modern_c_ports/run.sh tests/runtime/run_print_test.sh \
              tests/ctl/run_ctl_span.sh tests/stdlib/nuklear_adapt/run.sh \
              proof/games_gui_nuklear/run.sh tests/stdlib/scoped_mem/run.sh \
              tests/stdlib/no_heap/run.sh; do

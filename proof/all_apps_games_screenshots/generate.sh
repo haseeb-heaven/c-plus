@@ -36,5 +36,5 @@ run_name cli_app apps/cli_app/run.sh
 run_name scoped_memory apps/legacy_examples/scoped_memory/run.sh
 run_name ctl_demo apps/legacy_examples/ctl_demo/run.sh
 run_name nuklear proof/games_gui_nuklear/run.sh
-run_name modern_c_ports proof/modern_c_ports/run.sh
+run_name modern_c_ports examples/modern_c_ports/run.sh
 echo "SCREENSHOTS $(find "$D/screenshots" -name '*.svg' | wc -l | tr -d ' ')"

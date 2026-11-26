@@ -10,7 +10,7 @@ unset SDKROOT
 unset CPLUS_CLANG
 cases=0; pass=0; fail=0
 for suite in apps/run_all.sh proof/games_apps/run.sh \
-             proof/real_apps_cross_platform/run.sh proof/modern_c_ports/run.sh \
+             proof/real_apps_cross_platform/run.sh examples/modern_c_ports/run.sh \
              apps/games3d/run.sh apps/gui_app/run.sh \
              apps/cli_app/run.sh benchmarks/scoped_bump/run.sh \
              benchmarks/scoped_apps/run.sh \

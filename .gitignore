@@ -146,3 +146,9 @@ tests/compiler/raii_cleanup/results/*.bin
 # Generated app proof artifacts (runners recreate them).
 apps/gui_app/bin/
 apps/gui_app/results/
+
+# Generated example artifacts (runners recreate them).
+examples/**/bin/
+examples/**/out/
+examples/**/results/
+examples/**/.run/

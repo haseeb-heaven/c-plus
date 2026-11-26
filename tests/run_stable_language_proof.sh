@@ -78,7 +78,7 @@ for runner in \
   tests/docs/run_doc_check.sh \
   apps/run_all.sh \
   proof/games_gui_nuklear/run.sh \
-  proof/modern_c_ports/run.sh \
+  examples/modern_c_ports/run.sh \
   proof/all_apps_games_screenshots/run.sh \
   benchmarks/scoped_bump/run.sh \
   benchmarks/scoped_apps/run.sh; do
