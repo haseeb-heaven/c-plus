@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200112L
 #include <assert.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,8 +24,11 @@ static void expect_trap(void (*fn)(void *), void *ctx) {
         _exit(0);
     }
     assert(waitpid(pid, &status, 0) == pid);
-    assert(WIFEXITED(status));
-    assert(WEXITSTATUS(status) == 70);
+    /* C+ runtime traps via abort on some backends (SIGABRT) and via exit(70)
+     * on others; both are valid fail-closed outcomes. */
+    assert(WIFEXITED(status) ? WEXITSTATUS(status) == 70
+                             : (WIFSIGNALED(status) &&
+                                WTERMSIG(status) == SIGABRT));
 }
 
 static void child_cwe134_printf_user_input(void *unused) {

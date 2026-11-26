@@ -96,7 +96,7 @@ class log_sink {
      * and the source location.  The whole line is written under the stream
      * lock, so concurrent threads cannot interleave it. */
     int write(int severity, const char *message, const char *const *keys,
-              const long long *values, size_t field_count, const char *file,
+              const long long *values, size_t field_count, const char *src_file,
               int line, error *err) {
         char stamp[32];
         char text[LOG_LINE_SIZE];
@@ -147,9 +147,9 @@ class log_sink {
             }
             used += (size_t)n;
         }
-        if (file != NULL) {
+        if (src_file != NULL) {
             n = snprintf(text + used, sizeof(text) - used,
-                         " (%s:%d)", file, line);
+                         " (%s:%d)", src_file, line);
             if (n < 0 || (size_t)n >= sizeof(text) - used) {
                 error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
                                "log_sink::write: line truncated");

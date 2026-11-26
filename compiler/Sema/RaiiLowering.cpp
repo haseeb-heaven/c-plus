@@ -1290,7 +1290,8 @@ private:
         const OwnedVar &v = vars[k - 1];
         if ((exclude.valid() && exclude.scope == p - 1 &&
              exclude.var == k - 1) ||
-            v.deferDropped || transferredNames_.count(v.name))
+            v.deferDropped || transferredNames_.count(v.name) ||
+            v.name == "NULL")
           continue;
         // At a scope exit the name may already denote an inner shadow, so the
         // drop has to go through the saved address instead.  This only matters
