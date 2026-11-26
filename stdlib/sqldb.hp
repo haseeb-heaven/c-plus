@@ -115,6 +115,7 @@ static int sqldb_count(sqldb *db) {
 static int sqldb_save(sqldb *db, const char *path) {
     FILE *f;
     int i;
+    size_t k;
     if (db == (sqldb *)0 || path == (const char *)0)
         return -1;
     f = fopen(path, "w");
@@ -122,7 +123,6 @@ static int sqldb_save(sqldb *db, const char *path) {
         return -1;
     for (i = 0; i < db->count; i++)
         if (db->rows[i].used)
-            size_t k;
             /* Hex-encode names so spaces/newlines cannot inject records. */
             fprintf(f, "row %d %d ", db->rows[i].id, db->rows[i].age);
             for (k = 0; db->rows[i].name[k] != 0 && k < SQLDB_NAME_LEN; ++k)
@@ -147,7 +147,7 @@ static int sqldb_load(sqldb *db, const char *path) {
         char hex[(SQLDB_NAME_LEN + 1) * 2] = {0};
         char name[SQLDB_NAME_LEN] = {0};
         size_t k;
-        if (sscanf(line, "row %d %d %127s", &id, &age, hex) == 3) {
+        if (sscanf(line, "row %d %d %65s", &id, &age, hex) == 3) {
             for (k = 0; hex[2*k] != 0 && hex[2*k+1] != 0 &&
                         k < SQLDB_NAME_LEN; ++k) {
                 unsigned int byte = 0;
