@@ -129,6 +129,15 @@ static int cplus_safe_resolve_str_dmax(const char *dest, size_t fallback,
     return 1;
 }
 
+/* The checked backend's strnlen_s enforces safeclib's RSIZE_MAX_STR
+ * (4UL << 10, see third_party/safeclib/include/safe_types.h), while this
+ * library's public RSIZE_MAX_STR follows C11 (SIZE_MAX >> 1).  Passing the
+ * public value as a scan ceiling is refused by the backend with ESLEMAX
+ * (403); strnlen_s then returns 0 and a valid short source is mistaken for an
+ * empty one, causing a spurious 406 on the copy.  Bound scans by what the
+ * backend actually accepts. */
+#define CPLUS_SAFE_BOUNDED_SCAN_MAX ((size_t)(4UL << 10))
+
 /* Defense-in-depth for the standard-C-signature (auto) wrappers.
  *
  * The checked safeclib primitives already bound every read they perform by
@@ -150,19 +159,20 @@ static int cplus_safe_resolve_str_dmax(const char *dest, size_t fallback,
 static size_t cplus_safe_str_scan_ceiling(const char *dest, size_t known_dmax) {
     size_t cap = (size_t)-1;
     size_t tracked;
-    if (!dest) return RSIZE_MAX_STR;
+    if (!dest) return CPLUS_SAFE_BOUNDED_SCAN_MAX;
     tracked = cplus_safe_remaining_capacity(dest);
     if (tracked != (size_t)-1) cap = tracked;
     if (known_dmax != (size_t)-1 && (cap == (size_t)-1 || known_dmax < cap))
         cap = known_dmax;
-    if (cap == (size_t)-1 || cap > RSIZE_MAX_STR) cap = RSIZE_MAX_STR;
+    if (cap == (size_t)-1 || cap > CPLUS_SAFE_BOUNDED_SCAN_MAX)
+        cap = CPLUS_SAFE_BOUNDED_SCAN_MAX;
     return cap;
 }
 
 static int cplus_safe_bounded_strlen(const char *s, size_t ceiling, size_t *out) {
     size_t n;
     if (!s || !out || ceiling == 0) return 0;
-    if (ceiling > RSIZE_MAX_STR) ceiling = RSIZE_MAX_STR;
+    if (ceiling > CPLUS_SAFE_BOUNDED_SCAN_MAX) ceiling = CPLUS_SAFE_BOUNDED_SCAN_MAX;
     n = cplus_strnlen_s(s, ceiling); /* bounded read, never strlen() */
     if (n >= ceiling) return 0;      /* no NUL within the bound */
     *out = n;
