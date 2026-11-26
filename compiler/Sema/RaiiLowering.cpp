@@ -914,6 +914,10 @@ private:
       }
     }
     if (t.text == "cplus_move") {
+      // Per-binding transfer state (never a name-keyed global set): a second
+      // cplus_move of the same owner is diagnosed via `moveWarned`, and the
+      // macro itself zeroes the caller so the second call cannot hand out the
+      // same handle again.
       size_t lp = nextSig(i);
       if (isPunct(lp, "(")) {
         size_t arg = nextSig(lp);
@@ -1329,6 +1333,12 @@ private:
   /// whose ownership has been transferred and must not be destroyed here; it is
   /// an identity, not a name, so the outer binding of a shadowed name is still
   /// destroyed by its own scope exit.
+  ///
+  /// Issue #68: there is deliberately no translation-unit-wide set of moved
+  /// *names* here.  Transfers are recorded on the binding itself (`moved` /
+  /// `movedByMove`) and the caller's handle is zeroed at the transfer site, so
+  /// an unrelated later binding with the same spelling still gets its drop and
+  /// a move on an untaken branch cannot suppress cleanup on the other path.
   ///
   /// Explicit drops no longer suppress the automatic drop: a drop on only one
   /// branch must not leak on the other.  Instead the explicit drop is guarded

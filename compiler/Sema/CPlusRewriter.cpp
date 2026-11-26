@@ -94,6 +94,14 @@ struct ResourceInfo {
   size_t bodyClose = 0;
 };
 
+/// A struct/class field whose declared type is a C+ class.  Needed to lower
+/// member calls through a path (`w.c.add(5)`, `a.b.c.add(5)`) when the field
+/// name itself is not a local in `varClasses_`.
+struct FieldType {
+  std::string className;
+  bool pointer = false;
+};
+
 class TokenStream {
 public:
   explicit TokenStream(const std::vector<Token> &t) : toks_(t) {}
@@ -242,6 +250,7 @@ public:
     collectDeclarations();
     collectDefaultArgs();
     collectVariableTypes();
+    collectFieldTypes();
     collectAutoClasses();
     collectArrays();
     collectDynamicPointers();
@@ -448,6 +457,84 @@ private:
           !isTypeStarter(ts[n].text)) {
         varClasses_[ts[n].text] = ts[i].text;
       }
+    }
+  }
+
+  /// Record class-typed fields from class, struct and resource bodies.  Unlike
+  /// `collectVariableTypes()`, this looks inside class declarations too, so a
+  /// pointer field declared in a class (`Counter *ptr;`) can be used as the
+  /// receiver of `this->ptr->add(...)` in a method body.
+  void collectFieldTypes() {
+    auto scanBody = [&](size_t open, size_t close) {
+      size_t p = ts.nextSig(open);
+      while (p < close) {
+        // A method body inside a class is not a field declaration.
+        if (ts.isPunct(p, "{")) {
+          size_t end = ts.matchBrace(p);
+          if (end == kNPos || end >= close)
+            break;
+          p = ts.nextSig(end);
+          continue;
+        }
+        size_t semi = p;
+        while (semi < close && !ts.isPunct(semi, ";"))
+          ++semi;
+        if (semi >= close)
+          break;
+        for (size_t k = p; k < semi; ++k) {
+          if (ts[k].kind != TokKind::Identifier ||
+              !classNames_.count(ts[k].text))
+            continue;
+          bool pointer = false;
+          size_t name = ts.nextSig(k);
+          while (name < semi && ts.isPunct(name, "*")) {
+            pointer = true;
+            name = ts.nextSig(name);
+          }
+          if (name >= semi || ts[name].kind != TokKind::Identifier ||
+              isTypeStarter(ts[name].text))
+            continue;
+          fieldTypes_[ts[name].text] = {ts[k].text, pointer};
+          // Comma-separated declarators share the same class type.
+          size_t next = name;
+          while (next < semi) {
+            size_t comma = ts.nextSig(next);
+            if (!ts.isPunct(comma, ","))
+              break;
+            bool nextPointer = false;
+            next = ts.nextSig(comma);
+            while (next < semi && ts.isPunct(next, "*")) {
+              nextPointer = true;
+              next = ts.nextSig(next);
+            }
+            if (next >= semi || ts[next].kind != TokKind::Identifier)
+              break;
+            fieldTypes_[ts[next].text] = {ts[k].text, nextPointer};
+          }
+          break;
+        }
+        p = ts.nextSig(semi);
+      }
+    };
+
+    for (const auto &c : classes_)
+      scanBody(c.bodyOpen, c.bodyClose);
+    for (const auto &r : resources_)
+      scanBody(r.bodyOpen, r.bodyClose);
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (!ts.isIdent(i, "struct") && !ts.isIdent(i, "union"))
+        continue;
+      size_t name = ts.nextSig(i);
+      if (name >= ts.size() || ts[name].kind != TokKind::Identifier)
+        continue;
+      size_t open = ts.nextSig(name);
+      if (!ts.isPunct(open, "{"))
+        continue;
+      size_t close = ts.matchBrace(open);
+      if (close == kNPos)
+        continue;
+      scanBody(open, close);
+      i = close;
     }
   }
 
@@ -1591,22 +1678,25 @@ private:
   bool tryEmitMethodCall(size_t i, const ClassInfo *selfClass = nullptr) {
     if (ts[i].kind != TokKind::Identifier)
       return false;
+    // Only the head of a member path owns the rewrite.  Rewriting at an
+    // intermediate field would drop the prefix (`w.` in `w.c.add(5)`) and
+    // leave invalid C behind.
+    size_t prev = ts.prevSig(i);
+    if (ts.isPunct(prev, ".") || ts.isPunct(prev, "->"))
+      return false;
 
-    std::string className;
-    auto it = varClasses_.find(ts[i].text);
-    if (it != varClasses_.end())
-      className = it->second;
-    else if (selfClass && (ts[i].text == kw::kSelf ||
-                           ts[i].text == "this"))
-      className = selfClass->name;
-    else {
-      // A method-style call on a plain pointer/array is invalid. Give a
-      // clear C+ error instead of Clang's "not a structure or union".
-      size_t dot = ts.nextSig(i);
-      if (ts.isPunct(dot, ".") || ts.isPunct(dot, "->")) {
-        size_t member = ts.nextSig(dot);
-        if (member < ts.size() && ts.isIdent(member, "len") &&
-            ts.isPunct(ts.nextSig(member), "(")) {
+    // A method-style call on a plain pointer/array is invalid. Give a
+    // clear C+ error instead of Clang's "not a structure or union".
+    size_t dot = ts.nextSig(i);
+    if (ts.isPunct(dot, ".") || ts.isPunct(dot, "->")) {
+      size_t member = ts.nextSig(dot);
+      if (member < ts.size() && ts.isIdent(member, "len") &&
+          ts.isPunct(ts.nextSig(member), "(")) {
+        bool known = varClasses_.count(ts[i].text) != 0 ||
+                     fieldTypes_.count(ts[i].text) != 0 ||
+                     (selfClass && (ts[i].text == kw::kSelf ||
+                                    ts[i].text == "this"));
+        if (!known) {
           diags_.error("'len()' cannot be called on '" + ts[i].text +
                            "'; use the .len property on a static "
                            "array or C+ managed allocation",
@@ -1617,27 +1707,66 @@ private:
           return true;
         }
       }
-      return false;
     }
 
-    size_t op = ts.nextSig(i);
-    // Allow a method call on an array element: `vec[0].method()`.
+    // Walk the whole receiver path: `x`, `x[0]`, `x.f.m`, `p->f->m`, ...
+    // The final identifier is the method; the preceding one names the
+    // receiver whose class decides the lowered free function.
+    size_t op = dot;
     size_t receiverEnd = i;
     if (ts.isPunct(op, "[")) {
+      // Allow a method call on an array element: `vec[0].method()`.
       size_t close = ts.matchBracket(op);
       if (close == kNPos || close <= op)
         return false;
       receiverEnd = close;
       op = ts.nextSig(close);
     }
-    if (!ts.isPunct(op, ".") && !ts.isPunct(op, "->"))
+    std::string receiverName = ts[i].text;
+    bool arrow = false;
+    size_t methodIdx = kNPos, lparen = kNPos;
+    while (ts.isPunct(op, ".") || ts.isPunct(op, "->")) {
+      arrow = ts.isPunct(op, "->");
+      size_t member = ts.nextSig(op);
+      if (member >= ts.size() || ts[member].kind != TokKind::Identifier)
+        return false;
+      size_t after = ts.nextSig(member);
+      if (ts.isPunct(after, "(")) {
+        methodIdx = member;
+        lparen = after;
+        break;
+      }
+      // Another field in the path; continue looking for the method call.
+      receiverName = ts[member].text;
+      receiverEnd = member;
+      op = after;
+      if (ts.isPunct(op, "[")) {
+        size_t close = ts.matchBracket(op);
+        if (close == kNPos || close <= op)
+          return false;
+        receiverEnd = close;
+        op = ts.nextSig(close);
+      }
+    }
+    if (lparen == kNPos)
       return false;
-    bool arrow = ts.isPunct(op, "->");
-    size_t methodIdx = ts.nextSig(op);
-    if (methodIdx >= ts.size() || ts[methodIdx].kind != TokKind::Identifier)
-      return false;
-    size_t lparen = ts.nextSig(methodIdx);
-    if (!ts.isPunct(lparen, "("))
+
+    // Prefer a declared local, then a class-typed field (including fields
+    // that `collectVariableTypes()` cannot see inside a class body), and
+    // finally `this`/`self` inside a method.
+    std::string className;
+    auto it = varClasses_.find(receiverName);
+    if (it != varClasses_.end())
+      className = it->second;
+    else {
+      auto fit = fieldTypes_.find(receiverName);
+      if (fit != fieldTypes_.end())
+        className = fit->second.className;
+      else if (selfClass && (receiverName == kw::kSelf ||
+                             receiverName == "this"))
+        className = selfClass->name;
+    }
+    if (className.empty())
       return false;
 
     const ClassInfo *cls = nullptr;
@@ -1651,6 +1780,7 @@ private:
       return false;
 
     emit(className + "_" + ts[methodIdx].text + "(");
+    // `->` passes the pointer receiver directly; `.` passes its address.
     if (!arrow)
       emit("&");
     for (size_t k = i; k <= receiverEnd; ++k)
@@ -1661,6 +1791,7 @@ private:
     // Skip the receiver and the original '('; the loop continues at the
     // first argument so the closing ')' is emitted normally.
     skipTo_ = lparen;
+    changed_ = true;
     return true;
   }
 
@@ -1687,6 +1818,7 @@ private:
   std::set<std::string> classNamesWithCtor_;
   std::set<std::string> externalClassNames_;
   std::map<std::string, std::string> varClasses_;
+  std::map<std::string, FieldType> fieldTypes_;
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;
   struct DynamicLength {
