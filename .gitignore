@@ -142,3 +142,7 @@ tests/compiler/abi_link_flags/cases/*.o
 tests/compiler/abi_link_flags/cases/*.a
 tests/compiler/abi_link_flags/cases/*.dylib
 tests/compiler/raii_cleanup/results/*.bin
+
+# Generated app proof artifacts (runners recreate them).
+apps/gui_app/bin/
+apps/gui_app/results/
