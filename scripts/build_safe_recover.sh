@@ -14,6 +14,7 @@ OUT=${2:?output path required}
   "$IN" \
   "$ROOT/stdlib/safe/src/safe_runtime.c" \
   "$ROOT/stdlib/safe/src/safe_log.c" \
+  "$ROOT/stdlib/safe/src/safe_diag.c" \
   "$ROOT/stdlib/safe/src/safe_stats.c" \
   -o "$OUT"
 echo "$OUT"

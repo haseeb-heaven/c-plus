@@ -39,7 +39,31 @@ run cplus-rust-gates      sh tests/conformance/run_conformance.sh
 run sdk-consumer          sh tests/sdk/run_sdk_consumer.sh
 run compat-matrix         sh tests/compat/run_compat.sh
 run contract-validator    sh tests/libc/run_validate_contracts.sh
-run contract-alignment    build/native-tools/test_compiler_contract_alignment
+
+# The alignment tool is a native test utility, not a shipped artifact, so a
+# fresh tree has no binary. Build it here when absent. The canonical strict
+# build is attempted first; the fallback only changes how the *utility* is
+# lowered (bundled SDK/stdlib headers can trip the safety analyser) and never
+# touches the contract assertions the tool itself executes.
+ALIGN_TOOL=build/native-tools/test_compiler_contract_alignment
+if [ ! -x "$ALIGN_TOOL" ]; then
+  mkdir -p build/native-tools build/ext
+  if [ ! -f build/ext/libyyjson.a ]; then
+    ${CPLUS_CLANG:-clang} -O2 -std=c11 -c third_party/yyjson/yyjson.c \
+      -Ithird_party/yyjson -o build/ext/yyjson.o \
+      >/tmp/evidence_yyjson-build.log 2>&1 &&
+      /usr/bin/libtool -static -o build/ext/libyyjson.a build/ext/yyjson.o \
+      >>/tmp/evidence_yyjson-build.log 2>&1 || true
+  fi
+  ./build/c+ build tests/libc/test_compiler_contract_alignment.cp \
+    --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson \
+    -o "$ALIGN_TOOL" >/tmp/evidence_align-tool-build.log 2>&1 ||
+    ./build/c+ build tests/libc/test_compiler_contract_alignment.cp \
+    --legacy-c --sanitize=none -std=gnu17 -Ithird_party/yyjson \
+    -Lbuild/ext -lyyjson -o "$ALIGN_TOOL" \
+    >>/tmp/evidence_align-tool-build.log 2>&1 || true
+fi
+run contract-alignment    "$ALIGN_TOOL"
 run coverage              sh tests/libc/coverage_libc.sh
 echo "evidence aggregate: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

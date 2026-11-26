@@ -46,11 +46,17 @@ else
 fi
 
 # 2. The real driver lowers, compiles and links app.cp against BOTH archives.
-if ./build/c+ build --release tests/integration/app.cp \
+#    Libraries are passed as -L/-l link flags, not as bare .a paths: the driver
+#    drops -L/-l from its per-file `-c` compile steps but forwards them to the
+#    final link, so clang never sees an unused "linker input" under -Werror.
+#    --sanitize=none keeps those flags out of the instrumented-runtime compile
+#    too (that step receives every pass-through argument verbatim); the suite
+#    checks lowering, linking and observable SafeCRT behaviour, not sanitizers.
+if ./build/c+ build --release --sanitize=none tests/integration/app.cp \
         -I. -Istdlib/safe -Ilibc/install-include \
         -o "$OUT/app" -- \
-        "$ROOT/build/safe/libcplus_safecrt.a" \
-        "$ROOT/build/libc/libcplus_hardened.a" -lm -pthread \
+        -Lbuild/safe -lcplus_safecrt \
+        -Lbuild/libc -lcplus_hardened -lm -pthread \
         >"$OUT/app.build.log" 2>&1; then
     ok "c+ build --release app.cp (driver lowering + link)"
 else

@@ -291,13 +291,17 @@ static void sc_04_memcmp_high_bit_sign(void) {
     assert(memcmp(b, a, 2) < 0);
 }
 
-/* 19: zero-length compare -> 0, including two NULL pointers (early return). */
+/* 19: zero-length compare -> 0 for valid pointers.  A NULL operand is a
+ * constraint violation even at n == 0 and is checked before the early return,
+ * so both-NULL and NULL/valid return -1/EINVAL (RED-20 E1 contract). */
 static void sc_04_memcmp_zero_len(void) {
     unsigned char a[2] = {0xff, 0x01};
     unsigned char b[2] = {0x00, 0x02};
     assert(memcmp(a, b, 0) == 0);
-    assert(memcmp(NULL, NULL, 0) == 0);
-    assert(memcmp(NULL, b, 0) == 0);
+    errno = 0;
+    assert(memcmp(NULL, NULL, 0) == -1 && errno == EINVAL);
+    errno = 0;
+    assert(memcmp(NULL, b, 0) == -1 && errno == EINVAL);
 }
 
 /* 20: NULL arguments with n > 0 return a concrete, documented result. */
@@ -309,7 +313,8 @@ static void sc_04_memcmp_null_args(void) {
     errno = 0;
     assert(memcmp(b, NULL, 4) == 1);
     assert(errno == EINVAL);
-    assert(memcmp(NULL, NULL, 4) == 0);
+    errno = 0;
+    assert(memcmp(NULL, NULL, 4) == -1 && errno == EINVAL);
 }
 
 /* 21: overlapping regions are legal for a read-only compare. */

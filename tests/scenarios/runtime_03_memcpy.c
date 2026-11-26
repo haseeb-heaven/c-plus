@@ -86,26 +86,26 @@ static int sc_03_dest_one_short(void) {
     return 0;
 }
 
-/* SCENARIO 3: source nominally one byte short.  FINDING: the auto wrapper does
- * NOT check source capacity (cplus_sc_memcpy_s is called with BOS_UNKNOWN for
- * both sides), so the copy is accepted and reads one byte past the nominal
- * source subrange.  We keep that byte inside the enclosing 16-byte allocation
- * so the test itself invokes no UB, and compare against the host reference. */
+/* SCENARIO 3: source nominally one byte short.  The auto wrapper checks the
+ * proven source capacity (malloc_s tracks 16 bytes; src = blk + 12 leaves 4),
+ * so a 5-byte request is refused with ERANGE and dest is left untouched.  The
+ * host reference copies only the 4 in-bounds bytes: the test itself never
+ * reads blk[16]. */
 static int sc_03_src_one_short_gap(void) {
     unsigned char *blk = (unsigned char *)malloc_s(16);
-    unsigned char dest[8], ref[8];
+    unsigned char dest[8], initial[8], ref[4];
     size_t i;
     const unsigned char *src;
     int bad = 0;
     if (!blk) return 1;
     fill_pattern(blk, 16, 3u);
-    for (i = 0; i < sizeof dest; ++i) dest[i] = 0x5Au;
-    src = blk + 12; /* tracked remaining capacity is exactly 4 */
+    for (i = 0; i < sizeof dest; ++i) dest[i] = initial[i] = 0x5Au;
+    src = blk + 12; /* proven remaining capacity is exactly 4 */
     if (cplus_safe_remaining_capacity(src) != 4) bad = 1;
-    ref_copy(ref, src, 5); /* blk[12..16] is fully inside the block: no UB */
+    ref_copy(ref, src, sizeof ref); /* in-bounds host reference */
     errno = 0;
-    memcpy(dest, src, 5); /* request 5 > nominal source capacity 4 */
-    if (errno != 0 || !bytes_eq(dest, ref, 5)) bad = 1;
+    memcpy(dest, src, 5); /* 5 > proven source capacity 4 -> refused */
+    if (errno != ERANGE || !bytes_eq(dest, initial, sizeof dest)) bad = 1;
     free_s(blk);
     return bad;
 }
@@ -160,32 +160,31 @@ static int sc_03_adjacent_buffers(void) {
     return 0;
 }
 
-/* SCENARIO 8: overlapping forward copy (dest below src) refused.  safeclib
- * zeroes dmax destination bytes on ESOVRLP; verify that, not a real copy. */
+/* SCENARIO 8: overlapping forward copy (dest below src) refused.  The C+
+ * memcpy_s/security patch deliberately leaves [dest, dest+dmax) intact on
+ * ESOVRLP (locked in tests/crt/adversarial/test_mem50_memmove_overlap.c), so
+ * the whole buffer must still match its pre-call snapshot. */
 static int sc_03_overlap_forward(void) {
-    unsigned char buf[16];
+    unsigned char buf[16], initial[16];
     size_t i;
     fill_pattern(buf, sizeof buf, 8u);
+    for (i = 0; i < sizeof buf; ++i) initial[i] = buf[i];
     errno = 0;
     memcpy(buf, buf + 2, 8);
-    if (errno == 0) return 1;
-    for (i = 0; i < sizeof buf; ++i)
-        if (buf[i] != 0) return 1;
+    if (errno != EINVAL || !bytes_eq(buf, initial, sizeof buf)) return 1;
     return 0;
 }
 
-/* SCENARIO 9: overlapping backward copy (dest above src) refused. */
+/* SCENARIO 9: overlapping backward copy (dest above src) refused; dest is
+ * left intact just as in scenario 8 (no error-path zeroing). */
 static int sc_03_overlap_backward(void) {
-    unsigned char buf[16], head[4];
+    unsigned char buf[16], initial[16];
     size_t i;
     fill_pattern(buf, sizeof buf, 9u);
-    for (i = 0; i < sizeof head; ++i) head[i] = buf[i];
+    for (i = 0; i < sizeof buf; ++i) initial[i] = buf[i];
     errno = 0;
     memcpy(buf + 4, buf, 8);
-    if (errno == 0) return 1;
-    if (!bytes_eq(buf, head, sizeof head)) return 1;
-    for (i = 4; i < sizeof buf; ++i)
-        if (buf[i] != 0) return 1;
+    if (errno != EINVAL || !bytes_eq(buf, initial, sizeof buf)) return 1;
     return 0;
 }
 
