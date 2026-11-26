@@ -9145,6 +9145,13 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
     bool VisitFunctionDecl(FunctionDecl *fd) {
       checkDefiniteInitialization(
           ctx_, fd, [this](SourceLocation loc, const std::string &msg) {
+            // System headers (Apple SDK math.h, libstdc++ unions, etc.) use
+            // deliberate type-punning and partially initialised unions.  C+
+            // does not own their bodies and must not emit lifetime diagnostics
+            // for them: a source location in a system header is not user code.
+            if (loc.isValid() &&
+                ctx_.getSourceManager().isInSystemHeader(loc))
+              return;
             PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
             Diag d;
             d.level = DiagLevel::Error;
