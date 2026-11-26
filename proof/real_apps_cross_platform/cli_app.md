@@ -18,4 +18,4 @@ saved transcript.  Windows output also carries Highball's launcher line
 (engine `x64-crossover26.3-r27`, renderer `dxvk`), which is runtime noise and
 not part of the app marker.  The app runner's verified verdict is
 `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok`; its deterministic
-screenshot is [cli_app.svg](../all_apps_games_screenshots/screenshots/cli_app.svg).
+screenshot is [cli_app.svg](../all_apps_games_screenshots/cli_transcripts/cli_app.svg).

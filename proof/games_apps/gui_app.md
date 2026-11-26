@@ -29,7 +29,7 @@ GUI_RESULT describe:999,0,0 REFUSED 101
 The owning app runner (`apps/gui_app/run.sh`) runs 30 scenarios with byte-exact
 expected outputs: 6 successes and 24 defined refusals, 0 failures. Verified
 verdict: `GUI_APP 30 6 0 24`. Screenshot:
-[gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg).
+[gui_app.svg](../all_apps_games_screenshots/cli_transcripts/gui_app.svg).
 
 ## Reproduce
 

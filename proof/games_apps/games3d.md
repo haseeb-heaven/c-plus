@@ -26,7 +26,7 @@ EXIT=0
 The full transcript is byte-identical to
 `apps/games3d/expected/transcript.expected`. Verified verdict from the owning
 app runner: `SCENE3D 1 4 0 13`. Screenshot:
-[games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg).
+[games3d.svg](../all_apps_games_screenshots/cli_transcripts/games3d.svg).
 
 Refusal cases exercised by the owning app runner (`apps/games3d/run.sh`, 13
 cases): `NAN`/`INF` → `E_NONFINITE`, bad indices → `E_INDEX`, `NODE 9` →

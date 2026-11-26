@@ -66,9 +66,9 @@ print these exact final lines; each screenshot is rendered from real stdout.
 
 | App | Runner | Verified verdict | Screenshot | App README |
 | --- | --- | --- | --- | --- |
-| games3d | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg) | [apps/games3d](../../apps/games3d/README.md) |
-| gui_app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg) | [apps/gui_app](../../apps/gui_app/README.md) |
-| cli_app | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../all_apps_games_screenshots/screenshots/cli_app.svg) | [apps/cli_app](../../apps/cli_app/README.md) |
+| games3d | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../all_apps_games_screenshots/cli_transcripts/games3d.svg) | [apps/games3d](../../apps/games3d/README.md) |
+| gui_app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../all_apps_games_screenshots/cli_transcripts/gui_app.svg) | [apps/gui_app](../../apps/gui_app/README.md) |
+| cli_app | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../all_apps_games_screenshots/cli_transcripts/cli_app.svg) | [apps/cli_app](../../apps/cli_app/README.md) |
 
 ### gui_app invocation note
 

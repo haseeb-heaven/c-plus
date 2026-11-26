@@ -52,9 +52,9 @@ Their exact verified verdicts and screenshots:
 
 | App | Runner | Verified verdict | Screenshot |
 | --- | --- | --- | --- |
-| 3D scene app | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg) |
-| GUI app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg) |
-| Calculator CLI | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../all_apps_games_screenshots/screenshots/cli_app.svg) |
+| 3D scene app | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../all_apps_games_screenshots/cli_transcripts/games3d.svg) |
+| GUI app | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../all_apps_games_screenshots/cli_transcripts/gui_app.svg) |
+| Calculator CLI | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../all_apps_games_screenshots/cli_transcripts/cli_app.svg) |
 
 Per-app screenshot/transcript pages:
 [games3d](../all_apps_games_screenshots/games3d.md),

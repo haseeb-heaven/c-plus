@@ -33,4 +33,4 @@ here can contain transient bottle noise (msync bootstrap,
 `winemenubuilder.exe`, driver-load errors); those lines are not app failures
 and are stripped from the marker transcript.  The app runner's verified
 verdict is `GUI_APP 30 6 0 24`; its deterministic screenshot is
-[gui_app.svg](../all_apps_games_screenshots/screenshots/gui_app.svg).
+[gui_app.svg](../all_apps_games_screenshots/cli_transcripts/gui_app.svg).

@@ -27,7 +27,7 @@ The owning app runner (`apps/cli_app/run.sh`) runs 17 scenarios: 17 passed /
 0 failed, including a hostile 10 KB argument (`CLI refuse name or token too
 long 3`) and a wide-product overflow refusal (`CLI overflow`). Verified
 verdict: `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok`.
-Screenshot: [cli_app.svg](../all_apps_games_screenshots/screenshots/cli_app.svg).
+Screenshot: [cli_app.svg](../all_apps_games_screenshots/cli_transcripts/cli_app.svg).
 
 ## Reproduce
 

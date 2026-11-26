@@ -21,4 +21,4 @@ Both transcripts also contain the identical self-check line
 DLLs beside the exe.  `run.sh` re-runs this app on both platforms and checks
 both marker lines plus exit 0.  The app runner's verified verdict is
 `SCENE3D 1 4 0 13`; its deterministic screenshot is
-[games3d.svg](../all_apps_games_screenshots/screenshots/games3d.svg).
+[games3d.svg](../all_apps_games_screenshots/cli_transcripts/games3d.svg).
