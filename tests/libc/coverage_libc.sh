@@ -109,6 +109,15 @@ for s in $SRCS; do
   fi
 done
 ar rcs "$OUT/libcplus_hardened_cov.a" $OBJS
+# The atomic wrappers call __atomic_is_lock_free, which Clang/GCC lower to a
+# libatomic symbol on Linux.  macOS has no separate libatomic, so probe the
+# toolchain rather than hard-coding a platform or skipping the test.
+ATOMIC_LIB=""
+if printf 'int main(void) { return 0; }\n' | "$CC" -x c - -latomic \
+      -o "$OUT/atomic-link-probe" >/dev/null 2>&1; then
+  ATOMIC_LIB="-latomic"
+fi
+rm -f "$OUT/atomic-link-probe"
 pass=0; fail=0
 for t in tests/libc/test_*.c; do
   case "$t" in *_attack.c|*/test_corpus_format.c) continue ;; esac # adversarial suite has its own runner
@@ -119,7 +128,8 @@ for t in tests/libc/test_*.c; do
     *test_vendor_*) EXTRA_INC="-I. -Ithird_party/safeclib/include"; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
   esac
   if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC \
-      "$t" "$OUT/libcplus_hardened_cov.a" $EXTRA_LIB -lm -lpthread -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then
+      "$t" "$OUT/libcplus_hardened_cov.a" $EXTRA_LIB -lm -lpthread $ATOMIC_LIB \
+      -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then
     if LLVM_PROFILE_FILE="$OUT/$(basename "$t" .c).profraw" "$b" >"$OUT/$(basename "$t" .c).out" 2>&1; then
       pass=$((pass + 1))
     else

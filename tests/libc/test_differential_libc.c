@@ -1,5 +1,9 @@
 /* Differential tests: compare cplus_* memory, string, and numeric
  * primitives against host C library behaviour on randomized valid inputs. */
+/* strnlen is POSIX.1-2008; glibc hides it under plain -std=c99.  Declaring
+ * the feature level before any system header keeps this a true comparison
+ * against the host libc instead of a hand-written substitute. */
+#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>

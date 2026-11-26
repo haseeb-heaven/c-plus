@@ -4,6 +4,14 @@
 #include <assert.h>
 #include <time.h>
 
+/* C11 fixes TIME_UTC to 1, but glibc hides timespec_get and TIME_UTC unless
+ * an ISO C11 (or GNU) feature level is active.  This runner compiles C99,
+ * so supply the standard base value when the platform header omits it; the
+ * assertion still checks that the wrapper returns that exact base value. */
+#ifndef TIME_UTC
+#define TIME_UTC 1
+#endif
+
 int cplus_clock_gettime(clockid_t,struct timespec*);
 int cplus_nanosleep(const struct timespec*,struct timespec*);
 int cplus_timespec_get(struct timespec*,int);

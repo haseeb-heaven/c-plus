@@ -95,9 +95,13 @@ class log_sink {
     /* Writes one line: timestamp, level, message, optional key=value fields,
      * and the source location.  The whole line is written under the stream
      * lock, so concurrent threads cannot interleave it. */
+    /* The source-location parameter must not be named `file`: `file` is a
+     * C+ resource type, and comparing a parameter of that name with NULL
+     * lowers to a spurious `file_drop(&NULL)` scope-exit cleanup (an
+     * address-of-rvalue error on glibc, where NULL is `((void *)0)`). */
     int write(int severity, const char *message, const char *const *keys,
-              const long long *values, size_t field_count, const char *file,
-              int line, error *err) {
+              const long long *values, size_t field_count,
+              const char *source_file, int line, error *err) {
         char stamp[32];
         char text[LOG_LINE_SIZE];
         size_t used = 0;
@@ -147,9 +151,9 @@ class log_sink {
             }
             used += (size_t)n;
         }
-        if (file != NULL) {
+        if (source_file != NULL) {
             n = snprintf(text + used, sizeof(text) - used,
-                         " (%s:%d)", file, line);
+                         " (%s:%d)", source_file, line);
             if (n < 0 || (size_t)n >= sizeof(text) - used) {
                 error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
                                "log_sink::write: line truncated");
