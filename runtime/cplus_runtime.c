@@ -21,22 +21,77 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* C+ exception frames. The stack is thread-local and holds only ordinary C
- * pointers; raising with no active try is a deterministic fatal error. */
+/* Thread-local storage keyword.  Generated C+ code and the runtime agree on
+ * __thread for GNU/Clang builds; MSVC uses __declspec(thread). */
+#if defined(_MSC_VER)
+#define CPLUS_TLS __declspec(thread)
+#else
+#define CPLUS_TLS __thread
+#endif
+
 static void cplus_print_fatal(cplus_exit_code code, const char *kind,
                               const char *file, int line, const char *msg);
-static __thread CPlusExceptionFrame *cplus_exception_current = NULL;
+
+/* C+ exception frames. The stack is thread-local and holds only ordinary C
+ * pointers; raising with no active try is a deterministic fatal error. */
+static CPLUS_TLS CPlusExceptionFrame *cplus_exception_current = NULL;
+
+/* Per-thread print formatting state.  Every print(...) invocation owns one
+ * buffer; nesting (a value-producing helper that prints itself) uses a stack
+ * of slots.  All of it is thread-local so concurrent print() calls can never
+ * realloc a buffer another thread is writing to or flushing (issue #72). */
+#define CPLUS_PRINT_MAX_DEPTH 64
+static CPLUS_TLS char *cplus_print_buf[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_TLS size_t cplus_print_cap[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_TLS size_t cplus_print_len[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_TLS int cplus_print_first[CPLUS_PRINT_MAX_DEPTH];
+static CPLUS_TLS int cplus_print_depth = 0;
+
+/* Snapshot of the print nesting depth at each active try frame.  A throw
+ * longjmps past cplus_print_end(), so without this the depth would leak and
+ * later prints would write into a stale slot.  This mirror stack is internal:
+ * generated try/catch lowering declares CPlusExceptionFrame itself (sometimes
+ * without including cplus/cplus.h), so its public layout is left unchanged. */
+typedef struct cplus_exc_print_state {
+  CPlusExceptionFrame *frame;
+  int print_depth;
+  struct cplus_exc_print_state *prev;
+} cplus_exc_print_state;
+static CPLUS_TLS cplus_exc_print_state *cplus_exc_print_stack = NULL;
+
+static void cplus_exc_print_enter(CPlusExceptionFrame *frame) {
+  cplus_exc_print_state *s = (cplus_exc_print_state *)malloc(sizeof(*s));
+  if (!s)
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "cannot save print state for try frame");
+  s->frame = frame;
+  s->print_depth = cplus_print_depth;
+  s->prev = cplus_exc_print_stack;
+  cplus_exc_print_stack = s;
+}
+
+static void cplus_exc_print_leave(void) {
+  cplus_exc_print_state *s = cplus_exc_print_stack;
+  if (!s)
+    return;
+  cplus_exc_print_stack = s->prev;
+  cplus_print_depth = s->print_depth;
+  free(s);
+}
 
 void cplus_exception_enter(CPlusExceptionFrame *frame) {
   if (!frame)
     return;
   frame->prev = cplus_exception_current;
   cplus_exception_current = frame;
+  cplus_exc_print_enter(frame);
 }
 
 void cplus_exception_pop(void) {
-  if (cplus_exception_current)
+  if (cplus_exception_current) {
     cplus_exception_current = cplus_exception_current->prev;
+    cplus_exc_print_leave();
+  }
 }
 
 void cplus_exception_raise(int code, const char *message, const char *file,
@@ -46,6 +101,9 @@ void cplus_exception_raise(int code, const char *message, const char *file,
                       line, "throw outside a try block");
   CPlusExceptionFrame *active = cplus_exception_current;
   cplus_exception_current = active->prev;
+  /* Unwind print nesting to the try frame, so a throw from inside print(...)
+   * cannot leave a leaked depth slot behind (issue #72). */
+  cplus_exc_print_leave();
   active->exc.code = code;
   active->exc.message = message;
   active->exc.file = file;
@@ -85,10 +143,21 @@ static void cplus_log_impl(int level, const char *file, int line,
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__unix__) || defined(__APPLE__)
+/* CPLUS_FORCE_NO_THREAD_BACKEND is a test-only switch: it compiles the same
+ * runtime with no thread backend so the non-POSIX fallback can be verified to
+ * fail loudly instead of silently returning NULL (issue #75). */
+#if !defined(CPLUS_FORCE_NO_THREAD_BACKEND) &&                                  \
+    (defined(__unix__) || defined(__APPLE__))
 #include <pthread.h>
 #include <unistd.h>
 #define CPLUS_POSIX 1
+#endif
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #endif
 
 /* Usable size of a malloc block.  Used only to *clamp* a caller-supplied
@@ -632,7 +701,12 @@ static int cplus_retired_address_stale(const void *p) {
 #endif
 }
 
-#ifdef CPLUS_POSIX
+#if defined(CPLUS_FORCE_NO_THREAD_BACKEND)
+/* Test-only path: no threads exist, so the side table needs no locking.  The
+ * exported mutex/TLS primitives still fail loudly below. */
+static void cplus_alloc_lock(void) {}
+static void cplus_alloc_unlock(void) {}
+#elif defined(CPLUS_POSIX)
 static pthread_mutex_t cplus_alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void cplus_alloc_lock(void) { pthread_mutex_lock(&cplus_alloc_mutex); }
 static void cplus_alloc_unlock(void) {
@@ -655,7 +729,17 @@ static void cplus_atfork_child(void) {
 __attribute__((constructor)) static void cplus_atfork_install(void) {
   pthread_atfork(cplus_atfork_prepare, cplus_atfork_parent, cplus_atfork_child);
 }
+#elif defined(_WIN32)
+/* Win32 has real threads: the side table must be serialized here too, not
+ * just in the exported mutex API.  A statically initialized SRWLOCK needs no
+ * one-time init and works before main() runs. */
+static SRWLOCK cplus_alloc_srw = SRWLOCK_INIT;
+static void cplus_alloc_lock(void) { AcquireSRWLockExclusive(&cplus_alloc_srw); }
+static void cplus_alloc_unlock(void) {
+  ReleaseSRWLockExclusive(&cplus_alloc_srw);
+}
 #else
+/* No thread backend at all: single-threaded programs are still usable. */
 static void cplus_alloc_lock(void) {}
 static void cplus_alloc_unlock(void) {}
 #endif
@@ -840,9 +924,25 @@ static void cplus_retired_insert(const void *p, uint64_t generation) {
   ++cplus_retired_count;
 }
 
-/* Called with the allocator lock held. */
+/* Called with the allocator lock held.  Only grow when the *live* set needs
+ * the room.  Tombstone churn (allocate/free one object repeatedly) used to
+ * double the table every time the load threshold was crossed, growing without
+ * bound until calloc() failed (issue #73).  When the live set is still below
+ * half the table, rehash into the SAME capacity instead: that drops every
+ * tombstone in O(cap) and keeps memory usage constant. */
 static void cplus_live_grow(void) {
-  size_t cap = cplus_live_cap ? cplus_live_cap * 2 : CPLUS_LIVE_INITIAL;
+  size_t cap = cplus_live_cap;
+  if (cplus_live_cap == 0) {
+    cap = CPLUS_LIVE_INITIAL;
+  } else if (cplus_live_count * 2u >= cplus_live_cap) {
+    /* Genuine live-set growth.  Guard the multiplication so a corrupt or
+     * enormous table cannot wrap size_t and calloc a too-small buffer. */
+    if (cplus_live_cap > SIZE_MAX / 2u)
+      cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                        "allocation bookkeeping capacity overflow");
+    cap = cplus_live_cap * 2u;
+  }
+  /* else: cap == cplus_live_cap; rehash in place to purge tombstones. */
   cplus_live_slot *fresh = (cplus_live_slot *)calloc(cap, sizeof(*fresh));
   if (!fresh) {
     cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
@@ -990,6 +1090,16 @@ void *cplus_alloc(size_t size) {
                       "managed allocation failed");
   }
   cplus_alloc_lock();
+  /* The same two guards as cplus_register_allocation(): a malloc result must
+   * never already be live (a second slot would survive one release), and a
+   * stale quarantine entry for this address must be dropped so ring eviction
+   * cannot free a block that is live again (issue #76). */
+  if (cplus_find_live(p)) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", NULL,
+                      0, "allocator returned an already-live address");
+  }
+  cplus_quarantine_drop(p);
   uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
@@ -1024,24 +1134,73 @@ void *cplus_realloc(void *ptr, size_t size) {
     cplus_release(ptr);
     return NULL;
   }
-  /* cplus_realloc is an ownership transfer: the old slot is retired with its
-   * generation and the fresh block gets a new generation.  If malloc happens
-   * to reuse the old address, an old alias can no longer be distinguished
-   * from the new allocation (F2, documented in the file header). */
-  void *fresh = cplus_alloc(size);
+  /* Validate the transfer source BEFORE allocating anything.  The old code
+   * called cplus_alloc() first and only then discovered an invalid ptr,
+   * leaking the fresh block and consuming a generation on the trap path
+   * (issue #76).  The entire lookup/copy/retire/insert sequence now runs in
+   * one critical section, so a concurrent release cannot free ptr while the
+   * copy is in flight or observe a half-retired live slot. */
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
-  if (slot) {
-    size_t n = size < slot->size ? size : slot->size;
-    /* Belt-and-braces: even a wrongly registered or stale extent must never
-     * authorize a copy past the block malloc actually handed out. */
-    size_t usable = cplus_malloc_capacity(ptr);
-    if (usable != 0u && n > usable)
-      n = usable;
-    memcpy(fresh, ptr, n);
+  if (!slot) {
+    uint64_t retired = cplus_retired_generation(ptr);
+    cplus_alloc_unlock();
+    cplus_print_fatal(retired ? CPLUS_EXIT_DOUBLE_FREE
+                              : CPLUS_EXIT_TYPE_CONFUSION,
+                      "invalid free", NULL, 0,
+                      "realloc target is not a live C+ allocation");
+  }
+  void *fresh = malloc(size);
+  if (!fresh) {
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "managed reallocation failed");
+  }
+  size_t n = size < slot->size ? size : slot->size;
+  /* Belt-and-braces: even a wrongly registered or stale extent must never
+   * authorize a copy past the block malloc actually handed out. */
+  size_t usable = cplus_malloc_capacity(ptr);
+  if (usable != 0u && n > usable)
+    n = usable;
+  memcpy(fresh, ptr, n);
+
+  /* Retire the old slot with its own generation.  Do this before any table
+   * rebuild (which would invalidate `slot`) and never touch `slot` again. */
+  uint64_t old_generation = slot->generation;
+  slot->ptr = CPLUS_TOMBSTONE;
+  --cplus_live_count;
+  ++cplus_live_deleted;
+  cplus_recent[cplus_recent_index(ptr)].ptr = ptr;
+  cplus_recent[cplus_recent_index(ptr)].generation = old_generation;
+  cplus_retired_insert(ptr, old_generation);
+
+  if (cplus_find_live(fresh)) {
+    free(fresh);
+    cplus_alloc_unlock();
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", NULL,
+                      0, "allocator returned an already-live address");
+  }
+  cplus_quarantine_drop(fresh);
+  uint64_t gen = cplus_next_generation();
+  if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
+    cplus_live_grow();
+  cplus_live_insert(fresh, size, gen);
+
+  /* Mirror cplus_release(): when quarantine is enabled the old block is
+   * retained for a bounded time instead of being returned to malloc. */
+  if (cplus_quarantine_enabled()) {
+    void *oldest = cplus_quarantine[cplus_quarantine_next];
+    cplus_quarantine[cplus_quarantine_next] = ptr;
+    cplus_quarantine_next =
+        (cplus_quarantine_next + 1) % CPLUS_QUARANTINE_SLOTS;
+    if (cplus_quarantine_count < CPLUS_QUARANTINE_SLOTS)
+      ++cplus_quarantine_count;
+    if (oldest)
+      free(oldest);
+  } else {
+    free(ptr);
   }
   cplus_alloc_unlock();
-  cplus_release(ptr);
   return fresh;
 }
 
@@ -1149,6 +1308,21 @@ int cplus_address_retired(const void *ptr) {
   int retired = cplus_retired_generation(ptr) != 0u;
   cplus_alloc_unlock();
   return retired;
+}
+
+/* Additive introspection for the live-address table.  Lets a regression test
+ * verify that tombstone churn rehashes in place rather than growing the table
+ * without bound (issue #73).  Any argument may be NULL. */
+void cplus_live_table_stats(size_t *capacity, size_t *live,
+                            size_t *tombstones) {
+  cplus_alloc_lock();
+  if (capacity)
+    *capacity = cplus_live_cap;
+  if (live)
+    *live = cplus_live_count;
+  if (tombstones)
+    *tombstones = cplus_live_deleted;
+  cplus_alloc_unlock();
 }
 
 /* Additive introspection for the bounded retired ledger.  Once this returns
@@ -1323,15 +1497,126 @@ void cplus_tls_free(void *slotp) {
   pthread_key_delete(s->key);
   free(s);
 }
+#elif defined(_WIN32)
+typedef struct cplus_mutex {
+  CRITICAL_SECTION cs;
+} cplus_mutex;
+
+typedef struct cplus_tls_slot {
+  DWORD key;
+} cplus_tls_slot;
+
+void *cplus_mutex_new(void) {
+  cplus_mutex *m = (cplus_mutex *)malloc(sizeof(cplus_mutex));
+  if (!m) {
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "cannot create mutex");
+  }
+  InitializeCriticalSection(&m->cs);
+  return m;
+}
+
+void cplus_mutex_lock(void *mp) {
+  if (!mp)
+    return;
+  EnterCriticalSection(&((cplus_mutex *)mp)->cs);
+}
+
+void cplus_mutex_unlock(void *mp) {
+  if (!mp)
+    return;
+  LeaveCriticalSection(&((cplus_mutex *)mp)->cs);
+}
+
+void cplus_mutex_free(void *mp) {
+  if (!mp)
+    return;
+  DeleteCriticalSection(&((cplus_mutex *)mp)->cs);
+  free(mp);
+}
+
+void *cplus_tls_new(void) {
+  cplus_tls_slot *s = (cplus_tls_slot *)malloc(sizeof(cplus_tls_slot));
+  if (!s) {
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "cannot create thread-local slot");
+  }
+  DWORD key = TlsAlloc();
+  if (key == TLS_OUT_OF_INDEXES) {
+    free(s);
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "TLS failure", NULL, 0,
+                      "TlsAlloc failed");
+  }
+  s->key = key;
+  return s;
+}
+
+void *cplus_tls_get(void *slotp) {
+  if (!slotp)
+    return NULL;
+  return TlsGetValue(((cplus_tls_slot *)slotp)->key);
+}
+
+void cplus_tls_set(void *slotp, void *value) {
+  if (!slotp)
+    return;
+  if (!TlsSetValue(((cplus_tls_slot *)slotp)->key, value)) {
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "TLS failure", NULL, 0,
+                      "TlsSetValue failed");
+  }
+}
+
+void cplus_tls_free(void *slotp) {
+  if (!slotp)
+    return;
+  TlsFree(((cplus_tls_slot *)slotp)->key);
+  free(slotp);
+}
 #else
-void *cplus_mutex_new(void) { return NULL; }
-void cplus_mutex_lock(void *m) { (void)m; }
-void cplus_mutex_unlock(void *m) { (void)m; }
-void cplus_mutex_free(void *m) { (void)m; }
-void *cplus_tls_new(void) { return NULL; }
-void *cplus_tls_get(void *s) { (void)s; return NULL; }
-void cplus_tls_set(void *s, void *v) { (void)s; (void)v; }
-void cplus_tls_free(void *s) { (void)s; }
+/* No thread backend.  Never pretend locking succeeded: a silent no-op mutex
+ * turns mutual exclusion into a data race with no diagnostic (issue #75). */
+void *cplus_mutex_new(void) {
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_mutex_new requires POSIX threads or Win32");
+  return NULL;
+}
+void cplus_mutex_lock(void *m) {
+  (void)m;
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_mutex_lock requires POSIX threads or Win32");
+}
+void cplus_mutex_unlock(void *m) {
+  (void)m;
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_mutex_unlock requires POSIX threads or Win32");
+}
+void cplus_mutex_free(void *m) {
+  (void)m;
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_mutex_free requires POSIX threads or Win32");
+}
+void *cplus_tls_new(void) {
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_tls_new requires POSIX threads or Win32");
+  return NULL;
+}
+void *cplus_tls_get(void *s) {
+  (void)s;
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_tls_get requires POSIX threads or Win32");
+  return NULL;
+}
+void cplus_tls_set(void *s, void *v) {
+  (void)s;
+  (void)v;
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_tls_set requires POSIX threads or Win32");
+}
+void cplus_tls_free(void *s) {
+  (void)s;
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unsupported thread backend", NULL,
+                    0, "cplus_tls_free requires POSIX threads or Win32");
+}
 #endif
 
 /* -------------------------------------------------------------------------
@@ -1343,19 +1628,13 @@ void cplus_tls_free(void *s) { (void)s; }
  * without a format string.
  * ------------------------------------------------------------------------- */
 
-/* Each `print(...)` invocation owns one output buffer. Values are appended to
- * it and flushed by cplus_print_end(), so arguments evaluated while printing
- * can never interleave with this invocation's own output. The buffer grows on
- * demand (no silent truncation); if growth fails, the pending bytes and the
- * new chunk are written directly, which preserves data at the cost of the
- * interleaving guarantee in that out-of-memory case. */
-#define CPLUS_PRINT_MAX_DEPTH 64
-
-static char *cplus_print_buf[CPLUS_PRINT_MAX_DEPTH];
-static size_t cplus_print_cap[CPLUS_PRINT_MAX_DEPTH];
-static size_t cplus_print_len[CPLUS_PRINT_MAX_DEPTH];
-static int cplus_print_first[CPLUS_PRINT_MAX_DEPTH];
-static int cplus_print_depth = 0;
+/* Each `print(...)` invocation owns one output buffer.  The state arrays are
+ * declared thread-local near the top of this file; values are appended to the
+ * current thread's buffer and flushed by cplus_print_end(), so arguments
+ * evaluated while printing can never interleave with this invocation's own
+ * output.  The buffer grows on demand (no silent truncation); if growth fails,
+ * the pending bytes and the new chunk are written directly, which preserves
+ * data at the cost of the interleaving guarantee in that out-of-memory case. */
 
 void cplus_print_begin(void) {
   if (cplus_print_depth < CPLUS_PRINT_MAX_DEPTH) {
@@ -1396,10 +1675,16 @@ static void cplus_print_append(int d, const char *text, size_t n) {
 void cplus_print_end(void) {
   if (cplus_print_depth > 0) {
     int d = cplus_print_depth - 1;
-    if (cplus_print_len[d] > 0) {
-      fwrite(cplus_print_buf[d], 1, cplus_print_len[d], stdout);
+    size_t n = cplus_print_len[d];
+    if (n > 0) {
+      /* One fwrite for the whole line (including '\n'): stdio serializes each
+       * call, so independent per-thread buffers cannot produce interleaved
+       * partial lines.  append() always reserved room for the terminator. */
+      cplus_print_buf[d][n] = '\n';
+      fwrite(cplus_print_buf[d], 1, n + 1, stdout);
+    } else {
+      fwrite("\n", 1, 1, stdout);
     }
-    putchar('\n');
     cplus_print_len[d] = 0;
     cplus_print_first[d] = 1;
     --cplus_print_depth;

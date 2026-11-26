@@ -230,6 +230,12 @@ uint64_t cplus_epoch(void);
 int cplus_address_retired(const void *ptr);
 int cplus_retired_ledger_full(void);
 
+/* Live-table introspection.  Any argument may be NULL.  A churn loop that
+ * keeps only a few objects live must not grow `capacity`: tombstone cleanup
+ * rehashes into the same table instead of doubling it. */
+void cplus_live_table_stats(size_t *capacity, size_t *live,
+                            size_t *tombstones);
+
 /* Bounded side-table behavior (documented, deterministic):
  *
  *  - The live table is keyed on base addresses.  An interior pointer does not
@@ -444,7 +450,10 @@ typedef enum {
 
 /* One generic entry point.  The macro passes a type tag plus the value
  * through varargs, so no association is type-checked against the wrong C
- * type the way separate overloaded functions would be. */
+ * type the way separate overloaded functions would be.  Print scratch
+ * buffers and nesting depth are thread-local: concurrent print() calls on
+ * different threads are safe, and a throw unwinds the nesting depth back to
+ * the enclosing try frame. */
 void cplus_print_value(cplus_print_kind kind, ...);
 void cplus_print_begin(void);
 void cplus_print_end(void);

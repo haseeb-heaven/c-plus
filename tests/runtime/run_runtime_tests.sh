@@ -48,5 +48,36 @@ else
   tail -20 /tmp/rt4.log /tmp/rt4.out /tmp/rt4.err 2>/dev/null || true
 fi
 
+# 5) Runtime safety regressions (#72/#73/#75/#76): concurrent print(), print
+# depth unwind across throw, bounded live table under tombstone churn, working
+# mutex/TLS, and realloc validation/transfer.
+if "$CC" -std=gnu17 -O0 -g -I"$ROOT/runtime/include" \
+    "$ROOT/tests/runtime/test_runtime_safety.c" \
+    "$ROOT/runtime/cplus_runtime.c" -lm -pthread \
+    -o "$OUT/test_runtime_safety" >/tmp/rt5.log 2>&1 \
+    && "$OUT/test_runtime_safety" >/tmp/rt5.out 2>/tmp/rt5.err \
+    && grep -q "runtime_safety: ok" /tmp/rt5.out; then
+  pass=$((pass+1)); echo "ok runtime_safety_regressions"
+else
+  fail=$((fail+1)); echo "FAIL runtime_safety_regressions"
+  tail -30 /tmp/rt5.log /tmp/rt5.out /tmp/rt5.err 2>/dev/null || true
+fi
+
+# 6) The no-thread-backend fallback must fail loudly, never silently no-op
+# (#75).  CPLUS_FORCE_NO_THREAD_BACKEND compiles the same runtime without the
+# POSIX/Win32 thread primitives so the fallback branch is testable here.
+if "$CC" -std=gnu17 -O0 -g -DCPLUS_FORCE_NO_THREAD_BACKEND \
+    -I"$ROOT/runtime/include" \
+    "$ROOT/tests/runtime/test_no_thread_backend.c" \
+    "$ROOT/runtime/cplus_runtime.c" -lm \
+    -o "$OUT/test_no_thread_backend" >/tmp/rt6.log 2>&1 \
+    && "$OUT/test_no_thread_backend" >/tmp/rt6.out 2>/tmp/rt6.err \
+    && grep -q "no_thread_backend: ok" /tmp/rt6.out; then
+  pass=$((pass+1)); echo "ok no_thread_backend_fails_loudly"
+else
+  fail=$((fail+1)); echo "FAIL no_thread_backend_fails_loudly"
+  tail -30 /tmp/rt6.log /tmp/rt6.out /tmp/rt6.err 2>/dev/null || true
+fi
+
 echo "runtime tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
