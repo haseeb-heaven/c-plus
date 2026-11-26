@@ -1125,6 +1125,11 @@ withoutLinkerFlags(const std::vector<std::string> &args) {
     if (a.starts_with("-L") || a.starts_with("-l") ||
         a.starts_with("-Wl,") || a == "-shared")
       continue;
+    // Explicit archive/shared-library operands are linker inputs too; the
+    // integration driver passes absolute .a paths after `--`.
+    if (a.ends_with(".a") || a.ends_with(".so") || a.ends_with(".dylib") ||
+        a.ends_with(".lib"))
+      continue;
     out.push_back(args[i]);
   }
   return out;

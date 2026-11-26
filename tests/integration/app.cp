@@ -186,12 +186,11 @@ static void run_core(const char *path, long *r) {
      * while smax=8 must return ESNOSPC (406) and leave the destination alone. */
     memset(checked_dst, 0x5A, sizeof checked_dst);
     r[R_CHECKED_MEMCPY_RC] = (long)memcpy_s(checked_dst, 4, big, 8);
-    /* Annex K semantics: on a constraint violation safeclib zeroes the first
-     * dmax (4) bytes and copies nothing.  The trailing bytes must survive, and
-     * no source byte (0xA5) may appear in the destination. */
-    r[R_CHECKED_MEMCPY_KEEP] =
-        (all_bytes_are(checked_dst, 4, 0x00) &&
-         all_bytes_are(checked_dst + 4, 4, 0x5A)) ? 1 : 0;
+    /* C+ safeclib never clears the destination on a refused write: dmax is
+     * untrusted and a wild clear is itself a memory-safety bug.  The whole
+     * destination must survive unchanged and no source byte (0xA5) may
+     * appear in it. */
+    r[R_CHECKED_MEMCPY_KEEP] = all_bytes_are(checked_dst, 8, 0x5A) ? 1 : 0;
 
     /* Double-free refusal via the checked free API. */
     df = (unsigned char *)malloc(16);
