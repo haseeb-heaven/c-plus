@@ -33,3 +33,15 @@ not a soundness proof.
   `proof/benchmarks/language_rounds.txt`.
 - No Goose compiler analysis (static root inference, checkfree, relative links).
 - Checked heap remains the backing allocator; "no heap" is opt-in for C+ source.
+
+## GUI / GFX apps (real windowed SDL3, 2026-11-26)
+
+| App | Widgets | C+ memory path | Boundary |
+|---|---|---|---|
+| `apps/gui_widgets/` | textbox, dropdown, list, buttons | SDL3 renderer; C+ GFX facade | SDL3 owns its own heap; no C+ safety claim about SDL3 |
+| `apps/memory_lab_gui/` | textbox, dropdown, selectable list, buttons; live keyboard/mouse input | `stdlib_scoped_scope` + `stdlib_scoped_stack_current()` for each frame's transient line; fixed slot state in `app_state`; one-store release | Real framebuffer capture (`screenshots/memory_lab.png`); external SDL3 heap remains outside the C+ policy |
+
+`sh apps/gui_widgets/run.sh` → `GFX_APP_TEST 3 3 0`; `sh apps/memory_lab_gui/run.sh` →
+`MEMORY_LAB_TEST 2 2 0`. These are real windowed renderer outputs, not CLI
+transcripts. They demonstrate Goose-style scoped transient allocation inside a
+real GUI app, not a 100% memory-safety guarantee for external SDL3 code.
