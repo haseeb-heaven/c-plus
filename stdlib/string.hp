@@ -536,15 +536,16 @@ class string {
  * where A is any stdlib_allocator (arena/pool/scratch/heap).  A must outlive s.
  */
 static inline string string_in(const stdlib_allocator *a, const char *text) {
-    string s = string("");
+    /* A by-value owner declared without an initializer is zero-initialised by
+     * C+ (no constructor call, no allocation).  Starting from string("")
+     * allocated a 1-byte placeholder on the default checked heap and then
+     * leaked it when `a` replaced it; it also broke CPLUS_NO_HEAP callers and
+     * left a heap pointer paired with a custom allocator on every failure
+     * path.  Here every byte of storage comes from `a` or from nowhere. */
+    string s;
     error e = error();
     size_t n = text == 0 ? 0 : strlen(text);
     s.alloc = a;
-    /* The placeholder string("") buffer is replaced here; retire its token so
-     * a view taken from the temporary cannot alias the new allocation. */
-    stdlib_view_retire(s.chars);
-    s.chars = (char *)0;
-    s.view_token = 0;
     if (n < STDLIB_ALLOC_LIMIT && n + 1u > n) {
         s.chars = (char *)stdlib_allocate(a, n + 1u, 1u, &e);
         if (s.chars != 0) {

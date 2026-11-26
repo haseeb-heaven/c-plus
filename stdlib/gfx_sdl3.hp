@@ -1,31 +1,74 @@
 /* C+ modern GFX/GUI facade over SDL3 (zlib, system-installed, real windowed
  * rendering). Additive header; no the inspiration language code. Widgets are drawn into a real
  * SDL3 renderer, producing a real framebuffer, not CLI transcripts.
+ *
+ * Lifecycle contract: every successful cplus_gfx_open() contributes one
+ * reference to SDL's video subsystem. cplus_gfx_close() releases exactly that
+ * one reference (and calls SDL_Quit() only when the last window is gone). Both
+ * functions are safe with NULL/invalid handles and close() is idempotent, so a
+ * failed open or a repeated close can never leak a window, double-destroy a
+ * handle, or tear SDL down underneath another live window.
  */
 #ifndef CPLUS_STD_GFX_SDL3_HP
 #define CPLUS_STD_GFX_SDL3_HP
 
+/* Headless lifecycle tests supply equivalent declarations and define this
+ * macro, so no display or system SDL development files are needed. */
+#ifndef CPLUS_GFX_SDL3_SDL_DECLARED
 #include <SDL3/SDL.h>
+#endif
 
 typedef struct {
     SDL_Window *window;
     SDL_Renderer *renderer;
 } cplus_gfx_window;
 
+/* Shared across translation units, like stdlib_state in stdlib/error.hp. */
+__attribute__((weak)) int cplus_gfx_sdl_refs;
+
+static inline int cplus_gfx_sdl_acquire(void) {
+    int refs = __atomic_load_n(&cplus_gfx_sdl_refs, __ATOMIC_ACQUIRE);
+    if (refs == 0 && !SDL_Init(SDL_INIT_VIDEO))
+        return 0;
+    __atomic_fetch_add(&cplus_gfx_sdl_refs, 1, __ATOMIC_ACQ_REL);
+    return 1;
+}
+
+static inline void cplus_gfx_sdl_release(void) {
+    if (__atomic_sub_fetch(&cplus_gfx_sdl_refs, 1, __ATOMIC_ACQ_REL) == 0)
+        SDL_Quit();
+}
+
 static inline int cplus_gfx_open(cplus_gfx_window *g, const char *title,
                                  int w, int h) {
-    if (g == (cplus_gfx_window *)0) return 0;
+    if (g == (cplus_gfx_window *)0)
+        return 0;
+    /* An already-open window owns a reference; closing is the caller's job. */
+    if (g->window != (SDL_Window *)0 || g->renderer != (SDL_Renderer *)0)
+        return 0;
     g->window = (SDL_Window *)0;
     g->renderer = (SDL_Renderer *)0;
-    if (!SDL_Init(SDL_INIT_VIDEO)) return 0;
+    if (!cplus_gfx_sdl_acquire())
+        return 0;
     g->window = SDL_CreateWindow(title, w, h, 0u);
-    if (g->window == (SDL_Window *)0) return 0;
+    if (g->window == (SDL_Window *)0) {
+        cplus_gfx_sdl_release();
+        return 0;
+    }
     g->renderer = SDL_CreateRenderer(g->window, (const char *)0);
-    return g->renderer != (SDL_Renderer *)0;
+    if (g->renderer == (SDL_Renderer *)0) {
+        SDL_DestroyWindow(g->window);
+        g->window = (SDL_Window *)0;
+        cplus_gfx_sdl_release();
+        return 0;
+    }
+    return 1;
 }
 
 static inline void cplus_gfx_clear(cplus_gfx_window *g, unsigned char r,
                                    unsigned char gg, unsigned char b) {
+    if (g == (cplus_gfx_window *)0 || g->renderer == (SDL_Renderer *)0)
+        return;
     SDL_SetRenderDrawColor(g->renderer, r, gg, b, 255);
     SDL_RenderClear(g->renderer);
 }
@@ -33,13 +76,22 @@ static inline void cplus_gfx_clear(cplus_gfx_window *g, unsigned char r,
 static inline void cplus_gfx_rect(cplus_gfx_window *g, int x, int y,
                                   int w, int h, unsigned char r,
                                   unsigned char gg, unsigned char b) {
-    SDL_FRect rect = {(float)x, (float)y, (float)w, (float)h};
+    SDL_FRect rect;
+    if (g == (cplus_gfx_window *)0 || g->renderer == (SDL_Renderer *)0)
+        return;
+    rect.x = (float)x;
+    rect.y = (float)y;
+    rect.w = (float)w;
+    rect.h = (float)h;
     SDL_SetRenderDrawColor(g->renderer, r, gg, b, 255);
     SDL_RenderFillRect(g->renderer, &rect);
 }
 
 static inline void cplus_gfx_text(cplus_gfx_window *g, int x, int y,
                                   const char *text) {
+    if (g == (cplus_gfx_window *)0 || g->renderer == (SDL_Renderer *)0 ||
+        text == (const char *)0)
+        return;
     SDL_RenderDebugText(g->renderer, (float)x, (float)y, text);
 }
 
@@ -65,12 +117,16 @@ static inline void cplus_gfx_list(cplus_gfx_window *g, int x, int y, int w,
                                   int rows, const char *const *items,
                                   int selected) {
     int i;
+    if (rows < 0)
+        rows = 0;
     for (i = 0; i < rows; ++i) {
         cplus_gfx_rect(g, x, y + i * 28, w, 26,
                        i == selected ? 38 : 20,
                        i == selected ? 100 : 30,
                        i == selected ? 160 : 45);
-        if (items != (const char *const *)0 && i < rows)
+        /* cplus_gfx_text() refuses a NULL text, so a NULL items[i] is a
+         * skipped line rather than a crash (and needs no second subscript). */
+        if (items != (const char *const *)0)
             cplus_gfx_text(g, x + 8, y + i * 28 + 6, items[i]);
     }
 }
@@ -82,13 +138,28 @@ static inline void cplus_gfx_button(cplus_gfx_window *g, int x, int y,
 }
 
 static inline void cplus_gfx_present(cplus_gfx_window *g) {
+    if (g == (cplus_gfx_window *)0 || g->renderer == (SDL_Renderer *)0)
+        return;
     SDL_RenderPresent(g->renderer);
 }
 
 static inline void cplus_gfx_close(cplus_gfx_window *g) {
-    if (g->renderer != (SDL_Renderer *)0) SDL_DestroyRenderer(g->renderer);
-    if (g->window != (SDL_Window *)0) SDL_DestroyWindow(g->window);
-    SDL_Quit();
+    int held;
+    if (g == (cplus_gfx_window *)0)
+        return;
+    held = g->window != (SDL_Window *)0 || g->renderer != (SDL_Renderer *)0;
+    if (g->renderer != (SDL_Renderer *)0) {
+        SDL_DestroyRenderer(g->renderer);
+        g->renderer = (SDL_Renderer *)0;
+    }
+    if (g->window != (SDL_Window *)0) {
+        SDL_DestroyWindow(g->window);
+        g->window = (SDL_Window *)0;
+    }
+    /* Only a window this handle actually held consumes a reference.  A second
+     * close therefore cannot double-destroy or decrement into other windows. */
+    if (held)
+        cplus_gfx_sdl_release();
 }
 
 #endif

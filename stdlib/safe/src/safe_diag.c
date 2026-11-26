@@ -32,16 +32,22 @@ static cplus_diag_mode g_mode = CPLUS_DIAG_LEGACY;
 static cplus_diag_color g_color = CPLUS_DIAG_COLOR_AUTO;
 static int g_env_initialized = 0;
 
+/* Compare `value` against a single accepted `word`, ignoring surrounding
+ * spaces/tabs.  `i` walks `value`, `j` walks `word`: they must be independent.
+ * Reusing the skipped offset for `word` both compares the wrong character and
+ * reads past the end of short .rodata literals such as "rich" or "auto". */
 static int parse_word(const char *value, const char *word) {
   size_t i = 0;
+  size_t j = 0;
   if (!value || !word)
     return 0;
   while (value[i] == ' ' || value[i] == '\t')
     ++i;
-  while (word[i]) {
-    if (value[i] != word[i])
+  while (word[j] != '\0') {
+    if (value[i] != word[j])
       return 0;
     ++i;
+    ++j;
   }
   while (value[i] == ' ' || value[i] == '\t')
     ++i;
