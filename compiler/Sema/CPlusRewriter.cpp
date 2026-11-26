@@ -1427,14 +1427,26 @@ private:
     if (rp == kNPos)
       return false;
 
+    // Find the top-level ':' so the whole written type specifier — not just
+    // its first token — is available.  `int *p`, `unsigned int x` and
+    // `const auto x` must all be recognised (issue #85).
     size_t first = ts.nextSig(lp);
-    if (first >= rp ||
-        !(ts.isIdent(first, "auto") || ts[first].kind == TokKind::Identifier))
+    size_t colon = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t k = first; k < rp; ++k) {
+      if (ts.isPunct(k, "(")) ++paren;
+      else if (ts.isPunct(k, ")")) --paren;
+      else if (ts.isPunct(k, "[")) ++bracket;
+      else if (ts.isPunct(k, "]")) --bracket;
+      else if (ts.isPunct(k, ":") && paren == 0 && bracket == 0) {
+        colon = k;
+        break;
+      }
+    }
+    if (first >= rp || colon == kNPos || first >= colon)
       return false;
-    size_t name = ts.nextSig(first);
-    size_t colon = ts.nextSig(name);
-    if (name >= rp || ts[name].kind != TokKind::Identifier ||
-        !ts.isPunct(colon, ":"))
+    size_t name = ts.prevSig(colon);
+    if (name < first || ts[name].kind != TokKind::Identifier)
       return false;
     size_t exprStart = ts.nextSig(colon);
     if (exprStart >= rp || ts[exprStart].kind != TokKind::Identifier ||
@@ -1460,9 +1472,29 @@ private:
       return false;
     }
     std::string idx = "__cplus_range_i" + std::to_string(rangeCounter_++);
+
+    // Preserve the user-specified element type and qualifiers.  `auto` is
+    // the only spelling that is inferred, and even there qualifiers such as
+    // `const auto` are retained instead of being discarded.
+    std::string elementType;
+    for (size_t k = first; k < name; ++k) {
+      if (ts.isTrivia(k))
+        continue;
+      if (ts.isIdent(k, "auto")) {
+        elementType += "__typeof__(" + range + "[" + idx + "]) ";
+      } else if (ts[k].kind == TokKind::Identifier ||
+                 (ts[k].kind == TokKind::Punct &&
+                  (ts[k].text == "*" || ts[k].text == "&"))) {
+        elementType += ts[k].text + " ";
+      } else {
+        return false; // not a declarator we can lower faithfully
+      }
+    }
+    if (elementType.empty())
+      return false;
     emit("for (size_t " + idx + " = 0; " + idx + " < " + len + "; " +
-         idx + "++) { __typeof__(" + range + "[" + idx + "]) " + var + " = " +
-         range + "[" + idx + "];");
+         idx + "++) { " + elementType + var + " = " + range + "[" + idx +
+         "];");
     extraBraces_[bodyClose]++;
     skipTo_ = rp; // resume at the original body's opening brace
     changed_ = true;
@@ -1517,6 +1549,43 @@ private:
     return true;
   }
 
+  /// Token index of the last token of an `if` statement, following a full
+  /// `else if (...) ... else ...` chain.  statementEnd() alone stops at the
+  /// first top-level ';', so for `else if (...) { } else { }` it ended inside
+  /// the chain and the if-declaration's closing brace split the chain (issue
+  /// #84).
+  size_t ifStatementEnd(size_t start) const {
+    size_t end = kNPos;
+    size_t cur = start;
+    while (cur < ts.size() && ts.isIdent(cur, "if")) {
+      size_t lp = ts.nextSig(cur);
+      if (!ts.isPunct(lp, "("))
+        break;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos)
+        break;
+      size_t body = ts.nextSig(rp);
+      if (body >= ts.size())
+        break;
+      end = ts.isPunct(body, "{") ? ts.matchBrace(body)
+                                  : ts.statementEnd(body);
+      if (end == kNPos)
+        break;
+      size_t after = ts.nextSig(end);
+      if (!ts.isIdent(after, "else"))
+        break;
+      size_t other = ts.nextSig(after);
+      if (ts.isIdent(other, "if")) {
+        cur = other; // keep walking: else-if is part of the same statement
+        continue;
+      }
+      end = ts.isPunct(other, "{") ? ts.matchBrace(other)
+                                   : ts.statementEnd(other);
+      break;
+    }
+    return end;
+  }
+
   /// C2y if-declarations: `if (T x = init; cond) body else other` becomes
   /// `{ T x = init; if (cond) body else other }` so the variable is scoped.
   bool tryEmitIfDecl(size_t i) {
@@ -1544,6 +1613,13 @@ private:
     if (semi == kNPos || ts.nextSig(semi) >= rp)
       return false;
 
+    // Resolve the complete statement extent before emitting anything.  An
+    // unmatched chain previously returned false *after* the prefix had been
+    // written, duplicating the original `if` in the generated C.
+    size_t end = ifStatementEnd(i);
+    if (end == kNPos)
+      return false;
+
     size_t decl = ts.nextSig(lp);
     size_t cond = ts.nextSig(semi);
     emit("{ ");
@@ -1552,25 +1628,6 @@ private:
     emitRange(cond, rp);
     emit(")");
 
-    size_t body = ts.nextSig(rp);
-    size_t end = body;
-    if (ts.isPunct(body, "{")) {
-      end = ts.matchBrace(body);
-    } else {
-      end = ts.statementEnd(body);
-    }
-    if (end == kNPos)
-      return false;
-    size_t after = ts.nextSig(end);
-    if (ts.isIdent(after, "else")) {
-      size_t other = ts.nextSig(after);
-      if (ts.isPunct(other, "{"))
-        end = ts.matchBrace(other);
-      else
-        end = ts.statementEnd(other);
-      if (end == kNPos)
-        return false;
-    }
     extraBraces_[end]++;
     skipTo_ = rp;
     changed_ = true;
@@ -5696,7 +5753,8 @@ std::string lowerThrows(const std::string &s, bool &changed) {
 /// unique even for `try { try {...} ... try {...} }`; previously each recursive
 /// call restarted at 0 and could redeclare the same frame in one scope.
 std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
-                                bool &changed) {
+                                bool &changed, DiagnosticEngine *diags,
+                                const std::string &filename) {
   std::string out;
   size_t pos = 0;
   while (pos < source.size()) {
@@ -5724,12 +5782,11 @@ std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
     out += source.substr(pos, t - pos);
     const std::string body = lowerExceptionsImpl(
         lowerThrows(source.substr(open + 1, close - open - 1), changed),
-        counter, changed);
+        counter, changed, diags, filename);
 
     // C+ has a single `Exception` type, so extra catch clauses cannot be
     // type-matched.  Consume them (so no `catch` syntax leaks into the C) but
-    // run only the first handler; emitting every handler sequentially was
-    // silent wrong behaviour.
+    // diagnose them instead of silently discarding a dead handler (issue #83).
     std::string handlerCode;
     size_t resume = close + 1;
     size_t scan = skipSpace(source, resume);
@@ -5752,23 +5809,37 @@ std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
       if (firstHandler) {
         const std::string handler = lowerExceptionsImpl(
             lowerThrows(source.substr(ho + 1, hc - ho - 1), changed), counter,
-            changed);
+            changed, diags, filename);
         handlerCode = " Exception " + name + " = " + frame + ".base.exc; " +
                       handler;
         firstHandler = false;
+      } else if (diags) {
+        diags->error("multiple catch clauses are not supported: C+ has a "
+                     "single Exception type; only the first handler runs",
+                     filename);
       }
       resume = hc + 1;
       scan = skipSpace(source, resume);
     }
 
-    out += "do { CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; "
+    // A plain compound block (not `do { } while (0)`) keeps break/continue
+    // directed at an enclosing user loop or switch.  The scope still gives
+    // the setjmp frame guard a cleanup point on every exit edge (issue #82).
+    out += "{ CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; "
            "if (setjmp(" + frame + ".base.env) == 0) { "
            "cplus_exception_enter(&" + frame + ".base); " + body +
            " " + frame + ".active = 0; cplus_exception_pop(); }";
-    if (!handlerCode.empty())
-      out += " else { " + frame + ".active = 0; cplus_rethrow_exc = " +
-             frame + ".base.exc; " + handlerCode + " }";
-    out += " } while (0);";
+    if (!handlerCode.empty()) {
+      // Save the previous rethrow slot for the duration of this handler.  A
+      // nested try/catch inside the handler used to overwrite the single TLS
+      // slot, so a bare `throw;` rethrew the inner exception (issue #83).
+      const std::string guard = frame + "_rethrow";
+      out += " else { " + frame + ".active = 0; "
+             "CPLUS_RETHROW_GUARD(" + guard + "); " + guard +
+             ".saved = cplus_rethrow_exc; cplus_rethrow_exc = " + frame +
+             ".base.exc; " + handlerCode + " }";
+    }
+    out += " }";
     pos = resume;
   }
   // Throws outside a try block are lowered too: they become deterministic
@@ -5778,10 +5849,13 @@ std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
 
 } // namespace
 
-std::string lowerExceptions(const std::string &source) {
+std::string lowerExceptions(const std::string &source,
+                            DiagnosticEngine *diags,
+                            const std::string &filename) {
   unsigned counter = 0;
   bool changed = false;
-  std::string out = lowerExceptionsImpl(source, counter, changed);
+  std::string out = lowerExceptionsImpl(source, counter, changed, diags,
+                                        filename);
   if (!changed)
     return out;
   // Guard declarations so a source that includes "cplus/cplus.h" (which uses
@@ -5828,6 +5902,21 @@ std::string lowerExceptions(const std::string &source) {
          "__attribute__((cleanup(cplus_exc_guard_cleanup)))\n"
          "#else\n"
          "#  define CPLUS_EXC_FRAME(N) CPlusExcGuard N\n"
+         "#endif\n"
+         // Each handler saves the previous rethrow slot and restores it on
+         // scope exit, including break/continue/return/goto.  Without this,
+         // a nested catch in a handler overwrote the outer exception and a
+         // bare `throw;` raised the wrong one (issue #83).
+         "typedef struct CPlusRethrowGuard { Exception saved; } "
+         "CPlusRethrowGuard;\n"
+         "static void cplus_rethrow_guard_cleanup(CPlusRethrowGuard *g) {\n"
+         "  cplus_rethrow_exc = g->saved;\n"
+         "}\n"
+         "#if defined(__GNUC__) || defined(__clang__)\n"
+         "#  define CPLUS_RETHROW_GUARD(N) CPlusRethrowGuard N "
+         "__attribute__((cleanup(cplus_rethrow_guard_cleanup)))\n"
+         "#else\n"
+         "#  define CPLUS_RETHROW_GUARD(N) CPlusRethrowGuard N\n"
          "#endif\n" +
          out;
 }

@@ -23,8 +23,12 @@ void registerExternalClass(const std::string &name, bool hasConstructor);
 
 /// Lower C+ `try { ... } catch (Exception e) { ... }` and `throw expr;` to
 /// plain C using the ABI-neutral runtime exception helpers. Safe mode only;
-/// LEGACY source is left byte-identical.
-std::string lowerExceptions(const std::string &source);
+/// LEGACY source is left byte-identical.  `diags` (when non-null) reports
+/// unsupported constructs such as a second catch clause instead of silently
+/// discarding them.
+std::string lowerExceptions(const std::string &source,
+                            DiagnosticEngine *diags = nullptr,
+                            const std::string &filename = {});
 
 /// Register an owning type declared in a lowered `.hp` header.
 void registerExternalResource(const std::string &name);

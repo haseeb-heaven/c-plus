@@ -30,10 +30,16 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <system_error>
 #include <unistd.h>
+
+// Needed to pass an explicitly constructed environment to ExecuteAndWait.
+// The sanitizer probe overrides ASAN_OPTIONS/UBSAN_OPTIONS without a shell.
+// Must be at global scope: the POSIX symbol has external linkage.
+extern char **environ;
 
 namespace cplus {
 
@@ -166,6 +172,25 @@ bool writeFile(const std::string &path, const std::string &text,
   }
   os << text;
   os.close();
+  return true;
+}
+
+/// Write through the descriptor returned by createTemporaryFile /
+/// createUniqueFile.  Reopening a temp file by name after creating it is a
+/// symlink/TOCTOU race on shared systems; keeping the descriptor closed the
+/// gap.  Issue #74.
+bool writeFd(int fd, const std::string &text, std::string *err) {
+  if (fd < 0) {
+    *err = "invalid temporary file descriptor";
+    return false;
+  }
+  llvm::raw_fd_ostream os(fd, true, llvm::sys::fs::OF_Text);
+  os << text;
+  os.close();
+  if (os.has_error()) {
+    *err = "failed to write temporary file";
+    return false;
+  }
   return true;
 }
 
@@ -447,8 +472,9 @@ std::string lowerUnit(const std::string &text, const std::string &name,
                 strict);
   // Exception lowering runs after RAII so cleanup inserted into a `try`
   // block is preserved. It is Safe-mode only: LEGACY keeps original bytes.
-  lowered.text = mode == Mode::Safe ? lowerExceptions(lowered.text)
-                                    : lowered.text;
+  lowered.text = mode == Mode::Safe
+                     ? lowerExceptions(lowered.text, &diags, name)
+                     : lowered.text;
   if (outRewritten)
     *outRewritten = rewritten;
   *ok = !diags.hasErrors();
@@ -491,7 +517,7 @@ std::string resolveInclude(const std::string &name,
 std::string preprocessModernHeaders(
     const std::string &source, const std::string &currentPath,
     DiagnosticEngine &diags, Mode mode, std::vector<TempFile> &guards,
-    std::map<std::string, std::string> &processed, unsigned &counter) {
+    std::map<std::string, std::string> &processed) {
   std::string result;
   std::istringstream in(source);
   std::string line;
@@ -530,7 +556,7 @@ std::string preprocessModernHeaders(
                 diags.report(std::move(d));
               } else {
                 header = preprocessModernHeaders(header, path, diags, mode,
-                                                 guards, processed, counter);
+                                                 guards, processed);
                 bool ok = false;
                 RewrittenSource headerInfo;
                 std::string lowered = lowerUnit(header, path, diags, mode, &ok,
@@ -540,18 +566,26 @@ std::string preprocessModernHeaders(
                       cls, lowered.find(cls + "_ctor(") != std::string::npos);
                 for (const auto &res : headerInfo.resourceTypes)
                   registerExternalResource(res);
+                // createTemporaryFile uses O_CREAT|O_EXCL with a random
+                // suffix: unlike a pid/counter name it cannot be predicted
+                // and raced through a symlink in a shared /tmp.  Write via
+                // the returned descriptor, never by reopening the name.
+                int headerFd = -1;
                 llvm::SmallString<256> tmp;
-                llvm::sys::path::system_temp_directory(true, tmp);
-                llvm::sys::path::append(
-                    tmp, "cplus-hp-" + std::to_string(::getpid()) + "-" +
-                             std::to_string(counter++) + ".h");
-                tempPath = tmp.str().str();
-                if (!writeFile(tempPath, lowered, &err)) {
+                if (llvm::sys::fs::createTemporaryFile("cplus-hp", ".h",
+                                                        headerFd, tmp)) {
+                  err = "cannot create a unique temporary header";
+                } else {
+                  err.clear();
+                  if (!writeFd(headerFd, lowered, &err))
+                    llvm::sys::fs::remove(tmp);
+                }
+                tempPath = err.empty() ? tmp.str().str() : std::string();
+                if (tempPath.empty()) {
                   Diag d;
                   d.level = DiagLevel::Error;
                   d.message = "cannot write lowered header: " + err;
                   diags.report(std::move(d));
-                  tempPath.clear();
                 } else {
                   guards.emplace_back();
                   guards.back().path = tempPath;
@@ -1047,36 +1081,77 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   llvm::SmallString<256> srcPath, exePath;
   if (llvm::sys::fs::createTemporaryFile("cplus_san", ".c", srcPath))
     return cache[key] = false;
-  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath))
+  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath)) {
+    llvm::sys::fs::remove(srcPath);
     return cache[key] = false;
+  }
   {
     std::ofstream os(srcPath.c_str());
     os << probe.source;
   }
+  // Every argument is passed as an individual argv element.  Quoting a
+  // path/flag with `'...'` into a shell string let a single quote in a
+  // user-supplied -D/-I (or in a path) escape and run arbitrary commands.
+  // ExecuteAndWait never invokes /bin/sh.  Issue #74.
+  const std::string src = std::string(srcPath.str());
+  const std::string exe = std::string(exePath.str());
+  const std::string compileLog = exe + ".compile.log";
+  const std::string runLog = exe + ".log";
+
   std::vector<std::string> flags;
   addSanitizerFlags(flags, bit);
-  std::string cmd = "'" + clang + "' -std=gnu17 -g";
+  std::vector<std::string> compileArgs;
+  compileArgs.push_back(clang); // argv[0]
+  compileArgs.push_back("-std=gnu17");
+  compileArgs.push_back("-g");
   for (const auto &a : extra)
-    cmd += " '" + a + "'";
+    compileArgs.push_back(a);
   for (const auto &f : flags)
     if (f.rfind("-fsanitize=", 0) == 0 || f == "-fno-sanitize-trap=cfi" ||
         f == "-flto" || f == "-fvisibility=hidden")
-      cmd += " '" + f + "'";
-  std::string compileLog = std::string(srcPath.str()) + ".compile.log";
-  cmd += " -o '" + std::string(exePath.str()) + "' '" + std::string(srcPath.str()) +
-         "' > '" + compileLog + "' 2>&1";
-  int rc = system(cmd.c_str());
+      compileArgs.push_back(f);
+  compileArgs.push_back("-o");
+  compileArgs.push_back(exe);
+  compileArgs.push_back(src);
+
+  std::vector<llvm::StringRef> compileArgv;
+  for (const auto &a : compileArgs)
+    compileArgv.push_back(a);
+  // stdin inherited, stdout discarded, stderr captured.  Two redirects to
+  // the same file would use independent file offsets, so only stderr is
+  // captured here (that is where the sanitizer diagnostic is emitted).
+  std::optional<llvm::StringRef> compileRedirects[3] = {
+      std::nullopt, llvm::StringRef(), llvm::StringRef(compileLog)};
+  int rc = llvm::sys::ExecuteAndWait(
+      clang, compileArgv, std::nullopt,
+      llvm::ArrayRef<std::optional<llvm::StringRef>>(compileRedirects), 0, 0);
   if (rc != 0) {
     llvm::sys::fs::remove(srcPath);
+    llvm::sys::fs::remove(exePath);
     llvm::sys::fs::remove(compileLog);
     return cache[key] = false;
   }
-  std::string runLog = std::string(exePath.str()) + ".log";
-  std::string runCmd = "exec 2>/dev/null; "
-                       "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 '" +
-                       std::string(exePath.str()) + "' > /dev/null 2> '" +
-                       runLog + "'";
-  (void)system(runCmd.c_str());
+
+  std::vector<std::string> envStrings;
+  for (char **e = environ; e && *e; ++e) {
+    llvm::StringRef entry(*e);
+    if (entry.starts_with("ASAN_OPTIONS=") || entry.starts_with("UBSAN_OPTIONS="))
+      continue;
+    envStrings.emplace_back(*e);
+  }
+  envStrings.emplace_back("ASAN_OPTIONS=detect_leaks=0");
+  envStrings.emplace_back("UBSAN_OPTIONS=halt_on_error=1");
+  std::vector<llvm::StringRef> env;
+  for (const auto &e : envStrings)
+    env.push_back(e);
+
+  std::vector<llvm::StringRef> runArgv;
+  runArgv.push_back(exe);
+  std::optional<llvm::StringRef> runRedirects[3] = {
+      std::nullopt, llvm::StringRef(), llvm::StringRef(runLog)};
+  (void)llvm::sys::ExecuteAndWait(
+      exe, runArgv, llvm::ArrayRef<llvm::StringRef>(env),
+      llvm::ArrayRef<std::optional<llvm::StringRef>>(runRedirects), 0, 0);
   std::ifstream log(runLog);
   std::stringstream buf;
   buf << log.rdbuf();
@@ -1403,7 +1478,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     }
   }
   std::vector<TempFile> guards;
-  std::string pidSuffix = std::to_string(::getpid());
 
   for (size_t fileIndex = 0; fileIndex < inputs.size(); ++fileIndex) {
     const std::string &input = inputs[fileIndex];
@@ -1418,10 +1492,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     std::vector<TempFile> headerGuards;
     std::map<std::string, std::string> processedHeaders;
-    unsigned headerCounter = 0;
     source = preprocessModernHeaders(source, input, diags, opts.mode,
-                                     headerGuards, processedHeaders,
-                                     headerCounter);
+                                     headerGuards, processedHeaders);
 
     DRIVER_LOG(CLOG_DEBUG, "lowering %s", input.c_str());
     bool ok = false;
@@ -1616,16 +1688,26 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     llvm::StringRef inputDir = llvm::sys::path::parent_path(input);
     if (inputDir.empty())
       inputDir = ".";
-    tempPath = std::string(inputDir);
-    llvm::sys::path::append(tempPath, ".cplus-tmp-" + pidSuffix + "-" +
-                                          std::to_string(fileIndex) + ".c");
-    if (!writeFile(tempPath.str().str(), loweredText, &err)) {
-      llvm::SmallString<256> sysTemp;
-      llvm::sys::path::system_temp_directory(true, sysTemp);
-      llvm::sys::path::append(sysTemp, "cplus-" + pidSuffix + "-" +
-                                           std::to_string(fileIndex) + ".c");
-      tempPath = sysTemp;
-      if (!writeFile(tempPath.str().str(), loweredText, &err)) {
+    // createUniqueFile(mkstemp) is atomic: a predictable pid/index name in a
+    // shared source directory could be pre-created as a symlink and raced.
+    // Keep the lowered C next to the input so relative includes still resolve.
+    int tempFd = -1;
+    const std::string tempModel =
+        joinPath(inputDir.str(), ".cplus-tmp-%%%%%%%%.c");
+    if (llvm::sys::fs::createUniqueFile(tempModel, tempFd, tempPath))
+      err = "cannot create a unique temporary source file";
+    else
+      err.clear();
+    if (!err.empty() || !writeFd(tempFd, loweredText, &err)) {
+      if (!tempPath.empty())
+        llvm::sys::fs::remove(tempPath);
+      tempPath.clear();
+      tempFd = -1;
+      if (llvm::sys::fs::createTemporaryFile("cplus", ".c", tempFd, tempPath))
+        err = "cannot create a unique temporary source file";
+      else
+        err.clear();
+      if (!err.empty() || !writeFd(tempFd, loweredText, &err)) {
         errs << "error: cannot write temporary file: " << err << "\n";
         return 1;
       }
@@ -1660,9 +1742,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       args.push_back(output);
     } else {
       llvm::SmallString<256> objPath;
-      llvm::sys::path::system_temp_directory(true, objPath);
-      llvm::sys::path::append(objPath, "cplus-" + pidSuffix + "-" +
-                                           std::to_string(fileIndex) + ".o");
+      if (llvm::sys::fs::createTemporaryFile("cplus", ".o", objPath)) {
+        errs << "error: cannot create a unique temporary object file\n";
+        return 1;
+      }
       args.push_back("-c");
       args.push_back("-o");
       args.push_back(objPath.str().str());
