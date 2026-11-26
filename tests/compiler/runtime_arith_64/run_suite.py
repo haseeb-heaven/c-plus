@@ -20,10 +20,15 @@ int main(void){
   (long long)__cplus_checked_shr_i64((int64_t)UINT64_MAX,1,64,0),
   (long long)__cplus_checked_shl_i64(1,2,64,1),
   (long long)__cplus_checked_narrow_i64((uint64_t)(int64_t)-1,64,1,32,1));
+ printf("u0=%lld u65=%lld s0=%lld\\n",
+  (long long)__cplus_checked_shr_i64(-1,1,0,0),
+  (long long)__cplus_checked_shr_i64(-1,1,65,0),
+  (long long)__cplus_checked_shr_i64(-1,1,0,1));
  return 0;
 }
 '''
-EXPECT='div=9223372036854775807 rem=1 shr=9223372036854775807 shl=4 narrow=-1\n'
+EXPECT=('div=9223372036854775807 rem=1 shr=9223372036854775807 shl=4 narrow=-1\n'
+        'u0=9223372036854775807 u65=9223372036854775807 s0=-1\n')
 def run(argv,t=60):
  try:
   p=subprocess.run(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=t)

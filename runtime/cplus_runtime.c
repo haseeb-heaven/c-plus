@@ -362,9 +362,15 @@ int64_t __cplus_checked_rem_i64(int64_t a, int64_t b, unsigned bits,
  * matching Clang's EmitShl predicates. */
 static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
                                    unsigned isSigned, int left) {
-  if (bits == 0 || bits > 64)
-    return left ? (int64_t)((uint64_t)a << (uint64_t)b)
-                : (int64_t)(a >> (uint64_t)b);
+  if (bits == 0 || bits > 64) {
+    /* No source width is known: operate on the full 64-bit pattern.  Use a
+     * logical shift for unsigned operands (never sign-extend) and normalize
+     * the count on widths where C would otherwise have UB. */
+    unsigned count = (unsigned)b & 63u;
+    return left ? (int64_t)((uint64_t)a << count)
+                : (int64_t)(isSigned ? (a >> count)
+                                     : ((uint64_t)a >> count));
+  }
   if (b < 0 || (unsigned long long)b >= bits) {
     char buf[160];
     snprintf(buf, sizeof(buf), "shift count %lld is outside [0, %u)",

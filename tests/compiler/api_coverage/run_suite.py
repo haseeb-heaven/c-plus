@@ -403,6 +403,8 @@ for api, cfun, left in [
                         k = b & 63
                         if left:
                             want = i64(((a & MASK64) << k) & MASK64)
+                        elif not signed:
+                            want = i64((a & MASK64) >> k)
                         else:
                             want = i64(a >> k)
                         val_i64(api, "wrap_" + tag, expr, want)
@@ -423,6 +425,9 @@ for api, cfun, left in [
                     elif left:
                         val_i64(api, "ok_" + tag, expr,
                                 i64(((a & MASK64) << b) & MASK64))
+                    elif not signed:
+                        val_i64(api, "ok_" + tag, expr,
+                                i64((a & MASK64) >> b))
                     elif not signed:
                         val_i64(api, "ok_" + tag, expr,
                                 i64((a & MASK64) >> b))
