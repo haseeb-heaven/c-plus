@@ -7,9 +7,10 @@
  *   #73 - allocate/release churn must rehash the live table in place instead
  *         of doubling it on every tombstone cleanup cycle.
  *   #75 - mutex/TLS primitives must actually work on hosts with threads.
- *   #76 - realloc must validate its source before allocating and perform its
- *         whole transfer in one critical section; alloc churn must leave a
- *         consistent live table.
+ *   #76/#110 - realloc must validate its source before allocating and perform
+ *         its whole validate/copy/retire/insert/free transfer in one critical
+ *         section; concurrent alloc/realloc/release churn must leave a
+ *         consistent live table and keep errno/ABI semantics intact.
  *
  * Every check is deterministic; failures are counted and reported at exit.
  *
@@ -17,6 +18,7 @@
 
 #include "cplus/cplus.h"
 
+#include <errno.h>
 #include <pthread.h>
 #include <setjmp.h>
 #include <stdint.h>
@@ -336,6 +338,25 @@ static void test_realloc_invalid_does_not_allocate(void) {
         "realloc invalid: allocated before validating ptr (or did not trap)");
 }
 
+/* #110: the lock-gap race involved cplus_release() being called by another
+ * thread after a realloc had copied but before it retired ptr.  Interleave
+ * independent alloc/release churn with realloc workers so every possible
+ * ordering of the three operations is exercised under the same allocator
+ * lock.  A spurious double-free trap or a leaked live slot fails the test. */
+static void *alloc_release_worker(void *arg) {
+  long id = (long)arg;
+  for (int i = 0; i < 3000; ++i) {
+    size_t sz = (size_t)((i + (int)id) % 5 + 1) * 16u;
+    unsigned char *p = (unsigned char *)cplus_alloc(sz);
+    if (!p)
+      return (void *)1;
+    p[0] = (unsigned char)id;
+    p[sz - 1] = (unsigned char)i;
+    cplus_release(p);
+  }
+  return NULL;
+}
+
 static void *realloc_worker(void *arg) {
   long id = (long)arg;
   unsigned char *p = (unsigned char *)cplus_alloc(16);
@@ -359,9 +380,11 @@ static void test_realloc_concurrency(void) {
   cplus_live_table_stats(&cap_before, &live_before, &del_before);
   CHECK(live_before == 0, "realloc concurrency: live slots left by earlier test");
   pthread_t threads[THREADS];
-  for (long i = 0; i < THREADS; ++i)
-    CHECK(pthread_create(&threads[i], NULL, realloc_worker, (void *)i) == 0,
+  for (long i = 0; i < THREADS; ++i) {
+    void *(*worker)(void *) = (i & 1) ? alloc_release_worker : realloc_worker;
+    CHECK(pthread_create(&threads[i], NULL, worker, (void *)i) == 0,
           "realloc concurrency: pthread_create");
+  }
   for (int i = 0; i < THREADS; ++i) {
     void *result = (void *)1;
     pthread_join(threads[i], &result);
@@ -374,6 +397,20 @@ static void test_realloc_concurrency(void) {
         "realloc concurrency: live table grew on tombstone churn");
 }
 
+/* ABI/errno preservation: cplus_realloc keeps the plain void* signature and
+ * leaves errno untouched on success (malloc still reports ENOMEM on failure). */
+static void test_realloc_errno(void) {
+  unsigned char *p = (unsigned char *)cplus_alloc(32);
+  CHECK(p != NULL, "realloc errno: alloc failed");
+  if (!p)
+    return;
+  errno = EDOM;
+  unsigned char *q = (unsigned char *)cplus_realloc(p, 64);
+  CHECK(q != NULL, "realloc errno: realloc failed");
+  CHECK(errno == EDOM, "realloc errno: success path clobbered errno");
+  cplus_release(q);
+}
+
 int main(void) {
   test_print_concurrency();
   test_print_unwind();
@@ -381,6 +418,7 @@ int main(void) {
   test_mutex_tls();
   test_realloc_transfer();
   test_realloc_invalid_does_not_allocate();
+  test_realloc_errno();
   test_realloc_concurrency();
 
   if (failures == 0) {

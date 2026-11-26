@@ -13,6 +13,7 @@
  *===----------------------------------------------------------------------===*/
 
 #include "cplus/cplus.h"
+#include <ctype.h>
 #include <errno.h>
 #include <math.h>
 #include <setjmp.h>
@@ -1137,9 +1138,12 @@ void *cplus_realloc(void *ptr, size_t size) {
   /* Validate the transfer source BEFORE allocating anything.  The old code
    * called cplus_alloc() first and only then discovered an invalid ptr,
    * leaking the fresh block and consuming a generation on the trap path
-   * (issue #76).  The entire lookup/copy/retire/insert sequence now runs in
-   * one critical section, so a concurrent release cannot free ptr while the
-   * copy is in flight or observe a half-retired live slot. */
+   * (issues #76/#110).  The entire lookup/copy/retire/insert/free sequence
+   * now runs in one critical section, so a concurrent release cannot free
+   * ptr while the copy is in flight or observe a half-retired live slot,
+   * and no second thread can double-retire ptr in the memcpy/free window.
+   * The plain pointer signature is unchanged and errno keeps its malloc
+   * semantics: untouched on success, ENOMEM from malloc() on failure. */
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
   if (!slot) {
@@ -1890,6 +1894,88 @@ static void cplus_scan_unsigned_checked(void *dest, size_t size,
   }
 }
 
+/* #111: the integer scanners reject a destination whose byte width does not
+ * match the target type.  Floating point, character and string scans must
+ * apply the same rule BEFORE reading stdin: scanf("%f"/"%lf"/"%c") writes a
+ * fixed number of bytes and cannot be told how large the real destination
+ * is, so an undersized `size` would otherwise be an unchecked write. */
+static void cplus_scan_exact_size(size_t size, size_t required,
+                                  const char *target, const char *file,
+                                  int line) {
+  if (size == required)
+    return;
+  char detail[256];
+  snprintf(detail, sizeof(detail),
+           "scan destination '%s' has size %zu but %zu byte(s) are required "
+           "for this type",
+           target, size, required);
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line, detail);
+}
+
+static void cplus_scan_min_size(size_t size, size_t required,
+                                const char *target, const char *file,
+                                int line) {
+  if (size >= required)
+    return;
+  char detail[256];
+  snprintf(detail, sizeof(detail),
+           "scan destination '%s' has size %zu but at least %zu byte(s) are "
+           "required for this type",
+           target, size, required);
+  cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line, detail);
+}
+
+/* #111: read one whitespace-delimited token into `dest` with a hard capacity
+ * of size-1 bytes (the last byte is reserved for the NUL).  There is no fixed
+ * 4095-byte staging buffer: every byte of the token is consumed even when it
+ * does not fit, so a long word can never leave a tail in stdin that a later
+ * scan() would mistake for a separate input.  The delimiter itself is pushed
+ * back, exactly as scanf("%s") leaves it pending for the next conversion. */
+static void cplus_scan_string_checked(void *dest, size_t size,
+                                      const char *target, const char *file,
+                                      int line) {
+  char *out = (char *)dest;
+  const size_t capacity = size - 1u; /* size >= 1 is validated by the caller */
+  size_t kept = 0u;
+  size_t total = 0u;
+  int overflow = 0;
+  int ch;
+  char detail[384];
+
+  do {
+    ch = fgetc(stdin);
+  } while (ch != EOF && isspace((unsigned char)ch));
+
+  if (ch == EOF) {
+    snprintf(detail, sizeof(detail),
+             "could not read input for '%s' (string) - input ended "
+             "unexpectedly",
+             target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+
+  while (ch != EOF && !isspace((unsigned char)ch)) {
+    if (kept < capacity)
+      out[kept++] = (char)ch;
+    else
+      overflow = 1;
+    ++total;
+    ch = fgetc(stdin);
+  }
+  out[kept] = '\0'; /* kept <= size-1, so this is always in bounds */
+  if (ch != EOF)
+    ungetc(ch, stdin);
+
+  if (overflow) {
+    snprintf(detail, sizeof(detail),
+             "cannot store the %zu-byte input token into '%s' (string "
+             "destination of %zu byte(s), at most %zu character(s)) - the "
+             "whole token was consumed so the next scan is not desynchronised",
+             total, target, size, capacity);
+    cplus_print_fatal(CPLUS_EXIT_BOUNDS, "input error", file, line, detail);
+  }
+}
+
 void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
                          const char *expr, const char *file, int line) {
   int rc = 0;
@@ -1915,26 +2001,21 @@ void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
     cplus_scan_unsigned_checked(dest, size, target, file, line);
     return;
   case CPLUS_SCAN_FLOAT:
+    cplus_scan_exact_size(size, sizeof(float), target, file, line);
     rc = scanf("%f", (float *)dest);
     break;
   case CPLUS_SCAN_DOUBLE:
+    cplus_scan_exact_size(size, sizeof(double), target, file, line);
     rc = scanf("%lf", (double *)dest);
     break;
   case CPLUS_SCAN_CHAR:
+    cplus_scan_min_size(size, 1u, target, file, line);
     rc = scanf(" %c", (char *)dest);
     break;
-  case CPLUS_SCAN_STR: {
-    char token[4096];
-    rc = scanf("%4095s", token);
-    if (rc == 1 && size > 0) {
-      size_t n = strlen(token);
-      if (n >= size)
-        n = size - 1;
-      memcpy(dest, token, n);
-      ((char *)dest)[n] = '\0';
-    }
-    break;
-  }
+  case CPLUS_SCAN_STR:
+    cplus_scan_min_size(size, 1u, target, file, line);
+    cplus_scan_string_checked(dest, size, target, file, line);
+    return;
   default:
     cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "input error", file, line,
                       "unsupported scan type");

@@ -79,5 +79,21 @@ else
   tail -30 /tmp/rt6.log /tmp/rt6.out /tmp/rt6.err 2>/dev/null || true
 fi
 
+# 7) scan() destination-size regressions (#111): undersized float/double/char/
+# string destinations must trap before reading stdin, and overlong string
+# tokens (including >4095 bytes) must fail closed without desynchronising
+# stdin for the next scan().
+if "$CC" -std=gnu17 -O0 -g -I"$ROOT/runtime/include" \
+    "$ROOT/tests/runtime/test_runtime_scan.c" \
+    "$ROOT/runtime/cplus_runtime.c" -lm -pthread \
+    -o "$OUT/test_runtime_scan" >/tmp/rt7.log 2>&1 \
+    && "$OUT/test_runtime_scan" >/tmp/rt7.out 2>/tmp/rt7.err \
+    && grep -q "runtime_scan: ok" /tmp/rt7.out; then
+  pass=$((pass+1)); echo "ok scan_destination_safety"
+else
+  fail=$((fail+1)); echo "FAIL scan_destination_safety"
+  tail -30 /tmp/rt7.log /tmp/rt7.out /tmp/rt7.err 2>/dev/null || true
+fi
+
 echo "runtime tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
