@@ -21,8 +21,8 @@ def run_cmd(args, env=None, cwd=None):
         merged_env.update(env)
     return subprocess.run(
         args,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
+        check=False,
         env=merged_env,
         cwd=cwd,
         timeout=60,
@@ -227,7 +227,10 @@ int main(void) {
         b, r, emitted = build_and_run(td, "issue_107", src_107,
                                       extra_flags=["--no-werror"],
                                       mode="--default")
-        c_text = open(emitted).read() if os.path.exists(emitted) else ""
+        c_text = ""
+        if os.path.exists(emitted):
+            with open(emitted) as f:
+                c_text = f.read()
         check(
             "107_scoped_nonnull_check",
             b.returncode == 0 and "CPLUS_NONNULL(p)" in c_text and
@@ -303,7 +306,10 @@ int main(void) {
 }
 '''
         b, r, emitted = build_and_run(td, "issue_121", src_121)
-        c_text = open(emitted).read() if os.path.exists(emitted) else ""
+        c_text = ""
+        if os.path.exists(emitted):
+            with open(emitted) as f:
+                c_text = f.read()
         out = r.stdout.decode() if r else ""
         check(
             "121_vla_exits_and_void_return",
@@ -333,7 +339,10 @@ int main(void) {
 '''
         b_g, r_g, em_g = build_and_run(td, "issue_121_goto", src_121_goto,
                                        extra_flags=["--no-werror"])
-        c_g = open(em_g).read() if os.path.exists(em_g) else ""
+        c_g = ""
+        if os.path.exists(em_g):
+            with open(em_g) as f:
+                c_g = f.read()
         out_g = r_g.stdout.decode() if r_g else ""
         check(
             "121_vla_goto_cleanup",
@@ -366,7 +375,10 @@ int main(void) {
 }
 '''
         b, r, emitted = build_and_run(td, "issue_122", src_122)
-        c_text = open(emitted).read() if os.path.exists(emitted) else ""
+        c_text = ""
+        if os.path.exists(emitted):
+            with open(emitted) as f:
+                c_text = f.read()
         out = r.stdout.decode() if r else ""
         check(
             "122_compound_vla_extents_lowered",

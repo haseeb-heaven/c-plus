@@ -3102,6 +3102,17 @@ static bool isDeclaratorStarRun(const std::vector<Token> &toks,
         (pre.text == "struct" || pre.text == "union" || pre.text == "enum"))
       return true;
   }
+  // Typedefs and C+ class names are ordinary identifiers to the lexer.  A
+  // name such as `Node **p` or `size_t **p` is a declarator, not a deref;
+  // otherwise a NULL check gets injected into the declaration itself.
+  if (before.kind == TokKind::Identifier) {
+    const std::string &n = before.text;
+    bool typeLike = !n.empty() &&
+        ((n[0] >= 'A' && n[0] <= 'Z') ||
+         (n.size() > 2 && n.compare(n.size() - 2, 2, "_t") == 0));
+    if (typeLike)
+      return true;
+  }
   return false;
 }
 
