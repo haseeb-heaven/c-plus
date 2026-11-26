@@ -445,7 +445,7 @@ private:
         n = ts.nextSig(n);
       if (n < ts.size() && ts[n].kind == TokKind::Identifier &&
           !isTypeStarter(ts[n].text)) {
-        varClasses_[ts[n].text] = ts[i].text;
+        varClasses_.push_back({ts[n].text, ts[i].text, n});
       }
     }
   }
@@ -626,7 +626,7 @@ private:
           ts[cls].kind != TokKind::Identifier ||
           !classNames_.count(ts[cls].text))
         continue;
-      varClasses_[ts[name].text] = ts[cls].text;
+      varClasses_.push_back({ts[name].text, ts[cls].text, name});
     }
   }
 
@@ -1681,8 +1681,7 @@ private:
           size_t mem = ts.nextSig(s);
           if (mem >= ts.size() || ts[mem].kind != TokKind::Identifier)
             break;
-          auto mit = varClasses_.find(ts[mem].text);
-          std::string cls = mit != varClasses_.end() ? mit->second : std::string();
+          std::string cls = classOfVar(ts[mem].text, mem);
           if (cls.empty() && selfClass)
             cls = fieldClass(selfClass, ts[mem].text);
           if (cls.empty())
@@ -1739,14 +1738,11 @@ private:
       }
     }
 
-    std::string className;
-    auto it = varClasses_.find(ts[i].text);
-    if (it != varClasses_.end())
-      className = it->second;
-    else if (selfClass && (ts[i].text == kw::kSelf ||
-                           ts[i].text == "this"))
+    std::string className = classOfVar(ts[i].text, i);
+    if (className.empty() && selfClass &&
+        (ts[i].text == kw::kSelf || ts[i].text == "this"))
       className = selfClass->name;
-    else {
+    else if (className.empty()) {
       // A method-style call on a plain pointer/array is invalid. Give a
       // clear C+ error instead of Clang's "not a structure or union".
       size_t dot = ts.nextSig(i);
@@ -1833,7 +1829,25 @@ private:
   std::set<std::string> classNames_;
   std::set<std::string> classNamesWithCtor_;
   std::set<std::string> externalClassNames_;
-  std::map<std::string, std::string> varClasses_;
+  struct VarClass {
+    std::string name;
+    std::string cls;
+    size_t pos;
+  };
+  std::vector<VarClass> varClasses_;
+  std::string classOfVar(const std::string &name, size_t usePos) const {
+    std::string result;
+    size_t best = kNPos;
+    // Pick the latest declaration that precedes this use (declaration order
+    // is also scope order), so same-named locals in later functions/scopes
+    // cannot reuse an earlier function's class.
+    for (const auto &v : varClasses_)
+      if (v.name == name && v.pos <= usePos && (best == kNPos || v.pos >= best)) {
+        best = v.pos;
+        result = v.cls;
+      }
+    return result;
+  }
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;
   struct DynamicLength {
