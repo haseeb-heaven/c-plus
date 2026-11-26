@@ -150,10 +150,19 @@ static int fmt_check_dest_bounds(const char *api, const char *dest, size_t dmax,
     {
         size_t tracked = cplus_safe_ptr_size(dest);
         size_t remaining = cplus_safe_remaining_capacity(dest);
-        size_t cap = remaining > 0 ? remaining :
-                     (tracked > 0 ? tracked :
-                      (known_dmax != (size_t)-1 ? known_dmax : 0));
-        if (cap > 0 && dmax > cap) {
+        /* (size_t)-1 is the "not in a tracked live block" sentinel, not a
+         * capacity: treating it as one made every dmax check pass for stack
+         * and static destinations.  Use the remaining bytes of a tracked
+         * block (which also covers interior heap pointers, including a
+         * proven zero-byte one-past-the-end destination), and otherwise fall
+         * back to the tracked base size / caller's known dmax.  Keep -1 for
+         * a genuinely unknown capacity so the existing permissive policy is
+         * preserved there. */
+        size_t cap = (size_t)-1;
+        if (remaining != (size_t)-1) cap = remaining;
+        else if (tracked > 0) cap = tracked;
+        else if (known_dmax != (size_t)-1) cap = known_dmax;
+        if (cap != (size_t)-1 && dmax > cap) {
             return fmt_violation(api, "format dmax exceeds destination buffer capacity");
         }
     }
