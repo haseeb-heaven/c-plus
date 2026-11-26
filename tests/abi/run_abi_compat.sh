@@ -132,7 +132,8 @@ step T3a_cplus_lib_archive - 60 /usr/bin/ar rcs \
 step T3a_c_driver_compile - 180 "$CC" -O1 -std=c99 -Wall -Wextra -pedantic \
     -fsanitize=undefined -fno-sanitize-recover=all $INC \
     tests/abi/abi_compat_c_driver.c "$OUT/libabi_compat_cplus.a" \
-    build/libc/libcplus_hardened.a -lm -pthread -o "$OUT/c_driver"
+    build/libcplus_runtime.a build/libc/libcplus_hardened.a \
+    -lm -pthread -o "$OUT/c_driver"
 step T3a_c_driver_run "$OUT/c_driver.out" 60 "$OUT/c_driver"
 check_line T3a_c_driver_summary "$OUT/c_driver.out" "C->C+ boundary checks match"
 
@@ -153,7 +154,7 @@ step T3b_c_part_archive - 60 /usr/bin/ar rcs \
 # The exact warning is preserved in results.log for the record.
 step T3b_direct_link_probe - 180 ./build/c+ build --sanitize=none \
     tests/abi/abi_compat_cplus_caller.cp -o "$OUT/cplus_caller_direct" \
-    -- "$OUT/libabi_compat_cpart.a"
+    -- "$OUT/libabi_compat_cpart.a" -Wno-unused-command-line-argument
 step T3b_cplus_caller_build - 180 ./build/c+ build --sanitize=none \
     tests/abi/abi_compat_cplus_caller.cp -o "$OUT/cplus_caller" \
     -- "$OUT/libabi_compat_cpart.a" -Wno-unused-command-line-argument

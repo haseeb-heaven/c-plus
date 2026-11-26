@@ -17,7 +17,8 @@ sh scripts/build_safecrt.sh >/dev/null
   -Ilibc -Ilibc/install-include -Istdlib/safe \
   -Ithird_party/safeclib/include -Ithird_party/intel-safestringlib/include \
   -o build/abi/abi_layouts.cplus -- \
-  build/libc/libcplus_hardened.a build/safe/libcplus_safecrt.a
+  -Lbuild/libc -lcplus_hardened -Lbuild/safe -lcplus_safecrt \
+  -Wno-unused-command-line-argument
 timeout 30 build/abi/abi_layouts > build/abi/host.out
 timeout 30 build/abi/abi_layouts.cplus > build/abi/cplus.out
 diff -u build/abi/host.out build/abi/cplus.out
