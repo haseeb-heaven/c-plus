@@ -245,15 +245,33 @@ int64_t __cplus_checked_mul_i64(int64_t a, int64_t b, unsigned bits,
  * implemented here without any sanitizer dependency. */
 static int64_t cplus_checked_divrem(int64_t a, int64_t b, unsigned bits,
                                     unsigned isSigned, int remainder) {
-  if (b == 0)
+  if (isSigned) {
+    if (b == 0)
+      cplus_arith_fatal("division by zero",
+                        remainder ? "remainder by zero" : "division by zero");
+    if (bits > 1 && bits <= 64 && b == -1 &&
+        a == (int64_t)(-((__int128)1 << (bits - 1))))
+      cplus_arith_fatal("signed integer overflow",
+                        remainder ? "remainder overflows the source type"
+                                  : "division overflows the source type");
+    return remainder ? a % b : a / b;
+  }
+
+  /* Unsigned operands arrive as int64_t bit patterns.  Doing the division
+   * on those C types would perform signed idiv: values with bit 63 set would
+   * be corrupted and INT64_MIN / UINT64_MAX would trap with SIGFPE. */
+  uint64_t ua = (uint64_t)a;
+  uint64_t ub = (uint64_t)b;
+  if (bits > 0 && bits < 64) {
+    uint64_t mask = (((uint64_t)1) << bits) - 1;
+    ua &= mask;
+    ub &= mask;
+  }
+  if (ub == 0)
     cplus_arith_fatal("division by zero",
                       remainder ? "remainder by zero" : "division by zero");
-  if (isSigned && bits > 1 && bits <= 64 && b == -1 &&
-      a == (int64_t)(-((__int128)1 << (bits - 1))))
-    cplus_arith_fatal("signed integer overflow",
-                      remainder ? "remainder overflows the source type"
-                                : "division overflows the source type");
-  return remainder ? a % b : a / b;
+  uint64_t result = remainder ? ua % ub : ua / ub;
+  return (int64_t)result;
 }
 
 int64_t __cplus_checked_div_i64(int64_t a, int64_t b, unsigned bits,
@@ -267,32 +285,45 @@ int64_t __cplus_checked_rem_i64(int64_t a, int64_t b, unsigned bits,
 }
 
 /* Shifts: enforce 0 <= count < width.  For signed left shift also reject a
- * negative left operand and any non-zero bit shifted out of the value bits,
+ * negative left operand and any bit that would reach or cross the sign bit,
  * matching Clang's EmitShl predicates. */
 static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
                                    unsigned isSigned, int left) {
-  if (bits == 0 || bits > 64)
-    return left ? (int64_t)((uint64_t)a << (uint64_t)b)
-                : (int64_t)(a >> (uint64_t)b);
-  if (b < 0 || (unsigned long long)b >= bits) {
+  uint64_t ua = (uint64_t)a;
+  uint64_t count = (uint64_t)b;
+  if (bits == 0 || bits > 64) {
+    /* Keep the historical wrapping result for an invalid width, but never
+     * invoke undefined behaviour by shifting by 64 or more. */
+    if (count >= 64)
+      return 0;
+    return left ? (int64_t)(ua << count)
+                : (isSigned ? (int64_t)(a >> (unsigned)count)
+                            : (int64_t)(ua >> count));
+  }
+  if (b < 0 || count >= bits) {
     char buf[160];
     snprintf(buf, sizeof(buf), "shift count %lld is outside [0, %u)",
              (long long)b, bits);
     cplus_arith_fatal("invalid shift", buf);
   }
+  if (!isSigned && bits < 64)
+    ua &= (((uint64_t)1) << bits) - 1;
   if (left && isSigned) {
     if (a < 0)
       cplus_arith_fatal("invalid shift",
                         "left shift of a negative signed value");
-    uint64_t ua = (uint64_t)a;
-    unsigned count = (unsigned)b;
-    uint64_t limit = (~(uint64_t)0) >> (64 - bits);
-    if ((ua << count) & ~limit)
+    /* The largest representable result is 2^(bits-1)-1.  Shifting in
+     * __int128 keeps the bound and the comparison exact for bits == 64,
+     * where a uint64_t mask would hide the sign bit entirely; count is
+     * always < bits <= 64, so neither shift is undefined. */
+    __int128 max = (((__int128)1) << (bits - 1)) - 1;
+    if ((__int128)a > (max >> count))
       cplus_arith_fatal("invalid shift",
-                        "left shift loses bits above the source width");
+                        "left shift reaches the sign bit of the source type");
   }
-  return left ? (int64_t)((uint64_t)a << (uint64_t)b)
-              : (int64_t)(a >> (uint64_t)b);
+  return left ? (int64_t)(ua << count)
+              : (isSigned ? (int64_t)(a >> (unsigned)count)
+                          : (int64_t)(ua >> count));
 }
 
 int64_t __cplus_checked_shl_i64(int64_t a, int64_t b, unsigned bits,
@@ -311,15 +342,31 @@ int64_t __cplus_checked_shr_i64(int64_t a, int64_t b, unsigned bits,
  * sanitizer runtime.  Only the value is checked; a narrow *type* is fine. */
 int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
                                    unsigned db, unsigned ds) {
-  __int128 src = (__int128)value;
-  if (ss && sb > 0 && sb < 64 && ((value >> (sb - 1)) & 1u))
-    src = (__int128)(int64_t)(value | (~((uint64_t)0) << sb));
+  __int128 src;
+  if (ss && sb > 0) {
+    /* A signed source arrives sign-extended to 64 bits.  For a full-width
+     * source, conversion through int64_t is what sign-extends bit 63 into
+     * __int128; a plain (__int128)value would zero-extend it instead. */
+    if (sb >= 64)
+      src = (__int128)(int64_t)value;
+    else if ((value >> (sb - 1)) & 1u)
+      src = (__int128)(int64_t)(value | (~((uint64_t)0) << sb));
+    else
+      src = (__int128)value;
+  } else {
+    src = (__int128)value;
+  }
   uint64_t mask = db >= 64 ? ~((uint64_t)0)
                            : ((((uint64_t)1) << db) - 1);
   uint64_t truncated = value & mask;
-  __int128 dst = (__int128)truncated;
-  if (ds && db > 0 && db < 64 && ((truncated >> (db - 1)) & 1u))
+  __int128 dst;
+  if (ds && db >= 64)
+    /* Same sign-extension rule for a full-width signed destination. */
+    dst = (__int128)(int64_t)truncated;
+  else if (ds && db > 0 && ((truncated >> (db - 1)) & 1u))
     dst = (__int128)(int64_t)(truncated | (~((uint64_t)0) << db));
+  else
+    dst = (__int128)truncated;
   if (src != dst) {
     char buf[192];
     snprintf(buf, sizeof(buf),
