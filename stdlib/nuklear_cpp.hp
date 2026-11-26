@@ -23,8 +23,18 @@ class NuklearScratchFrame {
     int frame_ok;
 
     NuklearScratchFrame(stdlib_datastack *ds) {
+        /* Capture both the top and the generation together, like
+         * stdlib_scratch_scope: drop() must refuse stale marks but must never
+         * compare an uninitialized generation. */
+        unsigned char *saved = (unsigned char *)0;
+        uint64_t g = 0;
+        if (ds != (stdlib_datastack *)0) {
+            saved = (*ds).top;
+            g = (*ds).generation;
+        }
         this->frame_ds = ds;
-        this->frame_saved_top = (ds != (stdlib_datastack *)0) ? (*ds).top : (unsigned char *)0;
+        this->frame_saved_top = saved;
+        this->frame_gen = g;
         nuklear_scratch_allocator(&this->frame_alloc, ds);
         this->frame_ok = (ds != (stdlib_datastack *)0) ? 1 : 0;
         cplus_log(CPLUS_LOG_INFO, "NuklearScratchFrame enter ok=%d", this->frame_ok);
@@ -32,13 +42,18 @@ class NuklearScratchFrame {
 
     /* Returns 1 when the context was initialized, 0 after a logged refusal. */
     int init(struct nk_context *ctx, const struct nk_user_font *font) {
+        /* exceptions4c blocks are popped when the TRY statement finishes; a
+         * raw return inside it would leave a dead frame on the thread's
+         * exception stack.  Keep the result in a volatile local and return
+         * only after every CATCH block has run. */
+        volatile int result = 0;
         TRY {
             if (this->frame_ok == 0 || ctx == (struct nk_context *)0)
                 THROW(NUKLEAR_INIT_FAIL, "null frame or context");
             if (nk_init(ctx, &this->frame_alloc, font) == 0)
                 THROW(NUKLEAR_INIT_FAIL, "nk_init refused scratch allocator");
             cplus_log(CPLUS_LOG_INFO, "NuklearScratchFrame nk_init ok");
-            return 1;
+            result = 1;
         }
         CATCH (NUKLEAR_INIT_FAIL) {
             cplus_log(CPLUS_LOG_WARN, "NuklearScratchFrame refused: %s",
@@ -49,7 +64,7 @@ class NuklearScratchFrame {
             cplus_log(CPLUS_LOG_ERROR, "NuklearScratchFrame unexpected failure");
             this->frame_ok = 0;
         }
-        return 0;
+        return result;
     }
 
     int ok(void) { return this->frame_ok; }
@@ -60,6 +75,9 @@ class NuklearScratchFrame {
             (*this->frame_ds).generation == this->frame_gen &&
             this->frame_saved_top != (unsigned char *)0)
             this->frame_ds->top = this->frame_saved_top;
+        /* C+ also calls drop() at scope exit; make the explicit call
+         * idempotent so a second drop cannot rewind a later allocation. */
+        this->frame_ds = (stdlib_datastack *)0;
         cplus_log(CPLUS_LOG_INFO, "NuklearScratchFrame rewound");
     }
 };

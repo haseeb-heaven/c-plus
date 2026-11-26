@@ -1,7 +1,17 @@
 /* Nuklear-on-scratch allocator proof: allocations come from the VM data
- * stack and are reclaimed by one scope-store, not per-object free. */
+ * stack and are reclaimed by one scope-store, not per-object free.
+ * Also guards issue #88: the allocator must never wipe the process-wide
+ * stdlib error callback installed by the application. */
 #include "cplus/cplus.h"
 #include "stdlib/nuklear_adapt.hp"
+
+static volatile int callback_hits = 0;
+
+static void app_error_callback(int category, cplus_exit_code code,
+                               const char *message) {
+    (void)category; (void)code; (void)message;
+    callback_hits++;
+}
 
 int main(void) {
     error e = error();
@@ -12,7 +22,7 @@ int main(void) {
     void *p;
     int i;
 
-    stdlib_set_error_callback((stdlib_error_callback)0);
+    stdlib_set_error_callback(&app_error_callback);
     if (ds == (stdlib_datastack *)0) { print("NK_ADAPT FATAL datastack"); return 1; }
     {
         stdlib_scratch_scope frame = stdlib_scratch_scope(ds);
@@ -32,6 +42,16 @@ int main(void) {
         after = (size_t)(ds->top - ds->base);
         if (after != before) fails++;
     }
+
+    /* The host's callback must survive every allocator call above. */
+    if (stdlib_state.callback != &app_error_callback) fails++;
+    {
+        error failed = error();
+        if (stdlib_datastack_alloc(ds, 0u, 16u, &failed) != (void *)0) fails++;
+        if (failed.ok() != 0) fails++;
+        if (callback_hits == 0) fails++; /* callback still installed and live */
+    }
+    stdlib_set_error_callback((stdlib_error_callback)0);
     print("NK_ADAPT", fails);
     return fails ? 1 : 0;
 }
