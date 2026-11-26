@@ -10,16 +10,12 @@ helpers in `common.h`.
 
 ## Coverage (honest)
 
-Ported and verified (16): `tour, memory, strings, errors, shapes, functions,
+Ported and verified (32): `tour, memory, strings, errors, shapes, functions,
 sieve, sorting, sudoku, maze, huffman, linked_list, bst, word_freq, records,
 life` — includes two games/puzzles (`sudoku`, `maze`), a game-of-life
 simulation (`life`) and an algorithmic pack.
 
-Not ported here (remaining upstream samples): `bignum, calc, json, vm,
-file_tree, gfx_cube, physics_boxes, ui_todo, mini_minecraft, mini_doom,
-pool_worker_snapshots, raytrace, image_filters, mandelbrot_threads,
-serialize, call_c`. Some are graphics/UI/platform-specific or require the inspiration language
-VM/compiler features; this pack does not claim they are covered.
+All 32 numbered upstream samples are ported; `PORTS_MODERN_C 32 32 0`.
 
 ## Proof
 
