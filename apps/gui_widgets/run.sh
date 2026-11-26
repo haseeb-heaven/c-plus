@@ -4,7 +4,7 @@
 # and verifies the framebuffer screenshot and widget markers.
 # Prints: GFX_APP_TEST <cases> <pass> <fail>.
 set -u
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$ROOT" || exit 2
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 unset SDKROOT
