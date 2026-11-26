@@ -9,6 +9,7 @@ cd "$D" || exit 2
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 unset SDKROOT
 CC=${CPLUS_CC:-/usr/bin/clang}
+mkdir -p "$D/bin" || exit 2
 pass=0; fail=0; cases=0
 
 for src in "$D"/*.c; do
