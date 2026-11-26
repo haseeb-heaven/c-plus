@@ -179,7 +179,8 @@ static void recoverable(void) {
     ck(s.append("-a-much-longer-suffix") == 0, "inval-realloc-append-rc");
     after = s.c_str();
     ck(after != old_buf, "inval-buffer-moved");
-    ck(v.data() == old_buf, "inval-view-still-points-old");
+    /* Generation-checked views now fail closed after owner reallocation. */
+    ck(v.data() == (const char *)0, "inval-view-refuses-stale");
     ck(stdlib_alloc_check_generation(old_buf, gen) == 0,
        "inval-old-generation-stale");
     ck(stdlib_alloc_generation(after) != 0ULL &&
@@ -196,8 +197,7 @@ static void recoverable(void) {
     ck(s.valid() == 0 && s.c_str()[0] == '\0', "inval-drop-owner-empty");
     ck(stdlib_alloc_check_generation(old_buf, gen) == 0,
        "inval-drop-generation-stale");
-    ck(v.data() == old_buf && v.size() == 6,
-       "inval-drop-view-unchanged-fields");
+    ck(v.data() == (const char *)0, "inval-drop-view-refuses-stale");
     /* Never call v.equals(...) / v.is_valid_utf8() on old_buf here. */
 }
 

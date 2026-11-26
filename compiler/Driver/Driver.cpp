@@ -1398,7 +1398,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       rtArgs.push_back("-o");
       rtArgs.push_back(std::string(objPath.str()));
       rtArgs.push_back(runtimeSrc);
-      for (const auto &a : opts.extraArgs)
+      /* This is a `-c` compile: linker-only operands (-l, -L, -Wl,...) are
+       * unused here and Clang's -Werror rejects them (e.g. -luv from the
+       * async stdlib tests). */
+      for (const auto &a : withoutLinkerFlags(opts.extraArgs))
         rtArgs.push_back(a);
       appendSafetyTail(rtArgs);
       if (runProgram(clang, rtArgs) != 0) {

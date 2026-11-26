@@ -276,6 +276,24 @@ static inline size_t stdlib_meta_hash(const void *p) {
     return (size_t)x;
 }
 
+/* Test seam for out-of-memory injection.  The metadata table grows with raw
+ * calloc(), which the checked-allocator fail_at/fail_from knobs do not reach.
+ * A NULL hook (the default) uses the real allocator; tests install a function
+ * that returns NULL to exercise the OOM path deterministically.  Weak so every
+ * translation unit that includes this header shares the same hook. */
+typedef void *(*stdlib_meta_calloc_fn)(size_t count, size_t size);
+__attribute__((weak)) stdlib_meta_calloc_fn stdlib_meta_calloc_hook;
+
+static inline void stdlib_meta_set_calloc_hook(stdlib_meta_calloc_fn fn) {
+    __atomic_store_n(&stdlib_meta_calloc_hook, fn, __ATOMIC_RELEASE);
+}
+
+static inline void *stdlib_meta_calloc(size_t count, size_t size) {
+    stdlib_meta_calloc_fn fn =
+        __atomic_load_n(&stdlib_meta_calloc_hook, __ATOMIC_ACQUIRE);
+    return fn != (stdlib_meta_calloc_fn)0 ? fn(count, size) : calloc(count, size);
+}
+
 static inline stdlib_meta_slot *stdlib_meta_find(const void *p) {
     size_t mask, i, n;
     if (stdlib_state.meta_cap == 0 || p == NULL || p == STDLIB_META_TOMB)
@@ -294,15 +312,19 @@ static inline stdlib_meta_slot *stdlib_meta_find(const void *p) {
 
 static inline void stdlib_meta_record(const void *p, size_t byte_size,
                                       size_t elem_size) {
-    size_t mask, i;
+    size_t mask, i, n;
     stdlib_meta_slot *existing;
+    int recorded = 0;
     if (p == NULL)
         return;
     if (elem_size == 0)
         elem_size = 1u;
     stdlib_meta_acquire();
+    /* Load factor threshold without the overflow-prone (used+1)*4 > cap*3.
+     * cap is always a power of two, so cap>>2 is exactly cap/4. */
     if (stdlib_state.meta_cap == 0 ||
-        (stdlib_state.meta_used + 1u) * 4u > stdlib_state.meta_cap * 3u) {
+        stdlib_state.meta_used + 1u >
+            stdlib_state.meta_cap - (stdlib_state.meta_cap >> 2u)) {
         size_t ncap = stdlib_state.meta_cap ? stdlib_state.meta_cap : 64u;
         size_t k;
         stdlib_meta_slot *fresh;
@@ -310,21 +332,30 @@ static inline void stdlib_meta_record(const void *p, size_t byte_size,
             stdlib_state.meta_live * 2u >= stdlib_state.meta_cap &&
             ncap <= SIZE_MAX / 4u / sizeof(stdlib_meta_slot))
             ncap = stdlib_state.meta_cap * 2u;
-        fresh = (stdlib_meta_slot *)calloc(ncap, sizeof(stdlib_meta_slot));
-        if (fresh != NULL) {
-            for (k = 0; k < stdlib_state.meta_cap; ++k) {
-                const void *kp = stdlib_state.meta_tab[k].ptr;
-                if (kp != NULL && kp != STDLIB_META_TOMB) {
-                    size_t j = stdlib_meta_hash(kp) & (ncap - 1u);
-                    while (fresh[j].ptr != NULL)
-                        j = (j + 1u) & (ncap - 1u);
-                    fresh[j] = stdlib_state.meta_tab[k];
+        /* Never rehash into a table of the same size: its probe loop cannot
+         * make progress once the old table is dense. */
+        if (ncap > stdlib_state.meta_cap) {
+            fresh = (stdlib_meta_slot *)stdlib_meta_calloc(
+                ncap, sizeof(stdlib_meta_slot));
+            if (fresh != NULL) {
+                for (k = 0; k < stdlib_state.meta_cap; ++k) {
+                    const void *kp = stdlib_state.meta_tab[k].ptr;
+                    if (kp != NULL && kp != STDLIB_META_TOMB) {
+                        size_t j = stdlib_meta_hash(kp) & (ncap - 1u);
+                        for (n = 0; n < ncap; ++n) {
+                            if (fresh[j].ptr == NULL) {
+                                fresh[j] = stdlib_state.meta_tab[k];
+                                break;
+                            }
+                            j = (j + 1u) & (ncap - 1u);
+                        }
+                    }
                 }
+                free(stdlib_state.meta_tab);
+                stdlib_state.meta_tab = fresh;
+                stdlib_state.meta_cap = ncap;
+                stdlib_state.meta_used = stdlib_state.meta_live;
             }
-            free(stdlib_state.meta_tab);
-            stdlib_state.meta_tab = fresh;
-            stdlib_state.meta_cap = ncap;
-            stdlib_state.meta_used = stdlib_state.meta_live;
         }
     }
     if (stdlib_state.meta_cap != 0) {
@@ -333,22 +364,35 @@ static inline void stdlib_meta_record(const void *p, size_t byte_size,
             existing->byte_size = byte_size;
             existing->elem_size = elem_size;
             existing->generation = ++stdlib_state.meta_gen;
+            recorded = 1;
         } else {
             mask = stdlib_state.meta_cap - 1u;
             i = stdlib_meta_hash(p) & mask;
-            while (stdlib_state.meta_tab[i].ptr != NULL &&
-                   stdlib_state.meta_tab[i].ptr != STDLIB_META_TOMB)
+            /* Bounded probing is essential: on OOM the table can be completely
+             * full, and an unbounded loop here held meta_lock forever. */
+            for (n = 0; n < stdlib_state.meta_cap; ++n) {
+                if (stdlib_state.meta_tab[i].ptr == NULL ||
+                    stdlib_state.meta_tab[i].ptr == STDLIB_META_TOMB)
+                    break;
                 i = (i + 1u) & mask;
-            if (stdlib_state.meta_tab[i].ptr == NULL)
-                ++stdlib_state.meta_used;
-            stdlib_state.meta_tab[i].ptr = p;
-            stdlib_state.meta_tab[i].byte_size = byte_size;
-            stdlib_state.meta_tab[i].elem_size = elem_size;
-            stdlib_state.meta_tab[i].generation = ++stdlib_state.meta_gen;
-            ++stdlib_state.meta_live;
+            }
+            if (n < stdlib_state.meta_cap) {
+                if (stdlib_state.meta_tab[i].ptr == NULL)
+                    ++stdlib_state.meta_used;
+                stdlib_state.meta_tab[i].ptr = p;
+                stdlib_state.meta_tab[i].byte_size = byte_size;
+                stdlib_state.meta_tab[i].elem_size = elem_size;
+                stdlib_state.meta_tab[i].generation = ++stdlib_state.meta_gen;
+                ++stdlib_state.meta_live;
+                recorded = 1;
+            }
         }
     }
+    /* Release the spinlock on EVERY exit, including OOM and a full table. */
     stdlib_meta_release_lock();
+    if (!recorded)
+        stdlib_note(STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                    "metadata table: out of memory, block not recorded");
 }
 
 static inline void stdlib_meta_forget(const void *p) {

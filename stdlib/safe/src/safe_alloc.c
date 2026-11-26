@@ -331,7 +331,6 @@ void *realloc_s(void *ptr, size_t size) {
     size_t req = size == 0 ? 1u : size;
     size_t old_size = 0, old_elem = 1u;
     uintptr_t old_addr;
-    unsigned long long old_gen = 0;
     if (size > RSIZE_MAX_MEM) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "realloc_s", "size exceeds RSIZE_MAX_MEM; owner preserved");
         cplus_safe_stat_record("realloc_s", 0);
@@ -354,37 +353,37 @@ void *realloc_s(void *ptr, size_t size) {
         }
         old_size = s->size;
         old_elem = s->elem_size ? s->elem_size : 1u;
-        old_gen = s->generation;
-    }
-    if (inject_fail_locked()) {
-        pthread_mutex_unlock(&g_lock);
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "realloc_s", "injected failure; owner preserved");
-        cplus_safe_stat_record("realloc_s", 0);
-        errno = ENOMEM;
-        return NULL;
-    }
-    /* Reserve table room first so nothing can fail after realloc succeeds. */
-    if (tab_reserve_one() != 0) {
-        pthread_mutex_unlock(&g_lock);
-        cplus_safe_stat_record("realloc_s", 0);
-        errno = ENOMEM;
-        return NULL;
-    }
-    pthread_mutex_unlock(&g_lock);
-    p = realloc(ptr, req);
-    if (!p) {
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "realloc_s", "oom/failed; owner preserved");
-        cplus_safe_stat_record("realloc_s", 0);
-        errno = ENOMEM;
-        return NULL;
-    }
-    pthread_mutex_lock(&g_lock);
-    {
-        slot *s = tab_find_addr(old_addr);
-        /* ABA guard: host realloc() ran without the lock. Only a slot with
-         * the ORIGINAL generation belongs to this realloc; never remove a
-         * newer block that another thread allocated at the recycled address. */
-        if (s && s->generation == old_gen && old_gen != 0) {
+        if (inject_fail_locked()) {
+            pthread_mutex_unlock(&g_lock);
+            cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "realloc_s", "injected failure; owner preserved");
+            cplus_safe_stat_record("realloc_s", 0);
+            errno = ENOMEM;
+            return NULL;
+        }
+        /* Reserve under the SAME lock that guards host realloc(). Dropping
+         * g_lock here let a concurrent malloc_s() consume the reserved slot;
+         * tab_insert() then probed a full table forever (issue #97). */
+        if (tab_reserve_one() != 0) {
+            pthread_mutex_unlock(&g_lock);
+            cplus_safe_stat_record("realloc_s", 0);
+            errno = ENOMEM;
+            return NULL;
+        }
+        /* g_lock is deliberately held across host realloc(): the old block
+         * stays owned from the table's point of view, so a concurrent
+         * free_s()/realloc_s() cannot reach host free/realloc on the same
+         * pointer (the lock-gap TOCTOU in issue #97). */
+        p = realloc(ptr, req);
+        if (!p) {
+            pthread_mutex_unlock(&g_lock);
+            cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "realloc_s", "oom/failed; owner preserved");
+            cplus_safe_stat_record("realloc_s", 0);
+            errno = ENOMEM;
+            return NULL;
+        }
+        /* tab_reserve_one() may have rehashed g_tab; re-find the slot. */
+        s = tab_find_addr(old_addr);
+        if (s) {
             if ((uintptr_t)p == old_addr) {
                 g_live_bytes -= old_size;
                 g_live_bytes += req;
@@ -395,6 +394,8 @@ void *realloc_s(void *ptr, size_t size) {
                 tab_insert(p, req, old_elem);
             }
         } else {
+            /* Unreachable while g_lock is held; never leave a host block
+             * untracked if it does happen. */
             tab_insert(p, req, old_elem);
         }
     }

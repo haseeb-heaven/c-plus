@@ -92,6 +92,15 @@ void cplus_fatal(cplus_exit_code code, const char *kind, const char *file,
 /* Optional test hook: called before terminating.  NULL in production. */
 extern void (*cplus_fatal_hook)(cplus_exit_code code, const char *kind);
 
+/* Opt-in auto-runtime (compiled with -DCPLUS_AUTO_RUNTIME=1).  Generated C
+ * calls this from a constructor.  When enabled, a fatal safety failure is
+ * delivered to a live C+ try/catch frame as an exception (exit code 101-111
+ * becomes Exception.code) instead of terminating the process.  The exact
+ * diagnostic is still printed first.  With no live frame, or when disabled
+ * (the default), the deterministic _Exit is preserved unchanged.  Additive
+ * symbol only: no existing signature or pointer representation changes. */
+void cplus_set_auto_runtime(int enabled);
+
 /* Emitted by the compiler for every checked array subscript. */
 void cplus_check_bounds(const void *base, size_t count, size_t index,
                         const char *file, int line, const char *expr);
@@ -565,6 +574,12 @@ typedef struct CPlusExceptionFrame {
   jmp_buf env;
   struct CPlusExceptionFrame *prev;
   Exception exc;
+  /* Defense-in-depth liveness token (additive).  Assigned by
+   * cplus_exception_enter and cleared by cplus_exception_pop / raise.  A
+   * cplus_exception_raise only longjmps when this token matches the live
+   * token; a stale (already-retired) frame is a deterministic
+   * CPLUS_EXIT_UNSUPPORTED fatal instead of a jump into dead stack. */
+  uint64_t generation;
 } CPlusExceptionFrame;
 #endif
 

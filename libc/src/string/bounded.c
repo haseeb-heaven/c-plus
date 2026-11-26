@@ -23,10 +23,12 @@
 #define RSIZE_MAX_MEM ((size_t)(SIZE_MAX >> 1))
 #endif
 
+/* Set/read concurrently by callers; use atomics to avoid a C11 data race
+ * (mirrors safe_memory.c's g_unknown_capacity_strict). */
 static int g_unknown_strict = 0;
 
 void cplus_libc_set_unknown_capacity_mode(int strict) {
-    g_unknown_strict = strict ? 1 : 0;
+    __atomic_store_n(&g_unknown_strict, strict ? 1 : 0, __ATOMIC_RELEASE);
 }
 
 static size_t resolve_capacity(const void *p, size_t known) {
@@ -42,7 +44,7 @@ static int check_capacity(const char *api, const void *p, size_t need,
                           size_t known, size_t *cap_out) {
     size_t cap = resolve_capacity(p, known);
     if (cap == (size_t)-1) {
-        if (g_unknown_strict) {
+        if (__atomic_load_n(&g_unknown_strict, __ATOMIC_ACQUIRE)) {
             cplus_libc_log(api, "unknown capacity - refused");
             errno = EINVAL;
             return 1;
@@ -69,6 +71,19 @@ static int cplus_refuse_absurd_length(size_t n) {
     return 0;
 }
 
+/* Source-side twin of check_capacity(): the public signatures have no source
+ * capacity parameter, but heap sources from cplus_malloc/calloc/realloc are
+ * tracked.  Refuse only when a capacity is provably known AND n exceeds it;
+ * unknown capacity keeps the pre-existing permissive policy.  Closing this
+ * asymmetry prevents a heap over-read / memory disclosure in memcpy/memmove. */
+static int check_src_capacity(const char *api, const void *s, size_t n) {
+    size_t cap = cplus_alloc_remaining_capacity(s);
+    if (cap == (size_t)-1 || n <= cap) return 0;
+    cplus_libc_log(api, "source over-read refused");
+    errno = ERANGE;
+    return 1;
+}
+
 void *cplus_memset_bounded(void *d, int v, size_t n, size_t known) {
     size_t cap = 0;
     if (!d) { errno = EINVAL; return NULL; }
@@ -81,6 +96,7 @@ void *cplus_memcpy_bounded(void *d, const void *s, size_t n, size_t known) {
     size_t cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (check_capacity("memcpy", d, n, known, &cap)) return NULL;
+    if (check_src_capacity("memcpy(src)", s, n)) return NULL;
     if (cplus_refuse_absurd_length(n)) return NULL;
     return cplus_memcpy(d, s, n);
 }
@@ -89,6 +105,7 @@ void *cplus_memmove_bounded(void *d, const void *s, size_t n, size_t known) {
     size_t cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (check_capacity("memmove", d, n, known, &cap)) return NULL;
+    if (check_src_capacity("memmove(src)", s, n)) return NULL;
     if (cplus_refuse_absurd_length(n)) return NULL;
     return cplus_memmove(d, s, n);
 }
@@ -137,8 +154,15 @@ char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
 
 char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
     size_t need, cap = 0;
+    size_t dlen, slen;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    need = cplus_strlen(d) + (n < cplus_strlen(s) ? n : cplus_strlen(s)) + 1u;
+    dlen = cplus_strlen(d);
+    /* strncat permits an n-byte source with no NUL terminator: scan at most n
+     * bytes instead of calling cplus_strlen(s), which over-reads in that case
+     * and was evaluated twice. */
+    slen = cplus_strnlen(s, n);
+    if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
+    need = dlen + slen + 1u;
     if (check_capacity("strncat", d, need, known, &cap)) return NULL;
     return cplus_strncat(d, s, n);
 }

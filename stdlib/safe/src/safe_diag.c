@@ -13,6 +13,7 @@
 #include "../safe_diag.h"
 
 #include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,20 +29,24 @@
 #endif
 
 /* ------------------------------------------------------------ configuration */
-static cplus_diag_mode g_mode = CPLUS_DIAG_LEGACY;
-static cplus_diag_color g_color = CPLUS_DIAG_COLOR_AUTO;
-static int g_env_initialized = 0;
+/* Process-wide config may be touched by any SafeCRT thread.  Mode/color use
+ * acquire/release atomics; the env load is serialized with pthread_once so no
+ * thread can observe a partially initialized configuration. */
+static int g_mode = CPLUS_DIAG_LEGACY;
+static int g_color = CPLUS_DIAG_COLOR_AUTO;
+static pthread_once_t g_env_once = PTHREAD_ONCE_INIT;
 
 static int parse_word(const char *value, const char *word) {
-  size_t i = 0;
+  size_t i = 0, j = 0;
   if (!value || !word)
     return 0;
   while (value[i] == ' ' || value[i] == '\t')
     ++i;
-  while (word[i]) {
-    if (value[i] != word[i])
+  while (word[j]) {
+    if (value[i] != word[j])
       return 0;
     ++i;
+    ++j;
   }
   while (value[i] == ' ' || value[i] == '\t')
     ++i;
@@ -53,67 +58,69 @@ void cplus_diag_init_from_env(void) {
   const char *color = getenv("CPLUS_COLOR");
   const char *no_color = getenv("NO_COLOR");
 
-  g_env_initialized = 1;
-
   if (parse_word(diag, "rich"))
-    g_mode = CPLUS_DIAG_RICH;
+    __atomic_store_n(&g_mode, (int)CPLUS_DIAG_RICH, __ATOMIC_RELEASE);
   else if (parse_word(diag, "plain"))
-    g_mode = CPLUS_DIAG_PLAIN;
+    __atomic_store_n(&g_mode, (int)CPLUS_DIAG_PLAIN, __ATOMIC_RELEASE);
   else if (parse_word(diag, "legacy") || (diag && diag[0] == '\0'))
-    g_mode = CPLUS_DIAG_LEGACY;
+    __atomic_store_n(&g_mode, (int)CPLUS_DIAG_LEGACY, __ATOMIC_RELEASE);
   /* Unrecognised CPLUS_DIAG leaves the programmatic/default mode intact. */
 
   if (parse_word(color, "always"))
-    g_color = CPLUS_DIAG_COLOR_ALWAYS;
+    __atomic_store_n(&g_color, (int)CPLUS_DIAG_COLOR_ALWAYS, __ATOMIC_RELEASE);
   else if (parse_word(color, "never"))
-    g_color = CPLUS_DIAG_COLOR_NEVER;
+    __atomic_store_n(&g_color, (int)CPLUS_DIAG_COLOR_NEVER, __ATOMIC_RELEASE);
   else if (parse_word(color, "auto") || (color && color[0] == '\0'))
-    g_color = CPLUS_DIAG_COLOR_AUTO;
+    __atomic_store_n(&g_color, (int)CPLUS_DIAG_COLOR_AUTO, __ATOMIC_RELEASE);
 
   /* NO_COLOR follows the de-facto standard: any non-empty value disables
    * color, even when CPLUS_COLOR=always was requested. */
   if (no_color && no_color[0] != '\0') {
-    if (g_color == CPLUS_DIAG_COLOR_ALWAYS)
-      g_color = CPLUS_DIAG_COLOR_NEVER;
+    if (__atomic_load_n(&g_color, __ATOMIC_ACQUIRE) ==
+        (int)CPLUS_DIAG_COLOR_ALWAYS)
+      __atomic_store_n(&g_color, (int)CPLUS_DIAG_COLOR_NEVER, __ATOMIC_RELEASE);
   }
 }
 
 static void ensure_env(void) {
-  if (!g_env_initialized)
-    cplus_diag_init_from_env();
+  /* pthread_once removes the check-then-act / partial-init race. */
+  pthread_once(&g_env_once, cplus_diag_init_from_env);
 }
 
 void cplus_diag_set_mode(cplus_diag_mode mode) {
   ensure_env();
-  g_mode = mode;
+  __atomic_store_n(&g_mode, (int)mode, __ATOMIC_RELEASE);
 }
 
 cplus_diag_mode cplus_diag_get_mode(void) {
   ensure_env();
-  return g_mode;
+  return (cplus_diag_mode)__atomic_load_n(&g_mode, __ATOMIC_ACQUIRE);
 }
 
 void cplus_diag_set_color(cplus_diag_color color) {
   ensure_env();
-  g_color = color;
+  __atomic_store_n(&g_color, (int)color, __ATOMIC_RELEASE);
 }
 
 cplus_diag_color cplus_diag_get_color(void) {
   ensure_env();
-  return g_color;
+  return (cplus_diag_color)__atomic_load_n(&g_color, __ATOMIC_ACQUIRE);
 }
 
 int cplus_diag_color_enabled(FILE *out) {
   const char *no_color;
+  int mode, color;
   ensure_env();
-  if (g_mode == CPLUS_DIAG_PLAIN)
+  mode = __atomic_load_n(&g_mode, __ATOMIC_ACQUIRE);
+  color = __atomic_load_n(&g_color, __ATOMIC_ACQUIRE);
+  if (mode == (int)CPLUS_DIAG_PLAIN)
     return 0;
-  if (g_color == CPLUS_DIAG_COLOR_NEVER)
+  if (color == (int)CPLUS_DIAG_COLOR_NEVER)
     return 0;
   no_color = getenv("NO_COLOR");
   if (no_color && no_color[0] != '\0')
     return 0;
-  if (g_color == CPLUS_DIAG_COLOR_ALWAYS)
+  if (color == (int)CPLUS_DIAG_COLOR_ALWAYS)
     return 1;
   if (!out)
     out = stderr;
@@ -305,7 +312,7 @@ void cplus_diag_emit(const cplus_diag_record *rec, FILE *out) {
   if (!out)
     out = stderr;
   ensure_env();
-  mode = g_mode;
+  mode = (cplus_diag_mode)__atomic_load_n(&g_mode, __ATOMIC_ACQUIRE);
   if (mode == CPLUS_DIAG_LEGACY) {
     emit_legacy(rec, out);
     return;

@@ -50,6 +50,19 @@ jobs:
         # ABI invariant: ordinary C pointers/layout/calling convention/symbols
         # stay unchanged; only additive cplus_* runtime exports are allowed.
         run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+      - name: SafeCRT/libc hard gates (issue #81)
+        # The CRT unit runner compiles and executes the fclose_s collision
+        # sub-case on glibc (there is no Linux early-return skip here), and
+        # both runners fail on any non-zero build/run. The guards forbid
+        # reintroducing the silent --legacy-c demo fallback or a crashed VLA
+        # runtime check being recorded as a pass (issue #81).
+        run: |
+          set -eu
+          ! grep -q 'defined(__linux__)' tests/crt/unit/test_fclose_s.c
+          ! grep -q -- '--legacy-c --no-werror' apps/legacy_demos/run_demos.sh
+          ! grep -q 'VLA runtime NOT_TESTED' tests/run_tests.sh
+          sh tests/crt/unit/run_unit_tests.sh
+          sh tests/libc/run_libc_tests.sh
       - name: "Clean SDK prefix: configure, build, install, C and C+ smoke"
         env:
           CC: clang
@@ -175,6 +188,19 @@ jobs:
         # ABI invariant: ordinary C pointers/layout/calling convention/symbols
         # stay unchanged; only additive cplus_* runtime exports are allowed.
         run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+      - name: SafeCRT/libc hard gates (issue #81)
+        # The CRT unit runner compiles and executes the fclose_s collision
+        # sub-case on glibc (there is no Linux early-return skip here), and
+        # both runners fail on any non-zero build/run. The guards forbid
+        # reintroducing the silent --legacy-c demo fallback or a crashed VLA
+        # runtime check being recorded as a pass (issue #81).
+        run: |
+          set -eu
+          ! grep -q 'defined(__linux__)' tests/crt/unit/test_fclose_s.c
+          ! grep -q -- '--legacy-c --no-werror' apps/legacy_demos/run_demos.sh
+          ! grep -q 'VLA runtime NOT_TESTED' tests/run_tests.sh
+          sh tests/crt/unit/run_unit_tests.sh
+          sh tests/libc/run_libc_tests.sh
       - name: "Clean SDK prefix: configure, build, install, C and C+ smoke"
         env:
           CC: clang
@@ -302,6 +328,19 @@ jobs:
         # ABI invariant: ordinary C pointers/layout/calling convention/symbols
         # stay unchanged; only additive cplus_* runtime exports are allowed.
         run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+      - name: SafeCRT/libc hard gates (issue #81)
+        # The CRT unit runner compiles and executes the fclose_s collision
+        # sub-case on glibc (there is no Linux early-return skip here), and
+        # both runners fail on any non-zero build/run. The guards forbid
+        # reintroducing the silent --legacy-c demo fallback or a crashed VLA
+        # runtime check being recorded as a pass (issue #81).
+        run: |
+          set -eu
+          ! grep -q 'defined(__linux__)' tests/crt/unit/test_fclose_s.c
+          ! grep -q -- '--legacy-c --no-werror' apps/legacy_demos/run_demos.sh
+          ! grep -q 'VLA runtime NOT_TESTED' tests/run_tests.sh
+          sh tests/crt/unit/run_unit_tests.sh
+          sh tests/libc/run_libc_tests.sh
       - name: "Clean SDK prefix: configure, build, install, C and C+ smoke"
         env:
           CC: clang

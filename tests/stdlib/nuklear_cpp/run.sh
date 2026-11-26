@@ -17,8 +17,9 @@ if [ ! -f build/ext/libnuklear.a ]; then
 fi
 if ! timeout 300 ./build/c+ build "$D/test.cp" --legacy-c --no-werror --sanitize=none \
       -I. -Istdlib/safe -Ithird_party/nuklear -Ithird_party/exceptions4c \
-      -o "$D/test" -- build/ext/libnuklear.a build/safe/libcplus_safecrt.a \
-      build/libc/libcplus_hardened.a >"$D/build.log" 2>&1; then
+      -o "$D/test" -- build/ext/libnuklear.a $(pkg-config --libs sdl3) \
+      build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a \
+      >"$D/build.log" 2>&1; then
     echo "NK_CPP_TEST FAIL build"; tail -6 "$D/build.log"; exit 1
 fi
 timeout 30 "$D/test" >"$D/out" 2>"$D/err" || { echo "NK_CPP_TEST FAIL run"; cat "$D/out"; exit 1; }

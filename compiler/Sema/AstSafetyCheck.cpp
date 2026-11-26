@@ -6669,6 +6669,11 @@ public:
   }
 
   void warnAt(SourceLocation loc, const std::string &message) {
+    // Diagnostics about the C library's own integer-to-pointer tricks (e.g.
+    // macOS OSByteOrder.h) are not actionable in C+ source and must not make
+    // an otherwise valid program fail under -Werror.
+    if (loc.isValid() && ctx_.getSourceManager().isInSystemHeader(loc))
+      return;
     PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
     Diag d;
     // DEFAULT mode warns about unverified operations; STRICT mode fails

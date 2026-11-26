@@ -65,33 +65,58 @@ static int parse_pos_dollar(const unsigned char **pp) {
     return 0;
 }
 
+/* Skip a run of flags/length modifiers, including the glibc 'I' flag and the
+ * C23 exact-width wN / wfN modifiers (w8/w16/w32/w64 and wf8..wf64).  Older
+ * filters stopped at 'I'/'w' and missed a following 'n', allowing %In and
+ * %w32n to reach the host printf. */
+static const unsigned char *skip_fmt_mods(const unsigned char *p) {
+    for (;;) {
+        while (*p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' ||
+               *p == '\'' || *p == 'I') ++p;
+        if (*p == 'w') {
+            const unsigned char *q = p + 1;
+            if (*q == 'f') ++q;
+            if (*q == '8' || (q[0] == '1' && q[1] == '6') ||
+                (q[0] == '3' && q[1] == '2') ||
+                (q[0] == '6' && q[1] == '4')) {
+                p = q + ((*q == '8') ? 1 : 2);
+                continue;
+            }
+        }
+        if (*p == 'h' || *p == 'l' || *p == 'j' || *p == 'z' || *p == 't' ||
+            *p == 'L' || *p == 'q') { ++p; continue; }
+        return p;
+    }
+}
+
+/* Refuse any '$' anywhere: libc accepts positional markers in many positions
+ * (even after a length modifier, e.g. %h1$n), so every missed placement could
+ * turn a later 'n' into a write.  This strict policy also refuses literal '$'
+ * text, which is acceptable for these checked APIs. */
+static int fmt_has_positional(const char *fmt) {
+    const unsigned char *s = (const unsigned char *)fmt;
+    while (*s) {
+        if (*s == '$') return 1;
+        ++s;
+    }
+    return 0;
+}
+
 static int cplus_fmt_has_percent_n(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
     if (!p) return 0;
-    /* C+ SECURITY PATCH: reject ANY positional-specifier marker ('$') up
-     * front.  libc accepts '$' in many positions (after length modifiers,
-     * inside width/precision, repeated), and every missed placement can turn
-     * a later 'n' into a real %n write.  Literal '$' in ordinary text is
-     * unaffected because we only scan conversions after '%'.  A stricter,
-     * simpler policy (refuse all positional formats) is safe here. */
-    {
-        const unsigned char *s = (const unsigned char *)fmt;
-        while (*s) {
-            if (*s == '$') return 1;
-            ++s;
-        }
-    }
+    if (fmt_has_positional(fmt)) return 1;
     while (*p) {
         int pr;
         if (*p != '%') { ++p; continue; }
         ++p;
         if (*p == '%') { ++p; continue; }
         pr = parse_pos_dollar(&p);
-        if (pr < 0) return 1;
-        while (*p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' || *p == '\'') ++p;
+        if (pr != 0) return 1;
+        p = skip_fmt_mods(p);
         if (*p == '*') {
             ++p;
-            if (parse_pos_dollar(&p) < 0) return 1;
+            if (parse_pos_dollar(&p) != 0) return 1;
         } else {
             while (*p >= '0' && *p <= '9') ++p;
         }
@@ -99,23 +124,25 @@ static int cplus_fmt_has_percent_n(const char *fmt) {
             ++p;
             if (*p == '*') {
                 ++p;
-                if (parse_pos_dollar(&p) < 0) return 1;
+                if (parse_pos_dollar(&p) != 0) return 1;
             } else {
                 while (*p >= '0' && *p <= '9') ++p;
             }
         }
-        if (*p == '$') return 1; /* repeated or misplaced positional marker (e.g. %1$2$n, %1$-2$n) */
-        while (*p == 'h' || *p == 'l' || *p == 'j' || *p == 'z' || *p == 't' || *p == 'L' || *p == 'q') ++p;
+        if (*p == '$') return 1; /* repeated or misplaced positional marker */
+        p = skip_fmt_mods(p);    /* length modifiers, incl. 'I', wN / wfN */
         if (*p == '$' || *p == 'n') return 1;
         if (*p) ++p;
     }
     return 0;
 }
 
-/* Returns 0 if safe, 1 if %n / invalid positional present, 2 if unbounded %s or %[...]. */
+/* Returns 0 if safe, 1 if %n / positional / allocating conversion present,
+ * 2 if an unbounded wide/narrow string conversion is present. */
 static int cplus_scanf_fmt_check(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
     if (!p) return 0;
+    if (fmt_has_positional(fmt)) return 1;
     while (*p) {
         int suppressed = 0;
         int has_width = 0;
@@ -123,20 +150,24 @@ static int cplus_scanf_fmt_check(const char *fmt) {
         if (*p != '%') { ++p; continue; }
         ++p;
         if (*p == '%') { ++p; continue; }
+        p = skip_fmt_mods(p);
         if (*p == '*') { suppressed = 1; ++p; }
         pr = parse_pos_dollar(&p);
-        if (pr < 0) return 1;
-        if (pr > 0 && *p == '*') { suppressed = 1; ++p; }
+        if (pr != 0) return 1;
+        if (*p == '*') { suppressed = 1; ++p; }
         while (*p >= '0' && *p <= '9') {
             if (*p >= '1') has_width = 1;
             ++p;
         }
         if (*p == '$') return 1;
-        while (*p == 'h' || *p == 'l' || *p == 'j' || *p == 'z' || *p == 't' || *p == 'L' || *p == 'q') ++p;
+        p = skip_fmt_mods(p);
         if (*p == '$' || *p == 'n') return 1;
-        if (*p == 's' && !suppressed && !has_width) return 2;
+        /* glibc 'm' allocates an untracked host buffer; POSIX %S reads an
+         * unbounded wide string.  Neither is permitted by these checked APIs. */
+        if (*p == 'm') return 1;
+        if (*p == 'S') return 2;
+        if ((*p == 's' || *p == '[') && !suppressed && !has_width) return 2;
         if (*p == '[') {
-            if (!suppressed && !has_width) return 2;
             ++p;
             if (*p == '^') ++p;
             if (*p == ']') ++p;
@@ -156,8 +187,19 @@ static int fmt_check_dest_bounds(const char *api, const char *dest, size_t dmax,
     }
     {
         size_t tracked = cplus_safe_ptr_size(dest);
-        size_t cap = tracked > 0 ? tracked : (known_dmax != (size_t)-1 ? known_dmax : 0);
-        if (cap > 0 && dmax > cap) {
+        size_t remaining = cplus_safe_remaining_capacity(dest);
+        /* (size_t)-1 is the "not in a tracked live block" sentinel, never a
+         * capacity: treating it as one (e.g. `remaining > 0 ? remaining : ...`)
+         * makes cap == SIZE_MAX for every stack/static destination and silently
+         * disables known_dmax bounds checking.  Use remaining bytes for tracked
+         * destinations -- including a genuine zero-byte one-past-the-end
+         * pointer -- otherwise fall back to the base size / caller's known
+         * dmax, and skip the check only for a truly unknown capacity. */
+        size_t cap = (size_t)-1;
+        if (remaining != (size_t)-1) cap = remaining;
+        else if (tracked > 0) cap = tracked;
+        else if (known_dmax != (size_t)-1) cap = known_dmax;
+        if (cap != (size_t)-1 && dmax > cap) {
             return fmt_violation(api, "format dmax exceeds destination buffer capacity");
         }
     }
@@ -166,8 +208,8 @@ static int fmt_check_dest_bounds(const char *api, const char *dest, size_t dmax,
 
 static int fmt_check_scanf_spec(const char *api, const char *fmt) {
     int issue = cplus_scanf_fmt_check(fmt);
-    if (issue == 1) return fmt_violation(api, "forbidden %n specifier in scanf");
-    if (issue == 2) return fmt_violation(api, "unbounded %s or %[ specifier in scanf without field width");
+    if (issue == 1) return fmt_violation(api, "forbidden %n, positional or allocating specifier in scanf");
+    if (issue == 2) return fmt_violation(api, "unbounded %s, %S or %[ specifier in scanf without field width");
     return 0;
 }
 

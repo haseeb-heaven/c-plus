@@ -9,6 +9,7 @@
 
 #include <fcntl.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <uv.h>
 #include "cplus/cplus.h"
@@ -25,18 +26,68 @@ static inline int stdlib_uv_run_mode_valid(int mode) {
            mode == (int)UV_RUN_NOWAIT;
 }
 
+/* HARDENING (#60): a timer must never touch a loop that has already been
+ * dropped.  The loop owns a heap lifetime token, published through the loop's
+ * `data` field; timers retain it while alive.  Once the token is marked dead
+ * all timer operations fail closed without dereferencing the native loop. */
+#define STDLIB_LOOP_LIFETIME_MAGIC ((uint64_t)0x43504C4F4F503031ULL)
+
+typedef struct stdlib_loop_lifetime {
+    uint64_t magic;
+    uv_loop_t *native;
+    int alive;
+    int refs;                  /* one for the loop, one per live timer */
+} stdlib_loop_lifetime;
+
+static inline stdlib_loop_lifetime *stdlib_loop_lifetime_get(uv_loop_t *native) {
+    stdlib_loop_lifetime *token;
+    if (native == (uv_loop_t *)0) return (stdlib_loop_lifetime *)0;
+    token = (stdlib_loop_lifetime *)native->data;
+    if (token == (stdlib_loop_lifetime *)0 ||
+        token->magic != STDLIB_LOOP_LIFETIME_MAGIC ||
+        token->native != native || token->alive == 0)
+        return (stdlib_loop_lifetime *)0;
+    return token;
+}
+
+static inline void stdlib_loop_lifetime_retain(stdlib_loop_lifetime *token) {
+    if (token != (stdlib_loop_lifetime *)0)
+        (void)__atomic_fetch_add(&token->refs, 1, __ATOMIC_ACQ_REL);
+}
+
+static inline void stdlib_loop_lifetime_release(stdlib_loop_lifetime *token) {
+    if (token != (stdlib_loop_lifetime *)0 &&
+        __atomic_fetch_sub(&token->refs, 1, __ATOMIC_ACQ_REL) == 1)
+        stdlib_release(token);
+}
+
 class loop {
     uv_loop_t native_loop;
     int initialized;
+    stdlib_loop_lifetime *lifetime;
 
     loop(error *err) {
         do {
             error_reset(err);
             this->initialized = 0;
+            this->lifetime = (stdlib_loop_lifetime *)0;
             if (uv_loop_init(&this->native_loop) != 0) {
                 error_fail(err, CPLUS_EXIT_RESOURCE, "loop: uv_loop_init failed");
                 break;
             }
+            this->lifetime = (stdlib_loop_lifetime *)
+                stdlib_alloc(sizeof(stdlib_loop_lifetime));
+            if (this->lifetime == (stdlib_loop_lifetime *)0) {
+                (void)uv_loop_close(&this->native_loop);
+                error_fail(err, CPLUS_EXIT_RESOURCE,
+                           "loop: lifetime token allocation failed");
+                break;
+            }
+            this->lifetime->magic = STDLIB_LOOP_LIFETIME_MAGIC;
+            this->lifetime->native = &this->native_loop;
+            this->lifetime->alive = 1;
+            this->lifetime->refs = 1;
+            this->native_loop.data = this->lifetime;
             this->initialized = 1;
         } while (0);
     }
@@ -95,6 +146,15 @@ class loop {
          * initialized until the close actually succeeds: a later explicit
          * drop() (and the compiler-emitted drop at scope exit) then retries
          * the bounded drain instead of silently leaking the loop. */
+        /* (#60) Kill the lifetime token before releasing the native loop: a
+         * timer that outlives this loop must fail closed instead of re-entering
+         * closed libuv memory. */
+        if (this->lifetime != (stdlib_loop_lifetime *)0) {
+            this->lifetime->alive = 0;
+            this->native_loop.data = (void *)0;
+            stdlib_loop_lifetime_release(this->lifetime);
+            this->lifetime = (stdlib_loop_lifetime *)0;
+        }
         if (uv_loop_close(&this->native_loop) != 0) {
             cplus_log(CPLUS_LOG_WARN, "loop::drop: libuv loop still busy");
             return; /* keep initialized == 1 so a later drop() can retry */
@@ -111,6 +171,7 @@ static inline void stdlib_timer_release_handle(uv_handle_t *handle) {
 class timer {
     uv_timer_t *handle;
     uv_loop_t *owner_loop;
+    stdlib_loop_lifetime *lifetime;
     int initialized;
 
     /* Takes the native loop: a constructor must not use `->`. */
@@ -118,21 +179,26 @@ class timer {
         error_reset(err);
         this->handle = NULL;
         this->owner_loop = NULL;
+        this->lifetime = (stdlib_loop_lifetime *)0;
         this->initialized = 0;
-        if (owner_loop == NULL) {
+        this->lifetime = stdlib_loop_lifetime_get(owner_loop);
+        if (this->lifetime == (stdlib_loop_lifetime *)0) {
             error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
-                           "timer: invalid loop");
+                           "timer: invalid or dropped loop");
         } else {
             this->handle = (uv_timer_t *)stdlib_alloc(sizeof(uv_timer_t));
             if (this->handle == NULL) {
+                this->lifetime = (stdlib_loop_lifetime *)0;
                 error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
                                "timer: out of memory");
             } else if (uv_timer_init(owner_loop, this->handle) != 0) {
                 stdlib_release(this->handle);
                 this->handle = NULL;
+                this->lifetime = (stdlib_loop_lifetime *)0;
                 error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
                                "timer: uv_timer_init failed");
             } else {
+                stdlib_loop_lifetime_retain(this->lifetime);
                 this->owner_loop = owner_loop;
                 this->initialized = 1;
             }
@@ -140,7 +206,9 @@ class timer {
     }
 
     int valid(void) {
-        return this->initialized != 0 && this->handle != NULL;
+        return this->initialized != 0 && this->handle != NULL &&
+               this->lifetime != (stdlib_loop_lifetime *)0 &&
+               this->lifetime->alive != 0;
     }
 
     /* repeat_ms of 0 fires once; user is reachable as handle->data. */
@@ -178,25 +246,28 @@ class timer {
         return uv_is_active((const uv_handle_t *)this->handle) ? 1 : 0;
     }
 
-    /* The handle lives on the heap and is released by the close callback, so
-     * dropping the timer can never free memory libuv still references.  The
-     * loop is drained (bounded) until the close completes. */
+    /* The handle lives on the heap and is released by uv_close's callback;
+     * loop::drop() drains pending closes.  Never call uv_run() here: dropping a
+     * timer from inside its own callback would recurse into the running loop
+     * (#60), and a dropped loop must never be dereferenced. */
     void drop(void) {
         if (!this->initialized)
             return;
         if (this->handle != NULL) {
-            uv_timer_stop(this->handle);
-            this->handle->data = NULL;
-            uv_close((uv_handle_t *)this->handle, stdlib_timer_release_handle);
-            this->handle = NULL;
-            if (this->owner_loop != NULL) {
-                int guard = 0;
-                while (uv_loop_alive(this->owner_loop) && guard < 1000) {
-                    uv_run(this->owner_loop, UV_RUN_NOWAIT);
-                    guard++;
-                }
+            if (this->lifetime != (stdlib_loop_lifetime *)0 &&
+                this->lifetime->alive != 0) {
+                uv_timer_stop(this->handle);
+                this->handle->data = NULL;
+                uv_close((uv_handle_t *)this->handle,
+                         stdlib_timer_release_handle);
+            } else {
+                /* The loop already closed: libuv no longer holds the handle. */
+                stdlib_release(this->handle);
             }
+            this->handle = NULL;
         }
+        stdlib_loop_lifetime_release(this->lifetime);
+        this->lifetime = (stdlib_loop_lifetime *)0;
         this->owner_loop = NULL;
         this->initialized = 0;
     }

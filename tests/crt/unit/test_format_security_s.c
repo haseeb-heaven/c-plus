@@ -1,13 +1,16 @@
 #define _POSIX_C_SOURCE 200112L
 #include <assert.h>
 #include <errno.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <wchar.h>
 #include "safe_alloc.h"
+#include "safe_diag.h"
 #include "safe_format.h"
 #include "safe_io.h"
 #include "safe_runtime.h"
@@ -97,6 +100,16 @@ static void child_heap_dmax_overflow(void *unused) {
     free_s(hp);
 }
 
+static void child_heap_interior_dmax_overflow(void *unused) {
+    char *hp = (char *)malloc_s(8);
+    assert(hp != NULL);
+    (void)unused;
+    /* Only 2 bytes remain from hp+6: dmax 64 must be refused even though the
+     * base allocation is larger (issue #80 / interior-destination case). */
+    (void)sprintf_s(hp + 6, 64, "%s", "abcdefgh");
+    free_s(hp);
+}
+
 static void child_sscanf_unbounded_s(void *unused) {
     char buf[8];
     (void)unused;
@@ -136,6 +149,31 @@ static void child_uaf_sscanf_src(void *unused) {
     (void)sscanf_s(hsrc, "%d", &v);
 }
 
+/* Concurrent diag setters/getters/emit must be race-free (issue #101). */
+static void *diag_stress(void *arg) {
+    FILE *sink = (FILE *)arg;
+    int i;
+    for (i = 0; i < 500; ++i) {
+        cplus_diag_set_mode((i & 1) ? CPLUS_DIAG_PLAIN : CPLUS_DIAG_LEGACY);
+        (void)cplus_diag_get_mode();
+        cplus_diag_set_color((i & 1) ? CPLUS_DIAG_COLOR_NEVER
+                                     : CPLUS_DIAG_COLOR_AUTO);
+        (void)cplus_diag_get_color();
+        (void)cplus_diag_color_enabled(sink);
+        if ((i % 64) == 0) {
+            cplus_diag_record r;
+            memset(&r, 0, sizeof(r));
+            r.kind = CPLUS_DIAG_SAFECRT;
+            r.level = 1;
+            r.code = 22;
+            r.api = "diag_stress";
+            r.detail = "concurrent diagnostic";
+            cplus_diag_emit(&r, sink);
+        }
+    }
+    return NULL;
+}
+
 int main(void) {
     char out[32];
     char word[16];
@@ -153,6 +191,7 @@ int main(void) {
     expect_trap(child_percent_n_snprintf, NULL);
     expect_trap(child_stack_dmax_overflow, NULL);
     expect_trap(child_heap_dmax_overflow, NULL);
+    expect_trap(child_heap_interior_dmax_overflow, NULL);
     expect_trap(child_sscanf_unbounded_s, NULL);
     expect_trap(child_sscanf_unbounded_scanset, NULL);
     expect_trap(child_uaf_dest, NULL);
@@ -241,7 +280,70 @@ int main(void) {
 
         free_s(hp);
     }
+
+    /* 6. glibc/C23 modifier %n bypasses and unbounded/allocating scanf forms
+     *    are refused in recoverable mode (issue #99). */
+    {
+        int n_sink = 0;
+        wchar_t wbuf[8];
+        char *allocated = NULL;
+
+        errno = 0;
+        assert(cplus_printf_s("%In", &n_sink) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(cplus_snprintf_s(out, sizeof(out), "%w32n", &n_sink) == -1 &&
+               errno == EINVAL);
+        errno = 0;
+        assert(cplus_printf_s("%w64n", &n_sink) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(cplus_printf_s("%wf64n", &n_sink) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(cplus_fprintf_s(stderr, "%I'n", &n_sink) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(cplus_printf_s("%1$s", "x") == -1 && errno == EINVAL);
+
+        errno = 0;
+        assert(sscanf_s("abc", "%S", wbuf) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(sscanf_s("abc", "%ls", wbuf) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(sscanf_s("abc", "%w32s", word) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(sscanf_s("abc", "%ms", &allocated) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(sscanf_s("abc", "%m[a-z]", &allocated) == -1 && errno == EINVAL);
+        errno = 0;
+        assert(sscanf_s("abc", "%1$s", word) == -1 && errno == EINVAL);
+    }
     cplus_runtime_set_violation_trap(1);
+
+    /* 7. Leading/trailing whitespace is trimmed without an out-of-bounds read
+     *    past the static word literal (issue #86). */
+    setenv("CPLUS_DIAG", "     rich", 1);
+    cplus_diag_init_from_env();
+    assert(cplus_diag_get_mode() == CPLUS_DIAG_RICH);
+    setenv("CPLUS_DIAG", "  plain  ", 1);
+    cplus_diag_init_from_env();
+    assert(cplus_diag_get_mode() == CPLUS_DIAG_PLAIN);
+    setenv("CPLUS_COLOR", "  auto  ", 1);
+    cplus_diag_init_from_env();
+    assert(cplus_diag_get_color() == CPLUS_DIAG_COLOR_AUTO);
+    unsetenv("CPLUS_DIAG");
+    unsetenv("CPLUS_COLOR");
+
+    /* 8. Concurrent configuration changes and emissions are race-free. */
+    {
+        pthread_t threads[4];
+        FILE *sink = fopen("/dev/null", "w");
+        assert(sink != NULL);
+        for (v = 0; v < 4; ++v)
+            assert(pthread_create(&threads[v], NULL, diag_stress, sink) == 0);
+        for (v = 0; v < 4; ++v)
+            assert(pthread_join(threads[v], NULL) == 0);
+        fclose(sink);
+    }
+    cplus_diag_set_mode(CPLUS_DIAG_LEGACY);
+    cplus_diag_set_color(CPLUS_DIAG_COLOR_AUTO);
 
     puts("unit format_security_s: ok");
     return 0;

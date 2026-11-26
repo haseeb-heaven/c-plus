@@ -386,16 +386,16 @@ static void t4_view(void) {
     t4_ck(t4_badview.size() == 2 && t4_badview.data() == t4_bad_bytes &&
           t4_badview.is_valid_utf8() == 0, "t4_view_utf8_invalid_bytes");
 
-    /* Stale-view safety: force reallocation with reserve(), then compare the
-     * captured pointer/size ONLY.  Never call equals()/is_valid_utf8() on the
-     * stale view: string_view has no generation tracking (caller's duty). */
+    /* Stale-view safety: force reallocation with reserve(). A generation-
+     * checked view refuses stale data instead of returning the old pointer. */
     t4_stale = t4_view.data();
     t4_saved_size = t4_view.size();
     t4_saved_size2 = t4_saved_size;
     t4_ck(t4_owner.reserve(64) == 0 && t4_owner.capacity() == 64,
           "t4_view_stale_reserve_rc");
     t4_ck(t4_owner.c_str() != t4_stale, "t4_view_stale_pointer_moved");
-    t4_ck(t4_view.data() == t4_stale, "t4_view_stale_data_unchanged");
+    t4_ck(t4_view.data() == (const char *)0,
+          "t4_view_stale_data_refused");
     t4_ck(t4_saved_size2 == 6 && t4_view.size() == t4_saved_size,
           "t4_view_stale_size_unchanged");
 }

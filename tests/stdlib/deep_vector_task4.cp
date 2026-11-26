@@ -572,27 +572,23 @@ int main(void) {
         if (view_v.size() != 6 || view_orig == (const char *)0)
             view_ok = 0;
 
-        /* Force reallocation with reserve(). The view keeps its old pointer
-         * and its snapshot size; only pointer identity is compared, never
-         * dereferenced. */
+        /* Force reallocation with reserve(). The generation-checked view
+         * refuses stale access instead of returning the old pointer. */
         if (view_s.reserve(64) != 0)
             view_ok = 0;
-        if (view_v.data() != view_orig || view_v.data() == view_s.c_str())
+        if (view_v.data() != (const char *)0)
             view_ok = 0;
         if (view_v.size() != view_size || view_size != 6)
             view_ok = 0;
         t4("T4_STALE_VIEW_RESERVE", view_ok);
 
-        /* Owner drop(): view still reports the same stale pointer/size.
-         * equals()/is_valid_utf8() are deliberately NOT called on the stale
-         * view: string_view has no generation tracking (caller responsibility),
-         * unlike vector::slice which refuses via stale()/valid()/at_checked. */
+        /* Owner drop(): the generation-checked view refuses stale access. */
         {
             int vd_ok = 1;
             view_s.drop();
             if (view_s.valid() != 0 || view_s.c_str()[0] != '\0')
                 vd_ok = 0;
-            if (view_v.data() != view_orig || view_v.size() != view_size)
+            if (view_v.data() != (const char *)0)
                 vd_ok = 0;
             t4("T4_STALE_VIEW_DROP", vd_ok);
         }

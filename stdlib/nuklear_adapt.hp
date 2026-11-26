@@ -25,7 +25,8 @@ static void *nuklear_scratch_alloc(nk_handle userdata, void *old_ptr,
     error e = error();
     stdlib_datastack *ds = (stdlib_datastack *)userdata.ptr;
     void *p;
-    stdlib_set_error_callback((stdlib_error_callback)0);
+    /* (#88) Never touch the process-wide error callback from an allocator:
+     * the host's handler must survive Nuklear allocations. */
     if (ds == (stdlib_datastack *)0 || size == 0u)
         return (void *)0;
     p = stdlib_datastack_alloc(ds, (size_t)size, 16u, &e);
