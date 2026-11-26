@@ -7,6 +7,9 @@
  * Prints: vendor_mem: <checks> <failures>
  * Exits nonzero when any check fails.
  */
+/* POSIX.1-2008 names (nanosleep/memccpy) are hidden under strict -std=c99. */
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>

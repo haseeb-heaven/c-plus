@@ -128,7 +128,8 @@ for t in tests/libc/test_*.c; do
     *test_vendor_*) EXTRA_INC="-I. -Ithird_party/safeclib/include"; EXTRA_LIB="build/safe/libcplus_safecrt.a" ;;
   esac
   if "$CC" -O0 -std=c99 -fprofile-instr-generate -Ilibc -Ilibc/include -Ilibc/install-include $EXTRA_INC \
-      "$t" "$OUT/libcplus_hardened_cov.a" $EXTRA_LIB -lm -lpthread $ATOMIC_LIB \
+      "$t" "$OUT/libcplus_hardened_cov.a" $EXTRA_LIB \
+      "$OUT/libcplus_hardened_cov.a" -lm -lpthread $ATOMIC_LIB \
       -o "$b" >"$OUT/$(basename "$t" .c).build.log" 2>&1; then
     if LLVM_PROFILE_FILE="$OUT/$(basename "$t" .c).profraw" "$b" >"$OUT/$(basename "$t" .c).out" 2>&1; then
       pass=$((pass + 1))

@@ -44,6 +44,9 @@
  *       single write() returning a short count must NOT silently drop bytes.
  */
 
+/* POSIX.1-2008 names (nanosleep/memccpy) are hidden under strict -std=c99. */
+#define _POSIX_C_SOURCE 200809L
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
