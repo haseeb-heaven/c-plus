@@ -1029,7 +1029,6 @@ private:
           if (bvit->second.count(argIndex)) {
             size_t arg = nextSig(start);
             if (arg < rp && toks_[arg].kind == TokKind::Identifier) {
-              transferredNames_.insert(toks_[arg].text);
             }
           }
           ++argIndex;
@@ -1288,6 +1287,48 @@ private:
   /// with `cplus_zero`, so the automatic destructor sees an empty handle and
   /// becomes a no-op.  The only remaining suppression is for a drop embedded
   /// in `defer`, whose text is itself the scope-exit cleanup.
+  bool passedByValueFrom(size_t from, const std::string &name) const {
+    if (name.empty() || toks_.empty())
+      return false;
+    /* v.declOffset is a byte offset used for edits; convert to token index. */
+    size_t start = 0;
+    while (start < toks_.size() && toks_[start].offset < from)
+      ++start;
+    size_t limit = start + 4000 < toks_.size() ? start + 4000 : toks_.size();
+    for (size_t k = start; k < limit; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      auto bit = byValueParamIndices_.find(toks_[k].text);
+      if (bit == byValueParamIndices_.end() || bit->second.empty())
+        continue;
+      size_t lp = nextSig(k);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = matchingParen(lp);
+      if (rp == kNPos)
+        continue;
+      size_t ast = lp + 1;
+      unsigned ai = 0;
+      int ad = 0;
+      for (size_t j = lp + 1; j <= rp; ++j) {
+        bool end = j == rp;
+        if (!end && isPunct(j, "(")) ++ad;
+        if (!end && isPunct(j, ")")) --ad;
+        if (!end && !(isPunct(j, ",") && ad == 0))
+          continue;
+        if (bit->second.count(ai)) {
+          size_t arg = isTrivia(ast) ? nextSig(ast) : ast;
+          if (arg < rp && toks_[arg].kind == TokKind::Identifier &&
+              toks_[arg].text == name)
+            return true;
+        }
+        ++ai;
+        ast = j + 1;
+      }
+    }
+    return false;
+  }
+
   std::string dropsFor(size_t from, size_t to, DeclId exclude) {
     std::string out;
     for (size_t p = to; p > from; --p) {
@@ -1298,8 +1339,7 @@ private:
         if ((exclude.valid() && exclude.scope == p - 1 &&
              exclude.var == k - 1) ||
             v.deferDropped ||
-            transferredNames_.count(v.name) ||
-            v.name == "NULL")
+            passedByValueFrom(v.declOffset, v.name) || v.name == "NULL")
           continue;
         // At a scope exit the name may already denote an inner shadow, so the
         // drop has to go through the saved address instead.  This only matters
@@ -2600,7 +2640,6 @@ private:
   // Functions taking resource owners by value: call sites transfer those
   // arguments to the callee (the callee emits the destructor).
   std::map<std::string, std::set<unsigned>> byValueParamIndices_;
-  std::set<std::string> transferredNames_;
   std::string currentFunctionName_;
   /// Macro name -> function-like?  Macros hiding a terminator in their body.
   std::map<std::string, bool> terminationMacros_;

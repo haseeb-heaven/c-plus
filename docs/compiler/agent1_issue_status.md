@@ -64,9 +64,9 @@ abi_ownership   42/42
 - #67: nested method rewriting with arguments, pointer members and deep chains
   fixed in `CPlusRewriter.cpp`; verified with `w.c.add(5)`, `w.ptr->add(7)` and
   `this->ptr->add(6)`.
-- #68: by-value transfer suite `tests/compiler/raii_transfer/` 2/2 remains.
-  The transfer marker is still name-based; cross-function name pollution is a
-  documented KNOWN_OPEN limitation.
+- #68: by-value transfer is now declaration-local: cleanup checks for a call
+  passing the owner by value from the declaration's byte offset, so no global
+  name set leaks across functions. `tests/compiler/raii_transfer/` 2/2.
 - #69/#70: SafeCRT interior-pointer bounds and closed-stream cache overflow
   fixed in `stdlib/safe/`; CRT unit 86/0, libc 109/0.
 - #71: CRT trap assertion accepts SIGABRT as well as exit(70); CRT unit 86/0.
