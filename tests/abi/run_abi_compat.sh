@@ -129,25 +129,20 @@ step T3a_cplus_lib_compile - 180 ./build/c+ build --sanitize=none \
     -- "-I$ROOT/libc/install-include"
 step T3a_cplus_lib_archive - 60 /usr/bin/ar rcs \
     "$OUT/libabi_compat_cplus.a" "$OUT/abi_compat_cplus_lib.o"
-# The C+ runtime and the hardened libc both export a C-compatible
-# cplus_realloc.  A native C consumer that calls it pulls both archive members;
-# allow the first (libc) definition to win while the runtime still supplies the
-# checked-arithmetic helpers used by lowered C+ code.  Probe the linker flag so
-# this works with both GNU ld and Apple ld64.
-MULTI_DEF=""
-if printf 'int main(void) { return 0; }\n' | "$CC" -x c - \
-      -Wl,--allow-multiple-definition -o "$OUT/multi-def-probe" \
-      >/dev/null 2>&1; then
-    MULTI_DEF="-Wl,--allow-multiple-definition"
-else
-    MULTI_DEF="-Wl,-multiply_defined,unused"
-fi
-rm -f "$OUT/multi-def-probe"
+# The C+ runtime and hardened libc both export cplus_realloc.  A native C
+# consumer that calls it would otherwise pull both definitions and fail to
+# link.  Compile the real runtime source with that ONE symbol renamed, so the
+# C+ checked-arithmetic/null helpers come from the genuine implementation while
+# libc remains the sole provider of the public cplus_realloc ABI.
+step T3a_runtime_shim_compile - 180 "$CC" -O1 -std=gnu17 -DCPLUS=1 \
+    -DCPLUS_SAFE=1 -Dcplus_realloc=cplus_abi_runtime_realloc \
+    -I"$ROOT/runtime/include" -c "$ROOT/runtime/cplus_runtime.c" \
+    -o "$OUT/abi_runtime_shim.o"
 step T3a_c_driver_compile - 180 "$CC" -O1 -std=c99 -Wall -Wextra -pedantic \
     -fsanitize=undefined -fno-sanitize-recover=all $INC \
     tests/abi/abi_compat_c_driver.c "$OUT/libabi_compat_cplus.a" \
-    build/libc/libcplus_hardened.a build/libcplus_runtime.a \
-    $MULTI_DEF -lm -pthread -o "$OUT/c_driver"
+    build/libc/libcplus_hardened.a "$OUT/abi_runtime_shim.o" \
+    -lm -pthread -o "$OUT/c_driver"
 step T3a_c_driver_run "$OUT/c_driver.out" 60 "$OUT/c_driver"
 check_line T3a_c_driver_summary "$OUT/c_driver.out" "C->C+ boundary checks match"
 
