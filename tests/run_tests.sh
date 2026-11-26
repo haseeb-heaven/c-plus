@@ -26,6 +26,7 @@ OUT="$ROOT/tests/out"
 PATTERN=${1:-}
 PASS=0
 FAIL=0
+GAP=0
 FAILED=""
 
 mkdir -p "$OUT"
@@ -53,6 +54,13 @@ fail() {
   FAILED="$FAILED
   - $1: $2"
   printf '  FAIL %s (%s)\n' "$1" "$2"
+}
+
+# A real, documented limitation is reported separately: it is evidence that
+# the case was exercised, but it is NOT a pass and is never counted as one.
+gap() {
+  GAP=$((GAP + 1))
+  printf '  gap  %s\n' "$1"
 }
 
 # --- positive tests --------------------------------------------------------
@@ -103,19 +111,22 @@ for src in "$ROOT"/tests/compile_fail/*.c "$ROOT"/tests/compile_fail/*.cp; do
        grep -qF '[CPLUS-FFI]' "$OUT/$name.log"; then
       pass "$name (warning-only known gap; not a compile-time rejection)"
     elif [ "$name" = "bugcat8" ]; then
-      # Verified known gap: the compiler now lowers this VLA safely instead of
-      # rejecting it.  Prove the lowered program actually runs (not a skip).
-      # --legacy-c avoids the CI compiler checkout's warning policy; the
-      # proof we need here is that the program compiles and RUNS, not a
-      # safety promise about the VLA lowering internals.
+      # Real compiler gap: the VLA's side-effecting extent is lowered instead
+      # of rejected, so `c+ check` exits 0 (even with --strict).  This case
+      # therefore CANNOT pass as a compile_fail test.  Exercise the lowered
+      # program for evidence, but record it as a GAP, never as a pass.
+      # Blocker: CPlusRewriter.cpp must reject a VLA extent with side effects
+      # (or an unchecked run-time bound); compiler/ is owned by another agent,
+      # so report the blocker rather than fabricate a compile-time rejection.
+      # See tests/known_gaps/README.md.
       if { timeout 60 "$CPLUS" build "$src" --legacy-c \
               -o "$OUT/$name.lowered" >>"$OUT/$name.log" 2>&1 ||
            timeout 60 "$CPLUS" build --no-werror -w "$src" \
               -o "$OUT/$name.lowered" >>"$OUT/$name.log" 2>&1; } &&
          timeout 10 "$OUT/$name.lowered" >>"$OUT/$name.runlog" 2>&1; then
-        pass "$name (documented known gap: VLA program compiles and runs)"
-      elif [ -x "$OUT/$name.lowered" ]; then
-        pass "$name (known gap: compiles; backend VLA runtime NOT_TESTED, see $OUT/$name.runlog)"
+        gap "$name (VLA compiles and runs, but is NOT rejected by the compiler)"
+        printf '  blocker: %s\n' \
+          "compiler must reject VLA extent side effects; compiler/ owned by another agent"
       else
         tail -12 "$OUT/$name.log" 2>/dev/null || true
         tail -12 "$OUT/$name.runlog" 2>/dev/null || true
@@ -197,7 +208,13 @@ if [ -f "$ROOT/tests/legacy/plain.c" ] && matches "legacy"; then
 fi
 
 echo
-echo "C+ tests: $PASS passed, $FAIL failed"
+gap_word=gaps
+[ "$GAP" -eq 1 ] && gap_word=gap
+echo "C+ tests: $PASS passed, $FAIL failed, $GAP documented $gap_word (NOT passes)"
+if [ "$GAP" -ne 0 ]; then
+  printf 'note: %s documented gap(s) are not passing tests; see tests/known_gaps/README.md\n' \
+    "$GAP" >&2
+fi
 if [ "$FAIL" -ne 0 ]; then
   printf '%s\n' "$FAILED"
   exit 1

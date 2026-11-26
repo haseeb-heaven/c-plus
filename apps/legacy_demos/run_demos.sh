@@ -60,10 +60,10 @@ build() {
     if "$CPLUS" build --no-werror "$src" --default --sanitize=none -I"$ROOT" \
          -o "$OUT/$name" -- "$ROOT/build/libc/libcplus_hardened.a" \
          >"$OUT/$name.build.log" 2>&1; then return 0; fi
-    if "$CPLUS" build --no-werror -w "$src" -I"$ROOT" -o "$OUT/$name" \
-         -- "$ROOT/build/libc/libcplus_hardened.a" \
-         >>"$OUT/$name.build.log" 2>&1; then return 0; fi
-    "$CPLUS" build --legacy-c --no-werror "$src" -I"$ROOT" -o "$OUT/$name" \
+    # Retry with backend warnings suppressed (C+ diagnostics and safety gates
+    # stay live). Never fall back to --legacy-c: that is an unsafe downgrade
+    # which would let a real safe-mode regression masquerade as a pass.
+    "$CPLUS" build --no-werror -w "$src" -I"$ROOT" -o "$OUT/$name" \
       -- "$ROOT/build/libc/libcplus_hardened.a" \
       >>"$OUT/$name.build.log" 2>&1
     return $?
