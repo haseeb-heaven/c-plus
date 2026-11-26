@@ -1,0 +1,94 @@
+/* C+ modern GFX/GUI facade over SDL3 (zlib, system-installed, real windowed
+ * rendering). Additive header; no Goose code. Widgets are drawn into a real
+ * SDL3 renderer, producing a real framebuffer, not CLI transcripts.
+ */
+#ifndef CPLUS_STD_GFX_SDL3_HP
+#define CPLUS_STD_GFX_SDL3_HP
+
+#include <SDL3/SDL.h>
+
+typedef struct {
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+} cplus_gfx_window;
+
+static inline int cplus_gfx_open(cplus_gfx_window *g, const char *title,
+                                 int w, int h) {
+    if (g == (cplus_gfx_window *)0) return 0;
+    g->window = (SDL_Window *)0;
+    g->renderer = (SDL_Renderer *)0;
+    if (!SDL_Init(SDL_INIT_VIDEO)) return 0;
+    g->window = SDL_CreateWindow(title, w, h, 0u);
+    if (g->window == (SDL_Window *)0) return 0;
+    g->renderer = SDL_CreateRenderer(g->window, (const char *)0);
+    return g->renderer != (SDL_Renderer *)0;
+}
+
+static inline void cplus_gfx_clear(cplus_gfx_window *g, unsigned char r,
+                                   unsigned char gg, unsigned char b) {
+    SDL_SetRenderDrawColor(g->renderer, r, gg, b, 255);
+    SDL_RenderClear(g->renderer);
+}
+
+static inline void cplus_gfx_rect(cplus_gfx_window *g, int x, int y,
+                                  int w, int h, unsigned char r,
+                                  unsigned char gg, unsigned char b) {
+    SDL_FRect rect = {(float)x, (float)y, (float)w, (float)h};
+    SDL_SetRenderDrawColor(g->renderer, r, gg, b, 255);
+    SDL_RenderFillRect(g->renderer, &rect);
+}
+
+static inline void cplus_gfx_text(cplus_gfx_window *g, int x, int y,
+                                  const char *text) {
+    SDL_RenderDebugText(g->renderer, (float)x, (float)y, text);
+}
+
+static inline void cplus_gfx_textbox(cplus_gfx_window *g, int x, int y,
+                                     int w, const char *label,
+                                     const char *value) {
+    cplus_gfx_rect(g, x, y, w, 28, 30, 40, 55);
+    cplus_gfx_rect(g, x + 1, y + 1, w - 2, 26, 13, 17, 23);
+    cplus_gfx_text(g, x + 8, y + 6, label);
+    cplus_gfx_text(g, x + 70, y + 6, value);
+}
+
+static inline void cplus_gfx_dropdown(cplus_gfx_window *g, int x, int y,
+                                      int w, const char *label,
+                                      const char *selected) {
+    cplus_gfx_rect(g, x, y, w, 28, 45, 60, 80);
+    cplus_gfx_text(g, x + 8, y + 6, label);
+    cplus_gfx_text(g, x + 100, y + 6, selected);
+    cplus_gfx_rect(g, x + w - 24, y + 8, 10, 10, 90, 200, 250);
+}
+
+static inline void cplus_gfx_list(cplus_gfx_window *g, int x, int y, int w,
+                                  int rows, const char *const *items,
+                                  int selected) {
+    int i;
+    for (i = 0; i < rows; ++i) {
+        cplus_gfx_rect(g, x, y + i * 28, w, 26,
+                       i == selected ? 38 : 20,
+                       i == selected ? 100 : 30,
+                       i == selected ? 160 : 45);
+        if (items != (const char *const *)0 && i < rows)
+            cplus_gfx_text(g, x + 8, y + i * 28 + 6, items[i]);
+    }
+}
+
+static inline void cplus_gfx_button(cplus_gfx_window *g, int x, int y,
+                                    int w, const char *label) {
+    cplus_gfx_rect(g, x, y, w, 30, 63, 130, 200);
+    cplus_gfx_text(g, x + 10, y + 8, label);
+}
+
+static inline void cplus_gfx_present(cplus_gfx_window *g) {
+    SDL_RenderPresent(g->renderer);
+}
+
+static inline void cplus_gfx_close(cplus_gfx_window *g) {
+    if (g->renderer != (SDL_Renderer *)0) SDL_DestroyRenderer(g->renderer);
+    if (g->window != (SDL_Window *)0) SDL_DestroyWindow(g->window);
+    SDL_Quit();
+}
+
+#endif
