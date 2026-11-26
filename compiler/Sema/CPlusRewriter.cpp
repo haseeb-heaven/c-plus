@@ -19,6 +19,7 @@
 
 #include "Sema/CPlusRewriter.h"
 
+#include <cctype>  // isalnum/isdigit (throw-operand classification)
 #include <climits> // ULLONG_MAX (lexical pointer-safety diagnostics)
 #include <cstring> // std::strcmp (used by helper-name reservation checks)
 
@@ -92,6 +93,25 @@ struct ResourceInfo {
   size_t nameIdx = 0;
   size_t bodyOpen = 0;
   size_t bodyClose = 0;
+};
+
+/// A variable binding with its lexical lifetime expressed in token indices.
+/// Declaration order alone is not scope order: an inner block can shadow an
+/// outer class variable, a plain C declaration can shadow a class type, and
+/// function parameters are visible only inside that function's body.
+struct VarBinding {
+  std::string name;
+  std::string className; ///< empty for non-class (shadowing) declarations
+  size_t declIdx = 0;
+  size_t from = 0;       ///< first token index where the binding is visible
+  size_t to = 0;         ///< last token index of its enclosing scope
+};
+
+struct DeclScope {
+  size_t open = kNPos;  ///< enclosing '{' token index
+  size_t close = kNPos; ///< matching '}' token index
+  bool inParens = false;
+  size_t parenOpen = kNPos;
 };
 
 /// A struct/class field whose declared type is a C+ class.  Needed to lower
@@ -249,9 +269,11 @@ public:
   RewrittenSource run() {
     collectDeclarations();
     collectDefaultArgs();
+    collectTypedefNames();
     collectVariableTypes();
     collectFieldTypes();
     collectAutoClasses();
+    collectNonClassBindings();
     collectArrays();
     collectDynamicPointers();
     emitTranslationUnit();
@@ -436,6 +458,233 @@ private:
     return true;
   }
 
+  /// Typedef aliases are declaration type spellings too, but they are not
+  /// C+ classes: `typedef struct { int (*len)(void); } Plain; Plain s;`
+  /// must shadow an earlier class binding named `s`.
+  void collectTypedefNames() {
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (!ts.isIdent(i, "typedef"))
+        continue;
+      size_t semi = i;
+      while (semi < ts.size() && !ts.isPunct(semi, ";"))
+        ++semi;
+      bool found = false;
+      for (size_t k = i + 1; k < semi; ++k) {
+        if (ts.isPunct(k, "(") && ts.isPunct(ts.nextSig(k), "*")) {
+          size_t name = ts.nextSig(ts.nextSig(k));
+          if (name < semi && ts[name].kind == TokKind::Identifier) {
+            typedefNames_.insert(ts[name].text);
+            found = true;
+          }
+          break;
+        }
+      }
+      if (found)
+        continue;
+      int brc = 0;
+      size_t last = kNPos;
+      for (size_t k = i + 1; k < semi; ++k) {
+        if (ts.isPunct(k, "{")) ++brc;
+        else if (ts.isPunct(k, "}")) { if (brc > 0) --brc; }
+        else if (brc == 0 && ts[k].kind == TokKind::Identifier)
+          last = k;
+      }
+      if (last != kNPos)
+        typedefNames_.insert(ts[last].text);
+    }
+  }
+
+  /// Lexical scope of a declaration at `idx`.  A declaration inside a
+  /// function parameter list belongs to that function's body; a declaration
+  /// in a control-expression (`for (int i = 0; ...)`) belongs to the
+  /// surrounding block.  Prototypes have no body and are not recorded.
+  DeclScope scopeForDecl(size_t idx) const {
+    int brace = 0, par = 0, brk = 0;
+    for (size_t k = idx; k > 0; --k) {
+      size_t j = k - 1;
+      if (ts.isPunct(j, ")")) ++par;
+      else if (ts.isPunct(j, "(")) {
+        if (par > 0) {
+          --par;
+          continue;
+        }
+        size_t lp = j, rp = ts.matchParen(lp);
+        if (rp == kNPos)
+          return {};
+        size_t before = ts.prevSig(lp);
+        if (before != kNPos && (ts.isIdent(before, "for") ||
+                                ts.isIdent(before, "while") ||
+                                ts.isIdent(before, "switch") ||
+                                ts.isIdent(before, "if"))) {
+          DeclScope outer = scopeForDecl(lp);
+          outer.inParens = false;
+          outer.parenOpen = kNPos;
+          return outer; // control expression: surrounding block scope
+        }
+        size_t body = ts.nextSig(rp);
+        if (ts.isPunct(body, "{")) {
+          size_t close = ts.matchBrace(body);
+          if (close != kNPos)
+            return DeclScope{body, close, false, kNPos};
+        }
+        size_t end = body;
+        while (end < ts.size() && !ts.isPunct(end, ";"))
+          ++end;
+        return DeclScope{kNPos, end, true, lp}; // prototype
+      } else if (ts.isPunct(j, "]")) ++brk;
+      else if (ts.isPunct(j, "[")) { if (brk > 0) --brk; }
+      else if (ts.isPunct(j, "}")) ++brace;
+      else if (ts.isPunct(j, "{")) {
+        if (brace > 0) --brace;
+        else {
+          size_t close = ts.matchBrace(j);
+          return DeclScope{j, close, false, kNPos};
+        }
+      }
+    }
+    return {}; // file scope
+  }
+
+  void recordBinding(const std::string &name, size_t declIdx,
+                     const std::string &cls) {
+    DeclScope scope = scopeForDecl(declIdx);
+    if (scope.inParens && scope.open == kNPos)
+      return; // prototype parameter: never used in a body
+    VarBinding b;
+    b.name = name;
+    b.className = cls;
+    b.declIdx = declIdx;
+    if (scope.open == kNPos) {
+      b.from = declIdx;
+      b.to = ts.size() - 1;
+    } else {
+      // Parameters are declared before the body's '{'; locals at/after it.
+      b.from = declIdx < scope.open ? scope.open : declIdx;
+      b.to = scope.close == kNPos ? ts.size() - 1 : scope.close;
+    }
+    varBindings_.push_back(std::move(b));
+  }
+
+  /// Class binding visible at `useIdx`, or an empty string when the nearest
+  /// visible declaration is a plain C variable (which must not be lowered
+  /// as a method call).  Later declarations in an enclosing scope beat
+  /// earlier ones, but a binding whose block has closed cannot leak out.
+  std::string classOfVar(const std::string &name, size_t useIdx) const {
+    const VarBinding *best = nullptr;
+    for (const VarBinding &b : varBindings_) {
+      if (b.name != name || b.declIdx > useIdx || useIdx < b.from ||
+          useIdx > b.to)
+        continue;
+      if (!best || b.declIdx > best->declIdx ||
+          (b.declIdx == best->declIdx && b.from >= best->from))
+        best = &b;
+    }
+    return best ? best->className : std::string();
+  }
+
+  static bool isDeclTypeWord(const std::string &s) {
+    static const std::set<std::string> kWords = {
+        "void",   "char",     "short",    "int",      "long",   "float",
+        "double", "signed",   "unsigned", "_Bool",    "size_t", "struct",
+        "union",  "enum",     "const",    "volatile", "static", "extern",
+        "register", "restrict", "_Atomic", "auto"};
+    return kWords.count(s) != 0;
+  }
+
+  /// Base type token of a simple declarator, walking back over '*' and over
+  /// earlier comma-separated declarators (`int a, s;`).
+  size_t declaratorBase(size_t idx) const {
+    size_t p = ts.prevSig(idx);
+    if (p == kNPos)
+      return kNPos;
+    while (ts.isPunct(p, "*") || ts.isPunct(p, ",")) {
+      if (ts.isPunct(p, ",")) {
+        size_t q = p;
+        while (q > 0) {
+          q = ts.prevSig(q);
+          if (q == kNPos || ts.isPunct(q, ";") || ts.isPunct(q, "{") ||
+              ts.isPunct(q, "}") || ts.isPunct(q, "("))
+            break;
+        }
+        if (q == kNPos)
+          return kNPos;
+        p = ts.nextSig(q);
+        if (p == kNPos)
+          return kNPos;
+        continue;
+      }
+      p = ts.prevSig(p);
+      if (p == kNPos)
+        return kNPos;
+    }
+    // Skip storage/qualifier words so `static string s;` is still recognised
+    // as a class binding rather than a plain-C shadow named `static`.
+    while (p != kNPos && ts[p].kind == TokKind::Identifier &&
+           isDeclQualifier(ts[p].text))
+      p = ts.prevSig(p);
+    return p;
+  }
+
+  bool looksLikeNonClassDecl(size_t i) const {
+    if (ts[i].kind != TokKind::Identifier)
+      return false;
+    size_t next = ts.nextSig(i);
+    if (ts.isPunct(next, "("))
+      return false; // function/method name, not a variable
+    for (const VarBinding &b : varBindings_)
+      if (b.declIdx == i && !b.className.empty())
+        return false; // already recorded as a C+ class binding
+    size_t prev = ts.prevSig(i);
+    if (prev == kNPos)
+      return false;
+    if (ts.isPunct(prev, "}")) {
+      // `struct Plain { ... } s;` — match the body backward and check its tag.
+      int depth = 0;
+      for (size_t k = prev + 1; k > 0; --k) {
+        size_t j = k - 1;
+        if (ts.isPunct(j, "}")) ++depth;
+        else if (ts.isPunct(j, "{")) {
+          if (--depth != 0)
+            continue;
+          size_t tag = ts.prevSig(j);
+          if (tag == kNPos)
+            return false;
+          size_t kindIdx = ts.prevSig(tag);
+          if (kindIdx != kNPos &&
+              (ts.isIdent(kindIdx, "struct") || ts.isIdent(kindIdx, "union") ||
+               ts.isIdent(kindIdx, "enum")))
+            return true;
+          return ts.isIdent(tag, "struct") || ts.isIdent(tag, "union") ||
+                 ts.isIdent(tag, "enum");
+        }
+      }
+      return false;
+    }
+    size_t base = declaratorBase(i);
+    if (base == kNPos || ts[base].kind != TokKind::Identifier)
+      return false;
+    const std::string &word = ts[base].text;
+    if (word == "auto")
+      return false; // class-typed `auto` is handled by collectAutoClasses()
+    if (classNames_.count(word) || resourceNames_.count(word))
+      return false; // a C+ class binding, recorded above
+    if (isDeclTypeWord(word) || typedefNames_.count(word))
+      return true;
+    size_t kindIdx = ts.prevSig(base);
+    return kindIdx != kNPos && (ts.isIdent(kindIdx, "struct") ||
+                                ts.isIdent(kindIdx, "union") ||
+                                ts.isIdent(kindIdx, "enum"));
+  }
+
+  /// Record plain C declarations so they hide an earlier class binding with
+  /// the same spelling.  Without this, `void f(void){ string s; }` made a
+  /// later `void g(void){ struct Plain s; s.len(); }` lower to `string_len`.
+  void collectNonClassBindings() {
+    for (size_t i = 0; i < ts.size(); ++i)
+      if (looksLikeNonClassDecl(i))
+        recordBinding(ts[i].text, i, std::string());
+  }
+
   /// Record `ClassName var` and `ClassName *var` so member calls can be
   /// lowered without a type checker.
   void collectVariableTypes() {
@@ -456,6 +705,7 @@ private:
       if (n < ts.size() && ts[n].kind == TokKind::Identifier &&
           !isTypeStarter(ts[n].text)) {
         varClasses_[ts[n].text] = ts[i].text;
+        recordBinding(ts[n].text, n, ts[i].text);
       }
     }
   }
@@ -715,6 +965,7 @@ private:
           !classNames_.count(ts[cls].text))
         continue;
       varClasses_[ts[name].text] = ts[cls].text;
+      recordBinding(ts[name].text, name, ts[cls].text);
     }
   }
 
@@ -1749,7 +2000,7 @@ private:
       size_t member = ts.nextSig(dot);
       if (member < ts.size() && ts.isIdent(member, "len") &&
           ts.isPunct(ts.nextSig(member), "(")) {
-        bool known = varClasses_.count(ts[i].text) != 0 ||
+        bool known = !classOfVar(ts[i].text, i).empty() ||
                      fieldTypes_.count(ts[i].text) != 0 ||
                      (selfClass && (ts[i].text == kw::kSelf ||
                                     ts[i].text == "this"));
@@ -1811,11 +2062,8 @@ private:
     // Prefer a declared local, then a class-typed field (including fields
     // that `collectVariableTypes()` cannot see inside a class body), and
     // finally `this`/`self` inside a method.
-    std::string className;
-    auto it = varClasses_.find(receiverName);
-    if (it != varClasses_.end())
-      className = it->second;
-    else {
+    std::string className = classOfVar(receiverName, i);
+    if (className.empty()) {
       auto fit = fieldTypes_.find(receiverName);
       if (fit != fieldTypes_.end())
         className = fit->second.className;
@@ -1874,7 +2122,9 @@ private:
   std::set<std::string> classNames_;
   std::set<std::string> classNamesWithCtor_;
   std::set<std::string> externalClassNames_;
+  std::set<std::string> typedefNames_;
   std::map<std::string, std::string> varClasses_;
+  std::vector<VarBinding> varBindings_;
   std::map<std::string, FieldType> fieldTypes_;
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;
@@ -3079,9 +3329,128 @@ static bool isArrayDeclaratorBracket(const std::vector<Token> &toks,
   return false;
 }
 
+/// Scope of an array declaration in a lowered translation unit.  Indices
+/// refer to `sig`, the vector of non-trivia token indices.
+struct NonnullScope {
+  size_t open = kNPos;
+  size_t close = kNPos;
+  bool inParens = false;
+  size_t parenOpen = kNPos;
+};
+
+static size_t matchBraceSig(const std::vector<Token> &toks,
+                            const std::vector<size_t> &sig, size_t open) {
+  int depth = 0;
+  for (size_t i = open; i < sig.size(); ++i) {
+    if (!(toks[sig[i]].kind == TokKind::Punct &&
+          (toks[sig[i]].text == "{" || toks[sig[i]].text == "}")))
+      continue;
+    depth += toks[sig[i]].text == "{" ? 1 : -1;
+    if (depth == 0)
+      return i;
+  }
+  return kNPos;
+}
+
+static size_t matchParenSig(const std::vector<Token> &toks,
+                            const std::vector<size_t> &sig, size_t open) {
+  int depth = 0;
+  for (size_t i = open; i < sig.size(); ++i) {
+    if (!(toks[sig[i]].kind == TokKind::Punct &&
+          (toks[sig[i]].text == "(" || toks[sig[i]].text == ")")))
+      continue;
+    depth += toks[sig[i]].text == "(" ? 1 : -1;
+    if (depth == 0)
+      return i;
+  }
+  return kNPos;
+}
+
+/// Enclosing lexical scope of the declaration at `si`.  Function parameters
+/// are visible in the function body; control-expression declarations use the
+/// surrounding block; prototypes end at their ';'.
+static NonnullScope scopeForArrayDecl(const std::vector<Token> &toks,
+                                      const std::vector<size_t> &sig,
+                                      size_t si) {
+  int brace = 0, par = 0, brk = 0;
+  for (size_t k = si; k > 0; --k) {
+    size_t j = k - 1;
+    const Token &t = toks[sig[j]];
+    if (t.kind != TokKind::Punct)
+      continue;
+    if (t.text == ")") ++par;
+    else if (t.text == "(") {
+      if (par > 0) {
+        --par;
+        continue;
+      }
+      size_t rp = matchParenSig(toks, sig, j);
+      if (rp == kNPos)
+        return {};
+      size_t before = j > 0 ? j - 1 : kNPos;
+      if (before != kNPos &&
+          (toks[sig[before]].text == "for" ||
+           toks[sig[before]].text == "while" ||
+           toks[sig[before]].text == "switch" ||
+           toks[sig[before]].text == "if")) {
+        NonnullScope outer = scopeForArrayDecl(toks, sig, j);
+        outer.inParens = false;
+        outer.parenOpen = kNPos;
+        return outer;
+      }
+      size_t body = rp + 1;
+      while (body < sig.size() &&
+             !(toks[sig[body]].kind == TokKind::Punct &&
+               (toks[sig[body]].text == "{" ||
+                toks[sig[body]].text == ";")))
+        ++body;
+      if (body < sig.size() && toks[sig[body]].text == "{")
+        return NonnullScope{body, matchBraceSig(toks, sig, body), false,
+                            kNPos};
+      return NonnullScope{kNPos, body, true, j}; // prototype
+    } else if (t.text == "]") ++brk;
+    else if (t.text == "[") { if (brk > 0) --brk; }
+    else if (t.text == "}") ++brace;
+    else if (t.text == "{") {
+      if (brace > 0) --brace;
+      else return NonnullScope{j, matchBraceSig(toks, sig, j), false, kNPos};
+    }
+  }
+  return {}; // file scope
+}
+
+/// Struct/union/enum member arrays are not bindings of a standalone pointer
+/// identifier: `struct S { int buf[8]; }; void f(int *buf){ *buf = 1; }`
+/// must still get a NULL check in `f`.
+static bool isAggregateBody(const std::vector<Token> &toks,
+                            const std::vector<size_t> &sig, size_t open) {
+  if (open == kNPos || open == 0)
+    return false;
+  const Token &tag = toks[sig[open - 1]];
+  if (tag.kind == TokKind::Identifier &&
+      (tag.text == "struct" || tag.text == "union" || tag.text == "enum"))
+    return true; // anonymous aggregate
+  if (tag.kind != TokKind::Identifier || open < 2)
+    return false;
+  const Token &kind = toks[sig[open - 2]];
+  return kind.kind == TokKind::Identifier &&
+         (kind.text == "struct" || kind.text == "union" ||
+          kind.text == "enum");
+}
+
+struct ScopedArrayDecl {
+  std::string name;
+  size_t from = 0;
+  size_t to = 0;
+};
+
 static std::vector<NonnullSite>
 collectNonnullDerefSites(const std::string &source,
                          const std::map<std::string, size_t> &arrayLengths) {
+  // Array names are resolved from scoped declarations below; the TU-wide
+  // `arrayLengths` map cannot be used here because it would suppress checks
+  // for same-named pointers in unrelated functions (issue #107).
+  (void)arrayLengths;
   std::vector<NonnullSite> sites;
   const std::vector<Token> toks = lexCPlus(source);
   std::vector<size_t> sig;
@@ -3089,13 +3458,38 @@ collectNonnullDerefSites(const std::string &source,
     if (!isTriviaTok(toks[i]) && toks[i].kind != TokKind::EndOfFile)
       sig.push_back(i);
 
-  // Collect declared array names syntactically.  `arrayLengths` only covers
-  // arrays whose extent the rewriter could evaluate; macro extents
-  // (`buf[BUFSIZE]`), inferred extents (`text[] = "..."`) and typedef element
-  // types (`Node nodes[NODES];`) are absent, yet wrapping them with
-  // __typeof__ is still invalid C.
+  // Collect declared arrays with their lexical spans.  A single TU-wide set
+  // of names made any array named `p` suppress NULL checks for every pointer
+  // named `p` in unrelated functions (issue #107).  Aggregate fields and
+  // prototype parameters are deliberately not bindings of a bare identifier.
+  // `arrayLengths` only covers extents the rewriter could evaluate; macro
+  // extents (`buf[BUFSIZE]`), inferred extents (`text[] = "..."`) and typedef
+  // element types (`Node nodes[NODES];`) are absent here, yet wrapping them
+  // with __typeof__ is still invalid C.
   const std::set<std::string> typeNames = collectDeclTypeNames(toks, sig);
-  std::set<std::string> declaredArrays;
+  std::vector<ScopedArrayDecl> declaredArrays;
+  auto recordDeclaredArray = [&](size_t si) {
+    const std::string name = toks[sig[si - 1]].text;
+    NonnullScope scope = scopeForArrayDecl(toks, sig, si - 1);
+    if (scope.inParens && scope.open == kNPos)
+      return; // prototype parameter: no body in which it could be derefed
+    if (scope.open != kNPos && isAggregateBody(toks, sig, scope.open))
+      return; // struct/union/enum member, not a local pointer binding
+    const size_t declOffset = toks[sig[si - 1]].offset;
+    ScopedArrayDecl decl;
+    decl.name = name;
+    if (scope.open == kNPos) {
+      decl.from = declOffset;
+      decl.to = source.size();
+    } else {
+      const size_t openOffset = toks[sig[scope.open]].offset;
+      decl.from = declOffset < openOffset ? openOffset : declOffset;
+      decl.to = scope.close == kNPos
+                    ? source.size()
+                    : endOfToken(toks[sig[scope.close]]);
+    }
+    declaredArrays.push_back(std::move(decl));
+  };
   for (size_t si = 1; si < sig.size(); ++si) {
     if (!(toks[sig[si]].kind == TokKind::Punct &&
           toks[sig[si]].text == "["))
@@ -3103,7 +3497,7 @@ collectNonnullDerefSites(const std::string &source,
     if (toks[sig[si - 1]].kind != TokKind::Identifier)
       continue;
     if (isArrayDeclaratorBracket(toks, sig, si, typeNames))
-      declaredArrays.insert(toks[sig[si - 1]].text);
+      recordDeclaredArray(si);
     // A single identifier followed by `[...]` that is NOT a subscript is a
     // declared array even when its element type is an unknown typedef (e.g.
     // `pthread_t`).  `isArrayDeclaratorBracket` only recognises element types
@@ -3132,7 +3526,7 @@ collectNonnullDerefSites(const std::string &source,
           break; // expression subscript `x[0]` — not a declarator
       }
       if (declBound)
-        declaredArrays.insert(toks[sig[si - 1]].text);
+        recordDeclaredArray(si);
     }
   }
 
@@ -3143,7 +3537,16 @@ collectNonnullDerefSites(const std::string &source,
       return;
     // An array is never a NULL pointer at a dereference site; binding one
     // with __typeof__ would emit an invalid array initializer in the C.
-    if (arrayLengths.count(b.text) != 0 || declaredArrays.count(b.text) != 0)
+    // Only a declaration visible in this scope (including an enclosing one)
+    // counts: an array in another function must not disable a pointer's
+    // runtime NULL check here.
+    bool visibleArray = false;
+    for (const ScopedArrayDecl &a : declaredArrays)
+      if (a.name == b.text && a.from <= b.offset && b.offset <= a.to) {
+        visibleArray = true;
+        break;
+      }
+    if (visibleArray)
       return;
     if (seen.count(b.offset) != 0)
       return;
@@ -5696,6 +6099,123 @@ std::string catchNameFromDecl(const std::string &decl) {
   return name;
 }
 
+/// True when `word` is a C type spelling that can introduce a cast, e.g.
+/// `(int)expr`.  Used only to distinguish a cast from two adjacent operands.
+static bool isCastTypeWordC(const std::string &word) {
+  static const std::set<std::string> kTypes = {
+      "void",     "char",     "short",  "int",     "long",   "float",
+      "double",   "signed",   "unsigned", "_Bool",  "size_t", "struct",
+      "union",    "enum",     "const",  "volatile", "static"};
+  size_t start = 0;
+  while (start < word.size()) {
+    while (start < word.size() &&
+           std::isspace(static_cast<unsigned char>(word[start])))
+      ++start;
+    size_t end = start;
+    while (end < word.size() &&
+           !std::isspace(static_cast<unsigned char>(word[end])))
+      ++end;
+    if (end > start && !kTypes.count(word.substr(start, end - start)))
+      return false;
+    start = end;
+  }
+  return true;
+}
+
+/// True when the `)` at `close` ends a cast such as `(int)` rather than an
+/// ordinary parenthesised expression or a call.  A call's closing `)` is
+/// preceded by a callee name (not a type), so only casts are exempted from
+/// the adjacent-operand check below.
+static bool isCastCloseC(const std::string &s, size_t close) {
+  size_t open = std::string::npos;
+  int depth = 0;
+  for (size_t i = 0; i <= close && i < s.size();) {
+    if (isCommentStart(s, i)) {
+      i = skipCommentC(s, i);
+      continue;
+    }
+    if (s[i] == '"' || s[i] == '\'') {
+      i = skipLiteralC(s, i);
+      continue;
+    }
+    if (s[i] == '(') {
+      if (depth == 0)
+        open = i;
+      ++depth;
+    } else if (s[i] == ')') {
+      --depth;
+      if (depth == 0)
+        return i == close && open != std::string::npos &&
+               isCastTypeWordC(
+                   trimC(s.substr(open + 1, close - open - 1)));
+    }
+    ++i;
+  }
+  return false;
+}
+
+/// Detect genuinely malformed operands such as `throw 4 print("x");`, where
+/// two primary expressions sit next to each other with no operator.  Valid
+/// calls (`throw get_code();`, `throw err.code();`, `throw compute(a, b);`),
+/// casts (`throw (int)f();`) and compound literals all have an operator,
+/// delimiter or recognised cast between their primaries, so they are kept
+/// intact for value/type evaluation instead of being replaced by code 1.
+static bool hasAdjacentOperandsC(const std::string &expr) {
+  enum class Kind { None, Ident, Number, Literal, CloseParen, CloseOther,
+                    Other };
+  size_t i = 0;
+  int par = 0, brk = 0, brc = 0;
+  Kind prev = Kind::None;
+  size_t prevPos = std::string::npos;
+  while (i < expr.size()) {
+    if (isCommentStart(expr, i)) {
+      i = skipCommentC(expr, i);
+      continue;
+    }
+    if (std::isspace(static_cast<unsigned char>(expr[i]))) {
+      ++i;
+      continue; // whitespace does not break token adjacency
+    }
+    size_t start = i;
+    Kind kind = Kind::Other;
+    if (expr[i] == '"' || expr[i] == '\'') {
+      i = skipLiteralC(expr, i);
+      kind = Kind::Literal;
+    } else if (isIdentCharC(expr[i]) && !isdigit(static_cast<unsigned char>(expr[i]))) {
+      while (i < expr.size() && isIdentCharC(expr[i]))
+        ++i;
+      kind = Kind::Ident;
+    } else if (isdigit(static_cast<unsigned char>(expr[i])) ||
+               (expr[i] == '.' && i + 1 < expr.size() &&
+                isdigit(static_cast<unsigned char>(expr[i + 1])))) {
+      while (i < expr.size() &&
+             (isalnum(static_cast<unsigned char>(expr[i])) || expr[i] == '.'))
+        ++i;
+      kind = Kind::Number;
+    } else {
+      char c = expr[i++];
+      if (c == '(') ++par;
+      else if (c == ')') { if (par > 0) --par; kind = Kind::CloseParen; }
+      else if (c == '[') ++brk;
+      else if (c == ']') { if (brk > 0) --brk; kind = Kind::CloseOther; }
+      else if (c == '{') ++brc;
+      else if (c == '}') { if (brc > 0) --brc; kind = Kind::CloseOther; }
+    }
+    const bool topLevel = par == 0 && brk == 0 && brc == 0;
+    const bool prevPrimary = prev == Kind::Ident || prev == Kind::Number ||
+                             prev == Kind::Literal || prev == Kind::CloseParen ||
+                             prev == Kind::CloseOther;
+    const bool curPrimary = kind == Kind::Ident || kind == Kind::Number ||
+                            kind == Kind::Literal;
+    if (topLevel && prevPrimary && curPrimary &&
+        !(prev == Kind::CloseParen && isCastCloseC(expr, prevPos)))
+      return true;
+    prev = kind;
+    prevPos = start;
+  }
+  return false;
+}
+
 std::string lowerThrows(const std::string &s, bool &changed) {
   std::string out;
   size_t pos = 0;
@@ -5722,22 +6242,18 @@ std::string lowerThrows(const std::string &s, bool &changed) {
              "cplus_rethrow_exc.message, cplus_rethrow_exc.file, "
              "cplus_rethrow_exc.line);";
     } else {
-      // A call in the operand (`throw 4 print("x");`) means the source is
-      // malformed: consume the whole statement but raise a neutral code
-      // rather than splicing a call into an integer argument list.
-      bool callLike = false;
-      for (size_t k = 1; k < expr.size(); ++k)
-        if (expr[k] == '(' && isIdentCharC(expr[k - 1])) {
-          callLike = true;
-          break;
-        }
+      // Only genuinely malformed statements (two adjacent primaries, e.g.
+      // `throw 4 print("x");`) get the neutral fallback.  A function or
+      // method call is a perfectly valid operand: keep and evaluate it so
+      // side effects and its returned code/type reach the exception.
+      const bool malformed = hasAdjacentOperandsC(expr);
       std::string code = "1", msg = "0";
-      if (!callLike && expr[0] == '"') {
-        msg = expr; // string throw: message, default code
-      } else if (!callLike) {
-        // Use the operand for the code, not just leading decimal digits.
-        // This preserves negative literals, parenthesised values and
-        // variables instead of silently turning them into `throw 1;`.
+      if (!malformed && expr[0] == '"') {
+        msg = expr; // string literal throw: message, default code
+      } else if (!malformed) {
+        // Preserve negative literals, parenthesised values, variables and
+        // call expressions; the cast to int is applied to the operand's
+        // value, so it is evaluated exactly once.
         code = "(int)(" + expr + ")";
       }
       out += "cplus_exception_raise(" + code + ", " + msg +

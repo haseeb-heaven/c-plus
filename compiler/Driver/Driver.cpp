@@ -34,6 +34,7 @@
 #include <set>
 #include <sstream>
 #include <system_error>
+#include <sys/stat.h>
 #include <unistd.h>
 
 // Needed to pass an explicitly constructed environment to ExecuteAndWait.
@@ -182,6 +183,13 @@ bool writeFile(const std::string &path, const std::string &text,
 bool writeFd(int fd, const std::string &text, std::string *err) {
   if (fd < 0) {
     *err = "invalid temporary file descriptor";
+    return false;
+  }
+  // createUniqueFile/createTemporaryFile already use exclusive creation;
+  // keep the contents private too (mkstemp-style 0600, not umask-dependent
+  // 0644) on every path that goes through this helper.  Issue #108.
+  if (::fchmod(fd, S_IRUSR | S_IWUSR) != 0) {
+    *err = "cannot restrict temporary file permissions";
     return false;
   }
   llvm::raw_fd_ostream os(fd, true, llvm::sys::fs::OF_Text);
@@ -921,6 +929,18 @@ static bool extraArgsWeakenSafetyWarnings(
 /// Only -I/-D/-std= are forwarded to the in-memory safety ASTs; the other
 /// accepted flags either do not affect parsing or are link/codegen only, so
 /// check and build keep identical safety-AST inputs.
+/// Only optimization levels that keep IEEE-754 semantics are allowed in
+/// STRICT.  `-Ofast` implies `-ffast-math` / `-ffinite-math-only`, which lets
+/// the backend delete the `isnan()` guards that C+'s numeric traps rely on.
+static bool isSafeOptimizationFlag(llvm::StringRef s) {
+  static const llvm::StringRef kSafe[] = {"-O",  "-O0", "-O1", "-O2",
+                                          "-O3", "-Os", "-Oz", "-Og"};
+  for (llvm::StringRef allowed : kSafe)
+    if (s == allowed)
+      return true;
+  return false;
+}
+
 static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) {
   for (size_t i = 0; i < extra.size(); ++i) {
     llvm::StringRef s = normalizeFlag(extra[i]);
@@ -939,7 +959,7 @@ static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) 
     }
     if (s.starts_with("-I") || s.starts_with("-D") || s.starts_with("-L") ||
         s.starts_with("-l") || s.starts_with("-std=") ||
-        s.starts_with("-isysroot") || s.starts_with("-O"))
+        s.starts_with("-isysroot") || isSafeOptimizationFlag(s))
       continue;
     // -U is deliberately excluded: it is parse-affecting but is NOT forwarded
     // to the safety AST, so allowing it would break check/build parity.
@@ -985,9 +1005,20 @@ static bool redefinesReservedCPlusMacro(const std::vector<std::string> &extra) {
     } else {
       continue;
     }
-    llvm::StringRef name = def.take_while([](char c) {
-      return c != '=' && c != '(' && c != ' ';
-    });
+    // Clang trims leading whitespace in `-D " CPLUS_STRICT=0"` and still
+    // defines the macro.  Trim it here too, then require a well-formed
+    // identifier: an empty/malformed name must fail closed, not sail past
+    // the reserved-name checks (issue #109).
+    def = def.ltrim(" \t");
+    if (def.empty() ||
+        !(std::isalpha(static_cast<unsigned char>(def[0])) || def[0] == '_'))
+      return true;
+    size_t len = 0;
+    while (len < def.size() &&
+           (std::isalnum(static_cast<unsigned char>(def[len])) ||
+            def[len] == '_'))
+      ++len;
+    llvm::StringRef name = def.take_front(len);
     // The whole CPLUS/CPLUS_/CPLUS<Name> gate family and the implementation
     // namespace (__cplus_*, reserved to the implementation) are closed sets;
     // reserve the prefix so a future gate macro cannot be redefined by a
@@ -1079,15 +1110,21 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   if (!probe.source || !*probe.source)
     return cache[key] = false;
   llvm::SmallString<256> srcPath, exePath;
-  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".c", srcPath))
+  int probeFd = -1;
+  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".c", probeFd, srcPath))
     return cache[key] = false;
   if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath)) {
     llvm::sys::fs::remove(srcPath);
     return cache[key] = false;
   }
-  {
-    std::ofstream os(srcPath.c_str());
-    os << probe.source;
+  (void)::chmod(exePath.c_str(), S_IRUSR | S_IWUSR);
+  // Write through the descriptor: reopening the name would reintroduce a
+  // symlink/TOCTOU window after the exclusive create.  Issue #108.
+  std::string writeErr;
+  if (!writeFd(probeFd, probe.source, &writeErr)) {
+    llvm::sys::fs::remove(srcPath);
+    llvm::sys::fs::remove(exePath);
+    return cache[key] = false;
   }
   // Every argument is passed as an individual argv element.  Quoting a
   // path/flag with `'...'` into a shell string let a single quote in a
@@ -1386,10 +1423,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // never-complete deny-list.
   if (strictSafe && !strictSafePassthroughAllowed(opts.extraArgs)) {
     errs << "error: pass-through flag outside the STRICT Safe allow-list "
-            "(-I/-D/-std=/-isysroot/-O/-W/-L/-l/-g/-pthread/...); flags such "
-            "as -Xclang, @response, -include/-imacros/-isystem, -U, -x and "
-            "-Wno-* are rejected because they can change the analysed program "
-            "or downgrade a gate\n";
+            "(-I/-D/-std=/-isysroot/-O[0-3szg]/-W/-L/-l/-g/-pthread/...); "
+            "flags such as -Xclang, @response, -include/-imacros/-isystem, "
+            "-U, -x, -Ofast and -Wno-* are rejected because they can change "
+            "the analysed program or downgrade a gate\n";
     return 1;
   }
   // Capability probing compiles and runs a defect program. `check` must stay
@@ -1458,6 +1495,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
                 "instrumentation\n";
         return 1;
       }
+      (void)::chmod(objPath.c_str(), S_IRUSR | S_IWUSR);
       std::vector<std::string> rtArgs = base;
       rtArgs.push_back("-c");
       rtArgs.push_back("-o");
