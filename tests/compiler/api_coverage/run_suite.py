@@ -423,8 +423,13 @@ for api, cfun, left in [
                             val_i64(api, "ok_" + tag, expr,
                                     i64(((a & MASK64) << b) & MASK64))
                     elif left:
-                        val_i64(api, "ok_" + tag, expr,
-                                i64(((a & MASK64) << b) & MASK64))
+                        value_bits = MASK64 if bits == 64 else ((1 << bits) - 1)
+                        shifted = ((a & MASK64) << b) & MASK64
+                        if shifted & ~value_bits:
+                            trap(api, "bits_" + tag, expr, 110,
+                                 "left shift loses bits above")
+                        else:
+                            val_i64(api, "ok_" + tag, expr, i64(shifted))
                     elif not signed:
                         val_i64(api, "ok_" + tag, expr,
                                 i64((a & MASK64) >> b))

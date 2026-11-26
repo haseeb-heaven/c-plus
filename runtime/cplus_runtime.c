@@ -380,8 +380,8 @@ static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
   if (!left && !isSigned)
     /* Logical right shift: never sign-extend an unsigned operand. */
     return (int64_t)((uint64_t)a >> (uint64_t)b);
-  if (left && isSigned) {
-    if (a < 0)
+  if (left) {
+    if (isSigned && a < 0)
       cplus_arith_fatal("invalid shift",
                         "left shift of a negative signed value");
     uint64_t ua = (uint64_t)a;
@@ -389,15 +389,15 @@ static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
     uint64_t valueBits = bits == 64 ? ~((uint64_t)0)
                                     : ((((uint64_t)1) << bits) - 1);
     uint64_t signBit = (uint64_t)1 << (bits - 1);
-    ua &= valueBits;
+    /* Check the real shifted value BEFORE masking it to the source width:
+     * masking first discards exactly the bits whose loss must be rejected. */
     uint64_t shifted = ua << count;
-    if ((shifted & ~valueBits) || (shifted & signBit))
+    if ((shifted & ~valueBits) || (isSigned && (shifted & signBit)))
       cplus_arith_fatal("invalid shift",
                         "left shift loses bits above the source width");
     return (int64_t)(shifted & valueBits);
   }
-  return left ? (int64_t)((uint64_t)a << (uint64_t)b)
-              : (int64_t)(a >> (uint64_t)b);
+  return (int64_t)(a >> (uint64_t)b);
 }
 
 int64_t __cplus_checked_shl_i64(int64_t a, int64_t b, unsigned bits,
