@@ -1004,6 +1004,46 @@ private:
       atStmtStart_ = false;
       return;
     }
+    // Passing an owned local by value transfers it to the callee, which emits
+    // the destructor; suppress the caller's drop to avoid a double release.
+    auto bvit = byValueParamIndices_.find(t.text);
+    if (bvit != byValueParamIndices_.end() && isPunct(nextSig(i), "(")) {
+      size_t lp = nextSig(i), rp = matchingParen(lp);
+      if (rp != kNPos && rp > lp) {
+        size_t start = lp + 1;
+        unsigned argIndex = 0;
+        int argDepth = 0;
+        for (size_t k = lp + 1; k <= rp; ++k) {
+          bool end = k == rp;
+          if (!end && isPunct(k, "(")) ++argDepth;
+          if (!end && isPunct(k, ")")) --argDepth;
+          if (!end && !(isPunct(k, ",") && argDepth == 0))
+            continue;
+          if (bvit->second.count(argIndex)) {
+            size_t arg = nextSig(start);
+            if (arg < rp && toks_[arg].kind == TokKind::Identifier) {
+              DeclId id = findLiveOwner(toks_[arg].text);
+              if (id.valid())
+                if (OwnedVar *owner = ownerAt(id)) {
+                  owner->moved = true;
+                  owner->movedByMove = true;
+                  // Zero the caller's handle so its scope-exit drop becomes a
+                  // no-op; the callee now owns the single live copy.
+                  if (rp < toks_.size() && !owner->type.empty() &&
+                      !owner->managed)
+                    edits_.push_back(
+                        Edit{toks_[rp].offset + toks_[rp].text.size(), 0,
+                             " " + owner->type + " " + owner->name +
+                                 " = {0};",
+                             seq_++});
+                }
+            }
+          }
+          ++argIndex;
+          start = k + 1;
+        }
+      }
+    }
     if ((t.text == "exit" || t.text == "_Exit" || t.text == "abort" ||
          t.text == "quick_exit" || t.text == "_exit" ||
          (terminationHelpers_.count(t.text) && isPunct(nextSig(i), "("))) &&
@@ -2023,12 +2063,18 @@ private:
     size_t openParen =
         closeParen == kNPos ? kNPos : matchingParenBackward(closeParen);
     if (openParen != kNPos) {
+      size_t fnNameIdx = prevSig(openParen);
+      const std::string funcName =
+          fnNameIdx != kNPos && toks_[fnNameIdx].kind == TokKind::Identifier
+              ? toks_[fnNameIdx].text
+              : std::string();
       for (size_t k = openParen + 1; k < closeParen; ++k)
         if (toks_[k].kind == TokKind::Identifier)
           params.insert(toks_[k].text);
       // A by-value resource/class parameter is owned by the callee: its
       // destructor must run at function exit, just like a local owner.
       size_t start = openParen + 1;
+      unsigned paramIndex = 0;
       int depth = 0;
       for (size_t k = openParen + 1; k <= closeParen; ++k) {
         bool end = k == closeParen;
@@ -2066,8 +2112,12 @@ private:
               edits_.push_back(Edit{toks_[closeIdx].offset, 0,
                                     "  " + v.drop + "(&" + v.name + "); ",
                                     seq_++});
+            if (!funcName.empty())
+              byValueParamIndices_[funcName].insert(paramIndex);
           }
         }
+        if (!end || k > start)
+          ++paramIndex;
         start = k + 1;
       }
     }
@@ -2552,6 +2602,9 @@ private:
   /// terminator/longjmp (or a helper that contains one).
   std::set<std::string> terminationAliases_;
   std::set<std::string> throwAliases_;
+  // Functions taking resource owners by value: call sites transfer those
+  // arguments to the callee (the callee emits the destructor).
+  std::map<std::string, std::set<unsigned>> byValueParamIndices_;
   /// Macro name -> function-like?  Macros hiding a terminator in their body.
   std::map<std::string, bool> terminationMacros_;
   std::vector<DeferInfo> defers_;
