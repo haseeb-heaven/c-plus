@@ -175,6 +175,27 @@ static void cplus_safe_str_refuse_unterminated(const char *api) {
     errno = ERANGE;
 }
 
+/* Safeclib's checked primitives leave a refused destination in a defined
+ * empty state (dest[0] == '\0').  The auto wrappers can refuse BEFORE the
+ * checked primitive is entered (unterminated source, unresolvable capacity),
+ * so they have to publish that state themselves or a caller reading dest[0]
+ * sees stale caller data.  Write exactly one byte, and only when a capacity
+ * is provably positive: tracked remaining bytes and/or the caller's
+ * compile-time object size.  A zero-capacity one-past-the-end destination and
+ * an unknown-capacity destination are never written; UAF refusals return
+ * before this helper so a freed pointer is never dereferenced. */
+static void cplus_safe_str_clear_on_refusal(char *dest, size_t known_dmax) {
+    size_t cap = (size_t)-1;
+    size_t tracked;
+    if (!dest) return;
+    tracked = cplus_safe_remaining_capacity(dest);
+    if (tracked != (size_t)-1) cap = tracked;
+    if (known_dmax != (size_t)-1 && (cap == (size_t)-1 || known_dmax < cap))
+        cap = known_dmax;
+    if (cap == 0 || cap == (size_t)-1) return;
+    *dest = '\0';
+}
+
 char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax) {
     size_t len, dmax;
     errno_t r;
@@ -189,18 +210,20 @@ char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax) {
     len = 0;
     if (!cplus_safe_bounded_strlen(src, cplus_safe_str_scan_ceiling(dest, known_dmax), &len)) {
         cplus_safe_str_refuse_unterminated("strcpy_s");
+        cplus_safe_str_clear_on_refusal(dest, known_dmax);
         return NULL;
     }
     if (!cplus_safe_resolve_str_dmax(dest, (len < RSIZE_MAX_STR) ? (len + 1u) : RSIZE_MAX_STR, known_dmax, &dmax)) {
 
         errno = EINVAL;
-
+        cplus_safe_str_clear_on_refusal(dest, known_dmax);
         return NULL;
 
     }
     r = cplus_strcpy_s(dest, dmax, src);
     if (r != 0) {
         errno = (r == 406 || len + 1u > dmax) ? ERANGE : EINVAL;
+        cplus_safe_str_clear_on_refusal(dest, known_dmax);
         return NULL;
     }
     return dest;
