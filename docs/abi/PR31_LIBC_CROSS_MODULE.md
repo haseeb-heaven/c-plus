@@ -219,7 +219,7 @@ PR31_LIBC <checks> <pass> <fail> <not_tested>
 Final measured run:
 
 ```
-PR31_LIBC 112 106 0 6
+PR31_LIBC 112 108 0 4
 ```
 
 Exit status is nonzero solely because six boundaries remain documented as
