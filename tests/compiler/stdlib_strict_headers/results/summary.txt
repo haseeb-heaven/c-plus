@@ -1,0 +1,13 @@
+Strict stdlib headers
+macOS-27.2.1-arm64-arm-64bit
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+error PASS
+vector PASS
+thread PASS
+collections PASS
+mempool PASS
+arena PASS
+scoped_mem PASS
+
+cases=7 passed=7 failed=0

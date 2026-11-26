@@ -401,6 +401,20 @@ public:
   }
   void setHandledReallocs(const std::set<unsigned> &s) { handledReallocs_ = s; }
   const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
+  void setHandledReallocVars(const std::set<std::string> &s) {
+    handledReallocVars_ = s;
+  }
+  const std::set<std::string> &handledReallocVars() const {
+    return handledReallocVars_;
+  }
+  void setReallocAssignCalls(
+      const std::map<const VarDecl *, const CallExpr *> &m) {
+    reallocAssignCalls_ = m;
+  }
+  const std::map<const VarDecl *, const CallExpr *> &reallocAssignCalls()
+      const {
+    return reallocAssignCalls_;
+  }
   void setConstLocals(const std::map<std::string, llvm::APSInt> &m) { constLocals_ = m; }
   const std::map<std::string, llvm::APSInt> &constLocals() const { return constLocals_; }
   void setConstFloatLocals(const std::map<std::string, double> &m) {
@@ -3979,17 +3993,22 @@ public:
       return false;
     const auto *ref = dyn_cast<DeclRefExpr>(tmpRef);
     const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (!vd || !vd->getInit())
+    if (!vd)
       return false;
     // Strip explicit casts as well (`int *q = (int *)realloc(...)`), and
     // resolve indirect realloc through a function pointer (T1_indirect_realloc
-    // calls realloc via `void *(*r)(void*,size_t) = realloc`).  The
-    // branch-aware state machine below then invalidates the old pointer only
-    // on the SUCCESS path, so the failure-path `free(p)` stays valid.
-    const Expr *initE = vd->getInit()->IgnoreParenImpCasts();
-    while (const auto *ce = dyn_cast<ExplicitCastExpr>(initE))
+    // calls realloc via `void *(*r)(void*,size_t) = realloc`).  Also accept a
+    // reassignment `q = realloc(...)` of an already-declared variable, which
+    // is the shape used by stdlib/error.hp.
+    const Expr *initE = vd->getInit() ? vd->getInit()->IgnoreParenImpCasts()
+                                      : nullptr;
+    while (const auto *ce = dyn_cast_or_null<ExplicitCastExpr>(initE))
       initE = ce->getSubExpr()->IgnoreParenImpCasts();
-    const auto *call = dyn_cast<CallExpr>(initE);
+    const CallExpr *call = dyn_cast_or_null<CallExpr>(initE);
+    if (!call) {
+      auto ait = reallocAssignCalls_.find(vd->getCanonicalDecl());
+      call = ait == reallocAssignCalls_.end() ? nullptr : ait->second;
+    }
     if (!call || call->getNumArgs() < 1)
       return false;
     bool isRealloc = false;
@@ -4115,6 +4134,8 @@ public:
       const CallExpr *rc = nullptr;
       if (detectReallocSuccess(s, owner, tmp, &rc) && rc)
         handledReallocs_.insert(rc->getBeginLoc().getRawEncoding());
+        if (!tmp.empty())
+          handledReallocVars_.insert(tmp);
     }
     std::string keepEraseVar;
     bool negatedGuard = false;
@@ -4884,6 +4905,14 @@ public:
     if (!sub || !cast->getType()->isPointerType() ||
         !sub->getType()->isIntegerType() || isNullConstant(sub))
       return true;
+    // Portable invalid-pointer sentinels (NULL and (void *)-1, e.g. MAP_FAILED)
+    // are compared, never dereferenced; accepting the cast is sound.
+    Expr::EvalResult sentinel;
+    if (sub->EvaluateAsInt(sentinel, ctx_) && sentinel.Val.isInt()) {
+      llvm::APSInt v = sentinel.Val.getInt();
+      if (v.isZero() || v.isNegative())
+        return true;
+    }
     if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
       if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
         if (provenanceInts_.count(vd->getNameAsString()))
@@ -5763,6 +5792,37 @@ public:
 
   bool VisitBinaryOperator(BinaryOperator *op) {
     noteAssignedValueSource(op);
+    if (op->isAssignmentOp()) {
+      // `uintptr_t sp; sp = (uintptr_t)p; ... (T *)sp` derives provenance by
+      // assignment, not by initializer. VisitVarDecl cannot see this shape.
+      if (isIntegerProvenanceExpr(op->getRHS()))
+        if (const auto *lref = dyn_cast<DeclRefExpr>(
+                op->getLHS()->IgnoreParenImpCasts()))
+          if (const auto *lvd = dyn_cast<VarDecl>(lref->getDecl())) {
+            provenanceInts_.insert(lvd->getNameAsString());
+            std::string src = pointerSourceOf(op->getRHS());
+            if (!src.empty())
+              provenanceSource_[lvd->getNameAsString()] = src;
+          }
+    }
+    if (op->isAssignmentOp()) {
+      const Expr *re = stripStmtExpr(op->getRHS());
+      while (const auto *ec = dyn_cast<ExplicitCastExpr>(re))
+        re = stripStmtExpr(ec->getSubExpr());
+      if (const auto *rc = dyn_cast<CallExpr>(re)) {
+        bool isRealloc = false;
+        for (const auto &cn : calleeNames(rc, rc->getDirectCallee()))
+          if (isReallocName(cn)) {
+            isRealloc = true;
+            break;
+          }
+        if (isRealloc)
+          if (const auto *lref = dyn_cast<DeclRefExpr>(
+                  op->getLHS()->IgnoreParenImpCasts()))
+            if (const auto *lvd = dyn_cast<VarDecl>(lref->getDecl()))
+              reallocAssignCalls_[lvd->getCanonicalDecl()] = rc;
+      }
+    }
     // `r.ptr = &local; return r;` stores a frame address in a struct field.
     // The aggregate-initializer check in VisitVarDecl cannot see this form,
     // so record the same obligation when the store is an assignment.
@@ -7834,8 +7894,15 @@ public:
           }
       bool reallocFromNull = isReallocName(baseName) && call->getNumArgs() >= 1 &&
                              isNullConstant(call->getArg(0)->IgnoreParenCasts());
+      std::string reallocResult;
+      for (const auto &kv : reallocAssignCalls_)
+        if (kv.second == call) {
+          reallocResult = kv.first->getNameAsString();
+          break;
+        }
       if (isReallocName(baseName) && !reallocFromNull &&
-          handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0) {
+          handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0 &&
+          !handledReallocVars_.count(reallocResult)) {
         // Do NOT mark the old pointer released: on failure realloc returns
         // NULL and the original block remains owned by the caller.  Alias
         // invalidation is only valid on the success branch, which the current
@@ -8953,6 +9020,9 @@ public:
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
+  // Realloc results assigned to an already-declared variable (`q = realloc(...)`).
+  std::map<const VarDecl *, const CallExpr *> reallocAssignCalls_;
+  std::set<std::string> handledReallocVars_;
   // Callees that release the POINTEE of a pointer parameter (`free(*pp)`).
   // The caller passes `&p`, so ownership of p must be transferred at the
   // call site even though the callee never names p.
@@ -9265,6 +9335,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setConstReturnValues(collect.constReturnValues());
   check.setFormatFnAliases(collect.formatFnAliases());
   check.setHandledReallocs(collect.handledReallocs());
+  check.setHandledReallocVars(collect.handledReallocVars());
+  check.setReallocAssignCalls(collect.reallocAssignCalls());
   check.setConstLocals(collect.constLocals());
   check.setConstFloatLocals(collect.constFloatLocals());
   check.setAssignedVars(collect.assignedVars());

@@ -18,6 +18,7 @@ here claims total memory safety or Rust parity.
 | #39 | `tests/compiler/proof_regressions/` 6/6 (struct downcast OOB) |
 | #40 | `tests/compiler/proof_regressions/` 6/6 (unproven runtime-offset deref) |
 | #46 | `tests/compiler/nested_method/` 2/2 |
+| #49 | `tests/compiler/stdlib_strict_headers/` 7/7 (error/vector/thread/collections/mempool/arena/scoped_mem) |
 | #21 | Strict inference, contracts, 20/20 strict rules, 58/58 semantic, ABI gate; local full gate green |
 | #23 | Compiler/SDK evidence: ABI gate 5/5, clean SDK smoke, Linux/macOS compiler CI; combined-tree libc 109/0 and CRT all checks |
 | #29 | Declaration-identity/provenance/RAII AST conversions; `ast_identity` 9/9, `pointer_provenance` 14/14; remaining token decisions documented in `ast_identity_audit.md` |

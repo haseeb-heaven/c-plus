@@ -87,6 +87,9 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_NULL_POINTER, "pool: NULL/invalid pool"), STDLIB_FAIL;
     stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
+    if (stride == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "pool: bad slot size"), STDLIB_FAIL;
     size_t raw;
     size_t i;
     unsigned char *slot;
@@ -189,8 +192,11 @@ static inline void stdlib_mem_pool_release(stdlib_mem_pool *p, void *ptr,
      * reading its header; a wild pointer must not be dereferenced. */
     {
         stdlib_pool_slab *s;
+        size_t stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
+        if (stride == 0)
+            return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                                        CPLUS_EXIT_BOUNDS, "pool: zero stride");
         for (s = p->slabs; s != (stdlib_pool_slab *)0; s = s->next) {
-            size_t stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
             if (slot >= s->slots + STDLIB_POOL_HEADER_SIZE &&
                 slot < s->slots + STDLIB_POOL_HEADER_SIZE +
                        stride * p->slots_per_slab &&
@@ -202,8 +208,14 @@ static inline void stdlib_mem_pool_release(stdlib_mem_pool *p, void *ptr,
         return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                     CPLUS_EXIT_OWNERSHIP, "pool: foreign pointer refused");
     h = (stdlib_pool_slot_header *)(void *)(slot - STDLIB_POOL_HEADER_SIZE);
-    i = (size_t)(slot - (h->slab->slots + STDLIB_POOL_HEADER_SIZE)) /
-        (STDLIB_POOL_HEADER_SIZE + p->slot_size);
+    {
+        size_t stride2 = STDLIB_POOL_HEADER_SIZE + p->slot_size;
+        if (stride2 == 0)
+            return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                                        CPLUS_EXIT_BOUNDS, "pool: zero stride");
+        i = (size_t)(slot - (h->slab->slots + STDLIB_POOL_HEADER_SIZE)) /
+            stride2;
+    }
     if (i >= p->slots_per_slab || i != h->index)
         return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                     CPLUS_EXIT_OWNERSHIP, "pool: misaligned pointer refused");
@@ -342,8 +354,12 @@ static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
     unsigned char *items;
     size_t *fl;
     uint64_t *gen;
+    size_t slot_size = p->slot_size;
     error_reset(err);
-    if (ncap > (size_t)-1 / p->slot_size)
+    if (slot_size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "slot_pool: zero slot size"), STDLIB_FAIL;
+    if (ncap > (size_t)-1 / slot_size)
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
     items = (unsigned char *)cplus_alloc(p->slot_size * ncap);
