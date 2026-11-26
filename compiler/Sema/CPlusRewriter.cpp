@@ -2358,21 +2358,41 @@ static bool isDeclQualifierTok(const std::string &s) {
          s == "_Atomic" || s == "inline" || s == "auto";
 }
 
+static bool isBuiltinTypeKeyword(const std::string &w) {
+  static const std::set<std::string> kTypeWords = {
+      "unsigned",  "signed",    "int",       "char",      "short",
+      "long",      "float",     "double",    "_Bool",     "size_t",
+      "uintptr_t", "uint64_t",  "uint32_t",  "uint16_t",  "uint8_t",
+      "ptrdiff_t", "intptr_t",  "int64_t",   "int32_t",   "int16_t",
+      "int8_t"};
+  return kTypeWords.count(w) != 0;
+}
+
 /// Parse a built-in / fixed-width integer (or float) type spelling at `i`.
 static TokenType parseTokenType(const std::vector<Token> &toks, size_t i,
                                 size_t limit, size_t &next) {
   TokenType out;
   std::vector<std::string> words;
   size_t k = i;
-  while (k < limit && toks[k].kind == TokKind::Identifier) {
+  while (k < limit) {
+    if (isTriviaTok(toks[k])) {
+      ++k;
+      continue;
+    }
+    if (toks[k].kind != TokKind::Identifier)
+      break;
     const std::string &w = toks[k].text;
     if (isDeclQualifierTok(w)) {
       ++k;
       continue;
     }
+    if (!isBuiltinTypeKeyword(w))
+      break;
     words.push_back(w);
     ++k;
   }
+  while (k < limit && isTriviaTok(toks[k]))
+    ++k;
   next = k;
   if (words.empty())
     return out;
@@ -2515,6 +2535,13 @@ static size_t skipLeadingCasts(const std::string &source, size_t begin,
   return p;
 }
 
+static bool needsIntegerConversionGuard(const TokenType &src,
+                                        const TokenType &dst) {
+  return src.valid && dst.valid && !src.isFloat && !dst.isFloat &&
+         (src.bits > dst.bits ||
+          (src.bits == dst.bits && src.isSigned != dst.isSigned));
+}
+
 static std::vector<CheckedArithmeticSite>
 collectTokenArithmeticSites(const std::string &source) {
   std::vector<Token> toks = lexCPlus(source);
@@ -2522,71 +2549,247 @@ collectTokenArithmeticSites(const std::string &source) {
   if (toks.empty())
     return sites;
 
-  std::map<std::string, TokenType> vars;
-
-  // Phase 1: recover declared types, and implicit
-  // narrowing in simple `TYPE name = identifier;` initializers.
-  for (size_t i = 0; i < toks.size(); ++i) {
-    size_t after = kNPos;
-    TokenType ty = parseTokenType(toks, i, toks.size(), after);
-    if (!ty.valid || after == kNPos || after >= toks.size())
-      continue;
-    size_t n = after;
-    bool isPointer = false;
-    while (n < toks.size() && toks[n].kind == TokKind::Punct &&
-           toks[n].text == "*") {
-      isPointer = true;
-      ++n;
-    }
-    if (n >= toks.size() || toks[n].kind != TokKind::Identifier)
-      continue;
-    // Pointer arithmetic has its own extent-based guard path; never treat a
-    // pointer-typed declarator as an integer variable.
-    if (isPointer)
-      continue;
-    size_t afterName = nextSigTok(toks, n);
-    if (afterName == kNPos || toks[afterName].kind != TokKind::Punct)
-      continue;
-    const std::string &p = toks[afterName].text;
-    if (p != "=" && p != "," && p != ";" && p != "[" && p != ")" &&
-        p != "(")
-      continue;
-    vars[toks[n].text] = ty;
-
-    if (p == "=") {
-      size_t rhs = nextSigTok(toks, afterName);
-      if (rhs == kNPos || toks[rhs].kind != TokKind::Identifier)
+  // Precompute brace/paren matches and mark aggregate (`struct`/`union`/`enum`)
+  // bodies so field declarations do not shadow local/parameter variables.
+  std::vector<size_t> braceMatch(toks.size(), kNPos);
+  std::vector<size_t> parenMatch(toks.size(), kNPos);
+  std::vector<bool> isAggregateBrace(toks.size(), false);
+  {
+    std::vector<size_t> bStack, pStack;
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind != TokKind::Punct)
         continue;
-      // Only a bare identifier has a source type we can prove here.  A
-      // compound RHS (e.g. `char c = a + b`) must be guarded on the *result*,
-      // which is the AST producer's job; guessing from its first token would
-      // narrow the wrong operand.
-      size_t afterRhs = nextSigTok(toks, rhs);
-      if (afterRhs == kNPos || toks[afterRhs].kind != TokKind::Punct ||
-          (toks[afterRhs].text != ";" && toks[afterRhs].text != ","))
-        continue;
-      TokenType src = lookupVar(vars, toks[rhs].text);
-      if (!src.valid || ty.isFloat)
-        continue;
-      CheckedArithmeticSite s;
-      s.begin = toks[rhs].offset;
-      s.op = s.begin;
-      s.opLength = 0;
-      s.end = endOfToken(toks[rhs]);
-      s.bits = ty.bits;
-      s.isSigned = ty.isSigned;
-      s.type = ty.spelling;
-      if (src.isFloat) {
-        // Implicit float -> integer in an initializer: guard the float value.
-        s.kind = CheckedArithmeticSite::Op::FloatToInt;
-      } else {
-        if (src.bits <= ty.bits)
-          continue;
-        s.kind = CheckedArithmeticSite::Op::Narrow;
-        s.srcBits = src.bits;
-        s.srcIsSigned = src.isSigned;
+      if (toks[i].text == "{") {
+        bool agg = false;
+        size_t p1 = prevSigTok(toks, i);
+        if (p1 != kNPos && toks[p1].kind == TokKind::Identifier) {
+          if (toks[p1].text == "struct" || toks[p1].text == "union" ||
+              toks[p1].text == "enum") {
+            agg = true;
+          } else {
+            size_t p2 = prevSigTok(toks, p1);
+            if (p2 != kNPos && toks[p2].kind == TokKind::Identifier &&
+                (toks[p2].text == "struct" || toks[p2].text == "union" ||
+                 toks[p2].text == "enum"))
+              agg = true;
+          }
+        }
+        isAggregateBrace[i] = agg;
+        bStack.push_back(i);
+      } else if (toks[i].text == "}") {
+        if (!bStack.empty()) {
+          braceMatch[bStack.back()] = i;
+          bStack.pop_back();
+        }
+      } else if (toks[i].text == "(") {
+        pStack.push_back(i);
+      } else if (toks[i].text == ")") {
+        if (!pStack.empty()) {
+          parenMatch[pStack.back()] = i;
+          pStack.pop_back();
+        }
       }
-      sites.push_back(std::move(s));
+    }
+  }
+
+  struct ScopedTokenVar {
+    std::string name;
+    TokenType type;
+    size_t startTok;
+    size_t endTok;
+  };
+  std::vector<ScopedTokenVar> scopedVars;
+  auto lookupScopedVar = [&](const std::string &name,
+                             size_t useTok) -> TokenType {
+    size_t bestStart = kNPos;
+    TokenType bestTy;
+    for (const auto &v : scopedVars) {
+      if (v.name == name && v.startTok <= useTok && useTok <= v.endTok &&
+          (bestStart == kNPos || v.startTok >= bestStart)) {
+        bestStart = v.startTok;
+        bestTy = v.type;
+      }
+    }
+    return bestTy;
+  };
+
+  // Phase 1: recover declared types with lexical scope spans, and implicit
+  // integer conversions in simple `TYPE name = identifier;` initializers.
+  {
+    std::vector<size_t> bStack, pStack;
+    auto inAggregateBody = [&]() -> bool {
+      for (size_t b : bStack)
+        if (isAggregateBrace[b])
+          return true;
+      return false;
+    };
+    auto enclosingScopeEnd = [&](size_t fallbackTok) -> size_t {
+      if (!bStack.empty()) {
+        if (!pStack.empty() && pStack.back() > bStack.back()) {
+          size_t kw = prevSigTok(toks, pStack.back());
+          if (kw != kNPos && toks[kw].kind == TokKind::Identifier &&
+              toks[kw].text == "for") {
+            size_t rp = parenMatch[pStack.back()];
+            if (rp != kNPos) {
+              size_t body = nextSigTok(toks, rp);
+              if (body != kNPos && toks[body].kind == TokKind::Punct &&
+                  toks[body].text == "{") {
+                size_t close = braceMatch[body];
+                if (close != kNPos)
+                  return close;
+              } else if (body != kNPos) {
+                size_t semi = findStmtEnd(toks, body);
+                if (semi != kNPos)
+                  return semi;
+              }
+            }
+          }
+        }
+        size_t close = braceMatch[bStack.back()];
+        return close == kNPos ? toks.size() - 1 : close;
+      }
+      if (!pStack.empty()) {
+        size_t rp = parenMatch[pStack.front()];
+        if (rp != kNPos) {
+          size_t body = nextSigTok(toks, rp);
+          if (body != kNPos && toks[body].kind == TokKind::Punct &&
+              toks[body].text == "{") {
+            size_t close = braceMatch[body];
+            return close == kNPos ? toks.size() - 1 : close;
+          }
+          return rp;
+        }
+      }
+      (void)fallbackTok;
+      return toks.size() - 1;
+    };
+
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind == TokKind::Punct) {
+        if (toks[i].text == "{")
+          bStack.push_back(i);
+        else if (toks[i].text == "}" && !bStack.empty())
+          bStack.pop_back();
+        else if (toks[i].text == "(")
+          pStack.push_back(i);
+        else if (toks[i].text == ")" && !pStack.empty())
+          pStack.pop_back();
+        continue;
+      }
+      if (inAggregateBody())
+        continue;
+
+      // Shadow outer/earlier integer variables when a local/param uses a
+      // `struct`/`union`/`enum` type (including pointers to one).
+      if (toks[i].kind == TokKind::Identifier &&
+          (toks[i].text == "struct" || toks[i].text == "union" ||
+           toks[i].text == "enum")) {
+        size_t tag = nextSigTok(toks, i);
+        size_t q = (tag != kNPos && toks[tag].kind == TokKind::Identifier)
+                       ? nextSigTok(toks, tag)
+                       : kNPos;
+        while (q != kNPos && toks[q].kind == TokKind::Punct &&
+               toks[q].text == "*")
+          q = nextSigTok(toks, q);
+        if (q != kNPos && q < toks.size() &&
+            toks[q].kind == TokKind::Identifier) {
+          size_t aq = nextSigTok(toks, q);
+          if (aq != kNPos && toks[aq].kind == TokKind::Punct &&
+              (toks[aq].text == "=" || toks[aq].text == "," ||
+               toks[aq].text == ";" || toks[aq].text == "[" ||
+               toks[aq].text == ")"))
+            scopedVars.push_back(
+                {toks[q].text, TokenType(), q, enclosingScopeEnd(q)});
+        }
+        continue;
+      }
+
+      // Skip mid-specifier keywords/qualifiers (e.g. `int` in `unsigned int`)
+      // so a multi-token type is only parsed once from its first token.
+      size_t prevTok = prevSigTok(toks, i);
+      if (prevTok != kNPos && toks[prevTok].kind == TokKind::Identifier &&
+          (isDeclQualifierTok(toks[prevTok].text) ||
+           isBuiltinTypeKeyword(toks[prevTok].text)))
+        continue;
+
+      size_t after = kNPos;
+      TokenType ty = parseTokenType(toks, i, toks.size(), after);
+      if (!ty.valid || after == kNPos || after >= toks.size())
+        continue;
+      size_t n = after;
+      bool isPointer = false;
+      while (n < toks.size()) {
+        if (isTriviaTok(toks[n])) {
+          ++n;
+          continue;
+        }
+        if (toks[n].kind == TokKind::Punct && toks[n].text == "*") {
+          isPointer = true;
+          ++n;
+          continue;
+        }
+        if (toks[n].kind == TokKind::Identifier &&
+            (toks[n].text == "const" || toks[n].text == "volatile" ||
+             toks[n].text == "restrict")) {
+          ++n;
+          continue;
+        }
+        break;
+      }
+      if (n >= toks.size() || toks[n].kind != TokKind::Identifier)
+        continue;
+      size_t afterName = nextSigTok(toks, n);
+      if (afterName == kNPos || toks[afterName].kind != TokKind::Punct)
+        continue;
+      const std::string &p = toks[afterName].text;
+      if (p != "=" && p != "," && p != ";" && p != "[" && p != ")" &&
+          p != "(")
+        continue;
+      const size_t scopeEnd = enclosingScopeEnd(n);
+      // Pointer declarations record an invalid sentinel TokenType so they
+      // properly shadow any earlier/outer integer variable of the same name.
+      if (isPointer) {
+        scopedVars.push_back({toks[n].text, TokenType(), n, scopeEnd});
+        continue;
+      }
+      scopedVars.push_back({toks[n].text, ty, n, scopeEnd});
+
+      if (p == "=") {
+        size_t rhs = nextSigTok(toks, afterName);
+        if (rhs == kNPos || toks[rhs].kind != TokKind::Identifier)
+          continue;
+        // Only a bare identifier has a source type we can prove here.  A
+        // compound RHS (e.g. `char c = a + b`) must be guarded on the *result*,
+        // which is the AST producer's job; guessing from its first token would
+        // narrow the wrong operand.
+        size_t afterRhs = nextSigTok(toks, rhs);
+        if (afterRhs == kNPos || toks[afterRhs].kind != TokKind::Punct ||
+            (toks[afterRhs].text != ";" && toks[afterRhs].text != ","))
+          continue;
+        TokenType src = lookupScopedVar(toks[rhs].text, rhs);
+        if (!src.valid || ty.isFloat)
+          continue;
+        CheckedArithmeticSite s;
+        s.begin = toks[rhs].offset;
+        s.op = s.begin;
+        s.opLength = 0;
+        s.end = endOfToken(toks[rhs]);
+        s.bits = ty.bits;
+        s.isSigned = ty.isSigned;
+        s.type = ty.spelling;
+        if (src.isFloat) {
+          // Implicit float -> integer in an initializer: guard the float value.
+          s.kind = CheckedArithmeticSite::Op::FloatToInt;
+        } else {
+          if (!needsIntegerConversionGuard(src, ty))
+            continue;
+          s.kind = CheckedArithmeticSite::Op::Narrow;
+          s.srcBits = src.bits;
+          s.srcIsSigned = src.isSigned;
+          s.srcType = src.spelling;
+        }
+        sites.push_back(std::move(s));
+      }
     }
   }
 
@@ -2648,26 +2851,57 @@ collectTokenArithmeticSites(const std::string &source) {
       continue;
     FnSig sig;
     sig.ret = ret;
-    size_t p = nextSigTok(toks, lp + 1);
+    size_t p = nextSigTok(toks, lp);
+    auto advancePastParam = [&](size_t from) {
+      int pd = 0;
+      size_t k = from;
+      while (k < rp) {
+        if (toks[k].kind == TokKind::Punct) {
+          if (toks[k].text == "(" || toks[k].text == "[")
+            ++pd;
+          else if ((toks[k].text == ")" || toks[k].text == "]") && pd > 0)
+            --pd;
+          else if (toks[k].text == "," && pd == 0)
+            break;
+        }
+        ++k;
+      }
+      return nextSigTok(toks, k);
+    };
     while (p != kNPos && p < rp) {
       size_t pa = kNPos;
       TokenType pt = parseTokenType(toks, p, rp, pa);
       if (!pt.valid) {
         sig.params.push_back(TokenType()); // keep argument indices aligned
-        p = nextSigTok(toks, p);
+        p = advancePastParam(p);
         continue;
       }
       size_t q = pa;
-      while (q < rp && toks[q].kind == TokKind::Punct &&
-             toks[q].text == "*") ++q;
-      if (q < rp && toks[q].kind == TokKind::Identifier) {
-        sig.params.push_back(pt);
-        vars[toks[q].text] = pt; // parameter is a known-typed variable too
+      bool ptrParam = false;
+      while (q < rp) {
+        if (isTriviaTok(toks[q])) {
+          ++q;
+          continue;
+        }
+        if (toks[q].kind == TokKind::Punct && toks[q].text == "*") {
+          ptrParam = true;
+          ++q;
+          continue;
+        }
+        if (toks[q].kind == TokKind::Identifier &&
+            (toks[q].text == "const" || toks[q].text == "volatile" ||
+             toks[q].text == "restrict")) {
+          ++q;
+          continue;
+        }
+        break;
       }
-      p = q;
-      while (p < rp && !(toks[p].kind == TokKind::Punct &&
-                         toks[p].text == ",")) ++p;
-      p = nextSigTok(toks, p);
+      TokenType paramTy = ptrParam ? TokenType() : pt;
+      sig.params.push_back(paramTy);
+      if (q < rp && toks[q].kind == TokKind::Identifier) {
+        scopedVars.push_back({toks[q].text, paramTy, q, close});
+      }
+      p = advancePastParam(q);
     }
     fnSigs[name] = sig;
     fnBodies.emplace_back(toks[body].offset, endOfToken(toks[close]), ret);
@@ -2691,13 +2925,14 @@ collectTokenArithmeticSites(const std::string &source) {
 
     const std::string op = tk.text;
 
-    // Helper: a bare identifier `value` converted to a known narrower type.
+    // Helper: a bare identifier `value` converted to a known narrower or
+    // sign-changing destination type.
     auto emitNarrowAt = [&](size_t value, const TokenType &dst) {
       if (value == kNPos || toks[value].kind != TokKind::Identifier ||
           !dst.valid || dst.isFloat)
         return;
-      TokenType src = lookupVar(vars, toks[value].text);
-      if (!src.valid || src.isFloat || src.bits <= dst.bits)
+      TokenType src = lookupScopedVar(toks[value].text, value);
+      if (!needsIntegerConversionGuard(src, dst))
         return;
       CheckedArithmeticSite s;
       s.kind = CheckedArithmeticSite::Op::Narrow;
@@ -2726,18 +2961,22 @@ collectTokenArithmeticSites(const std::string &source) {
           toks[lhs].kind == TokKind::Identifier &&
           toks[afterRhs].kind == TokKind::Punct &&
           (toks[afterRhs].text == ";" || toks[afterRhs].text == ","))
-        emitNarrowAt(rhs, lookupVar(vars, toks[lhs].text));
+        emitNarrowAt(rhs, lookupScopedVar(toks[lhs].text, lhs));
     }
 
     // Implicit narrowing in `return x;` against the enclosing function's
     // return type.
     if (tk.kind == TokKind::Identifier && op == "return") {
       size_t value = nextSigTok(toks, i);
-      for (const auto &b : fnBodies) {
-        if (tk.offset < std::get<0>(b) || tk.offset >= std::get<1>(b))
-          continue;
-        emitNarrowAt(value, std::get<2>(b));
-        break;
+      size_t afterVal = value == kNPos ? kNPos : nextSigTok(toks, value);
+      if (afterVal != kNPos && toks[afterVal].kind == TokKind::Punct &&
+          toks[afterVal].text == ";") {
+        for (const auto &b : fnBodies) {
+          if (tk.offset < std::get<0>(b) || tk.offset >= std::get<1>(b))
+            continue;
+          emitNarrowAt(value, std::get<2>(b));
+          break;
+        }
       }
     }
 
@@ -2764,135 +3003,172 @@ collectTokenArithmeticSites(const std::string &source) {
                             toks[after].text == "{";
           if (!definition && rp != kNPos) {
             size_t arg = 0;
-            int depth = 0;
             size_t t = lp + 1;
             while (t < rp) {
-              if (isTriviaTok(toks[t])) { ++t; continue; }
-              if (toks[t].kind == TokKind::Punct && toks[t].text == ",") {
-                ++arg; ++t; continue; // empty / already-consumed argument
+              while (t < rp && isTriviaTok(toks[t]))
+                ++t;
+              if (t >= rp)
+                break;
+              size_t argStart = t;
+              size_t argEnd = rp;
+              int depth = 0;
+              for (size_t q = t; q < rp; ++q) {
+                if (isTriviaTok(toks[q]) || toks[q].kind != TokKind::Punct)
+                  continue;
+                const std::string &pt = toks[q].text;
+                if (pt == "(" || pt == "[" || pt == "{") {
+                  ++depth;
+                } else if (pt == ")" || pt == "]" || pt == "}") {
+                  if (depth > 0)
+                    --depth;
+                } else if (pt == "," && depth == 0) {
+                  argEnd = q;
+                  break;
+                }
               }
-              if (toks[t].kind == TokKind::Punct && toks[t].text == "(") { ++depth; ++t; continue; }
-              if (toks[t].kind == TokKind::Punct && toks[t].text == ")") {
-                if (depth == 0) break;
-                --depth; ++t; continue;
+              if (arg < fit->second.params.size() &&
+                  toks[argStart].kind == TokKind::Identifier) {
+                size_t afterArg = nextSigTok(toks, argStart);
+                if (afterArg == kNPos || afterArg >= argEnd)
+                  emitNarrowAt(argStart, fit->second.params[arg]);
               }
-              if (depth == 0) {
-                if (arg < fit->second.params.size())
-                  emitNarrowAt(t, fit->second.params[arg]);
-                ++arg;
-                // Skip the rest of this argument up to a depth-0 ',' or ')'.
-                while (t < rp &&
-                       !(toks[t].kind == TokKind::Punct && toks[t].text == ",") &&
-                       !(toks[t].kind == TokKind::Punct && toks[t].text == ")"))
-                  ++t;
-                continue;
-              }
-              ++t;
+              ++arg;
+              t = (argEnd < rp) ? argEnd + 1 : rp;
             }
           }
         }
       }
     }
 
-    // Allocation extent: malloc(count * size) can wrap before the allocator
-    // sees the request.  Guard *every* depth-0 multiplication in the first
-    // argument, including nested chains (`n * size * 2`) and a multiplicative
-    // term inside a larger expression (`n * size + hdr`).  Each guard spans the
-    // whole left-associative prefix so an intermediate product that fits but
-    // whose extension overflows is still caught.
+    // Allocation extent: malloc(count * size), calloc(a * b, c * d),
+    // realloc(ptr, count * size) can wrap before the allocator sees the
+    // request.  Guard every depth-0 multiplication in the byte-size argument(s).
     if (tk.kind == TokKind::Identifier &&
         (op == "malloc" || op == "calloc" || op == "realloc")) {
       size_t lp = nextSigTok(toks, i);
       if (lp != kNPos && toks[lp].kind == TokKind::Punct &&
           toks[lp].text == "(") {
+        std::vector<std::pair<size_t, size_t>> callArgs;
         int par = 0;
-        size_t argStart = kNPos, argEnd = kNPos;
+        size_t curStart = kNPos;
         for (size_t k = lp + 1; k < toks.size(); ++k) {
           const Token &a = toks[k];
           if (isTriviaTok(a))
             continue;
-          if (a.kind == TokKind::Punct && a.text == "(") { ++par; continue; }
-          if (a.kind == TokKind::Punct && a.text == ")") {
-            if (par == 0) { argEnd = k; break; }
+          if (a.kind == TokKind::Punct &&
+              (a.text == "(" || a.text == "[" || a.text == "{")) {
+            if (curStart == kNPos)
+              curStart = k;
+            ++par;
+            continue;
+          }
+          if (a.kind == TokKind::Punct &&
+              (a.text == ")" || a.text == "]" || a.text == "}")) {
+            if (par == 0) {
+              if (curStart != kNPos)
+                callArgs.emplace_back(curStart, k);
+              break;
+            }
             --par;
             continue;
           }
           if (par != 0)
             continue;
-          if (a.kind == TokKind::Punct && a.text == ",") { argEnd = k; break; }
-          if (argStart == kNPos)
-            argStart = k;
+          if (a.kind == TokKind::Punct && a.text == ",") {
+            callArgs.emplace_back(curStart == kNPos ? k : curStart, k);
+            curStart = kNPos;
+            continue;
+          }
+          if (curStart == kNPos)
+            curStart = k;
         }
-        // Significant tokens at nesting depth zero of the first argument.
-        // A parenthesised group is kept as a single factor (its '(' and ')'
-        // are recorded); tokens inside it are not separate operators here.
-        std::vector<size_t> d0;
-        if (argStart != kNPos && argEnd != kNPos && argEnd > argStart) {
-          int depth = 0;
-          for (size_t k = argStart; k < argEnd; ++k) {
-            if (isTriviaTok(toks[k]))
+        auto scanAllocArg = [&](size_t argIdx) {
+          if (argIdx >= callArgs.size())
+            return;
+          const size_t argStart = callArgs[argIdx].first;
+          const size_t argEnd = callArgs[argIdx].second;
+          if (argStart == kNPos || argEnd == kNPos || argEnd <= argStart)
+            return;
+          // Significant tokens at nesting depth zero of this argument.
+          // A parenthesised group is kept as a single factor (its '(' and ')'
+          // are recorded); tokens inside it are not separate operators here.
+          std::vector<size_t> d0;
+          {
+            int depth = 0;
+            for (size_t k = argStart; k < argEnd; ++k) {
+              if (isTriviaTok(toks[k]))
+                continue;
+              bool open = false, close = false;
+              if (toks[k].kind == TokKind::Punct) {
+                const std::string &p = toks[k].text;
+                open = p == "(" || p == "[" || p == "{";
+                close = p == ")" || p == "]" || p == "}";
+              }
+              if (close && depth > 0) --depth;
+              if (depth == 0) d0.push_back(k);
+              if (open) ++depth;
+            }
+          }
+          auto isLowPrec = [](const Token &t) {
+            if (t.kind != TokKind::Punct)
+              return false;
+            static const std::set<std::string> kBoundary = {
+                "+",  "-",  "<<", ">>", "<",  ">",  "<=", ">=",
+                "==", "!=", "&",  "^",  "|",  "&&", "||", "?", ":"};
+            return kBoundary.count(t.text) != 0;
+          };
+          auto isMulOp = [](const Token &t) {
+            return t.kind == TokKind::Punct &&
+                   (t.text == "*" || t.text == "/" || t.text == "%");
+          };
+          for (size_t d = 0; d < d0.size(); ++d) {
+            const size_t k = d0[d];
+            if (toks[k].kind != TokKind::Punct || toks[k].text != "*" ||
+                d == 0 || d + 1 >= d0.size())
               continue;
-            bool open = false, close = false;
-            if (toks[k].kind == TokKind::Punct) {
-              const std::string &p = toks[k].text;
-              open = p == "(" || p == "[" || p == "{";
-              close = p == ")" || p == "]" || p == "}";
+            // A `*` is binary multiplication only when it separates two complete
+            // factors.  In `malloc(sizeof *p)` it is a unary dereference.
+            if (!canEndFactor(toks[d0[d - 1]]) ||
+                !canStartFactor(toks[d0[d + 1]]))
+              continue;
+            // Left boundary: first token after the nearest low-precedence
+            // separator.  Multiplicative operators do NOT reset it, so the
+            // k-th `*` guard covers the whole left-associative prefix.
+            size_t beginIdx = d0[0];
+            for (size_t q = d; q > 0; --q)
+              if (isLowPrec(toks[d0[q - 1]])) { beginIdx = d0[q]; break; }
+            // Right boundary: last significant token before the next
+            // multiplicative or low-precedence operator at this level.
+            size_t endIdx = kNPos;
+            for (size_t q = d + 1; q < d0.size(); ++q)
+              if (isMulOp(toks[d0[q]]) || isLowPrec(toks[d0[q]])) {
+                endIdx = prevSigTok(toks, d0[q]);
+                break;
+              }
+            if (endIdx == kNPos) {
+              endIdx = argEnd;
+              while (endIdx > argStart && isTriviaTok(toks[endIdx - 1]))
+                --endIdx;
+              if (endIdx > argStart) --endIdx;
             }
-            if (close && depth > 0) --depth;
-            if (depth == 0) d0.push_back(k);
-            if (open) ++depth;
+            if (endIdx == kNPos || endIdx <= k)
+              continue;
+            CheckedArithmeticSite s;
+            s.kind = CheckedArithmeticSite::Op::AllocExtent;
+            s.begin = toks[beginIdx].offset;
+            s.op = toks[k].offset;
+            s.opLength = toks[k].text.size();
+            s.end = endOfToken(toks[endIdx]);
+            sites.push_back(std::move(s));
           }
-        }
-        auto isLowPrec = [](const Token &t) {
-          if (t.kind != TokKind::Punct)
-            return false;
-          static const std::set<std::string> kBoundary = {
-              "+",  "-",  "<<", ">>", "<",  ">",  "<=", ">=",
-              "==", "!=", "&",  "^",  "|",  "&&", "||", "?", ":"};
-          return kBoundary.count(t.text) != 0;
         };
-        auto isMulOp = [](const Token &t) {
-          return t.kind == TokKind::Punct &&
-                 (t.text == "*" || t.text == "/" || t.text == "%");
-        };
-        for (size_t d = 0; d < d0.size(); ++d) {
-          const size_t k = d0[d];
-          if (toks[k].kind != TokKind::Punct || toks[k].text != "*" ||
-              d == 0 || d + 1 >= d0.size())
-            continue;
-          // A `*` is binary multiplication only when it separates two complete
-          // factors.  In `malloc(sizeof *p)` it is a unary dereference.
-          if (!canEndFactor(toks[d0[d - 1]]) ||
-              !canStartFactor(toks[d0[d + 1]]))
-            continue;
-          // Left boundary: first token after the nearest low-precedence
-          // separator.  Multiplicative operators do NOT reset it, so the k-th
-          // `*` guard covers the whole left-associative prefix.
-          size_t beginIdx = d0[0];
-          for (size_t q = d; q > 0; --q)
-            if (isLowPrec(toks[d0[q - 1]])) { beginIdx = d0[q]; break; }
-          // Right boundary: last significant token before the next
-          // multiplicative or low-precedence operator at this level.
-          size_t endIdx = kNPos;
-          for (size_t q = d + 1; q < d0.size(); ++q)
-            if (isMulOp(toks[d0[q]]) || isLowPrec(toks[d0[q]])) {
-              endIdx = prevSigTok(toks, d0[q]);
-              break;
-            }
-          if (endIdx == kNPos) {
-            endIdx = argEnd;
-            while (endIdx > argStart && isTriviaTok(toks[endIdx - 1])) --endIdx;
-            if (endIdx > argStart) --endIdx;
-          }
-          if (endIdx == kNPos || endIdx <= k)
-            continue;
-          CheckedArithmeticSite s;
-          s.kind = CheckedArithmeticSite::Op::AllocExtent;
-          s.begin = toks[beginIdx].offset;
-          s.op = toks[k].offset;
-          s.opLength = toks[k].text.size();
-          s.end = endOfToken(toks[endIdx]);
-          sites.push_back(std::move(s));
+        if (op == "malloc") {
+          scanAllocArg(0);
+        } else if (op == "realloc") {
+          scanAllocArg(1);
+        } else {
+          scanAllocArg(0);
+          scanAllocArg(1);
         }
       }
       continue;
@@ -2902,8 +3178,9 @@ collectTokenArithmeticSites(const std::string &source) {
         (op == "+=" || op == "-=" || op == "*=" || op == "/=" ||
          op == "%=" || op == "<<=" || op == ">>=")) {
       size_t lhs = prevSigTok(toks, i);
-      TokenType ty = lookupVar(vars, lhs == kNPos ? std::string()
-                                                 : toks[lhs].text);
+      TokenType ty = lhs == kNPos
+                         ? TokenType()
+                         : lookupScopedVar(toks[lhs].text, lhs);
       if (!ty.valid || ty.isFloat)
         continue;
       if (!ty.isSigned && (op == "+=" || op == "-=" || op == "*="))
@@ -2951,8 +3228,9 @@ collectTokenArithmeticSites(const std::string &source) {
       } else if (nxt != kNPos && toks[nxt].kind == TokKind::Identifier) {
         target = nxt;
       }
-      TokenType ty = lookupVar(vars, target == kNPos ? std::string()
-                                                    : toks[target].text);
+      TokenType ty = target == kNPos
+                         ? TokenType()
+                         : lookupScopedVar(toks[target].text, target);
       if (!ty.valid || ty.isFloat || !ty.isSigned)
         continue;
       CheckedArithmeticSite s;
@@ -2987,7 +3265,7 @@ collectTokenArithmeticSites(const std::string &source) {
       size_t nxt = nextSigTok(toks, i);
       if (nxt == kNPos || toks[nxt].kind != TokKind::Identifier)
         continue;
-      TokenType ty = lookupVar(vars, toks[nxt].text);
+      TokenType ty = lookupScopedVar(toks[nxt].text, nxt);
       if (!ty.valid || ty.isFloat)
         continue;
       CheckedArithmeticSite s;
@@ -3017,7 +3295,7 @@ collectTokenArithmeticSites(const std::string &source) {
       size_t val = nextSigTok(toks, after);
       if (val == kNPos || toks[val].kind != TokKind::Identifier)
         continue;
-      TokenType src = lookupVar(vars, toks[val].text);
+      TokenType src = lookupScopedVar(toks[val].text, val);
       if (!src.valid)
         continue;
       CheckedArithmeticSite s;
@@ -5487,7 +5765,7 @@ std::string instrumentDynamicArrayBounds(
         "    uint64_t t = sv & m;\n"
         "    if (ds && ((t >> (db - 1)) & 1u)) t |= ~m;\n"
         "    if (t == sv) return (int64_t)t;\n"
-        "  } else if (sv == v) {\n"
+        "  } else if (sv == v && (ss == ds || !((sv >> 63) & 1u))) {\n"
         "    return (int64_t)v;\n"
         "  }\n"
         "  return __cplus_checked_narrow_i64(v, sb, ss, db, ds);\n"
