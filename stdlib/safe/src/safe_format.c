@@ -149,7 +149,10 @@ static int fmt_check_dest_bounds(const char *api, const char *dest, size_t dmax,
     }
     {
         size_t tracked = cplus_safe_ptr_size(dest);
-        size_t cap = tracked > 0 ? tracked : (known_dmax != (size_t)-1 ? known_dmax : 0);
+        size_t remaining = cplus_safe_remaining_capacity(dest);
+        size_t cap = remaining > 0 ? remaining :
+                     (tracked > 0 ? tracked :
+                      (known_dmax != (size_t)-1 ? known_dmax : 0));
         if (cap > 0 && dmax > cap) {
             return fmt_violation(api, "format dmax exceeds destination buffer capacity");
         }
