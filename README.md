@@ -238,8 +238,8 @@ measurement instead of equivalence claims.
 
 ## Design provenance
 
-The scoped-memory design is inspired by Fil-C, TrapC, Rust and the Goose-Lang
-(`aardappel/goose`) data-stack model. The name and ideas appear only here in
+The scoped-memory design is inspired by Fil-C, TrapC, Rust and the the inspiration language-Lang
+(`aardappel/scoped`) data-stack model. The name and ideas appear only here in
 this README; library code, tests and docs use neutral names such as
 `stdlib/scoped_mem.hp`. No upstream source was copied, and this is not a claim
-of Rust/Goose equivalence or 100% memory safety.
+of Rust/the inspiration language equivalence or 100% memory safety.

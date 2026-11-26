@@ -167,7 +167,7 @@ int main(void) {
     for (t = 0; t < 20; ++t) {
         if (t == 5) vy = 32;
         vy -= 4; py += vy;
-        if (py < ground) { py = ground; vy = 0; }
+        if (py <= ground) { py = ground; vy = 0; }
     }
     move_ok = (py == ground && vy == 0);
 

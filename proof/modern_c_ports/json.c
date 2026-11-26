@@ -323,7 +323,7 @@ int main(void) {
     Buf pretty, compact;
     Node *authors;
 
-    (void)fails; (void)report;
+    (void)fails; (void)report; (void)cmp_int; /* shared common.h helpers */
 
     memcpy(input, doc, doclen);
     memset(input + doclen, ' ', 470 - doclen);

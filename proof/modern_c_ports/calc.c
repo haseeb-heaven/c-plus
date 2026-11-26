@@ -205,7 +205,7 @@ int main(void) {
     };
     char out[64], err[80];
 
-    (void)fails; (void)report;
+    (void)fails; (void)report; (void)cmp_int; /* shared common.h helpers */
     vars = scoped_take(sizeof(struct Var) * 16);
     nvars = 0;
 

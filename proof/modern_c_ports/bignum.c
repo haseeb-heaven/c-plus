@@ -108,7 +108,7 @@ int main(void) {
     char s[1100];
     int digits;
 
-    (void)fails; (void)report; /* common.h is shared by all ports */
+    (void)fails; (void)report; (void)cmp_int; /* shared common.h helpers */
     mark = scoped_mark();
     fact = scoped_take(sizeof(Big));
     a = scoped_take(sizeof(Big));
