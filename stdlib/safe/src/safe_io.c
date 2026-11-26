@@ -12,115 +12,123 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Bounded stream-identity caches with fail-closed growth policy.
+/* Stream-identity caches used for double-close/UAF protection and for the
+ * open-stream diagnostic count.
  *
- * Each cache is a fixed-size open-addressed hash table.  Deletion writes a
+ * Each cache is an open-addressed hash table that grows dynamically (the same
+ * policy as the checked allocator's metadata table).  Deletion writes a
  * tombstone (never NULL) so a probe chain stays intact: a lookup must skip
  * tombstones and stop only at a never-used (NULL) slot.  Insertion reuses the
- * first tombstone it passes, and compacts the table when it has no empty slot
- * left, so normal churn does not consume the fixed capacity.
+ * first tombstone it passes; when the load INCLUDING tombstones would exceed
+ * 75%, the table is grown to the next power of two and every live entry is
+ * reinserted (which also clears the tombstones).
  *
- * Capacity policy (documented): when a table has no free slot AND no
- * tombstone to reclaim, registration is REFUSED (errno = EMFILE) rather than
- * evicting an arbitrary marker.  Evicting a double-close marker could let a
- * second close reach host fclose() on a freed FILE*.  The caller of a refused
- * registration fails the whole operation; no host fclose() is attempted for
- * a stream whose closed marker could not be recorded. */
-#define STREAM_CACHE_SLOTS 512u
+ * A closed marker is essential state: it is what makes a second fclose_s()
+ * refuse instead of reaching host fclose() on a freed FILE*.  It is therefore
+ * never evicted to make room.  Registration is refused (errno = EMFILE) ONLY
+ * when growing the table fails for lack of memory; a refused close never
+ * calls host fclose(), so the guard itself never leaks a stream. */
+#define STREAM_CACHE_INITIAL_SLOTS 512u
+
+typedef struct {
+    FILE **slots;       /* NULL = never used, CACHE_TOMBSTONE = deleted */
+    size_t cap;         /* power of two, or 0 when unallocated */
+    size_t count;       /* live entries */
+    size_t tombstones;  /* deleted entries awaiting reuse/compaction */
+} stream_table;
 
 static pthread_mutex_t g_io_lock = PTHREAD_MUTEX_INITIALIZER;
-static FILE *g_live_streams[STREAM_CACHE_SLOTS];
-static FILE *g_closed_streams[STREAM_CACHE_SLOTS];
+static stream_table g_live_streams;    /* zero-initialized */
+static stream_table g_closed_streams;  /* zero-initialized */
 
 /* Deletion marker: address of a private, never-dereferenced object.  It can
  * never equal a host-allocated FILE* and is distinct from NULL ("never used"). */
 static FILE g_cache_tombstone;
 #define CACHE_TOMBSTONE (&g_cache_tombstone)
 
-static size_t g_live_count;
-static size_t g_live_tombstones;
-static size_t g_closed_count;
-static size_t g_closed_tombstones;
-
-static size_t hash_stream(const FILE *f) {
+static size_t hash_stream(const FILE *f, size_t cap) {
     uintptr_t x = (uintptr_t)f;
     x ^= x >> 33;
     x *= (uintptr_t)0xff51afd7ed558ccdULL;
     x ^= x >> 33;
-    return (size_t)(x & (STREAM_CACHE_SLOTS - 1u));
+    return (size_t)(x & (cap - 1u));
 }
 
 /* Lookup must skip tombstones: stopping at one would hide entries inserted
- * past it and is the root cause of the historical double-close UAF. */
-static size_t stream_find(FILE **table, const FILE *f) {
-    size_t mask = STREAM_CACHE_SLOTS - 1u;
-    size_t i;
-    if (!f) return STREAM_CACHE_SLOTS;
-    i = hash_stream(f);
-    for (size_t n = 0; n < STREAM_CACHE_SLOTS; ++n) {
-        if (table[i] == NULL) return STREAM_CACHE_SLOTS;
-        if (table[i] == f) return i;
-        i = (i + 1u) & mask;
+ * past it and is the root cause of the historical double-close UAF.  Returns
+ * t->cap for "not found" (a valid slot index is always < cap). */
+static size_t stream_find(const stream_table *t, const FILE *f) {
+    size_t i, n;
+    if (!f || t->cap == 0) return t->cap;
+    i = hash_stream(f, t->cap);
+    for (n = 0; n < t->cap; ++n) {
+        FILE *v = t->slots[i];
+        if (v == NULL) return t->cap;
+        if (v == f) return i;
+        i = (i + 1u) & (t->cap - 1u);
     }
-    return STREAM_CACHE_SLOTS;
+    return t->cap;
 }
 
-/* Insert into a table known to contain no tombstones (used when compacting). */
-static void stream_insert_raw(FILE **table, FILE *f) {
-    size_t mask = STREAM_CACHE_SLOTS - 1u;
-    size_t i = hash_stream(f);
-    while (table[i] != NULL) i = (i + 1u) & mask;
-    table[i] = f;
-}
-
-static void stream_compact(FILE **table, size_t *tombstones) {
-    FILE *fresh[STREAM_CACHE_SLOTS];
-    memset(fresh, 0, sizeof fresh);
-    for (size_t i = 0; i < STREAM_CACHE_SLOTS; ++i) {
-        FILE *v = table[i];
-        if (v != NULL && v != CACHE_TOMBSTONE) stream_insert_raw(fresh, v);
+/* Grow (and compact) when the load including tombstones would exceed 75%, so
+ * a probe sequence always terminates at a NULL slot.  Returns 1 on success,
+ * 0 on allocation failure (caller fails closed rather than evicting a marker). */
+static int stream_reserve(stream_table *t) {
+    size_t used, ncap, k;
+    FILE **fresh;
+    used = t->count + t->tombstones;
+    if (t->cap != 0 && (used + 1u) * 4u <= t->cap * 3u) return 1;
+    if (t->cap > SIZE_MAX / 2u) return 0;
+    ncap = t->cap ? t->cap * 2u : STREAM_CACHE_INITIAL_SLOTS;
+    if (ncap > SIZE_MAX / sizeof(*fresh)) return 0;
+    fresh = (FILE **)calloc(ncap, sizeof(*fresh));
+    if (!fresh) return 0;
+    for (k = 0; k < t->cap; ++k) {
+        FILE *v = t->slots[k];
+        if (v != NULL && v != CACHE_TOMBSTONE) {
+            size_t i = hash_stream(v, ncap);
+            while (fresh[i] != NULL) i = (i + 1u) & (ncap - 1u);
+            fresh[i] = v;
+        }
     }
-    memcpy(table, fresh, sizeof fresh);
-    *tombstones = 0u;
-    /* Occupied (live) count is unchanged by compaction. */
+    free(t->slots);
+    t->slots = fresh;
+    t->cap = ncap;
+    t->tombstones = 0u; /* compaction drops all tombstones; count unchanged */
+    return 1;
 }
 
-/* Returns 1 on success (including already-present), 0 when the table is at
- * its documented capacity and the caller must fail closed. */
-static int stream_add(FILE **table, size_t *count, size_t *tombstones, FILE *f) {
-    size_t mask = STREAM_CACHE_SLOTS - 1u;
-    size_t i, first_tomb = STREAM_CACHE_SLOTS;
+/* Returns 1 on success (including already-present), 0 only when the table
+ * could not be grown (OOM) -- never because it hit a fixed capacity. */
+static int stream_add(stream_table *t, FILE *f) {
+    size_t i, first_tomb, n;
     if (!f) return 0;
-    i = hash_stream(f);
-    for (size_t n = 0; n < STREAM_CACHE_SLOTS; ++n) {
-        FILE *v = table[i];
+    if (!stream_reserve(t)) return 0;
+    i = hash_stream(f, t->cap);
+    first_tomb = t->cap;
+    for (n = 0; n < t->cap; ++n) {
+        FILE *v = t->slots[i];
         if (v == f) return 1;
         if (v == CACHE_TOMBSTONE) {
-            if (first_tomb == STREAM_CACHE_SLOTS) first_tomb = i;
+            if (first_tomb == t->cap) first_tomb = i;
         } else if (v == NULL) {
-            size_t at = (first_tomb != STREAM_CACHE_SLOTS) ? first_tomb : i;
-            if (first_tomb != STREAM_CACHE_SLOTS) --*tombstones;
-            table[at] = f;
-            ++*count;
+            size_t at = (first_tomb != t->cap) ? first_tomb : i;
+            if (first_tomb != t->cap) --t->tombstones;
+            t->slots[at] = f;
+            ++t->count;
             return 1;
         }
-        i = (i + 1u) & mask;
+        i = (i + 1u) & (t->cap - 1u);
     }
-    if (*tombstones != 0u) {
-        stream_compact(table, tombstones);
-        stream_insert_raw(table, f);
-        ++*count;
-        return 1;
-    }
-    return 0; /* full: never overwrite an existing marker */
+    return 0; /* unreachable: reserve() guarantees at least one NULL slot */
 }
 
-static int stream_remove(FILE **table, size_t *count, size_t *tombstones, FILE *f) {
-    size_t i = stream_find(table, f);
-    if (i == STREAM_CACHE_SLOTS) return 0;
-    table[i] = CACHE_TOMBSTONE;
-    --*count;
-    ++*tombstones;
+static int stream_remove(stream_table *t, FILE *f) {
+    size_t i = stream_find(t, f);
+    if (i == t->cap) return 0;
+    t->slots[i] = CACHE_TOMBSTONE;
+    --t->count;
+    ++t->tombstones;
     return 1;
 }
 
@@ -131,7 +139,7 @@ int cplus_io_stream_is_closed(const FILE *stream) {
     int closed;
     if (!stream) return 0;
     pthread_mutex_lock(&g_io_lock);
-    closed = stream_find(g_closed_streams, stream) != STREAM_CACHE_SLOTS;
+    closed = stream_find(&g_closed_streams, stream) != g_closed_streams.cap;
     pthread_mutex_unlock(&g_io_lock);
     return closed;
 }
@@ -143,7 +151,7 @@ int cplus_safe_stream_was_closed(const FILE *stream) {
 size_t cplus_safe_open_stream_count(void) {
     size_t live;
     pthread_mutex_lock(&g_io_lock);
-    live = g_live_count;
+    live = g_live_streams.count;
     pthread_mutex_unlock(&g_io_lock);
     return live;
 }
@@ -157,7 +165,7 @@ size_t cplus_safe_open_stream_count(void) {
  * by __builtin_object_size for the unprefixed format-style macros).  A freed
  * buffer is refused even when its size metadata is still cached. */
 static int io_check_buf(const char *api, const void *buf, size_t bmax) {
-    size_t tracked;
+    size_t remaining;
     if (!buf) return 0; /* the existing NULL-argument path owns this case */
     if (cplus_safe_ptr_was_freed(buf)) {
         errno = EINVAL;
@@ -165,10 +173,14 @@ static int io_check_buf(const char *api, const void *buf, size_t bmax) {
         cplus_safe_stat_record(api, 0);
         return -1;
     }
-    tracked = cplus_safe_ptr_size(buf);
-    if (tracked > 0 && bmax > tracked) {
+    remaining = cplus_safe_remaining_capacity(buf);
+    /* (size_t)-1 means "no tracked block contains this address": stack/static
+     * buffers have no allocator capacity to enforce here (they remain bounded
+     * by the Annex K count clamp).  Never let that sentinel act as a real,
+     * unbounded capacity -- that is the safe_format.c sentinel bug. */
+    if (remaining != (size_t)-1 && bmax > remaining) {
         errno = EINVAL;
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "I/O bmax exceeds tracked buffer capacity");
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "I/O bmax exceeds remaining heap capacity");
         cplus_safe_stat_record(api, 0);
         return -1;
     }
@@ -209,15 +221,15 @@ FILE *cplus_fopen_s(const char *name, const char *mode) {
         return NULL;
     }
     pthread_mutex_lock(&g_io_lock);
-    if (!stream_add(g_live_streams, &g_live_count, &g_live_tombstones, f)) {
+    if (!stream_add(&g_live_streams, f)) {
         pthread_mutex_unlock(&g_io_lock);
         fclose(f); /* do not hand out an untrackable stream */
         errno = EMFILE;
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fopen_s", "live table full");
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fopen_s", "live table growth failed");
         cplus_safe_stat_record("fopen_s", 0);
         return NULL;
     }
-    stream_remove(g_closed_streams, &g_closed_count, &g_closed_tombstones, f);
+    stream_remove(&g_closed_streams, f);
     pthread_mutex_unlock(&g_io_lock);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fopen_s", "ok");
     cplus_safe_stat_record("fopen_s", 1);
@@ -232,8 +244,8 @@ int cplus_fclose_s(FILE *stream) {
         return EOF;
     }
     pthread_mutex_lock(&g_io_lock);
-    in_live = stream_find(g_live_streams, stream) != STREAM_CACHE_SLOTS;
-    in_closed = stream_find(g_closed_streams, stream) != STREAM_CACHE_SLOTS;
+    in_live = stream_find(&g_live_streams, stream) != g_live_streams.cap;
+    in_closed = stream_find(&g_closed_streams, stream) != g_closed_streams.cap;
     /* Refuse whenever a closed marker exists.  In particular an entry in
      * BOTH tables is an inconsistent state and must fail closed rather than
      * fall through to host fclose() on a freed FILE* (the historical UAF). */
@@ -244,18 +256,17 @@ int cplus_fclose_s(FILE *stream) {
         cplus_safe_stat_record("fclose_s", 0);
         return EOF;
     }
-    /* Record the close marker BEFORE calling fclose().  If the table is at
-     * capacity we refuse the close entirely: leaving no marker would allow a
-     * later double close to reach host fclose(). */
-    if (!stream_add(g_closed_streams, &g_closed_count, &g_closed_tombstones, stream)) {
+    /* Record the close marker BEFORE calling fclose().  The table grows on
+     * demand; only a failed allocation can stop us, and then we refuse the
+     * close entirely so no later double close can reach host fclose(). */
+    if (!stream_add(&g_closed_streams, stream)) {
         pthread_mutex_unlock(&g_io_lock);
         errno = EMFILE;
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fclose_s", "closed table full");
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fclose_s", "closed table growth failed");
         cplus_safe_stat_record("fclose_s", 0);
         return EOF;
     }
-    if (in_live)
-        stream_remove(g_live_streams, &g_live_count, &g_live_tombstones, stream);
+    if (in_live) stream_remove(&g_live_streams, stream);
     pthread_mutex_unlock(&g_io_lock);
     rc = fclose(stream);
     if (rc != 0) {
@@ -301,8 +312,8 @@ size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, F
 
 static int io_checked_guard(const char *api, const void *buf, size_t req_bytes,
                             size_t known_bmax, const FILE *stream) {
-    size_t tracked;
-    size_t cap;
+    size_t remaining, tracked, cap;
+    int known;
     if (cplus_io_stream_is_closed(stream)) {
         errno = EBADF;
         cplus_safe_stat_record(api, 0);
@@ -315,9 +326,30 @@ static int io_checked_guard(const char *api, const void *buf, size_t req_bytes,
         cplus_runtime_violation(api, "use-after-free detected in I/O buffer");
         return -1;
     }
+    /* Resolve a PROVABLE capacity.  Remaining bytes of the tracked block
+     * cover interior pointers, including a genuine one-past-the-end address
+     * (cap == 0).  (size_t)-1 is explicitly "untracked" and must fall through
+     * to the base-size / caller-supplied bound instead of being used as an
+     * unbounded capacity (the safe_format.c sentinel bug).  Keep "known but
+     * zero" distinct from "unknown": a proven capacity of 0 must reject any
+     * positive request, while unknown capacity keeps the pre-existing policy
+     * of deferring to the Annex K count clamp. */
+    remaining = cplus_safe_remaining_capacity(buf);
     tracked = cplus_safe_ptr_size(buf);
-    cap = tracked > 0 ? tracked : (known_bmax != (size_t)-1 ? known_bmax : 0);
-    if (cap > 0 && req_bytes > cap) {
+    if (remaining != (size_t)-1) {
+        cap = remaining;
+        known = 1;
+    } else if (tracked > 0) {
+        cap = tracked;
+        known = 1;
+    } else if (known_bmax != (size_t)-1) {
+        cap = known_bmax;
+        known = 1;
+    } else {
+        cap = 0;
+        known = 0;
+    }
+    if (known && req_bytes > cap) {
         errno = ERANGE;
         cplus_safe_stat_record(api, 0);
         cplus_runtime_violation(api, "requested I/O size exceeds buffer capacity");

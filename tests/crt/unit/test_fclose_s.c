@@ -46,114 +46,61 @@ static void test_basic_double_close(void) {
     unlink("/tmp/cplus_unit_fclose.tmp");
 }
 
-/* AUDIT #1: force a bucket collision, close A then B, reopen a stream at A's
- * address (clearing A's closed marker with a tombstone), then close B again.
- * B's marker must remain reachable through the tombstone and the second close
- * must be refused; a host fclose() on freed B would be a UAF. */
+/* AUDIT #1: two FILE* addresses in the same checked hash bucket must both
+ * stay marked closed, and a second close of either must be refused.
+ *
+ * The old subcase tried to force the host allocator to reuse a freed FILE*
+ * address, which on glibc could hand back a live chunk and perform a host
+ * double-free inside the test itself.  Here all candidate streams are held
+ * open at once, so every address is distinct and never recycled; a colliding
+ * pair is guaranteed by the pigeonhole principle (600 addresses, 512 buckets).
+ * The checked tracker is validated directly through cplus_io_stream_is_closed()
+ * and the double-close refusal -- every construction below runs on every
+ * platform and actually exercises the cache.
+ * The deterministic reopen/tombstone variant (stubbed fopen/fclose) lives in
+ * test_io_stream_cache.c. */
 static void test_collision_reopen(void) {
-#if defined(__linux__)
-    /* glibc FILE* address reuse makes the forced-collision setup perform a
-     * double free in the host allocator. The basic double-close refusal and
-     * capacity/eviction regressions still run; this platform-only subcase is
-     * explicitly reported, not silently skipped. */
-    fprintf(stderr, "unit fclose_s: note: libc FILE* address-collision sub-case NOT_TESTED on Linux\n");
-    return;
-#endif
-    /* A is the first FILE* the process allocates; Darwin libc recycles that
-     * exact chunk for later one-at-a-time opens, which makes "reopen at A's
-     * address" deterministic.  B is searched for among simultaneously open
-     * raw streams (the host allocator only hands out distinct FILE* addresses
-     * while streams are alive).  A given address run may not include a bucket
-     * collision with A, so retry with a perturbed heap until one is found. */
-    enum { POOL = 2000, ROUNDS = 40, ATTEMPTS = 256 };
-    /* Each round uses a different pool size so the host allocator produces a
-     * different address sequence, giving the bucket search fresh candidates. */
-    FILE *raw[POOL + ROUNDS * 137];
-    FILE *a, *b = NULL, *reopened = NULL;
-    unsigned char *pad;
-    int n = 0, i, round;
-    int before, after;
+    enum { POOL = 600 }; /* > 512 buckets: a collision must exist */
+    FILE *pool[POOL];
+    size_t bucket[POOL];
+    FILE *a = NULL, *b = NULL;
+    int i, j, before, after;
 
     before = count_fds();
-    a = fopen("/dev/null", "r");
-    assert(a != NULL);
-    for (round = 0; round < ROUNDS && !b; ++round) {
-        /* A large live allocation forces FILE* chunks from several malloc
-         * regions.  Varying its size each round changes the address pattern,
-         * so a bucket collision with A is found reliably. */
-        pad = (unsigned char *)malloc((8u + (size_t)(round % 8u) * 8u) * 1024u * 1024u);
-        assert(pad != NULL);
-        pad[0] = 1;
-        n = 0;
-        for (i = 0; i < POOL + round * 137; ++i) {
-            FILE *f = fopen("/dev/null", "r");
-            assert(f != NULL);
-            raw[n++] = f;
-            if (f != a && cache_bucket(f) == cache_bucket(a)) { b = f; break; }
-        }
-        free(pad);
-        if (!b) {
-            void *junk[16];
-            for (i = 0; i < n; ++i) (void)fclose(raw[i]);
-            for (i = 0; i < 16; ++i) junk[i] = malloc(1024u + (size_t)i * 53u);
-            for (i = 0; i < 16; ++i) free(junk[i]);
+    for (i = 0; i < POOL; ++i) {
+        pool[i] = fopen("/dev/null", "r");
+        assert(pool[i] != NULL);
+        bucket[i] = cache_bucket(pool[i]);
+    }
+    for (i = 0; i < POOL && !b; ++i) {
+        for (j = i + 1; j < POOL; ++j) {
+            if (bucket[i] == bucket[j]) { a = pool[i]; b = pool[j]; break; }
         }
     }
-#if defined(__linux__)
-    /* glibc reuses FILE* addresses and double-close detection aborts here;
-     * the capacity/eviction assertions above still cover the checked cache. */
-    for (i = 0; i < n; ++i) (void)fclose(raw[i]);
-    (void)fclose(b);
-    (void)fclose(a);
-    fprintf(stderr, "unit fclose_s: note: libc FILE* address-collision sub-case skipped on Linux\n");
-    return;
-#endif
-    if (!b) {
-        /* Address layout is host-allocator dependent; the deterministic
-         * capacity/eviction regression below still covers the cache policy. */
-        for (i = 0; i < n; ++i) (void)fclose(raw[i]);
-        fprintf(stderr, "unit fclose_s: note: no colliding FILE* found; "
-                        "collision sub-case skipped\n");
-        (void)fclose(a);
-        return;
-    }
+    assert(a != NULL && b != NULL && a != b);
     assert(cache_bucket(a) == cache_bucket(b));
-    /* Reclaim the other probes with host fclose so they do not consume the
-     * checked cache's fixed capacity. */
-    for (i = 0; i < n; ++i)
-        if (raw[i] != a && raw[i] != b) (void)fclose(raw[i]);
 
-    /* A is inserted at the home slot and B just past it in the probe chain. */
+    /* Insert both markers: B probes past A in the shared bucket. */
     assert(cplus_fclose_s(a) == 0);
     assert(cplus_fclose_s(b) == 0);
 
-    /* Reopen at A's exact address; cplus_fopen_s must unmark A with a
-     * tombstone while leaving B's marker reachable through the chain.
-     * Hold non-matching streams briefly so LIFO/tcache bins pop deeper slots. */
-    {
-        FILE *held[64];
-        int held_n = 0;
-        int k;
-        for (i = 0; i < ATTEMPTS && !reopened; ++i) {
-            FILE *f = cplus_fopen_s("/dev/null", "r");
-            assert(f != NULL);
-            if (f == a) reopened = f;
-            else if (held_n < 64) held[held_n++] = f;
-            else assert(fclose(f) == 0);
-        }
-        for (k = 0; k < held_n; ++k) assert(fclose(held[k]) == 0);
-    }
-    if (reopened != a) {
-        fprintf(stderr, "unit fclose_s: note: address of A not reused by host "
-                        "allocator; reopen sub-case skipped\n");
-        errno = 0;
-        assert(cplus_fclose_s(b) == EOF && errno == EINVAL);
-        return;
-    }
+    /* Direct query of the library's closed-stream tracking: both markers
+     * remain reachable through the collision chain. */
+    assert(cplus_io_stream_is_closed(a) == 1);
+    assert(cplus_io_stream_is_closed(b) == 1);
+    assert(cplus_safe_stream_was_closed(a) == 1);
+    assert(cplus_safe_stream_was_closed(b) == 1);
 
+    /* A second close of either is refused before reaching host fclose(), so
+     * no freed FILE* is ever passed to the host (no UAF, no double-free). */
+    errno = 0;
+    assert(cplus_fclose_s(a) == EOF && errno == EINVAL);
     errno = 0;
     assert(cplus_fclose_s(b) == EOF && errno == EINVAL);
-    assert(cplus_fclose_s(reopened) == 0);
+
+    /* The remaining raw streams were never registered; release them once. */
+    for (i = 0; i < POOL; ++i)
+        if (pool[i] != a && pool[i] != b) assert(fclose(pool[i]) == 0);
 
     after = count_fds();
     if (before >= 0 && after >= 0) assert(after <= before + 2);
