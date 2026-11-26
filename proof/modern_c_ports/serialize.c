@@ -262,6 +262,11 @@ int main(void) {
     unsigned got[6];
 
     (void)report; (void)fails;   /* helpers from common.h, not needed for stdout */
+    {
+        int probe[6] = {9, 6, 12, 5, 1, 0};
+        qsort(probe, 6, sizeof(probe[0]), cmp_int);
+        if (probe[5] != 12) return 1;   /* sanity: shared comparator works */
+    }
     build_index();
     scratch_init(&sc, 5 * (PREFIX_SIZE + NW * NODE_SIZE + TAG_SIZE) + 8192);
     img = (unsigned char *)scratch_take(&sc, PREFIX_SIZE + NW * NODE_SIZE + TAG_SIZE);
