@@ -140,7 +140,7 @@ if printf 'int main(void) { return 0; }\n' | "$CC" -x c - \
       >/dev/null 2>&1; then
     MULTI_DEF="-Wl,--allow-multiple-definition"
 else
-    MULTI_DEF="-Wl,-multiply_defined,suppress"
+    MULTI_DEF="-Wl,-multiply_defined,unused"
 fi
 rm -f "$OUT/multi-def-probe"
 step T3a_c_driver_compile - 180 "$CC" -O1 -std=c99 -Wall -Wextra -pedantic \
