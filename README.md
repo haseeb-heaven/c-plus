@@ -235,3 +235,11 @@ The core rule is documented in
 [`docs/CORE_PHILOSOPHY.md`](docs/CORE_PHILOSOPHY.md): arena-first, one-store
 release, no moving live data, refuse-don't-trust, opt-in no-heap mode, and
 measurement instead of equivalence claims.
+
+## Design provenance
+
+The scoped-memory design is inspired by Fil-C, TrapC, Rust and the Goose-Lang
+(`aardappel/goose`) data-stack model. The name and ideas appear only here in
+this README; library code, tests and docs use neutral names such as
+`stdlib/scoped_mem.hp`. No upstream source was copied, and this is not a claim
+of Rust/Goose equivalence or 100% memory safety.
