@@ -186,12 +186,11 @@ static void run_core(const char *path, long *r) {
      * while smax=8 must return ESNOSPC (406) and leave the destination alone. */
     memset(checked_dst, 0x5A, sizeof checked_dst);
     r[R_CHECKED_MEMCPY_RC] = (long)memcpy_s(checked_dst, 4, big, 8);
-    /* Annex K semantics: on a constraint violation safeclib zeroes the first
-     * dmax (4) bytes and copies nothing.  The trailing bytes must survive, and
-     * no source byte (0xA5) may appear in the destination. */
+    /* The C+ memcpy_s security patch leaves the destination intact on a
+     * constraint violation (locked in by the CRT overlap/mem50 regressions):
+     * no source byte may appear and no byte may be zeroed by the refusal. */
     r[R_CHECKED_MEMCPY_KEEP] =
-        (all_bytes_are(checked_dst, 4, 0x00) &&
-         all_bytes_are(checked_dst + 4, 4, 0x5A)) ? 1 : 0;
+        all_bytes_are(checked_dst, sizeof checked_dst, 0x5A) ? 1 : 0;
 
     /* Double-free refusal via the checked free API. */
     df = (unsigned char *)malloc(16);
