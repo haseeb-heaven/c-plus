@@ -40,6 +40,7 @@ int main(int argc, char **argv) {
     st.name_len = (int)strlen(st.name);
     if (cplus_gfx_open(&g, "C+ Memory Lab - SDL3", 720, 420) == 0) return 1;
     SDL_StartTextInput(g.window);
+    (void)SDL_RaiseWindow(g.window);
 
     while (running && frame < (demo ? 4 : 100000)) {
         while (SDL_PollEvent(&ev)) {
@@ -64,7 +65,7 @@ int main(int argc, char **argv) {
         if (demo && frame == 2) { st.selected++; st.clicks++; }
 
         cplus_gfx_clear(&g, 13, 17, 23);
-        cplus_gfx_text(&g, 20, 12, "C+ MEMORY LAB - Goose-style scoped allocation");
+        cplus_gfx_text(&g, 20, 12, "C+ MEMORY LAB - scoped-memory-style scoped allocation");
         cplus_gfx_textbox(&g, 20, 48, 560, "Name:", st.name);
         cplus_gfx_dropdown(&g, 20, 92, 560, "Allocator:", ALLOCATORS[st.selected]);
         if (st.dropdown_open)

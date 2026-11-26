@@ -283,14 +283,14 @@ static inline stdlib_allocator stdlib_mem_pool_as_allocator(stdlib_mem_pool *p) 
 }
 
 /* ---------------------------------------------------------------------------
- * Goose-inspired slot_pool: stable slots with intrusive free list.
+ * the inspiration language-inspired slot_pool: stable slots with intrusive free list.
  *
  * Unlike the slab MemoryPool above, a slot_pool keeps ONE grow-only array of
  * fixed-size slots.  Handles are (index, generation), never raw pointers, so
  * growth may move the array without invalidating a handle.  A freed slot is
  * NOT unmapped: a stale handle resolves to a *different value of the correct
  * type* (the slot's next owner) rather than corrupting memory -- exactly the
- * Goose safety property.  The generation tag makes stale access refusable.
+ * the inspiration language safety property.  The generation tag makes stale access refusable.
  * ------------------------------------------------------------------------ */
 typedef struct stdlib_slot_pool {
     unsigned char *items;      /* grow-only array of slot_size bytes */
@@ -313,6 +313,9 @@ static inline int stdlib_slot_pool_init(stdlib_slot_pool *p, size_t slot_size,
                                         size_t initial, error *err) {
     size_t cap = initial == 0 ? 8u : initial;
     size_t i;
+    unsigned char *items;
+    size_t *fl;
+    uint64_t *gen;
     error_reset(err);
     if (p == 0 || slot_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
@@ -322,12 +325,21 @@ static inline int stdlib_slot_pool_init(stdlib_slot_pool *p, size_t slot_size,
         cap > (size_t)-1 / sizeof(uint64_t))
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
-    p->items = (unsigned char *)cplus_alloc(slot_size * cap);
-    p->free_list = (size_t *)cplus_alloc(sizeof(size_t) * cap);
-    p->generations = (uint64_t *)cplus_alloc(sizeof(uint64_t) * cap);
-    if (p->items == 0 || p->free_list == 0 || p->generations == 0)
+    /* Issue #56: allocate into locals and publish only on full success.  A
+     * partial OOM releases every buffer taken so far and leaves *p untouched. */
+    items = (unsigned char *)cplus_alloc(slot_size * cap);
+    fl = (size_t *)cplus_alloc(sizeof(size_t) * cap);
+    gen = (uint64_t *)cplus_alloc(sizeof(uint64_t) * cap);
+    if (items == 0 || fl == 0 || gen == 0) {
+        if (items != 0) cplus_release(items);
+        if (fl != 0) cplus_release(fl);
+        if (gen != 0) cplus_release(gen);
         return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
                               CPLUS_EXIT_RESOURCE, "slot_pool: reserve refused"), STDLIB_FAIL;
+    }
+    p->items = items;
+    p->free_list = fl;
+    p->generations = gen;
     p->slot_size = slot_size;
     p->count = 0;
     p->capacity = cap;
@@ -339,24 +351,35 @@ static inline int stdlib_slot_pool_init(stdlib_slot_pool *p, size_t slot_size,
 
 static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
     size_t ncap;
-    error_reset(err);
-    if (p == 0 || p->slot_size == 0)
-        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
-                              CPLUS_EXIT_NULL_POINTER, "slot_pool: NULL/invalid pool"), STDLIB_FAIL;
-    ncap = p->capacity * 2u;
     unsigned char *items;
     size_t *fl;
     uint64_t *gen;
     error_reset(err);
-    if (ncap > (size_t)-1 / p->slot_size)
+    if (p == 0 || p->slot_size == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "slot_pool: NULL/invalid pool"), STDLIB_FAIL;
+    /* Issue #56: guard the doubling itself and every ncap*element product
+     * before any allocation is attempted. */
+    if (p->capacity > (size_t)-1 / 2u)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
+    ncap = p->capacity * 2u;
+    if (ncap > (size_t)-1 / p->slot_size ||
+        ncap > (size_t)-1 / sizeof(size_t) ||
+        ncap > (size_t)-1 / sizeof(uint64_t))
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
     items = (unsigned char *)cplus_alloc(p->slot_size * ncap);
     fl = (size_t *)cplus_alloc(sizeof(size_t) * ncap);
     gen = (uint64_t *)cplus_alloc(sizeof(uint64_t) * ncap);
-    if (items == 0 || fl == 0 || gen == 0)
+    if (items == 0 || fl == 0 || gen == 0) {
+        /* Failure-atomic growth: keep the original pool fully intact. */
+        if (items != 0) cplus_release(items);
+        if (fl != 0) cplus_release(fl);
+        if (gen != 0) cplus_release(gen);
         return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
                               CPLUS_EXIT_RESOURCE, "slot_pool: grow refused"), STDLIB_FAIL;
+    }
     memcpy(items, p->items, p->slot_size * p->count);
     memcpy(fl, p->free_list, sizeof(size_t) * p->free_count);
     memcpy(gen, p->generations, sizeof(uint64_t) * p->count);

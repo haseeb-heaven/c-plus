@@ -20,7 +20,7 @@ framebuffer are still real.
 ## CLI transcript renderings (`cli_transcripts/`, NOT GUI/3D)
 
 The SVG files under `cli_transcripts/` are transcript renderings for `webserver`,
-`sqldb`, `gameeng`, `cli_app`, `ctl_demo`, `goose_ports`, etc. They prove stdout
+`sqldb`, `gameeng`, `cli_app`, `ctl_demo`, `scoped_ports`, etc. They prove stdout
 behavior only. They are explicitly **not** GUI screenshots and **not** 3D game
 renders.
 

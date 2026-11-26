@@ -23,7 +23,7 @@ That is ~10.9x and ~9.0x lower allocation latency for the scoped-memory-style bu
 path in these two runs. Earlier runs measured 86/261 ns and 60/162 ns; timings
 are host/load dependent, so the deterministic gates only assert bucketed
 verdicts (`BENCH_SCOPED 4 4 0`, `SCOPED_APPS_BENCH 3 3 0`). No equivalence with
-Goose/Rust/Fil-C is claimed.
+the inspiration language/Rust/Fil-C is claimed.
 
 Cross-language *outcome* evidence (not timing): `tests/rust_vs_cplus/run_compare.sh`
 reports 473 matched / 119 documented differences / 0 failures, and

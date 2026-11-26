@@ -171,7 +171,7 @@ Median ratios vs legacy `clang -O2`: loop safe C+ 0.928Ã—, nested safe C+ 1.137Ã
   the legacy-C side is a single explicit source file, not because the C+ build
   of the `.c` files failed to compile (it did not).
 - **Not measured here:** the UBSan-instrumented C+ safe build (see `RESULTS.md`),
-  the modern-stdlib workload, Rust, Goose, and Fil-C. No result is invented for
+  the modern-stdlib workload, Rust, the inspiration language, and Fil-C. No result is invented for
   any of them. This is one synthetic workload pair on one machine and is not a
   general performance, safety, or language-superiority claim.
 

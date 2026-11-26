@@ -8,7 +8,7 @@
  * them; the slot itself still holds the next owner's value of the same type,
  * which is the underlying scoped-memory-style safety property.
  *
- * Architecture inspired by aardappel/goose (Apache-2.0).  No Goose code was
+ * Architecture inspired by aardappel/scoped (Apache-2.0).  No the inspiration language code was
  * copied; this is C+ using this repository's own mempool.hp API.
  */
 #include <stdio.h>
@@ -41,7 +41,7 @@ static void check(int cond, const char *label) {
     if (cond) {
         passed++;
     } else {
-        print("GOOSE_POOL CHECK_FAIL", label);
+        print("SCOPED_POOL CHECK_FAIL", label);
     }
 }
 
@@ -65,11 +65,11 @@ int main(void) {
 
     stdlib_slot_pool pool;
     if (stdlib_slot_pool_init(&pool, sizeof(struct Entity), 4, &e) != STDLIB_OK) {
-        print("GOOSE_POOL FATAL init", e.code());
+        print("SCOPED_POOL FATAL init", e.code());
         return 1;
     }
-    print("GOOSE_POOL init_capacity", pool.capacity);
-    print("GOOSE_POOL slot_size", pool.slot_size);
+    print("SCOPED_POOL init_capacity", pool.capacity);
+    print("SCOPED_POOL slot_size", pool.slot_size);
     check(pool.capacity == 4 && pool.slot_size == sizeof(struct Entity), "init");
     cplus_check_live(pool.items); /* base allocation is live */
 
@@ -82,10 +82,10 @@ int main(void) {
         /* Four live enemies, ids 101..104. */
         for (i = 0; i < 4; i++) {
             if (spawn(&pool, &refs[i], 101 + i, 100 - 10 * i, &e) != 0) {
-                print("GOOSE_POOL FATAL spawn", i);
+                print("SCOPED_POOL FATAL spawn", i);
                 return 1;
             }
-            print("GOOSE_POOL spawn index", refs[i].index, "gen", refs[i].generation);
+            print("SCOPED_POOL spawn index", refs[i].index, "gen", refs[i].generation);
         }
         check(refs[0].index == 0 && refs[3].index == 3 &&
               refs[0].generation == 1, "spawn_indices_and_generation");
@@ -93,17 +93,17 @@ int main(void) {
         /* Enemy 101 dies; a reinforcement takes the very same slot. */
         stdlib_slot_ref stale = refs[0]; /* keep the old token for the test */
         stdlib_slot_ref_free(&refs[0], &e);
-        print("GOOSE_POOL freed_index", stale.index, "free_count", pool.free_count);
+        print("SCOPED_POOL freed_index", stale.index, "free_count", pool.free_count);
         check(pool.free_count == 1, "freelist_push");
 
         if (spawn(&pool, &refs[0], 201, 77, &e) != 0) {
-            print("GOOSE_POOL FATAL reuse");
+            print("SCOPED_POOL FATAL reuse");
             return 1;
         }
         struct Entity *replacement = (struct Entity *)stdlib_slot_ref_get(&refs[0], &e);
-        print("GOOSE_POOL reuse index", refs[0].index, "gen", refs[0].generation);
-        print("GOOSE_POOL reuse id", replacement->id, "hp", replacement->hp);
-        print("GOOSE_POOL reuse old_value_changed",
+        print("SCOPED_POOL reuse index", refs[0].index, "gen", refs[0].generation);
+        print("SCOPED_POOL reuse id", replacement->id, "hp", replacement->hp);
+        print("SCOPED_POOL reuse old_value_changed",
               replacement->id != 101 && replacement->hp != 100 ? 1 : 0);
         check(refs[0].index == stale.index &&
               refs[0].generation > stale.generation &&
@@ -112,37 +112,37 @@ int main(void) {
 
         /* The old token is refused, never dereferenced. */
         void *stale_ptr = stdlib_slot_ref_get(&stale, &e);
-        print("GOOSE_POOL stale_get_refused code", e.code());
-        print("GOOSE_POOL stale_get_refused ptr_null", stale_ptr == 0 ? 1 : 0);
+        print("SCOPED_POOL stale_get_refused code", e.code());
+        print("SCOPED_POOL stale_get_refused ptr_null", stale_ptr == 0 ? 1 : 0);
         check(stale_ptr == 0 && e.code() == 103, "stale_handle_refused");
 
         /* A stale free is refused too, so it cannot corrupt the free stack. */
         size_t fc_before = pool.free_count;
         stdlib_slot_ref_free(&stale, &e);
-        print("GOOSE_POOL stale_free_refused code", e.code());
-        print("GOOSE_POOL stale_free_refused free_count", pool.free_count);
+        print("SCOPED_POOL stale_free_refused code", e.code());
+        print("SCOPED_POOL stale_free_refused free_count", pool.free_count);
         check(e.code() == 104 && pool.free_count == fc_before,
               "stale_free_refused");
 
         /* The stale index now addresses a different value of the SAME type. */
         struct Entity *current = (struct Entity *)stdlib_slot_ref_get(&refs[0], &e);
-        print("GOOSE_POOL stale_index_value id", current->id, "hp", current->hp);
+        print("SCOPED_POOL stale_index_value id", current->id, "hp", current->hp);
         check(current != 0 && current->id == 201, "correct_type_different_value");
 
         /* Fill to 16 entities: the items array must grow 4 -> 8 -> 16. */
         for (i = 4; i < 16; i++) {
             if (spawn(&pool, &refs[i], 1000 + i, 50 + i, &e) != 0) {
-                print("GOOSE_POOL FATAL grow_spawn", i);
+                print("SCOPED_POOL FATAL grow_spawn", i);
                 return 1;
             }
         }
-        print("GOOSE_POOL growth capacity", pool.capacity, "count", pool.count);
+        print("SCOPED_POOL growth capacity", pool.capacity, "count", pool.count);
         check(pool.capacity >= 16 && pool.count == 16, "array_growth");
         cplus_check_live(pool.items); /* grown base allocation is live */
 
         /* A handle taken before growth still resolves to its original entity. */
         struct Entity *survivor = (struct Entity *)stdlib_slot_ref_get(&refs[1], &e);
-        print("GOOSE_POOL stable_ref id", survivor->id, "hp", survivor->hp,
+        print("SCOPED_POOL stable_ref id", survivor->id, "hp", survivor->hp,
               "index", refs[1].index);
         check(survivor != 0 && survivor->id == 102 && survivor->hp == 90 &&
               refs[1].index == 1, "handle_stable_across_growth");
@@ -151,10 +151,10 @@ int main(void) {
         stdlib_slot_ref once = refs[5];
         stdlib_slot_ref_free(&refs[5], &e);
         size_t fc_after_once = pool.free_count;
-        print("GOOSE_POOL release_once free_count", fc_after_once);
+        print("SCOPED_POOL release_once free_count", fc_after_once);
         check(fc_after_once == 1, "release_once");
         stdlib_slot_ref_free(&once, &e);
-        print("GOOSE_POOL second_release code", e.code(),
+        print("SCOPED_POOL second_release code", e.code(),
               "free_count", pool.free_count);
         check(e.code() == 104 && pool.free_count == fc_after_once,
               "second_release_refused");
@@ -164,15 +164,15 @@ int main(void) {
             if (i != 5)
                 stdlib_slot_ref_free(&refs[i], &e);
         }
-        print("GOOSE_POOL all_released free_count", pool.free_count);
+        print("SCOPED_POOL all_released free_count", pool.free_count);
         check(pool.free_count == 16, "all_slots_released_once");
 
         guard.drop();
-        print("GOOSE_POOL raii_destroy items_null", pool.items == 0 ? 1 : 0);
+        print("SCOPED_POOL raii_destroy items_null", pool.items == 0 ? 1 : 0);
         check(pool.items == 0 && pool.count == 0, "raii_destroy");
     }
 
     int fails = checks - passed;
-    print("GOOSE_POOL SUMMARY", checks, passed, fails);
+    print("SCOPED_POOL SUMMARY", checks, passed, fails);
     return fails == 0 ? 0 : 1;
 }

@@ -153,7 +153,7 @@ runtime checks that these priorities are meant to replace.
 | P1 | Thread-safety analysis | `thread.hp` has runtime guards; no static data-race analysis — `tests/stdlib/agent1_handoff/thread_safety/` |
 | P2 | Fuzzing and compiler differential testing | stdlib fuzz 1200 / libc fuzz 4800 / Rust-vs-C+ 600 cases; no false-negative measurement — `tests/stdlib/agent1_handoff/fuzz_diff/` |
 | P2 | Linux, macOS, Windows verification | macOS local; Linux CI jobs exist but UNVERIFIED remotely; Windows x86 DLL script only — `tests/stdlib/agent1_handoff/portability/` |
-| P2 | Performance vs Clang and Fil-C | Local C+/Rust/Goose medians; Fil-C toolchain absent — `tests/stdlib/agent1_handoff/performance/` |
+| P2 | Performance vs Clang and Fil-C | Local C+/Rust/the inspiration language medians; Fil-C toolchain absent — `tests/stdlib/agent1_handoff/performance/` |
 
 Every current runtime protection (UBSan bounds/null/alignment, the allocation
 side table, `cplus_check_live()`, RAII cleanup) is dynamic or opt-in; none is a

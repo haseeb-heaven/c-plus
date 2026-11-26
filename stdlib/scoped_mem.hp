@@ -1,6 +1,6 @@
 /* scoped-memory-style dynamic memory facade for C+ safer/modern libraries.
  * Additive header: VM-reserved bump data stack (no per-object free), stable
- * slot-pool refs, and an allocator-aware dynamic arena.  No Goose code copied.
+ * slot-pool refs, and an allocator-aware dynamic arena.  No the inspiration language code copied.
  *
  * Rules: allocate inside a stdlib_scoped_scope; drop() restores the stack top in one
  * store. Never keep a raw pointer beyond the scope; use stdlib_pool_ref for

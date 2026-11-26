@@ -2,7 +2,7 @@
 
 Scope: **observed peak resident set size only.** This document does **not** compare
 or infer safety guarantees — only what the OS actually reported for each process.
-Plain C, Goose, and Fil-C are out of scope for this task and were not measured here
+Plain C, the inspiration language, and Fil-C are out of scope for this task and were not measured here
 (Fil-C also has no installed toolchain). See [`RESULTS.md`](RESULTS.md) for the
 speed numbers and workload definitions; the workloads here are the same ones.
 
@@ -200,7 +200,7 @@ pass (range 20,250,624–23,396,352 bytes overall, about 19.3–22.3 MiB). Treat
   equivalent guarantees: C+ relies on runtime/API-boundary checks plus
   compile-time diagnostics, whereas Rust relies on compile-time ownership and
   borrow checking plus checked returns. Fil-C was not measured (no toolchain
-  installed); plain C and Goose were not measured because this task covered C+
+  installed); plain C and the inspiration language were not measured because this task covered C+
   and Rust only.
 - One machine, three synthetic workloads, two measurement passes. Not a general
   memory-footprint claim about C+, Rust, or any standard library.

@@ -1,5 +1,5 @@
-/* Independent modern-C port of the "functions" Goose sample workload.
- * C11, no Goose source copied. See proof/modern_c_ports/README.md. */
+/* Independent modern-C port of the "functions" the inspiration language sample workload.
+ * C11, no the inspiration language source copied. See proof/modern_c_ports/README.md. */
 #include "common.h"
 
 static unsigned fact(unsigned n) { return n <= 1u ? 1u : n * fact(n - 1u); }

@@ -1,5 +1,5 @@
-/* Independent modern-C port of the "life" Goose sample workload.
- * C11, no Goose source copied. See proof/modern_c_ports/README.md. */
+/* Independent modern-C port of the "life" the inspiration language sample workload.
+ * C11, no the inspiration language source copied. See proof/modern_c_ports/README.md. */
 #include "common.h"
 
 static int a[5][5] = {{0,0,0,0,0},{0,1,1,1,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};

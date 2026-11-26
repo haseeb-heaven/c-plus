@@ -19,7 +19,7 @@ vendored in this repository (MIT, `third_party/nuklear/`).
 | bgfx | Apache-2.0, C++ API | not vendored | DEFER: RAII wrapper only | Owns GPU resources; cannot route its allocations through a C+ VM data stack without a fork. |
 | GTK | LGPL (strong copyleft constraints) | not vendored | **REJECT as source rewrite** | FFI façade only if ever needed; do not copy/relicense GTK source into this repo. |
 
-## What "fast memory like Goose" means here
+## What "fast memory like the inspiration language" means here
 
 - `stdlib/datastack.hp`: VM-reserved bump region; `stdlib_scratch_scope::drop()`
   restores the top with one store.
@@ -32,7 +32,7 @@ vendored in this repository (MIT, `third_party/nuklear/`).
 
 ## Non-claims
 
-- No claim that these eight libraries were "rewritten in C+" or match Goose's
+- No claim that these eight libraries were "rewritten in C+" or match the inspiration language's
   compiler-proven memory model.
 - No claim that wrapping a C API makes it memory-safe; third-party code stays
   in `--legacy-c` mode and is not covered by C+ safety guarantees.

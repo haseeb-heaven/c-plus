@@ -4,7 +4,7 @@
  * a borrow-only {T *data; size_t size} view with no allocation or destructor.
  * Its `at` uses release-disabled assert (`:38-42`), so this additive wrapper
  * supplies checked access with error* refusal. No CTL source is edited, no
- * ownership is taken, and no Goose/other code is copied.
+ * ownership is taken, and no the inspiration language/other code is copied.
  *
  * Contract: init/from_ctl_vector return STDLIB_OK (0) or a non-zero code;
  * at() returns 0 and sets *err on null/empty/out-of-range views; slice()

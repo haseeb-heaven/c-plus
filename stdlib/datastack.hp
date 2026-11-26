@@ -26,7 +26,7 @@
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
 
-/* Goose-inspired: a data stack is a large reserved address region with a
+/* the inspiration language-inspired: a data stack is a large reserved address region with a
  * single bump pointer.  `backing` selects virtual memory (mmap/VirtualAlloc,
  * committed on demand) or a plain checked-heap buffer (fallback / Windows
  * without VirtualAlloc).  Memory is freed at scope exit with one store. */

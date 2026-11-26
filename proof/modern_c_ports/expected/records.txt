@@ -1,4 +1,4 @@
-records 1 goose
+records 1 scoped
 records 2 port
 records 3 c
 records_sorted 1

@@ -41,7 +41,7 @@ documented so callers can write safe code within the supported contracts.
 
 ## 3. Dynamic arena rewind leaves raw pointers unchecked
 
-`stdlib_dyn_arena_rewind()` (renamed from the former goose-arena API) resets
+`stdlib_dyn_arena_rewind()` (renamed from the former scoped-arena API) resets
 block offsets to zero. Raw pointers handed out by `stdlib_dyn_arena_take()` are
 not invalidated or generation-tagged; a later take reuses the same address and
 silently mutates what the old pointer still references. Confirmed by the

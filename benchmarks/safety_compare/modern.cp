@@ -12,7 +12,7 @@
  *
  * Checksum: vsum = sum(0..N-1) = N*(N-1)/2, ssize_sum = sum of string sizes
  * after each of M appends. Both are integer-exact and easy to reproduce in
- * Rust and Goose, so identical output verifies semantics across variants.
+ * Rust and the inspiration language, so identical output verifies semantics across variants.
  */
 #include <stdio.h>
 #include "cplus/cplus.h"

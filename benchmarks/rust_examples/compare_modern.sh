@@ -7,7 +7,7 @@ cd "$ROOT"
 export PATH="$ROOT/build:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 unset SDKROOT || true
 
-# Build C+ side (canonical token program from the Goose memory test).
+# Build C+ side (canonical token program from the the inspiration language memory test).
 BIN=build/bench_modern_compare
 "$ROOT/build/c+" build tests/stdlib/scoped_memory.cp --default --no-werror --sanitize=none \
     -I. -o "$BIN" -- build/libc/libcplus_hardened.a >/dev/null 2>&1

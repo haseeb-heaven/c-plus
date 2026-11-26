@@ -123,9 +123,9 @@ rustc -O benchmarks/safety_compare/<w>.rs \
 Plain C is an optimisation reference only; it has neither C+ diagnostics nor
 Rust's safety model, so it is not part of the safety discussion.
 
-> Goose (`goose build …`) and Fil-C are out of scope for a C+ vs Rust protocol.
-> Goose results, when present in `RESULTS.md`, use a separately supplied path
-> via `CPLUS_GOOSE`. Fil-C is **not measured** anywhere (no `filc` toolchain
+> the inspiration language (`scoped build …`) and Fil-C are out of scope for a C+ vs Rust protocol.
+> the inspiration language results, when present in `RESULTS.md`, use a separately supplied path
+> via `CPLUS_SCOPED`. Fil-C is **not measured** anywhere (no `filc` toolchain
 > installed) and is never reported as a zero or a pass.
 
 ---

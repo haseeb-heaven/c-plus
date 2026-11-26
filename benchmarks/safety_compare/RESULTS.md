@@ -1,18 +1,18 @@
-# Speed comparison: C+, Rust, Goose, plain C (measured 2026-11-22)
+# Speed comparison: C+, Rust, the inspiration language, plain C (measured 2026-11-22)
 
-Command: `CPLUS_GOOSE=<path> sh benchmarks/safety_compare/run_bench.sh`
-Host: macOS arm64, Apple clang 16, rustc 1.100.0, Goose v2026.4, C+ driver at
+Command: `CPLUS_SCOPED=<path> sh benchmarks/safety_compare/run_bench.sh`
+Host: macOS arm64, Apple clang 16, rustc 1.100.0, the inspiration language v2026.4, C+ driver at
 `-O2 --release`. Each binary ran 5 times; the first run was discarded as
 warmup and the median of the remaining 4 is reported. All four languages
 produced identical checksums for both workloads.
 
-| Workload | plain C `-O2` | C+ safe (`--release`, UBSan) | C+ legacy (`--release --legacy-c`) | Rust `-O` | Goose |
+| Workload | plain C `-O2` | C+ safe (`--release`, UBSan) | C+ legacy (`--release --legacy-c`) | Rust `-O` | the inspiration language |
 |---|---:|---:|---:|---:|---:|
 | loop sum (2e8) | 0.0036s | 0.1075s | 0.0038s | 0.0042s | 0.0043s |
 | nested (4000²) | 0.0023s | 0.0090s | 0.0023s | 0.0026s | 0.0024s |
 
 Ratios vs plain C: safe 29.85x / 3.90x; legacy 1.05x / 1.02x; Rust 1.18x /
-1.14x; Goose 1.19x / 1.06x.
+1.14x; the inspiration language 1.19x / 1.06x.
 
 ## Honest interpretation
 
@@ -23,12 +23,12 @@ Ratios vs plain C: safe 29.85x / 3.90x; legacy 1.05x / 1.02x; Rust 1.18x /
 - **All non-instrumented compilers folded the arithmetic loops into closed-form
   results** (identical checksums prove semantics, but the 0.002–0.004s timings
   are dominated by that optimisation, not by loop execution). These numbers
-  must NOT be read as "Rust/Goose are 30x faster than C+"; they are
+  must NOT be read as "Rust/the inspiration language are 30x faster than C+"; they are
   optimisation differences.
 - Fil-C was **not measured**: no `filc` toolchain is installed. No result is
   fabricated for it.
-- `goose` is a real installed compiler here, but it is outside the restricted
-  benchmark PATH; pass its path via `CPLUS_GOOSE`.
+- `scoped` is a real installed compiler here, but it is outside the restricted
+  benchmark PATH; pass its path via `CPLUS_SCOPED`.
 - This benchmark measures two synthetic integer workloads only. It is not a
   general performance claim about any language.
 
@@ -38,8 +38,8 @@ Ratios vs plain C: safe 29.85x / 3.90x; legacy 1.05x / 1.02x; Rust 1.18x /
 
 This extends the workload set with one allocation-heavy workload written against
 the **modern stdlib layer** (`stdlib/string.hp` and `stdlib/vector.hp`). Source:
-`benchmarks/safety_compare/modern.cp` (C+), `modern.rs` (Rust), `modern.goose`
-(Goose). It was measured with **standalone commands** rather than
+`benchmarks/safety_compare/modern.cp` (C+), `modern.rs` (Rust), `modern.scoped`
+(the inspiration language). It was measured with **standalone commands** rather than
 `run_bench.sh`: that script is outside this workload's file ownership and still
 loops over only `loop`/`nested`, and it has no plain-C source for this workload
 anyway (the workload is defined in terms of the C+ stdlib types).
@@ -54,7 +54,7 @@ anyway (the workload is defined in terms of the C+ stdlib types).
   with `size()` accumulated into `ssize_sum`.
 - prints `vsum + ssize_sum` = **`2200000200000`** for every variant.
 
-Rust uses `Vec<i32>::push` + indexing and `String::push_str` + `len()`. Goose
+Rust uses `Vec<i32>::push` + indexing and `String::push_str` + `len()`. the inspiration language
 uses its owned dynamic arrays `i32[>..]` (`push`, indexed read) and `u8[>..]`
 (byte buffer; `push`/`append`/`len`) as the closest syntax-permitted analogue of
 the C+ owned containers. All four binaries printed the identical checksum, so
@@ -64,7 +64,7 @@ the comparison is semantics-correct.
 
 The restricted `PATH` mirrors `run_bench.sh`: it pins the C+ backend to
 `/usr/bin/clang` (Apple clang 16) so the two C+ variants are identical apart
-from the safety mode. `$CPLUS_GOOSE` was `/Users/haseeb-mir/.local/bin/goose`.
+from the safety mode. `$CPLUS_SCOPED` was `/Users/haseeb-mir/.local/bin/scoped`.
 
 ```sh
 mkdir -p build/bench_safety
@@ -75,7 +75,7 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
   build/c+ build --release --legacy-c \
   benchmarks/safety_compare/modern.cp -o build/bench_safety/cplus_legacy_modern
 rustc -O benchmarks/safety_compare/modern.rs -o build/bench_safety/rust_modern
-"$CPLUS_GOOSE" build benchmarks/safety_compare/modern.goose \
+"$CPLUS_SCOPED" build benchmarks/safety_compare/modern.scoped \
   -o build/bench_safety/scoped_apps
 ```
 
@@ -88,7 +88,7 @@ with interleaving added to limit drift on this shared host.
 python3 - <<'PY'
 import subprocess,time,statistics
 out='build/bench_safety'
-variants=['cplus_safe','cplus_legacy','rust','goose']
+variants=['cplus_safe','cplus_legacy','rust','scoped']
 bins={v:f'{out}/{v}_modern' for v in variants}
 for v in variants: subprocess.run([bins[v]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
 samples={v:[] for v in variants}
@@ -108,10 +108,10 @@ PY
   (`--release`). Safe = `Mode::Safe` (`-fsanitize=undefined,bounds,null,alignment`,
   `-fno-sanitize-recover=all`, `-fno-omit-frame-pointer`); legacy = `Mode::LegacyC`
   (`-std=gnu89`, `-DCPLUS_LEGACY_C=1`, no sanitizers).
-- Backend C compiler for both C+ variants and for Goose: Apple clang 16.0.0
+- Backend C compiler for both C+ variants and for the inspiration language: Apple clang 16.0.0
   (`clang-1600.0.26.6`, `/usr/bin/clang` / `/usr/bin/cc`).
 - rustc 1.100.0 (`0ef1bc386 2026-11-09`, LLVM 23.1.5), `-O`.
-- Goose `v2026.4-57-g9412b80f` (runtime `41e336e5d1ee`), default `-O2`.
+- the inspiration language `v2026.4-57-g9412b80f` (runtime `41e336e5d1ee`), default `-O2`.
 - All builds succeeded with **no warnings**.
 
 ## Measured medians
@@ -121,9 +121,9 @@ PY
 | C+ safe (`--release`, UBSan) | 0.0140s | 0.0134s | 0.0188s | 2200000200000 |
 | C+ legacy (`--release --legacy-c`) | 0.0061s | 0.0052s | 0.0077s | 2200000200000 |
 | Rust (`-O`) | 0.0060s | 0.0048s | 0.0105s | 2200000200000 |
-| Goose (`-O2`) | 0.0044s | 0.0041s | 0.0090s | 2200000200000 |
+| the inspiration language (`-O2`) | 0.0044s | 0.0041s | 0.0090s | 2200000200000 |
 
-Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, Goose 0.72×.
+Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, the inspiration language 0.72×.
 
 ## Honest interpretation
 
@@ -135,7 +135,7 @@ Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, Goose 0.72×.
 - **Optimisation effects**: unlike the earlier integer loops, this workload is
   allocation-heavy (repeated growth via `stdlib_alloc`), so the loops are not
   folded into a closed form. The measured time reflects real container work.
-  Rust `Vec`/`String` and Goose dynamic arrays are *different standard-library
+  Rust `Vec`/`String` and the inspiration language dynamic arrays are *different standard-library
   implementations*; their numbers are cross-checks, not an apples-to-apples
   measure of the C+ stdlib layer. They are **not** evidence that any one
   language is "faster" than another.
@@ -143,9 +143,9 @@ Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, Goose 0.72×.
   safe/legacy median ratio ranged ~1.8×–3.1× (legacy 0.0055–0.0095s, safe
   0.0150–0.0172s). The interleaved median above is the most controlled
   estimate; treat the ratios as indicative, not precise.
-- Goose is a real installed compiler here but sits outside the restricted
+- the inspiration language is a real installed compiler here but sits outside the restricted
   benchmark `PATH`, so its absolute path was passed directly (equivalent to
-  `CPLUS_GOOSE` in `run_bench.sh`). It is syntax-permitted for this workload via
+  `CPLUS_SCOPED` in `run_bench.sh`). It is syntax-permitted for this workload via
   dynamic arrays; no equivalent was skipped.
 - Fil-C is still **not measured** (no `filc` toolchain installed); no result is
   fabricated for it.

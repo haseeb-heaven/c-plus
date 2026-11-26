@@ -1,4 +1,4 @@
-/* C+ hybrid: CTL owns the persistent index; the Goose-inspired DataStack
+/* C+ hybrid: CTL owns the persistent index; the the inspiration language-inspired DataStack
  * owns transient query data.
  *
  * Real workload: aggregate a stream of document ids into a persistent CTL

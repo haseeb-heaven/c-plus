@@ -1,11 +1,11 @@
-/* Independent modern-C port of the "word_freq" Goose sample workload.
- * C11, no Goose source copied. See proof/modern_c_ports/README.md. */
+/* Independent modern-C port of the "word_freq" the inspiration language sample workload.
+ * C11, no the inspiration language source copied. See proof/modern_c_ports/README.md. */
 #include "common.h"
 
 struct freq { const char *w; int n; };
 int main(void) {
-    const char *text = "goose c goose port";
-    struct freq f[3] = {{"goose", 0}, {"c", 0}, {"port", 0}};
+    const char *text = "scoped c scoped port";
+    struct freq f[3] = {{"scoped", 0}, {"c", 0}, {"port", 0}};
     char word[32]; int i;
     const char *p = text;
     while (*p) {

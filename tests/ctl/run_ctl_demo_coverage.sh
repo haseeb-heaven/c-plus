@@ -1,5 +1,5 @@
 #!/bin/sh
-# End-to-end coverage of the new CTL / CTL+Goose demo runners (Issue #24).
+# End-to-end coverage of the new CTL / CTL+the inspiration language demo runners (Issue #24).
 # Each runner performs deterministic byte-for-byte diffs of expected outputs,
 # including the edge cases added on 2026-11-24 (duplicate accumulate, double
 # drop, empty containers/scopes, nested scope, bump on missing id).

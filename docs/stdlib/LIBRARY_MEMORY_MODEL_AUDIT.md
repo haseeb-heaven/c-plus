@@ -1,6 +1,6 @@
 # Memory-model audit: safer + modern C+ libraries (2026-11-26)
 
-Goal reviewed: Goose-inspired speed (VM data stacks, bump arenas, stable
+Goal reviewed: the inspiration language-inspired speed (VM data stacks, bump arenas, stable
 pools, no per-object heap in hot paths) with additive checked safety.
 **Verdict: fast and safer within documented contracts, NOT 100% safe, NOT
 Rust-equivalent.**
@@ -31,7 +31,7 @@ not a soundness proof.
   documented in `docs/stdlib/SCOPE_ESCAPE_LIMITS.md`.
 - No Rust equivalence; Rust won 5/5 head-to-head compute rounds in
   `proof/benchmarks/language_rounds.txt`.
-- No Goose compiler analysis (static root inference, checkfree, relative links).
+- No the inspiration language compiler analysis (static root inference, checkfree, relative links).
 - Checked heap remains the backing allocator; "no heap" is opt-in for C+ source.
 
 ## GUI / GFX apps (real windowed SDL3, 2026-11-26)
@@ -43,5 +43,5 @@ not a soundness proof.
 
 `sh apps/gui_widgets/run.sh` → `GFX_APP_TEST 3 3 0`; `sh apps/memory_lab_gui/run.sh` →
 `MEMORY_LAB_TEST 2 2 0`. These are real windowed renderer outputs, not CLI
-transcripts. They demonstrate Goose-style scoped transient allocation inside a
+transcripts. They demonstrate scoped-memory-style scoped transient allocation inside a
 real GUI app, not a 100% memory-safety guarantee for external SDL3 code.

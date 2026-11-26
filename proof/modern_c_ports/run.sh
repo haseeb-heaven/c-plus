@@ -1,5 +1,5 @@
 #!/bin/sh
-# Proof runner: independent modern-C ports of Goose sample workloads.
+# Proof runner: independent modern-C ports of the inspiration language sample workloads.
 # Rebuilds every binary from committed source, runs it with a bounded timeout,
 # and diffs stdout byte-for-byte against expected/.  No Python, no || true.
 # Prints: PORTS_MODERN_C <cases> <pass> <fail>.  Exit 0 == all pass.

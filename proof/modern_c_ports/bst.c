@@ -1,5 +1,5 @@
-/* Independent modern-C port of the "bst" Goose sample workload.
- * C11, no Goose source copied. See proof/modern_c_ports/README.md. */
+/* Independent modern-C port of the "bst" the inspiration language sample workload.
+ * C11, no the inspiration language source copied. See proof/modern_c_ports/README.md. */
 #include "common.h"
 
 struct node { int v; struct node *l, *r; };

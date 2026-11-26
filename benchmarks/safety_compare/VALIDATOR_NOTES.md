@@ -143,7 +143,7 @@ cat > "$TD/bench_valid.csv" <<'EOF'
 modern,cplus_safe,7,2200000200000,0.0140,0.0134,0.0188
 modern,cplus_legacy,9,2200000200000,0.0061,0.0052,0.0077
 modern,rust,7,2200000200000,0.0060,0.0048,0.0105
-modern,goose,8,2200000200000,0.0044,0.0041,0.0090
+modern,scoped,8,2200000200000,0.0044,0.0041,0.0090
 EOF
 cat > "$TD/bench_valid.json" <<'EOF'
 {
@@ -157,7 +157,7 @@ cat > "$TD/bench_bad_checksum.csv" <<'EOF'
 # columns: workload,language,runs,checksum,median_s
 modern,cplus_safe,7,2200000200000,0.0140
 modern,rust,6,999,0.0060
-modern,goose,7,2200000200000,nan
+modern,scoped,7,2200000200000,nan
 EOF
 cat > "$TD/bench_missing.csv" <<'EOF'
 # columns: workload,runs,checksum
@@ -278,14 +278,14 @@ cat > "$TD/status_blocked.csv" <<'EOF'
 # columns: workload,language,runs,checksum,median_s,status
 modern,cplus,7,abc,0.01,ok
 modern,rust,7,abc,0.02,ok
-modern,goose,0,,0,blocked
+modern,scoped,0,,0,blocked
 modern,fish,0,,0,skipped
 EOF
 cat > "$TD/status_exempt.csv" <<'EOF'
 # columns: workload,language,runs,checksum,status
 modern,cplus,7,abc,ok
 modern,rust,7,abc,ok
-modern,goose,6,XYZ,blocked
+modern,scoped,6,XYZ,blocked
 EOF
 cat > "$TD/status_unknown.csv" <<'EOF'
 # columns: workload,language,runs,checksum,status
@@ -295,7 +295,7 @@ cat > "$TD/status_blocked.json" <<'EOF'
 {"results": [
   {"workload":"modern","language":"cplus","runs_ok":7,"checksum":"abc","status":"ok"},
   {"workload":"modern","language":"rust","runs_ok":7,"checksum":"abc","status":"ok"},
-  {"workload":"modern","language":"goose","runs_ok":0,"checksum":"","status":"blocked"},
+  {"workload":"modern","language":"scoped","runs_ok":0,"checksum":"","status":"blocked"},
   {"workload":"modern","language":"fish","runs_ok":0,"checksum":"","status":"skipped"}
 ]}
 EOF

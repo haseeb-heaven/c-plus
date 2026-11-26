@@ -1,5 +1,5 @@
-/* Shared helpers for independent modern-C ports of Goose sample workloads.
- * C11, no Goose code. All programs print deterministic stdout. */
+/* Shared helpers for independent modern-C ports of the inspiration language sample workloads.
+ * C11, no the inspiration language code. All programs print deterministic stdout. */
 #ifndef PORTS_MODERN_C_COMMON_H
 #define PORTS_MODERN_C_COMMON_H
 #include <stdio.h>

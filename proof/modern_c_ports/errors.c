@@ -1,5 +1,5 @@
-/* Independent modern-C port of the "errors" Goose sample workload.
- * C11, no Goose source copied. See proof/modern_c_ports/README.md. */
+/* Independent modern-C port of the "errors" the inspiration language sample workload.
+ * C11, no the inspiration language source copied. See proof/modern_c_ports/README.md. */
 #include "common.h"
 
 enum result { OK = 0, ERR_ZERO = 1, ERR_NULL = 2 };

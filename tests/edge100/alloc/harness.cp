@@ -45,7 +45,37 @@
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
 #include "stdlib/arena.hp"
+
+/* Issue #56 regression plumbing: a deterministic raw-heap wrapper used only
+ * while mempool.hp is included.  With injection off it is a pass-through to
+ * the real managed allocator (so all 117 APIs keep their normal semantics);
+ * with injection armed it refuses the n-th and later allocs, which lets the
+ * slot_pool OOM paths be exercised without relying on real host exhaustion. */
+static long g_slot_inject = -1L; /* -1 off; >= 0 = successes before failure */
+static size_t g_slot_live = 0;
+
+static void *slot_heap_alloc(size_t n) {
+    void *p = (void *)0;
+    if (g_slot_inject >= 0L) {
+        if (g_slot_inject == 0L) return (void *)0;
+        g_slot_inject--;
+    }
+    p = cplus_alloc(n);
+    if (p != (void *)0) g_slot_live++;
+    return p;
+}
+static void slot_heap_release(void *p) {
+    if (p == (void *)0) return;
+    if (g_slot_live > 0) g_slot_live--;
+    cplus_release(p);
+}
+
+#define cplus_alloc(n) slot_heap_alloc(n)
+#define cplus_release(p) slot_heap_release(p)
 #include "stdlib/mempool.hp"
+#undef cplus_release
+#undef cplus_alloc
+
 #include "stdlib/datastack.hp"
 #include "stdlib/allocator.hp"
 #include "stdlib/alloc_policy.hp"
@@ -833,6 +863,22 @@ static void r031(int kind, struct cres *r) { /* stdlib_mem_pool_as_allocator */
     }
     stdlib_mem_pool_destroy(&p, &e);
 }
+static void slot56_zero_pool(stdlib_slot_pool *q) {
+    q->items = (unsigned char *)0;
+    q->slot_size = 0;
+    q->count = 0;
+    q->capacity = 0;
+    q->free_list = (size_t *)0;
+    q->free_count = 0;
+    q->generations = (uint64_t *)0;
+    q->owns = 0;
+}
+static void slot56_clean(const stdlib_slot_pool *q, struct cres *r) {
+    ex(r, q->items == (unsigned char *)0 && q->free_list == (size_t *)0 &&
+           q->generations == (uint64_t *)0 && q->slot_size == 0 &&
+           q->count == 0 && q->capacity == 0 && q->free_count == 0 &&
+           q->owns == 0);
+}
 static void r032(int kind, struct cres *r) { /* stdlib_slot_pool_init */
     stdlib_slot_pool p; error e = error();
     switch (kind) {
@@ -850,6 +896,24 @@ static void r032(int kind, struct cres *r) { /* stdlib_slot_pool_init */
         ex(r, stdlib_slot_pool_init(&p, 16u, 0u, &e) == STDLIB_OK && p.capacity == 8u);
         stdlib_slot_pool_destroy(&p, &e); break;
     }
+    /* Issue #56: every partial-OOM point must be failure-atomic: no leaked
+     * buffers, no partially published pool, and a safe destroy afterwards. */
+    {
+        stdlib_slot_pool q;
+        size_t before = g_slot_live;
+        long n;
+        slot56_zero_pool(&q);
+        for (n = 0L; n <= 2L; ++n) {
+            g_slot_inject = n;
+            ex(r, stdlib_slot_pool_init(&q, 16u, 4u, &e) == STDLIB_FAIL);
+            g_slot_inject = -1L;
+            ex(r, e.code() == CPLUS_EXIT_RESOURCE);
+            ex(r, g_slot_live == before);
+            slot56_clean(&q, r);
+            stdlib_slot_pool_destroy(&q, &e); /* no-op: nothing was published */
+            ex(r, g_slot_live == before);
+        }
+    }
 }
 static void r033(int kind, struct cres *r) { /* stdlib_slot_pool_grow */
     stdlib_slot_pool p; error e = error(); size_t cap;
@@ -864,6 +928,40 @@ static void r033(int kind, struct cres *r) { /* stdlib_slot_pool_grow */
     default:
         cap = p.capacity;
         ex(r, stdlib_slot_pool_grow(&p, &e) == STDLIB_OK && p.capacity == cap * 2u); break;
+    }
+    /* Issue #56: capacity*2 and both ncap*element products must be guarded,
+     * and a partial OOM must leave the original pool completely intact. */
+    {
+        stdlib_slot_pool q;
+        unsigned char *old_items;
+        size_t before;
+        size_t saved;
+        slot56_zero_pool(&q);
+        ex(r, stdlib_slot_pool_init(&q, 1u, 4u, &e) == STDLIB_OK);
+        saved = q.capacity;
+        /* (a) capacity * 2 wraps to zero. */
+        q.capacity = (size_t)-1 / 2u + 1u;
+        before = g_slot_live;
+        ex(r, stdlib_slot_pool_grow(&q, &e) == STDLIB_FAIL);
+        ex(r, e.code() == CPLUS_EXIT_BOUNDS);
+        ex(r, g_slot_live == before && q.capacity == (size_t)-1 / 2u + 1u);
+        /* (b) ncap*sizeof(size_t) and ncap*sizeof(uint64_t) overflow while
+         *     ncap*slot_size still fits (slot_size == 1). */
+        q.capacity = (size_t)-1 / (2u * sizeof(size_t)) + 1u;
+        before = g_slot_live;
+        ex(r, stdlib_slot_pool_grow(&q, &e) == STDLIB_FAIL);
+        ex(r, e.code() == CPLUS_EXIT_BOUNDS);
+        ex(r, g_slot_live == before);
+        /* (c) two of three new buffers allocated, then OOM. */
+        q.capacity = saved;
+        old_items = q.items;
+        before = g_slot_live;
+        g_slot_inject = 1L;
+        ex(r, stdlib_slot_pool_grow(&q, &e) == STDLIB_FAIL);
+        g_slot_inject = -1L;
+        ex(r, e.code() == CPLUS_EXIT_RESOURCE);
+        ex(r, g_slot_live == before && q.capacity == saved && q.items == old_items);
+        stdlib_slot_pool_destroy(&q, &e);
     }
     stdlib_slot_pool_destroy(&p, &e);
 }

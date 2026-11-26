@@ -23,7 +23,7 @@ number here.
 | C/C++ backend | `/usr/bin/clang` = Apple clang **16.0.0** (`clang-1600.0.26.6`), target `arm64-apple-darwin27.2.0` | `RESULTS.md`, `MEMORY_USAGE.md`, verified live with `/usr/bin/clang --version` |
 | Default `clang` on PATH | Homebrew clang **23.1.6** (targets `arm64-apple-macosx27.0.0`, no `MacOSX27.sdk` installed) — used for baseline ASan/TSan evidence in the CVE notes; also the cause of two prerequisite-build aborts (§5) | `verification-status.md` §1/§3.2 |
 | Rust | rustc **1.100.0** (`0ef1bc386` 2026-11-09, LLVM 23.1.5), `-O`; verified live with `rustc --version` | `bench_rust_NOTES.md`, `RESULTS.md` |
-| Goose | **v2026.4-57-g9412b80f** (runtime `41e336e5d1ee`), default `-O2`; verified live with `goose --version` | `RESULTS.md`, `MEMORY_USAGE.md` |
+| the inspiration language | **v2026.4-57-g9412b80f** (runtime `41e336e5d1ee`), default `-O2`; verified live with `scoped --version` | `RESULTS.md`, `MEMORY_USAGE.md` |
 | Sanitizer backend capability | Accepted by probe: `none` (`strict-none`), `undefined` (UBSan), `integer`. **Unsupported** by `/usr/bin/clang`: ASan/`address`, `leak`, `thread`, `memory`, `cfi` | `verification-status.md` §4, `tests/stdlib/agent2/SANITIZER_MATRIX.md` |
 | Fil-C | **not measured** — no `filc` toolchain installed. No result fabricated | `RESULTS.md`, `MEMORY_USAGE.md` |
 
@@ -61,20 +61,20 @@ safety proof (§8).
 
 ### 3.1 `loop` and `nested` (5 runs, first discarded as warmup, median of 4)
 
-Exact command (from repo root): `CPLUS_GOOSE=<path> sh benchmarks/safety_compare/run_bench.sh`
+Exact command (from repo root): `CPLUS_SCOPED=<path> sh benchmarks/safety_compare/run_bench.sh`
 (`run_bench.sh` pins `PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`
-and `/usr/bin/clang` for the two C+ variants). Goose was passed via
-`CPLUS_GOOSE=/Users/haseeb-mir/.local/bin/goose` because it sits outside the
+and `/usr/bin/clang` for the two C+ variants). the inspiration language was passed via
+`CPLUS_SCOPED=/Users/haseeb-mir/.local/bin/scoped` because it sits outside the
 restricted PATH. All four languages produced the identical checksum for both
 workloads. Source: `RESULTS.md` lines 1–33.
 
-| Workload | plain C `-O2` | C+ safe (`--release`, UBSan) | C+ legacy (`--release --legacy-c`) | Rust `-O` | Goose |
+| Workload | plain C `-O2` | C+ safe (`--release`, UBSan) | C+ legacy (`--release --legacy-c`) | Rust `-O` | the inspiration language |
 |---|---:|---:|---:|---:|---:|
 | loop sum (2e8) | 0.0036 s | 0.1075 s | 0.0038 s | 0.0042 s | 0.0043 s |
 | nested (4000²) | 0.0023 s | 0.0090 s | 0.0023 s | 0.0026 s | 0.0024 s |
 
 Ratios vs plain C: safe **29.85× / 3.90×**; legacy 1.05× / 1.02×; Rust 1.18× /
-1.14×; Goose 1.19× / 1.06×. `run_bench.sh`/`RESULTS.md` report medians only;
+1.14×; the inspiration language 1.19× / 1.06×. `run_bench.sh`/`RESULTS.md` report medians only;
 **p95 for these 5-variant rows: PENDING** (the n=31 p95 values in §3.5 are for
 different build configurations — sanitizers-off C+ vs legacy C).
 
@@ -91,7 +91,7 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
   build/c+ build --release --legacy-c \
   benchmarks/safety_compare/modern.cp -o build/bench_safety/cplus_legacy_modern
 rustc -O benchmarks/safety_compare/modern.rs -o build/bench_safety/rust_modern
-"$CPLUS_GOOSE" build benchmarks/safety_compare/modern.goose \
+"$CPLUS_SCOPED" build benchmarks/safety_compare/modern.scoped \
   -o build/bench_safety/scoped_apps
 ```
 
@@ -104,9 +104,9 @@ Timing used 1 warmup then 7 round-robin interleaved runs per binary with
 | C+ safe (`--release`, UBSan) | 0.0140 s | 0.0134 s | 0.0188 s | 2200000200000 |
 | C+ legacy (`--release --legacy-c`) | 0.0061 s | 0.0052 s | 0.0077 s | 2200000200000 |
 | Rust (`-O`) | 0.0060 s | 0.0048 s | 0.0105 s | 2200000200000 |
-| Goose (`-O2`) | 0.0044 s | 0.0041 s | 0.0090 s | 2200000200000 |
+| the inspiration language (`-O2`) | 0.0044 s | 0.0041 s | 0.0090 s | 2200000200000 |
 
-Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, Goose 0.72×. Across
+Ratio of medians vs C+ legacy: safe **2.31×**, Rust 0.99×, the inspiration language 0.72×. Across
 three non-interleaved passes the safe/legacy median ratio ranged ~1.8×–3.1×;
 the interleaved median is the most controlled estimate and the ratios are
 indicative, not precise (`RESULTS.md` §Honest interpretation). **p95 for these
@@ -322,7 +322,7 @@ runs) reproduced loop/nested and C+ legacy/Rust medians to within one page;
 MiB as approximate. `loop`/`nested` RSS is process baseline (arithmetic folded),
 `modern` is the only genuinely allocating workload, and the C+ and Rust
 standard libraries are **different implementations**, so these are observations
-of particular binaries, not a language ranking. Goose/plain C/Fil-C RSS:
+of particular binaries, not a language ranking. the inspiration language/plain C/Fil-C RSS:
 **PENDING** (out of scope for that task; no toolchain for Fil-C).
 
 ---
@@ -449,7 +449,7 @@ Other sibling artifacts add the following outcomes:
 | `benchmarks/safety_compare/METHODOLOGY.md` | protocol, p95-only-if-n≥20 rule, "same or closer" definition, non-claims, authoritative host record | present |
 | `benchmarks/safety_compare/legacy_speed_NOTES.md`, `legacy_speed.c` | sanitizers-off C+ vs legacy C, n=31 medians/p95 (§3.5) | present |
 | `benchmarks/safety_compare/ALLOC_COMPARE_NOTES.md`, `alloc_bench.{cp,rs}` | C+ `stdlib_alloc` vs Rust `Vec` medians/p95, checksum (§3.6) | present |
-| `benchmarks/safety_compare/{modern,loop,nested}.{cp,c,rs,goose}`, `bench_modern.{cp,rs}`, `run_bench.sh` | workload sources / reproducibility | present |
+| `benchmarks/safety_compare/{modern,loop,nested}.{cp,c,rs,scoped}`, `bench_modern.{cp,rs}`, `run_bench.sh` | workload sources / reproducibility | present |
 | `benchmarks/stdlib/allocator/NOTES.md`, `results/allocator_bench.csv` | allocator medians/p95, tracking toggle, findings | present (CSV read) |
 | `benchmarks/safety_compare/safety_matrix.cp`, `validate_results.cp`, `results/_probe/` | native safety-outcome matrix (C+ side) and probe artifacts | source present; results now recorded in `SAFETY_MATRIX_NOTES.md` / `VALIDATOR_NOTES.md` |
 | `tests/scenarios/cve_like/NOTES_1.md` … `NOTES_5.md` | 15-case safety-outcome matrix, gate output | present |
@@ -460,7 +460,7 @@ Other sibling artifacts add the following outcomes:
 | p95 for the 5-variant `loop`/`nested` rows and the 4-variant `modern` speed row | those tables record medians only (§3.5 p95 is a different build configuration) | **PENDING** |
 | Native safety-outcome matrix results (`safety_matrix.cp` Rust side + runner output) | `SAFETY_MATRIX_NOTES.md`: observed `OK`/`REFUSED`/`ABORT`/`COMPILE_ERROR` tokens, both layers, with explicit non-equivalence note | present |
 | `validate_results.cp` validation run output | `VALIDATOR_NOTES.md` records both pre-fix `BENCH_VALID 192 5` and fixed `BENCH_BLOCKED 5` + `BENCH_VALID 192 0`; independently rebuilt and verified here, exit 0 | present (fixed, verified) |
-| Goose/plain-C/Fil-C peak RSS | out of scope / no toolchain | **PENDING** |
+| the inspiration language/plain-C/Fil-C peak RSS | out of scope / no toolchain | **PENDING** |
 | Fil-C speed and safety results | no `filc` toolchain installed | **PENDING** |
 
 ---
@@ -501,7 +501,7 @@ Other sibling artifacts add the following outcomes:
   loop timings are dominated by constant-folding, not loop execution.
 - **No Rust-equivalence proof.** A matching checksum verifies one deterministic
   integer result; it says nothing about type systems, unsafe code, or "Rust is
-  proven safe". Rust `Vec`/`String` and Goose dynamic arrays are different
+  proven safe". Rust `Vec`/`String` and the inspiration language dynamic arrays are different
   standard-library implementations — cross-checks, not apples-to-apples
   measurements of the C+ stdlib. Rust `-O` retains bounds-check semantics but
   may prove individual checks away; overflow checks are normally off in
@@ -524,7 +524,7 @@ Other sibling artifacts add the following outcomes:
 - **RSS is an observation only.** `time -l` maximum RSS says nothing about
   correctness or safety; `modern` C+ safe RSS is explicitly approximate.
 - **Fil-C was not measured** (no toolchain); its absence in any table is a
-  limitation, not a zero or a failure. Plain C and Goose RSS are PENDING.
+  limitation, not a zero or a failure. Plain C and the inspiration language RSS are PENDING.
 - The **native safety-outcome matrix** is now recorded in
   `SAFETY_MATRIX_NOTES.md`: C+ refusals come from *runtime* checked APIs (with a
   build-only `-DCPLUS_EXIT_ARITHMETIC=110` shim), while Rust rejects null/use-after-move

@@ -1,5 +1,5 @@
 /* C+ modern GFX/GUI facade over SDL3 (zlib, system-installed, real windowed
- * rendering). Additive header; no Goose code. Widgets are drawn into a real
+ * rendering). Additive header; no the inspiration language code. Widgets are drawn into a real
  * SDL3 renderer, producing a real framebuffer, not CLI transcripts.
  */
 #ifndef CPLUS_STD_GFX_SDL3_HP

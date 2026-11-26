@@ -3,7 +3,7 @@
 Two small, non-interactive programs that use the vendored **rurban/CTL**
 headers (MIT, pinned `ede5f455392f2380dd16aead26835eece6cd20e4` in
 `third_party/ctl/`, unmodified) together with the C+ language and the native
-Goose-inspired scratch allocator.
+the inspiration language-inspired scratch allocator.
 
 Run everything with:
 

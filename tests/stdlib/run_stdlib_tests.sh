@@ -159,7 +159,7 @@ for src in "$ROOT"/tests/stdlib/*.cp; do
       [ -f "$CLIP" ] || { skip "$name" "ffmpeg CLI unavailable for the fixture"; continue; } ;;
     sdl_test|gui_test)
       pkg-config --exists sdl3 || { skip "$name" "SDL3 development files missing"; continue; } ;;
-    http_test)
+    http_test|http_issue63_test)
       pkg-config --exists libcurl || { skip "$name" "libcurl development files missing"; continue; } ;;
     async_test)
       pkg-config --exists libuv || { skip "$name" "libuv development files missing"; continue; } ;;

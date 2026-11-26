@@ -1,101 +1,101 @@
 RAII cleanup regression suite
 macOS-27.2.1-arm64-arm-64bit
-/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+/tmp/resolve3/build/c+
 
 neg_multi_declarator           PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp
-  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp:9:24: error: declare one owning resource per statement\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /tmp/resolve3/build/c+ check --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp
+  rc=1 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp:9:24: error: declare one owning resource per statement\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_multi_declarator.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
 neg_goto_out_of_scope          PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp
-  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp:9:28: error: 'goto' bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safe"
+  cmd: /tmp/resolve3/build/c+ check --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp
+  rc=1 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp:9:28: error: 'goto' bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_out_of_scope.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
 neg_goto_into_scope            PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp
-  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp:9:32: warning: 'goto' bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety"
+  cmd: /tmp/resolve3/build/c+ check --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp
+  rc=1 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp:9:32: warning: 'goto' bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_goto_into_scope.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\nerror: 1 C+ warning(s) treated as errors"
 neg_setjmp_assignment          PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp
-  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp:7:23: warning: [CPLUS-FFI] \'setjmp\' bypasses C+ deterministic cleanup\n  int main(void){ int j=setjmp(jb); if(j==0){ R x={1}; longjmp(jb,1); } printf("L\\n"); return 0; }\n                        ^~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_setjmp_assign'
+  cmd: /tmp/resolve3/build/c+ check --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp
+  rc=1 out='' err='/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp:7:23: warning: [CPLUS-FFI] \'setjmp\' bypasses C+ deterministic cleanup\n  int main(void){ int j=setjmp(jb); if(j==0){ R x={1}; longjmp(jb,1); } printf("L\\n"); return 0; }\n                        ^~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_setjmp_assignment.cp:7:54: warning: [CPLUS-RAII] \'longjmp\' bypasses'
 neg_longjmp_from_callback      PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp
-  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:7:27: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n  static void escape(void){ longjmp(jb,1); }\n                            ^~~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:8:20: warning: [CPLUS-FFI] 'set"
+  cmd: /tmp/resolve3/build/c+ check --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp
+  rc=1 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:7:27: warning: [CPLUS-RAII] 'longjmp' bypasses C+ deterministic cleanup\n  static void escape(void){ longjmp(jb,1); }\n                            ^~~~~~~\nhelp: RAII is not guaranteed across non-local jumps; use structured control flow in safe C+\n/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/neg_longjmp_from_callback.cp:8:20: warning: [CPLUS-FFI] 'setjmp' bypasses C+ deterministic cleanup\n  int main(void"
 pos_shadow_order               PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_shadow_order.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_shadow_order.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_shadow_order.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_shadow_order.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_shadow_order.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_shadow_order.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_shadow_order.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_shadow_order.bin
   rc=0 out='D2 END\nD1 ' err=''
 pos_loop_cleanup               PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_loop_cleanup.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_loop_cleanup.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_loop_cleanup.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_loop_cleanup.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_loop_cleanup.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_loop_cleanup.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_loop_cleanup.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_loop_cleanup.bin
   rc=0 out='D1 D2 D3 END\n' err=''
 pos_switch_break               PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_switch_break.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_switch_break.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_switch_break.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_switch_break.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_switch_break.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_switch_break.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_switch_break.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_switch_break.bin
   rc=0 out='D1 END\n' err=''
 pos_return_order               PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_return_order.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_return_order.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_return_order.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_return_order.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_return_order.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_return_order.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_return_order.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_return_order.bin
   rc=0 out='D2 D1 ' err=''
 pos_move_transfer              PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_move_transfer.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_move_transfer.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_move_transfer.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_move_transfer.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_move_transfer.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_move_transfer.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_move_transfer.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_move_transfer.bin
   rc=0 out='END\nD1 ' err=''
 pos_continue_cleanup           PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_continue_cleanup.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_continue_cleanup.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_continue_cleanup.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_continue_cleanup.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_continue_cleanup.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_continue_cleanup.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_continue_cleanup.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_continue_cleanup.bin
   rc=0 out='D1 B2 D2 ' err=''
 pos_explicit_helper_drop       PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_explicit_helper_drop.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_explicit_helper_drop.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_explicit_helper_drop.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_explicit_helper_drop.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_explicit_helper_drop.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_explicit_helper_drop.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_explicit_helper_drop.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_explicit_helper_drop.bin
   rc=0 out='D1 D2 END\n' err=''
 pos_separate_declarations      PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_separate_declarations.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_separate_declarations.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/pos_separate_declarations.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/pos_separate_declarations.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_separate_declarations.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_separate_declarations.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/pos_separate_declarations.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/pos_separate_declarations.bin
   rc=0 out='END\nD2 D1 ' err=''
 fuzz_chain_01                  PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_01.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_01.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_01.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_01.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_01.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_01.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_01.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_01.bin
   rc=0 out='D1 END\n' err=''
 fuzz_chain_02                  PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_02.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_02.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_02.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_02.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_02.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_02.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_02.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_02.bin
   rc=0 out='D2 D1 END\n' err=''
 fuzz_chain_04                  PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_04.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_04.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_04.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_04.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_04.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_04.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_04.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_04.bin
   rc=0 out='D4 D3 D2 D1 END\n' err=''
 fuzz_chain_08                  PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_08.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_08.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_08.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_08.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_08.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_08.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_08.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_08.bin
   rc=0 out='D8 D7 D6 D5 D4 D3 D2 D1 END\n' err=''
 fuzz_chain_16                  PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_16.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_16.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_chain_16.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_chain_16.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_16.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_16.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_chain_16.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_chain_16.bin
   rc=0 out='D16 D15 D14 D13 D12 D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 END\n' err=''
 fuzz_branch_01                 PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_branch_01.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_branch_01.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_branch_01.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_branch_01.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_01.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_01.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_01.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_01.bin
   rc=0 out='D1 END\n' err=''
 fuzz_branch_03                 PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_branch_03.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_branch_03.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_branch_03.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_branch_03.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_03.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_03.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_03.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_03.bin
   rc=0 out='D1 D2 D3 END\n' err=''
 fuzz_branch_07                 PASS
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_branch_07.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_branch_07.bin
-  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/cases/fuzz_branch_07.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
-  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_cleanup/results/fuzz_branch_07.bin
+  cmd: /tmp/resolve3/build/c+ build --strict --sanitize=none /private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_07.cp -o /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_07.bin
+  rc=0 out='' err="/private/tmp/resolve3/tests/compiler/raii_cleanup/cases/fuzz_branch_07.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /private/tmp/resolve3/tests/compiler/raii_cleanup/results/fuzz_branch_07.bin
   rc=0 out='D1 D2 D3 D4 D5 D6 D7 END\n' err=''
 
 cases=21 passed=21 failed=0

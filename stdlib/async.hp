@@ -79,7 +79,8 @@ class loop {
 
     /* Drains pending closes (bounded) before releasing the loop memory: a
      * handle whose uv_close() has not completed would otherwise point at freed
-     * memory. */
+     * memory.  This drain is also what completes a timer's queued uv_close():
+     * timer::drop() never runs the loop itself (see its contract below). */
     void drop(void) {
         int guard = 0;
         if (!this->initialized)
@@ -178,24 +179,23 @@ class timer {
         return uv_is_active((const uv_handle_t *)this->handle) ? 1 : 0;
     }
 
-    /* The handle lives on the heap and is released by the close callback, so
-     * dropping the timer can never free memory libuv still references.  The
-     * loop is drained (bounded) until the close completes. */
+    /* Issue #60: dropping a timer only *queues* the handle close; it must not
+     * run the loop.  uv_run() from a destructor is re-entrant UB when drop()
+     * happens inside a callback, it dispatches unrelated handles' callbacks,
+     * and it dereferences owner_loop even if the loop was already dropped.
+     * The owner loop's own run()/drop() lifecycle dispatches the close
+     * callback that releases the heap handle.  Contract: the owner loop must
+     * outlive the timer -- drop a timer before dropping its loop.  The
+     * borrowed owner_loop is guarded (non-NULL) on use and cleared here, so
+     * no later drop() can touch a stale pointer. */
     void drop(void) {
         if (!this->initialized)
             return;
-        if (this->handle != NULL) {
+        if (this->handle != NULL && this->owner_loop != NULL) {
             uv_timer_stop(this->handle);
             this->handle->data = NULL;
             uv_close((uv_handle_t *)this->handle, stdlib_timer_release_handle);
             this->handle = NULL;
-            if (this->owner_loop != NULL) {
-                int guard = 0;
-                while (uv_loop_alive(this->owner_loop) && guard < 1000) {
-                    uv_run(this->owner_loop, UV_RUN_NOWAIT);
-                    guard++;
-                }
-            }
         }
         this->owner_loop = NULL;
         this->initialized = 0;

@@ -4,6 +4,34 @@
 #include "stdlib/error.hp"
 #include "stdlib/json.hp"
 
+/* Issue #57 regression: json_builder must copy keys into document-owned
+ * storage, not retain the caller's raw pointer. Every key below lives only
+ * in jk_add_transients' stack frame; once it returns the keys are dead, and
+ * jk_reuse_stack overwrites that same stack region. A builder that kept the
+ * raw pointers would serialise filler bytes (or fail outright); a builder
+ * that duplicates keys emits the originals regardless of the dead frame. */
+static void jk_add_transients(json_builder *builder, error *err) {
+    char key[32];
+    int i;
+    for (i = 0; i < 32; i++)
+        key[i] = 0;
+    key[0] = 'k'; key[1] = '1';
+    builder->add_int(key, 7, err);
+    key[1] = '2';
+    builder->add_double(key, 2.5, err);
+    key[1] = '3';
+    builder->add_bool(key, 1, err);
+    key[1] = '4';
+    builder->add_string(key, "v", err);
+} /* the stack key dies here */
+
+static void jk_reuse_stack(void) {
+    char scratch[32];
+    int i;
+    for (i = 0; i < 32; i++)
+        scratch[i] = 'X';
+}
+
 int main(void) {
     error err = error();
     const char *text =
@@ -65,6 +93,17 @@ int main(void) {
     char *built = builder.write(&length);
     print("built", built, builder.valid());
     json_free(built);
+
+    /* Serialise only after every key's stack frame is gone and clobbered. */
+    json_builder key_builder = json_builder();
+    char *key_dump;
+    size_t key_length = 0;
+    jk_add_transients(&key_builder, &err);
+    jk_reuse_stack();
+    key_dump = key_builder.write(&key_length);
+    print("builder_key_lifetime", key_dump, key_length);
+    json_free(key_dump);
+    key_builder.drop();
 
     json bad = json("{not json", &err);
     print("bad", bad.valid(), err.failed_now(), err.what());

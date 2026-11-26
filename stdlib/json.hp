@@ -448,6 +448,25 @@ class json_builder {
         return this->document != NULL && this->root_value != NULL;
     }
 
+    /* The yyjson_mut_obj_add_* convenience helpers retain the caller's key
+     * pointer verbatim (they do not duplicate it). A stack key would therefore
+     * dangle as soon as it went out of scope, corrupting a later write().
+     * Copy the key into document-owned storage with yyjson_mut_strcpy and add
+     * the prebuilt value through the low-level yyjson_mut_obj_add instead.
+     * The key copy lives in the document's arena and is released by drop(),
+     * so no extra builder-owned storage or destructor work is required. */
+    int add_pair(const char *key, yyjson_mut_val *value, error *err,
+                 const char *failure_message) {
+        yyjson_mut_val *owned_key = yyjson_mut_strcpy(this->document, key);
+        if (owned_key == NULL || value == NULL ||
+            !yyjson_mut_obj_add(this->root_value, owned_key, value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           failure_message);
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
     int add_int(const char *key, int value, error *err) {
         error_reset(err);
         if (!this->valid() || key == NULL) {
@@ -455,12 +474,8 @@ class json_builder {
                            "json_builder::add_int: invalid argument");
             return STDLIB_FAIL;
         }
-        if (!yyjson_mut_obj_add_int(this->document, this->root_value, key, value)) {
-            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
-                           "json_builder::add_int failed");
-            return STDLIB_FAIL;
-        }
-        return STDLIB_OK;
+        return this->add_pair(key, yyjson_mut_int(this->document, value), err,
+                              "json_builder::add_int failed");
     }
 
     int add_double(const char *key, double value, error *err) {
@@ -475,12 +490,8 @@ class json_builder {
                            "json_builder::add_double: non-finite value");
             return STDLIB_FAIL;
         }
-        if (!yyjson_mut_obj_add_double(this->document, this->root_value, key, value)) {
-            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
-                           "json_builder::add_double failed");
-            return STDLIB_FAIL;
-        }
-        return STDLIB_OK;
+        return this->add_pair(key, yyjson_mut_double(this->document, value), err,
+                              "json_builder::add_double failed");
     }
 
     int add_bool(const char *key, int value, error *err) {
@@ -490,15 +501,12 @@ class json_builder {
                            "json_builder::add_bool: invalid argument");
             return STDLIB_FAIL;
         }
-        if (!yyjson_mut_obj_add_bool(this->document, this->root_value, key, value != 0)) {
-            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
-                           "json_builder::add_bool failed");
-            return STDLIB_FAIL;
-        }
-        return STDLIB_OK;
+        return this->add_pair(key, yyjson_mut_bool(this->document, value != 0),
+                              err, "json_builder::add_bool failed");
     }
 
-    /* Copies the value, so the caller keeps ownership of its buffer. */
+    /* Copies the value, so the caller keeps ownership of its buffer; the key
+     * is copied by add_pair, so the caller keeps ownership of that too. */
     int add_string(const char *key, const char *value, error *err) {
         error_reset(err);
         if (!this->valid() || key == NULL || value == NULL) {
@@ -506,12 +514,9 @@ class json_builder {
                            "json_builder::add_string: invalid argument");
             return STDLIB_FAIL;
         }
-        if (!yyjson_mut_obj_add_strcpy(this->document, this->root_value, key, value)) {
-            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
-                           "json_builder::add_string failed");
-            return STDLIB_FAIL;
-        }
-        return STDLIB_OK;
+        return this->add_pair(key, yyjson_mut_strncpy(this->document, value,
+                                                     strlen(value)), err,
+                              "json_builder::add_string failed");
     }
 
     char *write(size_t *length) {

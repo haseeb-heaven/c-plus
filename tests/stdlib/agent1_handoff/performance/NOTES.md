@@ -8,7 +8,7 @@ or runtime code, or claim that any language is faster or safer than another.
 Task identity (from `docs/libc/AGENT1_PRIORITY_HANDOFF.md`):
 
 - line 24: `| P2 | Performance vs Clang and Fil-C | benchmarks/safety_compare/RESULTS.md
-  has C+/Rust/Goose medians; Fil-C toolchain absent | tests/stdlib/agent1_handoff/performance/ |`
+  has C+/Rust/the inspiration language medians; Fil-C toolchain absent | tests/stdlib/agent1_handoff/performance/ |`
 - line 62: P2 definition of done — "performance is measured with identical
   workloads against Clang and (when available) Fil-C."
 
@@ -22,7 +22,7 @@ Target document: `tests/stdlib/agent1_handoff/performance/NOTES.md` (this file).
 | --- | --- |
 | `benchmarks/safety_compare/RESULTS.md` | Two dated measurement reports (2026-11-22 integer workloads; 2026-11-23 modern stdlib workload) with medians, environment, commands, denominators and explicit caveats. |
 | `benchmarks/safety_compare/run_bench.sh` | Exact build/timing commands for `loop` and `nested`; compiler pinning; the 5-run/1-warmup/median-of-4 denominator; the Fil-C "not measured" note. |
-| `benchmarks/safety_compare/modern.cp`, `modern.rs`, `modern.goose` | Identical workload definitions, N/M constants and the shared checksum; basis of the safe-vs-legacy fairness argument. |
+| `benchmarks/safety_compare/modern.cp`, `modern.rs`, `modern.scoped` | Identical workload definitions, N/M constants and the shared checksum; basis of the safe-vs-legacy fairness argument. |
 | `benchmarks/safety_compare/loop.c`, `nested.c` | Workload denominators (2e8 iterations; 4000² inner iterations). |
 | `benchmarks/run_bench.sh`, `benchmarks/timeit.py` | The other, older 8-benchmark suite: Clang `-O2` reference build line, 5-run median discipline (timeit warms up once then times N runs). |
 | `docs/LIMITATIONS.md` § "Performance measurements" | The only table with a dedicated `clang -O2` column (8 benchmarks) and its interpretation. |
@@ -40,8 +40,8 @@ $ /usr/bin/clang --version | head -1
 Apple clang version 16.0.0 (clang-1600.0.26.6)
 $ rustc --version
 rustc 1.100.0 (0ef1bc386 2026-11-09)
-$ /Users/haseeb-mir/.local/bin/goose --version
-goose v2026.4-57-g9412b80f (runtime 41e336e5d1ee)
+$ /Users/haseeb-mir/.local/bin/scoped --version
+scoped v2026.4-57-g9412b80f (runtime 41e336e5d1ee)
 $ ls tools
 verify.sh
 ```
@@ -56,9 +56,9 @@ not from any run performed while writing this note.
 
 ### 2.1 Integer workloads — measured 2026-11-22 (`benchmarks/safety_compare/RESULTS.md` lines 1–34)
 
-Command: `CPLUS_GOOSE=<path> sh benchmarks/safety_compare/run_bench.sh`
+Command: `CPLUS_SCOPED=<path> sh benchmarks/safety_compare/run_bench.sh`
 
-Host/toolchain as recorded: "macOS arm64, Apple clang 16, rustc 1.100.0, Goose
+Host/toolchain as recorded: "macOS arm64, Apple clang 16, rustc 1.100.0, the inspiration language
 v2026.4, C+ driver at `-O2 --release`."
 
 Denominator: "Each binary ran 5 times; the first run was discarded as warmup and
@@ -70,13 +70,13 @@ Interpretation of the "plain C `-O2`" column: `run_bench.sh` line 11 sets
 `CLANG=/usr/bin/clang` and line 17 builds with `"$CLANG" -O2 ...`. **Plain C -O2
 in this table is therefore the Clang -O2 reference** for these two workloads.
 
-| Workload | plain C / Clang `-O2` | C+ safe (`--release`, UBSan) | C+ legacy (`--release --legacy-c`) | Rust `-O` | Goose |
+| Workload | plain C / Clang `-O2` | C+ safe (`--release`, UBSan) | C+ legacy (`--release --legacy-c`) | Rust `-O` | the inspiration language |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | loop sum (2e8) | 0.0036s | 0.1075s | 0.0038s | 0.0042s | 0.0043s |
 | nested (4000²) | 0.0023s | 0.0090s | 0.0023s | 0.0026s | 0.0024s |
 
 Ratios vs plain C, as recorded: safe **29.85x / 3.90x**; legacy **1.05x / 1.02x**;
-Rust **1.18x / 1.14x**; Goose **1.19x / 1.06x**.
+Rust **1.18x / 1.14x**; the inspiration language **1.19x / 1.06x**.
 
 Workload denominators from source: `loop.c` sums `i = 0 .. 200000000-1`
 (2e8 iterations); `nested.c` runs 4000×4000 = 16,000,000 inner iterations
@@ -90,10 +90,10 @@ Caveats stated in RESULTS.md (must travel with any reuse of these numbers):
 - "All non-instrumented compilers folded the arithmetic loops into closed-form
   results (identical checksums prove semantics, but the 0.002–0.004s timings are
   dominated by that optimisation, not by loop execution)." These numbers must
-  **not** be read as "Rust/Goose are 30x faster than C+"; they are optimisation
+  **not** be read as "Rust/the inspiration language are 30x faster than C+"; they are optimisation
   differences.
-- `goose` is installed but outside the restricted benchmark `PATH`; its path must
-  be supplied via `CPLUS_GOOSE`.
+- `scoped` is installed but outside the restricted benchmark `PATH`; its path must
+  be supplied via `CPLUS_SCOPED`.
 
 ### 2.2 Modern stdlib workload — measured 2026-11-23 (`RESULTS.md` lines 37–154)
 
@@ -111,7 +111,7 @@ Workload (from `modern.cp`):
   Arithmetic check from the source constants: `vsum = N(N-1)/2 =
   1,999,999,000,000`; `ssize_sum = sum_{k=1..M}(1+10k) = 200,001,200,000`;
   total `2,200,000,200,000`. Rust uses `Vec<i32>::push`/indexing and
-  `String::push_str`/`len()`; Goose uses `i32[>..]` and `u8[>..]` dynamic arrays.
+  `String::push_str`/`len()`; the inspiration language uses `i32[>..]` and `u8[>..]` dynamic arrays.
   All binaries printed the identical checksum.
 
 Exact build commands (verbatim from RESULTS.md):
@@ -125,11 +125,11 @@ PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
   build/c+ build --release --legacy-c \
   benchmarks/safety_compare/modern.cp -o build/bench_safety/cplus_legacy_modern
 rustc -O benchmarks/safety_compare/modern.rs -o build/bench_safety/rust_modern
-"$CPLUS_GOOSE" build benchmarks/safety_compare/modern.goose \
+"$CPLUS_SCOPED" build benchmarks/safety_compare/modern.scoped \
   -o build/bench_safety/scoped_apps
 ```
 
-`$CPLUS_GOOSE` was `/Users/haseeb-mir/.local/bin/goose`. The restricted `PATH`
+`$CPLUS_SCOPED` was `/Users/haseeb-mir/.local/bin/scoped`. The restricted `PATH`
 pins the C+ backend to `/usr/bin/clang` (Apple clang 16) so the two C+ variants
 differ only in safety mode.
 
@@ -140,7 +140,7 @@ per binary, round-robin across variants, median of the 7. Verbatim harness:
 python3 - <<'PY'
 import subprocess,time,statistics
 out='build/bench_safety'
-variants=['cplus_safe','cplus_legacy','rust','goose']
+variants=['cplus_safe','cplus_legacy','rust','scoped']
 bins={v:f'{out}/{v}_modern' for v in variants}
 for v in variants: subprocess.run([bins[v]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
 samples={v:[] for v in variants}
@@ -158,9 +158,9 @@ T8112); C+ `0.1.0` (Backend: host Clang/LLVM); safe = `Mode::Safe`
 (`-fsanitize=undefined,bounds,null,alignment`, `-fno-sanitize-recover=all`,
 `-fno-omit-frame-pointer`); legacy = `Mode::LegacyC` (`-std=gnu89`,
 `-DCPLUS_LEGACY_C=1`, no sanitizers); backend C compiler for both C+ variants
-and Goose = Apple clang 16.0.0 (`clang-1600.0.26.6`, `/usr/bin/clang` /
+and the inspiration language = Apple clang 16.0.0 (`clang-1600.0.26.6`, `/usr/bin/clang` /
 `/usr/bin/cc`); rustc 1.100.0 (`0ef1bc386 2026-11-09`, LLVM 23.1.5) at `-O`;
-Goose `v2026.4-57-g9412b80f` (runtime `41e336e5d1ee`), default `-O2`. All builds
+the inspiration language `v2026.4-57-g9412b80f` (runtime `41e336e5d1ee`), default `-O2`. All builds
 succeeded with no warnings.
 
 | Variant | median (7 interleaved runs) | min | max | checksum |
@@ -168,15 +168,15 @@ succeeded with no warnings.
 | C+ safe (`--release`, UBSan) | 0.0140s | 0.0134s | 0.0188s | 2200000200000 |
 | C+ legacy (`--release --legacy-c`) | 0.0061s | 0.0052s | 0.0077s | 2200000200000 |
 | Rust (`-O`) | 0.0060s | 0.0048s | 0.0105s | 2200000200000 |
-| Goose (`-O2`) | 0.0044s | 0.0041s | 0.0090s | 2200000200000 |
+| the inspiration language (`-O2`) | 0.0044s | 0.0041s | 0.0090s | 2200000200000 |
 
 Ratios of medians vs C+ legacy, as recorded: safe **2.31×**, Rust **0.99×**,
-Goose **0.72×**.
+the inspiration language **0.72×**.
 
 Caveats stated in RESULTS.md: the fair comparison is safe vs legacy (same source,
 same `-O2`, same stdlib; only instrumentation differs; applied to lowered
 `string.hp`/`vector.hp` code too); this workload is allocation-heavy so loops
-are *not* folded; Rust/Goose libraries are different implementations and their
+are *not* folded; Rust/the inspiration language libraries are different implementations and their
 numbers are cross-checks, **not** evidence of language superiority. Variance is
 material: across three non-interleaved passes the safe/legacy ratio ranged
 ~1.8×–3.1× (legacy 0.0055–0.0095s, safe 0.0150–0.0172s).
@@ -227,7 +227,7 @@ runs and must be rerun, not treated as universal.
 4. **Clang -O2 on the modern allocation-heavy workload** — there is no plain-C
    source for `modern.cp`, because that workload is expressed in C+ stdlib types.
    The §2.2 table therefore has no Clang column; C+ legacy is its non-instrumented
-   baseline, and Rust/Goose are cross-checks.
+   baseline, and Rust/the inspiration language are cross-checks.
 5. **Anything beyond the listed workloads** — the evidence covers two synthetic
    integer workloads, one synthetic allocation-heavy workload, and eight older
    microbenchmarks. None of these is a general performance claim about any
@@ -248,8 +248,8 @@ a time; control drift; make every number reproducible from a recorded command.
 - **Compiler pinning**: C+ backend and any reference C compiler pinned by
   absolute path (`/usr/bin/clang`, Apple clang 16) via a restricted `PATH`:
   `PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`. Do not rely on a
-  Homebrew `clang` from `PATH` (see §6). Rust and Goose pinned by absolute path
-  or `${CPLUS_RUSTC}` / `${CPLUS_GOOSE}` environment overrides.
+  Homebrew `clang` from `PATH` (see §6). Rust and the inspiration language pinned by absolute path
+  or `${CPLUS_RUSTC}` / `${CPLUS_SCOPED}` environment overrides.
 - **Warmup**: exactly one untimed run per binary before sampling (discharges
   page faults and CPU frequency ramp-up; same discipline as `benchmarks/timeit.py`).
 - **Interleaving**: timed runs are round-robin across all variants in each round,
@@ -262,7 +262,7 @@ a time; control drift; make every number reproducible from a recorded command.
   `-O2 --release`, identical stdlib layer; only UBSan instrumentation differs.
   Use this pair for the headline overhead ratio.
 - **Secondary cross-checks**: Clang `-O2` plain C (only where an equivalent
-  plain-C source exists), Rust `-O`, Goose `-O2`, and Fil-C when a toolchain
+  plain-C source exists), Rust `-O`, the inspiration language `-O2`, and Fil-C when a toolchain
   exists. These compare *different implementations*; report them, but do not
   interpret them as language rankings.
 - **Reporting**: each table row must be accompanied by the exact build and
@@ -278,7 +278,7 @@ a time; control drift; make every number reproducible from a recorded command.
 | C+ legacy | `PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin build/c+ build --release --legacy-c <src>.cp -o build/bench_safety/cplus_legacy_<w>` | Primary non-instrumented baseline; same source/stdlib. |
 | Clang `-O2` | `/usr/bin/clang -O2 <src>.c -o build/bench_safety/c_<w>` (safety_compare) **or** `clang -std=gnu17 -O2 -pthread -I runtime/include -include cplus/cplus.h <src>.c -o ...` (older suite) | Reference plain C; only where a C source exists. |
 | Rust `-O` | `rustc -O <src>.rs -o build/bench_safety/rust_<w>` | Cross-check. |
-| Goose | `"$CPLUS_GOOSE" build <src>.goose -o build/bench_safety/goose_<w>` | Cross-check. |
+| the inspiration language | `"$CPLUS_SCOPED" build <src>.scoped -o build/bench_safety/scoped_<w>` | Cross-check. |
 | Fil-C | **No command available** — toolchain absent (§6). Add only when a `filc` compiler + runtime exists, with its own documented command and a checksum-parity gate. | Missing; report "not measured". |
 
 ### 4.3 Timing harness template
@@ -316,14 +316,14 @@ for the agent who implements P2:
 2. **Re-run the integer workloads** (`loop.c`, `nested.c`) with the §4 harness,
    including the Clang `-O2` reference built by `/usr/bin/clang -O2`. Keep the
    "loops folded into closed form" caveat attached to these rows.
-3. **Re-run the modern workload** (`modern.cp/.rs/.goose`) with the §4 harness,
+3. **Re-run the modern workload** (`modern.cp/.rs/.scoped`) with the §4 harness,
    preserving the safe-vs-legacy pair as the headline ratio and the exact
    checksum `2200000200000` as a gate.
 4. **Add a Clang `-O2` column for the modern workload only if** a plain-C
    equivalent is written and declared as a distinct workload (same operations,
    same checksum). Otherwise explicitly leave the Clang cell as "no equivalent
    plain-C source" rather than substituting C+ legacy and calling it Clang.
-5. **Keep Rust and Goose as labelled cross-checks** with absolute-path builds;
+5. **Keep Rust and the inspiration language as labelled cross-checks** with absolute-path builds;
    never convert their medians into "language X is faster" statements.
 6. **Add Fil-C only when a toolchain exists**: install/build a Fil-C compiler +
    runtime, document its exact command and version, compile the identical
@@ -426,6 +426,6 @@ for the agent who implements P2:
   and Fil-C cannot target x86 Windows; **cross-OS** — macOS arm64 only, Linux CI
   unverified.
 - Interpretation guardrail: C+ safe vs C+ legacy is the only apples-to-apples
-  pair; Rust/Goose/Clang numbers are cross-checks or reference points, not
+  pair; Rust/the inspiration language/Clang numbers are cross-checks or reference points, not
   evidence of language superiority; "not measured" is the only truthful Fil-C
   entry until a toolchain exists.

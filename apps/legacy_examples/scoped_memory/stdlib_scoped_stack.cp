@@ -6,7 +6,7 @@
  * The only pointer reported outside this frame is an offset from ds->base,
  * so the output is deterministic even though the reservation address is not.
  *
- * Architecture inspired by aardappel/goose (Apache-2.0).  No Goose code was
+ * Architecture inspired by aardappel/scoped (Apache-2.0).  No the inspiration language code was
  * copied; this is C+ using this repository's own datastack/vector/string APIs.
  */
 #include <stdio.h>

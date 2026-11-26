@@ -8,10 +8,17 @@
 #define CPLUS_STD_HTTP_HP
 
 #include <curl/curl.h>
+#include <limits.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
+
+/* Redirect hardening.  libcurl copies the protocol string, so a literal is
+ * safe here.  The hop cap stops a redirect loop from spinning forever. */
+#define HTTP_REDIRECT_PROTOCOLS "http,https"
+#define HTTP_MAX_REDIRECTS 5L
 
 /* Process-wide libcurl lifetime; clients must be dropped before it. */
 class http {
@@ -61,12 +68,19 @@ class http_headers {
         return this->list;
     }
 
-    /* Copies the line, so the caller keeps ownership of its string. */
+    /* Copies the line, so the caller keeps ownership of its string.
+     * CR or LF is rejected: a line containing either could inject extra
+     * headers (or a fake body) into the outgoing request. */
     int add(const char *line, error *err) {
         struct curl_slist *fresh;
         error_reset(err);
         if (line == NULL) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_headers::add: null line");
+            return STDLIB_FAIL;
+        }
+        if (strchr(line, '\r') != NULL || strchr(line, '\n') != NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "http_headers::add: CR/LF in header line");
             return STDLIB_FAIL;
         }
         fresh = curl_slist_append(this->list, line);
@@ -139,16 +153,34 @@ static size_t http_sink_write(char *ptr, size_t size, size_t nmemb,
 
 class http_client {
     CURL *handle;
-    /* Owned copy: libcurl keeps the pointer, so the caller's http_headers may
-     * die before the request is performed. */
+    /* Owned copies: libcurl keeps both pointers past curl_easy_perform and
+     * until the handle is cleaned up, so caller storage may die early. */
     struct curl_slist *header_copy;
+    char *post_copy;
 
     http_client(error *err) {
         error_reset(err);
-        this->handle = curl_easy_init();
-        this->header_copy = NULL;
-        if (this->handle == NULL)
-            error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
+        do {
+            this->handle = curl_easy_init();
+            this->header_copy = NULL;
+            this->post_copy = NULL;
+            if (this->handle == NULL) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
+                break;
+            }
+            /* Fail closed: never follow a redirect to file://, ftp://, etc.,
+             * and bound the chain even for http/https loops. */
+            if (curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS_STR,
+                                 HTTP_REDIRECT_PROTOCOLS) != CURLE_OK ||
+                curl_easy_setopt(this->handle, CURLOPT_MAXREDIRS,
+                                 HTTP_MAX_REDIRECTS) != CURLE_OK) {
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED,
+                           "http_client: redirect policy setopt failed");
+                curl_easy_cleanup(this->handle);
+                this->handle = NULL;
+                break;
+            }
+        } while (0);
     }
 
     int valid(void) {
@@ -223,11 +255,20 @@ class http_client {
         return count;
     }
 
+    /* Borrowed owned POST body; NULL until a POST whose setopt succeeded.
+     * Lets callers prove request() copied their buffer instead of borrowing
+     * a pointer that may die when request() returns. */
+    const char *body_copy(void) {
+        return this->post_copy;
+    }
+
     /* Shared body of get/post: writes at most size-1 response bytes. */
     int request(const char *url, const char *body, char *buf, size_t size,
                 error *err) {
         http_sink sink;
         CURLcode rc;
+        char *owned = NULL;
+        size_t len = 0;
         error_reset(err);
         if (this->handle == NULL || url == NULL || buf == NULL || size == 0) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::request: invalid argument");
@@ -239,19 +280,53 @@ class http_client {
         sink.overflow = 0;
         buf[0] = '\0';
 
+        /* CURLOPT_POSTFIELDS does NOT copy: libcurl keeps the caller's pointer
+         * past perform().  Own a copy so a stack/heap body can disappear as
+         * soon as post() returns without leaving a dangling pointer in the
+         * easy handle. */
+        if (body != NULL) {
+            len = strlen(body);
+            if (len > (size_t)LONG_MAX || len >= (size_t)STDLIB_ALLOC_LIMIT) {
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_UNSUPPORTED,
+                               "http_client::request: body too large");
+                return STDLIB_FAIL;
+            }
+            owned = (char *)malloc(len + 1u);
+            if (owned == NULL) {
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "http_client::request: body allocation failed");
+                return STDLIB_FAIL;
+            }
+            memcpy(owned, body, len + 1u);
+            /* POSTFIELDSIZE holds no pointer; set it before POSTFIELDS so a
+             * failure here cannot leave libcurl holding a pointer we free. */
+            if (curl_easy_setopt(this->handle, CURLOPT_POSTFIELDSIZE,
+                                 (long)len) != CURLE_OK) {
+                free(owned);
+                error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                               "http_client::request: setopt failed");
+                return STDLIB_FAIL;
+            }
+        }
         if (curl_easy_setopt(this->handle, CURLOPT_URL, url) != CURLE_OK ||
             curl_easy_setopt(this->handle, CURLOPT_WRITEFUNCTION,
                              http_sink_write) != CURLE_OK ||
             curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, &sink) != CURLE_OK ||
             (body == NULL
                  ? curl_easy_setopt(this->handle, CURLOPT_HTTPGET, 1L) != CURLE_OK
-                 : (curl_easy_setopt(this->handle, CURLOPT_POSTFIELDS, body) != CURLE_OK ||
-                    curl_easy_setopt(this->handle, CURLOPT_POSTFIELDSIZE,
-                                     (long)strlen(body)) != CURLE_OK))) {
+                 : curl_easy_setopt(this->handle, CURLOPT_POSTFIELDS,
+                                    owned) != CURLE_OK)) {
+            if (owned != NULL)
+                free(owned);
             curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, NULL);
             error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
                            "http_client::request: setopt failed");
             return STDLIB_FAIL;
+        }
+        if (owned != NULL) {
+            if (this->post_copy != NULL)
+                free(this->post_copy);
+            this->post_copy = owned;
         }
         rc = curl_easy_perform(this->handle);
         curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, NULL);
@@ -306,6 +381,11 @@ class http_client {
         if (this->header_copy != NULL) {
             curl_slist_free_all(this->header_copy);
             this->header_copy = NULL;
+        }
+        /* Cleanup above releases libcurl's POSTFIELDS reference first. */
+        if (this->post_copy != NULL) {
+            free(this->post_copy);
+            this->post_copy = NULL;
         }
     }
 };

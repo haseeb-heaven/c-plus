@@ -156,6 +156,6 @@ silently substituted.
 - `default` and `legacy` are *not* comparable to a UBSan build; they are included only to
   make the interleaving discipline meaningful and to show the workload is deterministic.
 - No sanitizer result, no `stdlib/vector.hp` result and no cross-language result is
-  claimed here. Fil-C and Goose were not part of this task.
+  claimed here. Fil-C and the inspiration language were not part of this task.
 - Files owned/created for this task: only `bench_modern.cp` and this `bench_modern_NOTES.md`.
   No compiler, runtime, stdlib header, build script, git index or commit was modified.

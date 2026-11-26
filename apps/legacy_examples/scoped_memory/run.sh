@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and run the two Goose-inspired memory examples and diff their output
+# Build and run the two the inspiration language-inspired memory examples and diff their output
 # byte-for-byte against the checked-in expected files.
 # Prints: SCOPED_DEMO <cases> <pass> <fail>
 set -u

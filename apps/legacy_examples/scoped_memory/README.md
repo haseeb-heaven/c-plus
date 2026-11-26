@@ -1,10 +1,10 @@
-# Goose-inspired memory examples (C+ stdlib)
+# the inspiration language-inspired memory examples (C+ stdlib)
 
 Two non-toy examples of the *architecture* described in
 `docs/stdlib/SCOPED_MEMORY_INSPIRATION.md`: a per-frame scratch data stack and a
 stable-slot game entity table. They exercise the real headers
 `stdlib/datastack.hp`, `stdlib/vector.hp`, `stdlib/string.hp` and
-`stdlib/mempool.hp` — no Goose source is present or linked.
+`stdlib/mempool.hp` — no the inspiration language source is present or linked.
 
 ## Run
 
@@ -98,14 +98,14 @@ defines `cplus_check_live(p) ((void)0)` for the duration of the `mempool.hp`
 include and `#undef`s it immediately afterwards. The demo checks
 `cplus_check_live(pool.items)` explicitly at the base instead. Generation and
 double-free checks in the header are untouched — they are what this example
-demonstrates. This is a limitation of the host runtime, **not** a Goose
+demonstrates. This is a limitation of the host runtime, **not** a the inspiration language
 behaviour.
 
 ## Honest scope and non-claims
 
-- **Inspiration, not code.** The ideas come from `aardappel/goose`
+- **Inspiration, not code.** The ideas come from `aardappel/scoped`
   (Apache-2.0), as summarised in `docs/stdlib/SCOPED_MEMORY_INSPIRATION.md`.
-  No Goose code, compiler, type rules, or binaries were copied or linked.
+  No the inspiration language code, compiler, type rules, or binaries were copied or linked.
   These are ordinary C+ programs using this repository's stdlib headers.
 - **No allocator-free / GC-free claim for C+ itself.** C+ still has its
   managed/checked heap (`cplus_alloc` / `cplus_release`). It backs the slot
@@ -113,11 +113,11 @@ behaviour.
   The examples only show that *these workloads* keep their hot-path
   allocations in a scoped bump region or in reusable slots, avoiding
   per-object frees there.
-- **No equivalence claim.** Goose reserves about 2 GiB per data stack, has
+- **No equivalence claim.** the inspiration language reserves about 2 GiB per data stack, has
   compile-time root inference, and lets stale reads observe another object of
   the correct type. This library reserves 256 MiB by default (configurable),
   uses generation tokens that *refuse* stale handles at runtime, and offers
-  none of Goose's compiler analysis. Different implementation, different
+  none of the inspiration language's compiler analysis. Different implementation, different
   guarantees; only the design motif is shared.
 
 ## Edge-case coverage (added 2026-11-24)

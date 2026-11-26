@@ -1,4 +1,4 @@
-#line 1 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/exceptions/demo.cp"
+#line 1 "/private/tmp/resolve3/tests/compiler/exceptions/demo.cp"
 #include "cplus/cplus.h"
 int main(void) {
   try { short arr[] = {10,30,50,50};

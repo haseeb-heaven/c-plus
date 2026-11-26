@@ -431,7 +431,7 @@ and the recorded artifacts:
 | modern stdlib (2,000,000 `push_back` + `at`, 200,000 `append`; 7 interleaved runs) | 0.0140 s (min 0.0134, max 0.0188) | 0.0061 s (min 0.0052, max 0.0077) | **2.31×** median safe vs legacy |
 
 All variants printed checksum `2200000200000`. Source caveats: non-instrumented
-compilers folded the integer loops into closed forms; Rust/Goose numbers are
+compilers folded the integer loops into closed forms; Rust/the inspiration language numbers are
 cross-checks, not apples-to-apples comparisons; variance was material
 (~1.8×–3.1× across three non-interleaved passes); Fil-C was **not measured**.
 
@@ -470,7 +470,7 @@ the metadata, so no number is reported.
    queries (generation/token, pointer/size snapshots) and refuses access
    *before* dereferencing; no arbitrary freed/raw pointer is ever shown safe.
    The wrappers protect only blocks tracked by `stdlib/error.hp`.
-2. **No Rust equivalence.** Rust/Goose benchmark numbers are cross-checks from
+2. **No Rust equivalence.** Rust/the inspiration language benchmark numbers are cross-checks from
    different standard-library implementations; 600 comparison cases with
    473 matches / 119 documented differences / 8 both-skip
    (`TASK6_FINAL_REPORT.md:§5`) are **outcome equality**, not safety
