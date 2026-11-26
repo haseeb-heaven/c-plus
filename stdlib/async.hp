@@ -25,24 +25,140 @@ static inline int stdlib_uv_run_mode_valid(int mode) {
            mode == (int)UV_RUN_NOWAIT;
 }
 
+/* Issue #60 lifetime token.  A timer only receives a raw uv_loop_t * from the
+ * public API, so it cannot assume the owning `loop` object still exists when
+ * it is dropped.  The loop publishes a heap-allocated token through
+ * uv_loop_t.data; each timer retains that token, and the token - not the timer
+ * - is the sole holder of the native loop pointer.  loop::drop() clears that
+ * pointer before the loop's storage can disappear, so no timer method or
+ * destructor can ever dereference a stale uv_loop_t.  The token also records
+ * live timers so dropping the loop first finalises their handles instead of
+ * leaving a close pending against destroyed loop memory.  Nothing here calls
+ * uv_run() from timer::drop(): the only drain is in loop::drop(), and even
+ * that is skipped while the loop is running. */
+#define STDLIB_ASYNC_TOKEN_MAGIC 0x3143504C55564131ULL
+
+typedef struct stdlib_async_token {
+    unsigned long long magic;
+    uv_loop_t *native;                 /* NULL once the loop has been dropped */
+    unsigned long refs;                /* the loop plus every live timer */
+    int running;                       /* 1 inside loop::run() */
+    struct stdlib_async_timer_rec *timers;
+} stdlib_async_token;
+
+typedef struct stdlib_async_timer_rec {
+    uv_timer_t *handle;                /* NULL once closed/finalised */
+    struct stdlib_async_timer_rec *next;
+} stdlib_async_timer_rec;
+
+/* uv_close() is asynchronous: the handle memory must outlive the close. */
+static inline void stdlib_timer_release_handle(uv_handle_t *handle) {
+    stdlib_release(handle);
+}
+
+/* Recover the token from a borrowed native loop.  The magic rejects loops that
+ * were not created by this header (their `data` is not our token). */
+static inline stdlib_async_token *stdlib_async_token_for(uv_loop_t *native) {
+    stdlib_async_token *tok;
+    if (native == NULL)
+        return NULL;
+    tok = (stdlib_async_token *)native->data;
+    if (tok == NULL || tok->magic != STDLIB_ASYNC_TOKEN_MAGIC)
+        return NULL;
+    return tok;
+}
+
+/* Constructors are lowered with `this->` rewritten to a value-style member
+ * access, so pointer-member writes are routed through these plain C helpers. */
+static inline void stdlib_async_token_init(stdlib_async_token *tok,
+                                           uv_loop_t *native) {
+    tok->magic = STDLIB_ASYNC_TOKEN_MAGIC;
+    tok->native = native;
+    tok->refs = 1;
+    tok->running = 0;
+    tok->timers = NULL;
+}
+
+static inline uv_loop_t *stdlib_async_token_native(stdlib_async_token *tok) {
+    return tok->native;
+}
+
+static inline void stdlib_async_record_init(stdlib_async_timer_rec *rec,
+                                            uv_timer_t *handle,
+                                            stdlib_async_token *tok) {
+    rec->handle = handle;
+    rec->next = tok->timers;
+    tok->timers = rec;
+    tok->refs++;
+}
+
+static inline void stdlib_async_release_token(stdlib_async_token *tok) {
+    if (tok != NULL && tok->refs > 0) {
+        tok->refs--;
+        if (tok->refs == 0)
+            stdlib_release(tok);
+    }
+}
+
+static inline void stdlib_async_unlink(stdlib_async_token *tok,
+                                       stdlib_async_timer_rec *rec) {
+    stdlib_async_timer_rec **link;
+    if (tok == NULL || rec == NULL)
+        return;
+    for (link = &tok->timers; *link != NULL; link = &(*link)->next) {
+        if (*link == rec) {
+            *link = rec->next;
+            rec->next = NULL;
+            return;
+        }
+    }
+}
+
+/* Queue the close while the loop is alive.  If the loop is already gone there
+ * is nobody left to invoke a close callback, so free the handle here instead
+ * of dereferencing a stale uv_loop_t.  Never runs the loop. */
+static inline void stdlib_async_close_timer(stdlib_async_token *tok,
+                                            uv_timer_t *handle) {
+    if (handle == NULL)
+        return;
+    if (tok != NULL && tok->native != NULL) {
+        uv_timer_stop(handle);
+        handle->data = NULL;
+        uv_close((uv_handle_t *)handle, stdlib_timer_release_handle);
+    } else {
+        stdlib_release(handle);
+    }
+}
+
 class loop {
     uv_loop_t native_loop;
     int initialized;
+    stdlib_async_token *token;
 
     loop(error *err) {
-        do {
-            error_reset(err);
-            this->initialized = 0;
-            if (uv_loop_init(&this->native_loop) != 0) {
-                error_fail(err, CPLUS_EXIT_RESOURCE, "loop: uv_loop_init failed");
-                break;
+        error_reset(err);
+        this->initialized = 0;
+        this->token = NULL;
+        if (uv_loop_init(&this->native_loop) != 0) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "loop: uv_loop_init failed");
+        } else {
+            this->token = (stdlib_async_token *)stdlib_alloc(
+                sizeof(stdlib_async_token));
+            if (this->token == NULL) {
+                (void)uv_loop_close(&this->native_loop);
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "loop: out of memory");
+            } else {
+                stdlib_async_token_init(this->token, &this->native_loop);
+                this->native_loop.data = this->token;
+                this->initialized = 1;
             }
-            this->initialized = 1;
-        } while (0);
+        }
     }
 
     int valid(void) {
-        return this->initialized != 0;
+        return this->initialized != 0 && this->token != NULL &&
+               this->token->native != NULL;
     }
 
     /* Borrowed native loop for APIs that need the libuv type. */
@@ -51,6 +167,7 @@ class loop {
     }
 
     int run(int mode, error *err) {
+        int rc;
         error_reset(err);
         if (!this->valid()) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "loop::run: invalid loop");
@@ -61,7 +178,10 @@ class loop {
                            "loop::run: invalid uv_run mode");
             return STDLIB_FAIL;
         }
-        if (uv_run(&this->native_loop, (uv_run_mode)mode) != 0)
+        this->token->running = 1;
+        rc = uv_run(&this->native_loop, (uv_run_mode)mode);
+        this->token->running = 0;
+        if (rc != 0)
             cplus_log(CPLUS_LOG_DEBUG, "loop::run: active handles remain");
         return STDLIB_OK;
     }
@@ -77,71 +197,99 @@ class loop {
         return (unsigned long long)uv_now(&this->native_loop);
     }
 
-    /* Drains pending closes (bounded) before releasing the loop memory: a
-     * handle whose uv_close() has not completed would otherwise point at freed
-     * memory.  This drain is also what completes a timer's queued uv_close():
-     * timer::drop() never runs the loop itself (see its contract below). */
+    /* Finalises timers first, then drains pending closes and releases the
+     * loop.  Issue #60: the drain used to live in timer::drop(), which ran it
+     * re-entrantly from callbacks and dispatched unrelated handles.  Here the
+     * native pointer is invalidated before the loop's storage dies, and the
+     * drain is skipped if drop() is reached from inside a running callback. */
     void drop(void) {
-        int guard = 0;
-        if (!this->initialized)
+        stdlib_async_token *tok = this->token;
+        stdlib_async_timer_rec *rec;
+        if (!this->initialized || tok == NULL) {
+            this->initialized = 0;
+            this->token = NULL;
             return;
-        while (uv_loop_alive(&this->native_loop) && guard < 1000) {
-            uv_run(&this->native_loop, UV_RUN_NOWAIT);
-            guard++;
         }
-        /* HARDENING (thread2): uv_loop_close() fails with UV_EBUSY when a
-         * handle is still active.  The old code cleared `initialized` on that
-         * failure, which lied to valid() and made every later drop() a no-op,
-         * so the native loop could never be retried or released.  Stay
-         * initialized until the close actually succeeds: a later explicit
-         * drop() (and the compiler-emitted drop at scope exit) then retries
-         * the bounded drain instead of silently leaking the loop. */
-        if (uv_loop_close(&this->native_loop) != 0) {
-            cplus_log(CPLUS_LOG_WARN, "loop::drop: libuv loop still busy");
-            return; /* keep initialized == 1 so a later drop() can retry */
+        while (tok->timers != NULL) {
+            rec = tok->timers;
+            tok->timers = rec->next;
+            if (rec->handle != NULL) {
+                uv_timer_stop(rec->handle);
+                rec->handle->data = NULL;
+                uv_close((uv_handle_t *)rec->handle,
+                         stdlib_timer_release_handle);
+                rec->handle = NULL;
+            }
         }
+        tok->native = NULL;
+        if (!tok->running) {
+            int guard = 0;
+            while (uv_loop_alive(&this->native_loop) && guard < 1000) {
+                uv_run(&this->native_loop, UV_RUN_NOWAIT);
+                guard++;
+            }
+            if (uv_loop_close(&this->native_loop) != 0) {
+                cplus_log(CPLUS_LOG_WARN, "loop::drop: libuv loop still busy");
+            }
+        } else {
+            cplus_log(CPLUS_LOG_WARN,
+                      "loop::drop: dropped from a running callback");
+        }
+        this->native_loop.data = NULL;
         this->initialized = 0;
+        this->token = NULL;
+        stdlib_async_release_token(tok);
     }
 };
 
-/* uv_close() is asynchronous: the handle memory must outlive the close. */
-static inline void stdlib_timer_release_handle(uv_handle_t *handle) {
-    stdlib_release(handle);
-}
-
+/* A timer owns a record in the loop's token, never a raw loop pointer. */
 class timer {
-    uv_timer_t *handle;
-    uv_loop_t *owner_loop;
+    stdlib_async_token *token;
+    stdlib_async_timer_rec *rec;
     int initialized;
 
     /* Takes the native loop: a constructor must not use `->`. */
     timer(uv_loop_t *owner_loop, error *err) {
+        stdlib_async_token *tok;
+        uv_timer_t *handle;
+        stdlib_async_timer_rec *record;
         error_reset(err);
-        this->handle = NULL;
-        this->owner_loop = NULL;
+        this->token = NULL;
+        this->rec = NULL;
         this->initialized = 0;
-        if (owner_loop == NULL) {
+        tok = stdlib_async_token_for(owner_loop);
+        if (tok == NULL || stdlib_async_token_native(tok) != owner_loop) {
             error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
                            "timer: invalid loop");
         } else {
-            this->handle = (uv_timer_t *)stdlib_alloc(sizeof(uv_timer_t));
-            if (this->handle == NULL) {
+            handle = (uv_timer_t *)stdlib_alloc(sizeof(uv_timer_t));
+            record = (stdlib_async_timer_rec *)stdlib_alloc(
+                sizeof(stdlib_async_timer_rec));
+            if (handle == NULL || record == NULL) {
+                if (handle != NULL)
+                    stdlib_release(handle);
+                if (record != NULL)
+                    stdlib_release(record);
                 error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
                                "timer: out of memory");
-            } else if (uv_timer_init(owner_loop, this->handle) != 0) {
-                stdlib_release(this->handle);
-                this->handle = NULL;
+            } else if (uv_timer_init(owner_loop, handle) != 0) {
+                stdlib_release(handle);
+                stdlib_release(record);
                 error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
                                "timer: uv_timer_init failed");
             } else {
-                this->owner_loop = owner_loop;
+                stdlib_async_record_init(record, handle, tok);
+                this->token = tok;
+                this->rec = record;
                 this->initialized = 1;
             }
         }
     }
 
     int valid(void) {
-        return this->initialized != 0 && this->handle != NULL;
+        return this->initialized != 0 && this->token != NULL &&
+               this->token->native != NULL && this->rec != NULL &&
+               this->rec->handle != NULL;
     }
 
     /* repeat_ms of 0 fires once; user is reachable as handle->data. */
@@ -152,8 +300,9 @@ class timer {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer::start: invalid timer");
             return STDLIB_FAIL;
         }
-        this->handle->data = user;
-        if (uv_timer_start(this->handle, callback, timeout_ms, repeat_ms) != 0) {
+        this->rec->handle->data = user;
+        if (uv_timer_start(this->rec->handle, callback, timeout_ms,
+                           repeat_ms) != 0) {
             error_fail(err, CPLUS_EXIT_IO, "timer::start: uv_timer_start failed");
             return STDLIB_FAIL;
         }
@@ -166,7 +315,7 @@ class timer {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer::stop: invalid timer");
             return STDLIB_FAIL;
         }
-        if (uv_timer_stop(this->handle) != 0) {
+        if (uv_timer_stop(this->rec->handle) != 0) {
             error_fail(err, CPLUS_EXIT_IO, "timer::stop: uv_timer_stop failed");
             return STDLIB_FAIL;
         }
@@ -176,28 +325,35 @@ class timer {
     int is_active(void) {
         if (!this->valid())
             return 0;
-        return uv_is_active((const uv_handle_t *)this->handle) ? 1 : 0;
+        return uv_is_active((const uv_handle_t *)this->rec->handle) ? 1 : 0;
     }
 
     /* Issue #60: dropping a timer only *queues* the handle close; it must not
      * run the loop.  uv_run() from a destructor is re-entrant UB when drop()
      * happens inside a callback, it dispatches unrelated handles' callbacks,
      * and it dereferences owner_loop even if the loop was already dropped.
-     * The owner loop's own run()/drop() lifecycle dispatches the close
-     * callback that releases the heap handle.  Contract: the owner loop must
-     * outlive the timer -- drop a timer before dropping its loop.  The
-     * borrowed owner_loop is guarded (non-NULL) on use and cleared here, so
-     * no later drop() can touch a stale pointer. */
+     * The token keeps the native pointer valid only while the loop lives; if
+     * the loop went first, loop::drop() already finalised our handle and we
+     * only release our record and token reference.  No uv_* call can reach a
+     * destroyed loop from here. */
     void drop(void) {
-        if (!this->initialized)
+        stdlib_async_token *tok;
+        stdlib_async_timer_rec *record;
+        if (!this->initialized || this->rec == NULL) {
+            this->initialized = 0;
+            this->token = NULL;
+            this->rec = NULL;
             return;
-        if (this->handle != NULL && this->owner_loop != NULL) {
-            uv_timer_stop(this->handle);
-            this->handle->data = NULL;
-            uv_close((uv_handle_t *)this->handle, stdlib_timer_release_handle);
-            this->handle = NULL;
         }
-        this->owner_loop = NULL;
+        tok = this->token;
+        record = this->rec;
+        stdlib_async_close_timer(tok, record->handle);
+        record->handle = NULL;
+        stdlib_async_unlink(tok, record);
+        stdlib_async_release_token(tok);
+        stdlib_release(record);
+        this->token = NULL;
+        this->rec = NULL;
         this->initialized = 0;
     }
 };
