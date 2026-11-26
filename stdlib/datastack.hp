@@ -255,7 +255,7 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
     if (ptr != (void *)top) {
         fresh = stdlib_datastack_alloc(ds, new_size, align, err);
         if (fresh == (void *)0) return (void *)0;
-        if (ptr != 0 && old_size != 0) memcpy(fresh, ptr, old_size);
+        if (ptr != 0 && old_size != 0) memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
         return fresh;
     }
     if (new_size > old_size) {
@@ -263,7 +263,7 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
         if (extra > (size_t)(ds->base + ds->capacity - ds->top)) {
             fresh = stdlib_datastack_alloc(ds, new_size, align, err);
             if (fresh == 0) return 0;
-            memcpy(fresh, ptr, old_size);
+            memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
             return fresh;
         }
         /* Growing the bump pointer does not map pages: commit the newly

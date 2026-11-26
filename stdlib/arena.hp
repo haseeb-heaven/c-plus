@@ -235,7 +235,7 @@ static inline void *stdlib_arena_realloc(stdlib_arena *a, void *ptr,
     if (ptr != (void *)top || old_size > (size_t)(a->cursor - a->block->base)) {
         fresh = stdlib_arena_alloc(a, new_size, align, err);
         if (fresh == (void *)0) return (void *)0;
-        if (ptr != (void *)0 && old_size != 0) memcpy(fresh, ptr, old_size);
+        if (ptr != (void *)0 && old_size != 0) memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
         return fresh;
     }
     /* Top of stack: consume additional bytes in place if available. */
@@ -244,7 +244,7 @@ static inline void *stdlib_arena_realloc(stdlib_arena *a, void *ptr,
         if (extra > a->remaining) {
             fresh = stdlib_arena_alloc(a, new_size, align, err);
             if (fresh == (void *)0) return (void *)0;
-            memcpy(fresh, ptr, old_size);
+            memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
             return fresh;
         }
         a->cursor += extra;

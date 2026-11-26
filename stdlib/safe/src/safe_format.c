@@ -74,13 +74,6 @@ static int cplus_fmt_has_percent_n(const char *fmt) {
      * a later 'n' into a real %n write.  Literal '$' in ordinary text is
      * unaffected because we only scan conversions after '%'.  A stricter,
      * simpler policy (refuse all positional formats) is safe here. */
-    {
-        const unsigned char *s = (const unsigned char *)fmt;
-        while (*s) {
-            if (*s == '$') return 1;
-            ++s;
-        }
-    }
     while (*p) {
         int pr;
         if (*p != '%') { ++p; continue; }

@@ -53,9 +53,15 @@ static int sqldb_insert(sqldb *db, int id, int age, const char *name) {
         return -1;
     r = sqldb_find(db, id);
     if (r == (sql_row *)0) {
-        if (db->count >= SQLDB_MAX_ROWS)
-            return -1;
-        r = &db->rows[db->count++];
+        size_t i;
+        /* Reclaim a deleted slot before growing the table. */
+        for (i = 0; i < db->count; ++i)
+            if (!db->rows[i].used) { r = &db->rows[i]; break; }
+        if (r == (sql_row *)0) {
+            if (db->count >= SQLDB_MAX_ROWS)
+                return -1;
+            r = &db->rows[db->count++];
+        }
     }
     r->used = 1;
     r->id = id;
