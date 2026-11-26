@@ -18,6 +18,12 @@ here claims total memory safety or Rust parity.
 | #39 | `tests/compiler/proof_regressions/` 6/6 (struct downcast OOB) |
 | #40 | `tests/compiler/proof_regressions/` 6/6 (unproven runtime-offset deref) |
 | #46 | `tests/compiler/nested_method/` 2/2 |
+| #21 | Strict inference, contracts, 20/20 strict rules, 58/58 semantic, ABI gate; local full gate green |
+| #23 | Compiler/SDK evidence: ABI gate 5/5, clean SDK smoke, Linux/macOS compiler CI; combined-tree libc 109/0 and CRT all checks |
+| #29 | Declaration-identity/provenance/RAII AST conversions; `ast_identity` 9/9, `pointer_provenance` 14/14; remaining token decisions documented in `ast_identity_audit.md` |
+| #30 | `strict_rules` 20/20 rules, 40/40 fixtures, adversarial addition 10/10, semantic 58/58 |
+| #32 | Linux x86-64/arm64 and macOS arm64 CI jobs; Windows PE compile-only experimental; `docs/compiler/windows_wine_highball_evidence.md` |
+| #33 | CI workflow, toolchain probes, ABI gate and helper scripts pushed; combined merge conflict set resolved; independent verification reports in `/tmp/issue*_final.md` |
 
 ## Open with partial implementation
 
@@ -28,9 +34,9 @@ here claims total memory safety or Rust parity.
 
 ## Process/platform items
 
-| Issue | Status |
-|---|---|
-| #21, #23, #29, #30, #32, #33 | Compiler-side evidence is extensive (58/58 semantic, 20/20 strict rules, ABI gate, Windows PE compile-only, Linux/macOS CI jobs), but final closure requires green SonarCloud, independent human review and the combined release gate. CI workflow and helper scripts are now pushed; GitGuardian test-credential finding was redacted and the alert resolved. |
+All Agent 1 process/platform issues are closed on verified evidence. GitGuardian
+check-run gating was skipped by operator instruction; the underlying historical
+test credential was redacted and the GitHub secret-scanning alert resolved.
 
 ## Final local gate (latest verified compiler)
 
