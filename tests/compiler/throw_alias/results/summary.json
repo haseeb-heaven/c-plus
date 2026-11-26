@@ -1,0 +1,46 @@
+{
+  "generated": "2026-11-26T00:57:35.310261+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "neg_fnptr_throw",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/throw_alias/neg_fnptr_throw.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/throw_alias/neg_fnptr_throw.cp:9:55: error: call through 'fp' may throw and bypass C+ cleanup\nhelp: release live owners before calling a throwing helper\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/throw_alias/neg_fnptr_throw.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_exception_enter', 'cplus_exception_pop', 'cplus_exception_raise' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_fnptr_normal",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/throw_alias/pos_fnptr_normal.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/throw_alias/pos_fnptr_normal.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/throw_alias/pos_fnptr_normal.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_exception_enter', 'cplus_exception_pop' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}
