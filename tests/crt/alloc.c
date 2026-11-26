@@ -15,7 +15,13 @@ __attribute__((noinline)) static void *allocate_many(size_t count, size_t elemen
 }
 
 __attribute__((noinline)) static void *resize_block(void *block, size_t size) {
-    return realloc(block, size);
+    void *resized = realloc(block, size);
+    if (!resized) {
+        /* Failure: realloc did not release block; the caller still owns it. */
+        return NULL;
+    }
+    /* Success: the original block was released and `resized` is its owner. */
+    return resized;
 }
 
 static void check(int condition, const char *what) {
@@ -57,9 +63,10 @@ int main(void) {
     unsigned char *grown = (unsigned char *)realloc(block, 4096);
     check(grown != NULL, "realloc grow");
     if (grown != NULL) {
-        free(grown);
-    } else {
+        block = grown; /* success: old block released, new owner is current */
         free(block);
+    } else {
+        free(block);   /* failure: original block still owned here */
     }
     unsigned char *owner = (unsigned char *)malloc(32);
     check(owner != NULL, "malloc(32)");

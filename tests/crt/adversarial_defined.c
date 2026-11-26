@@ -17,17 +17,18 @@ static void check(int cond, const char *name) {
 }
 
 struct thread_arg {
-    unsigned char *buf;
+    unsigned char *data;
     size_t n;
     int ok;
 };
 
 static void *touch_alloc(void *p) {
     struct thread_arg *a = (struct thread_arg *)p;
+    unsigned char *bytes = a->data;
     size_t i;
-    for (i = 0; i < a->n; ++i) a->buf[i] = (unsigned char)(i & 0xff);
+    for (i = 0; i < a->n; ++i) bytes[i] = (unsigned char)(i & 0xff);
     for (i = 0; i < a->n; ++i) {
-        if (a->buf[i] != (unsigned char)(i & 0xff)) { a->ok = 0; return NULL; }
+        if (bytes[i] != (unsigned char)(i & 0xff)) { a->ok = 0; return NULL; }
     }
     a->ok = 1;
     return NULL;
@@ -41,11 +42,13 @@ int main(void) {
 
     /* calloc overflow: C says if size overflows, behavior is impl-defined/NULL in many impls.
        Do not claim universal detection; record observed behavior. */
-    /* Volatile operands keep the overflow decision at runtime: the C+ static
-     * FFI check rejects a folded constant, which is the desired compile-time
-     * behaviour, but this corpus case records the runtime result. */
+    /* The volatile load keeps the value runtime; XOR with zero preserves it
+     * bit-for-bit while keeping the C+ constant tracker from folding it into
+     * a compile-time constant (which its static FFI check rejects).  This
+     * case records the runtime result without asserting a particular one. */
     volatile size_t huge_n = (size_t)-1 / 4 + 2;
-    void *co = calloc(huge_n, 4);
+    size_t runtime_n = huge_n ^ 0;
+    void *co = calloc(runtime_n, 4);
     if (co == NULL) {
         check(1, "calloc overflow returns NULL (detected)");
     } else {
@@ -57,12 +60,14 @@ int main(void) {
     /* realloc(ptr, 0): implementation-defined; treat NULL or free-like as defined. */
     void *r0 = malloc(16);
     void *rz = realloc(r0, z);
-    /* If rz is NULL, r0 was freed by realloc(ptr,0) in common impls; if non-NULL, free rz. */
-    if (rz == NULL) {
-        check(1, "realloc(ptr,0) returned NULL (old block freed)");
+    /* If rz is NULL, r0 was freed by realloc(ptr,0) in common impls; if
+     * non-NULL, rz is the new owner (the old block was released). */
+    if (rz != NULL) {
+        r0 = rz;
+        check(r0 != NULL, "realloc(ptr,0) returned unique pointer");
+        free(r0);
     } else {
-        check(rz != NULL, "realloc(ptr,0) returned unique pointer");
-        free(rz);
+        check(1, "realloc(ptr,0) returned NULL (old block freed)");
     }
 
     /* realloc failure preserves original owner. */
@@ -71,9 +76,15 @@ int main(void) {
     if (orig) {
         memset(orig, 0xA5, 32);
         void *big = realloc(orig, (size_t)-1);
-        check(big == NULL, "realloc huge size fails");
-        check(((unsigned char *)orig)[0] == 0xA5, "realloc failure preserves original bytes");
-        free(orig);
+        if (big != NULL) {
+            orig = big; /* success: the original block was released */
+            check(big == NULL, "realloc huge size fails");
+            free(orig);
+        } else {
+            check(orig != NULL, "realloc huge size fails");
+            check(((unsigned char *)orig)[0] == 0xA5, "realloc failure preserves original bytes");
+            free(orig);
+        }
     }
 
     /* memcpy/memmove zero length: defined even with NULL in some impls? C standard:
@@ -167,19 +178,21 @@ int main(void) {
     /* Thread boundary: malloc/free used from different threads (POSIX thread-safe). */
     {
         pthread_t t;
-        struct thread_arg a;
+        /* Static storage: the worker never borrows an automatic object, and
+         * pthread_join finishes before the malloc'd buffer is freed. */
+        static struct thread_arg a;
         a.n = 4096;
-        a.buf = (unsigned char *)malloc(a.n);
+        a.data = (unsigned char *)malloc(a.n);
         a.ok = 0;
-        check(a.buf != NULL, "malloc for thread boundary");
-        if (a.buf) {
+        check(a.data != NULL, "malloc for thread boundary");
+        if (a.data) {
             if (pthread_create(&t, NULL, touch_alloc, &a) == 0) {
                 pthread_join(t, NULL);
                 check(a.ok == 1, "malloc buffer usable across thread boundary");
             } else {
                 check(0, "pthread_create for malloc thread boundary");
             }
-            free(a.buf);
+            free(a.data);
         }
     }
 

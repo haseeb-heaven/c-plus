@@ -23,8 +23,11 @@ int main(void) {
           "snprintf string length");
     check(snprintf(NULL, 0, "%d", 7) == 1, "snprintf sizing call");
 
-    /* scanf from a memory stream: conversions, partial input and EOF. */
-    FILE *stream = fmemopen("42 2.5 trailing", 15, "r");
+    /* scanf from a memory stream: conversions, partial input and EOF.
+     * fmemopen takes a writable void * buffer, so use mutable copies of the
+     * input text (same contents and same size as the former literals). */
+    char input[] = "42 2.5 trailing";
+    FILE *stream = fmemopen(input, 15, "r");
     if (stream == NULL) {
         printf("format_ops: fmemopen unavailable\n");
         return 0;
@@ -40,7 +43,8 @@ int main(void) {
     fclose(stream);
 
     /* A failed conversion returns 0, not EOF, and leaves the stream usable. */
-    FILE *bad = fmemopen("abc", 3, "r");
+    char bad_input[] = "abc";
+    FILE *bad = fmemopen(bad_input, 3, "r");
     if (bad != NULL) {
         check(fscanf(bad, "%d", &value) == 0, "fscanf invalid -> 0");
         check(fscanf(bad, "%15s", word) == 1, "stream still usable after failure");

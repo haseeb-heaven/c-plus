@@ -43,6 +43,9 @@ int main(void) {
     if (p) {
         memset(p, 0x5A, 64);
         void *q = realloc(p, (size_t)-1);
+        if (q != NULL) {
+            p = q; /* success: original block was released */
+        }      /* failure: p remains the owner (handled in the checks below) */
         check(q == NULL, "realloc huge fails");
         check(((unsigned char *)p)[0] == 0x5A, "realloc fail preserves owner bytes");
         free(p);
