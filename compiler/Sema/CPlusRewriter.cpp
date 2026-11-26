@@ -1340,13 +1340,19 @@ private:
       return false;
 
     size_t first = ts.nextSig(lp);
-    if (first >= rp ||
-        !(ts.isIdent(first, "auto") || ts[first].kind == TokKind::Identifier))
+    if (first >= rp || ts[first].kind != TokKind::Identifier)
       return false;
-    size_t name = ts.nextSig(first);
-    size_t colon = ts.nextSig(name);
-    if (name >= rp || ts[name].kind != TokKind::Identifier ||
-        !ts.isPunct(colon, ":"))
+    size_t colon = kNPos;
+    for (size_t k = first + 1; k < rp; ++k)
+      if (ts.isPunct(k, ":")) {
+        colon = k;
+        break;
+      }
+    if (colon == kNPos)
+      return false;
+    size_t name = ts.prevSig(colon);
+    if (name < first || name >= rp ||
+        ts[name].kind != TokKind::Identifier)
       return false;
     size_t exprStart = ts.nextSig(colon);
     if (exprStart >= rp || ts[exprStart].kind != TokKind::Identifier ||
@@ -1372,9 +1378,22 @@ private:
       return false;
     }
     std::string idx = "__cplus_range_i" + std::to_string(rangeCounter_++);
+    std::string elementType = "__typeof__(" + range + "[" + idx + "])";
+    if (!ts.isIdent(first, "auto")) {
+      elementType.clear(); // preserve explicit element type and qualifiers
+      for (size_t k = first; k < name; ++k) {
+        if (ts.isTrivia(k))
+          continue;
+        if (!elementType.empty())
+          elementType += " ";
+        elementType += ts[k].text;
+      }
+      if (elementType.empty())
+        return false;
+    }
     emit("for (size_t " + idx + " = 0; " + idx + " < " + len + "; " +
-         idx + "++) { __typeof__(" + range + "[" + idx + "]) " + var + " = " +
-         range + "[" + idx + "];");
+         idx + "++) { " + elementType + " " + var + " = " + range + "[" +
+         idx + "];");
     extraBraces_[bodyClose]++;
     skipTo_ = rp; // resume at the original body's opening brace
     changed_ = true;
@@ -1473,15 +1492,26 @@ private:
     }
     if (end == kNPos)
       return false;
+    // Consume the whole else/else-if chain so the closing brace for the
+    // lowered declaration lands after the final branch, not in the middle.
     size_t after = ts.nextSig(end);
-    if (ts.isIdent(after, "else")) {
+    while (ts.isIdent(after, "else")) {
       size_t other = ts.nextSig(after);
       if (ts.isPunct(other, "{"))
         end = ts.matchBrace(other);
-      else
+      else if (ts.isIdent(other, "if")) {
+        size_t lp2 = ts.nextSig(other);
+        size_t rp2 = lp2 == kNPos ? kNPos : ts.matchParen(lp2);
+        size_t body2 = rp2 == kNPos ? kNPos : ts.nextSig(rp2);
+        if (body2 == kNPos)
+          return false;
+        end = ts.isPunct(body2, "{") ? ts.matchBrace(body2)
+                                     : ts.statementEnd(body2);
+      } else
         end = ts.statementEnd(other);
       if (end == kNPos)
         return false;
+      after = ts.nextSig(end);
     }
     extraBraces_[end]++;
     skipTo_ = rp;
@@ -5251,14 +5281,17 @@ std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
       scan = skipSpace(source, resume);
     }
 
-    out += "do { CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; "
+    // A plain compound block, not `do { ... } while (0)`: the latter is a
+    // loop and silently captures break/continue meant for an enclosing loop
+    // or switch (issue #82).
+    out += "{ CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; "
            "if (setjmp(" + frame + ".base.env) == 0) { "
            "cplus_exception_enter(&" + frame + ".base); " + body +
            " " + frame + ".active = 0; cplus_exception_pop(); }";
     if (!handlerCode.empty())
       out += " else { " + frame + ".active = 0; cplus_rethrow_exc = " +
              frame + ".base.exc; " + handlerCode + " }";
-    out += " } while (0);";
+    out += " }";
     pos = resume;
   }
   // Throws outside a try block are lowered too: they become deterministic
