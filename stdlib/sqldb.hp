@@ -122,8 +122,12 @@ static int sqldb_save(sqldb *db, const char *path) {
         return -1;
     for (i = 0; i < db->count; i++)
         if (db->rows[i].used)
-            fprintf(f, "row %d %d %s\n", db->rows[i].id, db->rows[i].age,
-                    db->rows[i].name);
+            size_t k;
+            /* Hex-encode names so spaces/newlines cannot inject records. */
+            fprintf(f, "row %d %d ", db->rows[i].id, db->rows[i].age);
+            for (k = 0; db->rows[i].name[k] != 0 && k < SQLDB_NAME_LEN; ++k)
+                fprintf(f, "%02x", (unsigned char)db->rows[i].name[k]);
+            fprintf(f, "\n");
     fclose(f);
     return 0;
 }
@@ -140,9 +144,19 @@ static int sqldb_load(sqldb *db, const char *path) {
     while (fgets(line, sizeof(line), f) != (char *)0) {
         int id = 0;
         int age = 0;
+        char hex[(SQLDB_NAME_LEN + 1) * 2] = {0};
         char name[SQLDB_NAME_LEN] = {0};
-        if (sscanf(line, "row %d %d %31s", &id, &age, name) == 3)
+        size_t k;
+        if (sscanf(line, "row %d %d %127s", &id, &age, hex) == 3) {
+            for (k = 0; hex[2*k] != 0 && hex[2*k+1] != 0 &&
+                        k < SQLDB_NAME_LEN; ++k) {
+                unsigned int byte = 0;
+                if (sscanf(hex + k*2, "%2x", &byte) != 1) break;
+                name[k] = (char)(unsigned char)byte;
+            }
+            name[k] = 0;
             sqldb_insert(db, id, age, name);
+        }
     }
     fclose(f);
     return 0;
