@@ -133,6 +133,7 @@ static inline int stdlib_arena_from_buffer(stdlib_arena *a, void *buf,
     a->generation = stdlib_arena_next_generation();
     a->default_block = 4096u;
     a->owns_first = 0;
+    a->first_block = (stdlib_arena_block *)0;
     a->first_base = (unsigned char *)0;
     a->first_capacity = 0;
     if (len != 0) {
@@ -168,6 +169,7 @@ static inline int stdlib_arena_from_buffer(stdlib_arena *a, void *buf,
     } else {
         if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK)
             return STDLIB_FAIL;
+        a->first_block = a->block;
         a->first_base = a->block->base;
         a->first_capacity = a->block->capacity;
     }
@@ -185,6 +187,10 @@ static inline void *stdlib_arena_alloc(stdlib_arena *a, size_t n,
         (align & (align - 1u)) != 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "arena: invalid request"),
+               (void *)0;
+    if (n > (size_t)-1 - align) /* n + align must not wrap when spilling */
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "arena: allocation size overflow"),
                (void *)0;
     mask = (uintptr_t)align - 1u;
     p = (uintptr_t)a->cursor;
@@ -271,8 +277,17 @@ static inline size_t stdlib_arena_used(const stdlib_arena *a) {
 }
 
 static inline void stdlib_arena_do_reset(stdlib_arena *a, error *err) {
+    stdlib_arena_block *b;
     error_reset(err);
     if (a == 0) return;
+    /* Release spilled blocks above the reset target.  Dropping the chain
+     * here would orphan them: destroy only walks from the current block. */
+    b = a->block;
+    while (b != (stdlib_arena_block *)0 && b != a->first_block) {
+        stdlib_arena_block *prev = b->prev;
+        if (b->owns) cplus_release(b);
+        b = prev;
+    }
     a->block = a->first_block;
     a->cursor = a->first_base;
     a->remaining = a->first_capacity;
