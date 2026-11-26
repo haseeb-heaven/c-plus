@@ -9,17 +9,27 @@
  *   web_server_start() returns a non-null web_server on success, 0 on failure.
  *   web_accept() returns 1 with a filled web_conn, 0 on timeout/error (see
  *   srv->nap_ms), -1 on terminal failure.
- *   web_reply() writes a response line and body; body may be "" (header only).
+ *   web_reply() writes a response line and body; body may be "" or NULL
+ *   (treated as empty).  Both header and body sends are checked for short
+ *   writes and truncation.
  *   web_server_stop() closes the listening socket.
+ *
+ * Request reads are bounded: a client that connects but never finishes a
+ * request line cannot pin the accept loop (Slowloris).  Descriptor bounds are
+ * checked before FD_SET/select so a stale or out-of-range listener cannot
+ * write past the fd_set.
  */
 #ifndef CPLUS_STD_WEB_HP
 #define CPLUS_STD_WEB_HP
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/time.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -28,6 +38,14 @@
 #define WEB_MAX_PATH 256
 #define WEB_MAX_BODY 512
 #define WEB_NAP_MS 50
+#define WEB_REQ_LINE_MAX 200
+
+/* The reply header buffer is deliberately fixed (heap-free path).  Tests may
+ * define a smaller value before including this header to exercise the
+ * snprintf-truncation path; production uses 128 bytes. */
+#ifndef WEB_REPLY_HEAD_MAX
+#define WEB_REPLY_HEAD_MAX 128
+#endif
 
 typedef struct {
     char method[16];
@@ -45,6 +63,65 @@ typedef struct {
     int fd;
     web_request req;
 } web_conn;
+
+/* Normalize a caller-supplied timeout: non-positive values use the default. */
+static int web_timeout_ms(int nap_ms) {
+    return nap_ms > 0 ? nap_ms : WEB_NAP_MS;
+}
+
+/* Convert milliseconds to a timeval, guarding overflow of tv_usec. */
+static struct timeval web_timeval_ms(int ms) {
+    struct timeval tv;
+    int t = web_timeout_ms(ms);
+    tv.tv_sec = t / 1000;
+    tv.tv_usec = (suseconds_t)((t % 1000) * 1000);
+    return tv;
+}
+
+/* Wait (at most timeout_ms) for fd to be readable, then read up to cap bytes.
+ * Returns the byte count (>0), or 0 on timeout, EOF, error or invalid fd.
+ * select() modifies its arguments, so both set and tv are rebuilt on EINTR. */
+static ssize_t web_recv_bounded(int fd, char *buf, size_t cap, int timeout_ms) {
+    fd_set set;
+    struct timeval tv;
+    int ready;
+    ssize_t got;
+    if (fd < 0 || fd >= FD_SETSIZE || buf == (char *)0 || cap == 0)
+        return 0;
+    for (;;) {
+        FD_ZERO(&set);
+        FD_SET(fd, &set);
+        tv = web_timeval_ms(timeout_ms);
+        ready = select(fd + 1, &set, (fd_set *)0, (fd_set *)0, &tv);
+        if (ready >= 0 || errno != EINTR)
+            break;
+    }
+    if (ready <= 0)
+        return 0;
+    do {
+        got = recv(fd, buf, cap, 0);
+    } while (got < 0 && errno == EINTR);
+    return got > 0 ? got : 0;
+}
+
+/* Send every byte, retrying EINTR and absorbing short writes.  Returns 0 on
+ * success, -1 on a peer error/no-progress (the caller stops writing). */
+static int web_send_all(int fd, const char *buf, size_t len) {
+    size_t sent = 0;
+    if (fd < 0 || (buf == (const char *)0 && len > 0))
+        return -1;
+    while (sent < len) {
+        ssize_t n = send(fd, buf + sent, len - sent, 0);
+        if (n > 0) {
+            sent += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        return -1;                 /* closed peer, reset, or no progress */
+    }
+    return 0;
+}
 
 /* Initialize a caller-owned web_server (stack or static storage) on host:port.
  * Returns 0 on success, -1 on failure. No heap allocation: this is the
@@ -88,38 +165,74 @@ static web_server *web_server_start(const char *host, int port) {
 }
 
 /* Accept one connection; returns 1 with *c filled, 0 on no-pending (timeout),
- * -1 on terminal error. */
+ * -1 on terminal error.  The request line is read under a total time budget
+ * so a peer that stalls mid-request cannot block the accept loop. */
 static int web_accept(web_server *s, web_conn *c) {
     struct timeval tv;
+    struct timeval started;
+    struct timeval now;
     fd_set set;
     int fd;
-    int n;
-    char line[256];
+    int ready;
+    int budget_ms;
+    long elapsed;
+    char line[WEB_REQ_LINE_MAX];
     size_t used = 0;
     if (s == (web_server *)0 || c == (web_conn *)0)
         return -1;
+    c->fd = -1;
     c->req.body_len = 0;
-    FD_ZERO(&set);
-    FD_SET(s->listen_fd, &set);
-    tv.tv_sec = 0;
-    tv.tv_usec = (suseconds_t)(s->nap_ms * 1000);
-    if (select(s->listen_fd + 1, &set, (fd_set *)0, (fd_set *)0, &tv) <= 0)
+    c->req.method[0] = 0;
+    c->req.path[0] = 0;
+    /* An invalid or out-of-range descriptor must never reach FD_SET/select:
+     * FD_SET would write past the fd_set for fd >= FD_SETSIZE. */
+    if (s->listen_fd < 0 || s->listen_fd >= FD_SETSIZE)
+        return -1;
+    for (;;) {
+        FD_ZERO(&set);
+        FD_SET(s->listen_fd, &set);
+        tv = web_timeval_ms(s->nap_ms);
+        ready = select(s->listen_fd + 1, &set, (fd_set *)0, (fd_set *)0, &tv);
+        if (ready >= 0 || errno != EINTR)
+            break;
+    }
+    if (ready <= 0)
         return 0;
     fd = accept(s->listen_fd, (struct sockaddr *)0, (socklen_t *)0);
     if (fd < 0)
         return 0;
     c->fd = fd;
-    c->req.method[0] = 0;
-    c->req.path[0] = 0;
-    /* Request line. */
-    for (n = 0; n < 200; n++) {
-        char ch = 0;
-        ssize_t got = recv(fd, &ch, 1, 0);
+    /* Belt and braces: cap any later recv() even if select races with it. */
+    tv = web_timeval_ms(s->nap_ms);
+    (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    /* Whole request line gets a small fixed budget (a few nap intervals),
+     * not one unbounded recv() per byte. */
+    budget_ms = web_timeout_ms(s->nap_ms) * 4;
+    if (budget_ms < WEB_NAP_MS * 4)
+        budget_ms = WEB_NAP_MS * 4;
+    gettimeofday(&started, (struct timezone *)0);
+    while (used < WEB_REQ_LINE_MAX - 1) {
+        ssize_t got;
+        char *chunk;
+        char *nl;
+        size_t cap = WEB_REQ_LINE_MAX - 1 - used;
+        gettimeofday(&now, (struct timezone *)0);
+        elapsed = (long)(now.tv_sec - started.tv_sec) * 1000L +
+                  (long)(now.tv_usec - started.tv_usec) / 1000L;
+        if (elapsed >= (long)budget_ms)
+            break;
+        chunk = line + used;
+        got = web_recv_bounded(fd, chunk, cap, (int)((long)budget_ms - elapsed));
         if (got <= 0)
+            break;                 /* timeout/EOF/peer stalled: never hang */
+        nl = (char *)memchr(chunk, '\n', (size_t)got);
+        if (nl != (char *)0) {
+            size_t take = (size_t)(nl - chunk) + 1;
+            used += take < cap ? take : cap;
             break;
-        if (ch == '\n')
-            break;
-        line[used++] = ch;
+        }
+        used += (size_t)got;
     }
     line[used] = 0;
     {
@@ -139,23 +252,35 @@ static int web_accept(web_server *s, web_conn *c) {
     return 1;
 }
 
-/* Write a reply: "HTTP/1.1 <status>\r\nContent-Length: N\r\n\r\n<body>". */
+/* Write a reply: "HTTP/1.1 <status>\r\nContent-Length: N\r\n\r\n<body>".
+ * Null arguments are inert; a truncated header is sent as its valid prefix
+ * and partial sends are retried until all bytes are out. */
 static void web_reply(web_conn *c, int status, const char *body) {
-    char head[128];
+    char head[WEB_REPLY_HEAD_MAX];
     const char *text;
-    size_t len = strlen(body);
+    size_t len;
+    int hlen;
+    size_t hsend;
+    if (c == (web_conn *)0 || c->fd < 0)
+        return;
+    if (body == (const char *)0)
+        body = "";
+    len = strlen(body);
     switch (status) {
         case 200: text = "OK"; break;
         case 404: text = "Not Found"; break;
         default:  text = "Status"; break;
     }
-    {
-        int hlen = snprintf(head, sizeof(head),
-                            "HTTP/1.1 %d %s\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
-                            status, text, len);
-        send(c->fd, head, (size_t)hlen, 0);
-    }
-    send(c->fd, body, len, 0);
+    hlen = snprintf(head, sizeof(head),
+                    "HTTP/1.1 %d %s\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
+                    status, text, len);
+    if (hlen < 0)
+        return;
+    /* snprintf can report the would-be length: never send past the buffer. */
+    hsend = (size_t)hlen < sizeof(head) ? (size_t)hlen : sizeof(head) - 1;
+    if (web_send_all(c->fd, head, hsend) != 0)
+        return;                    /* peer gone: do not push the body */
+    (void)web_send_all(c->fd, body, len);
 }
 
 /* Close a connection: write-shutdown, settle briefly so the reply reaches
