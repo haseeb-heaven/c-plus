@@ -58,10 +58,7 @@ if [ ! -x "$ALIGN_TOOL" ]; then
   ./build/c+ build tests/libc/test_compiler_contract_alignment.cp \
     --strict --sanitize=none -Ithird_party/yyjson -Lbuild/ext -lyyjson \
     -o "$ALIGN_TOOL" >/tmp/evidence_align-tool-build.log 2>&1 ||
-    ./build/c+ build tests/libc/test_compiler_contract_alignment.cp \
-    --legacy-c --sanitize=none -std=gnu17 -Ithird_party/yyjson \
-    -Lbuild/ext -lyyjson -o "$ALIGN_TOOL" \
-    >>/tmp/evidence_align-tool-build.log 2>&1 || true
+    echo "blocker: native alignment tool build failed; see /tmp/evidence_align-tool-build.log" >&2
 fi
 run contract-alignment    "$ALIGN_TOOL"
 run coverage              sh tests/libc/coverage_libc.sh
