@@ -1098,6 +1098,8 @@ void *cplus_alloc_array(size_t count, size_t element_size) {
   return cplus_zalloc(count * element_size);
 }
 
+static void cplus_release_locked(void *ptr); /* defined after cplus_realloc */
+
 void *cplus_realloc(void *ptr, size_t size) {
   cplus_log(CPLUS_LOG_DEBUG, "cplus_realloc ptr=%p size=%zu", ptr, size);
   if (!ptr)
@@ -1107,23 +1109,35 @@ void *cplus_realloc(void *ptr, size_t size) {
     return NULL;
   }
   /* cplus_realloc is an ownership transfer: the old slot is retired with its
-   * generation and the fresh block gets a new generation.  If malloc happens
-   * to reuse the old address, an old alias can no longer be distinguished
-   * from the new allocation (F2, documented in the file header). */
+   * generation and the fresh block gets a new generation.  Validate the old
+   * pointer BEFORE allocating, then re-check it under one lock that is held
+   * across the copy and the retirement so a concurrent release/realloc cannot
+   * free the source mid-copy or trigger a bogus double-free. */
+  cplus_alloc_lock();
+  int was_live = cplus_find_live(ptr) != NULL;
+  cplus_alloc_unlock();
+  if (!was_live)
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "realloc", NULL, 0,
+                      "pointer is not a live C+ allocation");
+
   void *fresh = cplus_alloc(size);
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
-  if (slot) {
-    size_t n = size < slot->size ? size : slot->size;
-    /* Belt-and-braces: even a wrongly registered or stale extent must never
-     * authorize a copy past the block malloc actually handed out. */
-    size_t usable = cplus_malloc_capacity(ptr);
-    if (usable != 0u && n > usable)
-      n = usable;
-    memcpy(fresh, ptr, n);
+  if (!slot) {
+    cplus_alloc_unlock();
+    free(fresh);
+    cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "realloc", NULL, 0,
+                      "allocation was released while reallocating");
   }
+  size_t n = size < slot->size ? size : slot->size;
+  /* Belt-and-braces: even a wrongly registered or stale extent must never
+   * authorize a copy past the block malloc actually handed out. */
+  size_t usable = cplus_malloc_capacity(ptr);
+  if (usable != 0u && n > usable)
+    n = usable;
+  memcpy(fresh, ptr, n);
+  cplus_release_locked(ptr);
   cplus_alloc_unlock();
-  cplus_release(ptr);
   return fresh;
 }
 
@@ -1132,12 +1146,10 @@ void cplus_zero(void *p, size_t size) {
     memset(p, 0, size);
 }
 
-void cplus_release(void *ptr) {
-  if (!ptr)
-    return;
-  cplus_log(CPLUS_LOG_DEBUG, "cplus_release ptr=%p", ptr);
-
-  cplus_alloc_lock();
+/* Release an allocation while cplus_alloc_mutex is already held.  Callers
+ * that must keep the lock across a copy (cplus_realloc) use this so no other
+ * thread can retire/reallocate the same pointer between the copy and free. */
+static void cplus_release_locked(void *ptr) {
   /* Retired-ledger hit on a live-table miss is authoritative and survives
    * cache eviction; a live hit is always a legitimate release. */
   uint64_t retired_generation = cplus_retired_generation(ptr);
@@ -1168,11 +1180,18 @@ void cplus_release(void *ptr) {
       ++cplus_quarantine_count;
     if (oldest)
       free(oldest); /* bounded: at most CPLUS_QUARANTINE_SLOTS delayed frees */
-    cplus_alloc_unlock();
     return;
   }
   /* Keep the lock across free(): see cplus_free_registered above. */
   free(ptr);
+}
+
+void cplus_release(void *ptr) {
+  if (!ptr)
+    return;
+  cplus_log(CPLUS_LOG_DEBUG, "cplus_release ptr=%p", ptr);
+  cplus_alloc_lock();
+  cplus_release_locked(ptr);
   cplus_alloc_unlock();
 }
 
@@ -1749,6 +1768,20 @@ static void cplus_scan_unsigned_checked(void *dest, size_t size,
   }
 }
 
+/* Common fail-closed path for a destination that cannot hold the scanned
+ * value.  Never truncate: a partial token would silently corrupt the caller
+ * and leave the rest of the input for the next scan. */
+static void cplus_scan_bad_size(cplus_exit_code code, void *dest, size_t size,
+                                const char *target, const char *file,
+                                int line) {
+  char detail[256];
+  snprintf(detail, sizeof(detail),
+           "scan destination '%s' (%p) has %zu bytes; not enough space for "
+           "the scanned value",
+           target, dest, size);
+  cplus_print_fatal(code, "input error", file, line, detail);
+}
+
 void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
                          const char *expr, const char *file, int line) {
   int rc = 0;
@@ -1774,24 +1807,38 @@ void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
     cplus_scan_unsigned_checked(dest, size, target, file, line);
     return;
   case CPLUS_SCAN_FLOAT:
+    if (size < sizeof(float))
+      cplus_scan_bad_size(CPLUS_EXIT_BOUNDS, dest, size, target, file, line);
     rc = scanf("%f", (float *)dest);
     break;
   case CPLUS_SCAN_DOUBLE:
+    if (size < sizeof(double))
+      cplus_scan_bad_size(CPLUS_EXIT_BOUNDS, dest, size, target, file, line);
     rc = scanf("%lf", (double *)dest);
     break;
   case CPLUS_SCAN_CHAR:
+    if (size < sizeof(char))
+      cplus_scan_bad_size(CPLUS_EXIT_BOUNDS, dest, size, target, file, line);
     rc = scanf(" %c", (char *)dest);
     break;
   case CPLUS_SCAN_STR: {
     char token[4096];
     rc = scanf("%4095s", token);
-    if (rc == 1 && size > 0) {
-      size_t n = strlen(token);
-      if (n >= size)
-        n = size - 1;
-      memcpy(dest, token, n);
-      ((char *)dest)[n] = '\0';
+    if (rc != 1)
+      break;
+    size_t n = strlen(token);
+    /* A token that filled the buffer continues on stdin; consume the rest so
+     * the next scan cannot desynchronise on the tail of this one. */
+    if (n == sizeof(token) - 1u) {
+      int ch;
+      while ((ch = fgetc(stdin)) != EOF && ch != ' ' && ch != '\t' &&
+             ch != '\n' && ch != '\r' && ch != '\f' && ch != '\v')
+        ;
     }
+    /* Fail closed instead of silently truncating into a smaller buffer. */
+    if (size == 0 || n + 1u > size)
+      cplus_scan_bad_size(CPLUS_EXIT_BOUNDS, dest, size, target, file, line);
+    memcpy(dest, token, n + 1u);
     break;
   }
   default:

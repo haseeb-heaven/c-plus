@@ -242,6 +242,7 @@ public:
     collectDefaultArgs();
     collectVariableTypes();
     collectAutoClasses();
+    collectShadowingNonClassVars();
     collectArrays();
     collectDynamicPointers();
     emitTranslationUnit();
@@ -426,6 +427,87 @@ private:
     return true;
   }
 
+  bool isAggregateBraceOpen(size_t openBrace) const {
+    size_t p1 = ts.prevSig(openBrace);
+    if (p1 == kNPos || ts[p1].kind != TokKind::Identifier)
+      return false;
+    if (ts[p1].text == "struct" || ts[p1].text == "union" ||
+        ts[p1].text == "enum")
+      return true;
+    size_t p2 = ts.prevSig(p1);
+    return p2 != kNPos && ts[p2].kind == TokKind::Identifier &&
+           (ts[p2].text == "struct" || ts[p2].text == "union" ||
+            ts[p2].text == "enum");
+  }
+
+  /// Compute the inclusive closing token index of the lexical scope in which
+  /// `declPos` is declared (matching `}` of the enclosing block/function, or
+  /// the end of the function prototype / `for`-loop body).  Fields declared
+  /// inside `struct`/`union`/`enum` bodies inherit the scope enclosing the
+  /// aggregate definition so `w.c.method()` stays lowerable across functions.
+  size_t computeScopeEnd(size_t declPos) const {
+    std::vector<size_t> braceStack;
+    std::vector<size_t> parenStack;
+    for (size_t k = 0; k < declPos && k < ts.size(); ++k) {
+      if (ts.isTrivia(k))
+        continue;
+      if (ts.isPunct(k, "{"))
+        braceStack.push_back(k);
+      else if (ts.isPunct(k, "}")) {
+        if (!braceStack.empty())
+          braceStack.pop_back();
+      } else if (ts.isPunct(k, "("))
+        parenStack.push_back(k);
+      else if (ts.isPunct(k, ")")) {
+        if (!parenStack.empty())
+          parenStack.pop_back();
+      }
+    }
+    while (!braceStack.empty() && isAggregateBraceOpen(braceStack.back()))
+      braceStack.pop_back();
+    if (!braceStack.empty()) {
+      // If `declPos` sits inside a `for (...)` header inside a function, its
+      // scope ends at the end of the `for` body.
+      if (!parenStack.empty()) {
+        size_t pOpen = parenStack.back();
+        if (pOpen > braceStack.back()) {
+          size_t kw = ts.prevSig(pOpen);
+          if (kw != kNPos && ts.isIdent(kw, "for")) {
+            size_t rp = ts.matchParen(pOpen);
+            if (rp != kNPos) {
+              size_t body = ts.nextSig(rp);
+              if (ts.isPunct(body, "{")) {
+                size_t close = ts.matchBrace(body);
+                if (close != kNPos)
+                  return close;
+              } else {
+                size_t semi = ts.statementEnd(body);
+                if (semi != kNPos)
+                  return semi;
+              }
+            }
+          }
+        }
+      }
+      size_t close = ts.matchBrace(braceStack.back());
+      return close == kNPos ? ts.size() : close;
+    }
+    if (!parenStack.empty()) {
+      // Function parameter at file brace-depth 0: scope covers the function body
+      // (or ends at `)` for a forward declaration).
+      size_t rp = ts.matchParen(parenStack.front());
+      if (rp != kNPos) {
+        size_t body = ts.nextSig(rp);
+        if (ts.isPunct(body, "{")) {
+          size_t close = ts.matchBrace(body);
+          return close == kNPos ? ts.size() : close;
+        }
+        return rp;
+      }
+    }
+    return ts.size();
+  }
+
   /// Record `ClassName var` and `ClassName *var` so member calls can be
   /// lowered without a type checker.
   void collectVariableTypes() {
@@ -445,7 +527,8 @@ private:
         n = ts.nextSig(n);
       if (n < ts.size() && ts[n].kind == TokKind::Identifier &&
           !isTypeStarter(ts[n].text)) {
-        varClasses_.push_back({ts[n].text, ts[i].text, n});
+        varClasses_.push_back(
+            {ts[n].text, ts[i].text, n, computeScopeEnd(n)});
       }
     }
   }
@@ -626,7 +709,144 @@ private:
           ts[cls].kind != TokKind::Identifier ||
           !classNames_.count(ts[cls].text))
         continue;
-      varClasses_.push_back({ts[name].text, ts[cls].text, name});
+      varClasses_.push_back(
+          {ts[name].text, ts[cls].text, name, computeScopeEnd(name)});
+    }
+  }
+
+  /// Record non-class variable/parameter declarations that share a name with
+  /// a known class variable so inner/sibling shadowing suppresses stale class
+  /// method lowering on plain structs/scalars.
+  void collectShadowingNonClassVars() {
+    if (varClasses_.empty())
+      return;
+    std::set<std::string> trackedNames;
+    std::set<size_t> classVarPositions;
+    for (const auto &v : varClasses_) {
+      trackedNames.insert(v.name);
+      classVarPositions.insert(v.pos);
+    }
+
+    static const std::set<std::string> kNonTypeKeywords = {
+        "return", "if",       "else",  "for",   "while",  "do",
+        "switch", "case",     "break", "continue", "goto", "sizeof",
+        "throw",  "defer",    "delete", "typeof", "__typeof__", "typedef",
+        "auto"};
+    static const std::set<std::string> kBuiltinDecl = {
+        "void",     "char",    "short",    "int",      "long",    "float",
+        "double",   "signed",  "unsigned", "_Bool",    "size_t",  "ptrdiff_t",
+        "uintptr_t","intptr_t","uint64_t", "int64_t",  "uint32_t","int32_t",
+        "uint16_t", "int16_t", "uint8_t",  "int8_t",   "const",   "volatile",
+        "static",   "extern",  "register", "restrict", "_Atomic"};
+
+    std::vector<size_t> aggBraces;
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts.isTrivia(i))
+        continue;
+      if (ts.isPunct(i, "{")) {
+        aggBraces.push_back(isAggregateBraceOpen(i) ? 1 : 0);
+        continue;
+      }
+      if (ts.isPunct(i, "}")) {
+        if (!aggBraces.empty())
+          aggBraces.pop_back();
+        continue;
+      }
+      if (!aggBraces.empty() && aggBraces.back() != 0)
+        continue;
+      if (ts[i].kind != TokKind::Identifier ||
+          !trackedNames.count(ts[i].text) || classVarPositions.count(i))
+        continue;
+      bool inClassDecl = false;
+      for (const auto &c : classes_)
+        if (i >= c.keyword && i <= c.bodyClose) {
+          inClassDecl = true;
+          break;
+        }
+      if (inClassDecl)
+        continue;
+      size_t nxt = ts.nextSig(i);
+      if (!(ts.isPunct(nxt, ";") || ts.isPunct(nxt, "=") ||
+            ts.isPunct(nxt, "[") || ts.isPunct(nxt, ",") ||
+            ts.isPunct(nxt, ")")))
+        continue;
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos || ts.isPunct(prev, ".") || ts.isPunct(prev, "->"))
+        continue;
+
+      bool isNonClassDecl = false;
+      if (ts.isPunct(prev, "*")) {
+        size_t r = prev;
+        while (r != kNPos && (ts.isPunct(r, "*") ||
+               (ts[r].kind == TokKind::Identifier &&
+                (ts[r].text == "const" || ts[r].text == "volatile" ||
+                 ts[r].text == "restrict"))))
+          r = ts.prevSig(r);
+        if (r != kNPos && ts[r].kind == TokKind::Identifier &&
+            !classNames_.count(ts[r].text) &&
+            !kNonTypeKeywords.count(ts[r].text)) {
+          if (kBuiltinDecl.count(ts[r].text))
+            isNonClassDecl = true;
+          else {
+            size_t rr = ts.prevSig(r);
+            if (rr != kNPos && ts[rr].kind == TokKind::Identifier &&
+                (ts[rr].text == "struct" || ts[rr].text == "union" ||
+                 ts[rr].text == "enum"))
+              isNonClassDecl = true;
+            else if (rr == kNPos || ts.isPunct(rr, ";") ||
+                     ts.isPunct(rr, "{") || ts.isPunct(rr, "}") ||
+                     ts.isPunct(rr, "(") || ts.isPunct(rr, ","))
+              isNonClassDecl = true;
+          }
+        } else if (r != kNPos && ts.isPunct(r, "}")) {
+          isNonClassDecl = true; // `struct { ... } *s;`
+        }
+      } else if (ts[prev].kind == TokKind::Identifier &&
+                 !classNames_.count(ts[prev].text) &&
+                 !kNonTypeKeywords.count(ts[prev].text)) {
+        if (kBuiltinDecl.count(ts[prev].text)) {
+          isNonClassDecl = true;
+        } else {
+          size_t prev2 = ts.prevSig(prev);
+          if (prev2 != kNPos && ts[prev2].kind == TokKind::Identifier &&
+              (ts[prev2].text == "struct" || ts[prev2].text == "union" ||
+               ts[prev2].text == "enum")) {
+            isNonClassDecl = true;
+          } else if (prev2 == kNPos || ts.isPunct(prev2, ";") ||
+                     ts.isPunct(prev2, "{") || ts.isPunct(prev2, "}") ||
+                     ts.isPunct(prev2, "(") || ts.isPunct(prev2, ",")) {
+            isNonClassDecl = true;
+          }
+        }
+      } else if (ts.isPunct(prev, "}")) {
+        // `struct Foo { ... } s;` or `struct { ... } s;`
+        size_t open = kNPos;
+        int depth = 0;
+        for (size_t k = prev + 1; k > 0;) {
+          --k;
+          if (ts.isPunct(k, "}")) ++depth;
+          else if (ts.isPunct(k, "{")) {
+            if (--depth == 0) { open = k; break; }
+          }
+        }
+        if (open != kNPos) {
+          size_t pre = ts.prevSig(open);
+          if (pre != kNPos && ts[pre].kind == TokKind::Identifier) {
+            if (ts[pre].text == "struct" || ts[pre].text == "union" ||
+                ts[pre].text == "enum")
+              isNonClassDecl = true;
+            else {
+              size_t pre2 = ts.prevSig(pre);
+              if (pre2 != kNPos && ts[pre2].kind == TokKind::Identifier &&
+                  (ts[pre2].text == "struct" || ts[pre2].text == "union" ||
+                   ts[pre2].text == "enum"))
+                isNonClassDecl = true;
+            }
+          }
+        }
+      }
+      if (isNonClassDecl)
+        varClasses_.push_back({ts[i].text, "", i, computeScopeEnd(i)});
     }
   }
 
@@ -654,7 +874,8 @@ private:
         if (end == kNPos)
           continue;
         len = initializerCount(brace, end);
-      } else if (ts[inner].kind == TokKind::Number) {
+      } else if (ts[inner].kind == TokKind::Number &&
+                 ts.nextSig(inner) == close) {
         len = static_cast<size_t>(strtoull(ts[inner].text.c_str(), nullptr, 0));
       }
       if (len != kNPos && len > 0)
@@ -1744,20 +1965,24 @@ private:
       className = selfClass->name;
     else if (className.empty()) {
       // A method-style call on a plain pointer/array is invalid. Give a
-      // clear C+ error instead of Clang's "not a structure or union".
-      size_t dot = ts.nextSig(i);
-      if (ts.isPunct(dot, ".") || ts.isPunct(dot, "->")) {
-        size_t member = ts.nextSig(dot);
-        if (member < ts.size() && ts.isIdent(member, "len") &&
-            ts.isPunct(ts.nextSig(member), "(")) {
-          diags_.error("'len()' cannot be called on '" + ts[i].text +
-                           "'; use the .len property on a static "
-                           "array or C+ managed allocation",
-                       filename_, ts[i].line, ts[i].column);
-          emit("0");
-          skipTo_ = member;
-          changed_ = true;
-          return true;
+      // clear C+ error instead of Clang's "not a structure or union", while
+      // leaving plain C struct function-pointer members (`s.len()`) alone.
+      if (arrays_.count(ts[i].text) != 0 ||
+          dynamicPointers_.count(ts[i].text) != 0) {
+        size_t dot = ts.nextSig(i);
+        if (ts.isPunct(dot, ".") || ts.isPunct(dot, "->")) {
+          size_t member = ts.nextSig(dot);
+          if (member < ts.size() && ts.isIdent(member, "len") &&
+              ts.isPunct(ts.nextSig(member), "(")) {
+            diags_.error("'len()' cannot be called on '" + ts[i].text +
+                             "'; use the .len property on a static "
+                             "array or C+ managed allocation",
+                         filename_, ts[i].line, ts[i].column);
+            emit("0");
+            skipTo_ = member;
+            changed_ = true;
+            return true;
+          }
         }
       }
       return false;
@@ -1833,16 +2058,17 @@ private:
     std::string name;
     std::string cls;
     size_t pos;
+    size_t scopeEnd = kNPos;
   };
   std::vector<VarClass> varClasses_;
   std::string classOfVar(const std::string &name, size_t usePos) const {
     std::string result;
     size_t best = kNPos;
-    // Pick the latest declaration that precedes this use (declaration order
-    // is also scope order), so same-named locals in later functions/scopes
-    // cannot reuse an earlier function's class.
+    // Pick the innermost enclosing declaration covering `usePos`, so inner
+    // shadowed blocks and earlier functions cannot leak stale class bindings.
     for (const auto &v : varClasses_)
-      if (v.name == name && v.pos <= usePos && (best == kNPos || v.pos >= best)) {
+      if (v.name == name && v.pos <= usePos && usePos <= v.scopeEnd &&
+          (best == kNPos || v.pos >= best)) {
         best = v.pos;
         result = v.cls;
       }
@@ -3059,55 +3285,169 @@ collectNonnullDerefSites(const std::string &source,
   // types (`Node nodes[NODES];`) are absent, yet wrapping them with
   // __typeof__ is still invalid C.
   const std::set<std::string> typeNames = collectDeclTypeNames(toks, sig);
-  std::set<std::string> declaredArrays;
-  for (size_t si = 1; si < sig.size(); ++si) {
-    if (!(toks[sig[si]].kind == TokKind::Punct &&
-          toks[sig[si]].text == "["))
-      continue;
-    if (toks[sig[si - 1]].kind != TokKind::Identifier)
-      continue;
-    if (isArrayDeclaratorBracket(toks, sig, si, typeNames))
-      declaredArrays.insert(toks[sig[si - 1]].text);
-    // A single identifier followed by `[...]` that is NOT a subscript is a
-    // declared array even when its element type is an unknown typedef (e.g.
-    // `pthread_t`).  `isArrayDeclaratorBracket` only recognises element types
-    // it knows (builtins / C+ classes / resources / struct/union/enum tags),
-    // so a bare typedef'd array declarator is otherwise missed and later
-    // treated as a nonnull deref site.
-    else {
-      // Walk back to the start of this declaration's declarator list to be
-      // confident this `[` follows a declared name rather than an expression
-      // subscript.  A declaration-bound `[` is preceded at the top level by
-      // `;`, `{`, `}`, `(`, `,` or a type keyword.
-      bool declBound = false;
-      for (int k = static_cast<int>(si) - 2; k >= 0; --k) {
-        const Token &u = toks[sig[k]];
-        if (u.kind == TokKind::Punct &&
-            (u.text == ";" || u.text == "{" || u.text == "}" ||
-             u.text == "(" || u.text == ","))
-        {
-          declBound = true;
-          break;
+  (void)arrayLengths;
+
+  // Match every `{` -> `}` and `(` -> `)` in `sig` and mark struct/union/enum
+  // bodies so field arrays (`struct S { int p[4]; };`) do not pollute local
+  // pointer NULL checks across the TU.
+  std::vector<size_t> braceMatch(sig.size(), kNPos);
+  std::vector<size_t> parenMatch(sig.size(), kNPos);
+  std::vector<bool> isAggregateBrace(sig.size(), false);
+  {
+    std::vector<size_t> bStack, pStack;
+    for (size_t si = 0; si < sig.size(); ++si) {
+      const Token &t = toks[sig[si]];
+      if (t.kind != TokKind::Punct)
+        continue;
+      if (t.text == "{") {
+        bool agg = false;
+        if (si >= 1 && toks[sig[si - 1]].kind == TokKind::Identifier) {
+          const std::string &p1 = toks[sig[si - 1]].text;
+          if (p1 == "struct" || p1 == "union" || p1 == "enum") {
+            agg = true;
+          } else if (si >= 2 && toks[sig[si - 2]].kind == TokKind::Identifier) {
+            const std::string &p2 = toks[sig[si - 2]].text;
+            if (p2 == "struct" || p2 == "union" || p2 == "enum")
+              agg = true;
+          }
         }
-        if (u.kind == TokKind::Punct && (u.text == ")" || u.text == "]" ||
-                                         u.text == "}"))
-          break;
-        if (u.kind == TokKind::Punct && u.text == "[")
-          break; // expression subscript `x[0]` — not a declarator
+        isAggregateBrace[si] = agg;
+        bStack.push_back(si);
+      } else if (t.text == "}") {
+        if (!bStack.empty()) {
+          braceMatch[bStack.back()] = si;
+          bStack.pop_back();
+        }
+      } else if (t.text == "(") {
+        pStack.push_back(si);
+      } else if (t.text == ")") {
+        if (!pStack.empty()) {
+          parenMatch[pStack.back()] = si;
+          pStack.pop_back();
+        }
       }
-      if (declBound)
-        declaredArrays.insert(toks[sig[si - 1]].text);
     }
   }
+
+  struct ScopedVarKind {
+    std::string name;
+    size_t startSi;
+    size_t endSi;
+    bool isArray;
+  };
+  std::vector<ScopedVarKind> scopedVars;
+  {
+    std::vector<size_t> bStack, pStack;
+    auto enclosingScopeEnd = [&](size_t fallbackSi) -> size_t {
+      if (!bStack.empty()) {
+        size_t close = braceMatch[bStack.back()];
+        return close == kNPos ? sig.size() - 1 : close;
+      }
+      if (!pStack.empty()) {
+        size_t rp = parenMatch[pStack.front()];
+        if (rp != kNPos && rp + 1 < sig.size() &&
+            toks[sig[rp + 1]].kind == TokKind::Punct &&
+            toks[sig[rp + 1]].text == "{") {
+          size_t close = braceMatch[rp + 1];
+          return close == kNPos ? sig.size() - 1 : close;
+        }
+        return rp == kNPos ? fallbackSi : rp;
+      }
+      return sig.size() - 1;
+    };
+    auto inAggregateBody = [&]() -> bool {
+      for (size_t b : bStack)
+        if (isAggregateBrace[b])
+          return true;
+      return false;
+    };
+
+    for (size_t si = 0; si < sig.size(); ++si) {
+      const Token &t = toks[sig[si]];
+      if (t.kind == TokKind::Punct) {
+        if (t.text == "{") { bStack.push_back(si); continue; }
+        if (t.text == "}") { if (!bStack.empty()) bStack.pop_back(); continue; }
+        if (t.text == "(") { pStack.push_back(si); continue; }
+        if (t.text == ")") { if (!pStack.empty()) pStack.pop_back(); continue; }
+
+        if (t.text == "*" && !inAggregateBody() && si > 0 && si + 1 < sig.size()) {
+          bool ptrDecl = isDeclaratorStarRun(toks, sig, si);
+          if (!ptrDecl && toks[sig[si - 1]].kind == TokKind::Identifier &&
+              typeNames.count(toks[sig[si - 1]].text) != 0)
+            ptrDecl = true;
+          if (ptrDecl) {
+            size_t k = si + 1;
+            while (k < sig.size() &&
+                   ((toks[sig[k]].kind == TokKind::Punct &&
+                     toks[sig[k]].text == "*") ||
+                    (toks[sig[k]].kind == TokKind::Identifier &&
+                     (toks[sig[k]].text == "const" ||
+                      toks[sig[k]].text == "volatile" ||
+                      toks[sig[k]].text == "restrict"))))
+              ++k;
+            if (k < sig.size() && toks[sig[k]].kind == TokKind::Identifier) {
+              // Do not confuse pointer-array declarator `void *slots[N];` with
+              // a scalar pointer: `[` right after `name` is handled below.
+              if (!(k + 1 < sig.size() &&
+                    toks[sig[k + 1]].kind == TokKind::Punct &&
+                    toks[sig[k + 1]].text == "["))
+                scopedVars.push_back(
+                    {toks[sig[k]].text, k, enclosingScopeEnd(k), false});
+            }
+          }
+        }
+
+        if (t.text == "[" && si >= 1 && !inAggregateBody() &&
+            toks[sig[si - 1]].kind == TokKind::Identifier) {
+          bool isDecl = isArrayDeclaratorBracket(toks, sig, si, typeNames);
+          if (!isDecl) {
+            for (int k = static_cast<int>(si) - 2; k >= 0; --k) {
+              const Token &u = toks[sig[k]];
+              if (u.kind == TokKind::Punct &&
+                  (u.text == ";" || u.text == "{" || u.text == "}" ||
+                   u.text == "(" || u.text == ",")) {
+                isDecl = true;
+                break;
+              }
+              if (u.kind == TokKind::Punct &&
+                  (u.text == ")" || u.text == "]" || u.text == "["))
+                break;
+            }
+          }
+          if (isDecl) {
+            // In C, array syntax in a function parameter (`void f(int a[4])`)
+            // decays to a pointer and CAN be NULL at runtime.
+            const bool isParam = bStack.empty() && !pStack.empty();
+            scopedVars.push_back({toks[sig[si - 1]].text, si - 1,
+                                  enclosingScopeEnd(si - 1), !isParam});
+          }
+        }
+      }
+    }
+  }
+
+  auto isScopedArrayAt = [&](const std::string &name, size_t useSi) -> bool {
+    size_t bestStart = kNPos;
+    bool bestIsArray = false;
+    for (const auto &sv : scopedVars) {
+      if (sv.name == name && sv.startSi <= useSi && useSi <= sv.endSi &&
+          (bestStart == kNPos || sv.startSi >= bestStart)) {
+        bestStart = sv.startSi;
+        bestIsArray = sv.isArray;
+      }
+    }
+    return bestStart != kNPos && bestIsArray;
+  };
 
   std::set<size_t> seen;
   auto tryAdd = [&](size_t baseSi) {
     const Token &b = toks[sig[baseSi]];
     if (b.kind != TokKind::Identifier)
       return;
-    // An array is never a NULL pointer at a dereference site; binding one
-    // with __typeof__ would emit an invalid array initializer in the C.
-    if (arrayLengths.count(b.text) != 0 || declaredArrays.count(b.text) != 0)
+    // An array in this lexical scope is never a NULL pointer at a dereference
+    // site; binding one with __typeof__ would emit an invalid array
+    // initializer in the C.
+    if (isScopedArrayAt(b.text, baseSi))
       return;
     if (seen.count(b.offset) != 0)
       return;
@@ -3244,25 +3584,47 @@ static bool isVlaQualifier(const Token &t) {
 }
 
 /// Constant-expression exclusions mirror the old static check: numeric
-/// extents, function-like constants (offsetof/sizeof/...) and ALL-CAPS macro
-/// names are not VLAs and must stay as ordinary arrays.
+/// extents, sizeof/alignof/offsetof subexpressions, and ALL-CAPS macro
+/// constants are not VLAs, but compound expressions containing any non-constant
+/// identifier or function call (e.g. `2 * n`, `N + n`, `sizeof(int) * n`,
+/// `foo() + 1`) are runtime VLAs and must be lowered.
 static bool isDynamicVlaExtent(const TokenStream &ts, size_t inner, size_t rb) {
   if (inner >= rb)
     return false;
-  if (ts[inner].kind == TokKind::Number)
-    return false;
-  if (ts[inner].kind == TokKind::Identifier &&
-      ts.isPunct(ts.nextSig(inner), "("))
-    return false;
-  if (ts[inner].kind == TokKind::Identifier) {
-    bool macroLike = true;
-    for (char c : ts[inner].text)
-      if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+  for (size_t k = inner; k < rb; k = ts.nextSig(k)) {
+    const Token &t = ts[k];
+    if (t.kind == TokKind::Number || t.kind == TokKind::CharLit ||
+        t.kind == TokKind::Punct)
+      continue;
+    if (t.kind != TokKind::Identifier)
+      return true;
+    if (t.text == "sizeof" || t.text == "_Alignof" || t.text == "alignof" ||
+        t.text == "offsetof") {
+      size_t lp = ts.nextSig(k);
+      if (lp < rb && ts.isPunct(lp, "(")) {
+        size_t rp = ts.matchParen(lp);
+        if (rp != kNPos && rp < rb) {
+          k = rp;
+          continue;
+        }
+      }
+      return true;
+    }
+    if (isVlaTypeWord(t) || isVlaQualifier(t))
+      continue;
+    bool macroLike = !t.text.empty();
+    bool hasUpper = false;
+    for (char c : t.text) {
+      if (c >= 'A' && c <= 'Z')
+        hasUpper = true;
+      else if (!((c >= '0' && c <= '9') || c == '_'))
         macroLike = false;
-    if (macroLike)
-      return false;
+    }
+    if (macroLike && hasUpper)
+      continue;
+    return true;
   }
-  return true;
+  return false;
 }
 
 /// The token immediately before a declarator name must belong to a
@@ -3303,11 +3665,54 @@ static bool lowerVariableLengthArrays(
     std::map<std::string, std::string> &vlaCounts) {
   std::vector<Token> toks = lexCPlus(source);
   TokenStream ts(toks);
+
+  // Pre-collect `label:` positions per top-level function brace so `goto` can
+  // release every live VLA whose declaring `{` scope it exits.
+  std::map<std::pair<size_t, std::string>, std::vector<size_t>> labelBraces;
+  {
+    std::vector<size_t> bStack;
+    size_t pDepth = 0;
+    for (size_t i = 0; i < ts.size(); ++i) {
+      const Token &t = toks[i];
+      if (t.kind == TokKind::Whitespace || t.kind == TokKind::Comment)
+        continue;
+      if (ts.isPunct(i, "#")) {
+        size_t e = i;
+        while (e < ts.size() && toks[e].line == t.line)
+          ++e;
+        i = e > i ? e - 1 : i;
+        continue;
+      }
+      if (ts.isPunct(i, "{")) { bStack.push_back(i); continue; }
+      if (ts.isPunct(i, "}")) { if (!bStack.empty()) bStack.pop_back(); continue; }
+      if (ts.isPunct(i, "(")) { ++pDepth; continue; }
+      if (ts.isPunct(i, ")")) { if (pDepth) --pDepth; continue; }
+      if (pDepth == 0 && !bStack.empty() && t.kind == TokKind::Identifier &&
+          t.text != "case" && t.text != "default" &&
+          ts.isPunct(ts.nextSig(i), ":")) {
+        size_t prev = ts.prevSig(i);
+        if (prev != kNPos && (ts.isPunct(prev, ";") || ts.isPunct(prev, "{") ||
+                              ts.isPunct(prev, "}") || ts.isPunct(prev, ":")))
+          labelBraces[{bStack.front(), t.text}] = bStack;
+      }
+    }
+  }
+
   struct LiveVla {
     size_t scope;
+    size_t scopeOpenTok;
     std::string release;
   };
+  struct LoopFrame {
+    size_t depth;
+    bool isSwitch;
+  };
   std::vector<LiveVla> live;
+  std::vector<size_t> braceStack;
+  std::vector<LoopFrame> loops;
+  int pendingLoop = 0; // 1 = loop, 2 = switch
+  size_t pendingLoopParen = 0;
+  bool doAwaitingWhile = false;
   std::set<std::string> loweredNames;
   std::vector<SafetyInsertion> edits;
   std::vector<SafetyInsertion> sizeofEdits;
@@ -3327,7 +3732,15 @@ static bool lowerVariableLengthArrays(
       i = e > i ? e - 1 : i;
       continue;
     }
-    if (ts.isPunct(i, "{")) { ++brace; continue; }
+    if (ts.isPunct(i, "{")) {
+      braceStack.push_back(i);
+      brace = braceStack.size();
+      if (pendingLoop != 0 && paren == pendingLoopParen) {
+        loops.push_back({brace, pendingLoop == 2});
+        pendingLoop = 0;
+      }
+      continue;
+    }
     if (ts.isPunct(i, "}")) {
       // Reverse declaration order, innermost scopes first.
       for (size_t k = live.size(); k > 0; --k)
@@ -3338,21 +3751,96 @@ static bool lowerVariableLengthArrays(
         if (v.scope != brace)
           kept.push_back(v);
       live.swap(kept);
-      if (brace)
-        --brace;
+      if (!loops.empty() && loops.back().depth == brace)
+        loops.pop_back();
+      if (!braceStack.empty()) {
+        braceStack.pop_back();
+        brace = braceStack.size();
+      }
       continue;
     }
     if (ts.isPunct(i, "(")) { ++paren; continue; }
     if (ts.isPunct(i, ")")) { if (paren) --paren; continue; }
+    if (ts.isPunct(i, ";")) {
+      if (pendingLoop != 0 && paren == pendingLoopParen)
+        pendingLoop = 0;
+      continue;
+    }
+    if (brace > 0 && (ts.isIdent(i, "for") || ts.isIdent(i, "while") ||
+                      ts.isIdent(i, "switch") || ts.isIdent(i, "do"))) {
+      if (ts.isIdent(i, "while") && doAwaitingWhile) {
+        doAwaitingWhile = false;
+      } else {
+        pendingLoop = ts.isIdent(i, "switch") ? 2 : 1;
+        pendingLoopParen = paren;
+        if (ts.isIdent(i, "do"))
+          doAwaitingWhile = true;
+      }
+      continue;
+    }
+    if ((ts.isIdent(i, "break") || ts.isIdent(i, "continue")) &&
+        !live.empty() && !loops.empty()) {
+      size_t semi = ts.statementEnd(i);
+      if (semi != kNPos && semi < ts.size()) {
+        size_t targetDepth = kNPos;
+        if (ts.isIdent(i, "break")) {
+          targetDepth = loops.back().depth;
+        } else {
+          for (size_t p = loops.size(); p > 0; --p) {
+            if (!loops[p - 1].isSwitch) {
+              targetDepth = loops[p - 1].depth;
+              break;
+            }
+          }
+        }
+        if (targetDepth != kNPos) {
+          std::string rel;
+          for (size_t k = live.size(); k > 0; --k)
+            if (live[k - 1].scope >= targetDepth)
+              rel += live[k - 1].release;
+          if (!rel.empty()) {
+            edits.push_back({t.offset, 0, 0,
+                             "{ " + rel + t.text + "; }",
+                             endOfToken(toks[semi]) - t.offset});
+          }
+        }
+      }
+      continue;
+    }
+    if (ts.isIdent(i, "goto") && !live.empty() && !braceStack.empty()) {
+      size_t lbl = ts.nextSig(i);
+      size_t semi = ts.statementEnd(i);
+      if (lbl < semi && semi != kNPos && semi < ts.size() &&
+          toks[lbl].kind == TokKind::Identifier) {
+        auto it = labelBraces.find({braceStack.front(), toks[lbl].text});
+        std::set<size_t> targetSet;
+        if (it != labelBraces.end())
+          targetSet.insert(it->second.begin(), it->second.end());
+        std::string rel;
+        for (size_t k = live.size(); k > 0; --k) {
+          if (it == labelBraces.end() ||
+              targetSet.count(live[k - 1].scopeOpenTok) == 0)
+            rel += live[k - 1].release;
+        }
+        if (!rel.empty()) {
+          edits.push_back({t.offset, 0, 0,
+                           "{ " + rel + "goto " + toks[lbl].text + "; }",
+                           endOfToken(toks[semi]) - t.offset});
+        }
+      }
+      continue;
+    }
     if (ts.isIdent(i, "return") && !live.empty()) {
       // A GNU statement expression keeps the release inside the single
       // `return` statement (so an unbraced `if (c) return x;` stays intact),
       // and captures the value BEFORE releasing: releasing first would make
-      // `return a[i];` read freed memory.  __typeof__ mirrors the existing
-      // RAII lowering's __cplus_ret pattern.  The original expression tokens
-      // stay in place, so bounds-check insertions inside it are preserved.
+      // `return a[i];` read freed memory.  For bare `return;` in void
+      // functions, emit `{ cplus_release(...); return; }` with no stray `;`.
       size_t semi = ts.statementEnd(i);
       if (semi != kNPos && semi < ts.size()) {
+        std::string rel;
+        for (size_t k = live.size(); k > 0; --k)
+          rel += live[k - 1].release;
         size_t exprStart = ts.nextSig(i);
         if (exprStart < semi) {
           std::string expr =
@@ -3361,19 +3849,16 @@ static bool lowerVariableLengthArrays(
           size_t e = expr.find_last_not_of(" \t\n\r");
           expr = b == std::string::npos ? std::string()
                                         : expr.substr(b, e - b + 1);
-          edits.push_back({toks[exprStart].offset, 0, 0,
+          edits.push_back({toks[exprStart].offset, kNPos, 0,
                            "({ __typeof__(" + expr +
                                ") __cplus_vla_ret = (",
                            0});
+          edits.push_back({toks[semi].offset, kNPos, 2,
+                           "); " + rel + "__cplus_vla_ret; })", 0});
         } else {
-          edits.push_back({toks[semi].offset, 0, 0, "({ ", 0});
+          edits.push_back({t.offset, 0, 0, "{ " + rel + "return; }",
+                           endOfToken(toks[semi]) - t.offset});
         }
-        std::string tail = exprStart < semi ? "); " : "";
-        for (size_t k = live.size(); k > 0; --k)
-          tail += live[k - 1].release;
-        tail += exprStart < semi ? " __cplus_vla_ret; });"
-                                 : " });";
-        edits.push_back({toks[semi].offset, 0, 0, tail, 0});
       }
       continue;
     }
@@ -3472,7 +3957,7 @@ static bool lowerVariableLengthArrays(
     // Export the runtime extent so instrumentDynamicArrayBounds() can guard
     // every `a[index]` with the very same count the allocation used.
     vlaCounts[name] = countVar;
-    live.push_back({brace,
+    live.push_back({brace, braceStack.empty() ? 0 : braceStack.back(),
                     "cplus_release((void *)" + name + "); "});
     loweredNames.insert(name);
     haveVla = true;
@@ -5202,6 +5687,59 @@ std::string catchNameFromDecl(const std::string &decl) {
   return name;
 }
 
+/// True when `expr` is syntactically malformed as a C expression (unbalanced
+/// delimiters or adjacent non-operator tokens such as `4 print("x")` from a
+/// missing semicolon between statements).
+bool isMalformedThrowExpr(const std::string &expr) {
+  std::vector<Token> toks = lexCPlus(expr);
+  int par = 0, brk = 0, brc = 0;
+  TokKind prevKind = TokKind::EndOfFile;
+  std::string prevText;
+  int prevDepth = -1;
+  for (const Token &t : toks) {
+    if (t.kind == TokKind::Whitespace || t.kind == TokKind::Comment ||
+        t.kind == TokKind::EndOfFile)
+      continue;
+    if (t.kind == TokKind::Punct) {
+      if (t.text == "(") {
+        if (par == 0 && brk == 0 && brc == 0 && prevDepth == 0 &&
+            prevKind == TokKind::Number)
+          return true; // e.g. `4 ("x")`
+        ++par;
+      } else if (t.text == ")") {
+        if (--par < 0) return true;
+      } else if (t.text == "[") {
+        ++brk;
+      } else if (t.text == "]") {
+        if (--brk < 0) return true;
+      } else if (t.text == "{") {
+        ++brc;
+      } else if (t.text == "}") {
+        if (--brc < 0) return true;
+      }
+      prevKind = t.kind;
+      prevText = t.text;
+      prevDepth = par + brk + brc;
+      continue;
+    }
+    const int curDepth = par + brk + brc;
+    if (curDepth == 0 && prevDepth == 0 &&
+        (t.kind == TokKind::Identifier || t.kind == TokKind::Number ||
+         t.kind == TokKind::StringLit || t.kind == TokKind::CharLit)) {
+      if (prevKind == TokKind::Number || prevKind == TokKind::StringLit ||
+          prevKind == TokKind::CharLit)
+        return true;
+      if (prevKind == TokKind::Identifier && prevText != "sizeof" &&
+          prevText != "_Alignof" && prevText != "alignof")
+        return true;
+    }
+    prevKind = t.kind;
+    prevText = t.text;
+    prevDepth = curDepth;
+  }
+  return par != 0 || brk != 0 || brc != 0;
+}
+
 std::string lowerThrows(const std::string &s, bool &changed) {
   std::string out;
   size_t pos = 0;
@@ -5227,27 +5765,22 @@ std::string lowerThrows(const std::string &s, bool &changed) {
       out += "cplus_exception_raise(cplus_rethrow_exc.code, "
              "cplus_rethrow_exc.message, cplus_rethrow_exc.file, "
              "cplus_rethrow_exc.line);";
+    } else if (isMalformedThrowExpr(expr)) {
+      // Malformed adjacent statement (`throw 4 print("x");`): consume the
+      // statement and raise a neutral code rather than emitting invalid C.
+      out += "cplus_exception_raise(1, 0, __FILE__, __LINE__);";
+    } else if (expr[0] == '"') {
+      out += "cplus_exception_raise(1, " + expr + ", __FILE__, __LINE__);";
     } else {
-      // A call in the operand (`throw 4 print("x");`) means the source is
-      // malformed: consume the whole statement but raise a neutral code
-      // rather than splicing a call into an integer argument list.
-      bool callLike = false;
-      for (size_t k = 1; k < expr.size(); ++k)
-        if (expr[k] == '(' && isIdentCharC(expr[k - 1])) {
-          callLike = true;
-          break;
-        }
-      std::string code = "1", msg = "0";
-      if (!callLike && expr[0] == '"') {
-        msg = expr; // string throw: message, default code
-      } else if (!callLike) {
-        // Use the operand for the code, not just leading decimal digits.
-        // This preserves negative literals, parenthesised values and
-        // variables instead of silently turning them into `throw 1;`.
-        code = "(int)(" + expr + ")";
-      }
-      out += "cplus_exception_raise(" + code + ", " + msg +
-             ", __FILE__, __LINE__);";
+      // Support arbitrary integer and string expressions including function/
+      // method calls (`throw get_code();`, `throw obj.code();`, `throw msg()`).
+      out += "__extension__ _Generic((" + expr + "), "
+             "char *: __cplus_throw_str, "
+             "const char *: __cplus_throw_str, "
+             "void *: __cplus_throw_ptr, "
+             "const void *: __cplus_throw_ptr, "
+             "default: __cplus_throw_int)((" + expr +
+             "), __FILE__, __LINE__);";
     }
     changed = true;
     pos = semi + 1;
@@ -5316,13 +5849,11 @@ std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
         const std::string handler = lowerExceptionsImpl(
             lowerThrows(source.substr(ho + 1, hc - ho - 1), changed), counter,
             changed);
-        // Preserve the outer handler's rethrow exception: a nested try/catch
-        // inside a catch must not overwrite the TLS value it will rethrow.
-        handlerCode = " Exception __cplus_prev_rethrow_" + frame +
-                      " = cplus_rethrow_exc; Exception " + name + " = " +
-                      frame + ".base.exc; " + handler +
-                      " cplus_rethrow_exc = __cplus_prev_rethrow_" + frame +
-                      ";";
+        // Wrap the handler in its own block so declarations inside the catch
+        // cannot collide with frame fields, and restore cplus_rethrow_exc via
+        // CPlusExcGuard cleanup even on return/break/continue/goto.
+        handlerCode = "Exception " + name + " = " + frame + ".base.exc; " +
+                      handler;
         firstHandler = false;
       } else {
         // Fail closed instead of silently discarding a handler. Since this
@@ -5336,14 +5867,21 @@ std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
 
     // A plain compound block, not `do { ... } while (0)`: the latter is a
     // loop and silently captures break/continue meant for an enclosing loop
-    // or switch (issue #82).
-    out += "{ CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; "
+    // or switch (issue #82).  Save `prev_rethrow` BEFORE `setjmp` / entering
+    // the handler so nested `try/catch` inside an outer `catch` preserves
+    // the outer rethrow exception across both normal and early-exit paths.
+    out += "{ CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; " +
+           frame + ".restore_rethrow = 0; " + frame +
+           ".prev_rethrow = cplus_rethrow_exc; "
            "if (setjmp(" + frame + ".base.env) == 0) { "
            "cplus_exception_enter(&" + frame + ".base); " + body +
            " " + frame + ".active = 0; cplus_exception_pop(); }";
     if (!handlerCode.empty())
-      out += " else { " + frame + ".active = 0; cplus_rethrow_exc = " +
-             frame + ".base.exc; " + handlerCode + " }";
+      out += " else { " + frame + ".active = 0; " + frame +
+             ".restore_rethrow = 1; cplus_rethrow_exc = " + frame +
+             ".base.exc; { " + handlerCode + " } " + frame +
+             ".restore_rethrow = 0; cplus_rethrow_exc = " + frame +
+             ".prev_rethrow; }";
     out += " }";
     pos = resume;
   }
@@ -5362,9 +5900,12 @@ std::string lowerExceptions(const std::string &source) {
     return out;
   // Guard declarations so a source that includes "cplus/cplus.h" (which uses
   // the same CPLUS_EXCEPTION_DEFINED guard) does not redefine the types, while
-  // a source that omits the header still emits valid C.  Placed before every
-  // #line so original source line numbers are preserved.
-  return "#ifndef CPLUS_EXCEPTION_DEFINED\n"
+  // a source that omits the header still emits valid C.  Mark the prelude with
+  // a synthetic #line header name so AstSafetyCheck's isHeaderLocation() does
+  // not mistake compiler-emitted exception helpers for user declarations; the
+  // #line 1 "<filename>" emitted by rewriteCPlusSource follows immediately.
+  return "#line 1 \"<cplus-exception-prelude>\"\n"
+         "#ifndef CPLUS_EXCEPTION_DEFINED\n"
          "#define CPLUS_EXCEPTION_DEFINED\n"
          "#include <setjmp.h>\n"
          "#include <stdint.h>\n"
@@ -5388,16 +5929,28 @@ std::string lowerExceptions(const std::string &source) {
          "#endif\n"
          "static CPLUS_EXC_TLS Exception cplus_rethrow_exc = "
          "{1, 0, 0, 0};\n"
+         "__attribute__((unused)) static inline void __cplus_throw_int("
+         "long long c, const char *f, int l) { "
+         "cplus_exception_raise((int)c, 0, f, l); }\n"
+         "__attribute__((unused)) static inline void __cplus_throw_str("
+         "const char *m, const char *f, int l) { "
+         "cplus_exception_raise(1, m, f, l); }\n"
+         "__attribute__((unused)) static inline void __cplus_throw_ptr("
+         "const void *p, const char *f, int l) { "
+         "cplus_exception_raise(p ? 1 : 0, 0, f, l); }\n"
          // Scope guard: `cplus_exception_pop()` on the setjmp==0 path alone
          // left a stale runtime frame when a try was left by return/break/
-         // continue/goto.  A cleanup attribute pops on *every* exit edge.
-         // `active` is volatile so its value survives a longjmp; the catch
-         // path clears it because cplus_exception_raise() already popped the
-         // frame before jumping, which prevents a double pop.
+         // continue/goto.  A cleanup attribute pops on *every* exit edge and
+         // restores any outer catch's `cplus_rethrow_exc` on early exit.
+         // `active` / `restore_rethrow` are volatile so their values survive
+         // a longjmp.
          "typedef struct CPlusExcGuard { CPlusExceptionFrame base; "
-         "volatile int active; } CPlusExcGuard;\n"
+         "volatile int active; Exception prev_rethrow; "
+         "volatile int restore_rethrow; } CPlusExcGuard;\n"
          "static void cplus_exc_guard_cleanup(CPlusExcGuard *g) {\n"
          "  if (g->active) { g->active = 0; cplus_exception_pop(); }\n"
+         "  if (g->restore_rethrow) { g->restore_rethrow = 0; "
+         "cplus_rethrow_exc = g->prev_rethrow; }\n"
          "}\n"
          "#if defined(__GNUC__) || defined(__clang__)\n"
          "#  define CPLUS_EXC_FRAME(N) CPlusExcGuard N "

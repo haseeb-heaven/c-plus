@@ -169,6 +169,48 @@ bool writeFile(const std::string &path, const std::string &text,
   return true;
 }
 
+/// Atomically create a unique file with O_CREAT | O_EXCL and mode 0600,
+/// writing `text` directly to the opened descriptor so shared temp directories
+/// cannot be hijacked via predictable PID filenames or symlink races.
+bool writeUniqueTempFile(llvm::StringRef dir, llvm::StringRef prefix,
+                         llvm::StringRef suffix, const std::string &text,
+                         std::string &outPath, std::string *err) {
+  int fd = -1;
+  llvm::SmallString<256> resultPath;
+  std::error_code ec;
+  if (!dir.empty()) {
+    llvm::SmallString<256> model(dir);
+    std::string tail = (prefix + "-%%%%%%").str();
+    if (!suffix.empty())
+      tail += "." + suffix.str();
+    llvm::sys::path::append(model, tail);
+    ec = llvm::sys::fs::createUniqueFile(model, fd, resultPath,
+                                         llvm::sys::fs::OF_Text, 0600);
+  } else {
+    ec = llvm::sys::fs::createTemporaryFile(prefix, suffix, fd, resultPath,
+                                            llvm::sys::fs::OF_Text);
+  }
+  if (ec) {
+    if (err)
+      *err = ec.message();
+    return false;
+  }
+  outPath = resultPath.str().str();
+  llvm::raw_fd_ostream os(fd, /*shouldClose=*/true);
+  os << text;
+  os.flush();
+  if (os.has_error()) {
+    std::error_code writeEc = os.error();
+    os.clear_error();
+    llvm::sys::fs::remove(outPath);
+    outPath.clear();
+    if (err)
+      *err = writeEc.message();
+    return false;
+  }
+  return true;
+}
+
 std::string readFile(const std::string &path, std::string *err) {
   auto buf = llvm::MemoryBuffer::getFile(path);
   if (!buf) {
@@ -540,13 +582,8 @@ std::string preprocessModernHeaders(
                       cls, lowered.find(cls + "_ctor(") != std::string::npos);
                 for (const auto &res : headerInfo.resourceTypes)
                   registerExternalResource(res);
-                llvm::SmallString<256> tmp;
-                llvm::sys::path::system_temp_directory(true, tmp);
-                llvm::sys::path::append(
-                    tmp, "cplus-hp-" + std::to_string(::getpid()) + "-" +
-                             std::to_string(counter++) + ".h");
-                tempPath = tmp.str().str();
-                if (!writeFile(tempPath, lowered, &err)) {
+                if (!writeUniqueTempFile("", "cplus-hp", "h", lowered, tempPath,
+                                         &err)) {
                   Diag d;
                   d.level = DiagLevel::Error;
                   d.message = "cannot write lowered header: " + err;
@@ -905,7 +942,9 @@ static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) 
     }
     if (s.starts_with("-I") || s.starts_with("-D") || s.starts_with("-L") ||
         s.starts_with("-l") || s.starts_with("-std=") ||
-        s.starts_with("-isysroot") || s.starts_with("-O"))
+        s.starts_with("-isysroot") ||
+        s == "-O" || s == "-O0" || s == "-O1" || s == "-O2" || s == "-O3" ||
+        s == "-Os" || s == "-Oz" || s == "-Og")
       continue;
     // -U is deliberately excluded: it is parse-affecting but is NOT forwarded
     // to the safety AST, so allowing it would break check/build parity.
@@ -951,9 +990,12 @@ static bool redefinesReservedCPlusMacro(const std::vector<std::string> &extra) {
     } else {
       continue;
     }
+    def = def.ltrim(" \t\r\n");
     llvm::StringRef name = def.take_while([](char c) {
-      return c != '=' && c != '(' && c != ' ';
+      return c != '=' && c != '(' && c != ' ' && c != '\t';
     });
+    if (name.empty())
+      return true;
     // The whole CPLUS/CPLUS_/CPLUS<Name> gate family and the implementation
     // namespace (__cplus_*, reserved to the implementation) are closed sets;
     // reserve the prefix so a future gate macro cannot be redefined by a
@@ -1385,19 +1427,25 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   bool strictDisclosureEmitted = false;
   // Recompiling the C+ runtime with sanitizer flags is part of building an
   // instrumented executable. `check` never produces an executable, so skip it.
+  std::vector<TempFile> guards;
   if (san != Sanitizer::None && !isCheckCommand(opts)) {
     std::string runtimeSrc = runtimeSourcePath();
     if (runtimeSrc.empty()) {
       errs << "warning: C+ runtime source not found; runtime library will "
               "not be instrumented by the selected sanitizers\n";
     } else {
+      int rtObjFd = -1;
       llvm::SmallString<256> objPath;
-      if (llvm::sys::fs::createTemporaryFile("cplus_runtime_san", ".o",
+      if (llvm::sys::fs::createTemporaryFile("cplus_runtime_san", "o", rtObjFd,
                                              objPath)) {
         errs << "error: cannot create temporary object for runtime "
                 "instrumentation\n";
         return 1;
       }
+      ::close(rtObjFd);
+      guards.emplace_back();
+      guards.back().path = objPath.str().str();
+      guards.back().keep = false;
       std::vector<std::string> rtArgs = base;
       rtArgs.push_back("-c");
       rtArgs.push_back("-o");
@@ -1411,7 +1459,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       appendSafetyTail(rtArgs);
       if (runProgram(clang, rtArgs) != 0) {
         errs << "error: failed to compile instrumented C+ runtime\n";
-        llvm::sys::fs::remove(objPath);
         return 1;
       }
       objects.push_back(std::string(objPath.str()));
@@ -1420,8 +1467,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
                  runtimeSrc.c_str());
     }
   }
-  std::vector<TempFile> guards;
-  std::string pidSuffix = std::to_string(::getpid());
 
   for (size_t fileIndex = 0; fileIndex < inputs.size(); ++fileIndex) {
     const std::string &input = inputs[fileIndex];
@@ -1630,26 +1675,20 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
         os << "lowered C written to " << opts.emitC << "\n";
     }
 
-    llvm::SmallString<256> tempPath;
     llvm::StringRef inputDir = llvm::sys::path::parent_path(input);
     if (inputDir.empty())
       inputDir = ".";
-    tempPath = std::string(inputDir);
-    llvm::sys::path::append(tempPath, ".cplus-tmp-" + pidSuffix + "-" +
-                                          std::to_string(fileIndex) + ".c");
-    if (!writeFile(tempPath.str().str(), loweredText, &err)) {
-      llvm::SmallString<256> sysTemp;
-      llvm::sys::path::system_temp_directory(true, sysTemp);
-      llvm::sys::path::append(sysTemp, "cplus-" + pidSuffix + "-" +
-                                           std::to_string(fileIndex) + ".c");
-      tempPath = sysTemp;
-      if (!writeFile(tempPath.str().str(), loweredText, &err)) {
+    std::string tempPathStr;
+    if (!writeUniqueTempFile(inputDir, ".cplus-tmp", "c", loweredText,
+                             tempPathStr, &err)) {
+      if (!writeUniqueTempFile("", "cplus-tu", "c", loweredText, tempPathStr,
+                               &err)) {
         errs << "error: cannot write temporary file: " << err << "\n";
         return 1;
       }
     }
     TempFile guard;
-    guard.path = tempPath.str().str();
+    guard.path = tempPathStr;
     guard.keep = opts.keepTemp || !envOr("CPLUS_KEEP_TEMP").empty();
     if (guard.keep)
       os << "note: lowered C kept at " << guard.path << "\n";
@@ -1677,16 +1716,23 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       args.push_back("-o");
       args.push_back(output);
     } else {
+      int objFd = -1;
       llvm::SmallString<256> objPath;
-      llvm::sys::path::system_temp_directory(true, objPath);
-      llvm::sys::path::append(objPath, "cplus-" + pidSuffix + "-" +
-                                           std::to_string(fileIndex) + ".o");
+      if (llvm::sys::fs::createTemporaryFile("cplus-obj", "o", objFd,
+                                             objPath)) {
+        errs << "error: cannot create temporary object file\n";
+        return 1;
+      }
+      ::close(objFd);
+      guards.emplace_back();
+      guards.back().path = objPath.str().str();
+      guards.back().keep = false;
       args.push_back("-c");
       args.push_back("-o");
       args.push_back(objPath.str().str());
       objects.push_back(objPath.str().str());
     }
-    args.push_back(tempPath.str().str());
+    args.push_back(tempPathStr);
 
     if (opts.verbose) {
       os << "backend: " << clang << "\n";

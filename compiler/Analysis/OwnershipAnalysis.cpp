@@ -1857,13 +1857,16 @@ bool isReservedHelperName(llvm::StringRef name) {
   // Emitted guard/arithmetic helpers and generated defer/drop helpers.
   if (name.starts_with("__cplus_checked_") ||
       name.starts_with("__cplus_inline_") ||
+      name.starts_with("__cplus_throw_") ||
       name.starts_with("__cplus_defer_") || name.starts_with("cplus_drop_"))
     return true;
-  // Closed runtime families (allocation, checks, printing, threading, scope).
+  // Closed runtime families (allocation, checks, printing, threading, scope,
+  // exceptions, scanning).
   if (name.starts_with("cplus_alloc") || name.starts_with("cplus_check_") ||
       name.starts_with("cplus_print_") || name.starts_with("cplus_mutex_") ||
       name.starts_with("cplus_tls_") || name.starts_with("cplus_scope_") ||
-      name.starts_with("cplus_checked"))
+      name.starts_with("cplus_exception_") || name.starts_with("cplus_exc_") ||
+      name.starts_with("cplus_scan_") || name.starts_with("cplus_checked"))
     return true;
   // Remaining individual runtime ABI entry points (runtime/include/cplus/cplus.h
   // and the rewriter's generated wrappers).
@@ -1878,9 +1881,11 @@ bool isReservedHelperName(llvm::StringRef name) {
       "cplus_sprintf_s", "cplus_realloc", "cplus_realloc_registered",
       "cplus_register_allocation", "cplus_release",
       "cplus_resource", "cplus_resource_check_borrow",
-      "cplus_retired_ledger_full", "cplus_rotl32", "cplus_rotr32",
+      "cplus_retired_ledger_full", "cplus_rethrow_exc",
+      "cplus_rotl32", "cplus_rotr32",
       "cplus_runtime", "cplus_runtime_log_level",
       "cplus_runtime_logging_init", "cplus_scan_one", "cplus_scan_value",
+      "cplus_scan_value_at",
       "cplus_strcpy", "cplus_strnlen", "cplus_zero", "cplus_zalloc",
   };
   return kReserved.count(name) != 0;

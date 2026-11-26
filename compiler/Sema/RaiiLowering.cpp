@@ -472,17 +472,55 @@ private:
   }
 
   void handleDefer(size_t i) {
-    size_t semi = statementEnd(i + 1);
-    if (semi == kNPos || semi == i + 1) {
-      errorAt("defer requires a statement", toks_[i]);
+    if (scopes_.empty()) {
+      errorAt("defer cannot appear outside a function scope", toks_[i]);
       return;
     }
-    for (size_t k = i + 1; k < semi; ++k) {
+    size_t prev = prevSig(i);
+    if (prev != kNPos &&
+        (isPunct(prev, ")") ||
+         (toks_[prev].kind == TokKind::Identifier &&
+          (toks_[prev].text == "else" || toks_[prev].text == "do")))) {
+      errorAt("defer cannot be used as the unbraced body of a control "
+              "statement; wrap it in '{ ... }'",
+              toks_[i]);
+      return;
+    }
+
+    size_t bodyStart = nextSig(i);
+    bool isBlock = bodyStart < toks_.size() && isPunct(bodyStart, "{");
+    size_t bodyEnd = kNPos;
+    size_t deleteEndOffset = 0;
+    std::string deferText;
+
+    if (isBlock) {
+      size_t close = matchingBrace(bodyStart);
+      if (close == kNPos) {
+        errorAt("unterminated defer block", toks_[i]);
+        return;
+      }
+      bodyEnd = close + 1;
+      deleteEndOffset = toks_[close].offset + toks_[close].text.size();
+      deferText = joinTokens(bodyStart, bodyEnd);
+    } else {
+      size_t semi = statementEnd(i + 1);
+      if (semi == kNPos || semi == i + 1) {
+        errorAt("defer requires a statement", toks_[i]);
+        return;
+      }
+      bodyEnd = semi;
+      deleteEndOffset = toks_[semi].offset;
+      deferText = joinTokens(i + 1, semi);
+    }
+
+    for (size_t k = bodyStart; k < bodyEnd; ++k) {
       if (toks_[k].kind != TokKind::Identifier)
         continue;
       const std::string &kw = toks_[k].text;
       if (kw == "return" || kw == "break" || kw == "continue" || kw == "goto") {
         errorAt("'" + kw + "' cannot jump out of a defer cleanup", toks_[k]);
+        if (isBlock)
+          skipTo_ = bodyEnd - 1;
         return;
       }
       // A throw/longjmp/terminator in the body exits before the rest of the
@@ -493,10 +531,11 @@ private:
            isTerminationName(kw) || terminationMacros_.count(kw) != 0))
         errorAt("'" + kw + "' cannot jump out of a defer cleanup", toks_[k]);
     }
+
     OwnedVar v;
     v.name = "__cplus_defer_" + std::to_string(deferCounter_++);
     v.isDefer = true;
-    v.deferText = joinTokens(i + 1, semi);
+    v.deferText = deferText;
     v.line = toks_[i].line;
     v.column = toks_[i].column;
     registerOwned(v);
@@ -506,7 +545,7 @@ private:
     // Record the token span so the explicit-drop guard can be folded into the
     // re-emitted defer text instead of an edit inside the deleted region.
     bool conditional = false;
-    for (size_t k = i + 1; k < semi; ++k) {
+    for (size_t k = bodyStart; k < bodyEnd; ++k) {
       if (toks_[k].kind == TokKind::Identifier) {
         const std::string &s = toks_[k].text;
         if (s == "if" || s == "while" || s == "for" || s == "switch")
@@ -515,12 +554,23 @@ private:
         conditional = true;
       }
     }
-    defers_.push_back(DeferInfo{i + 1, semi, toks_[i].offset,
-                                toks_[semi].offset, conditional, v.name});
+    defers_.push_back(DeferInfo{bodyStart, bodyEnd, toks_[i].offset,
+                                deleteEndOffset, conditional, v.name});
 
     edits_.push_back(Edit{toks_[i].offset,
-                          toks_[semi].offset - toks_[i].offset,
+                          deleteEndOffset - toks_[i].offset,
                           std::string(), seq_++});
+    if (isBlock) {
+      // Do not let scan() push/pop a Scope for the defer block's braces,
+      // while still tracking explicit *_drop(&owner) calls inside the block.
+      for (size_t k = bodyStart + 1; k < bodyEnd - 1; ++k) {
+        if (toks_[k].kind == TokKind::Identifier &&
+            toks_[k].text.size() > 5 &&
+            toks_[k].text.compare(toks_[k].text.size() - 5, 5, "_drop") == 0)
+          handleExplicitDrop(k, toks_[k]);
+      }
+      skipTo_ = bodyEnd - 1;
+    }
     atStmtStart_ = true;
   }
 
@@ -647,6 +697,10 @@ private:
       }
       if (t.kind == TokKind::Identifier) {
         handleIdentifier(i, t);
+        if (skipTo_ != kNPos) {
+          i = skipTo_;
+          skipTo_ = kNPos;
+        }
         continue;
       }
     }
@@ -835,6 +889,66 @@ private:
     atStmtStart_ = true;
   }
 
+  void handleExplicitDrop(size_t i, const Token &t) {
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "("))
+      return;
+    size_t rp = matchingParen(lp);
+    if (rp == kNPos || rp >= toks_.size())
+      return;
+    size_t ownerTok = findDroppedOwner(lp, rp);
+    DeferInfo *defer = nullptr;
+    for (auto &d : defers_)
+      if (toks_[i].offset >= d.startOffset && toks_[i].offset < d.endOffset) {
+        defer = &d;
+        break;
+      }
+    if (ownerTok != kNPos) {
+      const std::string &name = toks_[ownerTok].text;
+      // The obligation is the innermost live binding of that name; the
+      // dropped flag is per binding, so dropping an inner shadow does
+      // not mark the outer owner as already released.
+      OwnedVar *owner = ownerAt(findLiveOwner(name));
+      if (owner && owner->explicitlyDropped && strict_ &&
+          mode_ != Mode::LegacyC)
+        errorAt("resource '" + name + "' is explicitly dropped more than once",
+                t,
+                "release each owner exactly once; a second drop may "
+                "free already-freed memory");
+      if (owner)
+        owner->explicitlyDropped = true;
+      if (defer && !defer->conditional) {
+        // Unconditional defer: its text *is* the scope-exit cleanup, so
+        // suppress the automatic drop.  No source edit is needed (the
+        // defer span is deleted from the output).
+        if (owner)
+          owner->deferDropped = true;
+      } else if (defer) {
+        // Conditional defer: the explicit drop runs on one branch only.
+        // Keep the automatic drop and fold a zeroing guard into the
+        // re-emitted defer text so the true branch cannot double-free.
+        const std::string guard =
+            " , (void)cplus_zero(&" + name + ", sizeof(" + name + "))";
+        std::string text = joinTokensWithInsert(defer->startTok, defer->endTok,
+                                                rp, guard);
+        if (OwnedVar *guarded = ownerAt(findLiveOwner(defer->ownerName)))
+          guarded->deferText = text;
+      } else {
+        // `cplus_zero` is a no-op on an already empty handle, so the
+        // automatic drop inserted at scope exit cannot double-free.
+        emitExplicitDropGuard(i, rp, name);
+      }
+    } else {
+      size_t amp = nextSig(lp);
+      if (strict_ && mode_ != Mode::LegacyC && amp < toks_.size() &&
+          toks_[amp].kind == TokKind::Identifier &&
+          !borrowOwner(toks_[amp].text).empty())
+        errorAt("explicit drop through alias '" + toks_[amp].text +
+                    "' is not supported",
+                t, "call the destructor with the owner's address directly");
+    }
+  }
+
   void handleIdentifier(size_t i, const Token &t) {
     if (t.text == "defer") {
       handleDefer(i);
@@ -849,65 +963,7 @@ private:
     // explicit drop.
     if (t.text.size() > 5 &&
         t.text.compare(t.text.size() - 5, 5, "_drop") == 0) {
-      size_t lp = nextSig(i);
-      if (isPunct(lp, "(")) {
-        size_t rp = matchingParen(lp);
-        if (rp != kNPos && rp < toks_.size()) {
-          size_t ownerTok = findDroppedOwner(lp, rp);
-          DeferInfo *defer = nullptr;
-          for (auto &d : defers_)
-            if (toks_[i].offset >= d.startOffset &&
-                toks_[i].offset < d.endOffset) {
-              defer = &d;
-              break;
-            }
-          if (ownerTok != kNPos) {
-            const std::string &name = toks_[ownerTok].text;
-            // The obligation is the innermost live binding of that name; the
-            // dropped flag is per binding, so dropping an inner shadow does
-            // not mark the outer owner as already released.
-            OwnedVar *owner = ownerAt(findLiveOwner(name));
-            if (owner && owner->explicitlyDropped && strict_ &&
-                mode_ != Mode::LegacyC)
-              errorAt("resource '" + name +
-                          "' is explicitly dropped more than once",
-                      t, "release each owner exactly once; a second drop may "
-                         "free already-freed memory");
-            if (owner)
-              owner->explicitlyDropped = true;
-            if (defer && !defer->conditional) {
-              // Unconditional defer: its text *is* the scope-exit cleanup, so
-              // suppress the automatic drop.  No source edit is needed (the
-              // defer span is deleted from the output).
-              if (owner)
-                owner->deferDropped = true;
-            } else if (defer) {
-              // Conditional defer: the explicit drop runs on one branch only.
-              // Keep the automatic drop and fold a zeroing guard into the
-              // re-emitted defer text so the true branch cannot double-free.
-              const std::string guard =
-                  " , (void)cplus_zero(&" + name + ", sizeof(" + name + "))";
-              std::string text = joinTokensWithInsert(
-                  defer->startTok, defer->endTok, rp, guard);
-              if (OwnedVar *guarded = ownerAt(findLiveOwner(defer->ownerName)))
-                guarded->deferText = text;
-            } else {
-              // `cplus_zero` is a no-op on an already empty handle, so the
-              // automatic drop inserted at scope exit cannot double-free.
-              emitExplicitDropGuard(i, rp, name);
-            }
-          } else {
-            size_t amp = nextSig(lp);
-            if (strict_ && mode_ != Mode::LegacyC && amp < toks_.size() &&
-                toks_[amp].kind == TokKind::Identifier &&
-                !borrowOwner(toks_[amp].text).empty())
-              errorAt("explicit drop through alias '" + toks_[amp].text +
-                          "' is not supported",
-                      t, "call the destructor with the owner's address "
-                         "directly");
-          }
-        }
-      }
+      handleExplicitDrop(i, t);
     }
     if (t.text == "cplus_move") {
       size_t lp = nextSig(i);
@@ -1388,7 +1444,9 @@ private:
           continue;
         }
         if (v.isDefer)
-          out += v.deferText + "; ";
+          out += v.deferText +
+                 (!v.deferText.empty() && v.deferText.back() == '}' ? " "
+                                                                    : "; ");
         else if (v.managed)
           out += shadowed ? "cplus_release(" + alias + "); "
                           : "cplus_release(" + v.name + "); " + v.name +
@@ -2676,6 +2734,7 @@ private:
   std::map<std::string, bool> terminationMacros_;
   std::vector<DeferInfo> defers_;
   size_t skipMoveArg_ = kNPos;
+  size_t skipTo_ = kNPos;
 
   std::vector<Scope> scopes_;
   std::vector<LoopInfo> loops_;
