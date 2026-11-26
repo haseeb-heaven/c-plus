@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>SQL-like DB app — C+ proof GUI</title>
+<style>
+body{font:14px system-ui;background:#0d1117;color:#c9d1d9;margin:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;width:560px}
+input,select,button{font:inherit;padding:6px;margin:4px 0;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:4px}
+button{cursor:pointer} table{border-collapse:collapse;width:100%;margin-top:10px}
+td,th{border:1px solid #30363d;padding:6px;text-align:left} h2{color:#58a6ff}
+</style></head><body><div class="card">
+<h2>SQL-like database app (verified transcript)</h2>
+<label>Query: <input id="q" value="SELECT id, age, name FROM users"></label>
+<label>Format: <select id="fmt"><option>table</option><option>json</option><option>csv</option></select></label>
+<button id="run">Run</button>
+<table id="rows"><tr><th>id</th><th>age</th><th>name</th></tr>
+<tr><td>101</td><td>31</td><td>ada2</td></tr></table>
+<p id="verdict">SQLDB_APP load rc=0 · count_after_load=1 · delete rc=0 · count_final=1</p>
+<pre id="log">SQLDB_APP insert rc=0
+SQLDB_APP insert rc=0
+SQLDB_APP count=2
+SQLDB_APP select id=101 found=1 age=30
+SQLDB_APP update rc=0
+SQLDB_APP save rc=0
+SQLDB_APP load rc=0
+SQLDB_APP count_after_load=1
+SQLDB_APP loaded_age=31
+SQLDB_APP delete rc=0
+SQLDB_APP count_final=1</pre>
+</div></body></html>

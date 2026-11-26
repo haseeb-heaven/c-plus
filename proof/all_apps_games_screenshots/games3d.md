@@ -3,9 +3,12 @@
 Runner: `apps/games3d/run.sh`. Generated from its actual stdout (bounded by timeout).
 Verified verdict: `SCENE3D 1 4 0 13`. App: [`apps/games3d`](../../apps/games3d/README.md).
 
-![games3d](../../games_gui_nuklear/screenshots/games3d_real.png)
+![games3d](real/games3d_real.png)
 
 Transcript: [`screenshots/games3d.out`](screenshots/games3d.out).
 
 
 The previous `games3d.svg` was a CLI transcript rendering and is superseded by this real framebuffer image.
+
+
+Proof image is a real SDL3 framebuffer capture, not a CLI transcript.

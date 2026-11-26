@@ -2,6 +2,9 @@
 
 Runner: `apps/gameeng/run.sh`. Generated from its actual stdout (bounded by timeout).
 
-![gameeng](screenshots/gameeng.svg)
+![gameeng](cli_transcripts/gameeng.svg)
 
-Transcript: [`screenshots/gameeng.out`](screenshots/gameeng.out).
+Transcript: [`cli_transcripts/gameeng.out`](cli_transcripts/gameeng.out).
+
+
+This is a CLI transcript rendered as SVG, NOT a GUI or 3D screenshot.
