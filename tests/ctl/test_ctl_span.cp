@@ -13,12 +13,17 @@ static void check(int cond, const char *tag) {
 }
 
 int main(void) {
-    int a[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    int *a;
     ctl_span s, sub, empty;
     error e = error();
     int *p;
+    int i;
 
     stdlib_set_error_callback((stdlib_error_callback)0);
+    /* Checked ctl_span_init requires tracked (heap/arena) storage. */
+    a = (int *)stdlib_alloc(8u * sizeof(int));
+    if (a == (int *)0) return 1;
+    for (i = 0; i < 8; ++i) a[i] = i;
     check(ctl_span_init(&s, a, 8u, sizeof(int), &e) == 0, "init");
     p = (int *)ctl_span_at(&s, 7u, &e);
     check(p == &a[7] && *p == 7, "at_last");
@@ -37,5 +42,6 @@ int main(void) {
     check(ctl_span_from_ctl_vector(a, 8u, sizeof(int), &sub, &e) == 0 &&
           ctl_span_size(&sub) == 8u, "from_ctl_storage");
     printf("CTL_SPAN %d %d %d\n", checks, passed, checks - passed);
+    stdlib_release(a);
     return checks == passed ? 0 : 1;
 }

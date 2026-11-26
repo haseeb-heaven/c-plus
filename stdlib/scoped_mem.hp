@@ -4,7 +4,9 @@
  *
  * Rules: allocate inside a stdlib_scoped_scope; drop() restores the stack top in one
  * store. Never keep a raw pointer beyond the scope; use stdlib_pool_ref for
- * values that must survive growth.
+ * values that must survive growth.  Dynamic-arena takes are registered in the
+ * shared lifetime registry: a rewind refuses to alias an outstanding pointer,
+ * and stdlib_arena_scope retires its tokens before rewinding.
  */
 #ifndef CPLUS_STD_SCOPED_MEM_HP
 #define CPLUS_STD_SCOPED_MEM_HP
@@ -57,12 +59,21 @@ static int stdlib_dyn_arena_open(stdlib_dyn_arena *a, size_t initial, error *err
     return stdlib_arena_init(a, initial, err);
 }
 
+/* Dynamic-arena takes are tracked in the shared lifetime registry.  A pointer
+ * handed out here stays valid until it is released (or its scope drops), and a
+ * rewind refuses to alias it. */
 static void *stdlib_dyn_arena_take(stdlib_dyn_arena *a, size_t bytes, error *err) {
-    return stdlib_arena_alloc(a, bytes, 16u, err);
+    return stdlib_arena_take_checked(a, bytes, 16u, (unsigned long long *)0, err);
 }
 
-static void stdlib_dyn_arena_rewind(stdlib_dyn_arena *a, error *err) {
-    stdlib_arena_do_reset(a, err);
+static int stdlib_dyn_arena_release(stdlib_dyn_arena *a, void *ptr, error *err) {
+    return stdlib_arena_release_checked(a, ptr,
+                                       stdlib_view_token_of(ptr), err);
+}
+
+/* 0 on success, -1 when a tracked pointer is still outstanding. */
+static int stdlib_dyn_arena_rewind(stdlib_dyn_arena *a, error *err) {
+    return stdlib_arena_rewind_checked(a, err);
 }
 
 /* Stable handles across growth (generation-checked, stale refs refused). */

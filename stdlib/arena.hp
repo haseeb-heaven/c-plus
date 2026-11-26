@@ -17,6 +17,12 @@
  *   - Safe/diagnostic handle struct carries (arena*, generation).  Querying
  *     or freeing with a stale handle fails closed through error* (no abort
  *     in library code; callers convert to fatal via their own policy).
+ *   - Issue #44: stdlib_arena_take_checked() registers each allocation in the
+ *     shared lifetime registry.  stdlib_arena_rewind_checked() REFUSES to
+ *     rewind while such pointers are outstanding; stdlib_arena_scope offers
+ *     scoped takes that retire their tokens before an automatic rewind.
+ *     The raw stdlib_arena_alloc()/stdlib_arena_do_reset() pair stays as the
+ *     documented unchecked low-level API.
  *
  * All helpers are static inline: no exported symbols, no ABI change.
  */
@@ -29,6 +35,7 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
+#include "stdlib/view_lifetime.hp"
 
 typedef struct stdlib_arena_block {
     struct stdlib_arena_block *prev;
@@ -47,6 +54,7 @@ typedef struct stdlib_arena {
     stdlib_arena_block *first_block;   /* reset target (may be caller-owned) */
     unsigned char *first_base;         /* reset target payload */
     size_t first_capacity;
+    size_t checked_outstanding;        /* live take_checked allocations */
 } stdlib_arena;
 
 /* Handle used by diagnostic APIs: (arena identity, generation). */
@@ -106,6 +114,7 @@ static inline int stdlib_arena_init(stdlib_arena *a, size_t capacity, error *err
     a->cursor = (unsigned char *)0;
     a->remaining = 0;
     a->generation = stdlib_arena_next_generation();
+    a->checked_outstanding = 0;
     a->default_block = capacity == 0 ? 4096u : capacity;
     a->owns_first = 1;
     a->first_base = (unsigned char *)0;
@@ -131,6 +140,7 @@ static inline int stdlib_arena_from_buffer(stdlib_arena *a, void *buf,
     a->cursor = (unsigned char *)0;
     a->remaining = 0;
     a->generation = stdlib_arena_next_generation();
+    a->checked_outstanding = 0;
     a->default_block = 4096u;
     a->owns_first = 0;
     a->first_block = (stdlib_arena_block *)0;
@@ -310,8 +320,128 @@ static inline void stdlib_arena_destroy(stdlib_arena *a, error *err) {
     a->cursor = (unsigned char *)0;
     a->remaining = 0;
     a->generation = stdlib_arena_next_generation();
+    a->checked_outstanding = 0; /* tokens become unreachable but never reused */
     (void)err;
 }
+
+/* ---- tracked allocations: rewind cannot alias a live pointer -------------- */
+
+/* Allocate from the arena AND publish the address in the shared lifetime
+ * registry.  Callers keep the returned token for release/validation.  The
+ * low-level stdlib_arena_alloc() remains available for legacy untracked use. */
+static inline void *stdlib_arena_take_checked(stdlib_arena *a, size_t n,
+                                              size_t align,
+                                              unsigned long long *token_out,
+                                              error *err) {
+    void *p;
+    unsigned long long token;
+    if (token_out != (unsigned long long *)0)
+        *token_out = 0;
+    p = stdlib_arena_alloc(a, n, align, err);
+    if (p == (void *)0)
+        return (void *)0;
+    token = stdlib_view_register(p, n);
+    if (token == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "arena: lifetime registry exhausted"),
+               (void *)0;
+    if (a != (stdlib_arena *)0)
+        ++a->checked_outstanding;
+    if (token_out != (unsigned long long *)0)
+        *token_out = token;
+    return p;
+}
+
+/* Retire one tracked allocation.  The arena bytes are monotonic and are not
+ * reused until a successful rewind, but the pointer is stale immediately. */
+static inline int stdlib_arena_release_checked(stdlib_arena *a, void *ptr,
+                                               unsigned long long token,
+                                               error *err) {
+    error_reset(err);
+    if (a == (stdlib_arena *)0 || ptr == (void *)0 || token == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "arena: invalid tracked release"),
+               STDLIB_FAIL;
+    if (stdlib_view_validate(ptr, token) != 1)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "arena: stale or untracked pointer refused"),
+               STDLIB_FAIL;
+    stdlib_view_retire(ptr);
+    if (a->checked_outstanding > 0)
+        --a->checked_outstanding;
+    return STDLIB_OK;
+}
+
+/* Refuse to rewind while tracked pointers are still outstanding: rewinding
+ * would hand the same addresses to a new allocation and silently alias them.
+ * Returns 0 on success, -1 on refusal (arena is left untouched). */
+static inline int stdlib_arena_rewind_checked(stdlib_arena *a, error *err) {
+    error_reset(err);
+    if (a == (stdlib_arena *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "arena: NULL arena"),
+               STDLIB_FAIL;
+    if (a->checked_outstanding != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "arena: rewind refused, tracked pointers outstanding"),
+               STDLIB_FAIL;
+    stdlib_arena_do_reset(a, err);
+    return STDLIB_OK;
+}
+
+/* Scoped allocations: every take() is tracked; drop() retires its tokens and
+ * only then rewinds.  An untracked pointer taken outside the scope still
+ * blocks the rewind via checked_outstanding. */
+#define STDLIB_ARENA_SCOPE_MAX 32u
+class stdlib_arena_scope {
+    stdlib_arena *scope_arena;
+    unsigned long long tokens[STDLIB_ARENA_SCOPE_MAX];
+    size_t token_count;
+
+    stdlib_arena_scope(stdlib_arena *a) {
+        size_t i;
+        this->scope_arena = a;
+        this->token_count = 0;
+        for (i = 0; i < STDLIB_ARENA_SCOPE_MAX; ++i)
+            this->tokens[i] = 0;
+    }
+
+    void *take(size_t bytes, size_t align, error *err) {
+        unsigned long long token = 0;
+        void *p;
+        error_reset(err);
+        if (this->scope_arena == (stdlib_arena *)0 ||
+            this->token_count >= (size_t)STDLIB_ARENA_SCOPE_MAX)
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "arena scope: invalid arena or token limit"),
+                   (void *)0;
+        p = stdlib_arena_take_checked(this->scope_arena, bytes, align,
+                                      &token, err);
+        if (p != (void *)0 && token != 0)
+            this->tokens[this->token_count++] = token;
+        return p;
+    }
+
+    void drop(void) {
+        error e = error();
+        size_t i;
+        if (this->scope_arena == (stdlib_arena *)0)
+            return;
+        for (i = 0; i < this->token_count; ++i) {
+            stdlib_view_retire_token(this->tokens[i]);
+            if (this->scope_arena->checked_outstanding > 0)
+                --this->scope_arena->checked_outstanding;
+            this->tokens[i] = 0;
+        }
+        this->token_count = 0;
+        stdlib_arena_rewind_checked(this->scope_arena, &e);
+    }
+};
 
 /* Generation-safe handle query: returns 1 only when both match. */
 static inline int stdlib_arena_handle_valid(const stdlib_arena_handle *h) {

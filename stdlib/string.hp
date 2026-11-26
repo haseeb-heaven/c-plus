@@ -2,7 +2,10 @@
  *
  * A thin, RAII-safe wrapper over libc string/memory functions; there is no
  * second string engine here.  `string` owns its buffer and frees it in
- * drop(); `string_view` is a borrowed window and never frees anything.
+ * drop(); `string_view` is a borrowed window and never frees anything.  Views
+ * returned by to_view() carry a token from stdlib/view_lifetime.hp so a stale
+ * access is refused at runtime (data() == NULL, content accessors return 0).
+ * This is not compile-time lifetime enforcement; C+ has no borrow parameters.
  *
  * Storage comes from the checked allocator in error.hp.  Every operation that
  * can fail is failure-atomic: on -1 the string is exactly as it was.  A string
@@ -23,6 +26,7 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
+#include "stdlib/view_lifetime.hp"
 
 /* Strict UTF-8 (RFC 3629) validation of exactly `len` bytes: rejects overlong
  * forms, UTF-16 surrogates, code points above U+10FFFF, stray continuation
@@ -116,27 +120,65 @@ static inline size_t stdlib_string_calculate_growth(size_t requested,
     return want;
 }
 
-/* Borrowed view of a character range, valid while its owner lives. */
+/* Borrowed view of a character range.
+ *
+ * Views produced by string::to_view() carry a stable token from the shared
+ * lifetime registry (stdlib/view_lifetime.hp).  The owner publishes its buffer
+ * when it is allocated and retires that token on reallocation or drop(), so a
+ * stale view is refused before any byte is read: data() returns NULL and the
+ * content accessors return 0.  The snapshot count is kept for diagnostics.
+ *
+ * The direct string_view(ptr, len) constructor has no owner token: it remains
+ * a caller-managed view over static/external storage (legacy behaviour).  Use
+ * raw_data() only when the caller deliberately wants the unchecked pointer.
+ * This is a runtime check, not compile-time lifetime enforcement. */
 class string_view {
     const char *chars;
     size_t count;
+    unsigned long long owner_token;
+    int owner_bound;
 
     string_view(const char *chars, size_t count) {
         this->chars = chars;
         this->count = count;
+        this->owner_token = 0;
+        this->owner_bound = 0;
+    }
+
+    /* 1 for caller-managed views and for owner-bound views whose buffer is
+     * still published with the captured token. */
+    int is_live(void) {
+        if (this->owner_bound == 0)
+            return 1;
+        /* An empty owner (failed constructor or cleared/dropped string) has
+         * no published buffer; keep the documented empty-window behaviour. */
+        if (this->chars == (const char *)0 && this->count == 0)
+            return 1;
+        if (this->owner_token == 0)
+            return 0;
+        return stdlib_view_validate(this->chars, this->owner_token);
     }
 
     size_t size(void) {
         return this->count;
     }
 
+    /* Safe accessor: NULL when an owner-bound view has gone stale. */
     const char *data(void) {
+        if (!this->is_live())
+            return (const char *)0;
+        return this->chars;
+    }
+
+    /* Explicit unchecked escape hatch for diagnostics/tests that need the
+     * recorded address; never dereference it after the owner is dropped. */
+    const char *raw_data(void) {
         return this->chars;
     }
 
     int equals(const char *other) {
         size_t n;
-        if (other == NULL)
+        if (other == NULL || !this->is_live())
             return 0;
         if (this->count > 0 && this->chars == NULL)
             return 0;
@@ -149,6 +191,8 @@ class string_view {
     }
 
     int is_valid_utf8(void) {
+        if (!this->is_live())
+            return 0;
         return stdlib_utf8_validate(this->chars, this->count);
     }
 };
@@ -158,6 +202,7 @@ class string {
     size_t count;
     size_t space;
     const stdlib_allocator *alloc; /* NULL = checked heap (default) */
+    unsigned long long view_token; /* lifetime registry token for chars */
 
     /* Default constructor: checked heap allocator. */
     string(const char *text) {
@@ -166,6 +211,7 @@ class string {
         this->chars = NULL;
         this->count = 0;
         this->space = 0;
+        this->view_token = 0;
         if (n < STDLIB_ALLOC_LIMIT) {
             this->chars = (char *)stdlib_alloc(n + 1);
             if (this->chars != NULL) {
@@ -174,6 +220,8 @@ class string {
                 this->chars[n] = '\0';
                 this->count = n;
                 this->space = n + 1;
+                this->view_token =
+                    stdlib_view_register(this->chars, this->space);
             }
         }
     }
@@ -279,10 +327,13 @@ class string {
             memcpy(fresh, this->chars, this->count + 1);
         else
             fresh[0] = '\0';
-        if (this->chars != NULL)
+        if (this->chars != NULL) {
+            stdlib_view_retire(this->chars);
             this->sfree(this->chars);
+        }
         this->chars = fresh;
         this->space = want;
+        this->view_token = stdlib_view_register(this->chars, this->space);
         stdlib_tm_add(STDLIB_TM_GROWTH, 1);
         return 0;
     }
@@ -350,11 +401,14 @@ class string {
         /* `text` may alias the old buffer, which is still alive at this point. */
         __builtin_memmove(fresh + this->count, text, extra);
         fresh[need - 1] = '\0';
-        if (this->chars != NULL)
+        if (this->chars != NULL) {
+            stdlib_view_retire(this->chars);
             this->sfree(this->chars);
+        }
         this->chars = fresh;
         this->count += extra;
         this->space = want;
+        this->view_token = stdlib_view_register(this->chars, this->space);
         stdlib_tm_add(STDLIB_TM_GROWTH, 1);
         return 0;
     }
@@ -385,11 +439,14 @@ class string {
         if (n > 0 && other->chars != NULL)
             memcpy(fresh, other->chars, n);
         fresh[n] = '\0';
-        if (this->chars != NULL)
+        if (this->chars != NULL) {
+            stdlib_view_retire(this->chars);
             this->sfree(this->chars);
+        }
         this->chars = fresh;
         this->count = n;
         this->space = n + 1;
+        this->view_token = stdlib_view_register(this->chars, this->space);
         return 0;
     }
 
@@ -457,15 +514,19 @@ class string {
         string_view borrowed;
         borrowed.chars = this->chars;
         borrowed.count = this->count;
+        borrowed.owner_token = this->view_token;
+        borrowed.owner_bound = 1;
         return borrowed;
     }
 
     void drop(void) {
         if (this->chars != NULL) {
+            stdlib_view_retire(this->chars);
             this->sfree(this->chars);
             this->chars = NULL;
             this->count = 0;
             this->space = 0;
+            this->view_token = 0;
         }
     }
 };
@@ -479,6 +540,11 @@ static inline string string_in(const stdlib_allocator *a, const char *text) {
     error e = error();
     size_t n = text == 0 ? 0 : strlen(text);
     s.alloc = a;
+    /* The placeholder string("") buffer is replaced here; retire its token so
+     * a view taken from the temporary cannot alias the new allocation. */
+    stdlib_view_retire(s.chars);
+    s.chars = (char *)0;
+    s.view_token = 0;
     if (n < STDLIB_ALLOC_LIMIT && n + 1u > n) {
         s.chars = (char *)stdlib_allocate(a, n + 1u, 1u, &e);
         if (s.chars != 0) {
@@ -486,6 +552,7 @@ static inline string string_in(const stdlib_allocator *a, const char *text) {
             s.chars[n] = '\0';
             s.count = n;
             s.space = n + 1u;
+            s.view_token = stdlib_view_register(s.chars, s.space);
         }
     }
     return s;

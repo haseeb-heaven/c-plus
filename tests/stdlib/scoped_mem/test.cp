@@ -30,7 +30,10 @@ int main(void) {
     if (stdlib_dyn_arena_open(&arena, 4096u, &e) != 0) fails++;
     p = (unsigned char *)stdlib_dyn_arena_take(&arena, 128u, &e);
     if (p == (unsigned char *)0) fails++;
-    stdlib_dyn_arena_rewind(&arena, &e);
+    /* Tracked takes must be released before a rewind is allowed. */
+    if (stdlib_dyn_arena_rewind(&arena, &e) == 0) fails++;
+    if (stdlib_dyn_arena_release(&arena, p, &e) != 0) fails++;
+    if (stdlib_dyn_arena_rewind(&arena, &e) != 0) fails++;
     if (stdlib_arena_used(&arena) != 0u) fails++;
     stdlib_arena_destroy(&arena, &e);
 

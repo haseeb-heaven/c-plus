@@ -8,15 +8,22 @@
  *
  * Borrowing and invalidation
  * --------------------------
- * `view()` returns a borrowed `slice`.  The slice records the vector's
- * generation counter; the counter is bumped by every operation that can move
- * or shorten the storage (a reallocation, pop_back, clear, insert, erase,
- * copy_from, shrink_to_fit, drop).  A slice taken before such an operation
- * reports stale() == 1, valid() == 0, and refuses reads.  push_back without a
- * reallocation does not invalidate existing slices.  The check dereferences
- * the owning vector, so it is only meaningful while that vector object is
- * still alive (a slice outliving the vector's own storage is a lifetime
- * error that a library cannot detect).
+ * `view()` returns a borrowed `slice`.  The slice carries a stable token from
+ * the shared lifetime registry (stdlib/view_lifetime.hp) plus a generation
+ * snapshot; neither is a pointer into the owner object, so a slice that
+ * outlives a stack-allocated vector can be checked safely.  The generation is
+ * bumped by every operation that can move or shorten the storage (a
+ * reallocation, pop_back, clear, insert, erase, copy_from, shrink_to_fit,
+ * drop) and is recorded in the registry.  A stale slice reports stale() == 1,
+ * valid() == 0, data() == NULL, and refuses checked reads/writes.  push_back
+ * without a reallocation does not invalidate existing slices.
+ *
+ * This is RUNTIME enforcement, not compile-time lifetime enforcement: C+
+ * classes are plain C structs with no borrow parameters or access control.
+ * The raw buffer field was renamed to `borrowed_items` and is only reachable
+ * through checked accessors (at_checked/set_checked/data); `raw_data()` is an
+ * explicit unchecked escape hatch.  The public `slice(ptr, n)` constructor
+ * remains a caller-managed, unregistered view for compatibility.
  */
 #ifndef CPLUS_STD_VECTOR_HP
 #define CPLUS_STD_VECTOR_HP
@@ -24,6 +31,7 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
+#include "stdlib/view_lifetime.hp"
 
 /* ---- Upstream-derived growth / invariant helpers (Microsoft STL) ---------
  *
@@ -83,45 +91,83 @@ static inline size_t vector_calculate_growth(size_t oldcapacity, size_t newsize)
     return geometric; /* geometric growth sufficient */
 }
 
-/* Borrowed, bounds-checked window over ints.  It never owns storage and is
- * invalidated by the owner's growth or destruction. */
+/* Borrowed, bounds-checked window over ints.  It never owns storage.  Views
+ * made by vector::view() are validated through the shared lifetime registry;
+ * direct slice(ptr, n) values stay caller-managed for compatibility. */
 class slice {
-    int *items;
+    int *borrowed_items; /* encapsulated: no public raw-array writes */
+    const int *owner_base; /* registered base (sub-slices keep the parent) */
     size_t count;
-    const size_t *generation_ref;
-    size_t generation_at;
+    unsigned long long owner_token;
+    unsigned long long generation_at;
+    int owner_bound;
 
     slice(int *items, size_t count) {
-        this->items = items;
+        this->borrowed_items = items;
+        this->owner_base = items;
         this->count = count;
-        this->generation_ref = NULL;
+        this->owner_token = 0;
         this->generation_at = 0;
+        this->owner_bound = 0;
     }
 
     size_t size(void) {
         return this->count;
     }
 
-    /* 1 when the owning vector changed shape after this slice was taken. */
+    /* 1 when the owner is gone, the buffer was reallocated, or the vector
+     * changed shape after this slice was taken.  Never dereferences the owner. */
     int stale(void) {
-        return this->generation_ref != NULL &&
-               *this->generation_ref != this->generation_at;
+        unsigned long long current = 0;
+        if (this->owner_bound == 0)
+            return 0;
+        if (this->owner_token == 0)
+            return 1;
+        if (stdlib_view_validate(this->owner_base, this->owner_token) != 1)
+            return 1;
+        if (stdlib_view_get_generation(this->owner_base,
+                                       this->owner_token, &current) != 1)
+            return 1;
+        return current != this->generation_at ? 1 : 0;
     }
 
     int valid(void) {
-        return this->items != NULL && this->count > 0 && !this->stale();
+        return this->borrowed_items != NULL && this->count > 0 && !this->stale();
+    }
+
+    /* Safe data accessor: NULL for a stale owner-bound slice. */
+    int *data(void) {
+        if (this->stale())
+            return (int *)0;
+        return this->borrowed_items;
+    }
+
+    /* Explicit unchecked escape hatch for pointer-identity diagnostics. */
+    int *raw_data(void) {
+        return this->borrowed_items;
     }
 
     /* 0 on success, -1 when the index is outside the slice or it is stale. */
     int at_checked(size_t index, int *out) {
         if (out == NULL)
             return -1;
-        if (this->items == NULL || index >= this->count || this->stale()) {
+        if (this->borrowed_items == NULL || index >= this->count || this->stale()) {
             stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
                         "slice::at_checked: index out of range or stale slice");
             return -1;
         }
-        *out = this->items[index];
+        *out = this->borrowed_items[index];
+        return 0;
+    }
+
+    /* Checked write through a live slice; refused for stale/out-of-range. */
+    int set_checked(size_t index, int value) {
+        if (this->borrowed_items == NULL || index >= this->count || this->stale()) {
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                        "slice::set_checked: index out of range or stale slice");
+            return -1;
+        }
+        this->borrowed_items[index] = value;
         return 0;
     }
 
@@ -130,14 +176,16 @@ class slice {
     slice sub(size_t start, size_t length) {
         slice empty = slice(NULL, 0);
         size_t available;
-        if (this->items == NULL || start >= this->count || this->stale())
+        if (this->borrowed_items == NULL || start >= this->count || this->stale())
             return empty;
         available = this->count - start;
         if (length > available)
             length = available;
         {
-            slice part = slice(this->items + start, length);
-            part.generation_ref = this->generation_ref;
+            slice part = slice(this->borrowed_items + start, length);
+            part.owner_base = this->owner_base;
+            part.owner_token = this->owner_token;
+            part.owner_bound = this->owner_bound;
             part.generation_at = this->generation_at;
             return part;
         }
@@ -150,6 +198,7 @@ class vector {
     size_t space;
     size_t generation;
     const stdlib_allocator *alloc; /* NULL = checked heap */
+    unsigned long long view_token; /* lifetime registry token for items */
 
     vector(void) {
         this->alloc = (const stdlib_allocator *)0;
@@ -157,6 +206,14 @@ class vector {
         this->used = 0;
         this->space = 0;
         this->generation = 0;
+        this->view_token = 0;
+    }
+
+    /* Publish the current generation for every slice bound to this buffer. */
+    void sync_generation(void) {
+        if (this->items != NULL && this->view_token != 0)
+            stdlib_view_set_generation(this->items, this->view_token,
+                                       (unsigned long long)this->generation);
     }
 
     int *valloc(size_t bytes) {
@@ -194,11 +251,15 @@ class vector {
         for (i = 0; i < this->used; i++)
             fresh[i] = this->items[i];
         /* ---- commit point: nothing above can leave the vector modified ---- */
-        if (this->items != NULL)
+        if (this->items != NULL) {
+            stdlib_view_retire(this->items);
             this->vfree(this->items, this->space * sizeof(int));
+        }
         this->items = fresh;
         this->space = want;
         this->generation++;
+        this->view_token = stdlib_view_register(this->items, bytes);
+        this->sync_generation();
         stdlib_tm_add(STDLIB_TM_GROWTH, 1);
         return 0;
     }
@@ -259,6 +320,7 @@ class vector {
         *out = this->items[this->used - 1];
         this->used--;
         this->generation++;
+        this->sync_generation();
         return 0;
     }
 
@@ -287,6 +349,7 @@ class vector {
         this->items[index] = value;
         this->used++;
         this->generation++;
+        this->sync_generation();
         return 0;
     }
 
@@ -301,12 +364,14 @@ class vector {
             this->items[i] = this->items[i + 1];
         this->used--;
         this->generation++;
+        this->sync_generation();
         return 0;
     }
 
     void clear(void) {
         this->used = 0;
         this->generation++;
+        this->sync_generation();
     }
 
     /* Replace the contents with a copy of `other`.  Failure-atomic: on -1 this
@@ -331,12 +396,17 @@ class vector {
             for (i = 0; i < other->used; i++)
                 fresh[i] = other->items[i];
         }
-        if (this->items != NULL)
+        if (this->items != NULL) {
+            stdlib_view_retire(this->items);
             this->vfree(this->items, this->space * sizeof(int));
+        }
         this->items = fresh;
         this->used = other->used;
         this->space = other->used;
         this->generation++;
+        this->view_token = stdlib_view_register(this->items,
+                                                this->space * sizeof(int));
+        this->sync_generation();
         return 0;
     }
 
@@ -349,11 +419,14 @@ class vector {
         if (this->space == this->used)
             return 0;
         if (this->used == 0) {
-            if (this->items != NULL)
+            if (this->items != NULL) {
+                stdlib_view_retire(this->items);
                 this->vfree(this->items, this->space * sizeof(int));
+            }
             this->items = NULL;
             this->space = 0;
             this->generation++;
+            this->view_token = 0;
             return 0;
         }
         if (vector_allocation_bytes(this->used, &bytes) != 0)
@@ -363,10 +436,13 @@ class vector {
             return -1;
         for (i = 0; i < this->used; i++)
             fresh[i] = this->items[i];
+        stdlib_view_retire(this->items);
         this->vfree(this->items, this->space * sizeof(int));
         this->items = fresh;
         this->space = this->used;
         this->generation++;
+        this->view_token = stdlib_view_register(this->items, bytes);
+        this->sync_generation();
         return 0;
     }
 
@@ -374,18 +450,24 @@ class vector {
      * invalidation rules. */
     slice view(void) {
         slice borrowed = slice(this->items, this->used);
-        borrowed.generation_ref = &this->generation;
-        borrowed.generation_at = this->generation;
+        borrowed.owner_base = this->items;
+        borrowed.owner_token = this->view_token;
+        borrowed.generation_at = (unsigned long long)this->generation;
+        /* An empty vector has no published buffer to validate; keep the
+         * historical "empty view is not stale" behaviour. */
+        borrowed.owner_bound = this->items != NULL ? 1 : 0;
         return borrowed;
     }
 
     void drop(void) {
         if (this->items != NULL) {
+            stdlib_view_retire(this->items);
             this->vfree(this->items, this->space * sizeof(int));
             this->items = NULL;
             this->used = 0;
             this->space = 0;
             this->generation++;
+            this->view_token = 0;
         }
     }
 };
