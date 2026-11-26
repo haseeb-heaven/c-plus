@@ -53,6 +53,11 @@ sources: [`bench.cp`](../../benchmarks/language_rounds/bench.cp) and
 advantage measured above is on **memory allocation** (bump/arena/pool), not on
 raw arithmetic loops. No claim that C+ is faster at everything.
 
-`trapc` and `fil-c`/`filc` binaries are **NOT INSTALLED** on this host, so those
-comparisons are explicitly `NOT_TESTED` here — no fabricated numbers. Only the
-Fil-C-style *technique* (side-table liveness queries) is adapted in C+.
+`trapc` is **NOT TESTABLE**: no public compiler, source, or license has been
+published, so no comparison number exists. Fil-C is now **TESTED** using the
+real upstream release: the published compiler is Linux-only, so
+`tests/compiler/cross_compiler/run_filc_docker.sh` runs it (and the binaries it
+produces) in a Linux aarch64 Docker container with this repository mounted.
+Results are in `tests/compiler/cross_compiler/results/filc_docker_summary.json`:
+const-oob and null-deref trap (exit 133), signed-overflow and clean scenarios
+run cleanly. These are real measurements, not macOS-native numbers.

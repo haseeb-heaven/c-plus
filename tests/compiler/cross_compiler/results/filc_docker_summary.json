@@ -1,0 +1,37 @@
+{
+  "generated": "2026-11-26T17:39:52.997047+00:00",
+  "toolchain": "Fil-C 0.687 (clang 20.1.8, aarch64 Linux)",
+  "host": "Darwin arm64 via Docker Linux aarch64 container (ubuntu:24.04)",
+  "release": "https://github.com/pizlonator/fil-c/releases/download/v0.687/filc-0.687-linux-aarch64.tar.xz",
+  "note": "Real binaries compiled and executed; not a macOS-native build. Trap-C remains NOT_TESTABLE (no published compiler/source).",
+  "results": [
+    {
+      "scenario": "const_oob",
+      "compile_rc": 0,
+      "run_rc": 133,
+      "outcome": "runtime_trap",
+      "runtime_output_head": "filc safety error: cannot read pointer with ptr >= upper.     pointer: 0xeff10901030c,0xeff1090102f0,0xeff109010300     expected 4 bytes. semantic origin:     (const_oob.bin) <somewhere>: main check scheduled at:     (const_oob.bin) <somewhere>: main     (libc.so) src/env/__libc_start_main.c:79:7: _"
+    },
+    {
+      "scenario": "overflow",
+      "compile_rc": 0,
+      "run_rc": 0,
+      "outcome": "clean_run",
+      "runtime_output_head": "(no output)"
+    },
+    {
+      "scenario": "null_deref",
+      "compile_rc": 0,
+      "run_rc": 133,
+      "outcome": "runtime_trap",
+      "runtime_output_head": "filc safety error: cannot write pointer with null object.     pointer: 0,<null>     expected 4 writable bytes. semantic origin:     (null_deref.bin) <somewhere>: double check scheduled at:     (null_deref.bin) <somewhere>: double     (null_deref.bin) <somewhere>: main     (libc.so) src/env/__libc_st"
+    },
+    {
+      "scenario": "clean",
+      "compile_rc": 0,
+      "run_rc": 0,
+      "outcome": "clean_run",
+      "runtime_output_head": "(no output)"
+    }
+  ]
+}

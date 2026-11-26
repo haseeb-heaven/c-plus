@@ -1,0 +1,4 @@
+const_oob	run	0	133	filc safety error: cannot read pointer with ptr >= upper.     pointer: 0xeff10901030c,0xeff1090102f0,0xeff109010300     expected 4 bytes. semantic origin:     (const_oob.bin) <somewhere>: main check scheduled at:     (const_oob.bin) <somewhere>: main     (libc.so) src/env/__libc_start_main.c:79:7: _
+overflow	run	0	0	(no output)
+null_deref	run	0	133	filc safety error: cannot write pointer with null object.     pointer: 0,<null>     expected 4 writable bytes. semantic origin:     (null_deref.bin) <somewhere>: double check scheduled at:     (null_deref.bin) <somewhere>: double     (null_deref.bin) <somewhere>: main     (libc.so) src/env/__libc_st
+clean	run	0	0	(no output)
