@@ -7,9 +7,9 @@ Verified verdict: `GUI_APP 30 6 0 24` — 6 successes, 24 defined refusals,
 
 Screenshot generated from an actual run:
 
-![gui_app](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg)
+![gui_app](../../proof/all_apps_games_screenshots/cli_transcripts/gui_app.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/gui_app.md`](../../proof/all_apps_games_screenshots/gui_app.md).
+Transcript + verifier: [`proof/all_apps_games_screenshots/gui_app.md`](../../proof/all_apps_games_screenshots/real/gui_app_real.png).
 
 A small, deterministic GUI **app** built on the new `stdlib/widgets.hp`
 headless widget core and a real SDL3 window/renderer. It is a real verified

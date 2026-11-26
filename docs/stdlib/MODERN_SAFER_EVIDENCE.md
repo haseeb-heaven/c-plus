@@ -20,9 +20,9 @@ toolchain PATH (`/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`),
 The three suites above were moved from `apps/legacy_examples/{games3d,gui_app,cli_app}` into
 `apps/`; the old `apps/legacy_examples/.../run.sh` entries are compatibility shims only.
 Their screenshots, rendered from actual runner stdout:
-[games3d.svg](../../proof/all_apps_games_screenshots/screenshots/games3d.svg),
-[gui_app.svg](../../proof/all_apps_games_screenshots/screenshots/gui_app.svg),
-[cli_app.svg](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg).
+[games3d.svg](../../proof/all_apps_games_screenshots/cli_transcripts/games3d.svg),
+[gui_app.svg](../../proof/all_apps_games_screenshots/cli_transcripts/gui_app.svg),
+[cli_app.svg](../../proof/all_apps_games_screenshots/cli_transcripts/cli_app.svg).
 The separate cross-platform pack
 [`proof/real_apps_cross_platform/`](../../proof/real_apps_cross_platform/README.md)
 captures genuine PE32+ runs under Highball/Wine (`CROSS_PROOF 58 58 0`); that

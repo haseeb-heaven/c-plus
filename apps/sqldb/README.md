@@ -8,6 +8,6 @@ Its library evidence is `stdlib/sqldb.hp`.
 
 ## Screenshot (generated from an actual runner transcript)
 
-![sqldb](../../proof/all_apps_games_screenshots/screenshots/sqldb.svg)
+![sqldb](../../proof/all_apps_games_screenshots/cli_transcripts/sqldb.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/sqldb.md`](../../proof/all_apps_games_screenshots/sqldb.md).
+Transcript + verifier: [`proof/all_apps_games_screenshots/sqldb.md`](../../proof/all_apps_games_screenshots/README.md).

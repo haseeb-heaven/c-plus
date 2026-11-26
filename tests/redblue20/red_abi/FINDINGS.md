@@ -62,11 +62,11 @@ Exact linker error (`build/abi/compat/results.log`, lines 37-56):
 ```
 Undefined symbols for architecture arm64:
   "___cplus_checked_add_i64", referenced from:
-      ___cplus_inline_add_i64 in libabi_compat_cplus.a[2](abi_compat_cplus_lib.o)
+      ___cplus_inline_add_i64 in libabi_compat_cplus.a[2](../../../proof/all_apps_games_screenshots/README.md)
   "_cplus_check_nonnull", referenced from:
-      _AbiAdder_apply in libabi_compat_cplus.a[2](abi_compat_cplus_lib.o)
-      _record_ok in libabi_compat_cplus.a[2](abi_compat_cplus_lib.o)
-      _abi_cplus_meta_write in libabi_compat_cplus.a[2](abi_compat_cplus_lib.o)
+      _AbiAdder_apply in libabi_compat_cplus.a[2](../../../proof/all_apps_games_screenshots/README.md)
+      _record_ok in libabi_compat_cplus.a[2](../../../proof/all_apps_games_screenshots/README.md)
+      _abi_cplus_meta_write in libabi_compat_cplus.a[2](../../../proof/all_apps_games_screenshots/README.md)
       ...
 ld: symbol(s) not found for architecture arm64
 ```

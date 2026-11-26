@@ -57,9 +57,9 @@ Their exact verified verdicts and screenshots:
 | Calculator CLI | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../all_apps_games_screenshots/cli_transcripts/cli_app.svg) |
 
 Per-app screenshot/transcript pages:
-[games3d](../all_apps_games_screenshots/games3d.md),
-[gui_app](../all_apps_games_screenshots/gui_app.md),
-[cli_app](../all_apps_games_screenshots/cli_app.md).
+[games3d](../all_apps_games_screenshots/real/games3d_real.png),
+[gui_app](../all_apps_games_screenshots/real/gui_app_real.png),
+[cli_app](../all_apps_games_screenshots/README.md).
 
 ## Reproduce
 

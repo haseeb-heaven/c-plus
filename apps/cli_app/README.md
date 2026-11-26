@@ -7,9 +7,9 @@ Verified verdict: `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok`
 
 Screenshot generated from an actual run:
 
-![cli_app](../../proof/all_apps_games_screenshots/screenshots/cli_app.svg)
+![cli_app](../../proof/all_apps_games_screenshots/cli_transcripts/cli_app.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/cli_app.md`](../../proof/all_apps_games_screenshots/cli_app.md).
+Transcript + verifier: [`proof/all_apps_games_screenshots/cli_app.md`](../../proof/all_apps_games_screenshots/README.md).
 
 A deterministic calculator CLI that exercises the full `cli.hp` surface:
 command/option registration, `cli_parse`, status-code refusals, `cli_run`

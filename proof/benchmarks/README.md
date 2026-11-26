@@ -6,8 +6,8 @@ stdout, the binaries, build logs and SVG screenshots are all in this folder.
 
 | Benchmark | Source | Binary | Raw result | Screenshot |
 |---|---|---|---|---|
-| scoped-memory-style bump vs checked heap | [bump_bench.cp](../../benchmarks/scoped_bump/bump_bench.cp) | [bump_bench](bin/bump_bench) | [scoped_bump.out](results/scoped_bump.out) | [scoped_bump.svg](screenshots/scoped_bump.svg) |
-| Modern libs on scratch | [bench.cp](../../benchmarks/scoped_apps/bench.cp) | [scoped_apps](bin/scoped_apps) | [scoped_apps.out](results/scoped_apps.out) | [scoped_apps.svg](screenshots/scoped_apps.svg) |
+| scoped-memory-style bump vs checked heap | [bump_bench.cp](../../benchmarks/scoped_bump/bump_bench.cp) | [bump_bench](bin/bump_bench) | [scoped_bump.out](../all_apps_games_screenshots/README.md) | [scoped_bump.svg](../all_apps_games_screenshots/README.md) |
+| Modern libs on scratch | [bench.cp](../../benchmarks/scoped_apps/bench.cp) | [scoped_apps](../all_apps_games_screenshots/README.md) | [scoped_apps.out](../all_apps_games_screenshots/README.md) | [scoped_apps.svg](../all_apps_games_screenshots/README.md) |
 
 Measured on the committed run:
 

@@ -7,9 +7,9 @@ Verified verdict: `SCENE3D 1 4 0 13` — 4 program checks passed, 0 failed,
 
 Screenshot generated from an actual run:
 
-![games3d](../../proof/all_apps_games_screenshots/screenshots/games3d.svg)
+![games3d](../../proof/all_apps_games_screenshots/cli_transcripts/games3d.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/games3d.md`](../../proof/all_apps_games_screenshots/games3d.md).
+Transcript + verifier: [`proof/all_apps_games_screenshots/games3d.md`](../../proof/all_apps_games_screenshots/real/games3d_real.png).
 
 A small, GPU-free "game engine" app built entirely on the new additive
 standard-library headers:

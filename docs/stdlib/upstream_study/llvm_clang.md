@@ -300,7 +300,7 @@ behavior (§9.2 below).
 
 ```cpp
 // lines 402-408
-reference operator[](size_type __n) _NOEXCEPT {
+reference operator[](../../../proof/all_apps_games_screenshots/README.md) _NOEXCEPT {
   _LIBCPP_ASSERT_VALID_ELEMENT_ACCESS(__n < size(), "vector[] index out of bounds");
   return this->__begin_[__n];
 }

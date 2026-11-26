@@ -17,7 +17,7 @@ Then the standard license text:
 > "GNU GENERAL PUBLIC LICENSE / Version 3, 29 June 2007
 > Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>"
 
-`README.md` §License confirms: "Cake uses the same license as GCC: [GPLv3](LICENSE)."
+`README.md` §License confirms: "Cake uses the same license as GCC: [GPLv3](../../../proof/all_apps_games_screenshots/README.md)."
 Identifier to record: **GPL-3.0-or-later + custom AI-training restriction addendum (non-OSI, non-standard)**. Not compatible with this MIT project without explicit legal review.
 
 ## 1. Exact URL inventory (success / failure)

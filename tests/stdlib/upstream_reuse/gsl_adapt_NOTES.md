@@ -87,14 +87,14 @@ The non-arithmetic overload is the same idea without the sign check:
     not_null operator--(int) = delete;
     not_null& operator+=(std::ptrdiff_t) = delete;
     not_null& operator-=(std::ptrdiff_t) = delete;
-    void operator[](std::ptrdiff_t) const = delete;
+    void operator[](../../../proof/all_apps_games_screenshots/README.md) const = delete;
 ```
 
 `include/gsl/span` — explicit storage and the exact `Expects` guards that became
 refusals in C+:
 
 ```cpp
-        constexpr reference operator[](size_type idx) const noexcept
+        constexpr reference operator[](../../../proof/all_apps_games_screenshots/README.md) const noexcept
         {
             Expects(idx < size());
             return data()[idx];

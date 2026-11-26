@@ -182,7 +182,7 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
   **[SRC]** (`msemsearray.h:8040-8058, 8653-8666`):
 
   ```cpp
-  const_reference operator[](size_type _P) const {
+  const_reference operator[](../../../proof/all_apps_games_screenshots/README.md) const {
       if (m_count <= _P) { MSE_THROW(msearray_range_error("out of bounds index - …")); }
       return m_start_iter[difference_type(mse::msear_as_a_size_t(_P))];
   }
@@ -290,7 +290,7 @@ are compatible, but **verbatim code reuse would require retaining the BSL notice
   - `primitives_null_dereference_error("attempt to dereference null pointer - mse::TNoradPointer")`
     (`msenorad.h:273-278`);
   - `nii_array_range_error("front() on empty - … - nii_array_base")` (`msemsearray.h:3139`);
-  - `msearray_range_error("out of bounds index - reference operator[](size_type _P) - TRandomAccessConstSectionBase")`
+  - `msearray_range_error("out of bounds index - reference operator[](../../../proof/all_apps_games_screenshots/README.md) - TRandomAccessConstSectionBase")`
     (`msemsearray.h:8041`);
   - `std::invalid_argument("invalid argument, no corresponding allocation found - mse::ndnorad_delete() …")`
     (`msenorad.h:701-708`);

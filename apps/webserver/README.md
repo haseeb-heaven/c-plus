@@ -8,6 +8,6 @@ Its library evidence is `stdlib/web.hp`.
 
 ## Screenshot (generated from an actual runner transcript)
 
-![webserver](../../proof/all_apps_games_screenshots/screenshots/webserver.svg)
+![webserver](../../proof/all_apps_games_screenshots/cli_transcripts/webserver.svg)
 
-Transcript + verifier: [`proof/all_apps_games_screenshots/webserver.md`](../../proof/all_apps_games_screenshots/webserver.md).
+Transcript + verifier: [`proof/all_apps_games_screenshots/webserver.md`](../../proof/all_apps_games_screenshots/README.md).
