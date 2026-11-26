@@ -1022,21 +1022,7 @@ private:
           if (bvit->second.count(argIndex)) {
             size_t arg = nextSig(start);
             if (arg < rp && toks_[arg].kind == TokKind::Identifier) {
-              DeclId id = findLiveOwner(toks_[arg].text);
-              if (id.valid())
-                if (OwnedVar *owner = ownerAt(id)) {
-                  owner->moved = true;
-                  owner->movedByMove = true;
-                  // Zero the caller's handle so its scope-exit drop becomes a
-                  // no-op; the callee now owns the single live copy.
-                  if (rp < toks_.size() && !owner->type.empty() &&
-                      !owner->managed)
-                    edits_.push_back(
-                        Edit{toks_[rp].offset + toks_[rp].text.size(), 0,
-                             " " + owner->type + " " + owner->name +
-                                 " = {0};",
-                             seq_++});
-                }
+              transferredNames_.insert(toks_[arg].text);
             }
           }
           ++argIndex;
@@ -1304,7 +1290,7 @@ private:
         const OwnedVar &v = vars[k - 1];
         if ((exclude.valid() && exclude.scope == p - 1 &&
              exclude.var == k - 1) ||
-            v.deferDropped)
+            v.deferDropped || transferredNames_.count(v.name))
           continue;
         // At a scope exit the name may already denote an inner shadow, so the
         // drop has to go through the saved address instead.  This only matters
@@ -2605,6 +2591,7 @@ private:
   // Functions taking resource owners by value: call sites transfer those
   // arguments to the callee (the callee emits the destructor).
   std::map<std::string, std::set<unsigned>> byValueParamIndices_;
+  std::set<std::string> transferredNames_;
   /// Macro name -> function-like?  Macros hiding a terminator in their body.
   std::map<std::string, bool> terminationMacros_;
   std::vector<DeferInfo> defers_;
