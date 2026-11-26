@@ -8,6 +8,9 @@ dropdown). For actual widget-layout rendering, see the Nuklear scratch adapter
 proof at `proof/games_gui_nuklear/screenshots/nuklear_ui.svg` (also headless SVG).
 Verified verdict: `GUI_APP 30 6 0 24`. App: [`apps/gui_app`](../../apps/gui_app/README.md).
 
-![gui_app](screenshots/gui_app.svg)
+![gui_app](../../games_gui_nuklear/screenshots/gui_app_real.png)
 
 Transcript: [`screenshots/gui_app.out`](screenshots/gui_app.out).
+
+
+The previous `gui_app.svg` was a CLI transcript rendering and is superseded by this real framebuffer image.
