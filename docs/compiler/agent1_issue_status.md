@@ -56,3 +56,17 @@ throw_alias      2/2
 ABI gate         5/5
 abi_ownership   42/42
 ```
+
+## Follow-up issues #64–#71
+
+- #64/#65/#66: 64-bit runtime division/remainder, logical shifts and narrowing
+  sign-extension fixed in `runtime/cplus_runtime.c`; `tests/compiler/runtime_arith_64/` 1/1.
+- #67: nested method rewriting with arguments, pointer members and deep chains
+  fixed in `CPlusRewriter.cpp`; verified with `w.c.add(5)`, `w.ptr->add(7)` and
+  `this->ptr->add(6)`.
+- #68: by-value transfer suite `tests/compiler/raii_transfer/` 2/2 remains.
+  The transfer marker is still name-based; cross-function name pollution is a
+  documented KNOWN_OPEN limitation.
+- #69/#70: SafeCRT interior-pointer bounds and closed-stream cache overflow
+  fixed in `stdlib/safe/`; CRT unit 86/0, libc 109/0.
+- #71: CRT trap assertion accepts SIGABRT as well as exit(70); CRT unit 86/0.

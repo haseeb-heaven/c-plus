@@ -22,21 +22,69 @@
 #include <stdlib.h>
 
 /* C+ exception frames. The stack is thread-local and holds only ordinary C
- * pointers; raising with no active try is a deterministic fatal error. */
+ * pointers; raising with no active try is a deterministic fatal error.
+ *
+ * Generation tokens (defense-in-depth)
+ * ------------------------------------
+ * A try frame normally lives on the stack of the function that entered it.
+ * If that function exits without cplus_exception_pop (an early
+ * return/break/goto/continue that a compiler lowering missed), the frame dies
+ * with it and a later longjmp through its saved jmp_buf would jump into dead
+ * stack (SIGBUS/hang/wrong handler).  Each enter issues a non-zero generation
+ * that is mirrored in a thread-local "live token"; pop (including the
+ * exit-edge cleanup emitted by the compiler) and raise retire the frame by
+ * clearing its generation.  A raise validates both the token and, for frames
+ * that are stack-resident, that the owning stack frame is still an ancestor
+ * of the current call.  Either stale case is a deterministic
+ * CPLUS_EXIT_UNSUPPORTED fatal, never a longjmp through a dead frame. */
 static void cplus_print_fatal(cplus_exit_code code, const char *kind,
                               const char *file, int line, const char *msg);
 static __thread CPlusExceptionFrame *cplus_exception_current = NULL;
+static __thread uint64_t cplus_exception_epoch = 0u; /* last issued generation */
+static __thread uint64_t cplus_exception_live = 0u; /* live head's generation */
+
+/* Opt-in auto-runtime, enabled by generated constructors built with
+ * -DCPLUS_AUTO_RUNTIME=1 (see cplus_set_auto_runtime).  Off by default so
+ * every safety failure keeps its original deterministic _Exit diagnostic and
+ * exit code; enabling it never changes a pointer's representation. */
+static int cplus_auto_runtime_enabled = 0;
+
+/* A stack frame that owns a try frame is an ancestor of cplus_exception_raise
+ * and therefore sits at a higher address on a downward-growing stack.  A
+ * frame at/below the current stack pointer is dead.  Frames in static storage
+ * (some harnesses use one) are far outside any plausible stack window and are
+ * validated by their generation token alone. */
+#define CPLUS_EXCEPTION_STACK_WINDOW ((uintptr_t)1u << 26) /* 64 MiB */
+
+static int cplus_exception_frame_dead(const CPlusExceptionFrame *frame) {
+  volatile char probe = 0;
+  uintptr_t sp = (uintptr_t)&probe;
+  uintptr_t fa = (uintptr_t)frame;
+  uintptr_t delta = fa > sp ? fa - sp : sp - fa;
+  if (delta > CPLUS_EXCEPTION_STACK_WINDOW)
+    return 0; /* not stack-resident: rely on the generation token */
+  return fa <= sp; /* owning scope is not an ancestor => frame is dead */
+}
 
 void cplus_exception_enter(CPlusExceptionFrame *frame) {
   if (!frame)
     return;
+  if (cplus_exception_epoch == UINT64_MAX)
+    cplus_exception_epoch = 0u; /* generation zero is reserved for "retired" */
+  frame->generation = ++cplus_exception_epoch;
   frame->prev = cplus_exception_current;
   cplus_exception_current = frame;
+  cplus_exception_live = frame->generation;
 }
 
 void cplus_exception_pop(void) {
-  if (cplus_exception_current)
-    cplus_exception_current = cplus_exception_current->prev;
+  CPlusExceptionFrame *frame = cplus_exception_current;
+  if (!frame)
+    return;
+  frame->generation = 0u; /* retire: a later raise must reject this frame */
+  cplus_exception_current = frame->prev;
+  cplus_exception_live =
+      cplus_exception_current ? cplus_exception_current->generation : 0u;
 }
 
 void cplus_exception_raise(int code, const char *message, const char *file,
@@ -45,7 +93,20 @@ void cplus_exception_raise(int code, const char *message, const char *file,
     cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "unhandled C+ exception", file,
                       line, "throw outside a try block");
   CPlusExceptionFrame *active = cplus_exception_current;
+  /* Never longjmp through a frame that is no longer live.  A cleared or
+   * mismatched generation means pop/raise already retired it (including
+   * exit-edge cleanup after return/break/goto/continue); a dead stack
+   * residence means its owning scope exited without cleanup. */
+  if (active->generation == 0u || active->generation != cplus_exception_live)
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "stale C+ exception frame", file,
+                      line, "exception frame generation is no longer live");
+  if (cplus_exception_frame_dead(active))
+    cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, "stale C+ exception frame", file,
+                      line, "exception frame's scope has exited");
   cplus_exception_current = active->prev;
+  cplus_exception_live =
+      cplus_exception_current ? cplus_exception_current->generation : 0u;
+  active->generation = 0u;
   active->exc.code = code;
   active->exc.message = message;
   active->exc.file = file;
@@ -131,6 +192,10 @@ static size_t cplus_clamp_registered_size(const void *p, size_t bytes) {
 
 void (*cplus_fatal_hook)(cplus_exit_code, const char *) = NULL;
 
+void cplus_set_auto_runtime(int enabled) {
+  cplus_auto_runtime_enabled = enabled ? 1 : 0;
+}
+
 static void cplus_print_fatal(cplus_exit_code code, const char *kind,
                               const char *file, int line, const char *msg) {
   fflush(stdout);
@@ -145,6 +210,23 @@ static void cplus_print_fatal(cplus_exit_code code, const char *kind,
   fflush(stderr);
   if (cplus_fatal_hook)
     cplus_fatal_hook(code, kind);
+  /* Opt-in auto-runtime: the diagnostic above is printed unchanged, then a
+   * live try frame receives the failure as a C+ exception so a catch handler
+   * can run and execution continues after the try.  A frame counts as live
+   * only when its generation matches the thread's live token and its owning
+   * stack scope still encloses us - the same checks cplus_exception_raise
+   * applies, so raising here cannot re-enter this function (no infinite
+   * recursion through the stale-frame fatal paths).  With auto-runtime off,
+   * or with no usable handler frame, keep the original deterministic _Exit.
+   * Memory-corruption defects therefore never silently continue: without a
+   * handler the process still exits with the original code. */
+  if (cplus_auto_runtime_enabled && cplus_exception_current &&
+      cplus_exception_current->generation != 0u &&
+      cplus_exception_current->generation == cplus_exception_live &&
+      !cplus_exception_frame_dead(cplus_exception_current)) {
+    cplus_exception_raise((int)code, kind, file, line);
+    /* cplus_exception_raise longjmps on a live frame; it does not return. */
+  }
   _Exit((int)code);
 }
 
@@ -248,7 +330,13 @@ static int64_t cplus_checked_divrem(int64_t a, int64_t b, unsigned bits,
   if (b == 0)
     cplus_arith_fatal("division by zero",
                       remainder ? "remainder by zero" : "division by zero");
-  if (isSigned && bits > 1 && bits <= 64 && b == -1 &&
+  if (!isSigned) {
+    /* The helper's parameters are int64_t, but an unsigned division must be
+     * performed on the unsigned bit pattern (UINT64_MAX / 2 is not -1 / 2). */
+    uint64_t ua = (uint64_t)a, ub = (uint64_t)b;
+    return (int64_t)(remainder ? ua % ub : ua / ub);
+  }
+  if (bits > 1 && bits <= 64 && b == -1 &&
       a == (int64_t)(-((__int128)1 << (bits - 1))))
     cplus_arith_fatal("signed integer overflow",
                       remainder ? "remainder overflows the source type"
@@ -280,16 +368,24 @@ static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
              (long long)b, bits);
     cplus_arith_fatal("invalid shift", buf);
   }
+  if (!left && !isSigned)
+    /* Logical right shift: never sign-extend an unsigned operand. */
+    return (int64_t)((uint64_t)a >> (uint64_t)b);
   if (left && isSigned) {
     if (a < 0)
       cplus_arith_fatal("invalid shift",
                         "left shift of a negative signed value");
     uint64_t ua = (uint64_t)a;
     unsigned count = (unsigned)b;
-    uint64_t limit = (~(uint64_t)0) >> (64 - bits);
-    if ((ua << count) & ~limit)
+    uint64_t valueBits = bits == 64 ? ~((uint64_t)0)
+                                    : ((((uint64_t)1) << bits) - 1);
+    uint64_t signBit = (uint64_t)1 << (bits - 1);
+    ua &= valueBits;
+    uint64_t shifted = ua << count;
+    if ((shifted & ~valueBits) || (shifted & signBit))
       cplus_arith_fatal("invalid shift",
                         "left shift loses bits above the source width");
+    return (int64_t)(shifted & valueBits);
   }
   return left ? (int64_t)((uint64_t)a << (uint64_t)b)
               : (int64_t)(a >> (uint64_t)b);
@@ -312,14 +408,22 @@ int64_t __cplus_checked_shr_i64(int64_t a, int64_t b, unsigned bits,
 int64_t __cplus_checked_narrow_i64(uint64_t value, unsigned sb, unsigned ss,
                                    unsigned db, unsigned ds) {
   __int128 src = (__int128)value;
-  if (ss && sb > 0 && sb < 64 && ((value >> (sb - 1)) & 1u))
-    src = (__int128)(int64_t)(value | (~((uint64_t)0) << sb));
+  if (ss && sb > 0) {
+    if (sb == 64)
+      src = (__int128)(int64_t)value;
+    else if ((value >> (sb - 1)) & 1u)
+      src = (__int128)(int64_t)(value | (~((uint64_t)0) << sb));
+  }
   uint64_t mask = db >= 64 ? ~((uint64_t)0)
                            : ((((uint64_t)1) << db) - 1);
   uint64_t truncated = value & mask;
   __int128 dst = (__int128)truncated;
-  if (ds && db > 0 && db < 64 && ((truncated >> (db - 1)) & 1u))
-    dst = (__int128)(int64_t)(truncated | (~((uint64_t)0) << db));
+  if (ds && db > 0) {
+    if (db == 64)
+      dst = (__int128)(int64_t)truncated;
+    else if ((truncated >> (db - 1)) & 1u)
+      dst = (__int128)(int64_t)(truncated | (~((uint64_t)0) << db));
+  }
   if (src != dst) {
     char buf[192];
     snprintf(buf, sizeof(buf),

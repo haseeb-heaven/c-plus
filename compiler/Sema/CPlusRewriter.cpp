@@ -1611,35 +1611,69 @@ private:
     // the base identifier avoids emitting a stray `w.` before the rewrite.
     {
       size_t op = ts.nextSig(i);
-      bool arrow = ts.isPunct(op, "->");
-      if (ts.isPunct(op, ".") || arrow) {
-        size_t member = ts.nextSig(op);
-        auto mit = member < ts.size() ? varClasses_.find(ts[member].text)
-                                      : varClasses_.end();
-        std::string nestedClass =
-            mit != varClasses_.end() ? mit->second : std::string();
-        if (nestedClass.empty() && selfClass)
-          nestedClass = fieldClass(selfClass, ts[member].text);
-        if (!nestedClass.empty() && ts.isPunct(ts.nextSig(member), ".")) {
-          size_t method = ts.nextSig(ts.nextSig(member));
-          if (method < ts.size() && ts[method].kind == TokKind::Identifier) {
-            bool known = false;
-            for (const auto &c : classes_)
-              if (c.name == nestedClass && c.methodNames.count(ts[method].text))
-                known = true;
-            if (known || externalClassNames_.count(nestedClass)) {
-              size_t lp = ts.nextSig(method);
-              if (ts.isPunct(lp, "(")) {
-                emit(nestedClass + "_" + ts[method].text + "(");
-                // The hidden self argument is a pointer to the member object
-                // for both `w.c` and `self->c` receivers.
+      size_t sep = kNPos, memberEnd = kNPos, methodIdx = kNPos;
+      std::string nestedClass;
+      if (ts.isPunct(op, ".") || ts.isPunct(op, "->")) {
+        size_t cur = i;
+        for (;;) {
+          size_t s = ts.nextSig(cur);
+          if (!ts.isPunct(s, ".") && !ts.isPunct(s, "->"))
+            break;
+          size_t mem = ts.nextSig(s);
+          if (mem >= ts.size() || ts[mem].kind != TokKind::Identifier)
+            break;
+          auto mit = varClasses_.find(ts[mem].text);
+          std::string cls = mit != varClasses_.end() ? mit->second : std::string();
+          if (cls.empty() && selfClass)
+            cls = fieldClass(selfClass, ts[mem].text);
+          if (cls.empty())
+            break;
+          nestedClass = cls;
+          sep = s;
+          memberEnd = mem;
+          size_t after = ts.nextSig(mem);
+          if (ts.isPunct(after, ".") || ts.isPunct(after, "->")) {
+            size_t candidate = ts.nextSig(after);
+            // The identifier after the separator is the method when it is
+            // followed by '('; otherwise the chain goes one level deeper.
+            if (candidate < ts.size() &&
+                ts[candidate].kind == TokKind::Identifier &&
+                ts.isPunct(ts.nextSig(candidate), "(")) {
+              sep = after;
+              memberEnd = mem;
+              methodIdx = candidate;
+              break;
+            }
+            cur = mem; // deeper chain: w.a.b.method() / this->a->b.method()
+            continue;
+          }
+          break;
+        }
+      }
+      if (!nestedClass.empty() && memberEnd != kNPos &&
+          (ts.isPunct(sep, ".") || ts.isPunct(sep, "->"))) {
+        size_t method =
+            methodIdx != kNPos ? methodIdx : ts.nextSig(memberEnd);
+        if (method < ts.size() && ts[method].kind == TokKind::Identifier) {
+          bool known = false;
+          for (const auto &c : classes_)
+            if (c.name == nestedClass && c.methodNames.count(ts[method].text))
+              known = true;
+          if (known || externalClassNames_.count(nestedClass)) {
+            size_t lp = ts.nextSig(method);
+            if (ts.isPunct(lp, "(")) {
+              emit(nestedClass + "_" + ts[method].text + "(");
+              // Object members need their address; pointer members already
+              // are pointers. This also covers 3+ level chains.
+              if (ts.isPunct(sep, "."))
                 emit("&");
-                for (size_t k = i; k <= member; ++k)
-                  emitToken(k);
-                skipTo_ = lp;
-                changed_ = true;
-                return true;
-              }
+              for (size_t k = i; k <= memberEnd; ++k)
+                emitToken(k);
+              if (!ts.isPunct(ts.nextSig(lp), ")"))
+                emit(", ");
+              skipTo_ = lp;
+              changed_ = true;
+              return true;
             }
           }
         }

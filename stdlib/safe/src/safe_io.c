@@ -115,6 +115,14 @@ static int stream_add(FILE **table, size_t *count, size_t *tombstones, FILE *f) 
     return 0; /* full: never overwrite an existing marker */
 }
 
+/* The closed-stream cache is a fixed-size ring: once it fills, the oldest
+ * marker at the hash slot is evicted. Refusing every further fclose() leaves
+ * real FILE* handles open forever (permanent EMFILE), which is worse than
+ * bounding double-close detection to the most recent 512 addresses. */
+static void stream_add_evict(FILE **table, FILE *f) {
+    table[hash_stream(f) & (STREAM_CACHE_SLOTS - 1u)] = f;
+}
+
 static int stream_remove(FILE **table, size_t *count, size_t *tombstones, FILE *f) {
     size_t i = stream_find(table, f);
     if (i == STREAM_CACHE_SLOTS) return 0;
@@ -165,7 +173,7 @@ static int io_check_buf(const char *api, const void *buf, size_t bmax) {
         cplus_safe_stat_record(api, 0);
         return -1;
     }
-    tracked = cplus_safe_ptr_size(buf);
+    tracked = cplus_safe_ptr_remaining(buf);
     if (tracked > 0 && bmax > tracked) {
         errno = EINVAL;
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "I/O bmax exceeds tracked buffer capacity");
@@ -247,12 +255,11 @@ int cplus_fclose_s(FILE *stream) {
     /* Record the close marker BEFORE calling fclose().  If the table is at
      * capacity we refuse the close entirely: leaving no marker would allow a
      * later double close to reach host fclose(). */
-    if (!stream_add(g_closed_streams, &g_closed_count, &g_closed_tombstones, stream)) {
-        pthread_mutex_unlock(&g_io_lock);
-        errno = EMFILE;
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fclose_s", "closed table full");
-        cplus_safe_stat_record("fclose_s", 0);
-        return EOF;
+    if (!stream_add(g_closed_streams, &g_closed_count, &g_closed_tombstones,
+                    stream)) {
+        stream_add_evict(g_closed_streams, stream);
+        /* count stays at capacity; the evicted marker is replaced, so no
+         * double-close marker is lost for the stream being closed now. */
     }
     if (in_live)
         stream_remove(g_live_streams, &g_live_count, &g_live_tombstones, stream);

@@ -1,0 +1,38 @@
+{
+  "generated": "2026-11-26T06:19:52.695997+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "cc": "/usr/bin/clang",
+  "results": [
+    {
+      "case": "runtime_64bit_arithmetic",
+      "status": "PASS",
+      "expected": "div=9223372036854775807 rem=1 shr=9223372036854775807 shl=4 narrow=-1\n",
+      "steps": [
+        {
+          "command": [
+            "/usr/bin/clang",
+            "-std=c11",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_arith_64/rt64.c",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_arith_64/results/rt64.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_arith_64/results/rt64.bin"
+          ],
+          "rc": 0,
+          "stdout": "div=9223372036854775807 rem=1 shr=9223372036854775807 shl=4 narrow=-1\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

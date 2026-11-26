@@ -730,6 +730,12 @@ private:
       if (p != kNPos && isPunct(p, ")")) {
         isFunction = true;
         inFunction_ = true;
+        size_t openParen = matchingParenBackward(p);
+        size_t fnameIdx = openParen == kNPos ? kNPos : prevSig(openParen);
+        currentFunctionName_ =
+            fnameIdx != kNPos && toks_[fnameIdx].kind == TokKind::Identifier
+                ? toks_[fnameIdx].text
+                : std::string();
         // All ownership state is now scoped, so entering a function needs no
         // reset: a sibling function's bindings can no longer be observed.
         doAwaitingWhile_ = false;
@@ -792,8 +798,9 @@ private:
     scopes_.pop_back();
     if (functionDepth_ > 0)
       --functionDepth_;
-    if (wasFunction)
+    if (wasFunction) {
       inFunction_ = false;
+    }
     atStmtStart_ = true;
   }
 
@@ -1290,7 +1297,8 @@ private:
         const OwnedVar &v = vars[k - 1];
         if ((exclude.valid() && exclude.scope == p - 1 &&
              exclude.var == k - 1) ||
-            v.deferDropped || transferredNames_.count(v.name) ||
+            v.deferDropped ||
+            transferredNames_.count(v.name) ||
             v.name == "NULL")
           continue;
         // At a scope exit the name may already denote an inner shadow, so the
@@ -2593,6 +2601,7 @@ private:
   // arguments to the callee (the callee emits the destructor).
   std::map<std::string, std::set<unsigned>> byValueParamIndices_;
   std::set<std::string> transferredNames_;
+  std::string currentFunctionName_;
   /// Macro name -> function-like?  Macros hiding a terminator in their body.
   std::map<std::string, bool> terminationMacros_;
   std::vector<DeferInfo> defers_;

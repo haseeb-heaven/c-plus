@@ -122,6 +122,28 @@ static slot *tab_find_addr(uintptr_t addr) {
 
 static slot *tab_find(const void *p) { return tab_find_addr((uintptr_t)p); }
 
+/* An interior pointer still lies inside its allocation. The exact-address
+ * lookup above is kept for ownership operations, but bounds queries must be
+ * able to find the containing block. */
+static slot *tab_find_containing(uintptr_t addr) {
+  size_t i;
+  if (g_cap == 0 || addr == 0)
+    return NULL;
+  for (i = 0; i < g_cap; ++i) {
+    slot *s = &g_tab[i];
+    uintptr_t base, end;
+    if (s->ptr == NULL || s->ptr == TOMB || s->ptr == RECENT_TOMB)
+      continue;
+    base = (uintptr_t)s->ptr;
+    if (s->size > UINTPTR_MAX - base)
+      continue;
+    end = base + s->size;
+    if (addr >= base && addr < end)
+      return s;
+  }
+  return NULL;
+}
+
 /* Make room for one more entry without ever failing afterwards. */
 static int tab_reserve_one(void) {
     size_t ncap, k;
@@ -549,6 +571,18 @@ size_t cplus_safe_ptr_size(const void *ptr) {
     if (s) n = s->size;
     pthread_mutex_unlock(&g_lock);
     return n;
+}
+
+size_t cplus_safe_ptr_remaining(const void *ptr) {
+  size_t n = 0;
+  slot *s;
+  uintptr_t addr = (uintptr_t)ptr;
+  pthread_mutex_lock(&g_lock);
+  s = tab_find_containing(addr);
+  if (s && addr >= (uintptr_t)s->ptr)
+    n = s->size - (size_t)(addr - (uintptr_t)s->ptr);
+  pthread_mutex_unlock(&g_lock);
+  return n;
 }
 
 size_t cplus_safe_ptr_elem_size(const void *ptr) {
