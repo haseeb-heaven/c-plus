@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y clang llvm-dev libclang-dev cmake ninja-build
+        run: sudo apt-get update && sudo apt-get install -y clang llvm-dev cmake ninja-build && sudo apt-get install -y libclang-$(ls -d /usr/lib/llvm-* | sed 's#.*/llvm-##' | sort -n | tail -1)-dev
       - name: Build safe CRT
         run: sh scripts/build_safecrt.sh
       - name: CRT unit tests
@@ -146,7 +146,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm-dev libclang-dev cmake ninja-build python3 \
+          sudo apt-get install -y clang llvm-dev cmake ninja-build && sudo apt-get install -y libclang-$(ls -d /usr/lib/llvm-* | sed 's#.*/llvm-##' | sort -n | tail -1)-dev python3 \
                                   libprotobuf-dev protobuf-compiler-grpc libgrpc++-dev \
                                   libabsl-dev libzstd-dev
       - name: Build C+ compiler for stdlib integration
