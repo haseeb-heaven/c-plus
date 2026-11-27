@@ -80,7 +80,7 @@ typedef struct {
     int conv;        /* 0 = dangling '%' at end of string */
     int has_width;
     int suppressed;
-    int bounded;     /* s, [, POSIX S, POSIX C: Annex K takes a capacity arg */
+    int bounded;     /* s, [, POSIX S/C, c: Annex K takes a capacity arg */
 } fmt_spec_t;
 
 /* Parse one specifier.  Returns 1 when a specifier was consumed, 0 for an
@@ -160,7 +160,11 @@ static int fmt_parse_spec(const unsigned char **pp, fmt_spec_t *s) {
         if (*p == ']') ++p;
     }
     s->end = p;
-    s->bounded = (s->conv == 's' || s->conv == '[' || s->conv == 'S' || s->conv == 'C');
+    /* Annex K gives %c an rsize_t capacity argument as well (K.3.5.3.2).
+     * Leaving it out made scan_dispatch consume that value as the next
+     * pointer, shifting (rsize_t)1 into a later conversion's va_arg slot. */
+    s->bounded = (s->conv == 's' || s->conv == '[' || s->conv == 'S' ||
+                  s->conv == 'C' || s->conv == 'c');
     *pp = p;
     return 1;
 }
@@ -193,7 +197,10 @@ static int cplus_scanf_fmt_check(const char *fmt) {
         if (r < 0) return 1;
         if (r == 0 || s.conv == 0 || s.conv == '%') continue;
         if (s.conv == 'n') return 1;
-        if (s.bounded && s.conv != 'C' && !s.suppressed && !s.has_width) return 2;
+        /* %c/%C have a default width of one, so an explicit field width is
+         * not required even though Annex K still takes a capacity argument. */
+        if (s.bounded && s.conv != 'C' && s.conv != 'c' &&
+            !s.suppressed && !s.has_width) return 2;
     }
     return 0;
 }
@@ -354,6 +361,9 @@ int cplus_fprintf_s_checked(int fmt_is_literal, FILE *stream, const char *fmt, .
 #else
 #define CPLUS_SCAN_CAP_MAX ((uintptr_t)0x10000u)
 #endif
+/* Hard ceiling on the rewritten scanf format.  Real formats are tiny; this
+ * keeps a crafted format from forcing an unbounded heap allocation. */
+#define CPLUS_SCAN_FMT_MAX ((size_t)1u << 20) /* 1 MiB */
 
 #define SCAN_FWD_DEFINE(N)                                                  \
 static int scan_fwd_##N(int mode, FILE *stream, const char *str,             \
@@ -418,13 +428,46 @@ static int scan_fwd(int mode, FILE *stream, const char *str, const char *fmt,
     }
 }
 
+/* Effective field width written into a rewritten bounded specifier: the
+ * Annex K capacity minus one, narrowed by an explicit nonzero width if it is
+ * smaller.  `*width_end` receives the first character after the old width so
+ * the caller can copy the rest of the specifier verbatim.  Returns -1 when the
+ * capacity cannot hold even a NUL-terminated one-character string. */
+static int scan_cap_limit(const fmt_spec_t *s, size_t cap, size_t *limit_out,
+                          const unsigned char **width_end) {
+    const unsigned char *we = s->width_at;
+    size_t limit;
+    if (cap < 2u) return -1;
+    limit = cap - 1u;
+    while (*we >= '0' && *we <= '9') ++we;
+    if (we > s->width_at) {
+        unsigned long long w = 0;
+        const unsigned char *d = s->width_at;
+        while (d < we) {
+            if (w < 1000000000ULL) w = w * 10ULL + (unsigned long long)(*d - '0');
+            ++d;
+        }
+        if (w > 0 && w < (unsigned long long)limit) limit = (size_t)w;
+    }
+    *limit_out = limit;
+    *width_end = we;
+    return 0;
+}
+
+/* Decimal digit count of a size_t value (at least one). */
+static size_t scan_dec_digits(size_t v) {
+    size_t n = 1u;
+    while (v >= 10u) { v /= 10u; ++n; }
+    return n;
+}
+
 /* mode: 0 = vscanf, 1 = vfscanf, 2 = vsscanf. */
 static int scan_dispatch(const char *api, int mode, FILE *stream, const char *str,
                          const char *fmt, va_list ap) {
     fmt_spec_t specs[CPLUS_SCAN_MAX_ARGS];
     void *args[CPLUS_SCAN_MAX_ARGS];
     size_t caps[CPLUS_SCAN_MAX_ARGS];
-    size_t nspecs = 0, nargs = 0, flen, pos = 0, i, n;
+    size_t nspecs = 0, nargs = 0, flen, pos = 0, i, n, newfmt_cap;
     const unsigned char *p = (const unsigned char *)fmt;
     const unsigned char *last = p;
     int r, rc, annexk = 0, have_pending = 0, unbounded_posix = 0;
@@ -438,7 +481,8 @@ static int scan_dispatch(const char *api, int mode, FILE *stream, const char *st
         if (r == 0) continue;
         if (specs[nspecs].conv != 0) {
             if (specs[nspecs].bounded && !specs[nspecs].suppressed &&
-                !specs[nspecs].has_width && specs[nspecs].conv != 'C')
+                !specs[nspecs].has_width && specs[nspecs].conv != 'C' &&
+                specs[nspecs].conv != 'c')
                 unbounded_posix = 1;
             if (++nspecs == CPLUS_SCAN_MAX_ARGS) {
                 while (*p) { r = fmt_parse_spec(&p, &specs[0]); if (r < 0) return fmt_violation(api, "malformed scanf format"); }
@@ -495,14 +539,55 @@ static int scan_dispatch(const char *api, int mode, FILE *stream, const char *st
     }
 
     flen = strlen(fmt);
-    if (flen > (SIZE_MAX / 2u) - 64u) return fmt_violation(api, "scanf format too long");
-    newfmt = (char *)malloc(flen * 2u + 64u);
+    /* Size the rewrite before allocating.  Every rewritten bounded specifier
+     * contributes (decimal digits of the new width) - (digits of the width it
+     * replaces); all other specifiers and literal text are copied verbatim.
+     * Accumulate with checked arithmetic and refuse anything beyond the hard
+     * ceiling so a crafted format cannot wrap the allocation size. */
+    {
+        size_t need;
+        int oversized = 0;
+        if (flen >= CPLUS_SCAN_FMT_MAX) return fmt_violation(api, "scanf format too long");
+        need = flen + 1u; /* NUL terminator */
+        for (i = 0; i < nspecs; ++i) {
+            const fmt_spec_t *s = &specs[i];
+            size_t limit, added, removed;
+            const unsigned char *we;
+            if (s->conv == '%' || s->suppressed || !s->bounded || caps[i] == 0) continue;
+            if (s->conv == 'c' || s->conv == 'C') continue; /* copied verbatim */
+            if (scan_cap_limit(s, caps[i], &limit, &we) != 0)
+                return fmt_violation(api, "scanf capacity too small");
+            added = scan_dec_digits(limit);
+            removed = (size_t)(we - s->width_at);
+            if (added >= removed) {
+                size_t delta = added - removed;
+                if (delta > CPLUS_SCAN_FMT_MAX - need) { oversized = 1; break; }
+                need += delta;
+            } else {
+                need -= (removed - added);
+            }
+        }
+        if (oversized || need > CPLUS_SCAN_FMT_MAX)
+            return fmt_violation(api, "scanf format too long");
+        newfmt_cap = need;
+    }
+    newfmt = (char *)malloc(newfmt_cap);
     if (!newfmt) { errno = ENOMEM; return -1; }
+/* Reserve the final byte for the NUL terminator and check every append. */
+#define SCAN_APPEND(src, len)                                                  \
+    do {                                                                       \
+        size_t _n = (size_t)(len);                                              \
+        if (pos >= newfmt_cap || _n > newfmt_cap - pos - 1u) {                  \
+            free(newfmt);                                                       \
+            return fmt_violation(api, "scanf format rewrite overflow");         \
+        }                                                                       \
+        memcpy(newfmt + pos, (const void *)(src), _n);                          \
+        pos += _n;                                                              \
+    } while (0)
     for (i = 0; i < nspecs; ++i) {
         const fmt_spec_t *s = &specs[i];
         size_t n = (size_t)(s->start - last);
-        memcpy(newfmt + pos, last, n);
-        pos += n;
+        SCAN_APPEND(last, n);
         /* A mixed Annex K / POSIX shape must not forward an unbounded
          * string conversion: a long token would overflow the caller's
          * buffer.  Every bounded string conversion needs either a detected
@@ -514,51 +599,37 @@ static int scan_dispatch(const char *api, int mode, FILE *stream, const char *st
         }
         if (s->conv == '%' || s->suppressed || !s->bounded || caps[i] == 0) {
             n = (size_t)(s->end - s->start);
-            memcpy(newfmt + pos, s->start, n);
-            pos += n;
+            SCAN_APPEND(s->start, n);
         } else {
-            size_t cap = caps[i];
             size_t limit;
-            const unsigned char *we = s->width_at;
+            const unsigned char *we;
             char num[32];
             int k;
             if (s->conv == 'c' || s->conv == 'C') {
-                if (cap == 0) { free(newfmt); return fmt_violation(api, "zero scanf capacity"); }
+                if (caps[i] == 0) { free(newfmt); return fmt_violation(api, "zero scanf capacity"); }
                 n = (size_t)(s->end - s->start);
-                memcpy(newfmt + pos, s->start, n);
-                pos += n;
+                SCAN_APPEND(s->start, n);
                 last = s->end;
                 continue;
             }
-            if (cap < 2u) { free(newfmt); return fmt_violation(api, "scanf capacity too small"); }
-            limit = cap - 1u;
-            n = (size_t)(s->width_at - s->start);
-            memcpy(newfmt + pos, s->start, n);
-            pos += n;
-            while (*we >= '0' && *we <= '9') ++we;
-            if (we > s->width_at) {
-                unsigned long long w = 0;
-                const unsigned char *d = s->width_at;
-                while (d < we) {
-                    if (w < 1000000000ULL) w = w * 10ULL + (unsigned long long)(*d - '0');
-                    ++d;
-                }
-                if (w > 0 && w < (unsigned long long)limit) limit = (size_t)w;
+            if (scan_cap_limit(s, caps[i], &limit, &we) != 0) {
+                free(newfmt);
+                return fmt_violation(api, "scanf capacity too small");
             }
+            n = (size_t)(s->width_at - s->start);
+            SCAN_APPEND(s->start, n);
             k = snprintf(num, sizeof(num), "%zu", limit);
             if (k < 0 || (size_t)k >= sizeof(num)) { free(newfmt); return fmt_violation(api, "scanf width overflow"); }
-            memcpy(newfmt + pos, num, (size_t)k);
-            pos += (size_t)k;
+            SCAN_APPEND(num, (size_t)k);
             n = (size_t)(s->end - we);
-            memcpy(newfmt + pos, we, n);
-            pos += n;
+            SCAN_APPEND(we, n);
         }
         last = s->end;
     }
     n = strlen((const char *)last);
-    memcpy(newfmt + pos, last, n);
-    pos += n;
+    SCAN_APPEND(last, n);
     newfmt[pos] = '\0';
+#undef SCAN_APPEND
     rc = scan_fwd(mode, stream, str, newfmt, args, nargs);
     free(newfmt);
     return rc;
