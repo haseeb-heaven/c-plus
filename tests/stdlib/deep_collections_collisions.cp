@@ -90,21 +90,21 @@ int main(void) {
     check("c_map_probe_all", ok); /* all 48 found through the same chain */
 
     /* ---- 2. removal and reinsertion inside the chain --------------------- */
-    for (i = 0; i < 48; i += 2)
+    for (i = 0; i < 48; i = i + 2)
         m.remove(g_intkeys[i]); /* 24 tombstones */
     ok = 1;
-    for (i = 0; i < 48; i += 2)
+    for (i = 0; i < 48; i = i + 2)
         if (m.contains(g_intkeys[i]))
             ok = 0;
     check("c_map_removed", ok && m.size() == 24);
     ok = 1;
-    for (i = 1; i < 48; i += 2)
+    for (i = 1; i < 48; i = i + 2)
         if (m.get(g_intkeys[i], &v) != 0 || v != 1000 + i)
             ok = 0;
     check("c_map_kept", ok);
 
     ok = 1;
-    for (i = 0; i < 48; i += 2)
+    for (i = 0; i < 48; i = i + 2)
         if (m.put(g_intkeys[i], 2000 + i) != 0)
             ok = 0;
     check("c_map_reinsert", ok && m.size() == 48);
@@ -144,14 +144,14 @@ int main(void) {
     for (i = 0; i < 48; i++)
         s.insert(g_intkeys[i]);
     check("c_set_insert", s.size() == 48);
-    for (i = 0; i < 48; i += 2)
+    for (i = 0; i < 48; i = i + 2)
         s.remove(g_intkeys[i]);
     ok = 1;
-    for (i = 0; i < 48; i += 2)
+    for (i = 0; i < 48; i = i + 2)
         if (s.contains(g_intkeys[i]))
             ok = 0;
     check("c_set_removed", ok && s.size() == 24);
-    for (i = 0; i < 48; i += 2)
+    for (i = 0; i < 48; i = i + 2)
         s.insert(g_intkeys[i]);
     ok = 1;
     for (i = 0; i < 48; i++)
@@ -173,20 +173,20 @@ int main(void) {
         if (sm.get(g_strkeys[i], &v) != 0 || v != i)
             ok = 0;
     check("c_str_probe_all", ok);
-    for (i = 0; i < 40; i += 2)
+    for (i = 0; i < 40; i = i + 2)
         sm.remove(g_strkeys[i]);
     ok = 1;
-    for (i = 0; i < 40; i += 2)
+    for (i = 0; i < 40; i = i + 2)
         if (sm.contains(g_strkeys[i]))
             ok = 0;
     check("c_str_removed", ok && sm.size() == 20);
     ok = 1;
-    for (i = 1; i < 40; i += 2)
+    for (i = 1; i < 40; i = i + 2)
         if (sm.get(g_strkeys[i], &v) != 0 || v != i)
             ok = 0;
     check("c_str_kept", ok);
     ok = 1;
-    for (i = 0; i < 40; i += 2)
+    for (i = 0; i < 40; i = i + 2)
         if (sm.put(g_strkeys[i], 100 + i) != 0)
             ok = 0;
     check("c_str_reinsert", ok && sm.size() == 40);

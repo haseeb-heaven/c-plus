@@ -59,7 +59,7 @@ int main(void) {
                           m.get(150 * 13, &v) == 0 && v == 150);
 
     /* ---- 2. tombstones, no-op grow, real grow, reinsertion ---------------- */
-    for (i = 0; i < 200; i += 2)
+    for (i = 0; i < 200; i = i + 2)
         m.remove(i * 13); /* 100 tombstones */
     check("g_tomb_remove", m.size() == 100 && m.contains(0) == 0 &&
                                m.contains(26) == 0);
@@ -69,7 +69,7 @@ int main(void) {
     check("g_grow_big", m.grow(1000) == 0 && m.size() == 100);
 
     ok = 1;
-    for (i = 0; i < 200; i += 2)
+    for (i = 0; i < 200; i = i + 2)
         if (m.put(i * 13, i + 1000) != 0)
             ok = 0;
     check("g_reinsert", ok && m.size() == 200);
