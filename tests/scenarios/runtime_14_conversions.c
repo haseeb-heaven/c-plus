@@ -200,8 +200,9 @@ static void sc_14_strtoul_conversions(void) {
     assert(cplus_strtoul("999999999999999999999999999999", &end, 10) == ULONG_MAX);
     assert(errno == ERANGE);
 
-    /* Unsupported base follows host contract. */
+    /* Unsupported base: glibc leaves *endptr untouched, so seed it first. */
     errno = 0;
+    end = (char *)s;
     assert(cplus_strtoul("10", &end, 1) == 0UL);
     assert(end - "10" == 0);
     assert(errno == EINVAL);
