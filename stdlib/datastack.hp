@@ -26,6 +26,27 @@
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
 
+/* Debug builds wipe rewound data-stack bytes so stale pointers fail fast;
+ * release builds keep the one-store scope release with no write. */
+#ifndef STDLIB_DATASTACK_POISON
+#  ifndef NDEBUG
+#    define STDLIB_DATASTACK_POISON 1
+#  else
+#    define STDLIB_DATASTACK_POISON 0
+#  endif
+#endif
+
+static inline void stdlib_datastack_poison(unsigned char *from,
+                                            unsigned char *to) {
+#if STDLIB_DATASTACK_POISON
+    if (from != (unsigned char *)0 && to > from)
+        memset(from, 0xDD, (size_t)(to - from));
+#else
+    (void)from;
+    (void)to;
+#endif
+}
+
 /* the inspiration language-inspired: a data stack is a large reserved address region with a
  * single bump pointer.  `backing` selects virtual memory (mmap/VirtualAlloc,
  * committed on demand) or a plain checked-heap buffer (fallback / Windows
