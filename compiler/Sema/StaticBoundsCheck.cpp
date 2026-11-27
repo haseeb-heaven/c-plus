@@ -1275,6 +1275,8 @@ private:
       while (last > r + 1 && trivia(last - 1)) --last;
       bool typed = false, valid = true;
       for (size_t k = r + 1; k < last; ++k) {
+        if (trivia(k))
+          continue;
         if (toks_[k].kind == TokKind::Identifier) {
           if (isTypeWord(toks_[k].text) || toks_[k].text == "void")
             typed = true;
@@ -2584,71 +2586,194 @@ private:
   /// Casting away const and then writing through the result is undefined for
   /// an originally const object.  A plain cast (Lua-style ABI casts) is fine.
   void checkConstCastMutation() {
-    std::set<std::string> constNames;
+    std::set<std::string> globalConstObjects;
+    int depth = 0;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isPunct(i, "{")) { ++depth; continue; }
+      if (isPunct(i, "}")) { --depth; continue; }
+      if (depth != 0 || !isIdent(i, "const"))
+        continue;
+      size_t end = i;
+      while (end < toks_.size() && !isPunct(end, ";") &&
+             !isPunct(end, "{") && !isPunct(end, ","))
+        ++end;
+      for (size_t k = i + 1; k < end; ++k)
+        if (isPunct(k, "=")) { end = k; break; }
+      bool pointer = false;
+      std::string name;
+      for (size_t k = i + 1; k < end; ++k) {
+        if (isPunct(k, "*"))
+          pointer = true;
+        if (toks_[k].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[k].text) && toks_[k].text != "const" &&
+            toks_[k].text != "volatile")
+          name = toks_[k].text;
+      }
+      if (!pointer && !name.empty())
+        globalConstObjects.insert(name);
+    }
+
+    std::set<std::string> constObjects;
+    std::set<std::string> constPointers;
     std::set<std::string> castPtrs;
+    auto declarationEnd = [&](size_t from) {
+      size_t end = from;
+      int parens = 0, brackets = 0;
+      while (end < toks_.size()) {
+        if (isPunct(end, "(")) ++parens;
+        else if (isPunct(end, ")")) {
+          if (parens == 0) return end;
+          --parens;
+        } else if (isPunct(end, "[")) ++brackets;
+        else if (isPunct(end, "]")) --brackets;
+        else if (parens == 0 && brackets == 0 &&
+                 (isPunct(end, ";") || isPunct(end, ",") ||
+                  isPunct(end, "{")))
+          return end;
+        ++end;
+      }
+      return end;
+    };
+
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (functionOpens_.count(i)) {
-        constNames.clear();
+        constObjects.clear();
+        constPointers.clear();
         castPtrs.clear();
-      }
-      if (isIdent(i, "const")) {
-        size_t n = nextSig(i);
-        while (n < toks_.size() && toks_[n].kind == TokKind::Identifier) {
-          size_t after = nextSig(n);
-          if (isPunct(after, "=") || isPunct(after, ";") ||
-              isPunct(after, "[")) {
-            constNames.insert(toks_[n].text);
-            break;
+        for (const auto &entry : funcs_) {
+          if (entry.second.bodyOpen != i)
+            continue;
+          for (const auto &param : entry.second.paramDeclPos) {
+            size_t begin = param.second;
+            while (begin > 0) {
+              --begin;
+              if (isPunct(begin, "(") || isPunct(begin, ","))
+                break;
+            }
+            bool isConst = false, pointer = false;
+            for (size_t k = begin + 1; k < param.second; ++k) {
+              if (isIdent(k, "const")) isConst = true;
+              if (isPunct(k, "*")) pointer = true;
+            }
+            if (isConst)
+              (pointer ? constPointers : constObjects).insert(param.first);
           }
-          n = after;
         }
+      }
+      if (!isIdent(i, "const"))
+        continue;
+      size_t end = declarationEnd(i);
+      for (size_t k = i + 1; k < end; ++k)
+        if (isPunct(k, "=")) { end = k; break; }
+      bool pointer = false;
+      std::string name;
+      for (size_t k = i + 1; k < end; ++k) {
+        if (isPunct(k, "*"))
+          pointer = true;
+        if (toks_[k].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[k].text) && toks_[k].text != "const" &&
+            toks_[k].text != "volatile")
+          name = toks_[k].text;
+      }
+      if (!name.empty())
+        (pointer ? constPointers : constObjects).insert(name);
+      i = end == 0 ? i : end - 1;
+    }
+
+    auto isConstOperand = [&](size_t from, size_t to) {
+      to = stmtEnd(from);
+      from = stripCast(from, to);
+      trim(&from, &to);
+      if (isPunct(from, "&")) {
+        size_t id = nextSig(from);
+        if (id < to && toks_[id].kind == TokKind::Identifier &&
+            (globalConstObjects.count(toks_[id].text) ||
+             constObjects.count(toks_[id].text)))
+          return true;
+      }
+      if (from < to && toks_[from].kind == TokKind::Identifier &&
+          constPointers.count(toks_[from].text))
+        return true;
+      return false;
+    };
+
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i)) {
+        castPtrs.clear();
         continue;
       }
-      if (isPunct(i, "(")) {
-        size_t close = match(i, "(", ")");
-        if (close != kNPos) {
-          bool hasStar = false;
-          for (size_t k = i + 1; k < close; ++k)
-            if (isPunct(k, "*")) hasStar = true;
-          size_t after = nextSig(close);
-          if (hasStar && isPunct(after, "&")) {
-            size_t owner = nextSig(after);
-            if (owner < toks_.size() && constNames.count(toks_[owner].text)) {
-              for (size_t k = i; k > 0; --k) {
-                if (isPunct(k, "=")) {
-                  size_t lhs = k == 0 ? kNPos : k - 1;
-                  while (lhs != kNPos && trivia(lhs)) {
-                    if (lhs == 0) { lhs = kNPos; break; }
-                    --lhs;
-                  }
-                  if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier)
-                    castPtrs.insert(toks_[lhs].text);
-                  break;
-                }
-                if (isPunct(k, ";") || isPunct(k, "{")) break;
-              }
-            }
+      if (!isPunct(i, "("))
+        continue;
+      size_t close = kNPos;
+      if (!castClose(i, toks_.size(), &close))
+        continue;
+      size_t operand = nextSig(close);
+      if (operand >= toks_.size() || !isConstOperand(operand, stmtEnd(operand)))
+        continue;
+      size_t after = stmtEnd(operand);
+      while (after > operand && trivia(after - 1))
+        --after;
+      if (isPunct(prevSig(i), "*") && after < toks_.size() &&
+          (isPunct(after, "=") || isPunct(after, "+=") ||
+           isPunct(after, "-=") || isPunct(after, "++") ||
+           isPunct(after, "--")))
+        errorAt(toks_[i], "casting away const and writing to the original "
+                          "object is undefined");
+    }
+
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i)) {
+        castPtrs.clear();
+        continue;
+      }
+      if (isPunct(i, "=")) {
+        size_t lhs = prevSig(i);
+        size_t rhs = nextSig(i);
+        if (lhs == kNPos || rhs >= toks_.size() ||
+            toks_[lhs].kind != TokKind::Identifier)
+          continue;
+        bool derivesFromConst = false;
+        if (toks_[rhs].kind == TokKind::Identifier && castPtrs.count(toks_[rhs].text))
+          derivesFromConst = true;
+        if (isPunct(rhs, "(")) {
+          size_t close = kNPos;
+          if (castClose(rhs, toks_.size(), &close)) {
+            bool pointer = false;
+            for (size_t k = rhs + 1; k < close; ++k)
+              if (isPunct(k, "*")) pointer = true;
+            size_t operand = nextSig(close);
+            derivesFromConst = pointer && operand < toks_.size() &&
+                isConstOperand(operand, stmtEnd(operand));
           }
         }
+        if (derivesFromConst)
+          castPtrs.insert(toks_[lhs].text);
+        else
+          castPtrs.erase(toks_[lhs].text);
+        continue;
       }
-      if (toks_[i].kind == TokKind::Identifier && castPtrs.count(toks_[i].text)) {
-        size_t prev = i == 0 ? kNPos : i - 1;
-        while (prev != kNPos && trivia(prev)) {
-          if (prev == 0) { prev = kNPos; break; }
-          --prev;
+      if (toks_[i].kind != TokKind::Identifier ||
+          !castPtrs.count(toks_[i].text))
+        continue;
+      size_t prev = prevSig(i);
+      size_t next = nextSig(i);
+      bool derefWrite = isPunct(prev, "*") &&
+          (isPunct(next, "=") || isPunct(next, "+=") ||
+           isPunct(next, "-=") || isPunct(next, "++") ||
+           isPunct(next, "--"));
+      bool indexWrite = false;
+      if (isPunct(next, "[")) {
+        size_t rb = match(next, "[", "]");
+        if (rb != kNPos) {
+          size_t after = nextSig(rb);
+          indexWrite = isPunct(after, "=") || isPunct(after, "+=") ||
+                       isPunct(after, "-=") || isPunct(after, "++") ||
+                       isPunct(after, "--");
         }
-        size_t next = nextSig(i);
-        bool derefWrite = isPunct(prev, "*") && isPunct(next, "=");
-        bool indexWrite = false;
-        if (isPunct(next, "[")) {
-          size_t rb = match(next, "[", "]");
-          if (rb != kNPos && isPunct(nextSig(rb), "="))
-            indexWrite = true;
-        }
-        if (derefWrite || indexWrite)
-          errorAt(toks_[i], "casting away const and writing to the original "
-                            "object is undefined");
       }
+      if (derefWrite || indexWrite)
+        errorAt(toks_[i], "casting away const and writing to the original "
+                          "object is undefined");
     }
   }
 
@@ -3889,7 +4014,218 @@ private:
   /// memcpy with overlapping source/destination is undefined; memmove is the
   /// correct API.
   void checkMemcpyOverlap() {
+    struct Pointer {
+      std::string base;
+      long long offset = 0; // bytes from the base, not pointer elements
+      size_t elemBytes = 0;
+    };
+    std::map<std::string, Pointer> aliases;
+
+    // Pointer arithmetic is scaled by the operand's pointee type.  Unknown
+    // types stay silent rather than guessing a byte width.
+    auto pointerTypeBytes = [&](size_t from, size_t to) {
+      std::string type;
+      size_t stars = 0;
+      for (size_t k = from; k < to; ++k) {
+        if (trivia(k))
+          continue;
+        if (isPunct(k, "*")) {
+          ++stars;
+        } else if (toks_[k].kind == TokKind::Identifier &&
+                   isTypeWord(toks_[k].text)) {
+          if (!type.empty())
+            type += " ";
+          type += toks_[k].text;
+        } else {
+          return size_t{0};
+        }
+      }
+      return stars == 1 ? typeSize(type) : size_t{0};
+    };
+
+    auto declaredPointerBytes = [&](size_t lhs) {
+      size_t begin = lhs;
+      while (begin > 0) {
+        --begin;
+        if (trivia(begin))
+          continue;
+        if (isPunct(begin, ";") || isPunct(begin, "{") ||
+            isPunct(begin, "}") || isPunct(begin, "(") ||
+            isPunct(begin, ","))
+          break;
+      }
+      return pointerTypeBytes(begin + 1, lhs);
+    };
+
+    auto addOffset = [](long long *offset, long amount, size_t width,
+                        bool add) {
+      if (width == 0)
+        return false;
+      const __int128 delta = static_cast<__int128>(amount) * width;
+      const __int128 value = static_cast<__int128>(*offset) +
+                             (add ? delta : -delta);
+      if (value < LLONG_MIN || value > LLONG_MAX)
+        return false;
+      *offset = static_cast<long long>(value);
+      return true;
+    };
+
+    // `char s[] = "text";` carries no explicit extent, so findShape() cannot
+    // see it, but the literal still fixes the element width.  Resolving the
+    // array here lets pointer arithmetic on it keep a known byte scale.
+    auto stringArrayElemBytes = [&](const std::string &name, size_t pos,
+                                     size_t *elemBytes) -> bool {
+      for (size_t i = 0; i < toks_.size(); ++i) {
+        if (toks_[i].kind != TokKind::Identifier || toks_[i].text != name)
+          continue;
+        if (i > pos)
+          continue;
+        size_t scopeEnd = enclosingScopeEnd(i);
+        if (scopeEnd != kNPos && pos > scopeEnd)
+          continue;
+        size_t lb = nextSig(i);
+        if (lb >= toks_.size() || !isPunct(lb, "["))
+          continue;
+        size_t rb = matchIn(lb, toks_.size(), "[", "]");
+        if (rb == kNPos)
+          continue;
+        size_t inner = nextSig(lb);
+        if (inner > rb)
+          continue;
+        if (inner != rb)
+          continue; // an explicit extent is handled by findShape()
+        size_t eq = nextSig(rb);
+        if (!isPunct(eq, "="))
+          continue;
+        size_t lit = nextSig(eq);
+        if (lit >= toks_.size() || toks_[lit].kind != TokKind::StringLit)
+          continue;
+        size_t typeTok = prevSig(i);
+        if (typeTok == kNPos || toks_[typeTok].kind != TokKind::Identifier)
+          continue;
+        size_t width = typeSize(toks_[typeTok].text);
+        if (width != 1)
+          continue; // only a byte-wide element type holds a string literal
+        *elemBytes = width;
+        return true;
+      }
+      return false;
+    };
+
+    // Resolve only expressions whose base and constant byte offset are known:
+    // an array, &array[k], a prior local alias, or one of those +/- a constant.
+    auto parsePointer = [&](size_t from, size_t to, const auto &self,
+                           Pointer *out) -> bool {
+      trim(&from, &to);
+      if (from >= to)
+        return false;
+      size_t castBytes = 0;
+      if (isPunct(from, "(")) {
+        size_t close = kNPos;
+        if (castClose(from, to, &close))
+          castBytes = pointerTypeBytes(from + 1, close);
+      }
+      from = stripCast(from, to);
+      if (from >= to)
+        return false;
+
+      if (isPunct(from, "&")) {
+        size_t id = nextSig(from);
+        size_t lb = nextSig(id);
+        if (id >= to || lb >= to || !isPunct(lb, "["))
+          return false;
+        size_t rb = matchIn(lb, to, "[", "]");
+        long index = 0;
+        if (rb == kNPos || nextSig(rb) < to ||
+            !constantIndexAt(lb + 1, rb, &index))
+          return false;
+        const std::vector<size_t> *dims = nullptr;
+        if (findShape(toks_[id].text, id, &dims) && !dims->empty()) {
+          out->base = toks_[id].text;
+          out->elemBytes = arrayElemBytes(out->base, from);
+        } else {
+          size_t width = 0;
+          if (!stringArrayElemBytes(toks_[id].text, id, &width))
+            return false;
+          out->base = toks_[id].text;
+          out->elemBytes = width;
+        }
+        return addOffset(&out->offset, index, out->elemBytes, true);
+      }
+
+      if (toks_[from].kind != TokKind::Identifier)
+        return false;
+      const std::string &name = toks_[from].text;
+      size_t after = nextSig(from);
+      Pointer base;
+      const std::vector<size_t> *dims = nullptr;
+      if (findShape(name, from, &dims) && !dims->empty()) {
+        base.base = name;
+        base.elemBytes = arrayElemBytes(name, from);
+      } else {
+        size_t width = 0;
+        if (stringArrayElemBytes(name, from, &width)) {
+          base.base = name;
+          base.elemBytes = width;
+        } else {
+          auto alias = aliases.find(name);
+          if (alias == aliases.end())
+            return false;
+          base = alias->second;
+        }
+      }
+      if (base.elemBytes == 0)
+        return false;
+
+      *out = base;
+      if (after >= to)
+        return true;
+      if (!isPunct(after, "+") && !isPunct(after, "-"))
+        return false;
+      long amount = 0;
+      size_t amountEnd = to;
+      for (size_t k = after + 1; k < to; ++k)
+        if (isPunct(k, ")") || isPunct(k, ";") || isPunct(k, ",")) {
+          amountEnd = k;
+          break;
+        }
+      if (!constantIndexAt(after + 1, amountEnd, &amount))
+        return false;
+      const size_t width = castBytes ? castBytes : base.elemBytes;
+      if (!addOffset(&out->offset, amount, width, isPunct(after, "+")))
+        return false;
+      out->elemBytes = width;
+      return true;
+    };
+
     for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isPunct(i, "=")) {
+        size_t lhs = prevSig(i);
+        if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier ||
+            isWriteThroughObject(lhs))
+          continue;
+        const std::string &name = toks_[lhs].text;
+        Pointer value;
+        size_t rhs = nextSig(i);
+        if (parsePointer(rhs, stmtEnd(rhs), parsePointer, &value)) {
+          const size_t declared = declaredPointerBytes(lhs);
+          if (declared != 0)
+            value.elemBytes = declared;
+          else {
+            auto prior = aliases.find(name);
+            if (prior == aliases.end() || prior->second.elemBytes == 0) {
+              aliases.erase(name);
+              continue;
+            }
+            value.elemBytes = prior->second.elemBytes;
+          }
+          aliases[name] = std::move(value);
+        } else {
+          aliases.erase(name);
+        }
+        continue;
+      }
+
       if (!isIdent(i, "memcpy"))
         continue;
       size_t lp = nextSig(i);
@@ -3899,24 +4235,35 @@ private:
       if (rp == kNPos)
         continue;
       auto args = splitArgs(lp + 1, rp);
-      if (args.size() < 2)
+      if (args.size() < 3)
         continue;
-      std::string dst = join(args[0].first, args[0].second);
-      std::string src = join(args[1].first, args[1].second);
-      bool overlap = !dst.empty() && dst == src;
-      if (!overlap) {
-        const std::string &shorter = dst.size() < src.size() ? dst : src;
-        const std::string &longer = dst.size() < src.size() ? src : dst;
-        if (longer.compare(0, shorter.size(), shorter) == 0) {
-          size_t pos = shorter.size();
-          while (pos < longer.size() &&
-                 (longer[pos] == ' ' || longer[pos] == '\t'))
-            ++pos;
-          if (pos < longer.size() &&
-              (longer[pos] == '+' || longer[pos] == '-'))
-            overlap = true;
-        }
+      long bytes = 0;
+      const bool sizeKnown =
+          indexExprValue(args[2].first, args[2].second, &bytes);
+      // `sizeof` of a complete type is never zero, so a copy sized by sizeof
+      // always moves at least one byte even when the exact count is unknown.
+      size_t sizeFrom = args[2].first, sizeTo = args[2].second;
+      trim(&sizeFrom, &sizeTo);
+      const bool sizePositive =
+          (sizeKnown && bytes > 0) || isIdent(sizeFrom, "sizeof");
+      if (!sizePositive)
+        continue; // an unknown or empty copy cannot overlap
+
+      Pointer dst, src;
+      bool overlap = false;
+      if (sizeKnown && bytes > 0 &&
+          parsePointer(args[0].first, args[0].second, parsePointer, &dst) &&
+          parsePointer(args[1].first, args[1].second, parsePointer, &src) &&
+          dst.base == src.base) {
+        const __int128 dstEnd = static_cast<__int128>(dst.offset) + bytes;
+        const __int128 srcEnd = static_cast<__int128>(src.offset) + bytes;
+        overlap = dst.offset < srcEnd && src.offset < dstEnd;
       }
+      // Identical expressions still overlap even when their base is unknown.
+      if (!overlap && !join(args[0].first, args[0].second).empty() &&
+          join(args[0].first, args[0].second) ==
+              join(args[1].first, args[1].second))
+        overlap = true;
       if (overlap)
         errorAt(toks_[i], "memcpy source and destination overlap; use memmove");
     }
@@ -5336,33 +5683,190 @@ private:
   }
 
   static size_t typeAlignment(const std::string &type) {
-    if (type.find("char") != std::string::npos)
+    if (type == "char" || type == "signed char" || type == "unsigned char" ||
+        type == "bool" || type == "_Bool" || type == "int8_t" ||
+        type == "uint8_t")
       return 1;
-    if (type.find("short") != std::string::npos)
+    if (type == "short" || type == "unsigned short" || type == "int16_t" ||
+        type == "uint16_t")
       return 2;
-    if (type.find("long long") != std::string::npos ||
-        type.find("double") != std::string::npos ||
-        type.find("size_t") != std::string::npos ||
-        type.find("uint64") != std::string::npos ||
-        type.find("int64") != std::string::npos ||
-        type.find("long") != std::string::npos)
-      return 8;
-    if (type.find("int") != std::string::npos ||
-        type.find("float") != std::string::npos ||
-        type.find("uint32") != std::string::npos ||
-        type.find("unsigned") != std::string::npos)
+    if (type == "int" || type == "unsigned" || type == "unsigned int" ||
+        type == "float" || type == "int32_t" || type == "uint32_t" ||
+        type == "wchar_t")
       return 4;
+    if (type == "long long" || type == "unsigned long long" ||
+        type == "double" || type == "int64_t" || type == "uint64_t" ||
+        type == "size_t" || type == "ssize_t" || type == "intptr_t" ||
+        type == "uintptr_t")
+      return 8;
+    if (type == "long" || type == "unsigned long")
+      return 8;
+    if (type == "long double")
+      return 16;
     return 0;
   }
 
-  /// Bug 46: casting a known allocation base plus a non-multiple byte offset
-  /// to a type with stricter alignment produces an unaligned pointer.
+  /// Casting a pointer with a known byte offset to a stricter-aligned type is
+  /// undefined when that offset is not a multiple of the target alignment.
   void checkUnalignedCasts() {
+    struct PointerBytes {
+      long long offset = 0;
+      size_t elemBytes = 0;
+    };
+    std::map<std::string, PointerBytes> pointers;
+
+    auto expressionEnd = [&](size_t from) {
+      int parens = 0, brackets = 0;
+      for (size_t k = from; k < toks_.size(); ++k) {
+        if (isPunct(k, "(")) ++parens;
+        else if (isPunct(k, ")")) {
+          if (parens == 0) return k;
+          --parens;
+        } else if (isPunct(k, "[")) ++brackets;
+        else if (isPunct(k, "]")) {
+          if (brackets == 0) return k;
+          --brackets;
+        } else if (parens == 0 && brackets == 0 &&
+                   (isPunct(k, ";") || isPunct(k, ",") ||
+                    isPunct(k, "=") || isPunct(k, "{")))
+          return k;
+      }
+      return toks_.size();
+    };
+
+    auto declaredBytePointer = [&](size_t lhs) {
+      size_t begin = lhs;
+      while (begin > 0) {
+        --begin;
+        if (trivia(begin))
+          continue;
+        if (isPunct(begin, ";") || isPunct(begin, "{") ||
+            isPunct(begin, "}") || isPunct(begin, "(") ||
+            isPunct(begin, ","))
+          break;
+      }
+      size_t stars = 0;
+      std::string type;
+      for (size_t k = begin + 1; k < lhs; ++k) {
+        if (trivia(k))
+          continue;
+        if (isPunct(k, "*")) {
+          ++stars;
+        } else if (toks_[k].kind == TokKind::Identifier &&
+                   isTypeWord(toks_[k].text)) {
+          if (!type.empty()) type += " ";
+          type += toks_[k].text;
+        }
+      }
+      return stars == 1 && (type == "char" || type == "void" ||
+                            type == "signed char" ||
+                            type == "unsigned char");
+    };
+
+    auto resolvePointer = [&](size_t from, size_t to, const auto &self,
+                             PointerBytes *out) -> bool {
+      trim(&from, &to);
+      if (from >= to)
+        return false;
+      from = stripCast(from, to);
+      trim(&from, &to);
+      while (to > from && isPunct(to - 1, ")")) --to;
+      trim(&from, &to);
+      if (from >= to)
+        return false;
+      if (isPunct(from, "(")) {
+        // A grouped operand such as `((char *)buf + 1)`: peel the group and
+        // resolve the expression inside it.
+        size_t close = matchIn(from, to, "(", ")");
+        if (close == kNPos || close <= from + 1)
+          return false;
+        return self(from + 1, close, self, out);
+      }
+
+      if (isPunct(from, "&")) {
+        size_t id = nextSig(from);
+        size_t lb = nextSig(id);
+        if (id >= to || lb >= to || !isPunct(lb, "["))
+          return false;
+        size_t rb = matchIn(lb, to, "[", "]");
+        long index = 0;
+        const std::vector<size_t> *dims = nullptr;
+        if (rb == kNPos || !constantIndexAt(lb + 1, rb, &index) ||
+            !findShape(toks_[id].text, id, &dims) || dims->empty())
+          return false;
+        size_t width = arrayElemBytes(toks_[id].text, id);
+        if (!width)
+          return false;
+        out->offset = static_cast<long long>(index) * width;
+        out->elemBytes = width;
+        return true;
+      }
+
+      if (toks_[from].kind != TokKind::Identifier)
+        return false;
+      const std::string &name = toks_[from].text;
+      size_t after = nextSig(from);
+      const std::vector<size_t> *dims = nullptr;
+      if (findShape(name, from, &dims) && !dims->empty()) {
+        out->offset = 0;
+        out->elemBytes = arrayElemBytes(name, from);
+      } else {
+        auto prior = pointers.find(name);
+        if (prior == pointers.end()) {
+          return false;
+        }
+        *out = prior->second;
+      }
+      if (!out->elemBytes) {
+        return false;
+      }
+      if (after >= to)
+        return true;
+      if (!isPunct(after, "+") && !isPunct(after, "-"))
+        return false;
+      long amount = 0;
+      size_t amountEnd = to;
+      for (size_t k = after + 1; k < to; ++k)
+        if (isPunct(k, ")") || isPunct(k, ";") || isPunct(k, ",")) {
+          amountEnd = k;
+          break;
+        }
+      if (!constantIndexAt(after + 1, amountEnd, &amount))
+        return false;
+      const __int128 offset = static_cast<__int128>(out->offset) +
+          static_cast<__int128>(amount) * out->elemBytes *
+              (isPunct(after, "+") ? 1 : -1);
+      if (offset < LLONG_MIN || offset > LLONG_MAX)
+        return false;
+      out->offset = static_cast<long long>(offset);
+      return true;
+    };
+
     for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i))
+        pointers.clear();
+      if (isPunct(i, "=")) {
+        size_t lhs = prevSig(i);
+        if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier &&
+            !isWriteThroughObject(lhs)) {
+          size_t rhs = nextSig(i);
+          const std::string &name = toks_[lhs].text;
+          PointerBytes value;
+          if (isAllocator(allocatorName(rhs)) && declaredBytePointer(lhs)) {
+            pointers[name] = PointerBytes{};
+            pointers[name].elemBytes = 1;
+          } else if (resolvePointer(rhs, expressionEnd(rhs), resolvePointer, &value)) {
+            pointers[name] = value;
+          } else {
+            pointers.erase(name);
+          }
+        }
+        continue;
+      }
       if (!isPunct(i, "("))
         continue;
-      size_t close = match(i, "(", ")");
-      if (close == kNPos)
+      size_t close = kNPos;
+      if (!castClose(i, toks_.size(), &close))
         continue;
       bool hasStar = false;
       std::string type;
@@ -5370,42 +5874,23 @@ private:
         if (isPunct(k, "*"))
           hasStar = true;
         if (toks_[k].kind == TokKind::Identifier) {
-          if (!type.empty())
-            type += " ";
+          if (!type.empty()) type += " ";
           type += toks_[k].text;
         }
       }
-      if (!hasStar || type.empty())
+      if (!hasStar)
         continue;
       size_t align = typeAlignment(type);
       if (align <= 1)
         continue;
-      size_t open2 = nextSig(close);
-      if (!isPunct(open2, "("))
+      size_t from = nextSig(close);
+      PointerBytes value;
+      if (!resolvePointer(from, expressionEnd(from), resolvePointer, &value))
         continue;
-      size_t close2 = match(open2, "(", ")");
-      if (close2 == kNPos)
-        continue;
-      size_t base = nextSig(open2);
-      if (base >= close2 || toks_[base].kind != TokKind::Identifier)
-        continue;
-      const std::string &baseName = toks_[base].text;
-      // Only byte-granular allocation bases make `base + N` a byte offset;
-      // for typed arrays/pointers N counts elements, not bytes.
-      if (!byteAllocPtrs_.count(baseName))
-        continue;
-      size_t op = nextSig(base);
-      if (!(isPunct(op, "+") || isPunct(op, "-")))
-        continue;
-      size_t numTok = nextSig(op);
-      if (numTok >= close2)
-        continue;
-      long offset = 0;
-      if (!number(toks_[numTok], &offset) || offset == 0)
-        continue;
-      if (offset % static_cast<long>(align) != 0)
-        errorAt(toks_[i], "unaligned pointer: '" + baseName + "' offset " +
-                              std::to_string(offset) + " is not a multiple of " +
+      if (value.offset % static_cast<long long>(align) != 0)
+        errorAt(toks_[i], "unaligned pointer: byte offset " +
+                              std::to_string(value.offset) +
+                              " is not a multiple of " +
                               std::to_string(align) + " for '" + type + "'");
     }
   }

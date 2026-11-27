@@ -753,6 +753,25 @@ static bool extraArgsDisableSignedOverflow(const std::vector<std::string> &extra
   return false;
 }
 
+static std::vector<std::string>
+stripLanguageFlags(const std::vector<std::string> &extra) {
+  std::vector<std::string> out;
+  out.reserve(extra.size());
+  for (size_t i = 0; i < extra.size(); ++i) {
+    llvm::StringRef a = normalizeFlag(extra[i]);
+    if (a == "-x") {
+      if (i + 1 < extra.size())
+        ++i;
+      continue;
+    }
+    if (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
+        std::isalpha(static_cast<unsigned char>(a[2])))
+      continue;
+    out.push_back(extra[i]);
+  }
+  return out;
+}
+
 /// Pass-through flags that change what the *real* clang compile parses but
 /// are discarded before the in-memory safety AST (both checkAstSafety and
 /// probeSafetyAst keep only -I/-D/-std). Accepting them in STRICT would let
@@ -1381,7 +1400,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     for (const auto &entry : kSanitizerEntries) {
       if (!wants(san, entry.bit))
         continue;
-      if (!sanitizerSupported(entry.bit, clang, opts.extraArgs)) {
+      if (!sanitizerSupported(entry.bit, clang,
+                              stripLanguageFlags(opts.extraArgs))) {
         errs << "error: sanitizer '" << entry.name
              << "' is not supported by the selected backend (" << clang
              << "); detected by a compile-and-run probe\n";
@@ -1454,7 +1474,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       /* This is a `-c` compile: linker-only operands (-l, -L, -Wl,...) are
        * unused here and Clang's -Werror rejects them (e.g. -luv from the
        * async stdlib tests). */
-      for (const auto &a : withoutLinkerFlags(opts.extraArgs))
+      for (const auto &a :
+           withoutLinkerFlags(stripLanguageFlags(opts.extraArgs)))
         rtArgs.push_back(a);
       appendSafetyTail(rtArgs);
       if (runProgram(clang, rtArgs) != 0) {
@@ -1696,7 +1717,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     std::vector<std::string> args = withoutLinkerFlags(base);
     args.push_back("-I" + std::string(inputDir));
-    for (const auto &a : withoutLinkerFlags(opts.extraArgs))
+    for (const auto &a :
+         withoutLinkerFlags(stripLanguageFlags(opts.extraArgs)))
       args.push_back(a);
     appendSafetyTail(args);
     if (opts.command == "check") {
@@ -1761,7 +1783,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (!runtime.empty())
       linkArgs.push_back(runtime);
   }
-  for (const auto &a : opts.extraArgs)
+  for (const auto &a : stripLanguageFlags(opts.extraArgs))
     linkArgs.push_back(a);
   appendSafetyTail(linkArgs);
   linkArgs.push_back("-o");

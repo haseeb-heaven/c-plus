@@ -277,8 +277,11 @@ int main(int argc, char **argv) {
       continue;
     }
     if (a == "--log-level") {
-      if (i + 1 < argc)
-        opts.logLevel = argv[++i];
+      if (i + 1 >= argc) {
+        errs() << "error: --log-level requires a value\n";
+        return 1;
+      }
+      opts.logLevel = argv[++i];
       continue;
     }
     if (a == "--keep-temp") {
@@ -286,29 +289,59 @@ int main(int argc, char **argv) {
       continue;
     }
     if (a == "-o") {
-      if (i + 1 < argc)
-        opts.output = argv[++i];
+      if (i + 1 >= argc) {
+        errs() << "error: -o requires a value\n";
+        return 1;
+      }
+      opts.output = argv[++i];
       continue;
     }
     // gcc-style two-token options: -I dir, -D NAME, -U NAME, -L dir, -l lib,
     // -x language.  Consuming the value here prevents it from being mistaken
-    // for a subcommand or source file.
-    if ((a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l" ||
-         a == "-x") && i + 1 < argc) {
-      std::string value = argv[++i];
-      if (a == "-x") {
-        // C+ lowers every source to C and buildClangArgs already emits `-x c`.
-        // Accept gcc's -x spelling (and ignore the value) without duplicating
-        // the flag after the input file.
-      } else {
-        opts.extraArgs.emplace_back(a);
-        opts.extraArgs.emplace_back(value);
+    // for a subcommand or source file, and forwarding -x preserves Driver.cpp's
+    // --strict rejection of language-override flags.
+    if (a == "-x") {
+      if (i + 1 >= argc) {
+        errs() << "error: -x requires a language argument\n";
+        return 1;
       }
+      std::string value = argv[++i];
+      static const char *const kValidLangs[] = {
+          "c",         "c++",           "c-header",
+          "c++-header", "cpp-output",   "c++-cpp-output",
+          "objective-c", "objective-c++", "assembler",
+          "assembler-with-cpp", "none"};
+      bool validLang = false;
+      for (const char *lang : kValidLangs) {
+        if (value == lang) {
+          validLang = true;
+          break;
+        }
+      }
+      if (!validLang) {
+        errs() << "error: invalid language '" << value << "' for -x\n";
+        return 1;
+      }
+      opts.extraArgs.emplace_back(a);
+      opts.extraArgs.emplace_back(value);
+      continue;
+    }
+    if (a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") {
+      if (i + 1 >= argc) {
+        errs() << "error: " << a << " requires a value\n";
+        return 1;
+      }
+      std::string value = argv[++i];
+      opts.extraArgs.emplace_back(a);
+      opts.extraArgs.emplace_back(value);
       continue;
     }
     if (a == "--emit-c") {
-      if (i + 1 < argc)
-        opts.emitC = argv[++i];
+      if (i + 1 >= argc) {
+        errs() << "error: --emit-c requires a value\n";
+        return 1;
+      }
+      opts.emitC = argv[++i];
       continue;
     }
     // Pass through common gcc/g++ options unchanged.

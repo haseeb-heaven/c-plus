@@ -4609,6 +4609,7 @@ public:
       heapInterior_.clear();
       onePastEnd_.clear();
       strlenSized_.clear();
+      knownStrLen_.clear();
       reallocResultVars_.clear();
 
     }
@@ -5493,6 +5494,14 @@ public:
         }
       }
     }
+    // Track initial NUL-terminated length for fixed char arrays.
+    if (conditionalDepth_ == 0 && vd->getInit()) {
+      if (const auto *at = ctx_.getAsConstantArrayType(vd->getType()))
+        if (at->getElementType()->isCharType())
+          if (const auto *sl =
+                  dyn_cast<StringLiteral>(vd->getInit()->IgnoreParenCasts()))
+            knownStrLen_[vd] = sl->getLength();
+    }
     // `int *end = arr + 4;` yields a pointer that is one past the array's
     // last element; dereferencing it is undefined even though forming it is ok.
     if (vd->getInit() && isOnePastEndExpr(vd->getInit()))
@@ -5568,6 +5577,8 @@ public:
           if (callee == "malloc" || callee == "calloc" || isReallocName(callee) ||
               callee.rfind("cplus_new", 0) == 0)
             allocLocs_[vd->getNameAsString()] = vd->getBeginLoc();
+          if (conditionalDepth_ == 0 && callee == "calloc")
+            knownStrLen_[vd] = 0;
         }
       }
       if (isa<StringLiteral>(init->IgnoreParenCasts())) {
@@ -6327,6 +6338,12 @@ public:
             if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
               if (heapStateOf(ref))
                 heapWritten_.insert(vd);
+              llvm::APSInt iv;
+              if (conditionalDepth_ == 0 && op->getOpcode() == BO_Assign &&
+                  knownConst(op->getRHS(), iv) && iv == 0)
+                knownStrLen_[vd] = 0;
+              else
+                knownStrLen_.erase(vd);
             }
           }
         }
@@ -6336,6 +6353,13 @@ public:
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
             if (heapStateOf(ref))
               heapWritten_.insert(vd);
+            llvm::APSInt idxV, rhsV;
+            if (conditionalDepth_ == 0 && op->getOpcode() == BO_Assign &&
+                knownConst(ase->getIdx(), idxV) && idxV == 0 &&
+                knownConst(op->getRHS(), rhsV) && rhsV == 0)
+              knownStrLen_[vd] = 0;
+            else
+              knownStrLen_.erase(vd);
           }
         }
       }
@@ -6377,6 +6401,7 @@ public:
             heapAllocs_.erase(hit);
             identityAllocs_.erase(identityKeyForDecl(vd));
           }
+          knownStrLen_.erase(vd);
           if (isOnePastEndExpr(op->getRHS()))
             onePastEnd_.insert(vd);
           else
@@ -6758,6 +6783,95 @@ public:
     return ref && ref->getDecl() == vd;
   }
 
+  struct StringDestination {
+    const VarDecl *var = nullptr;
+    long long offset = 0;
+    unsigned long long capacity = 0;
+    bool capacityKnown = false;
+  };
+
+  StringDestination stringDestination(const Expr *e) const {
+    StringDestination dst;
+    const Expr *x = e->IgnoreParenImpCasts();
+    while (const auto *bo = dyn_cast<BinaryOperator>(x)) {
+      if (bo->getOpcode() != BO_Add && bo->getOpcode() != BO_Sub)
+        break;
+      llvm::APSInt amount;
+      if (!knownConst(bo->getRHS(), amount) || !fits64(amount))
+        return dst;
+      long long delta = amount.getSExtValue();
+      if (bo->getOpcode() == BO_Sub)
+        delta = -delta;
+      long long elemSize = 1;
+      if (const auto *ptr = bo->getLHS()->getType()->getAs<PointerType>())
+        if (!ptr->getPointeeType()->isVoidType() &&
+            !ptr->getPointeeType()->isIncompleteType())
+          elemSize = ctx_.getTypeSize(ptr->getPointeeType()) / 8;
+      if (elemSize <= 0)
+        return dst;
+      dst.offset += delta * elemSize;
+      x = bo->getLHS()->IgnoreParenImpCasts();
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(x)) {
+      if (uo->getOpcode() != UO_AddrOf)
+        return dst;
+      const auto *ase = dyn_cast<ArraySubscriptExpr>(
+          uo->getSubExpr()->IgnoreParenImpCasts());
+      if (!ase)
+        return dst;
+      llvm::APSInt index;
+      if (!knownConst(ase->getIdx(), index) || !fits64(index) ||
+          index.isNegative())
+        return dst;
+      const auto *at = ctx_.getAsConstantArrayType(ase->getBase()->getType());
+      if (!at)
+        return dst;
+      long long elemSize = ctx_.getTypeSize(at->getElementType()) / 8;
+      if (elemSize <= 0)
+        return dst;
+      dst.offset += index.getSExtValue() * elemSize;
+      x = ase->getBase()->IgnoreParenImpCasts();
+    }
+    const auto *ref = dyn_cast<DeclRefExpr>(x);
+    if (!ref)
+      return dst;
+    dst.var = dyn_cast<VarDecl>(ref->getDecl());
+    if (!dst.var || dst.offset < 0)
+      return StringDestination{};
+    if (const auto *at = ctx_.getAsConstantArrayType(dst.var->getType())) {
+      if (!at->getElementType()->isCharType())
+        return StringDestination{};
+      dst.capacity = at->getSize().getZExtValue();
+      dst.capacityKnown = true;
+    } else if (const HeapAllocState *hs = heapStateOf(ref)) {
+      dst.capacity = hs->bytes;
+      dst.capacityKnown = true;
+    }
+    if (dst.offset > 0 && dst.capacityKnown) {
+      if (static_cast<unsigned long long>(dst.offset) >= dst.capacity)
+        dst.capacity = 0;
+      else
+        dst.capacity -= dst.offset;
+    }
+    return dst;
+  }
+
+  const StringLiteral *stringLiteralOf(const Expr *e) const {
+    const Expr *x = e->IgnoreParenCasts();
+    if (const auto *str = dyn_cast<StringLiteral>(x))
+      return str;
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (vd->getInit())
+          return dyn_cast<StringLiteral>(vd->getInit()->IgnoreParenCasts());
+    return nullptr;
+  }
+
+  void invalidateStringLength(const StringDestination &dst) {
+    if (dst.var)
+      knownStrLen_.erase(dst.var);
+  }
+
   /// For memcpy/memmove with a direct array destination, reject a constant
   /// byte count that exceeds the destination extent.  Unknown extents are not
   /// guessed.
@@ -6772,35 +6886,26 @@ public:
     // (`static size_t sz(void){return 40;}`), which knownConst misses.
     if (!evalByteCount(n, bytes) || bytes <= 0)
       return;
-    const auto *ref = dyn_cast<DeclRefExpr>(dst);
-    if (!ref)
-      return;
-    const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
-    if (!vd)
-      return;
-    // Heap allocation with a known byte extent.
-    if (const HeapAllocState *hs = heapStateOf(dst)) {
-      if ((unsigned long long)bytes > (unsigned long long)hs->bytes)
-        report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
-                                        " bytes exceeds " +
-                                        extentLabel(hs->origin) + " '" +
-                                        vd->getNameAsString() + "' of " +
-                                        std::to_string(hs->bytes) + " bytes");
-      return;
+    const StringDestination destination = stringDestination(dst);
+    if (op == "copy" && call->getNumArgs() > 1) {
+      if (const StringLiteral *str = stringLiteralOf(call->getArg(1))) {
+        if (destination.var && destination.offset == 0 &&
+            static_cast<unsigned long long>(bytes) == str->getLength() + 1)
+          knownStrLen_[destination.var] = str->getLength();
+        else
+          invalidateStringLength(destination);
+      } else {
+        invalidateStringLength(destination);
+      }
+    } else if (op == "string copy") {
+      invalidateStringLength(destination);
     }
-    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
-    if (!at)
+    if (!destination.var || !destination.capacityKnown)
       return;
-    QualType elem = at->getElementType();
-    if (!elem->isIntegerType() && !elem->isCharType())
-      return;
-    unsigned long long elemSize = ctx_.getTypeSize(elem) / 8u;
-    unsigned long long capacity =
-        at->getSize().getZExtValue() * elemSize;
-    if ((unsigned long long)bytes > capacity)
+    if (static_cast<unsigned long long>(bytes) > destination.capacity)
       report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
                                       " bytes exceeds destination '" +
-                                      vd->getNameAsString() + "'");
+                                      destination.var->getNameAsString() + "'");
   }
 
   void checkBoundedCopy(const CallExpr *call,
@@ -6808,33 +6913,38 @@ public:
     checkBoundedWrite(call, 0, 2, op);
   }
 
-  /// strcat(dst, src): reject when the concatenation provably overflows a
-  /// fixed-size destination with a constant string initializer.
+  /// strcat(dst, src): current content + src + NUL must fit the destination.
   void checkStringConcat(const CallExpr *call) {
     if (call->getNumArgs() < 2)
       return;
-    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
-    const auto *ref = dyn_cast<DeclRefExpr>(dst);
-    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (!vd || !vd->getInit())
+    const StringDestination dst =
+        stringDestination(call->getArg(0)->IgnoreParenImpCasts());
+    if (!dst.var)
       return;
-    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
-    if (!at || !at->getElementType()->isCharType())
+    const StringLiteral *src =
+        stringLiteralOf(call->getArg(1)->IgnoreParenCasts());
+    if (!src) {
+      invalidateStringLength(dst);
       return;
-    const auto *initStr = dyn_cast<StringLiteral>(
-        vd->getInit()->IgnoreParenCasts());
-    const auto *srcStr = dyn_cast<StringLiteral>(
-        call->getArg(1)->IgnoreParenCasts());
-    if (!initStr || !srcStr)
+    }
+    auto used = knownStrLen_.find(dst.var);
+    if (used == knownStrLen_.end() || dst.offset != 0) {
+      unsigned long long need = src->getLength() + 1;
+      if (dst.capacityKnown && need > dst.capacity)
+        report(call->getBeginLoc(),
+               "string concatenation needs " + std::to_string(need) +
+                   " bytes but destination '" + dst.var->getNameAsString() +
+                   "' has capacity " + std::to_string(dst.capacity));
       return;
-    unsigned long long capacity = at->getSize().getZExtValue();
-    unsigned long long needed =
-        initStr->getLength() + srcStr->getLength() + 1;
-    if (needed > capacity)
+    }
+    unsigned long long need = used->second + src->getLength() + 1;
+    if (need > dst.capacity)
       report(call->getBeginLoc(),
-             "string concatenation needs " + std::to_string(needed) +
-                 " bytes but destination '" + vd->getNameAsString() +
-                 "' has capacity " + std::to_string(capacity));
+             "string concatenation needs " + std::to_string(need) +
+                 " bytes but destination '" + dst.var->getNameAsString() +
+                 "' has capacity " + std::to_string(dst.capacity));
+    else
+      used->second += src->getLength();
   }
 
   /// Null pointers passed to libc read/write APIs are contract violations.
@@ -6849,59 +6959,27 @@ public:
                                       api);
   }
 
-  /// Detect strcpy from a short string literal into a smaller array.  Source
-  /// lengths that are not compile-time constants are unknown.
+  /// Detect strcpy from a constant string into a smaller array or allocation.
   void checkStringCopy(const CallExpr *call) {
-    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
-    const Expr *src = call->getArg(1)->IgnoreParenImpCasts();
-    const auto *dstRef = dyn_cast<DeclRefExpr>(dst);
-    if (!dstRef)
+    const StringDestination dst =
+        stringDestination(call->getArg(0)->IgnoreParenImpCasts());
+    if (!dst.var)
       return;
-    const auto *str = dyn_cast<StringLiteral>(src);
+    const StringLiteral *str =
+        stringLiteralOf(call->getArg(1)->IgnoreParenCasts());
     if (!str) {
-      // `const char *s = "literal"; strcpy(d, s);`
-      if (const auto *sref = dyn_cast<DeclRefExpr>(src))
-        if (const auto *svd = dyn_cast<VarDecl>(sref->getDecl()))
-          if (svd->getInit())
-            str = dyn_cast<StringLiteral>(svd->getInit()->IgnoreParenCasts());
+      invalidateStringLength(dst);
+      return;
     }
-    if (!str)
-      return;
-    const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
-    if (!vd)
-      return;
-    unsigned long long cap = 0;
-    if (const auto *at = ctx_.getAsConstantArrayType(vd->getType()))
-      cap = at->getSize().getZExtValue();
-    else if (const HeapAllocState *hs = heapStateOf(dst))
-      cap = static_cast<unsigned long long>(hs->bytes);
-    if (!cap)
-      return;
     unsigned long long need = str->getLength() + 1;
-    if (need > cap)
+    if (dst.capacityKnown && need > dst.capacity)
       report(call->getBeginLoc(), "string copy of " + std::to_string(need - 1) +
                                       " chars plus NUL exceeds destination '" +
-                                      vd->getNameAsString() + "'");
-  }
-
-  /// strcat into a heap buffer: current content + src + NUL must fit.
-  void checkStringConcatHeap(const CallExpr *call) {
-    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
-    const auto *dstRef = dyn_cast<DeclRefExpr>(dst);
-    const auto *str = dyn_cast<StringLiteral>(call->getArg(1)->IgnoreParenCasts());
-    const HeapAllocState *hs = heapStateOf(dst);
-    if (!dstRef || !str || !hs)
-      return;
-    const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
-    if (!vd)
-      return;
-    unsigned long long used = 1; // d[0]=0 idiom reserves one byte
-    unsigned long long need = used + str->getLength();
-    if (need > static_cast<unsigned long long>(hs->bytes))
-      report(call->getBeginLoc(),
-             "string concatenation needs " + std::to_string(need) +
-                 " bytes but destination '" + vd->getNameAsString() +
-                 "' has capacity " + std::to_string(hs->bytes));
+                                      dst.var->getNameAsString() + "'");
+    if (dst.offset == 0)
+      knownStrLen_[dst.var] = str->getLength();
+    else
+      invalidateStringLength(dst);
   }
 
   /// memcpy/memmove source must have at least the requested bytes.
@@ -8271,7 +8349,6 @@ public:
       }
       if (baseName == "strcat" && call->getNumArgs() >= 2) {
         checkStringConcat(call);
-        checkStringConcatHeap(call);
         checkLibcNullSource(call, baseName);
       }
       if ((baseName == "snprintf" || baseName == "vsnprintf") &&
@@ -8929,6 +9006,7 @@ private:
   std::set<const VarDecl *> unprovenPtrOffset_;
   std::set<const VarDecl *> arrayDerivedPtr_;
   std::map<const VarDecl *, std::string> strlenSized_;
+  std::map<const VarDecl *, unsigned long long> knownStrLen_;
   std::map<const VarDecl *, long long> loopIndexOverride_;
   std::map<std::string, llvm::APSInt> constLocals_;
   // Local floating constants with a provable initializer, used for strict
