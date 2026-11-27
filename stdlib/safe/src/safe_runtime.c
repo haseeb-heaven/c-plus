@@ -7,6 +7,7 @@
 #include "../safe_log.h"
 #include "../safe_stats.h"
 #include <setjmp.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -23,6 +24,8 @@ typedef struct guard_frame {
     jmp_buf jb;
     struct guard_frame *prev;
     int base;                       /* cleanup depth at guard entry */
+    unsigned long long token;       /* generation of this activation */
+    unsigned long long prev_token;  /* token to restore on exit */
 } guard_frame;
 
 typedef struct cleanup_entry {
@@ -30,25 +33,57 @@ typedef struct cleanup_entry {
     void *self;
 } cleanup_entry;
 
-static CPLUS_TLS guard_frame *g_top;
 static CPLUS_TLS cleanup_entry g_cleanups[CPLUS_RUNTIME_CLEANUP_MAX];
 static CPLUS_TLS int g_ncleanups;
 static CPLUS_TLS unsigned long g_leaked;
 static CPLUS_TLS unsigned long g_unwound;
+/* Process-wide control state.  `volatile` gave no inter-thread ordering; the
+ * setters may run on one thread while another is reporting a violation.  Use
+ * the compiler's atomic builtins (available under -std=c99) so reads and
+ * writes are ordered and race-free without changing the exported ABI. */
 static cplus_runtime_handler g_handler;
-static volatile int g_failstop;
-static volatile int g_violation_trap = 1;
+static int g_failstop;
+static int g_violation_trap = 1;
+static CPLUS_TLS unsigned long long g_guard_gen;
+static CPLUS_TLS guard_frame *g_top;
 
 void cplus_runtime_set_handler(cplus_runtime_handler handler) {
-    g_handler = handler;
+    __atomic_store_n(&g_handler, handler, __ATOMIC_RELEASE);
     cplus_safe_log(CPLUS_SAFE_LOG_INFO, "runtime", "handler set");
     cplus_safe_stat_record("runtime_set_handler", 1);
 }
 
-void cplus_runtime_set_failstop(int enabled) { g_failstop = enabled ? 1 : 0; }
-int cplus_runtime_get_failstop(void) { return g_failstop; }
-void cplus_runtime_set_violation_trap(int enabled) { g_violation_trap = enabled ? 1 : 0; }
-int cplus_runtime_get_violation_trap(void) { return g_violation_trap; }
+void cplus_runtime_set_failstop(int enabled) {
+    __atomic_store_n(&g_failstop, enabled ? 1 : 0, __ATOMIC_RELEASE);
+}
+int cplus_runtime_get_failstop(void) { return __atomic_load_n(&g_failstop, __ATOMIC_ACQUIRE); }
+void cplus_runtime_set_violation_trap(int enabled) {
+    __atomic_store_n(&g_violation_trap, enabled ? 1 : 0, __ATOMIC_RELEASE);
+}
+int cplus_runtime_get_violation_trap(void) { return __atomic_load_n(&g_violation_trap, __ATOMIC_ACQUIRE); }
+
+/* Is g_top a guard activation that is still on THIS thread's stack?  A body
+ * that leaves through an outer longjmp/exception bypasses the restore in
+ * cplus_runtime_guard(), leaving g_top pointing into a dead stack frame.
+ * Jumping through its jmp_buf afterwards is UB / control-flow hijack, so the
+ * generation and stack ancestry are both checked before every longjmp. */
+static guard_frame *live_guard_frame(void) {
+    guard_frame *f = g_top;
+    uintptr_t sp, fa;
+    if (f == NULL || f->token == 0u || f->token != g_guard_gen) return NULL;
+#if defined(__GNUC__) || defined(__clang__)
+    sp = (uintptr_t)__builtin_frame_address(0);
+#else
+    { int mark; sp = (uintptr_t)&mark; }
+#endif
+    fa = (uintptr_t)f;
+    /* On a downward-growing stack an active ancestor frame has a HIGHER
+     * address than the current frame.  After an outer unwind the current
+     * frame is above the abandoned guard, so fa < sp and we fail closed. */
+    if (fa < sp) return NULL;
+    if (fa - sp > (uintptr_t)(64u << 20)) return NULL; /* implausibly distant */
+    return f;
+}
 
 void cplus_runtime_violation_at(const char *api, const char *detail,
                                 const char *file, int line, const char *func) {
@@ -58,10 +93,10 @@ void cplus_runtime_violation_at(const char *api, const char *detail,
      * adds color/code/location/explanation), then apply the SAME trap policy
      * as before: unwind to a guard or fail stop with exit 70. */
     cplus_diag_violation_at(a, d, file, line, func);
-    if (g_violation_trap) {
-        if (g_top && !g_failstop) {
-            longjmp(g_top->jb, 1);
-        }
+    if (__atomic_load_n(&g_violation_trap, __ATOMIC_ACQUIRE)) {
+        guard_frame *f = live_guard_frame();
+        if (f != NULL && !__atomic_load_n(&g_failstop, __ATOMIC_ACQUIRE))
+            longjmp(f->jb, 1);
         fflush(NULL);
         _exit(70);
     }
@@ -78,7 +113,12 @@ void cplus_runtime_report_at(const char *message, const char *file, int line,
     if (!message) message = "runtime error";
     cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "runtime", message);
     cplus_safe_stat_record("runtime_report", 0);
-    if (g_handler) g_handler(message);
+    {
+        /* Load once atomically: a concurrent setter must not change the
+         * callee between the NULL test and the call (TOCTOU). */
+        cplus_runtime_handler handler = __atomic_load_n(&g_handler, __ATOMIC_ACQUIRE);
+        if (handler) handler(message);
+    }
     /* Always emit a diagnostic so the error is never silent. The message is
      * written verbatim and never interpreted as a format string. */
     cplus_diag_report_at(message, file, line, func);
@@ -135,16 +175,26 @@ int cplus_runtime_guard(int (*body)(void *ctx), void *ctx) {
     guard_frame frame;
     int rc;
     if (!body) return CPLUS_RUNTIME_ERROR;
-    frame.prev = g_top;
-    frame.base = g_ncleanups;
-    if (setjmp(frame.jb) != 0) {
-        g_top = frame.prev;
-        cplus_runtime_cleanup_unwind_to(frame.base);
-        return CPLUS_RUNTIME_ERROR;   /* unwound from a reported runtime error */
+    /* Volatile copies survive a longjmp back into this frame even if the
+     * guard's locals would otherwise be indeterminate after the jump. */
+    {
+        volatile guard_frame *volatile prev_frame = g_top;
+        volatile unsigned long long prev_token = g_guard_gen;
+        frame.prev = (guard_frame *)prev_frame;
+        frame.prev_token = (unsigned long long)prev_token;
+        frame.base = g_ncleanups;
+        frame.token = ++g_guard_gen;
+        if (setjmp(frame.jb) != 0) {
+            g_top = (guard_frame *)prev_frame;
+            g_guard_gen = prev_token;
+            cplus_runtime_cleanup_unwind_to(frame.base);
+            return CPLUS_RUNTIME_ERROR; /* unwound from a reported runtime error */
+        }
     }
     g_top = &frame;
     rc = body(ctx);
     g_top = frame.prev;
+    g_guard_gen = frame.prev_token;
     if (g_ncleanups > frame.base) {
         g_leaked += (unsigned long)(g_ncleanups - frame.base);
         cplus_runtime_cleanup_unwind_to(frame.base);
@@ -158,8 +208,10 @@ int cplus_runtime_guard(int (*body)(void *ctx), void *ctx) {
 void __ubsan_on_report(void);
 void __ubsan_on_report(void) {
     cplus_runtime_report("undefined behavior detected by C+ runtime (UBSan)");
-    if (g_top && !g_failstop) {
-        longjmp(g_top->jb, 1);        /* recover: unwind to the innermost guard */
+    {
+        guard_frame *f = live_guard_frame();
+        if (f != NULL && !__atomic_load_n(&g_failstop, __ATOMIC_ACQUIRE))
+            longjmp(f->jb, 1);        /* recover: unwind to a live guard */
     }
     /* No guard (or fail-stop): never crash with a signal and never continue
      * silently past undefined behavior. Terminate with a defined exit code. */
