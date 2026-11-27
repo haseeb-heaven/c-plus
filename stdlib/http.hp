@@ -168,14 +168,19 @@ class http_client {
                 error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
                 break;
             }
-            /* Fail closed: never follow a redirect to file://, ftp://, etc.,
-             * and bound the chain even for http/https loops. */
-            if (curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS_STR,
+            /* Fail closed: the initial URL and every redirect are both
+             * restricted to http/https.  REDIR_PROTOCOLS_STR alone only
+             * guards the hop; without PROTOCOLS_STR a caller could pass a
+             * file://, gopher://, dict://, ... URL straight to perform().
+             * Bound the chain even for http/https loops. */
+            if (curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS_STR,
+                                 HTTP_REDIRECT_PROTOCOLS) != CURLE_OK ||
+                curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS_STR,
                                  HTTP_REDIRECT_PROTOCOLS) != CURLE_OK ||
                 curl_easy_setopt(this->handle, CURLOPT_MAXREDIRS,
                                  HTTP_MAX_REDIRECTS) != CURLE_OK) {
                 error_fail(err, CPLUS_EXIT_UNSUPPORTED,
-                           "http_client: redirect policy setopt failed");
+                           "http_client: protocol policy setopt failed");
                 curl_easy_cleanup(this->handle);
                 this->handle = NULL;
                 break;
@@ -234,14 +239,20 @@ class http_client {
             }
             copy = fresh;
         }
-        if (this->header_copy != NULL)
-            curl_slist_free_all(this->header_copy);
-        this->header_copy = copy;
-        if (curl_easy_setopt(this->handle, CURLOPT_HTTPHEADER,
-                             this->header_copy) != CURLE_OK) {
+        /* Install the new list BEFORE releasing the old one.  libcurl keeps
+         * the CURLOPT_HTTPHEADER pointer until the next setopt or cleanup;
+         * freeing the previous list first leaves a dangling pointer on the
+         * handle if this setopt fails.  On failure the caller's previous
+         * headers stay installed and the unused copy is released. */
+        if (curl_easy_setopt(this->handle, CURLOPT_HTTPHEADER, copy) != CURLE_OK) {
+            if (copy != NULL)
+                curl_slist_free_all(copy);
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers failed");
             return STDLIB_FAIL;
         }
+        if (this->header_copy != NULL)
+            curl_slist_free_all(this->header_copy);
+        this->header_copy = copy;
         return STDLIB_OK;
     }
 
