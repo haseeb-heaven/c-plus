@@ -270,6 +270,7 @@ char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
  * scan at most n bytes, never the whole string like cplus_strlen(s). */
 char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
     size_t dcap = (size_t)-1, scap, scan, dlen, slen, need, cap = 0;
+    size_t room = (size_t)-1; /* payload bytes that fit after d's terminator */
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (dest_capacity_or_refuse("strncat", d, known, &dcap)) return NULL;
     if (dcap == 0u) { errno = ERANGE; return NULL; }
@@ -280,24 +281,46 @@ char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
             errno = ERANGE;
             return NULL;
         }
-        scan = dcap - dlen - 1u;
+        room = dcap - dlen - 1u;
+        /* Scan one byte BEYOND the room, never just up to it. Clamping the
+         * scan to `room` made need = dlen + slen + 1 <= dcap unconditional,
+         * so check_capacity() always passed while the delegated call still
+         * received the original (unclamped) n and wrote past the buffer. The
+         * extra byte is enough to detect an append that cannot fit: a source
+         * with a NUL inside the room still scans to that NUL, while a longer
+         * (or unterminated) source yields slen > room and is refused below. */
+        scan = min_bound(n, room + 1u);
     } else {
-        dlen = cplus_strlen(d);
-        scan = (size_t)-1;
+        dlen = cplus_strlen(d); /* no provable bound: legacy behaviour */
+        scan = n;
     }
-    scan = min_bound(scan, n);
     scap = source_capacity(s);
     scan = min_bound(scan, scap);
     /* With no destination room, only the presence of a first source byte
-     * decides whether this append would overflow. */
+     * decides whether this append would overflow. n == 0 is always a no-op,
+     * even when the destination is exactly full. */
     slen = (n == 0u) ? 0u
                         : ((scan == 0u) ? ((s[0] == '\0') ? 0u : 1u)
                                         : bounded_strlen(s, scan)); /* SIZE_MAX = legacy */
+    /* Refuse before any write when the proven destination cannot hold the
+     * bytes the raw strncat would append plus its terminator. This is the
+     * actual bounds check; check_capacity() below remains the final gate
+     * (and the strict-mode/unknown-capacity refusal path). */
+    if (dcap != (size_t)-1 && slen > room) {
+        cplus_libc_log("strncat", "overflow refused");
+        errno = ERANGE;
+        return NULL;
+    }
     /* need = dlen + slen + 1 must not wrap SIZE_MAX into a small value that
      * would bypass check_capacity(). slen >= SIZE_MAX - dlen covers both the
      * exact wrap (dlen + slen == SIZE_MAX) and dlen == SIZE_MAX. */
     if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
     need = dlen + slen + 1u;
     if (check_capacity("strncat", d, need, known, &cap)) return NULL;
-    return cplus_strncat(d, s, n);
+    /* Delegate only the bytes that were actually accepted. bounded_strlen()
+     * counts exactly what the raw loop appends (it stops at the source NUL),
+     * so passing `slen` preserves every valid result while preventing the raw
+     * loop from re-reading past a clamped destination room or a proven source
+     * capacity when the caller supplied a larger n. */
+    return cplus_strncat(d, s, slen);
 }
