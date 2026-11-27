@@ -1,6 +1,7 @@
 //===- Driver.cpp - C+ compile pipeline -------------------------*- C++ -*-===//
 
 #include "Driver/Driver.h"
+#include "Driver/TempSupport.h"
 
 #include "Analysis/OwnershipAnalysis.h"
 #include "Sema/CPlusRewriter.h"
@@ -49,10 +50,11 @@ namespace {
 static bool g_logEnabled = false;
 static int g_logLevel = 3; // CLOG_WARN
 
-/// Set for the lifetime of a STRICT Safe run. Security-critical path lookups
-/// (runtime library, shipped include dir) must then ignore CPLUS_ROOT: an
-/// untrusted source root could otherwise substitute a pass-through runtime or
-/// a no-op header while `check` still saw a well-formed safety AST.
+/// Set for the lifetime of a STRICT Safe run. Every security-critical path
+/// lookup (runtime library, clang backend, shipped include dir and .hp header
+/// resolution) then ignores CPLUS_ROOT/CPLUS_INCLUDE/CPLUS_CLANG: an untrusted
+/// environment could otherwise substitute a pass-through runtime, a no-op
+/// header or a stub backend while `check` still saw a well-formed safety AST.
 static bool g_strictSafePaths = false;
 
 static int logLevelFromString(const std::string &name) {
@@ -133,28 +135,7 @@ int runProgram(const std::string &program,
   return rc;
 }
 
-struct TempFile {
-  std::string path;
-  bool keep = false;
-  TempFile() = default;
-  TempFile(const TempFile &) = delete;
-  TempFile &operator=(const TempFile &) = delete;
-  TempFile(TempFile &&other) noexcept : path(std::move(other.path)), keep(other.keep) {
-    other.path.clear();
-  }
-  TempFile &operator=(TempFile &&other) noexcept {
-    if (this != &other) {
-      path = std::move(other.path);
-      keep = other.keep;
-      other.path.clear();
-    }
-    return *this;
-  }
-  ~TempFile() {
-    if (!keep && !path.empty())
-      llvm::sys::fs::remove(path);
-  }
-};
+using driver_detail::TempFile;
 
 /// A lowered compilation unit plus the temp file that holds it.
 struct LoweredUnit {
@@ -163,18 +144,7 @@ struct LoweredUnit {
   bool ok = false;
 };
 
-bool writeFile(const std::string &path, const std::string &text,
-               std::string *err) {
-  std::error_code ec;
-  llvm::raw_fd_ostream os(path, ec, llvm::sys::fs::OF_Text);
-  if (ec) {
-    *err = ec.message();
-    return false;
-  }
-  os << text;
-  os.close();
-  return true;
-}
+using driver_detail::writeFile;
 
 /// Write through the descriptor returned by createTemporaryFile /
 /// createUniqueFile.  Reopening a temp file by name after creating it is a
@@ -266,8 +236,10 @@ std::string runtimeLibArg(bool trustEnvOverride) {
 
 } // namespace
 
-std::string findSourceRoot() {
-  std::string env = envOr("CPLUS_ROOT");
+std::string findSourceRoot(bool trustEnvRoot) {
+  // CPLUS_ROOT is an untrusted environment override. In STRICT Safe mode it
+  // must not be able to supply headers, .hp sources or runtime artifacts.
+  std::string env = trustEnvRoot ? envOr("CPLUS_ROOT") : std::string();
   if (!env.empty() && llvm::sys::fs::exists(joinPath(env, "CMakeLists.txt")))
     return env;
 #ifdef CPLUS_SOURCE_DIR
@@ -287,14 +259,18 @@ std::string findSourceRoot() {
 }
 
 std::string findClangBinary() {
-  std::string env = envOr("CPLUS_CLANG");
+  // STRICT is a soundness contract: an env-supplied backend could be a stub
+  // that skips the flags or headers C+ analysis assumes. Only the compiled-in
+  // and system/bundled compilers are trusted there (issue #202).
+  std::string env = g_strictSafePaths ? std::string() : envOr("CPLUS_CLANG");
   if (!env.empty() && fileExists(env))
     return env;
 #ifdef __APPLE__
   // Apple's system clang resolves the installed SDK (MacOSX.sdk) correctly.
   // Homebrew's clang loads arm64-apple-darwin27.cfg, which selects a
   // MacOSX27.sdk that is not installed on this host. Prefer the system
-  // compiler instead of relying on PATH order. CPLUS_CLANG above still wins.
+  // compiler instead of relying on PATH order. In DEFAULT/LEGACY an explicit
+  // CPLUS_CLANG above still wins.
   if (fileExists("/usr/bin/clang"))
     return "/usr/bin/clang";
 #endif
@@ -317,10 +293,14 @@ std::string findClangBinary() {
 }
 
 std::string findCPlusIncludeDir() {
-  std::string env = envOr("CPLUS_INCLUDE");
+  // STRICT must not take headers from the environment: a spoofed
+  // cplus/cplus.h can disable the safety ABI while analysis still succeeds.
+  std::string env =
+      g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
   if (!env.empty() && llvm::sys::fs::exists(joinPath(env, "cplus/cplus.h")))
     return env;
-  // In STRICT, CPLUS_ROOT must not redirect the shipped runtime headers.
+  // In STRICT, neither CPLUS_ROOT nor CPLUS_INCLUDE may redirect the shipped
+  // runtime headers.
   std::string found = findByLayout("runtime/include", !g_strictSafePaths);
   if (!found.empty() && llvm::sys::fs::exists(joinPath(found, "cplus/cplus.h")))
     return found;
@@ -499,13 +479,17 @@ std::string resolveInclude(const std::string &name,
   if (!parent.empty())
     dirs.push_back(parent.str());
   dirs.push_back(".");
-  std::string envInc = envOr("CPLUS_INCLUDE");
+  // STRICT resolves .hp headers only from the input's directory and the
+  // shipped include tree; env-supplied CPLUS_INCLUDE/CPLUS_ROOT paths would
+  // otherwise inject unanalysed C+ code into the build (issue #202).
+  std::string envInc =
+      g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
   if (!envInc.empty())
     dirs.push_back(envInc);
   std::string autoInc = findCPlusIncludeDir();
   if (!autoInc.empty())
     dirs.push_back(autoInc);
-  std::string root = findSourceRoot();
+  std::string root = g_strictSafePaths ? std::string() : findSourceRoot();
   if (!root.empty()) {
     dirs.push_back(root);
     dirs.push_back(root + "/runtime/include");
@@ -519,91 +503,257 @@ std::string resolveInclude(const std::string &name,
   return std::string();
 }
 
+/// Return `line` with every byte belonging to a C comment replaced by a
+/// space.  String/char literals are deliberately left intact: their quotes
+/// are still visible so the header name of a real `#include "x.hp"` can be
+/// read from the original line.  Block-comment state crosses line boundaries
+/// via `inBlockComment`.  Issue #203.
+static std::string maskComments(const std::string &line,
+                                bool &inBlockComment) {
+  std::string masked = line;
+  char quote = '\0';
+  size_t i = 0;
+  while (i < line.size()) {
+    if (inBlockComment) {
+      masked[i] = ' ';
+      if (line[i] == '*' && i + 1 < line.size() && line[i + 1] == '/') {
+        masked[++i] = ' ';
+        inBlockComment = false;
+      }
+      ++i;
+      continue;
+    }
+    if (quote) {
+      if (line[i] == '\\' && i + 1 < line.size()) {
+        i += 2;
+        continue;
+      }
+      if (line[i] == quote)
+        quote = '\0';
+      ++i;
+      continue;
+    }
+    if (line[i] == '/' && i + 1 < line.size() && line[i + 1] == '/') {
+      while (i < line.size())
+        masked[i++] = ' ';
+      break;
+    }
+    if (line[i] == '/' && i + 1 < line.size() && line[i + 1] == '*') {
+      masked[i] = masked[i + 1] = ' ';
+      i += 2;
+      inBlockComment = true;
+      continue;
+    }
+    if (line[i] == '"' || line[i] == '\'') {
+      quote = line[i];
+      ++i;
+      continue;
+    }
+    ++i;
+  }
+  return masked;
+}
+
+/// Integer literal after a #if/#elif: only 0 (false) and a nonzero decimal
+/// literal are known; everything else stays unknown so includes in that
+/// branch keep being rewritten instead of being silently dropped.
+static std::optional<bool> literalBool(const std::string &s, size_t pos) {
+  while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t'))
+    ++pos;
+  size_t start = pos;
+  bool nonzero = false;
+  while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) {
+    if (s[pos] != '0')
+      nonzero = true;
+    ++pos;
+  }
+  if (pos == start) return std::nullopt;
+  if (pos < s.size() &&
+      (std::isalnum(static_cast<unsigned char>(s[pos])) || s[pos] == '_' ||
+       s[pos] == '.'))
+    return std::nullopt;
+  return nonzero;
+}
+
+struct If0Frame {
+  bool parentSkip;
+  bool condKnown;
+  bool condValue;
+  bool inElse;
+};
+
+/// State carried across recursive .hp expansion. A header is registered in
+/// `processed` before its body is expanded, so a guarded cycle (`a.hp` ->
+/// `b.hp` -> `a.hp`) reuses the reserved lowered path instead of recursing
+/// forever. `pendingFds` holds the still-open descriptor of each header
+/// awaiting its lowered bytes. Issue #203.
+struct HeaderPreprocessState {
+  std::map<std::string, int> pendingFds;
+};
+
 /// Replace `#include "x.hp"` with an absolute path to a lowered `.h` copy.
 /// This lets modern C+ headers use the same syntax as `.cp` sources while
-/// ordinary `.h` headers keep working unchanged.
+/// ordinary `.h` headers keep working unchanged. Only real preprocessing
+/// directives outside comments/strings and outside definitely-disabled
+/// `#if 0` branches are rewritten.
 std::string preprocessModernHeaders(
     const std::string &source, const std::string &currentPath,
     DiagnosticEngine &diags, Mode mode, std::vector<TempFile> &guards,
-    std::map<std::string, std::string> &processed) {
+    std::map<std::string, std::string> &processed,
+    HeaderPreprocessState &state) {
   std::string result;
   std::istringstream in(source);
   std::string line;
   bool first = true;
+  bool inBlockComment = false;
+  std::vector<If0Frame> conditions;
+  auto currentSkip = [&]() {
+    if (conditions.empty())
+      return false;
+    const If0Frame &f = conditions.back();
+    return f.parentSkip ||
+           (f.condKnown && (f.inElse ? f.condValue : !f.condValue));
+  };
+  auto wordAt = [](const std::string &s, size_t pos, const char *word) {
+    size_t len = std::strlen(word);
+    if (s.compare(pos, len, word) != 0)
+      return false;
+    char next = pos + len < s.size() ? s[pos + len] : '\0';
+    return !std::isalnum(static_cast<unsigned char>(next)) && next != '_';
+  };
+  bool skipIncludes = false;
+
   while (std::getline(in, line)) {
     if (!first)
       result += "\n";
     first = false;
 
-    size_t hash = line.find("#include");
-    if (hash != std::string::npos) {
-      size_t q1 = line.find('"', hash);
-      size_t q2 = q1 == std::string::npos ? std::string::npos
-                                          : line.find('"', q1 + 1);
-      if (q1 != std::string::npos && q2 != std::string::npos) {
-        std::string inc = line.substr(q1 + 1, q2 - q1 - 1);
-        if (llvm::StringRef(inc).ends_with(".hp")) {
-          std::string path = resolveInclude(inc, currentPath);
-          if (path.empty()) {
-            Diag d;
-            d.level = DiagLevel::Error;
-            d.message = "cannot find C+ header '" + inc + "'";
-            d.file = currentPath;
-            diags.report(std::move(d));
-          } else {
-            auto known = processed.find(path);
-            std::string tempPath =
-                known == processed.end() ? std::string() : known->second;
-            if (tempPath.empty()) {
-              std::string err;
-              std::string header = readFile(path, &err);
-              if (!err.empty()) {
-                Diag d;
-                d.level = DiagLevel::Error;
-                d.message = "cannot read '" + path + "': " + err;
-                diags.report(std::move(d));
-              } else {
-                header = preprocessModernHeaders(header, path, diags, mode,
-                                                 guards, processed);
-                bool ok = false;
-                RewrittenSource headerInfo;
-                std::string lowered = lowerUnit(header, path, diags, mode, &ok,
-                                                &headerInfo, true);
-                for (const auto &cls : headerInfo.classTypes)
-                  registerExternalClass(
-                      cls, lowered.find(cls + "_ctor(") != std::string::npos);
-                for (const auto &res : headerInfo.resourceTypes)
-                  registerExternalResource(res);
+    const std::string masked = maskComments(line, inBlockComment);
+    size_t hash = masked.find_first_not_of(" \t\r");
+    const bool isDirective = hash != std::string::npos && masked[hash] == '#';
+    size_t p = isDirective ? hash + 1 : std::string::npos;
+    if (isDirective) {
+      while (p < masked.size() && (masked[p] == ' ' || masked[p] == '\t'))
+        ++p;
+      if (wordAt(masked, p, "if")) {
+        auto v = literalBool(masked, p + 2);
+        conditions.push_back(
+            {skipIncludes, v.has_value(), v.value_or(true), false});
+        skipIncludes = currentSkip();
+      } else if (wordAt(masked, p, "ifdef") ||
+                 wordAt(masked, p, "ifndef")) {
+        // Unknown condition: keep rewriting includes conservatively.
+        conditions.push_back({skipIncludes, false, true, false});
+        skipIncludes = currentSkip();
+      } else if (wordAt(masked, p, "elif")) {
+        if (!conditions.empty()) {
+          auto v = literalBool(masked, p + 4);
+          conditions.back().condKnown = v.has_value();
+          conditions.back().condValue = v.value_or(true);
+          conditions.back().inElse = false;
+          skipIncludes = currentSkip();
+        }
+      } else if (wordAt(masked, p, "else")) {
+        if (!conditions.empty()) {
+          conditions.back().inElse = true;
+          skipIncludes = currentSkip();
+        }
+      } else if (wordAt(masked, p, "endif")) {
+        if (!conditions.empty())
+          conditions.pop_back();
+        skipIncludes = currentSkip();
+      }
+    }
+
+    if (!skipIncludes && isDirective && wordAt(masked, p, "include")) {
+      size_t after = p + 7; // strlen("include")
+      if (after == masked.size() || masked[after] == '"' ||
+          masked[after] == '<' || masked[after] == ' ' ||
+          masked[after] == '\t') {
+        size_t q1 = line.find('"', after);
+        size_t q2 = q1 == std::string::npos ? std::string::npos
+                                            : line.find('"', q1 + 1);
+        // Verify both quotes came from source text, not from a comment.
+        if (q1 != std::string::npos && q2 != std::string::npos &&
+            masked[q1] == '"' && masked[q2] == '"') {
+          std::string inc = line.substr(q1 + 1, q2 - q1 - 1);
+          if (llvm::StringRef(inc).ends_with(".hp")) {
+            std::string path = resolveInclude(inc, currentPath);
+            if (path.empty()) {
+              Diag d;
+              d.level = DiagLevel::Error;
+              d.message = "cannot find C+ header '" + inc + "'";
+              d.file = currentPath;
+              diags.report(std::move(d));
+            } else {
+              std::string tempPath;
+              auto known = processed.find(path);
+              if (known != processed.end())
+                tempPath = known->second;
+              if (tempPath.empty()) {
+                std::string err;
                 // createTemporaryFile uses O_CREAT|O_EXCL with a random
                 // suffix: unlike a pid/counter name it cannot be predicted
                 // and raced through a symlink in a shared /tmp.  Write via
                 // the returned descriptor, never by reopening the name.
                 int headerFd = -1;
+                size_t guardIndex = guards.size();
+                bool guardAdded = false;
                 llvm::SmallString<256> tmp;
                 if (llvm::sys::fs::createTemporaryFile("cplus-hp", ".h",
                                                         headerFd, tmp)) {
                   err = "cannot create a unique temporary header";
                 } else {
-                  err.clear();
-                  if (!writeFd(headerFd, lowered, &err))
-                    llvm::sys::fs::remove(tmp);
+                  tempPath = tmp.str().str();
+                  // Reserve the path *before* recursion: this is the cycle
+                  // guard. A nested include of this header reuses tempPath,
+                  // and the C include guard in the lowered header terminates
+                  // the include at compile time. Unguarded cycles still fail
+                  // loudly in the backend ("include nesting too deep").
+                  processed[path] = tempPath;
+                  state.pendingFds[path] = headerFd;
+                  guards.emplace_back();
+                  guards[guardIndex].path = tempPath;
+                  guards[guardIndex].keep = false;
+                  guardAdded = true;
+
+                  std::string header = readFile(path, &err);
+                  if (err.empty()) {
+                    header = preprocessModernHeaders(header, path, diags, mode,
+                                                     guards, processed, state);
+                    bool ok = false;
+                    RewrittenSource headerInfo;
+                    std::string lowered =
+                        lowerUnit(header, path, diags, mode, &ok, &headerInfo,
+                                  true);
+                    for (const auto &cls : headerInfo.classTypes)
+                      registerExternalClass(
+                          cls,
+                          lowered.find(cls + "_ctor(") != std::string::npos);
+                    for (const auto &res : headerInfo.resourceTypes)
+                      registerExternalResource(res);
+                    if (!writeFd(headerFd, lowered, &err))
+                      llvm::sys::fs::remove(tempPath);
+                  }
+                  state.pendingFds.erase(path);
                 }
-                tempPath = err.empty() ? tmp.str().str() : std::string();
-                if (tempPath.empty()) {
+                if (!err.empty()) {
                   Diag d;
                   d.level = DiagLevel::Error;
-                  d.message = "cannot write lowered header: " + err;
+                  d.message = "cannot read/write lowered header '" + path +
+                              "': " + err;
+                  d.file = currentPath;
                   diags.report(std::move(d));
-                } else {
-                  guards.emplace_back();
-                  guards.back().path = tempPath;
-                  guards.back().keep = false;
-                  processed[path] = tempPath;
+                  processed.erase(path);
+                  llvm::sys::fs::remove(tempPath);
+                  if (guardAdded)
+                    guards[guardIndex].path.clear();
+                  tempPath.clear();
                 }
               }
+              if (!tempPath.empty())
+                line.replace(q1, q2 - q1 + 1, "\"" + tempPath + "\"");
             }
-            if (!tempPath.empty())
-              line.replace(q1, q2 - q1 + 1, "\"" + tempPath + "\"");
           }
         }
       }
@@ -1311,6 +1461,16 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     return 1;
   }
 
+  // STRICT is a soundness contract: it must fail closed on any pass-through
+  // flag that can make the analysed program differ from the compiled one,
+  // downgrade a safety gate, or hide a runtime check. Set the global BEFORE
+  // resolving the backend: findClangBinary() must not pick CPLUS_CLANG on a
+  // STRICT run (issue #202). DEFAULT keeps the documented env overrides, and
+  // --legacy-c --strict only gets its documented no-effect disclosure so
+  // plain-C ABI/source stays untouched.
+  const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
+  g_strictSafePaths = strictSafe;
+
   const std::string clang = findClangBinary();
   // Validate the sanitizer selection before doing any work. Conflicts are
   // configuration errors, so they are diagnosed for every command, including
@@ -1332,13 +1492,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
             "'-fno-sanitize=undefined' or use --sanitize=none\n";
     return 1;
   }
-  // STRICT is a soundness contract: it must fail closed on any pass-through
-  // flag that can make the analysed program differ from the compiled one,
-  // downgrade a safety gate, or hide a runtime check. DEFAULT keeps accepting
-  // these (no soundness claim), and --legacy-c --strict only gets its
-  // documented no-effect disclosure so plain-C ABI/source stays untouched.
-  const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
-  g_strictSafePaths = strictSafe;
   // STRICT never trusts an environment-supplied runtime library: a pass-through
   // runtime would strip every trap while `check` still reported a clean result.
   // runtimeLibArg(false) already ignores it; drop it here as well so no other
@@ -1530,8 +1683,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     std::vector<TempFile> headerGuards;
     std::map<std::string, std::string> processedHeaders;
+    HeaderPreprocessState headerState;
     source = preprocessModernHeaders(source, input, diags, opts.mode,
-                                     headerGuards, processedHeaders);
+                                     headerGuards, processedHeaders,
+                                     headerState);
 
     DRIVER_LOG(CLOG_DEBUG, "lowering %s", input.c_str());
     bool ok = false;

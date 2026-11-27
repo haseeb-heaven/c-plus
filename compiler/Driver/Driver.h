@@ -110,7 +110,9 @@ std::string findCPlusIncludeDir();
 std::string findCPlusRuntimeLib();
 
 /// Directory that holds tests/, demos/, benchmarks/.
-std::string findSourceRoot();
+/// `trustEnvRoot == false` ignores the CPLUS_ROOT environment override;
+/// STRICT Safe mode uses that form for every security-critical lookup.
+std::string findSourceRoot(bool trustEnvRoot = true);
 
 } // namespace cplus
 

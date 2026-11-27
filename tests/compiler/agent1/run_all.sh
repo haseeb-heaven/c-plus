@@ -316,14 +316,21 @@ if want_category sanitizer; then
     src="$ROOT/tests/core/positive/safe_memory.c"
     out="$RES/logs/$name.stdout"; err="$RES/logs/$name.stderr"
     san_env=""
+    san_mode="$MODEFLAG"
     case "$san" in
-      *address*) san_env="CPLUS_CLANG=/opt/homebrew/opt/llvm/bin/clang" ;;
+      # Issue #202: STRICT deliberately ignores the CPLUS_CLANG environment
+      # override, so a backend-specific ASan probe cannot select Homebrew
+      # clang there. Validate ASan support in DEFAULT mode instead; the strict
+      # analysis path is covered by the other categories and run_tests.sh.
+      *address*)
+        san_env="CPLUS_CLANG=/opt/homebrew/opt/llvm/bin/clang"
+        san_mode="--default" ;;
     esac
-    cmd="$san_env $CPLUS --strict --sanitize=$san $src -o $OUT/$name.bin"
+    cmd="$san_env $CPLUS $san_mode --sanitize=$san $src -o $OUT/$name.bin"
     if [ -n "$san_env" ]; then
-      run_timed "$TIMEOUT" env CPLUS_CLANG=/opt/homebrew/opt/llvm/bin/clang $CPLUS --strict --sanitize=$san "$src" -o "$OUT/$name.bin" -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk >"$out" 2>"$err"
+      run_timed "$TIMEOUT" env CPLUS_CLANG=/opt/homebrew/opt/llvm/bin/clang $CPLUS $san_mode --sanitize=$san "$src" -o "$OUT/$name.bin" -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk >"$out" 2>"$err"
     else
-      run_timed "$TIMEOUT" $CPLUS --strict --sanitize=$san "$src" -o "$OUT/$name.bin" >"$out" 2>"$err"
+      run_timed "$TIMEOUT" $CPLUS $san_mode --sanitize=$san "$src" -o "$OUT/$name.bin" >"$out" 2>"$err"
     fi
     code=$?
     if [ "$code" -eq 0 ]; then record "$name" PASS "$cmd" "build ok" "" "$code"
