@@ -7,6 +7,11 @@ library layer: a checked, additive C API that keeps the ordinary C ABI.
 > no new app, game, web-server or GUI demo. Agent 2 cycles go to stdlib/libc
 > hardening. See [AGENT2_FOCUS.md](AGENT2_FOCUS.md).
 
+> **Non-negotiable guardrails:** no new features/keywords; no fake or inflated
+> benchmarks; small atomic commits under 300 lines; never silence warnings or
+> tests; C ABI sacred. Full rules in
+> [AGENT2_FOCUS.md § Non-negotiable guardrails](AGENT2_FOCUS.md#non-negotiable-guardrails).
+
 ## Current authoritative documents
 
 | Topic | Document |

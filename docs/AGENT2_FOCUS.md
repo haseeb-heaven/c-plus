@@ -3,7 +3,35 @@
 Status: **active directive** (recorded 2026-11-28). This is the authoritative
 statement of scope for Agent 2 work in this repository. Where an older report
 suggests adding an application, game, web server or GUI demo, this document
-supersedes it. The index is [docs/README.md](README.md).
+supersedes it. The index is [docs/README.md](README.md). It also records the
+five non-negotiable guardrails in the next section, which apply to all work.
+
+## Non-negotiable guardrails
+
+These five rules apply to **all** work in this repository, including the
+stdlib/libc hardening that Agent 2 cycles go to. They are not preferences and
+are not subject to trade-off against a deadline or a desired result:
+
+1. **No new features or keywords.** Harden and fix what exists; do not grow the
+   public surface. No new language keywords, C APIs or "features" introduced
+   under the guise of hardening. See [Freeze](#freeze) and
+   [Where Agent 2 cycles go instead](#where-agent-2-cycles-go-instead).
+2. **No fake or inflated benchmarks.** Every performance claim must come from a
+   real end-to-end run whose work cannot be optimized away — use a
+   `volatile`/blackbox sink and measure the whole path, not a
+   dead-code-eliminated micro-loop. Never present synthetic or extrapolated
+   numbers as measured. See
+   [benchmark methodology](../benchmarks/safety_compare/METHODOLOGY.md).
+3. **Small, atomic commits under 300 lines.** Keep each commit focused and below
+   300 changed lines. Split larger work into reviewable, self-contained commits;
+   do not land a mixed or oversized change.
+4. **Never silence warnings or tests.** Do not suppress, skip, disable or weaken
+   a compiler warning or a test gate to obtain a green build. Fix the root
+   cause, or record a narrowly scoped, justified exception in the evidence.
+5. **C ABI is sacred.** Never change the `sizeof`/`alignof` of a public type, or
+   the layout or signature of an exported symbol. Additional metadata must be
+   out-of-band or use an explicit wrapper type — never an inline field that
+   shifts the ABI. See [ABI_SAFE_LAYER.md](ABI_SAFE_LAYER.md).
 
 ## Freeze
 
