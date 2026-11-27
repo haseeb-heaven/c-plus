@@ -503,6 +503,15 @@ static int scan_dispatch(const char *api, int mode, FILE *stream, const char *st
         size_t n = (size_t)(s->start - last);
         memcpy(newfmt + pos, last, n);
         pos += n;
+        /* A mixed Annex K / POSIX shape must not forward an unbounded
+         * string conversion: a long token would overflow the caller's
+         * buffer.  Every bounded string conversion needs either a detected
+         * capacity or an explicit field width. */
+        if (caps[i] == 0 && !s->has_width && !s->suppressed &&
+            (s->conv == 's' || s->conv == '[' || s->conv == 'S')) {
+            free(newfmt);
+            return fmt_violation(api, "unbounded %s or %[ specifier in scanf without field width");
+        }
         if (s->conv == '%' || s->suppressed || !s->bounded || caps[i] == 0) {
             n = (size_t)(s->end - s->start);
             memcpy(newfmt + pos, s->start, n);

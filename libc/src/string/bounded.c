@@ -290,8 +290,9 @@ char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
     scan = min_bound(scan, scap);
     /* With no destination room, only the presence of a first source byte
      * decides whether this append would overflow. */
-    slen = (scan == 0u) ? ((s[0] == '\0') ? 0u : 1u)
-                        : bounded_strlen(s, scan); /* SIZE_MAX = legacy case */
+    slen = (n == 0u) ? 0u
+                        : ((scan == 0u) ? ((s[0] == '\0') ? 0u : 1u)
+                                        : bounded_strlen(s, scan)); /* SIZE_MAX = legacy */
     /* need = dlen + slen + 1 must not wrap SIZE_MAX into a small value that
      * would bypass check_capacity(). slen >= SIZE_MAX - dlen covers both the
      * exact wrap (dlen + slen == SIZE_MAX) and dlen == SIZE_MAX. */
