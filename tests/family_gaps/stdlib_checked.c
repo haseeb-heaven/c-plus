@@ -36,6 +36,7 @@
  * Every FINDING line is prefixed with the exact operation name.
  */
 #define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE 1
 
 #ifdef PLAIN_LIBC
 #include "cplus_libc_safe.h" /* includes cplus_libc.h */
