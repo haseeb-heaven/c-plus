@@ -1,0 +1,8 @@
+clear-live 1 6 7
+clear-stale 0 1 0 0
+clear-fresh 1 0 1 1
+clear-reuse 0 3 0 1
+clear-repeat 0 0 0
+clear-alloc 0 1 1 0
+clear-inert 0 0
+string-clear-view 24 0

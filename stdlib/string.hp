@@ -413,10 +413,22 @@ class string {
         return 0;
     }
 
+    /* A clear is a shape change: a view snapshotted before it must stop
+     * reporting the old contents even though the buffer is still owned.
+     * Retire the published token and republish the same buffer under a fresh
+     * one (vector::clear() bumps its generation the same way).  Buffer,
+     * capacity and allocator binding are untouched; when the registry is
+     * exhausted the fresh token is 0 and new views fail closed. */
     void clear(void) {
-        if (this->chars != NULL)
+        if (this->chars != NULL) {
+            stdlib_view_retire(this->chars);
             this->chars[0] = '\0';
-        this->count = 0;
+            this->count = 0;
+            this->view_token = stdlib_view_register(this->chars, this->space);
+        } else {
+            this->count = 0;
+            this->view_token = 0;
+        }
     }
 
     /* Replace the contents with a copy of `other`.  Failure-atomic. */
