@@ -16,6 +16,7 @@
  */
 #include "cplus_libc.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <float.h>
