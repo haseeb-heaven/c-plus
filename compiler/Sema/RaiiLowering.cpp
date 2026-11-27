@@ -1721,25 +1721,69 @@ private:
     registerOwned(v);
   }
 
+  /// Qualifiers allowed around the `*`/base type of a pointer borrow.  The
+  /// set is deliberately small: arbitrary identifiers here would let an
+  /// expression such as `a * b;` be read as a declaration.
+  static bool isBorrowQualifier(const std::string &s) {
+    return s == "const" || s == "volatile" || s == "restrict" ||
+           s == "__restrict" || s == "__restrict__";
+  }
+
+  /// Type specifiers that may precede the base type name (`struct T *p`).
+  static bool isBorrowTypeSpecifier(const std::string &s) {
+    return isBorrowQualifier(s) || s == "struct" || s == "union" ||
+           s == "enum";
+  }
+
   /// Record `T *p = &owner;` and `T *p = managed_owner;` as borrows of a
   /// local resource or managed allocation.  This is a deliberately small
   /// borrow checker: it catches dangling escapes and use-after-move, not
   /// aliasing or general lifetime relationships.
   bool tryBorrowDeclaration(size_t i) {
-    size_t star = nextSig(i);
-    if (!isPunct(star, "*"))
+    const size_t semi = statementEnd(i);
+    if (semi == kNPos)
       return false;
-    size_t name = nextSig(star);
-    if (name >= toks_.size() || toks_[name].kind != TokKind::Identifier)
+
+    // Prefix: any number of type specifiers/qualifiers, exactly one base type
+    // identifier, then a single `*`.  This accepts `const T *`, `struct T *`,
+    // `T const *` and their combinations without confusing an expression
+    // statement for a declaration.
+    size_t cur = i;
+    bool sawType = false;
+    while (cur < semi) {
+      if (isPunct(cur, "*"))
+        break;
+      if (toks_[cur].kind != TokKind::Identifier)
+        return false;
+      if (isBorrowTypeSpecifier(toks_[cur].text)) {
+        cur = nextSig(cur);
+        continue;
+      }
+      if (sawType)
+        return false;
+      sawType = true;
+      cur = nextSig(cur);
+    }
+    if (!sawType || !isPunct(cur, "*"))
       return false;
-    size_t eq = nextSig(name);
-    if (!isPunct(eq, "="))
+
+    // `T * const p` is still a direct pointer to the owner.  A second `*` is
+    // not: a pointer-to-pointer alias is outside this small checker.
+    cur = nextSig(cur);
+    while (cur < semi && toks_[cur].kind == TokKind::Identifier &&
+           isBorrowQualifier(toks_[cur].text))
+      cur = nextSig(cur);
+    if (cur >= semi || toks_[cur].kind != TokKind::Identifier)
       return false;
-    size_t init = nextSig(eq);
-    bool addressOf = isPunct(init, "&");
-    size_t ownerIdx = addressOf ? nextSig(init) : init;
-    if (ownerIdx >= toks_.size() ||
-        toks_[ownerIdx].kind != TokKind::Identifier)
+    const size_t name = cur;
+
+    const size_t eq = nextSig(name);
+    if (!isPunct(eq, "=") || eq >= semi)
+      return false;
+    const size_t init = nextSig(eq);
+    const bool addressOf = isPunct(init, "&");
+    const size_t ownerIdx = addressOf ? nextSig(init) : init;
+    if (ownerIdx >= semi || toks_[ownerIdx].kind != TokKind::Identifier)
       return false;
     if (!hasLiveOwner(toks_[ownerIdx].text))
       return false;

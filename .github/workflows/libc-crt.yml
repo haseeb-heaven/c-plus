@@ -61,6 +61,11 @@ jobs:
         run: sh tests/libc/install_smoke.sh
       - name: C/C++ header compatibility matrix
         run: sh tests/compat/run_compat.sh
+      - name: Safe-s ABI catalog / doc sync (issues #188/#190)
+        # Cross-references docs/abi/STRICT_C_ABI_BOUNDARY.md; no compiler build
+        # needed, so the hardened-libc job enforces the same catalog used by
+        # the compiler gate in compiler.yml.
+        run: python3 tests/compiler/abi_gate/check_safe_s_catalog.py
       - name: External SDK consumer (clean prefix, find_package)
         run: sh tests/sdk/run_sdk_consumer.sh
       - name: Fuzz smoke (UBSan)

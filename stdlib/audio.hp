@@ -13,6 +13,7 @@
 #define CPLUS_STD_AUDIO_HP
 
 #include <errno.h>
+#include <math.h>
 #include <stdlib.h>
 #include <time.h>
 #include "cplus/cplus.h"
@@ -160,6 +161,12 @@ class audio_engine {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_engine::set_volume: invalid engine");
             return STDLIB_FAIL;
         }
+        /* NaN, +/-Inf and negative gain would poison the mixer graph. */
+        if (!isfinite(volume) || volume < 0.0f) {
+            error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "audio_engine::set_volume: volume must be finite and non-negative");
+            return STDLIB_FAIL;
+        }
         ma_engine_set_volume(&this->engine, volume);
         return STDLIB_OK;
     }
@@ -204,6 +211,11 @@ class audio_device {
         this->initialized = 0;
         if (owner_context == NULL) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_device: invalid context");
+        } else if (sample_rate == 0u || channels == 0u || callback == NULL) {
+            /* Explicit zero/NULL arguments must fail here: miniaudio would
+             * otherwise substitute defaults or silently no-op. */
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "audio_device: sample_rate, channels and callback must be non-zero");
         } else {
             config = ma_device_config_init(capture ? ma_device_type_capture
                                                    : ma_device_type_playback);

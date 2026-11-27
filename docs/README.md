@@ -11,8 +11,9 @@ library layer: a checked, additive C API that keeps the ordinary C ABI.
 | Architecture and layout | [ARCHITECTURE.md](ARCHITECTURE.md), [STRUCTURE.md](STRUCTURE.md) |
 | Standard library API | [STDLIB.md](STDLIB.md), [MODERN_STDLIB.md](MODERN_STDLIB.md) |
 | Checked C layer | [SAFE_CRT.md](SAFE_CRT.md), [LOGGING.md](LOGGING.md) |
+| Safer `_s` ABI categories | [SAFE_S_ABI_PRESERVING.md](SAFE_S_ABI_PRESERVING.md), [SAFE_S_NON_ABI_PRESERVING.md](SAFE_S_NON_ABI_PRESERVING.md), [SAFE_S_COMPATIBILITY_MATRIX.md](SAFE_S_COMPATIBILITY_MATRIX.md) |
 | Allocators / ownership | [stdlib/allocator/](stdlib/allocator/), [stdlib/MODERN_ALLOCATORS.md](stdlib/MODERN_ALLOCATORS.md) |
-| ABI preservation | [ABI_SAFE_LAYER.md](ABI_SAFE_LAYER.md), [abi/](abi/) |
+| ABI preservation | [ABI_SAFE_LAYER.md](ABI_SAFE_LAYER.md), [abi/](abi/), [abi/ABI_GATE.md](abi/ABI_GATE.md), [abi/STRICT_C_ABI_BOUNDARY.md](abi/STRICT_C_ABI_BOUNDARY.md) |
 | Security evidence | [security/](security/) — start with `RED_BLUE_20_FINAL.md` |
 | Limitations and honest scope | [LIMITATIONS.md](LIMITATIONS.md), [THREAT_MODEL.md](THREAT_MODEL.md) |
 | Modern 3D/GUI/CLI libraries | [stdlib/MODERN_LIBS_3D_GUI_CLI.md](stdlib/MODERN_LIBS_3D_GUI_CLI.md) |

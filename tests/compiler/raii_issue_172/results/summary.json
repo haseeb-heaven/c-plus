@@ -1,0 +1,505 @@
+{
+  "generated": "2026-11-27T05:36:38.949474+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "neg_const_qualified",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_qualified.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_qualified.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_qualified.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_qualified.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_const_qualified.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_qualified.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_qualified.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_struct_specifier",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_struct_specifier.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_struct_specifier.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_struct_specifier.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_struct_specifier.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_struct_specifier.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_struct_specifier.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_struct_specifier.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_pointer_const",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_const.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_const.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_const.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_const.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_pointer_const.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_const.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_const.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_volatile_qualified",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_volatile_qualified.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_volatile_qualified.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_volatile_qualified.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_volatile_qualified.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_volatile_qualified.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_volatile_qualified.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_volatile_qualified.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_const_struct",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_struct.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_struct.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_struct.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_struct.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_const_struct.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_struct.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_const_struct.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_trailing_qualifier",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_trailing_qualifier.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_trailing_qualifier.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_trailing_qualifier.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_trailing_qualifier.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_trailing_qualifier.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_trailing_qualifier.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_trailing_qualifier.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_pointer_volatile",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_volatile.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_volatile.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_volatile.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_volatile.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_pointer_volatile.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_volatile.cp:14:18: error: borrow 'p' of 'owner' is used after that resource was moved\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_pointer_volatile.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_managed_const_borrow",
+      "status": "PASS",
+      "detail": "check_rc=1 build_rc=1 diag=True",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_managed_const_borrow.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_managed_const_borrow.cp:10:19: error: borrow 'p' of 'm' is used after that resource was moved\n    return 0;\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_managed_const_borrow.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_managed_const_borrow.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/neg_managed_const_borrow.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_managed_const_borrow.cp:10:19: error: borrow 'p' of 'm' is used after that resource was moved\n    return 0;\nhelp: re-borrow the new owner instead\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/neg_managed_const_borrow.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_unqualified_control",
+      "status": "PASS",
+      "detail": "build_rc=0 expected_stdout='P7\\nD7\\n'",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_unqualified_control.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_unqualified_control.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_unqualified_control.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_unqualified_control.bin"
+          ],
+          "rc": 0,
+          "stdout": "P7\nD7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_const_qualified",
+      "status": "PASS",
+      "detail": "build_rc=0 expected_stdout='P7\\nD7\\n'",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_const_qualified.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_const_qualified.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_const_qualified.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_const_qualified.bin"
+          ],
+          "rc": 0,
+          "stdout": "P7\nD7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_struct_specifier",
+      "status": "PASS",
+      "detail": "build_rc=0 expected_stdout='P7\\nD7\\n'",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_struct_specifier.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_struct_specifier.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_struct_specifier.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_struct_specifier.bin"
+          ],
+          "rc": 0,
+          "stdout": "P7\nD7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_pointer_const",
+      "status": "PASS",
+      "detail": "build_rc=0 expected_stdout='P7\\nD7\\n'",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_pointer_const.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_pointer_const.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_pointer_const.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_pointer_const.bin"
+          ],
+          "rc": 0,
+          "stdout": "P7\nD7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_volatile_qualified",
+      "status": "PASS",
+      "detail": "build_rc=0 expected_stdout='P7\\nD7\\n'",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_volatile_qualified.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_volatile_qualified.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_volatile_qualified.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_volatile_qualified.bin"
+          ],
+          "rc": 0,
+          "stdout": "P7\nD7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_const_struct",
+      "status": "PASS",
+      "detail": "build_rc=0 expected_stdout='P7\\nD7\\n'",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_const_struct.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_const_struct.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_const_struct.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_const_struct.bin"
+          ],
+          "rc": 0,
+          "stdout": "P7\nD7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_non_pointer_const_copy",
+      "status": "PASS",
+      "detail": "build_rc=0 expected_stdout='7\\nD7\\n'",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_non_pointer_const_copy.cp",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_non_pointer_const_copy.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/cases/pos_non_pointer_const_copy.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_issue_172/results/pos_non_pointer_const_copy.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\nD7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

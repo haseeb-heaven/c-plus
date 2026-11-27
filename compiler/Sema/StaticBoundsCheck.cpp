@@ -65,6 +65,9 @@ class Checker {
     // name-keyed extent for the whole body; a declaration at/after this token
     // (e.g. `void f(int a[8])`) still describes the parameter itself.
     std::map<std::string, size_t> paramDeclPos;
+    // Parameters declared `char` / `signed char`.  `unsigned char` is the
+    // only safe input to <ctype.h>, so it is deliberately excluded.
+    std::set<std::string> charParams;
     size_t bodyOpen = 0;
     size_t bodyClose = 0;
   };
@@ -2376,16 +2379,146 @@ private:
            name == "calloc";
   }
 
-  void checkForkThreads() {
-    bool hasThreads = false, hasFork = false;
-    size_t forkAt = kNPos;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (isIdent(i, "pthread_create")) hasThreads = true;
-      if (isIdent(i, "fork")) { hasFork = true; if (forkAt == kNPos) forkAt = i; }
+  bool isForkCall(size_t i, size_t *lp) const {
+    if (!isIdent(i, "fork") || inDirectiveLine(i))
+      return false;
+    size_t open = nextSig(i);
+    if (!isPunct(open, "("))
+      return false;
+    size_t rp = match(open, "(", ")");
+    if (rp == kNPos || isPunct(nextSig(rp), "{"))
+      return false;
+    *lp = open;
+    return true;
+  }
+
+  /// Does `name` start a thread directly, or through a helper it calls?
+  /// Used only to decide whether a `fork()` site can already be concurrent
+  /// with a thread created earlier in the same call chain.
+  bool functionSpawnsThread(const std::string &name,
+                            std::set<std::string> *seen = nullptr) const {
+    auto it = funcs_.find(name);
+    if (it == funcs_.end())
+      return false;
+    std::set<std::string> local;
+    if (!seen)
+      seen = &local;
+    if (!seen->insert(name).second)
+      return false;
+    const FuncSig &sig = it->second;
+    for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+      size_t lp = kNPos;
+      if (threadSpawnCall(k, &lp))
+        return true;
+      if (toks_[k].kind != TokKind::Identifier || !funcs_.count(toks_[k].text) ||
+          !isPunct(nextSig(k), "("))
+        continue;
+      if (functionSpawnsThread(toks_[k].text, seen))
+        return true;
     }
-    if (hasThreads && hasFork && forkAt != kNPos)
-      errorAt(toks_[forkAt], "fork() in a multi-threaded process can deadlock; "
-                             "use posix_spawn or fork before creating threads");
+    return false;
+  }
+
+  /// `main(void)` has no parameters and is therefore not in funcs_.  Locate
+  /// its body directly so fork/spawn order inside it can still be checked.
+  bool inMainBody(size_t pos) const {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "main"))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || !isPunct(nextSig(rp), "{"))
+        continue;
+      size_t open = nextSig(rp);
+      size_t close = match(open, "{", "}");
+      if (close != kNPos && pos >= open && pos <= close)
+        return true;
+    }
+    return false;
+  }
+
+  /// A fork is only dangerous when a thread has *already* been started on the
+  /// path that reaches it.  A whole-file token presence scan also rejects the
+  /// safe `fork(); pthread_create();` order, which contradicts the diagnostic
+  /// itself.
+  void checkForkThreads() {
+    std::vector<SpawnSite> spawns = collectThreadSpawns();
+    if (spawns.empty())
+      return;
+    std::set<std::string> workers;
+    for (const auto &site : spawns)
+      if (!site.entry.empty())
+        workers.insert(site.entry);
+
+    const char *msg = "fork() in a multi-threaded process can deadlock; "
+                      "use posix_spawn or fork before creating threads";
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      size_t lp = kNPos;
+      if (!isForkCall(i, &lp))
+        continue;
+      const std::string *host = enclosingFunction(i);
+      // A worker/post-thread helper runs concurrently with its creator by
+      // construction, regardless of the textual order of the two definitions.
+      if (host && workers.count(*host)) {
+        errorAt(toks_[i], msg);
+        continue;
+      }
+      bool started = false;
+      // Spawns earlier in main(), which collectFunctions() does not record
+      // when its parameter list is empty.
+      if (!host && inMainBody(i)) {
+        for (const auto &site : spawns) {
+          if (site.pos < i && inMainBody(site.pos)) {
+            started = true;
+            break;
+          }
+        }
+      }
+      // Spawns earlier in the same function (directly or through a helper).
+      if (host) {
+        auto it = funcs_.find(*host);
+        if (it != funcs_.end()) {
+          const FuncSig &sig = it->second;
+          for (size_t k = sig.bodyOpen; k < i; ++k) {
+            size_t call = kNPos;
+            if (threadSpawnCall(k, &call)) {
+              started = true;
+              break;
+            }
+            if (toks_[k].kind == TokKind::Identifier &&
+                toks_[k].text != *host && funcs_.count(toks_[k].text) &&
+                isPunct(nextSig(k), "(") &&
+                functionSpawnsThread(toks_[k].text)) {
+              started = true;
+              break;
+            }
+          }
+        }
+      }
+      // A caller that started a thread and then calls a fork helper.
+      if (!started && host) {
+        for (const auto &entry : funcs_) {
+          const FuncSig &caller = entry.second;
+          for (size_t k = caller.bodyOpen; k <= caller.bodyClose && !started; ++k) {
+            if (!isIdent(k, host->c_str()) || !isPunct(nextSig(k), "("))
+              continue;
+            for (size_t before = caller.bodyOpen; before < k; ++before) {
+              size_t call = kNPos;
+              if (threadSpawnCall(before, &call)) {
+                started = true;
+                break;
+              }
+            }
+          }
+          if (started)
+            break;
+        }
+      }
+      if (started)
+        errorAt(toks_[i], msg);
+    }
   }
 
   /// Two `restrict`-qualified parameters of the same call must not refer to
@@ -3924,21 +4057,33 @@ private:
   void checkCtypeChar() {
     static const char *const kCtype[] = {
         "isalpha", "isdigit", "isalnum", "isspace", "islower", "isupper",
-        "tolower", "toupper", "ispunct", "isxdigit"};
+        "tolower", "toupper", "ispunct", "isxdigit", "iscntrl", "isgraph",
+        "isprint", "isblank"};
+    // Locals are cleared at each function body, but parameters are recorded
+    // in FuncSig and survive the opening `{` of their own function.
     std::set<std::string> plainChars;
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (functionOpens_.count(i))
         plainChars.clear();
       if (isIdent(i, "char")) {
-        size_t prev = i == 0 ? kNPos : i - 1;
-        while (prev != kNPos && trivia(prev)) {
-          if (prev == 0) { prev = kNPos; break; }
-          --prev;
+        // Only `unsigned char` is safe here.  `signed char` and plain `char`
+        // (on signed-char targets) are undefined for negative values.
+        bool unsignedChar = false;
+        for (size_t back = i; back > 0;) {
+          --back;
+          if (isPunct(back, ";") || isPunct(back, "{") ||
+              isPunct(back, "}") || isPunct(back, ","))
+            break;
+          if (isIdent(back, "unsigned"))
+            unsignedChar = true;
         }
-        if (prev != kNPos &&
-            (isIdent(prev, "unsigned") || isIdent(prev, "signed")))
+        if (unsignedChar)
           continue;
         size_t name = nextSig(i);
+        while (isPunct(name, "*") ||
+               isIdent(name, "restrict") || isIdent(name, "__restrict") ||
+               isIdent(name, "__restrict__"))
+          name = nextSig(name);
         if (name < toks_.size() && toks_[name].kind == TokKind::Identifier)
           plainChars.insert(toks_[name].text);
         continue;
@@ -3951,47 +4096,137 @@ private:
           ctype = true;
           break;
         }
-      if (!ctype)
+      if (!ctype || !isPunct(nextSig(i), "("))
         continue;
-      size_t arg = nextSig(nextSig(i));
-      if (arg < toks_.size() && plainChars.count(toks_[arg].text))
-        errorAt(toks_[arg], "cast a plain char to unsigned char before <ctype.h>");
+      size_t lp = nextSig(i);
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{"))
+        continue; // a declaration/definition, not a call
+      auto args = splitArgs(lp + 1, rp);
+      if (args.empty())
+        continue;
+      size_t from = args.front().first, to = args.front().second;
+      size_t id = kNPos, plainTokens = 0;
+      bool beforeStar = false, afterIndex = false;
+      for (size_t k = from; k < to; ++k) {
+        if (trivia(k))
+          continue;
+        ++plainTokens;
+        if (isPunct(k, "*") && (id == kNPos))
+          beforeStar = true;
+        if (isPunct(k, "[") && id != kNPos)
+          afterIndex = true;
+        if (toks_[k].kind == TokKind::Identifier && id == kNPos)
+          id = k;
+      }
+      if (id == kNPos || !(plainTokens == 1 || beforeStar || afterIndex))
+        continue;
+      const std::string &name = toks_[id].text;
+      bool bad = plainChars.count(name) != 0;
+      if (!bad) {
+        const std::string *host = enclosingFunction(i);
+        if (host) {
+          auto it = funcs_.find(*host);
+          if (it != funcs_.end() && it->second.charParams.count(name))
+            bad = true;
+        }
+      }
+      if (bad)
+        errorAt(toks_[id],
+                "cast a plain char to unsigned char before <ctype.h>");
     }
   }
 
-  // getenv() returns a pointer into the environ table; any later setenv()
-  // may reallocate it, leaving earlier results dangling.
+  // getenv() returns a pointer into the environ table; any later mutation of
+  // the environment (setenv/putenv/unsetenv and their cplus_* wrappers) may
+  // reallocate that table, leaving earlier results dangling.
+  static bool isEnvMutator(const std::string &name) {
+    static const char *const kNames[] = {
+        "setenv", "putenv", "unsetenv", "cplus_setenv", "cplus_putenv",
+        "cplus_unsetenv"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
   void checkGetenvInvalidation() {
     for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (sig.bodyClose == kNPos || sig.bodyClose >= toks_.size())
+        continue;
       std::map<std::string, size_t> saved;
-      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
-        if (!isIdent(k, "getenv"))
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (!isIdent(k, "getenv") || !isPunct(nextSig(k), "("))
           continue;
         size_t eq = k;
-        while (eq > entry.second.bodyOpen && trivia(eq - 1)) --eq;
-        if (eq > entry.second.bodyOpen && isPunct(eq - 1, "=")) {
-          size_t lhs = eq - 1;
-          while (lhs > entry.second.bodyOpen && trivia(lhs - 1)) --lhs;
-          if (lhs > entry.second.bodyOpen)
-            saved[toks_[lhs - 1].text] = k;
+        while (eq > sig.bodyOpen && trivia(eq - 1)) --eq;
+        if (eq <= sig.bodyOpen || !isPunct(eq - 1, "="))
+          continue;
+        // The saved name is the identifier immediately before `=`.  Do not
+        // walk backwards past it: that would skip over `*p = getenv(...)`
+        // and pick an unrelated token from the declaration/statement.
+        size_t name = k;
+        while (name > sig.bodyOpen) {
+          --name;
+          if (trivia(name) || isPunct(name, "="))
+            continue;
+          break;
         }
+        if (name < sig.bodyOpen || toks_[name].kind != TokKind::Identifier)
+          continue;
+        static const char *const kTypes[] = {
+            "char", "int", "const", "unsigned", "signed", "static", "void",
+            "long", "short", "struct", "size_t", "return"};
+        bool typeWord = false;
+        for (const char *t : kTypes)
+          if (toks_[name].text == t) {
+            typeWord = true;
+            break;
+          }
+        if (!typeWord && !saved.count(toks_[name].text))
+          saved[toks_[name].text] = k;
       }
       if (saved.empty())
         continue;
-      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
-        if (!isIdent(k, "setenv"))
+
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (toks_[k].kind != TokKind::Identifier || inDirectiveLine(k))
           continue;
-        for (size_t u = k + 1; u <= entry.second.bodyClose; ++u) {
+        const std::string &word = toks_[k].text;
+        // A later getenv() call is an invalidation point too: the environ
+        // table is shared state and a second lookup can reuse/reallocate it.
+        if (!isEnvMutator(word) && word != "getenv")
+          continue;
+        size_t lp = nextSig(k);
+        if (!isPunct(lp, "("))
+          continue;
+        size_t rp = match(lp, "(", ")");
+        if (rp == kNPos)
+          continue;
+        bool used = false;
+        for (size_t u = rp + 1; u <= sig.bodyClose; ++u) {
           if (toks_[u].kind != TokKind::Identifier)
             continue;
           auto it = saved.find(toks_[u].text);
           if (it != saved.end() && it->second < k) {
-            errorAt(toks_[it->second],
-                    "getenv result '" + it->first +
-                        "' may dangle after setenv reallocates environ");
+            used = true;
             break;
           }
         }
+        if (!used)
+          continue;
+        bool reported = false;
+        for (const auto &item : saved) {
+          if (item.second >= k)
+            continue;
+          errorAt(toks_[item.second],
+                  "getenv result '" + item.first + "' may dangle after " +
+                      word + " reallocates environ");
+          reported = true;
+        }
+        if (reported)
+          break; // one diagnostic per invalidation site
       }
     }
   }
@@ -4390,63 +4625,248 @@ private:
         }
         if (isVolatile)
           volatileGlobals_.insert(toks_[i].text);
+        bool isAtomic = false;
+        size_t ascan = i;
+        while (ascan > 0) {
+          --ascan;
+          if (isPunct(ascan, ";") || isPunct(ascan, "}"))
+            break;
+          if (isIdent(ascan, "_Atomic") || isIdent(ascan, "atomic_int") ||
+              isIdent(ascan, "atomic_long") || isIdent(ascan, "atomic_flag"))
+            isAtomic = true;
+        }
+        if (isAtomic)
+          atomicGlobals_.insert(toks_[i].text);
     }
+  }
+
+  /// The C and C+ thread creation APIs.  All of them start a thread that runs
+  /// concurrently with the creating thread.
+  static bool isThreadSpawnName(const std::string &name) {
+    static const char *const kNames[] = {
+        "pthread_create", "cplus_pthread_create", "thrd_create",
+        "cplus_thrd_create", "thread_start"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  /// True when the token at `i` sits on a preprocessor directive line.  A
+  /// `#define pthread_create my_create` must not look like a thread spawn.
+  bool inDirectiveLine(size_t i) const {
+    for (size_t k = i; k > 0 && toks_[k].line == toks_[i].line; --k)
+      if (isPunct(k - 1, "#"))
+        return true;
+    return false;
+  }
+
+  /// A call site of one of the thread creation APIs.
+  struct SpawnSite {
+    size_t pos = 0;            // token index of the call
+    std::string entry;         // entry function, when identifiable
+    std::string host;          // function whose body contains the call
+  };
+
+  /// True when `i` is a real call of one of the thread creation APIs (not a
+  /// declaration, a macro definition or a mention in a comment).  `lp` is
+  /// the token index of the call's opening parenthesis.
+  bool threadSpawnCall(size_t i, size_t *lp) const {
+    if (i >= toks_.size() || toks_[i].kind != TokKind::Identifier ||
+        inDirectiveLine(i))
+      return false;
+    size_t open = kNPos;
+    if (isThreadSpawnName(toks_[i].text)) {
+      open = nextSig(i);
+    } else if (isIdent(i, "thread") && isPunct(nextSig(i), "::") &&
+               isIdent(nextSig(nextSig(i)), "start")) {
+      open = nextSig(nextSig(nextSig(i)));
+    } else {
+      return false;
+    }
+    if (!isPunct(open, "("))
+      return false;
+    size_t rp = match(open, "(", ")");
+    if (rp == kNPos || isPunct(nextSig(rp), "{"))
+      return false;
+    *lp = open;
+    return true;
+  }
+
+  /// Every thread creation call in the translation unit.  The entry function
+  /// is the first argument that names a function defined in this unit, which
+  /// covers the differing argument positions of pthread_create, thrd_create
+  /// and the C+ wrappers.
+  std::vector<SpawnSite> collectThreadSpawns() const {
+    std::vector<SpawnSite> sites;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      size_t lp = kNPos;
+      if (!threadSpawnCall(i, &lp))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      SpawnSite site;
+      site.pos = i;
+      const std::string *host = enclosingFunction(i);
+      if (host)
+        site.host = *host;
+      for (const auto &arg : splitArgs(lp + 1, rp)) {
+        // `&thread_id` is an out-parameter, not a worker entrypoint.
+        if (isPunct(nextSig(arg.first), "&"))
+          continue;
+        std::string name = baseName(arg.first, arg.second);
+        if (!name.empty() && funcs_.count(name)) {
+          site.entry = name;
+          break;
+        }
+      }
+      sites.push_back(site);
+    }
+    return sites;
+  }
+
+  /// Synchronisation primitives.  Only these exact names count: a substring
+  /// match on "lock" would let `clock()`, `block` or `block_size` silently
+  /// disable every race diagnostic.
+  static bool isLockAcquireName(const std::string &name) {
+    static const char *const kNames[] = {
+        "pthread_mutex_lock",   "pthread_mutex_trylock",
+        "pthread_rwlock_rdlock", "pthread_rwlock_wrlock",
+        "pthread_spin_lock",    "pthread_spin_trylock",
+        "cplus_mutex_lock",     "cplus_mutex_trylock",
+        "mutex_lock",           "mutex_trylock",
+        "mtx_lock",             "mtx_trylock",
+        "cplus_sema_lock",      "sem_wait"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  static bool isLockReleaseName(const std::string &name) {
+    static const char *const kNames[] = {
+        "pthread_mutex_unlock", "pthread_rwlock_unlock",
+        "pthread_spin_unlock",  "cplus_mutex_unlock",
+        "mutex_unlock",         "mtx_unlock",
+        "cplus_sema_unlock",    "sem_post"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  /// RAII guard types.  They hold the lock for the whole enclosing scope.
+  static bool isScopeGuardName(const std::string &name) {
+    static const char *const kNames[] = {
+        "lock_guard", "unique_lock", "scoped_lock", "mutex_guard",
+        "Guard", "guard", "Lock", "MutexGuard"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  /// True when the identifier at `i` introduces a declared object, which is
+  /// how a guard type is used: `Guard g(m);`.  `int guard = 0;` is a plain
+  /// variable and must not count as synchronisation.
+  bool declaresObject(size_t i) const {
+    size_t next = nextSig(i);
+    if (next >= toks_.size())
+      return false;
+    if (toks_[next].kind == TokKind::Identifier)
+      return true;
+    return isPunct(next, "<");
+  }
+
+  /// Shared globals that a function body writes without holding a lock.  The
+  /// map holds the token index of the first such write per global.
+  std::map<std::string, size_t> unsynchronizedGlobalWrites(
+      const FuncSig &sig) const {
+    std::map<std::string, size_t> writes;
+    if (sig.bodyClose == kNPos)
+      return writes;
+    int held = 0;
+    for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      const std::string &word = toks_[k].text;
+      if (isScopeGuardName(word) && declaresObject(k)) {
+        held = 1; // the guard is released when the scope ends
+        continue;
+      }
+      if (isLockAcquireName(word) || (isScopeGuardName(word) &&
+                                      isPunct(nextSig(k), "("))) {
+        ++held;
+        continue;
+      }
+      if (isLockReleaseName(word)) {
+        if (held > 0)
+          --held;
+        continue;
+      }
+      if (!globals_.count(word) || volatileGlobals_.count(word) ||
+          atomicGlobals_.count(word))
+        continue;
+      size_t next = nextSig(k);
+      bool write = isPunct(next, "=") || isPunct(next, "++") ||
+                   isPunct(next, "--") || isPunct(next, "+=") ||
+                   isPunct(next, "-=") || isPunct(next, "*=") ||
+                   isPunct(next, "/=") || isPunct(next, "%=") ||
+                   isPunct(next, "|=") || isPunct(next, "&=") ||
+                   isPunct(next, "^=");
+      if (write && held == 0 && !writes.count(word))
+        writes[word] = k;
+    }
+    return writes;
   }
 
   /// A conservative check: a thread entry function that writes a global
   /// without taking any C+ lock is a data race.
   void checkDataRaces() {
     collectGlobals();
+    std::vector<SpawnSite> spawns = collectThreadSpawns();
+    if (spawns.empty())
+      return;
     std::map<std::string, int> workerCounts;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (!isIdent(i, "pthread_create"))
+    std::map<std::string, std::vector<std::string>> spawnHosts;
+    for (const auto &site : spawns) {
+      if (site.entry.empty())
         continue;
-      size_t lp = nextSig(i);
-      if (!isPunct(lp, "("))
-        continue;
-      size_t rp = match(lp, "(", ")");
-      if (rp == kNPos)
-        continue;
-      auto args = splitArgs(lp + 1, rp);
-      if (args.size() < 3)
-        continue;
-      std::string name = baseName(args[2].first, args[2].second);
-      if (!name.empty())
-        ++workerCounts[name];
+      ++workerCounts[site.entry];
+      spawnHosts[site.entry].push_back(site.host);
     }
     for (const auto &entry : funcs_) {
-      // A single thread does not create a race; require the same entry to be
-      // passed to at least two pthread_create calls.
-      if (workerCounts[entry.first] < 2)
+      const std::string &worker = entry.first;
+      auto countIt = workerCounts.find(worker);
+      if (countIt == workerCounts.end())
         continue;
       const FuncSig &sig = entry.second;
-      bool locked = false;
-      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
-        if (toks_[k].kind != TokKind::Identifier)
-          continue;
-        const std::string &word = toks_[k].text;
-        // Direct runtime calls or a lock-taking helper (Lock_acquire,
-        // Guard_lock, ...) count as synchronisation for this conservative
-        // check.
-        if (word.find("lock") != std::string::npos ||
-            word.find("Lock") != std::string::npos ||
-            word.find("guard") != std::string::npos ||
-            word.find("Guard") != std::string::npos)
-          locked = true;
-      }
-      if (locked)
+      std::map<std::string, size_t> writes = unsynchronizedGlobalWrites(sig);
+      if (writes.empty())
         continue;
-      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
-        if (toks_[k].kind != TokKind::Identifier ||
-            !globals_.count(toks_[k].text))
-          continue;
-        size_t next = nextSig(k);
-        bool write = isPunct(next, "=") || isPunct(next, "++") ||
-                     isPunct(next, "--") || isPunct(next, "+=");
-        if (write && !volatileGlobals_.count(toks_[k].text))
-          errorAt(toks_[k], "unsynchronized write to shared global '" +
-                                toks_[k].text + "' in thread function '" +
-                                entry.first + "'");
+      for (const auto &write : writes) {
+        const std::string &global = write.first;
+        // Two workers on the same entry always race.  A single worker still
+        // races with the thread that started it when both touch the global.
+        bool concurrent = countIt->second >= 2;
+        if (!concurrent) {
+          for (const auto &host : spawnHosts[worker]) {
+            auto hostIt = funcs_.find(host);
+            if (hostIt == funcs_.end())
+              continue;
+            if (unsynchronizedGlobalWrites(hostIt->second).count(global))
+              concurrent = true;
+          }
+          if (!concurrent) {
+            auto mainIt = funcs_.find("main");
+            if (mainIt != funcs_.end() &&
+                unsynchronizedGlobalWrites(mainIt->second).count(global))
+              concurrent = true;
+          }
+        }
+        if (concurrent)
+          errorAt(toks_[write.second],
+                  "unsynchronized write to shared global '" + global +
+                      "' in thread function '" + worker + "'");
       }
     }
   }
@@ -4570,33 +4990,42 @@ private:
       if (rp == kNPos || !isPunct(nextSig(rp), "{"))
         continue;
       auto parts = splitArgs(lp + 1, rp);
-      if (parts.size() == 1 &&
-          join(parts[0].first, parts[0].second).empty())
-        continue;
+      // A `(void)` parameter list yields no named parameters, but the
+      // function still has a body that later fact collectors must inspect.
       std::vector<std::string> params;
       std::vector<bool> outFlags;
       std::vector<bool> restrictFlags;
       std::map<std::string, size_t> declPos;
+      std::set<std::string> pendingCharParams;
       for (const auto &part : parts) {
         size_t last = kNPos;
         int stars = 0;
         bool restricted = false;
+        bool plainChar = false, unsignedChar = false;
         for (size_t k = part.first; k < part.second; ++k) {
           if (toks_[k].kind == TokKind::Identifier) {
             last = k;
             if (toks_[k].text == "restrict" || toks_[k].text == "__restrict" ||
                 toks_[k].text == "__restrict__")
               restricted = true;
+            if (toks_[k].text == "char")
+              plainChar = true;
+            if (toks_[k].text == "unsigned")
+              unsignedChar = true;
           } else if (isPunct(k, "*"))
             ++stars;
         }
         params.push_back(last == kNPos ? std::string() : toks_[last].text);
         outFlags.push_back(stars >= 2);
         restrictFlags.push_back(restricted);
-        if (last != kNPos)
+        if (last != kNPos) {
           declPos[toks_[last].text] = last;
+          if (plainChar && !unsignedChar)
+            pendingCharParams.insert(toks_[last].text);
+        }
       }
       FuncSig sig;
+      sig.charParams = pendingCharParams;
       sig.params = params;
       sig.outParam = outFlags;
       sig.restrictParam = restrictFlags;
@@ -5997,6 +6426,7 @@ private:
   std::map<std::string, size_t> returnExtents_;
   std::set<std::string> globals_;
   std::set<std::string> volatileGlobals_;
+  std::set<std::string> atomicGlobals_;
   std::set<size_t> functionOpens_;
   std::set<std::string> pointerNames_;   // bug 35
   std::set<std::string> byteAllocPtrs_;  // bug 46

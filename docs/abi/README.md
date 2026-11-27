@@ -10,6 +10,8 @@ header, source or test files are owned by this directory.
 | --- | --- |
 | [`compatibility-matrix.md`](compatibility-matrix.md) | Matrix of every ABI check by directory, exact platform tested, platform scope, commands, pass/fail/timeout counts with denominators, the external build blocker, and explicit non-claims. |
 | [`source_audit.md`](source_audit.md) | Sibling source-level audit of recent stdlib/install-include header changes (verdicts `NO_ABI_IMPACT` / `POTENTIAL_ABI_IMPACT` / `ABI_CHANGE`); complementary to the runtime checks recorded in the matrix. |
+| [`ABI_GATE.md`](ABI_GATE.md) | The mandatory one-command C-ABI non-regression gate: suites, coverage map, and how to add a case. |
+| [`STRICT_C_ABI_BOUNDARY.md`](STRICT_C_ABI_BOUNDARY.md) | Current contract for host-struct purity, header/macro hygiene, `stdlib/*.hp` interop boundaries and the `_s` catalog. Supersedes the PENDING status recorded in the snapshot below. |
 
 ## Snapshot provenance
 

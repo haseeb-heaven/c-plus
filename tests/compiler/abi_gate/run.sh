@@ -31,9 +31,18 @@ run_suite abi_mixed python3 "$ROOT/tests/compiler/abi_mixed/run_suite.py"
 run_suite abi_real_world python3 "$ROOT/tests/compiler/abi_real_world/run_suite.py"
 run_suite cross_compiler python3 "$ROOT/tests/compiler/cross_compiler/run_suite.py"
 run_suite source_preservation python3 "$ROOT/tests/compiler/source_preservation/run.py"
+# Issues #186/#187: host-struct purity, header hygiene, every stdlib/*.hp
+# boundary, precompiled C <-> C+ linking in both directions, and the safe-s
+# catalog/doc sync. None of these suites is optional; any failure fails the
+# whole gate. See docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
+run_suite host_abi_purity python3 "$ROOT/tests/abi/host_abi_purity/run.py"
+run_suite c_to_cp sh "$ROOT/tests/abi/c_to_cp/run.sh"
+run_suite precompiled sh "$ROOT/tests/abi/precompiled/run_precompiled_lab.sh"
+run_suite hp_boundary python3 "$ROOT/tests/compiler/abi_gate/run_hp_boundary.py"
+run_suite safe_s_catalog python3 "$ROOT/tests/compiler/abi_gate/check_safe_s_catalog.py"
 
 if [ "$status" -ne 0 ]; then
   echo "ABI preservation gate: FAIL"
   exit 1
 fi
-echo "ABI preservation gate: PASS (5 suites)"
+echo "ABI preservation gate: PASS (10 suites)"

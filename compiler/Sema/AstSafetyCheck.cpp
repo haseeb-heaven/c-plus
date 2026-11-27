@@ -63,6 +63,34 @@ inline std::string normalizeFortifyName(std::string n) {
 /// (e.g. `__int128`). All narrowing call sites must check this first.
 inline bool fits64(const llvm::APSInt &v) { return v.getBitWidth() <= 64; }
 
+/// Add `delta * scale` to a signed byte offset without signed overflow.
+inline bool addScaledOffset(long long &offset, long long delta,
+                            long long scale) {
+  if (scale <= 0)
+    return false;
+  if (delta > 0 && delta > LLONG_MAX / scale)
+    return false;
+  if (delta < 0 && delta < LLONG_MIN / scale)
+    return false;
+  const long long scaled = delta * scale;
+  if (scaled > 0 && offset > LLONG_MAX - scaled)
+    return false;
+  if (scaled < 0 && offset < LLONG_MIN - scaled)
+    return false;
+  offset += scaled;
+  return true;
+}
+
+/// Compute `base + delta * scale` with an explicit overflow check. Returns
+/// false on overflow so callers can reject the offset as out of bounds.
+inline bool mulAddFits(unsigned long long base, unsigned long long delta,
+                       unsigned long long scale, unsigned long long &out) {
+  if (scale == 0 || delta > (ULLONG_MAX - base) / scale)
+    return false;
+  out = base + delta * scale;
+  return true;
+}
+
 /// True when a scanf-style format contains an unbounded `%s` conversion
 /// (no field width), which can overflow any fixed-size destination array.
 inline bool hasUnboundedStringConversion(const StringLiteral *fmt) {
@@ -2736,7 +2764,7 @@ public:
           sl->getDirectCallee()->getNameAsString() == "strlen" &&
           sl->getNumArgs() == 1) {
         if (report_)
-          strlenSized_[vd] = varNameOf(sl->getArg(0));
+          strlenSized_[vd] = stringSourceKey(sl->getArg(0));
         return;
       }
     }
@@ -3285,14 +3313,15 @@ public:
     unsigned long long elemSize = 0;
     if ((elem->isIntegerType() || elem->isCharType() ||
          elem->isFloatingType() || elem->isEnumeralType() ||
-         elem->isRecordType()) &&
+         elem->isPointerType() || elem->isRecordType()) &&
         !elem->isDependentType() && !elem->isIncompleteType())
       elemSize = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
     if (elemSize == 0)
       return;
-    unsigned long long off =
-        fieldOffsetBytes + (unsigned long long)idx * elemSize;
-    if (off >= (unsigned long long)st->bytes)
+    unsigned long long off = 0;
+    // A wrapped 64-bit product would make an enormous index look in-bounds.
+    if (!mulAddFits(fieldOffsetBytes, (unsigned long long)idx, elemSize, off) ||
+        off >= (unsigned long long)st->bytes)
       report(loc, "array index " + std::to_string(idx) + " exceeds " +
                       extentLabel(st->origin) + " '" + name + "' of " +
                       std::to_string(st->bytes) + " bytes");
@@ -3397,14 +3426,20 @@ public:
                 QualType elem = pt->getPointeeType();
                 unsigned long long es = 0;
                 if ((elem->isIntegerType() || elem->isCharType() ||
-                     elem->isFloatingType() || elem->isEnumeralType()) &&
-                    !elem->isDependentType())
+                     elem->isFloatingType() || elem->isEnumeralType() ||
+                     elem->isPointerType() || elem->isRecordType()) &&
+                    !elem->isDependentType() && !elem->isIncompleteType())
                   es = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
                 if (es != 0) {
-                  long long byteOff = off * (long long)es;
-                  if (byteOff < 0 ||
-                      (unsigned long long)byteOff >=
-                          (unsigned long long)baseSt->bytes)
+                  unsigned long long byteOff = 0;
+                  bool exceeds = off < 0;
+                  if (!exceeds &&
+                      !mulAddFits(0ULL, (unsigned long long)off, es, byteOff))
+                    exceeds = true;
+                  if (!exceeds &&
+                      byteOff >= (unsigned long long)baseSt->bytes)
+                    exceeds = true;
+                  if (exceeds)
                     report(loc, "pointer offset " + std::to_string(off) +
                                     " exceeds " +
                                     extentLabel(baseSt->origin) + " '" +
@@ -3441,25 +3476,66 @@ public:
       report(loc, "write to string literal '" + vd->getNameAsString() + "'");
   }
 
+  /// Canonical identity of a string source. A pointer alias
+  /// (`const char *s2 = s`) and identical string literals produce the same
+  /// key as the expression passed to `strlen`; a VarDecl pointer (not a
+  /// mutable name group) keeps the key stable across the AST walk.
+  std::string stringSourceKey(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 4)
+      return std::string();
+    e = e->IgnoreParenImpCasts();
+    if (const auto *sl = dyn_cast<StringLiteral>(e))
+      return "literal:" + sl->getBytes().str();
+    if (const auto *bo = dyn_cast<BinaryOperator>(e)) {
+      llvm::APSInt k;
+      if ((bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) &&
+          knownConst(bo->getRHS(), k) && k.isZero())
+        return stringSourceKey(bo->getLHS(), depth + 1);
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
+      if (uo->getOpcode() == UO_AddrOf) {
+        const Expr *inner = uo->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *ase = dyn_cast<ArraySubscriptExpr>(inner)) {
+          llvm::APSInt k;
+          if (knownConst(ase->getIdx(), k) && k.isZero())
+            return stringSourceKey(ase->getBase(), depth + 1);
+        }
+      }
+    }
+    const auto *ref = dyn_cast<DeclRefExpr>(e);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd)
+      return std::string();
+    // Follow a stable initializer alias, but not a variable that has since
+    // been reassigned to a different string.
+    if (vd->getInit() && !assignedVars_.count(vd->getNameAsString())) {
+      const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      if (isa<DeclRefExpr>(init) || isa<StringLiteral>(init))
+        return stringSourceKey(init, depth + 1);
+    }
+    return "var:" +
+           std::to_string(reinterpret_cast<uintptr_t>(vd->getCanonicalDecl()));
+  }
+
   /// `malloc(strlen(src))` followed by strcpy/strcat overflows by the NUL.
   void checkStrcpyNul(const CallExpr *call) {
     if (call->getNumArgs() < 2)
       return;
-    const auto *ref = dyn_cast<DeclRefExpr>(
-        call->getArg(0)->IgnoreParenImpCasts());
-    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (!vd)
+    // Resolve `dst + 0` and `&dst[0]` through the shared destination logic.
+    const StringDestination dst =
+        stringDestination(call->getArg(0)->IgnoreParenImpCasts());
+    const VarDecl *vd = dst.var;
+    if (!vd || dst.offset != 0)
       return;
     auto it = strlenSized_.find(vd);
     if (it == strlenSized_.end())
       return;
-    std::string srcName = varNameOf(call->getArg(1));
-    if (srcName.empty() || srcName == it->second)
+    std::string srcKey = stringSourceKey(call->getArg(1));
+    if (srcKey.empty() || srcKey == it->second)
       report(call->getBeginLoc(),
              "string copy needs a NUL terminator: buffer '" +
                  vd->getNameAsString() + "' was sized by strlen alone");
   }
-
   /// Detect frees of objects that cannot be the start of an allocation.
   /// These are always bugs in C and are rejected in both safety modes.
   void checkInvalidFree(SourceLocation loc, const Expr *arg,
@@ -3478,7 +3554,10 @@ public:
         const Expr *sub = uo->getSubExpr()->IgnoreParenImpCasts();
         if (const auto *ref = dyn_cast<DeclRefExpr>(sub)) {
           const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
-          if (vd && !vd->getType()->isPointerType()) {
+          // &vd is the address of the variable's own storage (stack, global
+          // or TLS), never the heap block pointer held inside vd. This also
+          // applies when vd is itself a pointer variable (`free(&ptr)`).
+          if (vd) {
             report(loc, "invalid free of address of non-heap object '" +
                             vd->getNameAsString() + "' via " + api);
             return;
@@ -5127,15 +5206,26 @@ public:
       // -Wreturn-stack-address no longer sees `return &buf[0]`. Detect a
       // local array ADDRESS in the AST so check and build agree. Returning
       // an element value (`return row[0]`) stays legal.
-      if (const auto *ref = dyn_cast<DeclRefExpr>(
-              s->getRetValue()->IgnoreParenImpCasts()))
-        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
-          if (vd->getNameAsString() == "self" ||
-              vd->getNameAsString() == "this")
-            reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
-                        "address of local instance '" + vd->getNameAsString() +
-                            "' cannot escape the method",
-                        "return a copied value or use an explicit owner", true);
+      // `self`/`this` is the implicit receiver of a lowered C+ method only
+      // in .cp sources. In plain C it is an ordinary pointer parameter whose
+      // pointee is owned by the caller (builder/fluent APIs), so returning
+      // it does not expose a dying stack frame.
+      const bool loweredMethodSource =
+          filename_.size() >= 3 &&
+          filename_.compare(filename_.size() - 3, 3, ".cp") == 0;
+      if (loweredMethodSource) {
+        if (const auto *ref = dyn_cast<DeclRefExpr>(
+                s->getRetValue()->IgnoreParenImpCasts()))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+            if (vd->getNameAsString() == "self" ||
+                vd->getNameAsString() == "this")
+              reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
+                          "address of local instance '" +
+                              vd->getNameAsString() +
+                              "' cannot escape the method",
+                          "return a copied value or use an explicit owner",
+                          true);
+      }
       const VarDecl *owner = localStackOwner(s->getRetValue());
       if (owner && owner->hasLocalStorage() &&
           (owner->getType()->isArrayType() ||
@@ -5150,10 +5240,10 @@ public:
         warnAt(s->getBeginLoc(), "mutex '" + held.first +
                                      "' is still held on this return path; "
                                      "unlock before returning");
-    // A return ends this path. Clear the linear-traversal lock state so code
-    // that follows in the AST (but is unreachable on this path) is not
-    // mistaken for a second unlock of the same mutex.
-    heldLocks_.clear();
+    // Do not wipe the lock set on an early return. The AST visitor keeps
+    // walking sibling paths after the return, and VisitIfStmt already
+    // restores the fall-through state; clearing here hid real leaks on later
+    // returns (e.g. a switch arm that returns while holding the mutex).
     if (report_ && s->getRetValue()) {
       const Expr *value = s->getRetValue()->IgnoreParenImpCasts();
       if (const auto *ref = dyn_cast<DeclRefExpr>(value))
@@ -6798,7 +6888,7 @@ public:
         break;
       llvm::APSInt amount;
       if (!knownConst(bo->getRHS(), amount) || !fits64(amount))
-        return dst;
+        return StringDestination{};
       long long delta = amount.getSExtValue();
       if (bo->getOpcode() == BO_Sub)
         delta = -delta;
@@ -6807,9 +6897,8 @@ public:
         if (!ptr->getPointeeType()->isVoidType() &&
             !ptr->getPointeeType()->isIncompleteType())
           elemSize = ctx_.getTypeSize(ptr->getPointeeType()) / 8;
-      if (elemSize <= 0)
-        return dst;
-      dst.offset += delta * elemSize;
+      if (elemSize <= 0 || !addScaledOffset(dst.offset, delta, elemSize))
+        return StringDestination{};
       x = bo->getLHS()->IgnoreParenImpCasts();
     }
     if (const auto *uo = dyn_cast<UnaryOperator>(x)) {
@@ -6823,14 +6912,23 @@ public:
       if (!knownConst(ase->getIdx(), index) || !fits64(index) ||
           index.isNegative())
         return dst;
-      const auto *at = ctx_.getAsConstantArrayType(ase->getBase()->getType());
-      if (!at)
-        return dst;
-      long long elemSize = ctx_.getTypeSize(at->getElementType()) / 8;
-      if (elemSize <= 0)
-        return dst;
-      dst.offset += index.getSExtValue() * elemSize;
-      x = ase->getBase()->IgnoreParenImpCasts();
+      const Expr *base = ase->getBase()->IgnoreParenImpCasts();
+      long long elemSize = 0;
+      if (const auto *at = ctx_.getAsConstantArrayType(base->getType())) {
+        elemSize = ctx_.getTypeSize(at->getElementType()) / 8;
+      } else if (const auto *pt = base->getType()->getAs<PointerType>()) {
+        // `&heap_buf[k]`: the base is a heap allocation, not a fixed array.
+        // Resolve its pointee size here; the VarDecl/capacity resolution
+        // below uses heapStateOf() and subtracts the resulting byte offset.
+        QualType elem = pt->getPointeeType();
+        if (!elem->isVoidType() && !elem->isIncompleteType() &&
+            !elem->isDependentType())
+          elemSize = ctx_.getTypeSize(elem) / 8;
+      }
+      if (elemSize <= 0 ||
+          !addScaledOffset(dst.offset, index.getSExtValue(), elemSize))
+        return StringDestination{};
+      x = base;
     }
     const auto *ref = dyn_cast<DeclRefExpr>(x);
     if (!ref)

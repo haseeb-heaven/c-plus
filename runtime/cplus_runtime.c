@@ -653,10 +653,51 @@ static void *cplus_quarantine[CPLUS_QUARANTINE_SLOTS];
 static size_t cplus_quarantine_next = 0;
 static size_t cplus_quarantine_count = 0;
 
-static int cplus_quarantine_enabled(void) {
+static int cplus_quarantine_cached = 0;
+
+#if defined(CPLUS_POSIX)
+static pthread_once_t cplus_quarantine_once = PTHREAD_ONCE_INIT;
+static void cplus_quarantine_init(void) {
   const char *env = getenv("CPLUS_QUARANTINE");
-  return env && env[0] != '0';
+  cplus_quarantine_cached = env && env[0] != '0';
 }
+static int cplus_quarantine_enabled(void) {
+  /* getenv() races with setenv()/putenv()/unsetenv() in another thread, and
+   * this is on every cplus_release() hot path.  Sample it exactly once. */
+  pthread_once(&cplus_quarantine_once, cplus_quarantine_init);
+  return cplus_quarantine_cached;
+}
+/* Sample before user threads start, so even the first lookup cannot race. */
+__attribute__((constructor)) static void cplus_quarantine_preinit(void) {
+  pthread_once(&cplus_quarantine_once, cplus_quarantine_init);
+}
+#elif defined(_WIN32)
+static INIT_ONCE cplus_quarantine_once = INIT_ONCE_STATIC_INIT;
+static BOOL CALLBACK cplus_quarantine_init_win(PINIT_ONCE once, PVOID param,
+                                               PVOID *context) {
+  (void)once;
+  (void)param;
+  (void)context;
+  const char *env = getenv("CPLUS_QUARANTINE");
+  cplus_quarantine_cached = env && env[0] != '0';
+  return TRUE;
+}
+static int cplus_quarantine_enabled(void) {
+  InitOnceExecuteOnce(&cplus_quarantine_once, cplus_quarantine_init_win, NULL,
+                      NULL);
+  return cplus_quarantine_cached;
+}
+#else
+static int cplus_quarantine_enabled(void) {
+  static int initialized = 0;
+  if (!initialized) {
+    const char *env = getenv("CPLUS_QUARANTINE");
+    cplus_quarantine_cached = env && env[0] != '0';
+    initialized = 1;
+  }
+  return cplus_quarantine_cached;
+}
+#endif
 
 /* Called with the allocator lock held.  If a pointer is (re)registered, any
  * stale quarantine entry for that address must go away: ring eviction would
@@ -821,6 +862,10 @@ static void cplus_retired_grow(void) {
   cplus_retired_slot *fresh =
       (cplus_retired_slot *)calloc(cap, sizeof(*fresh));
   if (!fresh) {
+    /* Growers run with cplus_alloc_mutex held.  Unlock before the fatal:
+     * CPLUS_AUTO_RUNTIME longjmps out of it into a catch handler, and a
+     * locked mutex would deadlock every later allocator call on all threads. */
+    cplus_alloc_unlock();
     cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
                       "retired-address ledger failed");
   }
@@ -929,6 +974,8 @@ static void cplus_live_grow(void) {
     cap = cplus_live_cap ? cplus_live_cap * 2 : CPLUS_LIVE_INITIAL;
   cplus_live_slot *fresh = (cplus_live_slot *)calloc(cap, sizeof(*fresh));
   if (!fresh) {
+    /* See cplus_retired_grow(): never longjmp out with the allocator locked. */
+    cplus_alloc_unlock();
     cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
                       "allocation bookkeeping failed");
   }
@@ -1136,8 +1183,13 @@ void *cplus_realloc(void *ptr, size_t size) {
   cplus_alloc_lock();
   cplus_live_slot *slot = cplus_find_live(ptr);
   if (!slot) {
+    /* fresh is already registered in cplus_live.  Retire it through the
+     * normal release path: a raw free() here leaves a live entry pointing at
+     * freed heap, so an address reused by a later allocation traps with a
+     * spurious double-free - especially when CPLUS_AUTO_RUNTIME longjmps out
+     * of the fatal below and execution continues in a catch handler. */
+    cplus_release_locked(fresh);
     cplus_alloc_unlock();
-    free(fresh);
     cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "realloc", NULL, 0,
                       "allocation was released while reallocating");
   }
@@ -1531,20 +1583,114 @@ static CPLUS_THREAD_LOCAL size_t cplus_print_cap[CPLUS_PRINT_MAX_DEPTH];
 static CPLUS_THREAD_LOCAL size_t cplus_print_len[CPLUS_PRINT_MAX_DEPTH];
 static CPLUS_THREAD_LOCAL int cplus_print_first[CPLUS_PRINT_MAX_DEPTH];
 static CPLUS_THREAD_LOCAL int cplus_print_depth = 0;
+/* Number of nested begin() calls that could not reserve a slot because all
+ * CPLUS_PRINT_MAX_DEPTH slots were already in use.  Their matching end()
+ * calls consume this counter instead of popping/flushing a real slot. */
+static CPLUS_THREAD_LOCAL int cplus_print_overflow = 0;
+
+/* Buffers are kept across print() calls on one thread to avoid realloc churn,
+ * so a short-lived worker thread must still release its heap buffers when it
+ * exits.  The key's value is a small heap record that mirrors every buffer
+ * pointer: on some platforms the __thread arrays are already torn down when
+ * TLS key destructors run, so the destructor must not read them. */
+typedef struct cplus_print_thread_state {
+  char *buf[CPLUS_PRINT_MAX_DEPTH];
+} cplus_print_thread_state;
+static CPLUS_THREAD_LOCAL cplus_print_thread_state *cplus_print_tls_state = NULL;
+
+static void cplus_print_tls_drop(cplus_print_thread_state *state) {
+  if (!state)
+    return;
+  for (int d = 0; d < CPLUS_PRINT_MAX_DEPTH; ++d)
+    free(state->buf[d]);
+  free(state);
+}
+
+#if defined(CPLUS_POSIX)
+static pthread_key_t cplus_print_tls_key;
+static int cplus_print_tls_key_ok = 0;
+static pthread_once_t cplus_print_tls_once = PTHREAD_ONCE_INIT;
+
+static void cplus_print_tls_cleanup(void *value) {
+  cplus_print_tls_drop((cplus_print_thread_state *)value);
+}
+static void cplus_print_tls_init(void) {
+  cplus_print_tls_key_ok =
+      pthread_key_create(&cplus_print_tls_key, cplus_print_tls_cleanup) == 0;
+}
+static void cplus_print_tls_register(void) {
+  if (cplus_print_tls_state)
+    return;
+  pthread_once(&cplus_print_tls_once, cplus_print_tls_init);
+  if (!cplus_print_tls_key_ok)
+    return;
+  cplus_print_thread_state *state =
+      (cplus_print_thread_state *)calloc(1u, sizeof(*state));
+  if (!state)
+    return;
+  if (pthread_setspecific(cplus_print_tls_key, state) != 0) {
+    free(state);
+    return;
+  }
+  cplus_print_tls_state = state;
+}
+#elif defined(_WIN32)
+static DWORD cplus_print_tls_index = FLS_OUT_OF_INDEXES;
+static INIT_ONCE cplus_print_tls_once = INIT_ONCE_STATIC_INIT;
+
+static void CALLBACK cplus_print_tls_cleanup(PVOID value) {
+  cplus_print_tls_drop((cplus_print_thread_state *)value);
+}
+static BOOL CALLBACK cplus_print_tls_init(PINIT_ONCE once, PVOID param,
+                                          PVOID *context) {
+  (void)once;
+  (void)param;
+  (void)context;
+  cplus_print_tls_index = FlsAlloc(cplus_print_tls_cleanup);
+  return TRUE;
+}
+static void cplus_print_tls_register(void) {
+  if (cplus_print_tls_state)
+    return;
+  InitOnceExecuteOnce(&cplus_print_tls_once, cplus_print_tls_init, NULL, NULL);
+  if (cplus_print_tls_index == FLS_OUT_OF_INDEXES)
+    return;
+  cplus_print_thread_state *state =
+      (cplus_print_thread_state *)calloc(1u, sizeof(*state));
+  if (!state)
+    return;
+  if (!FlsSetValue(cplus_print_tls_index, (PVOID)state)) {
+    free(state);
+    return;
+  }
+  cplus_print_tls_state = state;
+}
+#else
+static void cplus_print_tls_register(void) {} /* no TLS destructor support */
+#endif
 
 void cplus_print_begin(void) {
+  cplus_print_tls_register();
   if (cplus_print_depth < CPLUS_PRINT_MAX_DEPTH) {
     int d = cplus_print_depth++;
     cplus_print_len[d] = 0;
     cplus_print_first[d] = 1;
+  } else {
+    ++cplus_print_overflow;
   }
 }
 
 static void cplus_print_append(int d, const char *text, size_t n) {
   if (n == 0)
     return;
-  if (cplus_print_len[d] + n + 1 > cplus_print_cap[d]) {
-    size_t want = cplus_print_len[d] + n + 1;
+  /* Fail closed before computing want: len + n + 1 can wrap around SIZE_MAX,
+   * which would skip reallocation and overflow cplus_print_buf[d] in memcpy. */
+  if (cplus_print_len[d] >= SIZE_MAX ||
+      n > SIZE_MAX - 1u - cplus_print_len[d])
+    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                      "print buffer size overflow");
+  size_t want = cplus_print_len[d] + n + 1u;
+  if (want > cplus_print_cap[d]) {
     size_t cap = cplus_print_cap[d] ? cplus_print_cap[d] : 128;
     char *grown;
     while (cap < want) {
@@ -1561,6 +1707,10 @@ static void cplus_print_append(int d, const char *text, size_t n) {
       return;
     }
     cplus_print_buf[d] = grown;
+    /* Keep the destructor's record in sync: on thread exit the __thread
+     * arrays may already be gone when the key callback runs. */
+    if (cplus_print_tls_state)
+      cplus_print_tls_state->buf[d] = grown;
     cplus_print_cap[d] = cap;
   }
   memcpy(cplus_print_buf[d] + cplus_print_len[d], text, n);
@@ -1569,6 +1719,12 @@ static void cplus_print_append(int d, const char *text, size_t n) {
 }
 
 void cplus_print_end(void) {
+  if (cplus_print_overflow > 0) {
+    /* This end matches a begin that reserved no slot; flushing slot 63 here
+     * would clobber the enclosing print()'s buffered output. */
+    --cplus_print_overflow;
+    return;
+  }
   if (cplus_print_depth > 0) {
     int d = cplus_print_depth - 1;
     if (cplus_print_len[d] > 0) {
@@ -1780,6 +1936,75 @@ static void cplus_scan_unsigned_checked(void *dest, size_t size,
   }
 }
 
+/* Floating point scanning is token-based like the integer paths: scanf("%f")
+ * accepts NaN/Inf, hides ERANGE on some libcs, and happily stores a numeric
+ * prefix of "42xyz" while leaving "xyz" to desynchronise the next scan. */
+static void cplus_scan_float_checked(void *dest, size_t size, const char *expr,
+                                     const char *file, int line) {
+  char token[128];
+  char detail[384];
+  int rc = scanf("%127s", token);
+  char *end = NULL;
+  float v;
+  const char *target = (expr && *expr) ? expr : "variable";
+  (void)size; /* caller checks the destination extent before this call */
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "could not read input for '%s' (float) - input ended unexpectedly",
+             target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  errno = 0;
+  v = strtof(token, &end);
+  if (end == token || *end != '\0') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (float) - expected a valid floating-point number, not text/extra characters",
+             token, target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (errno == ERANGE || !isfinite((double)v)) {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (float) - expected a finite representable number, not NaN/Infinity or an out-of-range value",
+             token, target);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  *(float *)dest = v;
+}
+
+static void cplus_scan_double_checked(void *dest, size_t size, const char *expr,
+                                      const char *file, int line) {
+  char token[128];
+  char detail[384];
+  int rc = scanf("%127s", token);
+  char *end = NULL;
+  double v;
+  const char *target = (expr && *expr) ? expr : "variable";
+  (void)size; /* caller checks the destination extent before this call */
+  if (rc != 1) {
+    snprintf(detail, sizeof(detail),
+             "could not read input for '%s' (double) - input ended unexpectedly",
+             target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  errno = 0;
+  v = strtod(token, &end);
+  if (end == token || *end != '\0') {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (double) - expected a valid floating-point number, not text/extra characters",
+             token, target);
+    cplus_print_fatal(CPLUS_EXIT_IO, "input error", file, line, detail);
+  }
+  if (errno == ERANGE || !isfinite(v)) {
+    snprintf(detail, sizeof(detail),
+             "cannot store '%s' into '%s' (double) - expected a finite representable number, not NaN/Infinity or an out-of-range value",
+             token, target);
+    cplus_print_fatal(CPLUS_EXIT_CONVERSION, "input overflow", file, line,
+                      detail);
+  }
+  *(double *)dest = v;
+}
+
 /* Common fail-closed path for a destination that cannot hold the scanned
  * value.  Never truncate: a partial token would silently corrupt the caller
  * and leave the rest of the input for the next scan. */
@@ -1821,13 +2046,13 @@ void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
   case CPLUS_SCAN_FLOAT:
     if (size < sizeof(float))
       cplus_scan_bad_size(CPLUS_EXIT_BOUNDS, dest, size, target, file, line);
-    rc = scanf("%f", (float *)dest);
-    break;
+    cplus_scan_float_checked(dest, size, target, file, line);
+    return;
   case CPLUS_SCAN_DOUBLE:
     if (size < sizeof(double))
       cplus_scan_bad_size(CPLUS_EXIT_BOUNDS, dest, size, target, file, line);
-    rc = scanf("%lf", (double *)dest);
-    break;
+    cplus_scan_double_checked(dest, size, target, file, line);
+    return;
   case CPLUS_SCAN_CHAR:
     if (size < sizeof(char))
       cplus_scan_bad_size(CPLUS_EXIT_BOUNDS, dest, size, target, file, line);

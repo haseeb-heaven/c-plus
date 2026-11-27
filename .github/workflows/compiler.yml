@@ -46,9 +46,11 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Core safety suite
         run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh
-      - name: ABI preservation gate
-        # ABI invariant: ordinary C pointers/layout/calling convention/symbols
-        # stay unchanged; only additive cplus_* runtime exports are allowed.
+      - name: C-ABI non-regression gate (issues #186/#187/#190)
+        # One fail-closed command: layout/header purity, symbols, calling
+        # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
+        # tests/abi/precompiled, plus the safe-s catalog/doc sync.
+        # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
         run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
       - name: SafeCRT/libc hard gates (issue #81)
         # The CRT unit runner compiles and executes the fclose_s collision
@@ -184,9 +186,11 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Core safety suite
         run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh
-      - name: ABI preservation gate
-        # ABI invariant: ordinary C pointers/layout/calling convention/symbols
-        # stay unchanged; only additive cplus_* runtime exports are allowed.
+      - name: C-ABI non-regression gate (issues #186/#187/#190)
+        # One fail-closed command: layout/header purity, symbols, calling
+        # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
+        # tests/abi/precompiled, plus the safe-s catalog/doc sync.
+        # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
         run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
       - name: SafeCRT/libc hard gates (issue #81)
         # The CRT unit runner compiles and executes the fclose_s collision
@@ -324,9 +328,11 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Core safety suite
         run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh
-      - name: ABI preservation gate
-        # ABI invariant: ordinary C pointers/layout/calling convention/symbols
-        # stay unchanged; only additive cplus_* runtime exports are allowed.
+      - name: C-ABI non-regression gate (issues #186/#187/#190)
+        # One fail-closed command: layout/header purity, symbols, calling
+        # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
+        # tests/abi/precompiled, plus the safe-s catalog/doc sync.
+        # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
         run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
       - name: SafeCRT/libc hard gates (issue #81)
         # The CRT unit runner compiles and executes the fclose_s collision
