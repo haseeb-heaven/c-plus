@@ -119,8 +119,10 @@ static inline int stdlib_arena_init(stdlib_arena *a, size_t capacity, error *err
     a->owns_first = 1;
     a->first_base = (unsigned char *)0;
     a->first_capacity = 0;
-    if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK)
+    if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK) {
+        a->first_block = (stdlib_arena_block *)0; /* no stale reset target */
         return STDLIB_FAIL;
+    }
     a->first_block = a->block;
     a->first_base = a->block->base;
     a->first_capacity = a->block->capacity;
@@ -360,6 +362,9 @@ static inline void stdlib_arena_destroy(stdlib_arena *a, error *err) {
     a->block = (stdlib_arena_block *)0;
     a->cursor = (unsigned char *)0;
     a->remaining = 0;
+    a->first_block = (stdlib_arena_block *)0;
+    a->first_base = (unsigned char *)0;
+    a->first_capacity = 0;
     a->generation = stdlib_arena_next_generation();
     a->checked_outstanding = 0; /* stdlib_arena_retire_views invalidated them */
     (void)err;
