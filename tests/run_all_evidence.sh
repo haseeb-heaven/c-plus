@@ -61,6 +61,10 @@ if [ ! -x "$ALIGN_TOOL" ]; then
     echo "blocker: native alignment tool build failed; see /tmp/evidence_align-tool-build.log" >&2
 fi
 run contract-alignment    "$ALIGN_TOOL"
+run issue214              sh tests/stdlib/issue214/run.sh
+run issue215              sh tests/stdlib/issue215/run.sh
+run issue216              sh tests/stdlib/issue216/run.sh
+run issue217_219          sh tests/stdlib/run_stdlib_tests.sh issue21
 run coverage              sh tests/libc/coverage_libc.sh
 echo "evidence aggregate: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
