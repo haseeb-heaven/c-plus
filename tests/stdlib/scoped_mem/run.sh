@@ -44,5 +44,15 @@ if timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/test_chain.cp" --default --no-
     pass=$((pass + 1));
 else fail=$((fail + 1)); echo "SCOPED_MEM_TEST FAIL chained blocks"; tail -8 "$D/build_chain.log"; cat "$D/chain.out" 2>/dev/null; fi
 
+# Cross-TU generation uniqueness (C4): weak shared counter, not TU-local.
+cases=$((cases + 1))
+if timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/gen_main.cp" "$D/gen_a.cp" "$D/gen_b.cp" \
+      --default --no-werror --sanitize=none -I. -o "$D/gen_test" \
+      -- build/libc/libcplus_hardened.a >"$D/build_gen.log" 2>&1 \
+      && timeout 30 "$D/gen_test" >"$D/gen.out" 2>"$D/gen.err" \
+      && grep -qF 'GEN_TEST 0' "$D/gen.out" && [ ! -s "$D/gen.err" ]; then
+    pass=$((pass + 1));
+else fail=$((fail + 1)); echo "SCOPED_MEM_TEST FAIL cross-TU generations"; tail -8 "$D/build_gen.log"; cat "$D/gen.out" 2>/dev/null; fi
+
 echo "SCOPED_MEM_TEST $cases $pass $fail"
 [ "$fail" -eq 0 ]

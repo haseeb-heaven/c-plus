@@ -80,10 +80,20 @@ typedef struct stdlib_scratch_mark {
     uint64_t generation;
 } stdlib_scratch_mark;
 
+/* Weak definition: one shared counter per program, even across translation
+ * units.  A TU-local static let a second TU reissue a generation already
+ * handed out in the first TU, so a stale mark could be accepted after a
+ * cross-TU reset/destroy.  Merged by the linker exactly like stdlib_state
+ * in error.hp and the view registry in view_lifetime.hp. */
+__attribute__((weak)) uint64_t stdlib_datastack_generation_counter = 1;
+
 static inline uint64_t stdlib_datastack_next_gen(void) {
-    static uint64_t g = 1;
-    uint64_t v = g++;
-    return v == 0 ? 1 : v;
+    uint64_t v;
+    do {
+        v = __atomic_fetch_add(&stdlib_datastack_generation_counter, 1u,
+                               __ATOMIC_RELAXED);
+    } while (v == 0);
+    return v;
 }
 
 static inline size_t stdlib_datastack_page_size(void) {
