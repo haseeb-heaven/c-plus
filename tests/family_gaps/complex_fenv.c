@@ -807,7 +807,7 @@ static void logging_parity(void)
     long double al1, al2;
     complex long double sl1, sl2;
     fenv_t e1, e2;
-    int r1, r2, t1, t2;
+    int r1, r2, t1, t2, round1, round2;
 
     CHECK(cplus_feclearexcept(FE_ALL_EXCEPT) == 0);
     log_cap_begin(&cap);
@@ -821,6 +821,7 @@ static void logging_parity(void)
     sl1 = cplus_casinl(lz);
     r1 = cplus_fegetenv(&e1);
     t1 = cplus_fetestexcept(FE_ALL_EXCEPT);
+    round1 = fegetround();
 
     cplus_libc_log_set_enabled(1);
     a2 = cplus_cabs(z);
@@ -831,6 +832,7 @@ static void logging_parity(void)
     sl2 = cplus_casinl(lz);
     r2 = cplus_fegetenv(&e2);
     t2 = cplus_fetestexcept(FE_ALL_EXCEPT);
+    round2 = fegetround();
 
     log_cap_end(&cap);
     CHECK(a1 == a2);
@@ -840,7 +842,8 @@ static void logging_parity(void)
     CHECK(al1 == al2);
     CHECK(near_cl(sl1, sl2, 0.0L));
     CHECK(r1 == r2 && t1 == t2);
-    CHECK(memcmp(&e1, &e2, sizeof e1) == 0);
+    /* fenv_t has host-defined padding; compare observable state only. */
+    CHECK(round1 == round2);
     if (cap.f) (void)fclose(cap.f);
 }
 #endif /* !_WIN32 */
