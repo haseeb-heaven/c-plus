@@ -63,10 +63,15 @@ typedef struct stdlib_arena_handle {
     uint64_t generation;
 } stdlib_arena_handle;
 
+/* Weak shared counter: handles are just (arena*, generation), so a reset or
+ * destroy performed in another translation unit must advance the same counter
+ * or an old handle can be accepted there.  One instance per program, as with
+ * the view-lifetime registry. */
+__attribute__((weak)) uint64_t stdlib_arena_generation_state = 1u;
+
 static inline uint64_t stdlib_arena_next_generation(void) {
-    static uint64_t counter = 1;
-    uint64_t g = counter++;
-    return g == 0 ? 1 : g;
+    uint64_t g = stdlib_arena_generation_state++;
+    return g == 0 ? 1u : g;
 }
 
 static inline int stdlib_arena_new_block(stdlib_arena *a, size_t capacity,
@@ -117,15 +122,53 @@ static inline int stdlib_arena_init(stdlib_arena *a, size_t capacity, error *err
     a->checked_outstanding = 0;
     a->default_block = capacity == 0 ? 4096u : capacity;
     a->owns_first = 1;
+    a->first_block = (stdlib_arena_block *)0;
     a->first_base = (unsigned char *)0;
     a->first_capacity = 0;
-    if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK) {
-        a->first_block = (stdlib_arena_block *)0; /* no stale reset target */
+    if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK)
         return STDLIB_FAIL;
-    }
     a->first_block = a->block;
     a->first_base = a->block->base;
     a->first_capacity = a->block->capacity;
+    return STDLIB_OK;
+}
+
+/* Heap-owned header whose payload is caller storage.  Used when the caller
+ * buffer cannot hold an aligned header; only the header is released by
+ * destroy, the caller bytes are never freed. */
+static inline int stdlib_arena_adopt_buffer(stdlib_arena *a, void *buf,
+                                            size_t len, error *err) {
+    stdlib_arena_block *b;
+    unsigned char *bytes;
+    uintptr_t p, mask;
+    size_t pad;
+    error_reset(err);
+    if (a == (stdlib_arena *)0 || buf == (void *)0 || len == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "arena: invalid buffer"),
+               STDLIB_FAIL;
+    b = (stdlib_arena_block *)cplus_alloc(sizeof(*b));
+    if (b == (stdlib_arena_block *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE, "arena: header allocation refused"),
+               STDLIB_FAIL;
+    bytes = (unsigned char *)buf;
+    mask = (uintptr_t)STDLIB_ALIGN_DEFAULT - 1u;
+    p = (uintptr_t)buf;
+    pad = (size_t)((STDLIB_ALIGN_DEFAULT - (p & mask)) & mask);
+    if (pad > (uintptr_t)-1 - p) {
+        cplus_release(b);
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "arena: buffer address overflow"),
+               STDLIB_FAIL;
+    }
+    b->prev = a->block;
+    b->base = bytes + pad; /* provenance stays with the caller object */
+    b->capacity = pad >= len ? 0u : len - pad;
+    b->owns = 1; /* header only; the payload remains caller-owned */
+    a->block = b;
+    a->cursor = b->base;
+    a->remaining = b->capacity;
     return STDLIB_OK;
 }
 
@@ -149,9 +192,13 @@ static inline int stdlib_arena_from_buffer(stdlib_arena *a, void *buf,
     a->first_base = (unsigned char *)0;
     a->first_capacity = 0;
     if (len != 0) {
-        /* Embed a header in the caller buffer only if it is large enough;
-         * otherwise use a heap header pointing at the caller buffer. */
-        if (len > sizeof(stdlib_arena_block) + STDLIB_ALIGN_DEFAULT) {
+        uintptr_t hdr_mask = (uintptr_t)_Alignof(stdlib_arena_block) - 1u;
+        int hdr_aligned = (((uintptr_t)buf & hdr_mask) == 0u);
+        /* Embed a header only when the caller buffer both fits one and is
+         * aligned for it: writing a struct header at a misaligned address is
+         * undefined behaviour even where the hardware tolerates it. */
+        if (len > sizeof(stdlib_arena_block) + STDLIB_ALIGN_DEFAULT &&
+            hdr_aligned) {
             stdlib_arena_block *b = (stdlib_arena_block *)buf;
             p = (uintptr_t)(b + 1);
             mask = (uintptr_t)STDLIB_ALIGN_DEFAULT - 1u;
@@ -169,11 +216,22 @@ static inline int stdlib_arena_from_buffer(stdlib_arena *a, void *buf,
             a->remaining = b->capacity;
             a->first_base = b->base;
             a->first_capacity = b->capacity;
-        } else {
-            /* Small caller buffer: keep it as a separate region via a heap
-             * header allocated below the first bump. */
-            if (stdlib_arena_new_block(a, a->default_block, err) != STDLIB_OK)
+        } else if (!hdr_aligned) {
+            /* Misaligned caller storage: keep a properly aligned heap header
+             * and point it at the aligned payload inside the caller buffer. */
+            if (stdlib_arena_adopt_buffer(a, buf, len, err) != STDLIB_OK)
                 return STDLIB_FAIL;
+            a->owns_first = 1;
+            a->first_block = a->block;
+            a->first_base = a->block->base;
+            a->first_capacity = a->block->capacity;
+        } else {
+            /* Too small for an embedded header: use an aligned heap header
+             * over the caller bytes rather than silently allocating a fresh
+             * default-sized heap block and ignoring the caller storage. */
+            if (stdlib_arena_adopt_buffer(a, buf, len, err) != STDLIB_OK)
+                return STDLIB_FAIL;
+            a->owns_first = 1;
             a->first_block = a->block;
             a->first_base = a->block->base;
             a->first_capacity = a->block->capacity;
@@ -362,6 +420,7 @@ static inline void stdlib_arena_destroy(stdlib_arena *a, error *err) {
     a->block = (stdlib_arena_block *)0;
     a->cursor = (unsigned char *)0;
     a->remaining = 0;
+    /* No live block remains, so reset must not adopt the old first block. */
     a->first_block = (stdlib_arena_block *)0;
     a->first_base = (unsigned char *)0;
     a->first_capacity = 0;
@@ -399,6 +458,30 @@ static inline void *stdlib_arena_take_checked(stdlib_arena *a, size_t n,
     return p;
 }
 
+/* The lifetime registry is keyed by address, so a live (ptr, token) pair that
+ * lies outside this arena's blocks belongs to a different owner.  Checking
+ * ownership here prevents a foreign token from decrementing this arena's
+ * outstanding count. */
+static inline int stdlib_arena_contains(const stdlib_arena *a, const void *ptr) {
+    const stdlib_arena_block *b;
+    uintptr_t p;
+    if (a == (const stdlib_arena *)0 || ptr == (const void *)0)
+        return 0;
+    p = (uintptr_t)ptr;
+    b = a->block;
+    while (b != (const stdlib_arena_block *)0) {
+        if (b->base != (unsigned char *)0) {
+            uintptr_t lo = (uintptr_t)b->base;
+            if (p >= lo && p - lo < b->capacity)
+                return 1;
+        }
+        if (b == a->first_block)
+            break;
+        b = b->prev;
+    }
+    return 0;
+}
+
 /* Retire one tracked allocation.  The arena bytes are monotonic and are not
  * reused until a successful rewind, but the pointer is stale immediately. */
 static inline int stdlib_arena_release_checked(stdlib_arena *a, void *ptr,
@@ -409,6 +492,11 @@ static inline int stdlib_arena_release_checked(stdlib_arena *a, void *ptr,
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED,
                               "arena: invalid tracked release"),
+               STDLIB_FAIL;
+    if (stdlib_arena_contains(a, ptr) != 1)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP,
+                              "arena: pointer not owned by this arena"),
                STDLIB_FAIL;
     if (stdlib_view_validate(ptr, token) != 1)
         return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
