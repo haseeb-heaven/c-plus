@@ -35,12 +35,75 @@ static int cplus_safe_reject_uaf(const void *ptr, const char *api) {
     return 0;
 }
 
+/* Safeclib's string constraint handler clears `dmax` bytes of the destination
+ * on several refusal paths.  When dmax exceeds the real destination capacity,
+ * that "safe" refusal is itself an out-of-bounds write (issue #208).  Refuse
+ * BEFORE calling safeclib whenever a capacity is provable: tracked allocation
+ * remaining bytes or the compiler-visible object size.  The same proof is
+ * applied to read bounds (strcmp_s / strnlen_s / strtok_s) to prevent an
+ * over-read of a short source.  Unknown capacity keeps the existing policy. */
+#define CPLUS_STR_ESNOSPC 406
+
+static int cplus_str_refuse_unproven_capacity(const char *api, const void *buf,
+                                              size_t bound, const char *what) {
+    size_t provable = (size_t)-1;
+    size_t tracked;
+    size_t bos;
+    char msg[192];
+    if (buf == NULL) return 0; /* safeclib owns the NULL-constraint case */
+    tracked = cplus_safe_remaining_capacity(buf);
+    bos = (size_t)CPLUS_SAFE_OBJ_SIZE(buf);
+    if (tracked != (size_t)-1) provable = tracked;
+    if (bos != (size_t)-1 && (provable == (size_t)-1 || bos < provable))
+        provable = bos;
+    if (provable == (size_t)-1 || bound <= provable) return 0;
+    errno = ERANGE;
+    cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "bound exceeds proven capacity");
+    cplus_safe_stat_record(api, 0);
+    snprintf(msg, sizeof(msg),
+             "refused before safeclib: %s bound %zu > proven capacity %zu "
+             "(ESNOSPC 406); error-path zeroing/over-read skipped",
+             what, bound, provable);
+    cplus_runtime_violation(api, msg);
+    return 1;
+}
+
+/* safeclib codes are not errno values.  Publish a standard errno on refusal
+ * without overwriting a more specific value set by an earlier guard. */
+static void cplus_str_publish_constraint_errno(errno_t r) {
+    switch (r) {
+    case 400: /* ESNULLP */
+    case 401: /* ESZEROL */
+    case 404: /* ESOVRLP */
+    case 410: /* ESLEWRNG */
+        errno = EINVAL;
+        break;
+    case 403: /* ESLEMAX */
+    case 406: /* ESNOSPC */
+        errno = ERANGE;
+        break;
+#ifdef EOVERFLOW
+    case EOVERFLOW:
+        errno = EOVERFLOW;
+        break;
+#endif
+    default:
+        errno = EINVAL;
+        break;
+    }
+}
+
 errno_t cplus_strcpy_s(char *dest, rsize_t dmax, const char *src) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strcpy_s", "enter");
     if (cplus_safe_reject_uaf(dest, "strcpy_s") || cplus_safe_reject_uaf(src, "strcpy_s"))
         return 400;
+    if (cplus_str_refuse_unproven_capacity("strcpy_s", dest, dmax, "destination"))
+        return CPLUS_STR_ESNOSPC;
     errno_t r = cplus_sc_strcpy_s(dest, dmax, src);
-    if (r != 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcpy_s", "constraint/error");
+    if (r != 0) {
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcpy_s", "constraint/error");
+        cplus_str_publish_constraint_errno(r);
+    }
     cplus_safe_stat_record("strcpy_s", r == 0);
     return r;
 }
@@ -48,8 +111,13 @@ errno_t cplus_strncpy_s(char *dest, rsize_t dmax, const char *src, rsize_t slen)
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strncpy_s", "enter");
     if (cplus_safe_reject_uaf(dest, "strncpy_s") || cplus_safe_reject_uaf(src, "strncpy_s"))
         return 400;
+    if (cplus_str_refuse_unproven_capacity("strncpy_s", dest, dmax, "destination"))
+        return CPLUS_STR_ESNOSPC;
     errno_t r = cplus_sc_strncpy_s(dest, dmax, src, slen);
-    if (r != 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strncpy_s", "constraint/error");
+    if (r != 0) {
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strncpy_s", "constraint/error");
+        cplus_str_publish_constraint_errno(r);
+    }
     cplus_safe_stat_record("strncpy_s", r == 0);
     return r;
 }
@@ -57,8 +125,13 @@ errno_t cplus_strcat_s(char *dest, rsize_t dmax, const char *src) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strcat_s", "enter");
     if (cplus_safe_reject_uaf(dest, "strcat_s") || cplus_safe_reject_uaf(src, "strcat_s"))
         return 400;
+    if (cplus_str_refuse_unproven_capacity("strcat_s", dest, dmax, "destination"))
+        return CPLUS_STR_ESNOSPC;
     errno_t r = cplus_sc_strcat_s(dest, dmax, src);
-    if (r != 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcat_s", "constraint/error");
+    if (r != 0) {
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcat_s", "constraint/error");
+        cplus_str_publish_constraint_errno(r);
+    }
     cplus_safe_stat_record("strcat_s", r == 0);
     return r;
 }
@@ -66,8 +139,13 @@ errno_t cplus_strncat_s(char *dest, rsize_t dmax, const char *src, rsize_t slen)
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strncat_s", "enter");
     if (cplus_safe_reject_uaf(dest, "strncat_s") || cplus_safe_reject_uaf(src, "strncat_s"))
         return 400;
+    if (cplus_str_refuse_unproven_capacity("strncat_s", dest, dmax, "destination"))
+        return CPLUS_STR_ESNOSPC;
     errno_t r = cplus_sc_strncat_s(dest, dmax, src, slen);
-    if (r != 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strncat_s", "constraint/error");
+    if (r != 0) {
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strncat_s", "constraint/error");
+        cplus_str_publish_constraint_errno(r);
+    }
     cplus_safe_stat_record("strncat_s", r == 0);
     return r;
 }
@@ -77,8 +155,16 @@ errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *ind
         if (indicator) *indicator = 0;
         return 400;
     }
+    if (cplus_str_refuse_unproven_capacity("strcmp_s", dest, dmax, "destination") ||
+        cplus_str_refuse_unproven_capacity("strcmp_s", src, dmax, "source")) {
+        if (indicator) *indicator = 0;
+        return CPLUS_STR_ESNOSPC;
+    }
     errno_t r = cplus_sc_strcmp_s(dest, dmax, src, indicator);
-    if (r != 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcmp_s", "constraint/error");
+    if (r != 0) {
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcmp_s", "constraint/error");
+        cplus_str_publish_constraint_errno(r);
+    }
     cplus_safe_stat_record("strcmp_s", r == 0);
     return r;
 }
@@ -86,6 +172,9 @@ rsize_t cplus_strnlen_s(const char *str, rsize_t smax) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strnlen_s", "enter");
     if (cplus_safe_reject_uaf(str, "strnlen_s"))
         return 0;
+    if (cplus_str_refuse_unproven_capacity("strnlen_s", str, smax, "scan")) {
+        return 0;
+    }
     rsize_t r = cplus_sc_strnlen_s(str, smax);
     cplus_safe_stat_record("strnlen_s", 1);
     return r;
@@ -94,7 +183,13 @@ rsize_t cplus_strnlen_s(const char *str, rsize_t smax) {
 
 char *cplus_strtok_s(char *dest, rsize_t *dmax, const char *delim, char **ptr) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strtok_s", "enter");
-    if (cplus_safe_reject_uaf(dest, "strtok_s"))
+    if (cplus_safe_reject_uaf(dest, "strtok_s") ||
+        cplus_safe_reject_uaf(delim, "strtok_s") ||
+        cplus_safe_reject_uaf(ptr, "strtok_s") ||
+        cplus_safe_reject_uaf(ptr ? *ptr : NULL, "strtok_s"))
+        return NULL;
+    if (dmax != NULL &&
+        cplus_str_refuse_unproven_capacity("strtok_s", dest, *dmax, "destination"))
         return NULL;
     char *r = cplus_sc_strtok_s(dest, dmax, delim, ptr);
     if (!r) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "strtok_s", "null");
@@ -107,8 +202,13 @@ errno_t cplus_strerror_s(char *dest, rsize_t dmax, int errnum) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "strerror_s", "enter");
     if (cplus_safe_reject_uaf(dest, "strerror_s"))
         return 400;
+    if (cplus_str_refuse_unproven_capacity("strerror_s", dest, dmax, "destination"))
+        return CPLUS_STR_ESNOSPC;
     errno_t r = cplus_sc_strerror_s(dest, dmax, errnum);
-    if (r != 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strerror_s", "constraint/error");
+    if (r != 0) {
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strerror_s", "constraint/error");
+        cplus_str_publish_constraint_errno(r);
+    }
     cplus_safe_stat_record("strerror_s", r == 0);
     return r;
 }
