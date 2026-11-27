@@ -26,31 +26,6 @@
 #include "stdlib/error.hp"
 #include "stdlib/alloc_iface.hp"
 
-/* Debug builds wipe rewound data-stack bytes so stale pointers fail fast;
- * release builds keep the one-store scope release with no write. */
-#ifndef STDLIB_DATASTACK_POISON
-#  ifndef NDEBUG
-#    define STDLIB_DATASTACK_POISON 1
-#  else
-#    define STDLIB_DATASTACK_POISON 0
-#  endif
-#endif
-
-static inline int stdlib_datastack_poison_enabled(void) {
-    return STDLIB_DATASTACK_POISON != 0;
-}
-
-static inline void stdlib_datastack_poison(unsigned char *from,
-                                            unsigned char *to) {
-#if STDLIB_DATASTACK_POISON
-    if (from != (unsigned char *)0 && to > from)
-        memset(from, 0xDD, (size_t)(to - from));
-#else
-    (void)from;
-    (void)to;
-#endif
-}
-
 /* the inspiration language-inspired: a data stack is a large reserved address region with a
  * single bump pointer.  `backing` selects virtual memory (mmap/VirtualAlloc,
  * committed on demand) or a plain checked-heap buffer (fallback / Windows
@@ -61,6 +36,46 @@ static inline void stdlib_datastack_poison(unsigned char *from,
 #ifndef STDLIB_DATASTACK_COMMIT
 #define STDLIB_DATASTACK_COMMIT ((size_t)1024u * 1024u)
 #endif
+
+/* Debug poison policy.  A rewound bump region is filled with 0xDD so a stale
+ * reference fails on its first read; release builds keep the exact one-store
+ * rewind.  This changes no C struct field, size or alignment. */
+#if defined(STDLIB_DATASTACK_NO_POISON)
+#define STDLIB_DATASTACK_POISON 0
+#elif defined(STDLIB_DATASTACK_FORCE_POISON)
+#define STDLIB_DATASTACK_POISON 1
+#elif defined(NDEBUG)
+#define STDLIB_DATASTACK_POISON 0
+#else
+#define STDLIB_DATASTACK_POISON 1
+#endif
+#define STDLIB_DATASTACK_POISON_BYTE ((unsigned char)0xDDu)
+
+/* Every bump allocation occupies a whole number of 16-byte slots.  Keeping
+ * top on that grid means each returned pointer is 16-byte aligned regardless
+ * of the requested size or the caller's smaller alignment request, which is
+ * required for SIMD and over-aligned struct storage. */
+static inline size_t stdlib_datastack_slot(size_t n) {
+    return (n + (size_t)STDLIB_ALIGN_DEFAULT - 1u) &
+           ~((size_t)STDLIB_ALIGN_DEFAULT - 1u);
+}
+
+static inline int stdlib_datastack_poison_enabled(void) {
+    return STDLIB_DATASTACK_POISON;
+}
+
+/* Poison the half-open byte range between the two pointers (either order).
+ * No-op in release builds. */
+static inline void stdlib_datastack_poison(unsigned char *a, unsigned char *b) {
+#if STDLIB_DATASTACK_POISON
+    unsigned char *lo = a < b ? a : b;
+    unsigned char *hi = a < b ? b : a;
+    if (lo != (unsigned char *)0 && hi != (unsigned char *)0 && hi > lo)
+        memset(lo, (int)STDLIB_DATASTACK_POISON_BYTE, (size_t)(hi - lo));
+#else
+    (void)a; (void)b;
+#endif
+}
 
 typedef struct stdlib_datastack {
     unsigned char *base;
@@ -250,26 +265,29 @@ static inline void stdlib_scratch_leave(stdlib_datastack *ds,
 static inline void *stdlib_datastack_alloc(stdlib_datastack *ds, size_t n,
                                            size_t align, error *err) {
     uintptr_t p, mask;
-    size_t pad;
+    size_t pad, slots;
     error_reset(err);
     if (ds == 0 || ds->base == 0 || n == 0 || align == 0 ||
-        (align & (align - 1u)) != 0)
+        (align & (align - 1u)) != 0 ||
+        n > (size_t)-1 - (size_t)STDLIB_ALIGN_DEFAULT)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "datastack: invalid request"), (void *)0;
+    slots = stdlib_datastack_slot(n);
+    if (align < (size_t)STDLIB_ALIGN_DEFAULT) align = (size_t)STDLIB_ALIGN_DEFAULT;
     mask = (uintptr_t)align - 1u;
     p = (uintptr_t)ds->top;
     pad = (size_t)((align - (p & mask)) & mask);
     if (pad > (size_t)(ds->base + ds->capacity - ds->top) ||
-        n > (size_t)(ds->base + ds->capacity - ds->top) - pad)
+        slots > (size_t)(ds->base + ds->capacity - ds->top) - pad)
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "datastack: exhausted"), (void *)0;
     /* scoped-memory-style: commit only the pages touched by this bump. */
-    if (stdlib_datastack_ensure(ds, (size_t)(p + pad + n - (uintptr_t)ds->base), err) != STDLIB_OK)
+    if (stdlib_datastack_ensure(ds, (size_t)(p + pad + slots - (uintptr_t)ds->base), err) != STDLIB_OK)
         return (void *)0;
     {
         void *out = (void *)(ds->top + pad);
-        ds->top += pad + n;
-        memset(out, 0, n);
+        ds->top += pad + slots;
+        memset(out, 0, slots);
         return out;
     }
 }
@@ -279,10 +297,15 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
                                              size_t align, error *err) {
     unsigned char *top;
     void *fresh;
+    size_t old_slots, new_slots;
     error_reset(err);
-    if (ds == 0 || ds->base == (unsigned char *)0 || new_size == 0)
+    if (ds == 0 || ds->base == (unsigned char *)0 || new_size == 0 ||
+        old_size > (size_t)-1 - (size_t)STDLIB_ALIGN_DEFAULT ||
+        new_size > (size_t)-1 - (size_t)STDLIB_ALIGN_DEFAULT)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "datastack: invalid realloc"), (void *)0;
+    old_slots = stdlib_datastack_slot(old_size);
+    new_slots = stdlib_datastack_slot(new_size);
     /* Issue #218: old_size must be backed by bytes already bumped, otherwise
      * top - old_size underflows and the copy reads past the live region (into
      * the freshly allocated block itself). */
@@ -291,20 +314,20 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
         uintptr_t base = (uintptr_t)ds->base;
         uintptr_t cur = (uintptr_t)ds->top;
         if (p < base || p > cur || old_size > ds->capacity ||
-            old_size > (size_t)(cur - p))
+            old_slots > (size_t)(cur - p))
             return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                   CPLUS_EXIT_BOUNDS, "datastack: implausible realloc"),
                    (void *)0;
     }
-    top = ds->top - old_size;
+    top = ds->top - old_slots;
     if (ptr != (void *)top) {
         fresh = stdlib_datastack_alloc(ds, new_size, align, err);
         if (fresh == (void *)0) return (void *)0;
         if (ptr != 0 && old_size != 0) memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
         return fresh;
     }
-    if (new_size > old_size) {
-        size_t extra = new_size - old_size;
+    if (new_slots > old_slots) {
+        size_t extra = new_slots - old_slots;
         if (extra > (size_t)(ds->base + ds->capacity - ds->top)) {
             fresh = stdlib_datastack_alloc(ds, new_size, align, err);
             if (fresh == 0) return 0;
@@ -319,7 +342,7 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
             return (void *)0;
         ds->top += extra;
     } else {
-        ds->top -= (old_size - new_size);
+        ds->top -= (old_slots - new_slots);
     }
     return ptr;
 }

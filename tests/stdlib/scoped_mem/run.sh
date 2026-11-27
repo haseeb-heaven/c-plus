@@ -54,5 +54,14 @@ if timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/gen_main.cp" "$D/gen_a.cp" "$D
     pass=$((pass + 1));
 else fail=$((fail + 1)); echo "SCOPED_MEM_TEST FAIL cross-TU generations"; tail -8 "$D/build_gen.log"; cat "$D/gen.out" 2>/dev/null; fi
 
+# 16-byte alignment guarantee for every bump allocation.
+cases=$((cases + 1))
+if timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/test_align.cp" --default --no-werror --sanitize=none \
+      -I. -o "$D/test_align" -- build/libc/libcplus_hardened.a >"$D/build_align.log" 2>&1 \
+      && timeout 30 "$D/test_align" >"$D/align.out" 2>"$D/align.err" \
+      && grep -qF 'ALIGN_TEST 0' "$D/align.out" && [ ! -s "$D/align.err" ]; then
+    pass=$((pass + 1));
+else fail=$((fail + 1)); echo "SCOPED_MEM_TEST FAIL 16-byte alignment"; tail -8 "$D/build_align.log"; cat "$D/align.out" 2>/dev/null; fi
+
 echo "SCOPED_MEM_TEST $cases $pass $fail"
 [ "$fail" -eq 0 ]
