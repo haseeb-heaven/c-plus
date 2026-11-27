@@ -36,7 +36,7 @@ static size_t recent_index(const void *p) {
 
 int main(void)
 {
-    enum { N = 4096 };
+    enum { N = 16384 };
     void *v[N];
     void *a = NULL, *b = NULL;
     size_t ia = 0, ib, i;
