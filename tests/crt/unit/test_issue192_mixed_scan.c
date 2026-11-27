@@ -16,8 +16,14 @@ int main(void) {
 
     /* First conversion supplies a capacity, second has neither capacity nor
      * width: the whole call must be refused before any host scan. */
-    errno = 0;
-    r = cplus_sscanf_s("abc def", "%s %s", a, (size_t)sizeof a, b);
+    /* Call through a plain function pointer so the compiler's printf-format
+     * attribute does not misread the Annex K capacity argument. */
+    {
+        typedef int (*scanf3_fn)(const char *, const char *, ...);
+        scanf3_fn scan = cplus_sscanf_s;
+        errno = 0;
+        r = scan("abc def", "%s %s", a, (size_t)sizeof a, b);
+    }
     if (r >= 0) {
         fprintf(stderr, "mixed unbounded scanf accepted: r=%d\n", r);
         return 1;
