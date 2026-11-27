@@ -6,7 +6,10 @@
 #include "../safe_stats.h"
 #include <errno.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /*
  * Formatting contract (documented in full in safe_format.h):
@@ -65,79 +68,132 @@ static int parse_pos_dollar(const unsigned char **pp) {
     return 0;
 }
 
-static int cplus_fmt_has_percent_n(const char *fmt) {
-    const unsigned char *p = (const unsigned char *)fmt;
-    if (!p) return 0;
-    /* C+ SECURITY PATCH: reject ANY positional-specifier marker ('$') up
-     * front.  libc accepts '$' in many positions (after length modifiers,
-     * inside width/precision, repeated), and every missed placement can turn
-     * a later 'n' into a real %n write.  Literal '$' in ordinary text is
-     * unaffected because we only scan conversions after '%'.  A stricter,
-     * simpler policy (refuse all positional formats) is safe here. */
-    while (*p) {
-        int pr;
-        if (*p != '%') { ++p; continue; }
+/* One conversion specifier, with the offsets needed to rewrite it safely.
+ * `start` points at '%', `width_at` at the first width character (right after
+ * flags/positional), `conv_at` at the conversion character and `end` just past
+ * the whole specifier (including a scanset). */
+typedef struct {
+    const unsigned char *start;
+    const unsigned char *width_at;
+    const unsigned char *conv_at;
+    const unsigned char *end;
+    int conv;        /* 0 = dangling '%' at end of string */
+    int has_width;
+    int suppressed;
+    int bounded;     /* s, [, POSIX S, POSIX C: Annex K takes a capacity arg */
+} fmt_spec_t;
+
+/* Parse one specifier.  Returns 1 when a specifier was consumed, 0 for an
+ * ordinary character (p advanced by one), -1 for a forbidden positional
+ * marker.  Flags and length modifiers include glibc `I` / `'` / `m`, MS `I64`
+ * and ISO C23 `wN` / `wfN`: stopping early on any of them used to hide a
+ * following 'n' from the filter (issue #192). */
+static int fmt_parse_spec(const unsigned char **pp, fmt_spec_t *s) {
+    const unsigned char *p = *pp;
+    int nonzero_width = 0;
+    memset(s, 0, sizeof(*s));
+    if (*p != '%') { *pp = p + 1; return 0; }
+    s->start = p;
+    ++p;
+    if (*p == '%') {
+        s->conv_at = p;
+        s->conv = '%';
+        s->end = p + 1;
+        *pp = s->end;
+        return 1;
+    }
+    if (parse_pos_dollar(&p) < 0) return -1;
+    if (*p == '*') { s->suppressed = 1; ++p; if (parse_pos_dollar(&p) < 0) return -1; }
+    for (;;) {
+        unsigned char c = *p;
+        if (c == '-' || c == '+' || c == ' ' || c == '#' || c == '0' || c == '\'') { ++p; continue; }
+        /* `I`/`m` are flags only when something follows them; a bare `%m`
+         * (glibc strerror) is itself a conversion and must not be skipped. */
+        if ((c == 'I' || c == 'm') && p[1] != '\0' && p[1] != '$' && p[1] != '%') { ++p; continue; }
+        break;
+    }
+    s->width_at = p;
+    if (*p == '*') {
         ++p;
-        if (*p == '%') { ++p; continue; }
-        pr = parse_pos_dollar(&p);
-        if (pr < 0) return 1;
-        while (*p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' || *p == '\'') ++p;
+        s->has_width = 1;
+        if (parse_pos_dollar(&p) < 0) return -1;
+    } else {
+        const unsigned char *w = p;
+        while (*p >= '0' && *p <= '9') {
+            if (*p != '0') nonzero_width = 1;
+            ++p;
+        }
+        if (p > w && nonzero_width) s->has_width = 1; /* %0s is NOT bounded */
+    }
+    if (*p == '.') {
+        ++p;
         if (*p == '*') {
             ++p;
-            if (parse_pos_dollar(&p) < 0) return 1;
+            if (parse_pos_dollar(&p) < 0) return -1;
         } else {
             while (*p >= '0' && *p <= '9') ++p;
         }
-        if (*p == '.') {
+    }
+    if (*p == '$') return -1; /* repeated or misplaced positional marker */
+    for (;;) {
+        unsigned char c = *p;
+        if (c == 'h' || c == 'l' || c == 'j' || c == 'z' || c == 't' || c == 'L' || c == 'q') { ++p; continue; }
+        if (c == 'I') { ++p; while (*p >= '0' && *p <= '9') ++p; continue; }
+        if (c == 'w') { /* C23 exact-width: wN, wfN */
             ++p;
-            if (*p == '*') {
-                ++p;
-                if (parse_pos_dollar(&p) < 0) return 1;
-            } else {
-                while (*p >= '0' && *p <= '9') ++p;
-            }
+            if (*p == 'f') ++p;
+            while (*p >= '0' && *p <= '9') ++p;
+            continue;
         }
-        if (*p == '$') return 1; /* repeated or misplaced positional marker (e.g. %1$2$n, %1$-2$n) */
-        while (*p == 'h' || *p == 'l' || *p == 'j' || *p == 'z' || *p == 't' || *p == 'L' || *p == 'q') ++p;
-        if (*p == '$' || *p == 'n') return 1;
-        if (*p) ++p;
+        break;
+    }
+    if (*p == '$') return -1;
+    s->conv_at = p;
+    s->conv = *p;
+    s->end = p;
+    if (*p == '\0') { *pp = p; return 1; } /* dangling '%': no conversion */
+    ++p;
+    if (s->conv == '[') {
+        if (*p == '^') ++p;
+        if (*p == ']') ++p;
+        while (*p && *p != ']') ++p;
+        if (*p == ']') ++p;
+    }
+    s->end = p;
+    s->bounded = (s->conv == 's' || s->conv == '[' || s->conv == 'S' || s->conv == 'C');
+    *pp = p;
+    return 1;
+}
+
+static int cplus_fmt_has_percent_n(const char *fmt) {
+    const unsigned char *p = (const unsigned char *)fmt;
+    fmt_spec_t s;
+    int r;
+    if (!p) return 0;
+    /* C+ SECURITY PATCH: every '$' positional marker is refused.  libc accepts
+     * '$' in many positions, and any missed placement can turn a later 'n'
+     * into a real write.  Literal '$' in ordinary text is unaffected. */
+    while (*p) {
+        r = fmt_parse_spec(&p, &s);
+        if (r < 0) return 1;
+        if (r > 0 && s.conv == 'n') return 1;
     }
     return 0;
 }
 
-/* Returns 0 if safe, 1 if %n / invalid positional present, 2 if unbounded %s or %[...]. */
+/* Returns 0 if safe, 1 if %n / invalid positional present, 2 if an unbounded
+ * string conversion is present. */
 static int cplus_scanf_fmt_check(const char *fmt) {
     const unsigned char *p = (const unsigned char *)fmt;
+    fmt_spec_t s;
+    int r;
     if (!p) return 0;
     while (*p) {
-        int suppressed = 0;
-        int has_width = 0;
-        int pr;
-        if (*p != '%') { ++p; continue; }
-        ++p;
-        if (*p == '%') { ++p; continue; }
-        if (*p == '*') { suppressed = 1; ++p; }
-        pr = parse_pos_dollar(&p);
-        if (pr < 0) return 1;
-        if (pr > 0 && *p == '*') { suppressed = 1; ++p; }
-        while (*p >= '0' && *p <= '9') {
-            if (*p >= '1') has_width = 1;
-            ++p;
-        }
-        if (*p == '$') return 1;
-        while (*p == 'h' || *p == 'l' || *p == 'j' || *p == 'z' || *p == 't' || *p == 'L' || *p == 'q') ++p;
-        if (*p == '$' || *p == 'n') return 1;
-        if (*p == 's' && !suppressed && !has_width) return 2;
-        if (*p == '[') {
-            if (!suppressed && !has_width) return 2;
-            ++p;
-            if (*p == '^') ++p;
-            if (*p == ']') ++p;
-            while (*p && *p != ']') ++p;
-            if (*p == ']') ++p;
-            continue;
-        }
-        if (*p) ++p;
+        r = fmt_parse_spec(&p, &s);
+        if (r < 0) return 1;
+        if (r == 0 || s.conv == 0 || s.conv == '%') continue;
+        if (s.conv == 'n') return 1;
+        if (s.bounded && s.conv != 'C' && !s.suppressed && !s.has_width) return 2;
     }
     return 0;
 }
@@ -171,8 +227,10 @@ static int fmt_check_dest_bounds(const char *api, const char *dest, size_t dmax,
 
 static int fmt_check_scanf_spec(const char *api, const char *fmt) {
     int issue = cplus_scanf_fmt_check(fmt);
+    /* Issue 2 (unbounded %s / %[) is enforced by scan_dispatch() after the
+     * argument shape is known: an Annex K capacity makes an unbounded "%s"
+     * safe, while the POSIX-style call must still be refused. */
     if (issue == 1) return fmt_violation(api, "forbidden %n specifier in scanf");
-    if (issue == 2) return fmt_violation(api, "unbounded %s or %[ specifier in scanf without field width");
     return 0;
 }
 
@@ -275,6 +333,228 @@ int cplus_fprintf_s_checked(int fmt_is_literal, FILE *stream, const char *fmt, .
         return n;
     }
 }
+/* ---- Annex K / POSIX scanf argument-shape dispatcher -------------------
+ *
+ * The exported scanf_s family historically forwarded the caller's va_list to
+ * host vscanf/vfscanf/vsscanf.  Annex K callers pass an extra rsize_t capacity
+ * after every %s/%c/%[ pointer; host scanf does not consume it, so the next
+ * conversion reads the capacity value as a POINTER and writes to address
+ * 0x10 (SIGSEGV).  We now inspect the argument shape once:
+ *   - POSIX shape (no capacities): call the host exactly as before;
+ *   - Annex K shape: collect the pointer arguments, rewrite unbounded/oversize
+ *     string conversions with a width derived from the caller's capacity, and
+ *     forward only the pointer arguments.  A capacity is recognised as a small
+ *     non-zero integer immediately following a bounded conversion's pointer;
+ *     real user pointers on the supported ABIs are far larger.
+ * All arguments to scanf conversions are pointer-sized on the supported ABIs,
+ * including the capacity values, so the shape inspection uses void* words. */
+#define CPLUS_SCAN_MAX_ARGS 16u
+#if UINTPTR_MAX > 0xffffffffu
+#define CPLUS_SCAN_CAP_MAX ((uintptr_t)0x1000000u)
+#else
+#define CPLUS_SCAN_CAP_MAX ((uintptr_t)0x10000u)
+#endif
+
+#define SCAN_FWD_DEFINE(N)                                                  \
+static int scan_fwd_##N(int mode, FILE *stream, const char *str,             \
+                        const char *fmt, ...) {                              \
+    va_list ap;                                                              \
+    int r;                                                                   \
+    va_start(ap, fmt);                                                       \
+    if (mode == 1) r = vfscanf(stream, fmt, ap);                             \
+    else if (mode == 2) r = vsscanf(str, fmt, ap);                           \
+    else r = vscanf(fmt, ap);                                                \
+    va_end(ap);                                                              \
+    return r;                                                                \
+}
+
+static int scan_fwd_0(int mode, FILE *stream, const char *str, const char *fmt, ...) {
+    va_list ap;
+    int r;
+    va_start(ap, fmt);
+    if (mode == 1) r = vfscanf(stream, fmt, ap);
+    else if (mode == 2) r = vsscanf(str, fmt, ap);
+    else r = vscanf(fmt, ap);
+    va_end(ap);
+    return r;
+}
+SCAN_FWD_DEFINE(1)
+SCAN_FWD_DEFINE(2)
+SCAN_FWD_DEFINE(3)
+SCAN_FWD_DEFINE(4)
+SCAN_FWD_DEFINE(5)
+SCAN_FWD_DEFINE(6)
+SCAN_FWD_DEFINE(7)
+SCAN_FWD_DEFINE(8)
+SCAN_FWD_DEFINE(9)
+SCAN_FWD_DEFINE(10)
+SCAN_FWD_DEFINE(11)
+SCAN_FWD_DEFINE(12)
+SCAN_FWD_DEFINE(13)
+SCAN_FWD_DEFINE(14)
+SCAN_FWD_DEFINE(15)
+SCAN_FWD_DEFINE(16)
+
+static int scan_fwd(int mode, FILE *stream, const char *str, const char *fmt,
+                    void *const *args, size_t nargs) {
+    switch (nargs) {
+    case 0:  return scan_fwd_0(mode, stream, str, fmt);
+    case 1:  return scan_fwd_1(mode, stream, str, fmt, args[0]);
+    case 2:  return scan_fwd_2(mode, stream, str, fmt, args[0], args[1]);
+    case 3:  return scan_fwd_3(mode, stream, str, fmt, args[0], args[1], args[2]);
+    case 4:  return scan_fwd_4(mode, stream, str, fmt, args[0], args[1], args[2], args[3]);
+    case 5:  return scan_fwd_5(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4]);
+    case 6:  return scan_fwd_6(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5]);
+    case 7:  return scan_fwd_7(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+    case 8:  return scan_fwd_8(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+    case 9:  return scan_fwd_9(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]);
+    case 10: return scan_fwd_10(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9]);
+    case 11: return scan_fwd_11(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10]);
+    case 12: return scan_fwd_12(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11]);
+    case 13: return scan_fwd_13(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12]);
+    case 14: return scan_fwd_14(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13]);
+    case 15: return scan_fwd_15(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14]);
+    default: return scan_fwd_16(mode, stream, str, fmt, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15]);
+    }
+}
+
+/* mode: 0 = vscanf, 1 = vfscanf, 2 = vsscanf. */
+static int scan_dispatch(const char *api, int mode, FILE *stream, const char *str,
+                         const char *fmt, va_list ap) {
+    fmt_spec_t specs[CPLUS_SCAN_MAX_ARGS];
+    void *args[CPLUS_SCAN_MAX_ARGS];
+    size_t caps[CPLUS_SCAN_MAX_ARGS];
+    size_t nspecs = 0, nargs = 0, flen, pos = 0, i, n;
+    const unsigned char *p = (const unsigned char *)fmt;
+    const unsigned char *last = p;
+    int r, rc, annexk = 0, have_pending = 0, unbounded_posix = 0;
+    void *pending = NULL;
+    va_list peek;
+    char *newfmt;
+
+    while (*p) {
+        r = fmt_parse_spec(&p, &specs[nspecs]);
+        if (r < 0) return fmt_violation(api, "malformed scanf format");
+        if (r == 0) continue;
+        if (specs[nspecs].conv != 0) {
+            if (specs[nspecs].bounded && !specs[nspecs].suppressed &&
+                !specs[nspecs].has_width && specs[nspecs].conv != 'C')
+                unbounded_posix = 1;
+            if (++nspecs == CPLUS_SCAN_MAX_ARGS) {
+                while (*p) { r = fmt_parse_spec(&p, &specs[0]); if (r < 0) return fmt_violation(api, "malformed scanf format"); }
+                return fmt_violation(api, "too many scanf conversions");
+            }
+        }
+    }
+
+    memset(args, 0, sizeof(args));
+    memset(caps, 0, sizeof(caps));
+    va_copy(peek, ap);
+    for (i = 0; i < nspecs; ++i) {
+        const fmt_spec_t *s = &specs[i];
+        void *word;
+        if (s->conv == '%' || s->suppressed) continue;
+        word = have_pending ? pending : va_arg(peek, void *);
+        have_pending = 0;
+        if (nargs == CPLUS_SCAN_MAX_ARGS) { va_end(peek); return fmt_violation(api, "too many scanf arguments"); }
+        args[nargs++] = word;
+        if (!s->bounded) continue;
+        {
+            /* Never read past the caller's va_list on a lone bounded
+             * conversion with no width: that is the POSIX shape (and the
+             * historically refused unbounded "%s"), and the extra va_arg
+             * would inspect an uninitialised register save slot. */
+            size_t j;
+            int peek_ok = s->has_width ? 1 : 0;
+            for (j = i + 1; j < nspecs && !peek_ok; ++j)
+                if (specs[j].conv != 0 && specs[j].conv != '%' && !specs[j].suppressed)
+                    peek_ok = 1;
+            if (!peek_ok) continue;
+            {
+            void *next = va_arg(peek, void *);
+            uintptr_t v = (uintptr_t)next;
+            if (v != 0 && v <= CPLUS_SCAN_CAP_MAX) {
+                caps[i] = (size_t)v;
+                annexk = 1;
+            } else {
+                pending = next;
+                have_pending = 1;
+            }
+            }
+        }
+    }
+    va_end(peek);
+
+    if (!annexk) {
+        if (unbounded_posix)
+            return fmt_violation(api, "unbounded %s or %[ specifier in scanf without field width");
+        if (mode == 1) rc = vfscanf(stream, fmt, ap);
+        else if (mode == 2) rc = vsscanf(str, fmt, ap);
+        else rc = vscanf(fmt, ap);
+        return rc;
+    }
+
+    flen = strlen(fmt);
+    if (flen > (SIZE_MAX / 2u) - 64u) return fmt_violation(api, "scanf format too long");
+    newfmt = (char *)malloc(flen * 2u + 64u);
+    if (!newfmt) { errno = ENOMEM; return -1; }
+    for (i = 0; i < nspecs; ++i) {
+        const fmt_spec_t *s = &specs[i];
+        size_t n = (size_t)(s->start - last);
+        memcpy(newfmt + pos, last, n);
+        pos += n;
+        if (s->conv == '%' || s->suppressed || !s->bounded || caps[i] == 0) {
+            n = (size_t)(s->end - s->start);
+            memcpy(newfmt + pos, s->start, n);
+            pos += n;
+        } else {
+            size_t cap = caps[i];
+            size_t limit;
+            const unsigned char *we = s->width_at;
+            char num[32];
+            int k;
+            if (s->conv == 'c' || s->conv == 'C') {
+                if (cap == 0) { free(newfmt); return fmt_violation(api, "zero scanf capacity"); }
+                n = (size_t)(s->end - s->start);
+                memcpy(newfmt + pos, s->start, n);
+                pos += n;
+                last = s->end;
+                continue;
+            }
+            if (cap < 2u) { free(newfmt); return fmt_violation(api, "scanf capacity too small"); }
+            limit = cap - 1u;
+            n = (size_t)(s->width_at - s->start);
+            memcpy(newfmt + pos, s->start, n);
+            pos += n;
+            while (*we >= '0' && *we <= '9') ++we;
+            if (we > s->width_at) {
+                unsigned long long w = 0;
+                const unsigned char *d = s->width_at;
+                while (d < we) {
+                    if (w < 1000000000ULL) w = w * 10ULL + (unsigned long long)(*d - '0');
+                    ++d;
+                }
+                if (w > 0 && w < (unsigned long long)limit) limit = (size_t)w;
+            }
+            k = snprintf(num, sizeof(num), "%zu", limit);
+            if (k < 0 || (size_t)k >= sizeof(num)) { free(newfmt); return fmt_violation(api, "scanf width overflow"); }
+            memcpy(newfmt + pos, num, (size_t)k);
+            pos += (size_t)k;
+            n = (size_t)(s->end - we);
+            memcpy(newfmt + pos, we, n);
+            pos += n;
+        }
+        last = s->end;
+    }
+    n = strlen((const char *)last);
+    memcpy(newfmt + pos, last, n);
+    pos += n;
+    newfmt[pos] = '\0';
+    rc = scan_fwd(mode, stream, str, newfmt, args, nargs);
+    free(newfmt);
+    return rc;
+}
+
 int cplus_scanf_s(const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "scanf_s", "enter");
     if (!fmt) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "scanf_s", "null format"); cplus_safe_stat_record("scanf_s", 0); return -1; }
@@ -282,7 +562,7 @@ int cplus_scanf_s(const char *fmt, ...) {
     if (fmt_check_scanf_spec("scanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vscanf(fmt, ap);
+        int n = scan_dispatch("scanf_s", 0, NULL, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "scanf_s", "io/format error or EOF");
         cplus_safe_stat_record("scanf_s", n >= 0);
@@ -297,7 +577,7 @@ int cplus_scanf_s_checked(int fmt_is_literal, const char *fmt, ...) {
     if (fmt_check_scanf_spec("scanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vscanf(fmt, ap);
+        int n = scan_dispatch("scanf_s", 0, NULL, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "scanf_s", "io/format error or EOF");
         cplus_safe_stat_record("scanf_s", n >= 0);
@@ -313,7 +593,7 @@ int cplus_fscanf_s(FILE *stream, const char *fmt, ...) {
     if (fmt_check_scanf_spec("fscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vfscanf(stream, fmt, ap);
+        int n = scan_dispatch("fscanf_s", 1, stream, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "fscanf_s", "io/format error or EOF");
         cplus_safe_stat_record("fscanf_s", n >= 0);
@@ -330,7 +610,7 @@ int cplus_fscanf_s_checked(int fmt_is_literal, FILE *stream, const char *fmt, ..
     if (fmt_check_scanf_spec("fscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vfscanf(stream, fmt, ap);
+        int n = scan_dispatch("fscanf_s", 1, stream, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "fscanf_s", "io/format error or EOF");
         cplus_safe_stat_record("fscanf_s", n >= 0);
@@ -345,7 +625,7 @@ int cplus_sscanf_s(const char *str, const char *fmt, ...) {
     if (fmt_check_scanf_spec("sscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vsscanf(str, fmt, ap);
+        int n = scan_dispatch("sscanf_s", 2, NULL, str, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "sscanf_s", "input/format error or EOF");
         cplus_safe_stat_record("sscanf_s", n >= 0);
@@ -361,7 +641,7 @@ int cplus_sscanf_s_checked(int fmt_is_literal, const char *str, const char *fmt,
     if (fmt_check_scanf_spec("sscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vsscanf(str, fmt, ap);
+        int n = scan_dispatch("sscanf_s", 2, NULL, str, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "sscanf_s", "input/format error or EOF");
         cplus_safe_stat_record("sscanf_s", n >= 0);

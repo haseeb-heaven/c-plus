@@ -72,14 +72,30 @@ static size_t stream_find(const stream_table *t, const FILE *f) {
 
 /* Grow (and compact) when the load including tombstones would exceed 75%, so
  * a probe sequence always terminates at a NULL slot.  Returns 1 on success,
- * 0 on allocation failure (caller fails closed rather than evicting a marker). */
+ * 0 on allocation failure (caller fails closed rather than evicting a marker).
+ *
+ * Tombstones are NOT a reason to grow.  An open/close loop leaves one live
+ * entry and a growing trail of deletion markers; unconditionally doubling here
+ * allocated a new table on every threshold crossing, so memory grew without
+ * bound until calloc() failed and every later fopen_s/fclose_s was refused
+ * with EMFILE.  Rehash at the SAME capacity when the live count is sparse, and
+ * only double when the live entries themselves need the room (the allocator's
+ * metadata table uses the same rule). */
 static int stream_reserve(stream_table *t) {
     size_t used, ncap, k;
     FILE **fresh;
-    used = t->count + t->tombstones;
-    if (t->cap != 0 && (used + 1u) * 4u <= t->cap * 3u) return 1;
-    if (t->cap > SIZE_MAX / 2u) return 0;
-    ncap = t->cap ? t->cap * 2u : STREAM_CACHE_INITIAL_SLOTS;
+    if (t->cap == 0) {
+        ncap = STREAM_CACHE_INITIAL_SLOTS;
+    } else {
+        used = t->count + t->tombstones;
+        if (used + 1u <= t->cap - t->cap / 4u) return 1; /* under 75% load */
+        if (t->count > t->cap / 2u) {
+            if (t->cap > SIZE_MAX / 2u) return 0;
+            ncap = t->cap * 2u;
+        } else {
+            ncap = t->cap; /* compaction alone drops the tombstones */
+        }
+    }
     if (ncap > SIZE_MAX / sizeof(*fresh)) return 0;
     fresh = (FILE **)calloc(ncap, sizeof(*fresh));
     if (!fresh) return 0;
@@ -156,6 +172,17 @@ size_t cplus_safe_open_stream_count(void) {
     return live;
 }
 
+/* Additive diagnostic: the live-stream table's slot count.  Exported so a
+ * regression test can prove that tombstone churn compacts in place instead of
+ * doubling the table without bound; no existing symbol or header changes. */
+size_t cplus_safe_stream_cache_capacity(void) {
+    size_t cap;
+    pthread_mutex_lock(&g_io_lock);
+    cap = g_live_streams.cap;
+    pthread_mutex_unlock(&g_io_lock);
+    return cap;
+}
+
 /* Defense-in-depth for the caller-declared `bmax`.  The Annex K count clamp
  * (`count <= bmax/size`) is only as good as the caller's bound; for buffers that
  * came from the checked allocator we have a second, independent source of truth
@@ -185,6 +212,45 @@ static int io_check_buf(const char *api, const void *buf, size_t bmax) {
         return -1;
     }
     return 0;
+}
+
+/* Validate the byte request itself instead of silently truncating it.
+ *
+ * Annex K short I/O is only legitimate when the caller's `bmax` is a bound he
+ * deliberately chose BELOW the real capacity (an untracked stack object, or a
+ * tracked heap block with extra room).  When `bmax` IS the proven capacity --
+ * a tracked allocation's remaining bytes, or the compile-time object size
+ * passed by the checked macros -- a `size * count` that exceeds it is a bounds
+ * violation, not a short read/write: refuse it with errno = EINVAL and return
+ * the API's failure value without touching the host stream.  Out-of-range
+ * bmax/size/count values and multiplication overflow are refused as well.
+ *
+ * Returns 0 when the request may proceed (the caller still applies the Annex K
+ * count clamp for a caller-chosen smaller bound), -1 on refusal. */
+static int io_check_request(const char *api, const void *buf, size_t bmax,
+                            size_t size, size_t count, size_t known_bmax) {
+    size_t remaining;
+    if (bmax > RSIZE_MAX_MEM || size > RSIZE_MAX_MEM || count > RSIZE_MAX_MEM) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "bmax/size/count exceeds RSIZE_MAX_MEM");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    if (count > SIZE_MAX / size) {
+        errno = EOVERFLOW;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "size * count overflow");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    if (count <= bmax / size) return 0;
+    remaining = cplus_safe_remaining_capacity(buf);
+    if (remaining == (size_t)-1 || bmax < remaining) {
+        if (known_bmax == (size_t)-1 || bmax < known_bmax) return 0;
+    }
+    errno = EINVAL;
+    cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "requested byte count exceeds bmax");
+    cplus_safe_stat_record(api, 0);
+    return -1;
 }
 
 /* Refuse a stream that the checked layer already closed: fread/fwrite on it
@@ -287,6 +353,7 @@ size_t cplus_fread_s(void *buf, size_t bmax, size_t size, size_t count, FILE *st
         return 0;
     }
     if (io_check_buf("fread_s", buf, bmax) < 0 || io_check_stream("fread_s", stream) < 0) return 0;
+    if (io_check_request("fread_s", buf, bmax, size, count, (size_t)-1) < 0) return 0;
     if (count > bmax / size) count = bmax / size;
     r = fread(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fread_s", "ok");
@@ -303,6 +370,7 @@ size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, F
         return 0;
     }
     if (io_check_buf("fwrite_s", buf, bmax) < 0 || io_check_stream("fwrite_s", stream) < 0) return 0;
+    if (io_check_request("fwrite_s", buf, bmax, size, count, (size_t)-1) < 0) return 0;
     if (count > bmax / size) count = bmax / size;
     r = fwrite(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fwrite_s", "ok");
@@ -401,6 +469,7 @@ size_t cplus_fread_s_checked(void *buf, size_t known_bmax, size_t bmax,
         return 0;
     }
     if (io_checked_guard("fread_s", buf, bmax, known_bmax, stream) < 0) return 0;
+    if (io_check_request("fread_s", buf, bmax, size, count, known_bmax) < 0) return 0;
     if (count > bmax / size) count = bmax / size;
     r = fread(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fread_s", "ok");
@@ -425,6 +494,7 @@ size_t cplus_fwrite_s_checked(const void *buf, size_t known_bmax, size_t bmax,
         return 0;
     }
     if (io_checked_guard("fwrite_s", buf, bmax, known_bmax, stream) < 0) return 0;
+    if (io_check_request("fwrite_s", buf, bmax, size, count, known_bmax) < 0) return 0;
     if (count > bmax / size) count = bmax / size;
     r = fwrite(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fwrite_s", "ok");
