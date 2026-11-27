@@ -243,7 +243,12 @@ char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
     }
     scap = source_capacity(s);
     scan = min_bound(scan, scap);
-    if (scan != (size_t)-1) {
+    if (scan == 0u) {
+        /* Only the source's first byte matters: an empty source is a valid
+         * no-op, while any character would overflow the destination.  A C
+         * string pointer is readable at least up to its terminator. */
+        slen = (s[0] == '\0') ? 0u : 1u;
+    } else if (scan != (size_t)-1) {
         slen = bounded_strlen(s, scan);
         if (slen == scan) {
             cplus_libc_log("strcat", "source over-read refused");
@@ -283,7 +288,10 @@ char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
     scan = min_bound(scan, n);
     scap = source_capacity(s);
     scan = min_bound(scan, scap);
-    slen = bounded_strlen(s, scan); /* scan == SIZE_MAX is the legacy case */
+    /* With no destination room, only the presence of a first source byte
+     * decides whether this append would overflow. */
+    slen = (scan == 0u) ? ((s[0] == '\0') ? 0u : 1u)
+                        : bounded_strlen(s, scan); /* SIZE_MAX = legacy case */
     /* need = dlen + slen + 1 must not wrap SIZE_MAX into a small value that
      * would bypass check_capacity(). slen >= SIZE_MAX - dlen covers both the
      * exact wrap (dlen + slen == SIZE_MAX) and dlen == SIZE_MAX. */

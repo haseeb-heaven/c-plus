@@ -465,7 +465,7 @@ static int scan_dispatch(const char *api, int mode, FILE *stream, const char *st
              * historically refused unbounded "%s"), and the extra va_arg
              * would inspect an uninitialised register save slot. */
             size_t j;
-            int peek_ok = s->has_width ? 1 : 0;
+            int peek_ok = 0;
             for (j = i + 1; j < nspecs && !peek_ok; ++j)
                 if (specs[j].conv != 0 && specs[j].conv != '%' && !specs[j].suppressed)
                     peek_ok = 1;
