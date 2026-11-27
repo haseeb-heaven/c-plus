@@ -239,16 +239,22 @@ static inline void *stdlib_arena_realloc(stdlib_arena *a, void *ptr,
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "arena: invalid realloc"),
                (void *)0;
-    /* Reject implausible old_size before subtracting it from the cursor: a
-     * forged size (RED-20 1/3/4) caused a huge memcpy or wrapped top math. */
-    if (old_size > a->block->capacity ||
-        ptr < (void *)a->block->base || ptr > (void *)a->cursor) {
-        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
-                              CPLUS_EXIT_BOUNDS, "arena: implausible realloc size/ptr"),
-               (void *)0;
+    /* Issue #218: old_size must be backed by bytes still in the current
+     * block.  Checking only against block capacity allowed cursor - old_size
+     * to underflow and let memcpy read past the allocation. */
+    {
+        uintptr_t p = (uintptr_t)ptr;
+        uintptr_t base = (uintptr_t)a->block->base;
+        uintptr_t cur = (uintptr_t)a->cursor;
+        if (p < base || p > cur || old_size > a->block->capacity ||
+            old_size > (size_t)(cur - p))
+            return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "arena: implausible realloc size/ptr"),
+                   (void *)0;
     }
     top = a->cursor - old_size;
-    if (ptr != (void *)top || old_size > (size_t)(a->cursor - a->block->base)) {
+    if (ptr != (void *)top) {
         fresh = stdlib_arena_alloc(a, new_size, align, err);
         if (fresh == (void *)0) return (void *)0;
         if (ptr != (void *)0 && old_size != 0) memcpy(fresh, ptr, old_size < new_size ? old_size : new_size);
@@ -286,10 +292,31 @@ static inline size_t stdlib_arena_used(const stdlib_arena *a) {
     return (size_t)(a->cursor - a->first_base);
 }
 
+/* Issue #218: before any backing block is freed or rewound, retire every
+ * registered view whose address lives in it.  Otherwise a ctl_span / token
+ * taken from take_checked() keeps validating after the bytes are gone.
+ * The full first-block payload is retired too: reset rewinds the cursor to
+ * its base and those addresses will be handed out again. */
+static inline void stdlib_arena_retire_views(stdlib_arena *a) {
+    stdlib_arena_block *b;
+    if (a == (stdlib_arena *)0)
+        return;
+    b = a->block;
+    while (b != (stdlib_arena_block *)0) {
+        if (b->base != (unsigned char *)0)
+            stdlib_view_retire_range((const void *)b->base, b->capacity);
+        if (b == a->first_block)
+            break;
+        b = b->prev;
+    }
+    a->checked_outstanding = 0;
+}
+
 static inline void stdlib_arena_do_reset(stdlib_arena *a, error *err) {
     stdlib_arena_block *b;
     error_reset(err);
     if (a == 0) return;
+    stdlib_arena_retire_views(a);
     /* Release spilled blocks above the reset target.  Dropping the chain
      * here would orphan them: destroy only walks from the current block. */
     b = a->block;
@@ -308,6 +335,8 @@ static inline void stdlib_arena_destroy(stdlib_arena *a, error *err) {
     stdlib_arena_block *b, *prev;
     error_reset(err);
     if (a == 0 || a->block == 0) return;
+    /* Invalidate views before the heap blocks they point into are released. */
+    stdlib_arena_retire_views(a);
     b = a->block;
     /* The first buffer may be caller-owned; stop before it when !owns_first
      * and it is a caller-embedded header.  Heap headers are always managed. */
@@ -320,7 +349,7 @@ static inline void stdlib_arena_destroy(stdlib_arena *a, error *err) {
     a->cursor = (unsigned char *)0;
     a->remaining = 0;
     a->generation = stdlib_arena_next_generation();
-    a->checked_outstanding = 0; /* tokens become unreachable but never reused */
+    a->checked_outstanding = 0; /* stdlib_arena_retire_views invalidated them */
     (void)err;
 }
 

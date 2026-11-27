@@ -63,9 +63,30 @@ static inline size_t stdlib_view_hash(const void *p) {
     return (size_t)x & STDLIB_VIEW_TABLE_MASK;
 }
 
+/* Issue #217: tokens are never reused, not even at wrap-around.  Once the
+ * counter is exhausted, registration fails closed (token 0) instead of
+ * reviving a stale token by cycling back to 1.  Called under the table lock. */
+static inline unsigned long long stdlib_view_next_token(void) {
+    unsigned long long next = stdlib_view_registry_state.next_token;
+    if (next == 0xFFFFFFFFFFFFFFFFULL)
+        return 0;
+    if (next == 0)
+        next = 1u;
+    else
+        ++next;
+    stdlib_view_registry_state.next_token = next;
+    return next;
+}
+
 /* Publish `ptr` and return a fresh non-zero token, or 0 if the table is full
  * (or ptr == NULL).  Re-registering a retired/live address retires all older
- * tokens for that address by replacing the slot contents. */
+ * tokens for that address by replacing the slot contents.
+ *
+ * Issue #217: retired slots keep their key so probe chains stay intact, but
+ * they are tombstones, not permanent occupants.  A new pointer is inserted
+ * into the first tombstone on its probe chain (or into the first never-used
+ * slot when no tombstone was found).  Reusing a tombstone cannot revive a
+ * stale token: the slot receives a brand new, never-reused token. */
 static inline unsigned long long stdlib_view_register(const void *ptr,
                                                       size_t bytes) {
     unsigned long long token = 0;
@@ -76,41 +97,46 @@ static inline unsigned long long stdlib_view_register(const void *ptr,
         size_t i = stdlib_view_hash(ptr);
         size_t probe;
         size_t empty = STDLIB_VIEW_TABLE_SIZE;
+        size_t reusable = STDLIB_VIEW_TABLE_SIZE;
+        int found = 0;
         for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
             stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
             if (s->ptr == ptr) {
-                if (stdlib_view_registry_state.next_token == 0xFFFFFFFFFFFFFFFFULL)
-                    stdlib_view_registry_state.next_token = 1u;
-                else
-                    ++stdlib_view_registry_state.next_token;
-                if (stdlib_view_registry_state.next_token == 0)
-                    stdlib_view_registry_state.next_token = 1u;
-                token = stdlib_view_registry_state.next_token;
+                found = 1;
+                break;
+            }
+            if (s->ptr == (const void *)0) {
+                if (empty == STDLIB_VIEW_TABLE_SIZE)
+                    empty = i;
+                break; /* never used: chain ends here */
+            }
+            /* A retired slot still belongs to the chain: keep probing. */
+            if (!s->live && reusable == STDLIB_VIEW_TABLE_SIZE)
+                reusable = i;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+        if (!found) {
+            size_t target = reusable != STDLIB_VIEW_TABLE_SIZE ? reusable : empty;
+            if (target != STDLIB_VIEW_TABLE_SIZE) {
+                token = stdlib_view_next_token();
+                if (token != 0) {
+                    stdlib_view_slot *s = &stdlib_view_registry_state.slots[target];
+                    s->ptr = ptr;
+                    s->bytes = bytes;
+                    s->token = token;
+                    s->generation = 0;
+                    s->live = 1;
+                }
+            }
+        } else {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            token = stdlib_view_next_token();
+            if (token != 0) {
                 s->bytes = bytes;
                 s->token = token;
                 s->generation = 0;
                 s->live = 1;
-                break;
             }
-            if (empty == STDLIB_VIEW_TABLE_SIZE && s->ptr == (const void *)0)
-                empty = i;
-            if (s->ptr == (const void *)0)
-                break; /* never used: chain ends here */
-            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
-        }
-        if (token == 0 && empty != STDLIB_VIEW_TABLE_SIZE) {
-            if (stdlib_view_registry_state.next_token == 0xFFFFFFFFFFFFFFFFULL)
-                stdlib_view_registry_state.next_token = 1u;
-            else
-                ++stdlib_view_registry_state.next_token;
-            if (stdlib_view_registry_state.next_token == 0)
-                stdlib_view_registry_state.next_token = 1u;
-            token = stdlib_view_registry_state.next_token;
-            stdlib_view_registry_state.slots[empty].ptr = ptr;
-            stdlib_view_registry_state.slots[empty].bytes = bytes;
-            stdlib_view_registry_state.slots[empty].token = token;
-            stdlib_view_registry_state.slots[empty].generation = 0;
-            stdlib_view_registry_state.slots[empty].live = 1;
         }
     }
     stdlib_view_unlock();
@@ -253,6 +279,39 @@ static inline void stdlib_view_retire_token(unsigned long long token) {
                 s->token = 0;
                 s->generation = 0;
                 break;
+            }
+        }
+    }
+    stdlib_view_unlock();
+}
+
+/* Issue #218: retire every live registration whose address lies in
+ * [base, base + bytes).  Arena reset/destroy use this before rewinding or
+ * releasing backing blocks, so a view cannot outlive its storage.  The slot
+ * key is left intact so open-addressing probe chains remain valid; only the
+ * token is invalidated, and tokens are never reused. */
+static inline void stdlib_view_retire_range(const void *base, size_t bytes) {
+    uintptr_t lo, hi, limit;
+    size_t i;
+    if (base == (const void *)0 || bytes == 0)
+        return;
+    lo = (uintptr_t)base;
+    limit = (uintptr_t)-1;
+    if (lo > limit - (uintptr_t)bytes)
+        return;
+    hi = lo + (uintptr_t)bytes;
+    stdlib_view_lock();
+    {
+        for (i = 0; i < STDLIB_VIEW_TABLE_SIZE; ++i) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            uintptr_t p;
+            if (!s->live || s->ptr == (const void *)0)
+                continue;
+            p = (uintptr_t)s->ptr;
+            if (p >= lo && p < hi) {
+                s->live = 0;
+                s->token = 0;
+                s->generation = 0;
             }
         }
     }

@@ -59,13 +59,27 @@ typedef struct stdlib_pool_slot_header {
 #define STDLIB_POOL_HEADER_SIZE \
     ((sizeof(stdlib_pool_slot_header) + STDLIB_ALIGN_DEFAULT - 1u) & ~(STDLIB_ALIGN_DEFAULT - 1u))
 
+/* Issue #219: the slot payload must be padded to the allocator alignment,
+ * otherwise every slot after the first misaligns its header and user pointer.
+ * Returns 0 when the padded size would overflow. */
+static inline size_t stdlib_mem_pool_stride(size_t slot_size) {
+    size_t mask = (size_t)STDLIB_ALIGN_DEFAULT - 1u;
+    size_t aligned;
+    if (slot_size == 0 || slot_size > (size_t)-1 - mask)
+        return 0;
+    aligned = (slot_size + mask) & ~mask;
+    if (aligned > (size_t)-1 - STDLIB_POOL_HEADER_SIZE)
+        return 0;
+    return STDLIB_POOL_HEADER_SIZE + aligned;
+}
+
 static inline int stdlib_mem_pool_init(stdlib_mem_pool *p, size_t slot_size,
                                        size_t per_slab, error *err) {
     error_reset(err);
     if (p == 0 || slot_size == 0 || per_slab == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "pool: invalid config"), STDLIB_FAIL;
-    if (slot_size > (size_t)-1 - STDLIB_POOL_HEADER_SIZE)
+    if (stdlib_mem_pool_stride(slot_size) == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "pool: slot size overflow"), STDLIB_FAIL;
     p->slabs = (stdlib_pool_slab *)0;
@@ -86,7 +100,10 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
     if (p == 0 || p->slot_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_NULL_POINTER, "pool: NULL/invalid pool"), STDLIB_FAIL;
-    stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
+    stride = stdlib_mem_pool_stride(p->slot_size);
+    if (stride == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "pool: slot size overflow"), STDLIB_FAIL;
     size_t raw;
     size_t i;
     unsigned char *slot;
@@ -116,17 +133,20 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
             return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                                   CPLUS_EXIT_BOUNDS, "pool: link slack overflow"), STDLIB_FAIL;
         raw += p->slots_per_slab * sizeof(void *) + STDLIB_ALIGN_DEFAULT;
-        uintptr_t sp;
+        unsigned char *raw_slots;
+        size_t pad;
         s = (stdlib_pool_slab *)cplus_alloc(raw);
         if (s == (stdlib_pool_slab *)0)
             return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
                                   CPLUS_EXIT_RESOURCE, "pool: slab allocation refused"), STDLIB_FAIL;
         /* Align the slot array to STDLIB_ALIGN_DEFAULT so every slot is
-         * correctly aligned for the requested allocator alignment. */
-        sp = (uintptr_t)(s + 1);
-        sp = (sp + (uintptr_t)STDLIB_ALIGN_DEFAULT - 1u) &
-             ~((uintptr_t)STDLIB_ALIGN_DEFAULT - 1u);
-        s->slots = (unsigned char *)sp;
+         * correctly aligned for the requested allocator alignment.  Advance
+         * a real pointer: forging a pointer from an integer loses provenance. */
+        raw_slots = (unsigned char *)(s + 1);
+        pad = (STDLIB_ALIGN_DEFAULT -
+               ((size_t)(uintptr_t)raw_slots & (STDLIB_ALIGN_DEFAULT - 1u))) &
+              (STDLIB_ALIGN_DEFAULT - 1u);
+        s->slots = raw_slots + pad;
     }
     if (s->slots + stride * p->slots_per_slab + p->slots_per_slab >
         (unsigned char *)s + raw)
@@ -135,10 +155,12 @@ static inline int stdlib_mem_pool_add_slab(stdlib_mem_pool *p, error *err) {
     s->next = p->slabs;
     s->bitmap = s->slots + stride * p->slots_per_slab;
     {
-        uintptr_t lp = (uintptr_t)(void *)(s->bitmap + p->slots_per_slab);
-        lp = (lp + (uintptr_t)STDLIB_ALIGN_DEFAULT - 1u) &
-             ~((uintptr_t)STDLIB_ALIGN_DEFAULT - 1u);
-        s->links = (void **)(void *)lp;
+        unsigned char *raw_links = s->bitmap + p->slots_per_slab;
+        size_t lpad = (STDLIB_ALIGN_DEFAULT -
+                       ((size_t)(uintptr_t)raw_links &
+                        (STDLIB_ALIGN_DEFAULT - 1u))) &
+                      (STDLIB_ALIGN_DEFAULT - 1u);
+        s->links = (void **)(void *)(raw_links + lpad);
     }
     memset(s->bitmap, 0, p->slots_per_slab);
     p->slabs = s;
@@ -166,6 +188,9 @@ static inline void *stdlib_mem_pool_alloc(stdlib_mem_pool *p, error *err) {
     error_reset(err);
     if (p == 0) return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                       CPLUS_EXIT_NULL_POINTER, "pool: NULL pool"), (void *)0;
+    if (stdlib_mem_pool_stride(p->slot_size) == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "pool: invalid slot size"), (void *)0;
     if (p->free_head == (void *)0) {
         if (stdlib_mem_pool_add_slab(p, err) != STDLIB_OK) return (void *)0;
     }
@@ -185,17 +210,21 @@ static inline void stdlib_mem_pool_release(stdlib_mem_pool *p, void *ptr,
     unsigned char *slot;
     stdlib_pool_slot_header *h;
     size_t i, found = 0;
+    size_t stride;
     error_reset(err);
     if (p == 0 || ptr == 0)
         return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                     CPLUS_EXIT_NULL_POINTER, "pool: NULL argument");
+    stride = stdlib_mem_pool_stride(p->slot_size);
+    if (stride == 0)
+        return (void)error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                    CPLUS_EXIT_BOUNDS, "pool: invalid slot size");
     slot = (unsigned char *)ptr;
     /* RED-20 7: verify the pointer lies inside a slab's slot region BEFORE
      * reading its header; a wild pointer must not be dereferenced. */
     {
         stdlib_pool_slab *s;
         for (s = p->slabs; s != (stdlib_pool_slab *)0; s = s->next) {
-            size_t stride = STDLIB_POOL_HEADER_SIZE + p->slot_size;
             if (slot >= s->slots + STDLIB_POOL_HEADER_SIZE &&
                 slot < s->slots + STDLIB_POOL_HEADER_SIZE +
                        stride * p->slots_per_slab &&
@@ -207,8 +236,7 @@ static inline void stdlib_mem_pool_release(stdlib_mem_pool *p, void *ptr,
         return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                     CPLUS_EXIT_OWNERSHIP, "pool: foreign pointer refused");
     h = (stdlib_pool_slot_header *)(void *)(slot - STDLIB_POOL_HEADER_SIZE);
-    i = (size_t)(slot - (h->slab->slots + STDLIB_POOL_HEADER_SIZE)) /
-        (STDLIB_POOL_HEADER_SIZE + p->slot_size);
+    i = (size_t)(slot - (h->slab->slots + STDLIB_POOL_HEADER_SIZE)) / stride;
     if (i >= p->slots_per_slab || i != h->index)
         return (void)error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                                     CPLUS_EXIT_OWNERSHIP, "pool: misaligned pointer refused");
@@ -351,11 +379,16 @@ static inline int stdlib_slot_pool_init(stdlib_slot_pool *p, size_t slot_size,
 
 static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
     size_t ncap;
+    size_t slot_size;
     unsigned char *items;
     size_t *fl;
     uint64_t *gen;
     error_reset(err);
-    if (p == 0 || p->slot_size == 0)
+    if (p == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "slot_pool: NULL/invalid pool"), STDLIB_FAIL;
+    slot_size = p->slot_size;
+    if (slot_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_NULL_POINTER, "slot_pool: NULL/invalid pool"), STDLIB_FAIL;
     /* Issue #56: guard the doubling itself and every ncap*element product
@@ -364,12 +397,12 @@ static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
     ncap = p->capacity * 2u;
-    if (ncap > (size_t)-1 / p->slot_size ||
+    if (ncap > (size_t)-1 / slot_size ||
         ncap > (size_t)-1 / sizeof(size_t) ||
         ncap > (size_t)-1 / sizeof(uint64_t))
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
-    items = (unsigned char *)cplus_alloc(p->slot_size * ncap);
+    items = (unsigned char *)cplus_alloc(slot_size * ncap);
     fl = (size_t *)cplus_alloc(sizeof(size_t) * ncap);
     gen = (uint64_t *)cplus_alloc(sizeof(uint64_t) * ncap);
     if (items == 0 || fl == 0 || gen == 0) {
@@ -380,9 +413,13 @@ static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
         return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
                               CPLUS_EXIT_RESOURCE, "slot_pool: grow refused"), STDLIB_FAIL;
     }
-    memcpy(items, p->items, p->slot_size * p->count);
+    memcpy(items, p->items, slot_size * p->count);
     memcpy(fl, p->free_list, sizeof(size_t) * p->free_count);
     memcpy(gen, p->generations, sizeof(uint64_t) * p->count);
+    /* Issue #219: cplus_alloc is uninitialized malloc.  A freshly grown slot
+     * must start at generation 0; leaving the tail indeterminate made the
+     * next alloc_ref() read/increment uninitialized memory (UB). */
+    memset(gen + p->count, 0, sizeof(uint64_t) * (ncap - p->count));
     cplus_release(p->items); cplus_release(p->free_list); cplus_release(p->generations);
     p->items = items; p->free_list = fl; p->generations = gen;
     p->capacity = ncap;

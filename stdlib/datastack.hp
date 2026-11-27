@@ -95,7 +95,9 @@ static inline int stdlib_datastack_init_vm(stdlib_datastack *ds, size_t reserve,
 #else
     {
         void *p = mmap(0, reserve, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (p == MAP_FAILED)
+        /* Compare as integers: MAP_FAILED is (void *)-1, and forging that
+         * integer as a pointer has no verifiable provenance. */
+        if ((uintptr_t)p == (uintptr_t)-1)
             return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
                                   CPLUS_EXIT_RESOURCE, "datastack: mmap reserve refused"), STDLIB_FAIL;
         ds->base = (unsigned char *)p;
@@ -242,15 +244,22 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
     unsigned char *top;
     void *fresh;
     error_reset(err);
-    if (ds == 0 || new_size == 0)
+    if (ds == 0 || ds->base == (unsigned char *)0 || new_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "datastack: invalid realloc"), (void *)0;
-    /* Reject forged old_size before subtracting from top (RED-20 8). */
-    if (old_size > ds->capacity ||
-        ptr < (void *)ds->base || ptr > (void *)ds->top)
-        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
-                              CPLUS_EXIT_BOUNDS, "datastack: implausible realloc"),
-               (void *)0;
+    /* Issue #218: old_size must be backed by bytes already bumped, otherwise
+     * top - old_size underflows and the copy reads past the live region (into
+     * the freshly allocated block itself). */
+    {
+        uintptr_t p = (uintptr_t)ptr;
+        uintptr_t base = (uintptr_t)ds->base;
+        uintptr_t cur = (uintptr_t)ds->top;
+        if (p < base || p > cur || old_size > ds->capacity ||
+            old_size > (size_t)(cur - p))
+            return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                                  CPLUS_EXIT_BOUNDS, "datastack: implausible realloc"),
+                   (void *)0;
+    }
     top = ds->top - old_size;
     if (ptr != (void *)top) {
         fresh = stdlib_datastack_alloc(ds, new_size, align, err);
@@ -282,9 +291,17 @@ static inline void *stdlib_datastack_realloc(stdlib_datastack *ds, void *ptr,
 static inline void stdlib_datastack_release(stdlib_datastack *ds, void *ptr,
                                             size_t size, error *err) {
     error_reset(err);
-    if (ds != 0 && ptr != 0 && ptr == (void *)(ds->top - size))
-        ds->top -= size; /* top-of-stack free is a single subtract */
-    /* non-top frees are no-ops; the checkpoint restores the whole region */
+    /* Issue #218: validate before subtracting so a forged size cannot make
+     * ds->top - size point below the backing buffer. */
+    if (ds != 0 && ptr != 0 && ds->base != (unsigned char *)0) {
+        uintptr_t p = (uintptr_t)ptr;
+        uintptr_t base = (uintptr_t)ds->base;
+        uintptr_t cur = (uintptr_t)ds->top;
+        if (p >= base && p <= cur && size <= (size_t)(cur - base) &&
+            p == cur - (uintptr_t)size)
+            ds->top -= size; /* top-of-stack free is a single subtract */
+    }
+    /* invalid/non-top frees are no-ops; the checkpoint restores the region */
 }
 
 /* Vtable adapters bound to the calling thread's scratch stack. */
