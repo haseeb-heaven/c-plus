@@ -480,4 +480,223 @@ static inline vector vector_in(const stdlib_allocator *a) {
     return v;
 }
 
+/* ---- Generic Vec(T) / Slice(T) -------------------------------------------
+ * VEC_DEFINE(T, DROP) instantiates a typed vector and a non-owning slice.
+ * C+ lowers source text BEFORE the C preprocessor, so a macro cannot emit a
+ * `class` or `resource struct`; these are plain-C-compatible structs with
+ * static inline helpers, and the existing `vector`/`slice` classes and their
+ * ABI are untouched.  Vec(T)/Slice(T) name the generated types.
+ *
+ * DROP is applied to each element by Vec_drop (VEC_NO_DROP, or
+ * VEC_STRING_DROP when stdlib/string.hp is included).  Storage is one
+ * contiguous allocation through stdlib_allocate(v->alloc, ...): a stack or
+ * arena allocator never allocates per element.  Slices are non-owning and
+ * validated through the shared lifetime registry, exactly like vector::view().
+ */
+#define VEC_NO_DROP(x) ((void)0)
+#define VEC_STRING_DROP(x) string_drop(&(x))
+
+typedef void (*vec_drop_fn)(void *);
+
+/* Explicit C+ RAII wrapper: a local guard drops a heap-backed Vec at scope
+ * exit, including on early return.  Arena/datastack Vecs are reclaimed by
+ * their allocator instead. */
+class vec_owner {
+    void *owned;
+    vec_drop_fn cleanup;
+
+    vec_owner(void *p, vec_drop_fn fn) {
+        this->owned = p;
+        this->cleanup = fn;
+    }
+
+    void drop(void) {
+        if (this->owned != (void *)0 && this->cleanup != (vec_drop_fn)0) {
+            this->cleanup(this->owned);
+            this->owned = (void *)0;
+            this->cleanup = (vec_drop_fn)0;
+        }
+    }
+};
+
+#define VEC_DEFINE(T, DROP)                                                    \
+    typedef struct VEC_##T {                                                   \
+        T *items;                                                              \
+        size_t used;                                                            \
+        size_t space;                                                            \
+        size_t generation;                                                     \
+        const stdlib_allocator *alloc;                                         \
+        unsigned long long view_token;                                         \
+    } VEC_##T;                                                                 \
+    typedef struct VEC_##T##_Slice {                                           \
+        T *items;                                                              \
+        const T *owner_base;                                                   \
+        size_t used;                                                            \
+        unsigned long long token;                                              \
+        unsigned long long gen;                                                \
+        int bound;                                                             \
+    } VEC_##T##_Slice;                                                         \
+    static inline int VEC_##T##_bytes(size_t n, size_t *out) {                 \
+        size_t max = STDLIB_ALLOC_LIMIT / sizeof(T);                           \
+        if (n > max) {                                                         \
+            stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,              \
+                        "Vec: element count exceeds allocation limit");       \
+            return -1;                                                         \
+        }                                                                      \
+        *out = n * sizeof(T);                                                  \
+        return 0;                                                              \
+    }                                                                          \
+    static inline size_t VEC_##T##_growth(size_t space, size_t need) {           \
+        size_t max = STDLIB_ALLOC_LIMIT / sizeof(T);                           \
+        if (space >= max) return max;                                            \
+        if (space > max - space) return max;                                       \
+        return (space + space < need) ? need : space + space;                          \
+    }                                                                          \
+    static inline void VEC_##T##_sync(VEC_##T *v) {                            \
+        if (v->items != (T *)0 && v->view_token != 0u)                         \
+            stdlib_view_set_generation((const void *)v->items, v->view_token, \
+                                       (unsigned long long)v->generation);    \
+    }                                                                          \
+    static inline VEC_##T VEC_##T##_init(void) {                               \
+        VEC_##T v;                                                             \
+        v.items = (T *)0; v.used = 0; v.space = 0; v.generation = 0;              \
+        v.alloc = (const stdlib_allocator *)0; v.view_token = 0;               \
+        return v;                                                              \
+    }                                                                          \
+    static inline VEC_##T VEC_##T##_init_arena(const stdlib_allocator *a) {    \
+        VEC_##T v = VEC_##T##_init();                                          \
+        v.alloc = a;                                                           \
+        return v;                                                              \
+    }                                                                          \
+    static inline int VEC_##T##_reserve(VEC_##T *v, size_t want) {             \
+        error e = error_ctor();                                                \
+        T *fresh;                                                              \
+        size_t bytes = 0;                                                      \
+        size_t i;                                                              \
+        if (want <= v->space) return 0;                                          \
+        if (VEC_##T##_bytes(want, &bytes) != 0) return -1;                     \
+        fresh = (T *)stdlib_allocate(v->alloc, bytes, STDLIB_ALIGN_DEFAULT, &e);\
+        if (fresh == (T *)0) return -1;                                        \
+        for (i = 0; i < v->used; ++i) fresh[i] = v->items[i];                   \
+        if (v->items != (T *)0) {                                              \
+            stdlib_view_retire((const void *)v->items);                        \
+            stdlib_deallocate(v->alloc, (void *)v->items, v->space * sizeof(T)); \
+        }                                                                      \
+        v->items = fresh; v->space = want; v->generation++;                      \
+        v->view_token = stdlib_view_register((const void *)v->items, bytes);   \
+        VEC_##T##_sync(v);                                                     \
+        stdlib_tm_add(STDLIB_TM_GROWTH, 1);                                    \
+        return 0;                                                              \
+    }                                                                          \
+    static inline int VEC_##T##_push(VEC_##T *v, T value) {                    \
+        size_t max = STDLIB_ALLOC_LIMIT / sizeof(T);                           \
+        size_t want;                                                           \
+        if (v->used == v->space) {                                                \
+            size_t need;                                                       \
+            if (v->used >= max || v->space > max / 2u) {                          \
+                stdlib_note(STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,          \
+                            "Vec_push: capacity overflow");                    \
+                return -1;                                                     \
+            }                                                                  \
+            need = v->used + 1u; if (need < 4u) need = 4u;                      \
+            want = VEC_##T##_growth(v->space, need);                             \
+            if (VEC_##T##_reserve(v, want) != 0) return -1;                    \
+        }                                                                      \
+        v->items[v->used++] = value;                                            \
+        return 0;                                                              \
+    }                                                                          \
+    static inline int VEC_##T##_get(const VEC_##T *v, size_t i, T *out) {      \
+        if (out == (T *)0 || i >= v->used) {                                    \
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,             \
+                        "Vec_get: index out of range");                        \
+            return -1;                                                         \
+        }                                                                      \
+        *out = v->items[i];                                                    \
+        return 0;                                                              \
+    }                                                                          \
+    static inline int VEC_##T##_set(VEC_##T *v, size_t i, T value) {           \
+        if (i >= v->used) {                                                     \
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,             \
+                        "Vec_set: index out of range");                        \
+            return -1;                                                         \
+        }                                                                      \
+        v->items[i] = value;                                                   \
+        return 0;                                                              \
+    }                                                                          \
+    static inline VEC_##T##_Slice VEC_##T##_view(VEC_##T *v) {                 \
+        VEC_##T##_Slice s;                                                     \
+        s.items = v->items; s.owner_base = v->items; s.used = v->used;           \
+        s.token = v->view_token; s.gen = (unsigned long long)v->generation;    \
+        s.bound = v->items != (T *)0 ? 1 : 0;                                  \
+        return s;                                                              \
+    }                                                                          \
+    static inline int VEC_##T##_slice_stale(const VEC_##T##_Slice *s) {        \
+        unsigned long long current = 0;                                        \
+        if (s->bound == 0) return 0;                                           \
+        if (s->token == 0u) return 1;                                          \
+        if (stdlib_view_validate((const void *)s->owner_base, s->token) != 1)  \
+            return 1;                                                          \
+        if (stdlib_view_get_generation((const void *)s->owner_base,           \
+                                       s->token, &current) != 1) return 1;     \
+        return current != s->gen ? 1 : 0;                                      \
+    }                                                                          \
+    static inline T *VEC_##T##_slice_data(VEC_##T##_Slice *s) {                \
+        return VEC_##T##_slice_stale(s) ? (T *)0 : s->items;                   \
+    }                                                                          \
+    static inline int VEC_##T##_slice_get(const VEC_##T##_Slice *s,            \
+                                          size_t i, T *out) {                  \
+        if (out == (T *)0 || i >= s->used || VEC_##T##_slice_stale(s)) {        \
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,             \
+                        "Slice_get: index out of range or stale slice");       \
+            return -1;                                                         \
+        }                                                                      \
+        *out = s->items[i];                                                    \
+        return 0;                                                              \
+    }                                                                          \
+    static inline int VEC_##T##_slice_set(VEC_##T##_Slice *s, size_t i,        \
+                                          T value) {                           \
+        if (i >= s->used || VEC_##T##_slice_stale(s)) {                         \
+            stdlib_note(STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,             \
+                        "Slice_set: index out of range or stale slice");       \
+            return -1;                                                         \
+        }                                                                      \
+        s->items[i] = value;                                                   \
+        return 0;                                                              \
+    }                                                                          \
+    static inline void VEC_##T##_drop(VEC_##T *v) {                            \
+        size_t i;                                                              \
+        if (v->items == (T *)0) return;                                        \
+        for (i = 0; i < v->used; ++i) DROP(v->items[i]);                        \
+        stdlib_view_retire((const void *)v->items);                            \
+        stdlib_deallocate(v->alloc, (void *)v->items, v->space * sizeof(T));     \
+        v->items = (T *)0; v->used = 0; v->space = 0; v->generation++;            \
+        v->view_token = 0;                                                     \
+    }                                                                          \
+    static inline void VEC_##T##_drop_void(void *p) {                          \
+        VEC_##T##_drop((VEC_##T *)p);                                          \
+    }
+
+/* Public naming: Vec(T)/Slice(T) are the generated types. */
+#define Vec(T) VEC_##T
+#define Slice(T) VEC_##T##_Slice
+#define Vec_init(T) VEC_##T##_init()
+#define VEC_CAT(a, b) VEC_CAT_IMPL(a, b)
+#define VEC_CAT_IMPL(a, b) a##b
+#define Vec_init_arena(a) VEC_CAT(VEC_, VEC_CAT(VEC_DEFAULT_TYPE, _init_arena))(a)
+#define Vec_init_arena_t(T, a) VEC_##T##_init_arena(a)
+#define Vec_reserve(T, v, n) VEC_##T##_reserve((v), (n))
+#define Vec_push(T, v, x) VEC_##T##_push((v), (x))
+#define Vec_get(T, v, i, out) VEC_##T##_get((v), (i), (out))
+#define Vec_set(T, v, i, x) VEC_##T##_set((v), (i), (x))
+#define Vec_view(T, v) VEC_##T##_view(v)
+#define Vec_drop(T, v) VEC_##T##_drop(v)
+#define Vec_guard(T, v) vec_owner((void *)&(v), VEC_##T##_drop_void)
+#define Slice_stale(T, s) VEC_##T##_slice_stale(s)
+#define Slice_data(T, s) VEC_##T##_slice_data(s)
+#define Slice_get(T, s, i, out) VEC_##T##_slice_get((s), (i), (out))
+#define Slice_set(T, s, i, x) VEC_##T##_slice_set((s), (i), (x))
+/* Shorthand: define VEC_DEFAULT_TYPE before using these. */
+#define vec_get(v, i, out) VEC_CAT(VEC_, VEC_CAT(VEC_DEFAULT_TYPE, _get))((v), (i), (out))
+#define vec_set(v, i, x) VEC_CAT(VEC_, VEC_CAT(VEC_DEFAULT_TYPE, _set))((v), (i), (x))
+
 #endif
