@@ -470,7 +470,11 @@ static void test_wide_format(void) {
     errno = 0;
     assert(cplus_fwprintf(NULL, L"x") == -1 && errno == EINVAL);
     errno = 0;
-    assert(cplus_vfwprintf(NULL, L"x", (va_list)0) == -1 && errno == EINVAL);
+    {
+        va_list empty_ap;
+        __builtin_memset(&empty_ap, 0, sizeof empty_ap);
+        assert(cplus_vfwprintf(NULL, L"x", empty_ap) == -1 && errno == EINVAL);
+    }
     errno = 0;
     assert(cplus_wscanf(NULL) == EOF && errno == EINVAL);
     errno = 0;
