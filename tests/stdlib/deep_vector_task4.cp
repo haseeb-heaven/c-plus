@@ -577,7 +577,7 @@ int main(void) {
          * dereferenced. */
         if (view_s.reserve(64) != 0)
             view_ok = 0;
-        if (view_v.data() != view_orig || view_v.data() == view_s.c_str())
+        if (view_v.data() != (const char *)0)
             view_ok = 0;
         if (view_v.size() != view_size || view_size != 6)
             view_ok = 0;
@@ -592,7 +592,7 @@ int main(void) {
             view_s.drop();
             if (view_s.valid() != 0 || view_s.c_str()[0] != '\0')
                 vd_ok = 0;
-            if (view_v.data() != view_orig || view_v.size() != view_size)
+            if (view_v.data() != (int *)0 || view_v.size() != view_size)
                 vd_ok = 0;
             t4("T4_STALE_VIEW_DROP", vd_ok);
         }

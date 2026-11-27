@@ -179,7 +179,9 @@ static void recoverable(void) {
     ck(s.append("-a-much-longer-suffix") == 0, "inval-realloc-append-rc");
     after = s.c_str();
     ck(after != old_buf, "inval-buffer-moved");
-    ck(v.data() == old_buf, "inval-view-still-points-old");
+    /* The lifetime-checked accessor refuses a stale owner instead of handing
+     * back the old address; raw_data() remains the explicit unsafe escape. */
+    ck(v.data() == (const char *)0, "inval-view-refuses-after-realloc");
     ck(stdlib_alloc_check_generation(old_buf, gen) == 0,
        "inval-old-generation-stale");
     ck(stdlib_alloc_generation(after) != 0ULL &&
@@ -196,8 +198,8 @@ static void recoverable(void) {
     ck(s.valid() == 0 && s.c_str()[0] == '\0', "inval-drop-owner-empty");
     ck(stdlib_alloc_check_generation(old_buf, gen) == 0,
        "inval-drop-generation-stale");
-    ck(v.data() == old_buf && v.size() == 6,
-       "inval-drop-view-unchanged-fields");
+    ck(v.data() == (const char *)0 && v.size() == 6,
+       "inval-drop-view-refuses-after-drop");
     /* Never call v.equals(...) / v.is_valid_utf8() on old_buf here. */
 }
 
@@ -205,7 +207,7 @@ static void recoverable(void) {
 static void child_stale_view_check(void) {
     string s = string("live");
     string_view v = s.to_view();
-    const char *stale = v.data();
+    const char *stale = v.raw_data();
     s.drop();                               /* invalidates the borrowed pointer */
     cplus_check_live(stale);                 /* fatal: no longer a live block */
 }

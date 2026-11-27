@@ -395,7 +395,7 @@ static void t4_view(void) {
     t4_ck(t4_owner.reserve(64) == 0 && t4_owner.capacity() == 64,
           "t4_view_stale_reserve_rc");
     t4_ck(t4_owner.c_str() != t4_stale, "t4_view_stale_pointer_moved");
-    t4_ck(t4_view.data() == t4_stale, "t4_view_stale_data_unchanged");
+    t4_ck(t4_view.data() == (const char *)0, "t4_view_stale_data_refused");
     t4_ck(t4_saved_size2 == 6 && t4_view.size() == t4_saved_size,
           "t4_view_stale_size_unchanged");
 }
