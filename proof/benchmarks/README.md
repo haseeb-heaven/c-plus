@@ -58,7 +58,7 @@ raw arithmetic loops. No claim that C+ is faster at everything.
 All rows use the same 2,000,000-iteration integer/struct workload and checksum
 `16776346274400`. Sources: `language_rounds/{bench.cp,bench.rs,bench.zig,bench.goose}`;
 runners: `language_rounds/{run.sh,run_zig.sh,run_goose.sh}`; raw data:
-`language_rounds.txt`, `zig_rounds.txt` (if present), `goose_rounds.txt`.
+`language_rounds.txt`, `zig_rounds.txt`, `goose_rounds.txt`.
 
 | Language | Build | 5 rounds (ms) | Median (ms) | Evidence |
 |---|---|---:|---:|---|
