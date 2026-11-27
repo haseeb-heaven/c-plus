@@ -173,10 +173,22 @@ class http_client {
              * guards the hop; without PROTOCOLS_STR a caller could pass a
              * file://, gopher://, dict://, ... URL straight to perform().
              * Bound the chain even for http/https loops. */
-            if (curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS_STR,
-                                 HTTP_REDIRECT_PROTOCOLS) != CURLE_OK ||
+            int policy_ok;
+#if defined(LIBCURL_VERSION_NUM) && LIBCURL_VERSION_NUM >= 0x075500
+            policy_ok =
+                curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS_STR,
+                                 HTTP_REDIRECT_PROTOCOLS) == CURLE_OK &&
                 curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS_STR,
-                                 HTTP_REDIRECT_PROTOCOLS) != CURLE_OK ||
+                                 HTTP_REDIRECT_PROTOCOLS) == CURLE_OK;
+#else
+            {
+                long mask = (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                policy_ok =
+                    curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS, mask) == CURLE_OK &&
+                    curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS, mask) == CURLE_OK;
+            }
+#endif
+            if (!policy_ok ||
                 curl_easy_setopt(this->handle, CURLOPT_MAXREDIRS,
                                  HTTP_MAX_REDIRECTS) != CURLE_OK) {
                 error_fail(err, CPLUS_EXIT_UNSUPPORTED,

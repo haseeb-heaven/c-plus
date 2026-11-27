@@ -49,9 +49,19 @@ static void datastack_tls_destructor(void *value)
         if (ds->capacity != 0u) (void)munmap(ds->base, ds->capacity);
 #endif
     } else {
-        /* Heap fallback obtains its block from the host allocator
-         * (cplus_alloc -> malloc); release that backing storage here. */
+        /* Heap fallback was obtained from cplus_alloc(), which registers the
+         * block in the runtime live ledger. Release through cplus_release()
+         * when the runtime is linked so the ledger entry is removed; plain-C
+         * consumers without the runtime keep the host-free fallback. */
+#if defined(__GNUC__) || defined(__clang__)
+        extern void cplus_release(void *) __attribute__((weak));
+        if (cplus_release != NULL)
+            cplus_release(ds->base);
+        else
+            free(ds->base);
+#else
         free(ds->base);
+#endif
     }
     (void)__atomic_fetch_add(&g_datastack_reclaims, 1u, __ATOMIC_RELAXED);
     memset(ds, 0, sizeof *ds); /* also invalidates every outstanding mark */

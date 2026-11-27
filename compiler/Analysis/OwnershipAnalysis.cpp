@@ -1920,35 +1920,40 @@ std::set<std::string> definedFunctionNames(const std::string &source,
 /// rejecting every `cplus_*` name would outlaw legitimate project helpers such
 /// as `cplus_core_helper` (a multi-TU regression fixture).
 bool isReservedHelperName(llvm::StringRef name) {
-  // Emitted guard/arithmetic helpers and generated defer/drop helpers.
-  if (name.starts_with("__cplus_checked_") ||
-      name.starts_with("__cplus_inline_") ||
-      name.starts_with("__cplus_defer_") || name.starts_with("cplus_drop_"))
-    return true;
-  // Closed runtime families (allocation, checks, printing, threading, scope).
-  if (name.starts_with("cplus_alloc") || name.starts_with("cplus_check_") ||
-      name.starts_with("cplus_print_") || name.starts_with("cplus_mutex_") ||
-      name.starts_with("cplus_tls_") || name.starts_with("cplus_scope_") ||
-      name.starts_with("cplus_checked"))
-    return true;
-  // Remaining individual runtime ABI entry points (runtime/include/cplus/cplus.h
-  // and the rewriter's generated wrappers).
+  // Closed exact-symbol allowlist. Prefix matching used to let any user
+  // declaration like `extern void *cplus_check_backdoor(void *)` bypass the
+  // STRICT unverified-extern gate (issue #199). Every entry below is an
+  // actual compiler-generated helper or runtime ABI symbol.
   static const std::set<llvm::StringRef> kReserved = {
       "__cplus_bounds_check",
-      "cplus_address_retired", "cplus_allocation_generation",
-      "cplus_arith_fatal", "cplus_cleanup", "cplus_cleanup_kind",
+      "__cplus_checked_add_i64", "__cplus_checked_div_i64",
+      "__cplus_checked_f2i_i64", "__cplus_checked_mul_i64",
+      "__cplus_checked_narrow_i64", "__cplus_checked_rem_i64",
+      "__cplus_checked_shl_i64", "__cplus_checked_shr_i64",
+      "__cplus_checked_size_mul", "__cplus_checked_sub_i64",
+      "__cplus_inline_f2i_i64", "__cplus_inline_narrow_i64",
+      "__cplus_inline_size_mul", "__cplus_inline_sub_i64",
+      "cplus_address_retired", "cplus_alloc", "cplus_alloc_array",
+      "cplus_alloc_bytes", "cplus_alloc_count", "cplus_allocation_generation",
+      "cplus_arith_fatal", "cplus_check_bounds", "cplus_check_index",
+      "cplus_check_live", "cplus_check_nonnull", "cplus_check_ptr_formation",
+      "cplus_cleanup", "cplus_cleanup_kind", "cplus_epoch",
+      "cplus_exception_enter", "cplus_exception_pop", "cplus_exception_raise",
       "cplus_fatal", "cplus_fatal_hook", "cplus_free_registered",
-      "cplus_log", "cplus_log_impl", "cplus_memcpy", "cplus_memmove",
-      "cplus_move", "cplus_new", "cplus_new_array",
-      "cplus_printf_s", "cplus_fprintf_s", "cplus_snprintf_s",
-      "cplus_sprintf_s", "cplus_realloc", "cplus_realloc_registered",
-      "cplus_register_allocation", "cplus_release",
+      "cplus_live_table_stats", "cplus_log", "cplus_log_impl",
+      "cplus_memcpy", "cplus_memmove", "cplus_move", "cplus_mutex_free",
+      "cplus_mutex_lock", "cplus_mutex_new", "cplus_mutex_unlock",
+      "cplus_new", "cplus_new_array", "cplus_printf_s", "cplus_fprintf_s",
+      "cplus_snprintf_s", "cplus_sprintf_s", "cplus_print_begin",
+      "cplus_print_end", "cplus_print_value", "cplus_realloc",
+      "cplus_realloc_registered", "cplus_register_allocation", "cplus_release",
       "cplus_resource", "cplus_resource_check_borrow",
       "cplus_retired_ledger_full", "cplus_rotl32", "cplus_rotr32",
       "cplus_runtime", "cplus_runtime_log_level",
       "cplus_runtime_logging_init", "cplus_scan_one", "cplus_scan_value",
-      "cplus_strcpy", "cplus_strnlen", "cplus_zero", "cplus_zalloc",
-  };
+      "cplus_scan_value_at", "cplus_scope_cleanup", "cplus_scope_push",
+      "cplus_strcpy", "cplus_strnlen", "cplus_tls_free", "cplus_tls_get",
+      "cplus_tls_new", "cplus_tls_set", "cplus_zero", "cplus_zalloc"};
   return kReserved.count(name) != 0;
 }
 
