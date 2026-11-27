@@ -218,13 +218,14 @@ static void addIndex(std::vector<int> &indices, int idx) {
 /// call must stay accepted while an unannotated user extern must not.
 static bool isBuiltinLibcEffectName(llvm::StringRef name) {
   static const std::set<llvm::StringRef> kBuiltins = {
-      "malloc",    "calloc",    "malloc_s",  "calloc_s",   "realloc",
-      "realloc_s", "free",      "cplus_release", "free_s", "memcpy",
-      "memmove",   "memcpy_s",  "memmove_s", "memset",     "strcpy",
-      "strcpy_s",  "strncpy",   "strncpy_s", "strcat",     "strcat_s",
-      "strlen",    "strnlen_s", "strcmp",    "fopen",      "fopen_s",
-      "fclose",    "fread",     "fwrite",    "snprintf",   "sprintf_s",
-      "snprintf_s", "scanf_s"};
+      "malloc",     "calloc",     "malloc_s",  "calloc_s",   "realloc",
+      "realloc_s",  "free",       "cplus_release", "free_s", "memcpy",
+      "memmove",    "memset",     "memcpy_s",  "memmove_s",  "memset_s",
+      "strcpy",     "strcpy_s",   "strncpy",   "strncpy_s",  "strcat",
+      "strcat_s",   "strncat",    "strncat_s", "strlen",     "strnlen_s",
+      "strcmp",     "fopen",      "fopen_s",   "fclose",     "fclose_s",
+      "fread",      "fread_s",    "fwrite",    "fwrite_s",   "snprintf",
+      "sprintf_s",  "snprintf_s", "scanf_s"};
   return kBuiltins.count(name) != 0;
 }
 
@@ -232,8 +233,24 @@ static bool isBuiltinLibcEffectName(llvm::StringRef name) {
 /// semantics and are linked from the C+ runtime; they are trusted regardless of
 /// where the contract file came from. Shared by hasDeclaredEffect() and the
 /// authoritative-summary predicate so the two cannot drift apart.
+///
+/// This MUST be a closed allowlist: a wildcard `cplus_*` / `__cplus_*` prefix
+/// would let any user header declare `extern int *cplus_backdoor(int *)` and
+/// silence the STRICT unverified-extern gate without a body or a contract.
+/// isReservedHelperName() is that closed list (explicit symbols plus a few
+/// closed runtime families); the extra exact names below are genuine runtime
+/// ABI entry points declared by runtime/include/cplus/cplus.h that are not
+/// otherwise reserved. A user helper such as `cplus_core_helper` stays
+/// untrusted and must supply a body or a validated contract like any other
+/// user function.
 static bool isCompilerHelperEffectName(llvm::StringRef name) {
-  return name.starts_with("cplus_") || name.starts_with("__cplus_");
+  if (isReservedHelperName(name))
+    return true;
+  static const std::set<llvm::StringRef> kRuntimeAbi = {
+      "cplus_epoch",         "cplus_live_table_stats",
+      "cplus_scan_value_at", "cplus_exception_enter",
+      "cplus_exception_pop", "cplus_exception_raise"};
+  return kRuntimeAbi.count(name) != 0;
 }
 
 /// True when a function declaration can carry safety-relevant pointer effects.
@@ -276,30 +293,41 @@ class LocalCollector : public RecursiveASTVisitor<LocalCollector> {
 public:
   explicit LocalCollector(ASTContext &ctx) : ctx_(ctx) {}
 
-  // Only these functions are known to write through an output pointer. Taking
-  // an address for an arbitrary call (or storing it) does NOT initialize it.
+  // Only these EXACT functions are known to write through an output pointer.
+  // A substring match such as `find("scan")` would let `prescan(&x)` or a
+  // read-only `read_only_scan(const int *)` silently suppress an uninitialized
+  // read. Taking an address for an arbitrary call (or storing it) does NOT
+  // initialize it.
   static bool isOutputFunction(llvm::StringRef name) {
-    return name.contains("scanf") || name == "getline" ||
-           name == "pthread_mutex_init" || name == "pthread_cond_init" ||
-           name == "pthread_create" || name == "scan" ||
-           name == "cplus_scan_one" || name == "cplus_scan_value" ||
-           name == "checked_add" || name == "cplus_checked_add";
+    static const std::set<llvm::StringRef> kOutputs = {
+        "scanf",         "scanf_s",       "__isoc99_scanf",
+        "sscanf",        "sscanf_s",      "fscanf",
+        "fscanf_s",      "vscanf",        "vsscanf",
+        "vfscanf",       "getline",       "pthread_mutex_init",
+        "pthread_cond_init", "pthread_create", "scan",
+        "cplus_scan_one", "cplus_scan_value", "cplus_scan_value_at",
+        "checked_add",   "cplus_checked_add"};
+    return kOutputs.count(name) != 0;
   }
 
   bool VisitCallExpr(CallExpr *call) {
     const FunctionDecl *callee = call->getDirectCallee();
     llvm::StringRef calleeName = callee ? callee->getName() : llvm::StringRef();
-    if (calleeName.empty())
+    if (!callee)
       if (const auto *ref = dyn_cast<DeclRefExpr>(
               call->getCallee()->IgnoreParenImpCasts()))
         calleeName = ref->getDecl()->getName();
-    // An unresolved callee name (e.g. the C+ `scan` macro) may write through
-    // by-value arguments. Conservatively treat those arguments as outputs so
-    // valid macro-based I/O is not falsely diagnosed.
-    bool unknownMacroCall = calleeName.empty() || !callee ||
-                            calleeName.find("scan") != llvm::StringRef::npos;
+    // Only a truly unresolved callee name (e.g. a macro-expanded call whose
+    // callee cannot be named) is conservatively treated as an unknown output.
+    // An indirect call through a function pointer is NOT: its signature says
+    // whether a parameter is a const (read-only) pointer, and a body we cannot
+    // see cannot be assumed to initialize `&x`. The policy worklist below
+    // diagnoses the escape instead of seeding it as initialized.
+    bool unknownMacroCall = calleeName.empty() && !callee;
     const bool isOutput = isOutputFunction(calleeName) || unknownMacroCall;
-    bool byValueOutput = unknownMacroCall || calleeName == "cplus_scan_one" ||
+    // By-value scalars are initialised only by the exact C+ scan helpers.
+    // An opaque/indirect call must never make `int x; fn(x); return x;` clean.
+    bool byValueOutput = calleeName == "cplus_scan_one" ||
                          calleeName == "cplus_scan_value";
     for (const Expr *arg : call->arguments()) {
       const Expr *a = arg->IgnoreParenCasts();
@@ -1562,11 +1590,11 @@ static ContractState &loadedContracts() {
   return st;
 }
 
-FunctionEffect libcEffect(llvm::StringRef name) {
-  auto &contracts = loadedContracts().contracts;
-  auto it = contracts.find(name.str());
-  if (it != contracts.end())
-    return it->second;
+/// Built-in effect summaries for libc / SafeCRT calls. Kept separate from the
+/// JSON contract layer so a known-correct argument index can be applied even
+/// when a contract entry exists (the compiled-in contracts use prose extents
+/// such as "n <= dst_capacity" that resolve to no argument index at all).
+static FunctionEffect builtinLibcEffect(llvm::StringRef name) {
   FunctionEffect e;
   if (name == "malloc" || name == "calloc" || name == "malloc_s" ||
       name == "calloc_s") {
@@ -1588,39 +1616,61 @@ FunctionEffect libcEffect(llvm::StringRef name) {
     e.freedArg = 0;
     e.nullableArg = true; // free(NULL) is defined
     e.category = "CPLUS-SAFE-FREE";
-  } else if (name == "memcpy" || name == "memmove" || name == "memcpy_s" ||
-             name == "memmove_s" || name == "memset") {
+  } else if (name == "memcpy" || name == "memmove" || name == "memset" ||
+             name == "memcpy_s" || name == "memmove_s" || name == "memset_s") {
     e.borrows = true;
     e.writes = true;
     e.destArg = 0;
-    e.sizeArg = (name == "memcpy_s" || name == "memmove_s") ? 1 : -1;
-    e.checkedSize = e.sizeArg >= 0;
+    // memcpy/memmove/memset: (dst, src, n) => n is argument 2.
+    // *_s variants: (dst, dmax, ...) => destination capacity is argument 1.
+    e.sizeArg = (name == "memcpy_s" || name == "memmove_s" ||
+                 name == "memset_s") ? 1 : 2;
+    e.checkedSize = true;
     e.category = "CPLUS-SAFE-BOUNDS";
   } else if (name == "strcpy" || name == "strcpy_s" ||
              name == "strncpy" || name == "strncpy_s" ||
-             name == "strcat" || name == "strcat_s") {
+             name == "strcat" || name == "strcat_s" ||
+             name == "strncat" || name == "strncat_s") {
     e.borrows = true;
     e.writes = true;
     e.destArg = 0;
-    e.sizeArg = (name.find("_s") != std::string::npos ||
-                 name == "strncpy") ? 1 : -1;
+    // strncpy/strncat: (dst, src, n) => n is argument 2, NOT the src pointer
+    // at argument 1. The SafeCRT *_s forms put dmax at argument 1.
+    if (name == "strcpy_s" || name == "strncpy_s" || name == "strcat_s" ||
+        name == "strncat_s")
+      e.sizeArg = 1;
+    else if (name == "strncpy" || name == "strncat")
+      e.sizeArg = 2;
     e.checkedSize = e.sizeArg >= 0;
     e.category = "CPLUS-SAFE-CRT";
   } else if (name == "strlen" || name == "strnlen_s" || name == "strcmp") {
     e.borrows = true;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fopen" || name == "fopen_s") {
+  } else if (name == "fopen") {
     e.allocates = true;
-    e.returnsOwned = true;
+    e.returnsOwned = true; // fopen returns the owned FILE*
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fclose") {
+  } else if (name == "fopen_s") {
+    e.allocates = true;
+    // fopen_s returns errno_t and writes the owned FILE* through argument 0.
+    e.returnsOwned = false;
+    e.writes = true;
+    e.destArg = 0;
+    e.mayFail = true;
+    e.category = "CPLUS-SAFE-CRT";
+  } else if (name == "fclose" || name == "fclose_s") {
     e.frees = true;
     e.freedArg = 0;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fread" || name == "fwrite") {
+  } else if (name == "fread" || name == "fread_s" || name == "fwrite" ||
+             name == "fwrite_s") {
     e.borrows = true;
     e.writes = true;
+    // fread_s/fwrite_s: (buffer, buffersize, elementsize, count, stream).
+    e.destArg = 0;
+    e.sizeArg = (name == "fread_s" || name == "fwrite_s") ? 1 : -1;
+    e.checkedSize = e.sizeArg >= 0;
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
   } else if (name == "snprintf" || name == "sprintf_s" ||
@@ -1629,6 +1679,32 @@ FunctionEffect libcEffect(llvm::StringRef name) {
     e.checkedSize = name.starts_with("sn") || name.find("_s") != std::string::npos;
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
+  }
+  return e;
+}
+
+FunctionEffect libcEffect(llvm::StringRef name) {
+  FunctionEffect builtin = builtinLibcEffect(name);
+  auto &contracts = loadedContracts().contracts;
+  auto it = contracts.find(name.str());
+  if (it == contracts.end())
+    return builtin;
+  FunctionEffect e = it->second;
+  // Prefer the exact builtin argument indices over a contract's prose extent:
+  // without this, `strncpy`'s size would be read from the source pointer at
+  // argument 1 instead of the byte count at argument 2.
+  if (builtin.sizeArg >= 0) {
+    e.sizeArg = builtin.sizeArg;
+    e.checkedSize = true;
+  }
+  if (builtin.destArg >= 0)
+    e.destArg = builtin.destArg;
+  if (name == "fopen_s") {
+    // errno_t fopen_s(FILE **streamptr, ...): ownership is delivered through
+    // argument 0, not through the scalar return value.
+    e.returnsOwned = false;
+    e.writes = true;
+    e.destArg = 0;
   }
   return e;
 }

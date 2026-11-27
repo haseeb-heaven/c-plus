@@ -14,7 +14,7 @@ usage() {
 Usage: run_all.sh [options]
   --full              run every category
   --test NAME         run one named test
-  --category NAME     compile_fail|runtime_fail|positive|strict_positive|native|strict40|stress|core|legacy|sanitizer
+  --category NAME     compile_fail|runtime_fail|positive|strict_positive|native|strict40|stress|regression|core|legacy|sanitizer
   --mode strict|default|legacy
   --timeout SECONDS   per-test timeout (default 60)
   --help
@@ -268,6 +268,23 @@ if want_category strict_positive; then
       record "$name" BUILD_FAILURE "$cmd" "" "$(head -3 "$err")" "$code"
     fi
   done
+fi
+if want_category regression; then
+  runner="$ROOT/tests/compiler/agent1/regression_issues198_201.sh"
+  if [ -n "$ONE" ] && [ "$ONE" != "regression_issues198_201" ]; then :; else
+    run_timed "$TIMEOUT" env CPLUS_BUILD="${CPLUS_BUILD:-$ROOT/build-local}" \
+      CPLUS_BIN="$CPLUS" sh "$runner" >"$RES/logs/regression198201.stdout" \
+      2>"$RES/logs/regression198201.stderr"
+    code=$?
+    if [ "$code" -eq 0 ]; then
+      record regression_issues198_201 PASS "sh $runner" \
+        "$(tail -1 "$RES/logs/regression198201.stdout")" "" "$code"
+    else
+      record regression_issues198_201 FAIL "sh $runner" \
+        "$(tail -3 "$RES/logs/regression198201.stdout")" \
+        "$(tail -3 "$RES/logs/regression198201.stderr")" "$code"
+    fi
+  fi
 fi
 if want_category core; then
   runner="$ROOT/tests/core/run.sh"
