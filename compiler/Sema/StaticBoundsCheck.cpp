@@ -58,6 +58,9 @@ class Checker {
   struct FuncSig {
     std::vector<std::string> params;
     std::vector<bool> outParam; // `T **out`: an allocation written via *out
+    // Indices of the parameters declared `restrict` / `__restrict` /
+    // `__restrict__`.  Only these parameters may alias with each other.
+    std::vector<bool> restrictParam;
     // Token position of each parameter's name.  A parameter shadows an outer
     // name-keyed extent for the whole body; a declaration at/after this token
     // (e.g. `void f(int a[8])`) still describes the parameter itself.
@@ -2385,40 +2388,47 @@ private:
                              "use posix_spawn or fork before creating threads");
   }
 
+  /// Two `restrict`-qualified parameters of the same call must not refer to
+  /// overlapping objects.  Only the parameters the function itself declares
+  /// as `restrict` matter: an unrelated function elsewhere in the translation
+  /// unit must not turn every call into an error.
   void checkRestrictAliasing() {
-    std::set<std::string> restrictFuncs;
     for (const auto &entry : funcs_) {
       const FuncSig &sig = entry.second;
-      // funcs_ stores parameter names only; rescan the header for 'restrict'.
-      bool found = false;
+      bool anyRestrict = false;
+      for (bool restricted : sig.restrictParam)
+        if (restricted)
+          anyRestrict = true;
+      if (!anyRestrict)
+        continue;
       for (size_t i = 0; i < toks_.size(); ++i) {
-        if (!isIdent(i, "restrict")) continue;
-        // Attribute the restrict keyword to the nearest preceding function
-        // definition header containing this function's name.
-        for (size_t k = i; k > 0; --k) {
-          if (isPunct(k, ")") && isPunct(nextSig(k), "{")) {
-            break;
+        if (toks_[i].kind != TokKind::Identifier ||
+            toks_[i].text != entry.first)
+          continue;
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "("))
+          continue;
+        size_t rp = match(lp, "(", ")");
+        if (rp == kNPos || isPunct(nextSig(rp), "{"))
+          continue; // the definition itself, not a call
+        auto args = splitArgs(lp + 1, rp);
+        size_t count = args.size() < sig.restrictParam.size()
+                           ? args.size()
+                           : sig.restrictParam.size();
+        for (size_t a = 0; a < count; ++a) {
+          for (size_t b = a + 1; b < count; ++b) {
+            // At least one of the two must be restrict-qualified; a pair of
+            // unrestricted parameters may legitimately alias.
+            if (!sig.restrictParam[a] && !sig.restrictParam[b])
+              continue;
+            std::string lhs = baseName(args[a].first, args[a].second);
+            std::string rhs = baseName(args[b].first, args[b].second);
+            if (!lhs.empty() && lhs == rhs)
+              errorAt(toks_[i], "call passes overlapping pointers to restrict "
+                                "parameters");
           }
         }
-        found = true;
       }
-      if (found) restrictFuncs.insert(entry.first);
-    }
-    if (restrictFuncs.empty()) return;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (toks_[i].kind != TokKind::Identifier ||
-          !restrictFuncs.count(toks_[i].text))
-        continue;
-      size_t lp = nextSig(i);
-      if (!isPunct(lp, "(")) continue;
-      size_t rp = match(lp, "(", ")");
-      if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
-      auto args = splitArgs(lp + 1, rp);
-      if (args.size() < 2) continue;
-      std::string a = baseName(args[0].first, args[0].second);
-      std::string b = baseName(args[1].first, args[1].second);
-      if (!a.empty() && a == b)
-        errorAt(toks_[i], "call passes overlapping pointers to restrict parameters");
     }
   }
 
@@ -2459,7 +2469,8 @@ private:
     auto args = splitArgs(lp + 1, rp);
     if (args.empty())
       return;
-    std::string target = baseName(args[0].first, args[0].second);
+    std::string argText = exprText(args[0].first, args[0].second);
+    std::string argBase = baseName(args[0].first, args[0].second);
     size_t eq = kNPos;
     for (size_t k = i; k > 0; --k) {
       if (isPunct(k, "=")) { eq = k; break; }
@@ -2467,13 +2478,18 @@ private:
         break;
     }
     if (eq != kNPos) {
-      size_t lhs = eq == 0 ? kNPos : eq - 1;
-      while (lhs != kNPos && trivia(lhs)) {
-        if (lhs == 0) { lhs = kNPos; break; }
-        --lhs;
-      }
-      if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier &&
-          toks_[lhs].text == target) {
+      // The assigned lvalue is the whole expression before `=`, so that
+      // `s->buf = realloc(s->buf, n)` and `arr[i] = realloc(arr[i], n)` are
+      // compared as whole lvalues instead of a single trailing identifier.
+      size_t lhs = lvalueStart(eq);
+      std::string lhsText = exprText(lhs, eq);
+      std::string lhsBase = baseName(lhs, eq);
+      bool same = lhsText == argText;
+      // `p = realloc(p + 1, n)` overwrites the only pointer to the original
+      // block too: the plain variable is the base of the reallocated object.
+      if (!same && !lhsText.empty() && lhsText == lhsBase && lhsBase == argBase)
+        same = true;
+      if (same) {
         errorAt(toks_[i], "raw realloc can lose the original block on failure; "
                           "use cplus_realloc");
         return;
@@ -4011,6 +4027,64 @@ private:
     return std::string();
   }
 
+  /// Spelling of a token range with whitespace and comments removed, so that
+  /// `s -> buf` and `arr [ i ]` normalise to `s->buf` and `arr[i]`.
+  std::string exprText(size_t from, size_t to) const {
+    std::string out;
+    for (size_t k = from; k < to && k < toks_.size(); ++k) {
+      if (trivia(k))
+        continue;
+      out += toks_[k].text;
+    }
+    return out;
+  }
+
+  /// Start token of the lvalue expression that ends just before `end`.
+  /// Walks back over identifiers, `->`, `.`, `*` and bracketed subscripts.
+  size_t lvalueStart(size_t end) const {
+    int depth = 0;
+    size_t start = end;
+    while (start > 0) {
+      size_t k = start - 1;
+      if (trivia(k)) { --start; continue; }
+      if (toks_[k].kind == TokKind::Identifier) {
+        // A statement keyword ends the expression: `return p = realloc(..)`
+        // assigns to `p`, not to `return p`.
+        if (isControlKeyword(toks_[k].text))
+          break;
+        --start;
+        continue;
+      }
+      if (toks_[k].kind == TokKind::Number) { --start; continue; }
+      if (isPunct(k, "]")) { ++depth; --start; continue; }
+      if (isPunct(k, "[")) {
+        if (depth == 0)
+          break;
+        --depth;
+        --start;
+        continue;
+      }
+      if (depth == 0 &&
+          (isPunct(k, "->") || isPunct(k, ".") || isPunct(k, "*"))) {
+        --start;
+        continue;
+      }
+      break;
+    }
+    return start;
+  }
+
+  /// Keywords that never form part of an lvalue expression.
+  static bool isControlKeyword(const std::string &text) {
+    static const char *const kWords[] = {
+        "return", "if",    "else",  "while",  "for",    "do",     "switch",
+        "case",   "default", "break", "continue", "goto", "sizeof"};
+    for (const char *word : kWords)
+      if (text == word)
+        return true;
+    return false;
+  }
+
   /// memcpy with overlapping source/destination is undefined; memmove is the
   /// correct API.
   void checkMemcpyOverlap() {
@@ -4501,24 +4575,31 @@ private:
         continue;
       std::vector<std::string> params;
       std::vector<bool> outFlags;
+      std::vector<bool> restrictFlags;
       std::map<std::string, size_t> declPos;
       for (const auto &part : parts) {
         size_t last = kNPos;
         int stars = 0;
+        bool restricted = false;
         for (size_t k = part.first; k < part.second; ++k) {
-          if (toks_[k].kind == TokKind::Identifier)
+          if (toks_[k].kind == TokKind::Identifier) {
             last = k;
-          else if (isPunct(k, "*"))
+            if (toks_[k].text == "restrict" || toks_[k].text == "__restrict" ||
+                toks_[k].text == "__restrict__")
+              restricted = true;
+          } else if (isPunct(k, "*"))
             ++stars;
         }
         params.push_back(last == kNPos ? std::string() : toks_[last].text);
         outFlags.push_back(stars >= 2);
+        restrictFlags.push_back(restricted);
         if (last != kNPos)
           declPos[toks_[last].text] = last;
       }
       FuncSig sig;
       sig.params = params;
       sig.outParam = outFlags;
+      sig.restrictParam = restrictFlags;
       sig.paramDeclPos = declPos;
       sig.bodyOpen = nextSig(rp);
       sig.bodyClose = match(sig.bodyOpen, "{", "}");
