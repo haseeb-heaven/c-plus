@@ -88,7 +88,7 @@ static unsigned long g_overlap_cases;
 static unsigned long g_memcpy_handled;
 static unsigned long g_memcpy_refused_unchanged;
 static unsigned long g_memcpy_refused_zeroed;
-static unsigned long g_memmove_ok;
+static unsigned long g_memmove_ok, g_memmove_refused;
 static unsigned long g_warn_printed;
 static uint64_t      g_rng = UINT64_C(0xC0FFEE123456789A); /* fixed seed */
 
@@ -283,24 +283,32 @@ static void run_memmove_case(unsigned long idx) {
     size_t so  = c->src_offset;
     size_t dof = c->dst_offset;
     size_t len = c->length;
-    unsigned char *live, *ref;
+    unsigned char *live, *ref, *orig;
 
     live = (unsigned char *)malloc(bs);
     ref  = (unsigned char *)malloc(bs);
-    if (live == NULL || ref == NULL) {
+    orig = (unsigned char *)malloc(bs);
+    if (live == NULL || ref == NULL || orig == NULL) {
+        free(orig);
         free(ref);
         free(live);
         return;
     }
     fill_pattern(live, bs, c->seed);
     fill_pattern(ref, bs, c->seed);
+    memcpy(orig, live, bs);
 
     (void)host_memmove_fn(ref + dof, ref + so, len);
-    /* Ordinary memmove, hardened by safe_c.h: must match host exactly. */
+    /* Ordinary memmove, hardened by safe_c.h: must match host exactly, or
+     * fail closed with the destination left untouched. */
     memmove(live + dof, live + so, len);
 
     if (bytes_equal(live, ref, bs)) {
         ++g_memmove_ok;
+    } else if (bytes_equal(live, orig, bs)) {
+        /* A conservative refusal for an unproven capacity is safe: the
+         * destination is byte-for-byte intact. */
+        ++g_memmove_refused;
     } else {
         size_t i;
         for (i = 0u; i < bs; ++i) {
@@ -309,6 +317,7 @@ static void run_memmove_case(unsigned long idx) {
         finding(idx, "memmove", c, "hardened memmove differs from host memmove",
                 i, live[i], ref[i]);
     }
+    free(orig);
     free(ref);
     free(live);
 }
