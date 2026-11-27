@@ -149,8 +149,13 @@ static int sqldb_load(sqldb *db, const char *path) {
         char name[SQLDB_NAME_LEN] = {0};
         size_t k;
         if (sscanf(line, "row %d %d %65s", &id, &age, hex) == 3) {
-            for (k = 0; hex[2*k] != 0 && hex[2*k+1] != 0 &&
-                        k < SQLDB_NAME_LEN; ++k) {
+            /* Reserve the last element for the terminator written below.
+             * With k == SQLDB_NAME_LEN the old loop left name[k] = 0 one byte
+             * past the array; a row of 64+ hex characters reached exactly that
+             * case.  Decoding at most SQLDB_NAME_LEN - 1 bytes also matches
+             * sqldb_insert(), which stores at most that many bytes. */
+            for (k = 0; k + 1u < SQLDB_NAME_LEN &&
+                        hex[2*k] != 0 && hex[2*k+1] != 0; ++k) {
                 unsigned int byte = 0;
                 if (sscanf(hex + k*2, "%2x", &byte) != 1) break;
                 name[k] = (char)(unsigned char)byte;
