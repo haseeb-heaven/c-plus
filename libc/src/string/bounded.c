@@ -244,7 +244,10 @@ char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
     scap = source_capacity(s);
     {
         size_t room = scan;
-        int src_limited = (scap != (size_t)-1 && scap < room);
+        /* `scap == room` ends exactly at the source allocation edge: treat it
+         * as limited too, otherwise the lookahead below reads s[scan] one byte
+         * past a proven-capacity source. */
+        int src_limited = (scap != (size_t)-1 && scap <= room);
         scan = min_bound(scan, scap);
         if (scan == 0u) {
             if (src_limited) { /* nothing provably readable in the source */

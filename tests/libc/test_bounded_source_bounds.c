@@ -158,7 +158,59 @@ static void strncat_bounded_scan(void) {
     (void)munmap(base, (size_t)ps * 2u);
 }
 
-/* 6. Concurrent mode toggling must be race-free without touching the public
+/* 6. C1: a tracked source whose capacity exactly equals the destination room
+ * ends at the source allocation edge. bounded_strlen() consumes all `room`
+ * bytes with no NUL, so the old one-byte lookahead read s[room] past the
+ * block. Refuse without that read; exact-fit untracked sources and tracked
+ * sources with an in-capacity NUL must still append. */
+static void strcat_bounded_source_edge(void) {
+    enum { DCAP = 16, DLEN = 2 };
+    const size_t room = DCAP - DLEN - 1u; /* 13 */
+    char *dst = (char *)cplus_malloc(DCAP);
+    char *src;
+    char *r;
+    size_t i;
+    CHECK(dst != NULL);
+    if (!dst) return;
+
+    /* Tracked source, capacity == room, no NUL anywhere in the block. */
+    src = (char *)cplus_malloc(room);
+    CHECK(src != NULL);
+    if (!src) { cplus_free(dst); return; }
+    for (i = 0; i < room; ++i) src[i] = 'x';
+
+    dst[0] = 'a'; dst[1] = 'b'; dst[2] = '\0';
+    errno = 0;
+    r = cplus_strcat_bounded(dst, src, (size_t)-1);
+    CHECK(r == NULL && errno == ERANGE);
+    CHECK(strcmp(dst, "ab") == 0); /* destination intact on refusal */
+    cplus_free(src);
+
+    /* Control: untracked source with its NUL exactly at the room boundary. */
+    dst[0] = 'a'; dst[1] = 'b'; dst[2] = '\0';
+    errno = 0;
+    r = cplus_strcat_bounded(dst, "abcdefghijklm", (size_t)-1);
+    CHECK(r == dst && errno == 0);
+    CHECK(strcmp(dst, "ababcdefghijklm") == 0);
+
+    /* Control: tracked source, capacity == room, NUL inside the block. */
+    src = (char *)cplus_malloc(room);
+    CHECK(src != NULL);
+    if (src != NULL) {
+        for (i = 0; i < room - 1u; ++i) src[i] = 'y';
+        src[room - 1u] = '\0';
+        dst[0] = 'a'; dst[1] = 'b'; dst[2] = '\0';
+        errno = 0;
+        r = cplus_strcat_bounded(dst, src, (size_t)-1);
+        CHECK(r == dst && errno == 0);
+        CHECK(strlen(dst) == DLEN + room - 1u);
+        CHECK(memcmp(dst, "ab", DLEN) == 0 && dst[DLEN] == 'y');
+        cplus_free(src);
+    }
+    cplus_free(dst);
+}
+
+/* 7. Concurrent mode toggling must be race-free without touching the public
  * API. All capacities here are known, so results stay deterministic. */
 static void *toggle_mode(void *arg) {
     int i;
@@ -195,6 +247,7 @@ int main(void) {
     interior_source_bounds();
     unknown_source_preserved();
     strncat_bounded_scan();
+    strcat_bounded_source_edge();
     atomic_mode_toggle();
     if (failures != 0) {
         printf("test_bounded_source_bounds: %d failure(s)\n", failures);
