@@ -231,6 +231,7 @@ static inline stdlib_scratch_mark stdlib_scratch_enter(stdlib_datastack *ds) {
 static inline void stdlib_scratch_leave(stdlib_datastack *ds,
                                         stdlib_scratch_mark m) {
     if (ds == 0 || m.generation != ds->generation) return; /* stale/NULL: refuse */
+    stdlib_datastack_poison(m.saved_top, ds->top);
     ds->top = m.saved_top;
     /* Do NOT bump generation here: nested scopes must remain valid.  The
      * generation changes on reset/destroy, which is what invalidates marks. */
@@ -372,8 +373,10 @@ class stdlib_scratch_scope {
     }
 
     void drop(void) {
-        if (this->scope_ds != (stdlib_datastack *)0 && this->scope_gen == (*this->scope_ds).generation)
+        if (this->scope_ds != (stdlib_datastack *)0 && this->scope_gen == (*this->scope_ds).generation) {
+            stdlib_datastack_poison(this->scope_saved_top, (*this->scope_ds).top);
             (*this->scope_ds).top = this->scope_saved_top;
+        }
         this->scope_ds = (stdlib_datastack *)0;
     }
 };
