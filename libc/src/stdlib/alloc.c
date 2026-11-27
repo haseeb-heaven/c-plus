@@ -34,6 +34,11 @@ typedef struct recent_slot {
 } recent_slot;
 
 #define META_TOMB ((void *)(uintptr_t)1)
+/* A removed recent entry must remain a *probe* tombstone, never NULL: linear
+ * probing stops at NULL, so writing NULL there would hide every later entry
+ * in the same probe chain (and silently turn a double free into an "invalid
+ * free").  No real allocation can ever have this address. */
+#define META_RECENT_TOMB ((void *)(uintptr_t)2)
 #define META_RECENT_CAP 1024u
 
 static pthread_mutex_t g_meta_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -71,6 +76,7 @@ static size_t recent_find(const void *p) {
     size_t i = meta_recent_idx(p);
     if (!p) return META_RECENT_CAP;
     for (size_t n = 0; n < META_RECENT_CAP; ++n) {
+        /* NULL ends the probe chain; a tombstone is skipped, not a terminator. */
         if (g_recent[i].ptr == NULL) return META_RECENT_CAP;
         if (g_recent[i].ptr == p) return i;
         i = (i + 1u) & mask;
@@ -80,7 +86,10 @@ static size_t recent_find(const void *p) {
 static int recent_contains(const void *p) { return recent_find(p) < META_RECENT_CAP; }
 static void recent_remove(const void *p) {
     size_t i = recent_find(p);
-    if (i < META_RECENT_CAP) { g_recent[i].ptr = NULL; g_recent[i].generation = 0; }
+    if (i < META_RECENT_CAP) {
+        g_recent[i].ptr = META_RECENT_TOMB;
+        g_recent[i].generation = 0;
+    }
 }
 static void recent_add(const void *p, unsigned long long generation) {
     size_t mask = META_RECENT_CAP - 1u;
@@ -88,7 +97,10 @@ static void recent_add(const void *p, unsigned long long generation) {
     size_t i = start;
     if (!p) return;
     for (size_t n = 0; n < META_RECENT_CAP; ++n) {
-        if (g_recent[i].ptr == NULL || g_recent[i].ptr == p) {
+        /* Tombstones are reusable slots, but an earlier live entry in the same
+         * probe chain still has to be found, so probing never stops at one. */
+        if (g_recent[i].ptr == NULL || g_recent[i].ptr == META_RECENT_TOMB ||
+            g_recent[i].ptr == p) {
             g_recent[i].ptr = (void *)p;
             g_recent[i].generation = generation;
             return;
@@ -291,66 +303,121 @@ void *cplus_calloc(size_t nmemb, size_t size) {
     return p;
 }
 
+/* Requires g_meta_lock held; ptr must be a live tracked base address.
+ * Captures the original generation, performs the host realloc *under the same
+ * lock*, and updates metadata on success. On failure *proof_ok is cleared if
+ * the original allocation generation can no longer be proven intact. */
+static void *realloc_under_lock(void *ptr, size_t actual, int *proof_ok)
+{
+    uintptr_t old_addr = (uintptr_t)ptr;
+    meta_slot *s = meta_find_addr(old_addr);
+    size_t old_bytes, old_elem;
+    unsigned long long old_gen;
+    void *p;
+
+    if (s == NULL) { *proof_ok = 0; errno = EINVAL; return NULL; }
+    old_bytes = s->byte_size;
+    old_elem = s->elem_size ? s->elem_size : 1u;
+    old_gen = s->generation;
+    if (inject_fail_locked() || meta_reserve_one() != 0) {
+        errno = ENOMEM;
+        return NULL;
+    }
+    p = realloc(ptr, actual);
+    if (p == NULL) {
+        s = meta_find_addr(old_addr);
+        *proof_ok = (s != NULL && s->generation == old_gen && old_gen != 0u);
+        errno = ENOMEM;
+        return NULL;
+    }
+    s = meta_find_addr(old_addr);
+    /* The generation cannot change while the lock is held; keep the guard as
+     * defence in depth for a future reentrant backend. */
+    if (s != NULL && s->generation == old_gen && old_gen != 0u) {
+        if ((uintptr_t)p == old_addr) {
+            g_live_bytes -= old_bytes;
+            g_live_bytes += actual;
+            s->byte_size = actual;
+            s->generation = ++g_gen;
+        } else {
+            meta_remove(s);
+            meta_insert(p, actual, old_elem);
+        }
+    } else {
+        meta_insert(p, actual, old_elem);
+    }
+    return p;
+}
+
 void *cplus_realloc(void *ptr, size_t size) {
-    size_t actual, old_bytes = 0, old_elem = 1u;
-    uintptr_t old_addr;
-    unsigned long long old_gen = 0;
+    int proof_ok = 1;
     void *p;
     cplus_libc_log("realloc", "enter");
     if (ptr == NULL)
         return cplus_malloc(size);
-    actual = (size == 0) ? 1u : size;
-    old_addr = (uintptr_t)ptr;
     pthread_mutex_lock(&g_meta_lock);
-    {
-        meta_slot *s = meta_find_addr(old_addr);
-        if (!s) {
-            if (recent_contains(ptr)) ++g_double_frees;
-            else
-                ++g_invalid_frees;
-            pthread_mutex_unlock(&g_meta_lock);
-            errno = EINVAL;
-            return NULL;
-        }
-        old_bytes = s->byte_size;
-        old_elem = s->elem_size ? s->elem_size : 1u;
-        old_gen = s->generation;
-        if (inject_fail_locked() || meta_reserve_one() != 0) {
-            pthread_mutex_unlock(&g_meta_lock);
-            errno = ENOMEM;
-            return NULL;
-        }
-    }
-    pthread_mutex_unlock(&g_meta_lock);
-    p = realloc(ptr, actual);
-    if (!p) {
-        errno = ENOMEM;
+    if (meta_find_addr((uintptr_t)ptr) == NULL) {
+        if (recent_contains(ptr)) ++g_double_frees;
+        else ++g_invalid_frees;
+        pthread_mutex_unlock(&g_meta_lock);
+        errno = EINVAL;
         return NULL;
     }
-    pthread_mutex_lock(&g_meta_lock);
-    {
-        meta_slot *s = meta_find_addr(old_addr);
-        /* ABA guard: the host realloc() ran with the lock released, so another
-         * thread may have freed the old block and allocated a NEW live block at
-         * the same address. Only a slot with the ORIGINAL generation belongs to
-         * this realloc. Never remove a newer slot (that would silently strip
-         * another thread's live metadata). */
-        if (s != NULL && s->generation == old_gen && old_gen != 0) {
-            if ((uintptr_t)p == old_addr) {
-                g_live_bytes -= old_bytes;
-                g_live_bytes += actual;
-                s->byte_size = actual;
-                s->generation = ++g_gen;
-            } else {
-                meta_remove(s);
-                meta_insert(p, actual, old_elem);
-            }
-        } else {
-            meta_insert(p, actual, old_elem);
-        }
-    }
+    p = realloc_under_lock(ptr, (size == 0) ? 1u : size, &proof_ok);
     pthread_mutex_unlock(&g_meta_lock);
     return p;
+}
+
+/* Additive generation-aware primitives for the failure-atomic wrappers in
+ * alloc_hardened.c. Both perform the entire check -> host operation -> proof
+ * sequence with g_meta_lock held, so a concurrent free/realloc cannot make a
+ * recycled address look like the original allocation. */
+int cplus_alloc_realloc_proof(void **ptr, size_t new_size) {
+    void *old, *p;
+    int proof_ok = 1;
+
+    if (ptr == NULL) { errno = EINVAL; return EINVAL; }
+    old = *ptr;
+    if (new_size == 0 && old != NULL) {
+        errno = EINVAL; /* cplus_realloc(p, 0) releases p; never report atomic failure */
+        return EINVAL;
+    }
+    if (old == NULL) {
+        p = cplus_malloc(new_size);
+        if (p == NULL) return (errno != 0) ? errno : ENOMEM;
+        *ptr = p;
+        return 0;
+    }
+    pthread_mutex_lock(&g_meta_lock);
+    if (meta_find_addr((uintptr_t)old) == NULL) {
+        if (recent_contains(old)) ++g_double_frees;
+        else ++g_invalid_frees;
+        pthread_mutex_unlock(&g_meta_lock);
+        errno = EINVAL;
+        return EINVAL;
+    }
+    p = realloc_under_lock(old, new_size, &proof_ok);
+    pthread_mutex_unlock(&g_meta_lock);
+    if (p != NULL) { *ptr = p; return 0; }
+    if (!proof_ok) { errno = EINVAL; return -1; } /* generation/ABA inconsistency */
+    return (errno != 0) ? errno : ENOMEM;
+}
+
+int cplus_alloc_free_verified(void *target) {
+    meta_slot *s;
+    if (target == NULL) return EINVAL;
+    pthread_mutex_lock(&g_meta_lock);
+    s = meta_find(target);
+    if (s == NULL) {
+        if (recent_contains(target)) ++g_double_frees;
+        else ++g_invalid_frees;
+        pthread_mutex_unlock(&g_meta_lock);
+        return EINVAL;
+    }
+    meta_remove(s);
+    free(target); /* keep the lock across free(), matching cplus_realloc */
+    pthread_mutex_unlock(&g_meta_lock);
+    return 0;
 }
 
 int cplus_free_checked(void **inout) {
@@ -414,11 +481,15 @@ size_t cplus_alloc_remaining_capacity(const void *ptr) {
     }
     for (k = 0; k < g_cap; ++k) {
         void *base = g_tab[k].ptr;
-        uintptr_t b;
+        uintptr_t b, end;
         if (base == NULL || base == META_TOMB) continue;
         b = (uintptr_t)base;
-        if (p > b && p <= b + g_tab[k].byte_size) {
-            size_t cap = (size_t)(b + g_tab[k].byte_size - p);
+        /* Guard the pointer arithmetic: a corrupt/host-registered slot must
+         * never turn a bogus byte_size into a wrapped end address. */
+        if (g_tab[k].byte_size > UINTPTR_MAX - b) continue;
+        end = b + (uintptr_t)g_tab[k].byte_size;
+        if (p > b && p <= end) {
+            size_t cap = (size_t)(end - p);
             pthread_mutex_unlock(&g_meta_lock);
             return cap;
         }

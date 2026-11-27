@@ -137,6 +137,10 @@ struct TempFile {
   }
   TempFile &operator=(TempFile &&other) noexcept {
     if (this != &other) {
+      // Overwriting a live temp file must not strand it on disk: the old path
+      // will no longer appear in any destructor once `path` is replaced.
+      if (!keep && !path.empty())
+        llvm::sys::fs::remove(path);
       path = std::move(other.path);
       keep = other.keep;
       other.path.clear();
@@ -165,6 +169,15 @@ bool writeFile(const std::string &path, const std::string &text,
     return false;
   }
   os << text;
+  os.flush();
+  if (os.has_error()) {
+    // A failed write (ENOSPC/EIO/...) would otherwise hand a truncated C
+    // translation unit to clang while the driver reported success.
+    std::error_code writeEc = os.error();
+    os.clear_error();
+    *err = writeEc.message();
+    return false;
+  }
   os.close();
   return true;
 }
@@ -296,14 +309,17 @@ std::string findSourceRoot() {
 }
 
 std::string findClangBinary() {
-  std::string env = envOr("CPLUS_CLANG");
+  // STRICT Safe mode is a soundness contract: an env-supplied backend cannot
+  // be verified, so it must not replace the system/bundled compiler.
+  std::string env = g_strictSafePaths ? std::string() : envOr("CPLUS_CLANG");
   if (!env.empty() && fileExists(env))
     return env;
 #ifdef __APPLE__
   // Apple's system clang resolves the installed SDK (MacOSX.sdk) correctly.
   // Homebrew's clang loads arm64-apple-darwin27.cfg, which selects a
   // MacOSX27.sdk that is not installed on this host. Prefer the system
-  // compiler instead of relying on PATH order. CPLUS_CLANG above still wins.
+  // compiler instead of relying on PATH order. CPLUS_CLANG above still wins
+  // outside STRICT Safe mode.
   if (fileExists("/usr/bin/clang"))
     return "/usr/bin/clang";
 #endif
@@ -326,7 +342,10 @@ std::string findClangBinary() {
 }
 
 std::string findCPlusIncludeDir() {
-  std::string env = envOr("CPLUS_INCLUDE");
+  // As with CPLUS_ROOT below, a CPLUS_INCLUDE override can inject spoofed
+  // safety headers while `check` still sees a well-formed AST. STRICT only
+  // trusts the compiled-in / installed include directory.
+  std::string env = g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
   if (!env.empty() && llvm::sys::fs::exists(joinPath(env, "cplus/cplus.h")))
     return env;
   // In STRICT, CPLUS_ROOT must not redirect the shipped runtime headers.
@@ -507,13 +526,16 @@ std::string resolveInclude(const std::string &name,
   if (!parent.empty())
     dirs.push_back(parent.str());
   dirs.push_back(".");
-  std::string envInc = envOr("CPLUS_INCLUDE");
+  // `.hp` resolution must follow the same trust rule as the shipped runtime
+  // headers: in STRICT an untrusted CPLUS_INCLUDE / CPLUS_ROOT must not be
+  // able to substitute the modern C+ standard headers.
+  std::string envInc = g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
   if (!envInc.empty())
     dirs.push_back(envInc);
   std::string autoInc = findCPlusIncludeDir();
   if (!autoInc.empty())
     dirs.push_back(autoInc);
-  std::string root = findSourceRoot();
+  std::string root = g_strictSafePaths ? std::string() : findSourceRoot();
   if (!root.empty()) {
     dirs.push_back(root);
     dirs.push_back(root + "/runtime/include");
@@ -527,25 +549,158 @@ std::string resolveInclude(const std::string &name,
   return std::string();
 }
 
+/// True when `line` contains a real `#include` directive rather than a
+/// mention inside a comment or string literal. The scanner mirrors C lexical
+/// rules just far enough for this rewrite: whitespace may separate `#` and
+/// `include`, a `//` or `/*...*/` comment (or a string/char literal) before the
+/// directive disqualifies the line, and the directive must be the first token
+/// after leading whitespace. Only `include` directives are recognized here;
+/// other preprocessor directives are detected by the caller's `directiveName`.
+static bool isDirective(const std::string &line, size_t &hashOut) {
+  enum class State { Code, BlockComment, String, Char };
+  State state = State::Code;
+  bool escaped = false;
+  bool onlyWhitespace = true;
+  for (size_t i = 0; i < line.size(); ++i) {
+    char c = line[i];
+    switch (state) {
+    case State::BlockComment:
+      if (c == '*' && i + 1 < line.size() && line[i + 1] == '/') {
+        state = State::Code;
+        ++i;
+      }
+      continue;
+    case State::String:
+    case State::Char:
+      if (escaped) {
+        escaped = false;
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (state == State::String && c == '"') {
+        state = State::Code;
+      } else if (state == State::Char && c == '\'') {
+        state = State::Code;
+      }
+      continue;
+    case State::Code:
+      break;
+    }
+    if (c == '/' && i + 1 < line.size()) {
+      if (line[i + 1] == '/')
+        return false; // remainder is a line comment
+      if (line[i + 1] == '*') {
+        state = State::BlockComment;
+        ++i;
+        continue;
+      }
+    }
+    if (c == '"' || c == '\'') {
+      if (!onlyWhitespace)
+        return false; // literal in the middle of a statement, not a directive
+      state = c == '"' ? State::String : State::Char;
+      onlyWhitespace = false;
+      continue;
+    }
+    if (c == '#') {
+      if (!onlyWhitespace)
+        return false; // `#` not at the start of a directive
+      size_t j = i + 1;
+      while (j < line.size() && std::isspace(static_cast<unsigned char>(line[j])))
+        ++j;
+      hashOut = i;
+      return true;
+    }
+    if (!std::isspace(static_cast<unsigned char>(c)))
+      onlyWhitespace = false;
+  }
+  return false;
+}
+
+/// Track `#if`/`#ifdef`/`#ifndef`...`#endif` nesting so includes in disabled
+/// branches (notably `#if 0`) are never rewritten. #else/#elif flip the active
+/// state of the current branch; an unbalanced `#endif` ends the innermost
+/// condition. Directives inside block comments and strings are ignored.
+struct PreprocessorBranch {
+  bool parentActive;
+  bool branchActive;
+};
+
+static std::string directiveName(const std::string &line, size_t hash) {
+  size_t i = hash + 1;
+  while (i < line.size() && std::isspace(static_cast<unsigned char>(line[i])))
+    ++i;
+  size_t start = i;
+  while (i < line.size() &&
+         (std::isalnum(static_cast<unsigned char>(line[i])) || line[i] == '_'))
+    ++i;
+  return line.substr(start, i - start);
+}
+
 /// Replace `#include "x.hp"` with an absolute path to a lowered `.h` copy.
 /// This lets modern C+ headers use the same syntax as `.cp` sources while
 /// ordinary `.h` headers keep working unchanged.
 std::string preprocessModernHeaders(
     const std::string &source, const std::string &currentPath,
     DiagnosticEngine &diags, Mode mode, std::vector<TempFile> &guards,
-    std::map<std::string, std::string> &processed, unsigned &counter) {
+    std::map<std::string, std::string> &processed,
+    std::set<std::string> &visiting, unsigned &counter) {
   std::string result;
   std::istringstream in(source);
   std::string line;
   bool first = true;
+  std::vector<PreprocessorBranch> branches;
+  bool active = true;
   while (std::getline(in, line)) {
     if (!first)
       result += "\n";
     first = false;
 
-    size_t hash = line.find("#include");
-    if (hash != std::string::npos) {
-      size_t q1 = line.find('"', hash);
+    size_t hash = std::string::npos;
+    bool directive = isDirective(line, hash);
+    std::string name = directive ? directiveName(line, hash) : std::string();
+    if (name == "if" || name == "ifdef" || name == "ifndef") {
+      // Evaluate only the trivially decidable `#if 0`/`#if 1` forms; a real
+      // expression is conservatively treated as active so a header the
+      // backend would see is still rewritten.
+      bool taken = true;
+      if (name == "if") {
+        size_t expr = hash + name.size() + 1;
+        while (expr < line.size() &&
+               std::isspace(static_cast<unsigned char>(line[expr])))
+          ++expr;
+        if (line.compare(expr, 1, "0") == 0 &&
+            (expr + 1 == line.size() ||
+             !std::isalnum(static_cast<unsigned char>(line[expr + 1]))))
+          taken = false;
+      }
+      branches.push_back({active, taken});
+      active = active && taken;
+    } else if (name == "else" || name == "elif") {
+      if (!branches.empty()) {
+        PreprocessorBranch &b = branches.back();
+        bool taken = true;
+        if (name == "elif") {
+          size_t expr = hash + name.size() + 1;
+          while (expr < line.size() &&
+                 std::isspace(static_cast<unsigned char>(line[expr])))
+            ++expr;
+          if (line.compare(expr, 1, "0") == 0 &&
+              (expr + 1 == line.size() ||
+               !std::isalnum(static_cast<unsigned char>(line[expr + 1]))))
+            taken = false;
+        }
+        b.branchActive = taken;
+        active = b.parentActive && b.branchActive;
+      }
+    } else if (name == "endif") {
+      if (!branches.empty()) {
+        active = branches.back().parentActive;
+        branches.pop_back();
+      }
+    }
+
+    if (active && directive && name == "include") {
+      size_t q1 = line.find('"', hash + name.size());
       size_t q2 = q1 == std::string::npos ? std::string::npos
                                           : line.find('"', q1 + 1);
       if (q1 != std::string::npos && q2 != std::string::npos) {
@@ -558,6 +713,10 @@ std::string preprocessModernHeaders(
             d.message = "cannot find C+ header '" + inc + "'";
             d.file = currentPath;
             diags.report(std::move(d));
+          } else if (visiting.count(path)) {
+            // Guarded cyclic includes are legal C: lowering the same header a
+            // second time would recurse forever. Leave the directive untouched
+            // and let the backend's include guard resolve the cycle.
           } else {
             auto known = processed.find(path);
             std::string tempPath =
@@ -571,8 +730,11 @@ std::string preprocessModernHeaders(
                 d.message = "cannot read '" + path + "': " + err;
                 diags.report(std::move(d));
               } else {
+                visiting.insert(path);
                 header = preprocessModernHeaders(header, path, diags, mode,
-                                                 guards, processed, counter);
+                                                 guards, processed, visiting,
+                                                 counter);
+                visiting.erase(path);
                 bool ok = false;
                 RewrittenSource headerInfo;
                 std::string lowered = lowerUnit(header, path, diags, mode, &ok,
@@ -1267,6 +1429,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   g_logLevel = logLevelFromString(opts.logLevel);
   DRIVER_LOG(CLOG_INFO, "c+ driver start: command=%s files=%zu",
              opts.command.c_str(), opts.inputs.size());
+  // Establish the STRICT path policy before the first lookup. findClangBinary()
+  // is called below, and a substitution there would run before any later gate
+  // could reject it.
+  const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
+  g_strictSafePaths = strictSafe;
   std::vector<std::string> inputs = opts.inputs.empty()
                                         ? std::vector<std::string>{opts.input}
                                         : opts.inputs;
@@ -1301,8 +1468,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // downgrade a safety gate, or hide a runtime check. DEFAULT keeps accepting
   // these (no soundness claim), and --legacy-c --strict only gets its
   // documented no-effect disclosure so plain-C ABI/source stays untouched.
-  const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
-  g_strictSafePaths = strictSafe;
   // STRICT never trusts an environment-supplied runtime library: a pass-through
   // runtime would strip every trap while `check` still reported a clean result.
   // runtimeLibArg(false) already ignores it; drop it here as well so no other
@@ -1502,10 +1667,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     std::vector<TempFile> headerGuards;
     std::map<std::string, std::string> processedHeaders;
+    std::set<std::string> visitingHeaders;
     unsigned headerCounter = 0;
     source = preprocessModernHeaders(source, input, diags, opts.mode,
                                      headerGuards, processedHeaders,
-                                     headerCounter);
+                                     visitingHeaders, headerCounter);
 
     DRIVER_LOG(CLOG_DEBUG, "lowering %s", input.c_str());
     bool ok = false;

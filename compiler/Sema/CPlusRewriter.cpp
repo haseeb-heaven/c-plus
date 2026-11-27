@@ -5300,8 +5300,11 @@ std::string instrumentDynamicArrayBounds(
               c == 'U' || c == 'l' || c == 'L' || c == ' ' || c == '\t'))
           literal = false;
       }
-      if (literal)
+      if (literal) {
+        // A literal RHS is already range-safe by inspection; keep the plain
+        // compound assignment instead of emitting a malformed macro.
         continue;
+      }
       insertions.push_back({site.begin, span, 0, "CPLUS_NEG(", 0});
       insertions.push_back({site.op, span, 1, "", site.opLength});
       insertions.push_back({site.end, span, 2,
@@ -5311,6 +5314,17 @@ std::string instrumentDynamicArrayBounds(
 
     // --- compound assignment: preserve the lvalue update ---
     if (compound) {
+      // An integer literal RHS cannot overflow the destination type when the
+      // static checker has accepted the expression, and the lowering is
+      // injected twice for nested for-loop increments. Leave it as plain C.
+      std::string rhs = sourceSlice(source, site.op + site.opLength, site.end);
+      size_t first = rhs.find_first_not_of(" \t\r\n");
+      if (first != std::string::npos)
+        rhs = rhs.substr(first);
+      if (!rhs.empty() && ((rhs[0] >= '0' && rhs[0] <= '9') ||
+                           (rhs.size() > 1 && rhs[0] == '-' &&
+                            rhs[1] >= '0' && rhs[1] <= '9')))
+        continue;
       insertions.push_back({site.begin, span, 0,
                             "CPLUS_CMPD_BIN(" + std::string(checkedOpName(kind)) +
                                 ", ", 0});

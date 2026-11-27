@@ -6,7 +6,9 @@
 #include "../safe_stats.h"
 #include <errno.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 /*
  * Formatting contract (documented in full in safe_format.h):
@@ -65,14 +67,16 @@ static int parse_pos_dollar(const unsigned char **pp) {
     return 0;
 }
 
-/* Skip a run of flags/length modifiers, including the glibc 'I' flag and the
- * C23 exact-width wN / wfN modifiers (w8/w16/w32/w64 and wf8..wf64).  Older
- * filters stopped at 'I'/'w' and missed a following 'n', allowing %In and
- * %w32n to reach the host printf. */
+/* Skip a run of flags/length modifiers, including the glibc 'I' and 'm'
+ * flags and the C23 exact-width wN / wfN modifiers (w8/w16/w32/w64 and
+ * wf8..wf64).  Older filters stopped at 'I'/'w'/'m' and missed a following
+ * 'n', allowing %In, %w32n and %mn to reach the host printf.  A bare %m is
+ * the glibc strerror conversion and is left alone. */
 static const unsigned char *skip_fmt_mods(const unsigned char *p) {
     for (;;) {
         while (*p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' ||
-               *p == '\'' || *p == 'I') ++p;
+               *p == '\'' || *p == 'I' ||
+               (*p == 'm' && p[1] != '\0' && p[1] != '%' && p[1] != '$')) ++p;
         if (*p == 'w') {
             const unsigned char *q = p + 1;
             if (*q == 'f') ++q;
@@ -312,6 +316,128 @@ int cplus_fprintf_s_checked(int fmt_is_literal, FILE *stream, const char *fmt, .
         return n;
     }
 }
+/* ---- Annex K / POSIX scanf argument-shape dispatcher (issue #192) -------
+ *
+ * The exported scanf_s family used to forward its va_list straight to host
+ * vscanf/vfscanf/vsscanf.  Annex K callers pass an extra rsize_t capacity after
+ * every %s/%c/%[/%S/%C pointer; the host does not consume it, so the following
+ * conversion reads the capacity as a pointer (e.g. 16 -> address 0x10, SIGSEGV).
+ * Inspect the argument words once, drop any Annex K capacities, and forward
+ * only the real pointer arguments.  POSIX-shaped calls keep the historical
+ * zero-copy vscanf path.  All scanf conversion arguments are pointer-sized on
+ * the supported ABIs; the word after a bounded pointer is only read when a
+ * later conversion guarantees another argument exists. */
+#define CPLUS_SCAN_MAX_ARGS 16u
+#if UINTPTR_MAX > 0xffffffffu
+#define CPLUS_SCAN_CAP_MAX ((uintptr_t)0x1000000u)
+#else
+#define CPLUS_SCAN_CAP_MAX ((uintptr_t)0x10000u)
+#endif
+
+/* Host scanf ignores surplus variadic arguments, so always pass a full,
+ * NULL-padded pointer vector instead of 16 hand-written forwarding shims. */
+static int scan_call_host(int mode, FILE *stream, const char *str,
+                          const char *fmt, void *const *args) {
+    if (mode == 1)
+        return fscanf(stream, fmt, args[0], args[1], args[2], args[3], args[4],
+                      args[5], args[6], args[7], args[8], args[9], args[10],
+                      args[11], args[12], args[13], args[14], args[15]);
+    if (mode == 2)
+        return sscanf(str, fmt, args[0], args[1], args[2], args[3], args[4],
+                      args[5], args[6], args[7], args[8], args[9], args[10],
+                      args[11], args[12], args[13], args[14], args[15]);
+    return scanf(fmt, args[0], args[1], args[2], args[3], args[4], args[5],
+                 args[6], args[7], args[8], args[9], args[10], args[11],
+                 args[12], args[13], args[14], args[15]);
+}
+
+/* mode: 0 = vscanf, 1 = vfscanf, 2 = vsscanf.  Unbounded %s/%[/%S and %n were
+ * already refused by fmt_check_scanf_spec(), so only sized bounded conversions
+ * reach here. */
+static int scan_dispatch(const char *api, int mode, FILE *stream, const char *str,
+                         const char *fmt, va_list ap) {
+    const unsigned char *p = (const unsigned char *)fmt;
+    int bounded[CPLUS_SCAN_MAX_ARGS];
+    size_t width[CPLUS_SCAN_MAX_ARGS];
+    void *args[CPLUS_SCAN_MAX_ARGS];
+    size_t nconv = 0, i;
+    void *pending = NULL;
+    int have_pending = 0, annexk = 0;
+    va_list peek;
+
+    while (*p) {
+        int suppressed = 0;
+        size_t w = 0;
+        unsigned char conv;
+        if (*p != '%') { ++p; continue; }
+        ++p;
+        if (*p == '%') { ++p; continue; }
+        p = skip_fmt_mods(p);
+        if (*p == '*') { suppressed = 1; ++p; }
+        (void)parse_pos_dollar(&p);
+        if (*p == '*') { suppressed = 1; ++p; }
+        while (*p >= '0' && *p <= '9') {
+            if (w < 1000000u) w = w * 10u + (size_t)(*p - '0');
+            ++p;
+        }
+        p = skip_fmt_mods(p);
+        conv = *p;
+        if (conv == '[') {
+            ++p;
+            if (*p == '^') ++p;
+            if (*p == ']') ++p;
+            while (*p && *p != ']') ++p;
+            if (*p == ']') ++p;
+        } else if (conv) {
+            ++p;
+        }
+        if (!suppressed && conv) {
+            if (nconv == CPLUS_SCAN_MAX_ARGS)
+                return fmt_violation(api, "too many scanf conversions");
+            bounded[nconv] = (conv == 's' || conv == 'c' || conv == '[' ||
+                              conv == 'S' || conv == 'C');
+            width[nconv] = w;
+            ++nconv;
+        }
+    }
+
+    memset(args, 0, sizeof args);
+    va_copy(peek, ap);
+    for (i = 0; i < nconv; ++i) {
+        void *word;
+        if (have_pending) { word = pending; have_pending = 0; }
+        else word = va_arg(peek, void *);
+        args[i] = word;
+        /* A capacity can only desynchronise the host if another conversion
+         * follows; that guarantees the next argument word really exists. */
+        if (bounded[i] && i + 1u < nconv) {
+            void *next = va_arg(peek, void *);
+            uintptr_t v = (uintptr_t)next;
+            if (v != 0u && v <= CPLUS_SCAN_CAP_MAX) {
+                annexk = 1;
+                /* Annex K would clamp to capacity-1; the host honours only
+                 * the explicit width.  Refuse a capacity too small for the
+                 * declared field rather than overrun the destination. */
+                if (width[i] != 0u && (size_t)v <= width[i]) {
+                    va_end(peek);
+                    return fmt_violation(api, "scanf capacity smaller than field width");
+                }
+            } else {
+                pending = next;
+                have_pending = 1;
+            }
+        }
+    }
+    va_end(peek);
+
+    if (!annexk) {
+        if (mode == 1) return vfscanf(stream, fmt, ap);
+        if (mode == 2) return vsscanf(str, fmt, ap);
+        return vscanf(fmt, ap);
+    }
+    return scan_call_host(mode, stream, str, fmt, args);
+}
+
 int cplus_scanf_s(const char *fmt, ...) {
     cplus_safe_log(CPLUS_SAFE_LOG_TRACE, "scanf_s", "enter");
     if (!fmt) { errno = EINVAL; cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "scanf_s", "null format"); cplus_safe_stat_record("scanf_s", 0); return -1; }
@@ -319,7 +445,7 @@ int cplus_scanf_s(const char *fmt, ...) {
     if (fmt_check_scanf_spec("scanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vscanf(fmt, ap);
+        int n = scan_dispatch("scanf_s", 0, NULL, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "scanf_s", "io/format error or EOF");
         cplus_safe_stat_record("scanf_s", n >= 0);
@@ -334,7 +460,7 @@ int cplus_scanf_s_checked(int fmt_is_literal, const char *fmt, ...) {
     if (fmt_check_scanf_spec("scanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vscanf(fmt, ap);
+        int n = scan_dispatch("scanf_s", 0, NULL, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "scanf_s", "io/format error or EOF");
         cplus_safe_stat_record("scanf_s", n >= 0);
@@ -350,7 +476,7 @@ int cplus_fscanf_s(FILE *stream, const char *fmt, ...) {
     if (fmt_check_scanf_spec("fscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vfscanf(stream, fmt, ap);
+        int n = scan_dispatch("fscanf_s", 1, stream, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "fscanf_s", "io/format error or EOF");
         cplus_safe_stat_record("fscanf_s", n >= 0);
@@ -367,7 +493,7 @@ int cplus_fscanf_s_checked(int fmt_is_literal, FILE *stream, const char *fmt, ..
     if (fmt_check_scanf_spec("fscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vfscanf(stream, fmt, ap);
+        int n = scan_dispatch("fscanf_s", 1, stream, NULL, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "fscanf_s", "io/format error or EOF");
         cplus_safe_stat_record("fscanf_s", n >= 0);
@@ -382,7 +508,7 @@ int cplus_sscanf_s(const char *str, const char *fmt, ...) {
     if (fmt_check_scanf_spec("sscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vsscanf(str, fmt, ap);
+        int n = scan_dispatch("sscanf_s", 2, NULL, str, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "sscanf_s", "input/format error or EOF");
         cplus_safe_stat_record("sscanf_s", n >= 0);
@@ -398,7 +524,7 @@ int cplus_sscanf_s_checked(int fmt_is_literal, const char *str, const char *fmt,
     if (fmt_check_scanf_spec("sscanf_s", fmt) < 0) return -1;
     {
         va_list ap; va_start(ap, fmt);
-        int n = vsscanf(str, fmt, ap);
+        int n = scan_dispatch("sscanf_s", 2, NULL, str, fmt, ap);
         va_end(ap);
         if (n < 0) cplus_safe_log(CPLUS_SAFE_LOG_WARN, "sscanf_s", "input/format error or EOF");
         cplus_safe_stat_record("sscanf_s", n >= 0);

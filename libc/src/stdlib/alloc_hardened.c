@@ -13,6 +13,12 @@
 
 #include "cplus_libc.h"
 
+/* Generation-aware primitives from alloc.c. They execute the entire
+ * validate/host-operation/proof sequence under the allocator's metadata
+ * lock, closing the check-then-act race in this wrapper layer. */
+extern int cplus_alloc_realloc_proof(void **ptr, size_t new_size);
+extern int cplus_alloc_free_verified(void *target);
+
 /* Best-effort diagnostic counters. They are independent of the allocator's
  * counters in alloc.c and only describe wrapper activity. */
 static pthread_mutex_t g_hardened_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -31,12 +37,7 @@ static void bump(unsigned long *counter) {
 }
 
 int cplus_alloc_atomic_realloc(void **ptr, size_t new_size) {
-    void *old;
-    void *fresh;
-    cplus_alloc_meta before;
-    cplus_alloc_meta after;
-    int have_before = 0;
-    int saved;
+    int rc;
 
     if (ptr == NULL) {
         errno = EINVAL;
@@ -44,48 +45,25 @@ int cplus_alloc_atomic_realloc(void **ptr, size_t new_size) {
         return EINVAL;
     }
 
-    old = *ptr;
-    if (old != NULL) {
-        /* Untracked/freed pointers are refused before the underlying
-         * realloc can touch them; *ptr is deliberately left as-is. */
-        if (cplus_alloc_get_meta(old, &before) != 0 || before.is_live != 1) {
-            errno = EINVAL;
-            bump(&g_atomic_realloc_invalid);
-            return EINVAL;
-        }
-        have_before = 1;
-    }
-
-    fresh = cplus_realloc(old, new_size);
-    if (fresh == NULL) {
-        saved = (errno != 0) ? errno : ENOMEM;
-        if (have_before) {
-            /* Prove failure atomicity against the metadata side table: the
-             * original block must still be the same live allocation. */
-            if (cplus_alloc_get_meta(old, &after) != 0 ||
-                after.is_live != 1 ||
-                after.byte_size != before.byte_size ||
-                after.generation != before.generation) {
-                bump(&g_atomic_realloc_inconsistent);
-                errno = EINVAL;
-                bump(&g_atomic_realloc_fail);
-                return EINVAL;
-            }
-        }
-        errno = saved; /* ENOMEM from injection/host, EINVAL if reported */
+    /* The check, realloc and failure proof share one allocator lock; no
+     * separate metadata snapshot can go stale between them. */
+    rc = cplus_alloc_realloc_proof(ptr, new_size);
+    if (rc == -1) {
+        bump(&g_atomic_realloc_inconsistent);
+        errno = EINVAL;
         bump(&g_atomic_realloc_fail);
-        return (saved == EINVAL) ? EINVAL : ENOMEM;
+        return EINVAL;
     }
-
-    /* Only publish the new address after the underlying realloc succeeded. */
-    *ptr = fresh;
+    if (rc != 0) {
+        bump(&g_atomic_realloc_fail);
+        return rc;
+    }
     bump(&g_atomic_realloc_ok);
     return 0;
 }
 
 int cplus_alloc_checked_free(void **ptr) {
     void *target;
-    void *tmp;
 
     if (ptr == NULL || *ptr == NULL) {
         errno = EINVAL;
@@ -94,18 +72,9 @@ int cplus_alloc_checked_free(void **ptr) {
     }
 
     target = *ptr;
-    if (cplus_alloc_is_live(target) != 1) {
-        /* Double free / stale / foreign pointer: refuse using metadata and
-         * keep the caller's slot unchanged so the error is observable. */
-        errno = EINVAL;
-        bump(&g_checked_free_refused);
-        return EINVAL;
-    }
-
-    /* Use a local copy so a refused free inside cplus_free_checked cannot
-     * NULL the caller's pointer; only a successful free publishes NULL. */
-    tmp = target;
-    if (cplus_free_checked(&tmp) != 0) {
+    /* Validate generation, retire metadata and release the block atomically:
+     * a concurrent free/reuse cannot slip between a pre-check and the free. */
+    if (cplus_alloc_free_verified(target) != 0) {
         errno = EINVAL;
         bump(&g_checked_free_refused);
         return EINVAL;

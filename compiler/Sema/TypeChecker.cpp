@@ -7,6 +7,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/Basic/SourceManager.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -41,11 +42,23 @@ const ClassInfo *TypeRegistry::findByName(const std::string &name) const {
 
 namespace {
 
-/// A C+ class/resource is represented in Clang as a C++ record with a
-/// `cplus_class` marker attribute.  We detect it by looking for the
-/// attribute we attach during parsing.
+/// Only these exact annotation payloads mark a lowered C+ record.  An
+/// unrelated `annotate("...")` (from user code, a tool or another attribute
+/// on the same record) is not a class/resource marker.
+bool isCPlusMarker(const AnnotateAttr *a) {
+  if (!a)
+    return false;
+  const StringRef payload = a->getAnnotation();
+  return payload == "cplus_class" || payload == "cplus_resource";
+}
+
 bool isCPlusRecord(const RecordDecl *rd) {
-  return rd && rd->hasAttr<AnnotateAttr>();
+  if (!rd)
+    return false;
+  for (const auto *a : rd->specific_attrs<AnnotateAttr>())
+    if (isCPlusMarker(a))
+      return true;
+  return false;
 }
 
 std::string dropSymbolFor(const std::string &name) { return name + "_drop"; }
@@ -85,9 +98,14 @@ void TypeChecker::run(ASTContext &ctx) {
         }
       }
 
-      // Determine resource-ness from the marker attribute payload.
-      if (const auto *a = rd->getAttr<AnnotateAttr>())
-        info.isResource = a->getAnnotation() == "cplus_resource";
+      // Determine resource-ness from any exact `cplus_resource` marker.
+      // A different annotation listed first must not hide the marker.
+      for (const auto *a : rd->specific_attrs<AnnotateAttr>()) {
+        if (a->getAnnotation() == "cplus_resource") {
+          info.isResource = true;
+          break;
+        }
+      }
 
       // A resource must have a way to be destroyed.
       if (info.isResource) {

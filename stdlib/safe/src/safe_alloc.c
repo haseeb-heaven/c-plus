@@ -499,23 +499,30 @@ int free_checked_generation_s(void *ptr, unsigned long long generation) {
 size_t cplus_safe_remaining_capacity(const void *ptr) {
     size_t k;
     uintptr_t p = (uintptr_t)ptr;
+    slot *s;
     if (!ptr) return (size_t)-1;
     pthread_mutex_lock(&g_lock);
-    for (k = 0; k < g_cap; ++k) {
-        void *base = g_tab[k].ptr;
-        if (base != NULL && base != TOMB && (uintptr_t)base == p) {
-            size_t cap = g_tab[k].size;
-            pthread_mutex_unlock(&g_lock);
-            return cap;
-        }
+    /* Exact base matches are the common case for every auto-bound check:
+     * resolve them with the O(1) hash lookup instead of two full O(g_cap)
+     * scans under the global lock (issue #193). */
+    s = tab_find(ptr);
+    if (s != NULL) {
+        size_t cap = s->size;
+        pthread_mutex_unlock(&g_lock);
+        return cap;
     }
+    /* Interior pointer: scan for the containing block.  Check the addition
+     * before performing it so an oversized/corrupt size cannot wrap past
+     * UINTPTR_MAX and make an unrelated high address look contained. */
     for (k = 0; k < g_cap; ++k) {
         void *base = g_tab[k].ptr;
-        uintptr_t b;
-        if (base == NULL || base == TOMB) continue;
+        uintptr_t b, end;
+        if (base == NULL || base == TOMB || base == RECENT_TOMB) continue;
         b = (uintptr_t)base;
-        if (p > b && p <= b + g_tab[k].size) {
-            size_t cap = (size_t)(b + g_tab[k].size - p);
+        if (p <= b || g_tab[k].size > UINTPTR_MAX - b) continue;
+        end = b + g_tab[k].size;
+        if (p <= end) {
+            size_t cap = (size_t)(end - p);
             pthread_mutex_unlock(&g_lock);
             return cap;
         }

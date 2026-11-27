@@ -220,20 +220,34 @@ static bool isBuiltinLibcEffectName(llvm::StringRef name) {
   static const std::set<llvm::StringRef> kBuiltins = {
       "malloc",    "calloc",    "malloc_s",  "calloc_s",   "realloc",
       "realloc_s", "free",      "cplus_release", "free_s", "memcpy",
-      "memmove",   "memcpy_s",  "memmove_s", "memset",     "strcpy",
-      "strcpy_s",  "strncpy",   "strncpy_s", "strcat",     "strcat_s",
-      "strlen",    "strnlen_s", "strcmp",    "fopen",      "fopen_s",
-      "fclose",    "fread",     "fwrite",    "snprintf",   "sprintf_s",
-      "snprintf_s", "scanf_s"};
+      "memmove",   "memcpy_s",  "memmove_s", "memset",     "memset_s",
+      "strcpy",    "strcpy_s",  "strncpy",   "strncpy_s",  "strcat",
+      "strcat_s",  "strncat",   "strncat_s", "strlen",     "strnlen_s",
+      "strcmp",    "fopen",     "fopen_s",   "fclose",     "fclose_s",
+      "fread",     "fread_s",   "fwrite",    "fwrite_s",   "snprintf",
+      "sprintf_s", "snprintf_s", "scanf_s",
+      // Return-value-owning checked adapters: unlike Annex K fopen_s these
+      // return FILE *, so they must keep fopen's ownership summary.
+      "cplus_fopen_s", "cplus_fclose_s", "cplus_fread_s", "cplus_fwrite_s"};
   return kBuiltins.count(name) != 0;
 }
 
 /// Compiler/runtime entry points are emitted by the rewriter, have known
 /// semantics and are linked from the C+ runtime; they are trusted regardless of
-/// where the contract file came from. Shared by hasDeclaredEffect() and the
+/// where the contract file came from. This is a CLOSED allowlist: matching
+/// arbitrary `cplus_*` / `__cplus_*` prefixes let any user FFI declaration
+/// bypass the STRICT unverified-extern gate. isReservedHelperName() already
+/// enumerates the generated and runtime-owned symbols (while deliberately
+/// leaving user helpers such as `cplus_core_helper` alone); the small extra
+/// set below covers genuine runtime entry points emitted into the rewriter
+/// prelude that are not in that list. Shared by hasDeclaredEffect() and the
 /// authoritative-summary predicate so the two cannot drift apart.
 static bool isCompilerHelperEffectName(llvm::StringRef name) {
-  return name.starts_with("cplus_") || name.starts_with("__cplus_");
+  if (isReservedHelperName(name))
+    return true;
+  static const std::set<llvm::StringRef> kEmitted = {
+      "__cplus_auto_runtime_init", "cplus_set_auto_runtime", "cplus_epoch"};
+  return kEmitted.count(name) != 0;
 }
 
 /// True when a function declaration can carry safety-relevant pointer effects.
@@ -283,7 +297,8 @@ public:
            name == "pthread_mutex_init" || name == "pthread_cond_init" ||
            name == "pthread_create" || name == "scan" ||
            name == "cplus_scan_one" || name == "cplus_scan_value" ||
-           name == "checked_add" || name == "cplus_checked_add";
+           name == "cplus_scan_value_at" || name == "checked_add" ||
+           name == "cplus_checked_add";
   }
 
   bool VisitCallExpr(CallExpr *call) {
@@ -293,14 +308,15 @@ public:
       if (const auto *ref = dyn_cast<DeclRefExpr>(
               call->getCallee()->IgnoreParenImpCasts()))
         calleeName = ref->getDecl()->getName();
-    // An unresolved callee name (e.g. the C+ `scan` macro) may write through
-    // by-value arguments. Conservatively treat those arguments as outputs so
-    // valid macro-based I/O is not falsely diagnosed.
-    bool unknownMacroCall = calleeName.empty() || !callee ||
-                            calleeName.find("scan") != llvm::StringRef::npos;
-    const bool isOutput = isOutputFunction(calleeName) || unknownMacroCall;
-    bool byValueOutput = unknownMacroCall || calleeName == "cplus_scan_one" ||
-                         calleeName == "cplus_scan_value";
+    // Never infer output behaviour from a substring such as "scan": a
+    // read-only `read_only_scan(const int *)` is not an output function. Only
+    // the exact whitelist above initialises an address argument. An opaque
+    // callee (unexpanded macro or function pointer) is treated as a possible
+    // writer ONLY for pointers whose pointee is not const, and NEVER for a
+    // by-value scalar argument.
+    const bool knownOutput = isOutputFunction(calleeName);
+    const bool byValueOutput = calleeName == "cplus_scan_one" ||
+                               calleeName == "cplus_scan_value";
     for (const Expr *arg : call->arguments()) {
       const Expr *a = arg->IgnoreParenCasts();
       const auto *uo = dyn_cast<UnaryOperator>(a);
@@ -308,11 +324,16 @@ public:
         a = uo->getSubExpr()->IgnoreParenImpCasts();
         if (const auto *ref = dyn_cast<DeclRefExpr>(a))
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
-            // C+ policy: only a whitelist of output functions initialises a
-            // variable through `&v`. An opaque callee does not. Record the
-            // latter separately so Clang's address-taken suppression can be
+            // C+ policy: only the exact whitelist, or an opaque callee that
+            // can legally write through a non-const pointer argument,
+            // initialises a variable through `&v`. Everything else is
+            // recorded separately so Clang's address-taken suppression can be
             // compensated for without seeding the whitelist as initialised.
-            if (isOutput)
+            const QualType argType = arg->getType();
+            const bool opaqueWritable =
+                !callee && argType->isPointerType() &&
+                !argType->getPointeeType().isConstQualified();
+            if (knownOutput || opaqueWritable)
               addrTaken_.insert(vd);
             else
               nonOutputAddrTaken_.insert(vd);
@@ -1599,36 +1620,51 @@ FunctionEffect libcEffect(llvm::StringRef name) {
     e.nullableArg = true; // free(NULL) is defined
     e.category = "CPLUS-SAFE-FREE";
   } else if (name == "memcpy" || name == "memmove" || name == "memcpy_s" ||
-             name == "memmove_s" || name == "memset") {
+             name == "memmove_s" || name == "memset" || name == "memset_s") {
     e.borrows = true;
     e.writes = true;
     e.destArg = 0;
-    e.sizeArg = (name == "memcpy_s" || name == "memmove_s") ? 1 : -1;
+    // memcpy(dst,src,n)/memset(dst,c,n): n is argument 2. The _s variants
+    // take the destination capacity (dmax) as argument 1.
+    e.sizeArg = (name == "memcpy_s" || name == "memmove_s" ||
+                 name == "memset_s") ? 1 : 2;
     e.checkedSize = e.sizeArg >= 0;
     e.category = "CPLUS-SAFE-BOUNDS";
   } else if (name == "strcpy" || name == "strcpy_s" ||
              name == "strncpy" || name == "strncpy_s" ||
-             name == "strcat" || name == "strcat_s") {
+             name == "strcat" || name == "strcat_s" ||
+             name == "strncat" || name == "strncat_s") {
     e.borrows = true;
     e.writes = true;
     e.destArg = 0;
-    e.sizeArg = (name.find("_s") != std::string::npos ||
-                 name == "strncpy") ? 1 : -1;
+    // strncpy(dst,src,n)/strncat(dst,src,n): n is argument 2, NOT the source
+    // pointer at argument 1. Annex K *_s takes dmax at argument 1.
+    e.sizeArg = (name == "strncpy" || name == "strncat") ? 2
+                : (name.find("_s") != std::string::npos ? 1 : -1);
     e.checkedSize = e.sizeArg >= 0;
     e.category = "CPLUS-SAFE-CRT";
   } else if (name == "strlen" || name == "strnlen_s" || name == "strcmp") {
     e.borrows = true;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fopen" || name == "fopen_s") {
+  } else if (name == "fopen" || name == "cplus_fopen_s") {
+    // cplus_fopen_s(name, mode) is type-for-type identical to fopen and
+    // returns the owned FILE *. Annex K fopen_s(&fp, name, mode) instead
+    // returns errno_t, so it must NOT carry a return-value ownership claim.
     e.allocates = true;
     e.returnsOwned = true;
     e.mayFail = true;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fclose") {
+  } else if (name == "fopen_s") {
+    e.writes = true; // writes the FILE ** out-param at argument 0
+    e.destArg = 0;
+    e.mayFail = true;
+    e.category = "CPLUS-SAFE-CRT";
+  } else if (name == "fclose" || name == "cplus_fclose_s") {
     e.frees = true;
     e.freedArg = 0;
     e.category = "CPLUS-SAFE-CRT";
-  } else if (name == "fread" || name == "fwrite") {
+  } else if (name == "fread" || name == "fwrite" || name == "cplus_fread_s" ||
+             name == "cplus_fwrite_s") {
     e.borrows = true;
     e.writes = true;
     e.mayFail = true;

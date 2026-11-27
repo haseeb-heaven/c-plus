@@ -156,6 +156,11 @@ size_t cplus_safe_open_stream_count(void) {
     return live;
 }
 
+/* Observable bound for the stream-identity caches.  Registration refuses when
+ * this many slots are unavailable, so open/close churn can never grow the
+ * table (issue #191).  Additive diagnostic; no public header change. */
+size_t cplus_safe_stream_cache_capacity(void) { return STREAM_CACHE_SLOTS; }
+
 /* Defense-in-depth for the caller-declared `bmax`.  The Annex K count clamp
  * (`count <= bmax/size`) is only as good as the caller's bound; for buffers that
  * came from the checked allocator we have a second, independent source of truth
@@ -191,6 +196,27 @@ static int io_check_stream(const char *api, FILE *stream) {
     if (cplus_io_stream_is_closed(stream)) {
         errno = EINVAL;
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "checked stream was closed (use-after-close)");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    return 0;
+}
+
+/* Annex K constraint: size * count must fit in the caller-declared bmax, and
+ * bmax itself must be a representable SafeCRT object size.  Clamping count used
+ * to turn an out-of-bounds request into a successful short transfer (silent
+ * truncation / data loss, issue #191).  Fail the whole operation closed instead
+ * so no byte reaches the stream and the caller sees a hard error. */
+static int io_check_bounds(const char *api, size_t bmax, size_t size, size_t count) {
+    if (count > SIZE_MAX / size) {
+        errno = EOVERFLOW;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "fread/fwrite size * count overflow");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    if (bmax > RSIZE_MAX_MEM || count > bmax / size) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "requested byte count exceeds bmax");
         cplus_safe_stat_record(api, 0);
         return -1;
     }
@@ -283,7 +309,7 @@ size_t cplus_fread_s(void *buf, size_t bmax, size_t size, size_t count, FILE *st
         return 0;
     }
     if (io_check_buf("fread_s", buf, bmax) < 0 || io_check_stream("fread_s", stream) < 0) return 0;
-    if (count > bmax / size) count = bmax / size;
+    if (io_check_bounds("fread_s", bmax, size, count) < 0) return 0;
     r = fread(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fread_s", "ok");
     cplus_safe_stat_record("fread_s", 1);
@@ -299,7 +325,7 @@ size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, F
         return 0;
     }
     if (io_check_buf("fwrite_s", buf, bmax) < 0 || io_check_stream("fwrite_s", stream) < 0) return 0;
-    if (count > bmax / size) count = bmax / size;
+    if (io_check_bounds("fwrite_s", bmax, size, count) < 0) return 0;
     r = fwrite(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fwrite_s", "ok");
     cplus_safe_stat_record("fwrite_s", 1);
@@ -369,14 +395,8 @@ size_t cplus_fread_s_checked(void *buf, size_t known_bmax, size_t bmax,
         cplus_safe_stat_record("fread_s", 0);
         return 0;
     }
-    if (count > SIZE_MAX / size) {
-        errno = EOVERFLOW;
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fread_s", "size * count overflow");
-        cplus_safe_stat_record("fread_s", 0);
-        return 0;
-    }
     if (io_checked_guard("fread_s", buf, bmax, known_bmax, stream) < 0) return 0;
-    if (count > bmax / size) count = bmax / size;
+    if (io_check_bounds("fread_s", bmax, size, count) < 0) return 0;
     r = fread(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fread_s", "ok");
     cplus_safe_stat_record("fread_s", 1);
@@ -393,14 +413,8 @@ size_t cplus_fwrite_s_checked(const void *buf, size_t known_bmax, size_t bmax,
         cplus_safe_stat_record("fwrite_s", 0);
         return 0;
     }
-    if (count > SIZE_MAX / size) {
-        errno = EOVERFLOW;
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "fwrite_s", "size * count overflow");
-        cplus_safe_stat_record("fwrite_s", 0);
-        return 0;
-    }
     if (io_checked_guard("fwrite_s", buf, bmax, known_bmax, stream) < 0) return 0;
-    if (count > bmax / size) count = bmax / size;
+    if (io_check_bounds("fwrite_s", bmax, size, count) < 0) return 0;
     r = fwrite(buf, size, count, stream);
     cplus_safe_log(CPLUS_SAFE_LOG_DEBUG, "fwrite_s", "ok");
     cplus_safe_stat_record("fwrite_s", 1);

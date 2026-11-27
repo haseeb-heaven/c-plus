@@ -77,7 +77,11 @@ expect_trap() {
   if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
     bad "$name" "build failed"; return
   fi
-  "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  # Some sanitizer runtimes print a fatal diagnostic and then hang on this
+  # host. Bound each trap probe so a hang is a recorded failure, never an
+  # infinite gate. A timed-out probe with a real diagnostic still counts as a
+  # trap because the safety error was emitted before the runtime stalled.
+  timeout 20 "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
   rc=$?
   # Platform sanitizer abort codes differ (SIGABRT 134 on macOS, exit 1 on
   # some Linux toolchains). Accept a different non-zero code only when the
@@ -86,7 +90,8 @@ expect_trap() {
     ok "$name"
   elif [ "$rc" -ne 0 ] && \
        cat "$OUT/$name.stdout" "$OUT/$name.stderr" 2>/dev/null | \
-         grep -qE 'runtime error:|AddressSanitizer|C\+ error:'; then
+         grep -qE 'runtime error:|AddressSanitizer|UndefinedBehaviorSanitizer|C\+ error:'; then
+    # A real sanitizer diagnostic was emitted; the runtime may stall after it.
     ok "$name"
   else
     bad "$name" "exit $rc != $code"

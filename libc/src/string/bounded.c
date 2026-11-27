@@ -120,10 +120,44 @@ int cplus_memcmp_bounded(const void *a, const void *b, size_t n,
     return cplus_memcmp(a, b, n);
 }
 
+/* Resolve the destination capacity BEFORE scanning any string. A strict-mode
+ * unknown capacity is therefore refused before an unbounded read can happen.
+ * When capacity is unknown in default mode, scans still use a finite ceiling
+ * instead of raw strlen(). */
+static int resolve_scan_ceiling(const char *api, const void *d, size_t known,
+                                size_t *out)
+{
+    size_t cap = (size_t)-1;
+    if (check_capacity(api, d, 1u, known, &cap)) return 1;
+    *out = (cap == (size_t)-1) ? RSIZE_MAX_MEM : cap;
+    return 0;
+}
+
+/* A tracked heap source cannot be scanned past its own allocation either. */
+static size_t source_scan_ceiling(const char *s, size_t ceiling)
+{
+    size_t tracked = cplus_alloc_remaining_capacity(s);
+    if (tracked != (size_t)-1 && tracked < ceiling) return tracked;
+    return ceiling;
+}
+
+/* Bounded strlen: refuses when no NUL exists within ceiling bytes. */
+static int bounded_strlen(const char *s, size_t ceiling, size_t *out)
+{
+    size_t n = cplus_strnlen(s, ceiling);
+    if (n >= ceiling) { errno = ERANGE; return 1; }
+    *out = n;
+    return 0;
+}
+
 char *cplus_strcpy_bounded(char *d, const char *s, size_t known) {
-    size_t need, cap = 0;
+    size_t need, slen, ceiling, cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    need = cplus_strlen(s) + 1u; /* unterminated source remains caller UB */
+    if (resolve_scan_ceiling("strcpy", d, known, &ceiling)) return NULL;
+    /* The NUL must fit in the resolved destination capacity. */
+    if (bounded_strlen(s, source_scan_ceiling(s, ceiling), &slen)) return NULL;
+    if (slen == SIZE_MAX) { errno = EOVERFLOW; return NULL; }
+    need = slen + 1u;
     if (check_capacity("strcpy", d, need, known, &cap)) return NULL;
     return cplus_strcpy(d, s);
 }
@@ -145,22 +179,36 @@ char *cplus_strncpy_bounded(char *d, const char *s, size_t n, size_t known) {
 }
 
 char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
-    size_t need, cap = 0;
+    size_t need, dlen, slen, ceiling, cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    need = cplus_strlen(d) + cplus_strlen(s) + 1u;
+    if (resolve_scan_ceiling("strcat", d, known, &ceiling)) return NULL;
+    /* Scan d only inside its own resolved capacity: an unterminated heap
+     * buffer used to be read straight past the block by cplus_strlen(d). */
+    if (bounded_strlen(d, ceiling, &dlen)) return NULL;
+    if (ceiling <= dlen) { errno = ERANGE; return NULL; }
+    if (bounded_strlen(s, source_scan_ceiling(s, ceiling - dlen), &slen)) return NULL;
+    if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
+    need = dlen + slen + 1u;
     if (check_capacity("strcat", d, need, known, &cap)) return NULL;
     return cplus_strcat(d, s);
 }
 
 char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
-    size_t need, cap = 0;
-    size_t dlen, slen;
+    size_t need, ceiling, cap = 0;
+    size_t dlen, slen, scan_n;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    dlen = cplus_strlen(d);
-    /* strncat permits an n-byte source with no NUL terminator: scan at most n
-     * bytes instead of calling cplus_strlen(s), which over-reads in that case
-     * and was evaluated twice. */
-    slen = cplus_strnlen(s, n);
+    if (resolve_scan_ceiling("strncat", d, known, &ceiling)) return NULL;
+    if (bounded_strlen(d, ceiling, &dlen)) return NULL;
+    if (ceiling <= dlen) { errno = ERANGE; return NULL; }
+    /* scan_n never exceeds the space that could possibly fit; a longer
+     * unterminated source is refused by check_capacity() below. */
+    scan_n = n;
+    if (scan_n > ceiling - dlen - 1u) scan_n = ceiling - dlen - 1u;
+    {
+        size_t src_cap = source_scan_ceiling(s, scan_n);
+        if (src_cap < scan_n) scan_n = src_cap;
+    }
+    slen = cplus_strnlen(s, scan_n);
     if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
     need = dlen + slen + 1u;
     if (check_capacity("strncat", d, need, known, &cap)) return NULL;

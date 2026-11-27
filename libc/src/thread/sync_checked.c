@@ -20,6 +20,7 @@
 #include "../../log/log.h"
 #include "../../install-include/cplus_threads.h"
 #include "../../install-include/cplus_sync_checked.h"
+#include "sync_checked_internal.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -52,6 +53,9 @@ typedef struct cplus_sync_slot_s {
     uint64_t generation;    /* monotonic per-claim token (slot-reuse ABA guard) */
 } cplus_sync_slot;
 
+/* DONE entries are reclaimable: a full table retires the oldest completed
+ * identity instead of refusing every later call forever.  A successful
+ * init/create at the same address also clears that address's DONE marker. */
 static cplus_sync_slot g_slots[CPLUS_SYNC_CHECKED_CAPACITY];
 static uint64_t g_generation;
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -76,12 +80,19 @@ static int all_zero(const void *key, unsigned char keylen)
 }
 
 /* Reserve an identity or refuse it. Returns 0 with *out set to the reserved
- * slot, EINVAL for a repeat identity, ENOMEM when the table is full. The
- * subject object is never read here. */
+ * slot, EINVAL for a repeat identity, ENOMEM when every slot is still CLAIMED.
+ * The subject object is never read here.
+ *
+ * A DONE slot is *not* a permanent reservation: when the bounded table is
+ * full, the oldest DONE identity is retired so later destroy/join calls keep
+ * working.  Only a table made up entirely of in-flight (CLAIMED) operations
+ * can still refuse with ENOMEM, which is the genuine capacity bound. */
 static int claim(int kind, const void *key, unsigned char keylen, int *out)
 {
     int i;
     int free_slot = -1;
+    int oldest_done = -1;
+    uint64_t oldest_generation = 0u;
 
     (void)pthread_mutex_lock(&g_lock);
     for (i = 0; i < (int)CPLUS_SYNC_CHECKED_CAPACITY; ++i) {
@@ -94,8 +105,21 @@ static int claim(int kind, const void *key, unsigned char keylen, int *out)
         if (g_slots[i].keylen == 0u) { free_slot = i; break; }
     }
     if (free_slot < 0) {
+        /* Recycle the least-recently claimed completed operation. The scan
+         * above has already proven that no slot matches this identity. */
+        for (i = 0; i < (int)CPLUS_SYNC_CHECKED_CAPACITY; ++i) {
+            if (g_slots[i].keylen != 0u &&
+                g_slots[i].state == CPLUS_SYNC_STATE_DONE &&
+                (oldest_done < 0 || g_slots[i].generation < oldest_generation)) {
+                oldest_done = i;
+                oldest_generation = g_slots[i].generation;
+            }
+        }
+        free_slot = oldest_done;
+    }
+    if (free_slot < 0) {
         (void)pthread_mutex_unlock(&g_lock);
-        return ENOMEM; /* bounded table refusal, no object dereference */
+        return ENOMEM; /* all slots are in-flight: bounded table refusal */
     }
 
     /* Generation token: bumped for every claim, so a slot recycled after a
@@ -126,6 +150,37 @@ static void finish(int slot, int ok)
         memset(&g_slots[slot], 0, sizeof g_slots[slot]);
     }
     (void)pthread_mutex_unlock(&g_lock);
+}
+
+/* A freshly initialised object at a recycled address must be destroyable
+ * again.  Clear only DONE identities: a still-CLAIMED slot represents an
+ * operation that is in flight and must remain a refusal. */
+static void rearm(int kind, const void *key, unsigned char keylen)
+{
+    int i;
+    (void)pthread_mutex_lock(&g_lock);
+    for (i = 0; i < (int)CPLUS_SYNC_CHECKED_CAPACITY; ++i) {
+        if (g_slots[i].state == CPLUS_SYNC_STATE_DONE &&
+            slot_matches(&g_slots[i], kind, key, keylen)) {
+            memset(&g_slots[i], 0, sizeof g_slots[i]);
+        }
+    }
+    (void)pthread_mutex_unlock(&g_lock);
+}
+
+void cplus_sync_checked_rearm_mtx(cplus_mtx_t *mtx)
+{
+    if (mtx != NULL) rearm(CPLUS_SYNC_KIND_MTX, &mtx, (unsigned char)sizeof mtx);
+}
+
+void cplus_sync_checked_rearm_cnd(cplus_cnd_t *cnd)
+{
+    if (cnd != NULL) rearm(CPLUS_SYNC_KIND_CND, &cnd, (unsigned char)sizeof cnd);
+}
+
+void cplus_sync_checked_rearm_thrd(const cplus_thrd_t *thr)
+{
+    if (thr != NULL) rearm(CPLUS_SYNC_KIND_THRD, thr, (unsigned char)sizeof *thr);
 }
 
 int cplus_mtx_destroy_checked(cplus_mtx_t *mtx)

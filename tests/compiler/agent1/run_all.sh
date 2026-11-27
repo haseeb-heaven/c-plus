@@ -74,7 +74,8 @@ record() {
   name=$1; status=$2; cmd=$3; stdout=$4; stderr=$5; code=$6
   TOTAL=$((TOTAL+1))
   if [ "$status" = "PASS" ]; then PASS=$((PASS+1));
-  elif [ "$status" = "SKIPPED" ]; then SKIP=$((SKIP+1));
+  elif [ "$status" = "SKIPPED" ] || [ "$status" = "SKIP" ]; then
+    SKIP=$((SKIP+1));
   else FAIL=$((FAIL+1)); fi
   printf '%-8s %-42s rc=%s cmd=%s\n' "$status" "$name" "$code" "$cmd" >> "$RES/summary.txt"
   printf '    {"name":"%s","status":"%s","rc":"%s","cmd":"%s"},\n' \
@@ -309,6 +310,13 @@ if want_category sanitizer; then
       run_timed "$TIMEOUT" $CPLUS --strict --sanitize=$san "$src" -o "$OUT/$name.bin" >"$out" 2>"$err"
     fi
     code=$?
+    # A host whose selected backend cannot run a sanitizer probe reports
+    # "sanitizer ... is not supported"; that is an environmental blocker, not
+    # a compiler regression. Record it as a skip with the exact diagnostic.
+    if [ "$code" -ne 0 ] && grep -q 'sanitizer .* is not supported by the selected backend' "$err"; then
+      record "$name" SKIP "$cmd" "backend unsupported" "$(head -2 "$err")" "$code"
+      continue
+    fi
     if [ "$code" -eq 0 ]; then record "$name" PASS "$cmd" "build ok" "" "$code"
     else record "$name" FAIL "$cmd" "" "$(head -3 "$err")" "$code"; fi
   done

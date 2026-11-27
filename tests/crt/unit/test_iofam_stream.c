@@ -19,7 +19,10 @@ int main(void) {
     assert(cplus_fwrite_s(payload, sizeof payload, 1, 1, NULL) == 0);
     assert(cplus_fwrite_s(payload, sizeof payload, 0, 1, f) == 0);
     assert(cplus_fwrite_s(payload, sizeof payload, 1, 0, f) == 0);
-    assert(cplus_fwrite_s(payload, 4, 1, 8, f) == 4);
+    /* Issue #191: out-of-bounds count is refused, not silently truncated. */
+    assert(cplus_fwrite_s(payload, 4, 1, 8, f) == 0);
+    /* Write a valid exact-fit record for the later read checks. */
+    assert(cplus_fwrite_s(payload, sizeof payload, 1, 8, f) == 8);
 
     assert(cplus_fread_s(NULL, sizeof buf, 1, 1, f) == 0);
     assert(cplus_fread_s(buf, sizeof buf, 1, 1, NULL) == 0);
@@ -29,7 +32,7 @@ int main(void) {
     rewind(f);
     {
         size_t n = cplus_fread_s(buf, 4, 1, 8, f);
-        assert(n == 4 && memcmp(buf, "ABCD", 4) == 0);
+        assert(n == 0); /* refused: 8 > bmax 4 */
     }
     rewind(f);
     {
