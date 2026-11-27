@@ -200,11 +200,15 @@ static void sc_14_strtoul_conversions(void) {
     assert(cplus_strtoul("999999999999999999999999999999", &end, 10) == ULONG_MAX);
     assert(errno == ERANGE);
 
-    /* Unsupported base: glibc leaves *endptr untouched, so seed it first. */
-    errno = 0;
-    end = (char *)s;
-    assert(cplus_strtoul("10", &end, 1) == 0UL);
-    assert(end - "10" == 0);
+    /* Unsupported base: glibc leaves *endptr untouched, so seed it with the
+     * very literal passed to the call, and compare pointer identity. */
+    {
+        const char *bad = "10";
+        errno = 0;
+        end = (char *)bad;
+        assert(cplus_strtoul(bad, &end, 1) == 0UL);
+        assert(end == bad);
+    }
     assert(errno == EINVAL);
 }
 
