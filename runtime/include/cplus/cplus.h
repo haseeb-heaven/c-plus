@@ -248,7 +248,7 @@ int cplus_retired_ledger_full(void);
  *    per-byte ownership map without an ABI change.
  *  - The retired ledger holds at most 1,048,576 addresses.  When full, a
  *    one-time stderr warning is emitted, cplus_retired_ledger_full() becomes
- *    true, and later retirements evict one slot round-robin.  The address
+ *    true, and later retirements evict one scattered slot.  The address
  *    retired now stays detectable as a double free (104); the evicted address
  *    loses ledger coverage and cplus_address_retired() reports 0 for it.
  *    This is a bounded-resource limit, not a silent correctness claim.

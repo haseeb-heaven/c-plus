@@ -592,7 +592,7 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
  *   Retired-ledger cap (CPLUS_RETIRED_MAX, 1048576): once full, a one-time
  *   stderr warning is printed, cplus_retired_wrapped becomes sticky and
  *   cplus_retired_ledger_full() reports it.  New retirements then evict one
- *   slot round-robin instead of being dropped, so the address retired *now*
+ *   scattered slot instead of being dropped, so the address retired *now*
  *   stays detectable as 104.  The evicted address loses ledger coverage
  *   (cplus_address_retired() honestly returns 0 for it): that is a bounded
  *   resource limit, not a silent correctness claim.
@@ -601,8 +601,8 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
 #define CPLUS_LIVE_INITIAL 64u
 #define CPLUS_RECENT_SLOTS 4096u
 #define CPLUS_RETIRED_INITIAL 256u
-/* Upper bound on retired ledger entries.  Beyond this we evict round-robin
- * (never drop a retirement), set cplus_retired_wrapped (sticky) and print a
+/* Upper bound on retired ledger entries.  Beyond this we evict a scattered
+ * slot (never drop a retirement), set cplus_retired_wrapped (sticky) and print a
  * one-time warning; the evicted address loses ledger coverage.  The cap is a
  * fixed 1,048,576 addresses (documented above). */
 #define CPLUS_RETIRED_MAX 1048576u
@@ -638,9 +638,12 @@ static size_t cplus_retired_cap = 0;
 static size_t cplus_retired_count = 0;
 static size_t cplus_retired_deleted = 0;
 static int cplus_retired_wrapped = 0;
-/* Once the ledger is full, new retirements evict this slot round-robin so
- * double-free detection keeps working instead of silently degrading to 105. */
-static size_t cplus_retired_evict_cursor = 0;
+/* Once the ledger is full, new retirements evict a slot chosen from a
+ * scattered sequence so double-free detection keeps working instead of
+ * silently degrading to 105.  The sequence is scattered on purpose: a
+ * sequential cursor would evict one dense band of slots, which collapses the
+ * open-addressed probe chains and makes the ledger quadratic. */
+static uint64_t cplus_retired_evict_cursor = 0;
 
 /* Opt-in temporal-safety experiment: keep released blocks out of malloc's
  * reuse pool for a bounded time so stale aliases are detected instead of
@@ -851,11 +854,11 @@ static void cplus_retired_insert(const void *p, uint64_t generation) {
       cplus_retired_wrapped = 1;
       fprintf(stderr,
               "C+ runtime warning: retired-address ledger is full (%u "
-              "entries); further retirements evict entries round-robin\n",
+              "entries); further retirements evict scattered entries\n",
               (unsigned)CPLUS_RETIRED_MAX);
       fflush(stderr);
     }
-    /* Bounded ledger: evict one occupied slot round-robin rather than drop
+    /* Bounded ledger: evict one occupied slot rather than drop
      * the retirement.  The victim becomes a tombstone (so other probe chains
      * stay intact) and p is inserted on its own hash probe sequence, which
      * keeps every entry findable.  The evicted address loses ledger coverage
@@ -866,7 +869,16 @@ static void cplus_retired_insert(const void *p, uint64_t generation) {
     if (cplus_retired_deleted > cplus_retired_cap / 4u)
       cplus_retired_grow();
     size_t mask = cplus_retired_cap - 1u;
-    size_t victim = cplus_retired_evict_cursor++ & mask;
+    /* Scatter the eviction victims.  A sequential cursor turns the evicted
+     * slots into one dense band, and a dense band of occupied slots collapses
+     * the open-addressed probe chains into long runs: every later retirement
+     * then rescans the band and the ledger turns into a quadratic hot path.
+     * A multiplicative stride spreads the victims over the whole table, so
+     * the chains stay short however many addresses are retired. */
+    cplus_retired_evict_cursor =
+        cplus_retired_evict_cursor * 6364136223846793005ULL +
+        1442695040888963407ULL;
+    size_t victim = (size_t)((cplus_retired_evict_cursor >> 32) & mask);
     for (size_t probe = 0; probe <= mask; ++probe) {
       void *q = cplus_retired[victim].ptr;
       if (q != NULL && q != CPLUS_TOMBSTONE && q != p)
@@ -1254,7 +1266,7 @@ int cplus_address_retired(const void *ptr) {
 
 /* Additive introspection for the bounded retired ledger.  Once this returns
  * non-zero, the cap has been reached and further retirements evict an older
- * entry round-robin; the evicted address is then no longer covered by the
+ * entry; the evicted address is then no longer covered by the
  * ledger. */
 int cplus_retired_ledger_full(void) {
   cplus_alloc_lock();
