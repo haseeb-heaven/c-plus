@@ -251,9 +251,14 @@ char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
     } else if (scan != (size_t)-1) {
         slen = bounded_strlen(s, scan);
         if (slen == scan) {
-            cplus_libc_log("strcat", "source over-read refused");
-            errno = ERANGE;
-            return NULL;
+            /* A source that fills the destination's character room exactly
+             * is valid if byte[scan] is its terminator.  Read that one byte
+             * (the caller passed a C string) before declaring over-read. */
+            if (s[scan] != '\0') {
+                cplus_libc_log("strcat", "source over-read refused");
+                errno = ERANGE;
+                return NULL;
+            }
         }
     } else {
         slen = cplus_strlen(s);

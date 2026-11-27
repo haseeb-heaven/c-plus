@@ -227,7 +227,7 @@ inner() {
     fi
     # Source-level arena/slot-pool allocator pairings (no exported symbols):
     # build and run a C+ probe that allocates and releases via the same API.
-    build_step allocator_pairing_build 30 ./build/c+ build \
+    build_step allocator_pairing_build 30 ${CPLUS_BIN:-./build/c+} build \
         tests/pr31_abi/allocator_pairing.cp --default --no-werror --sanitize=none \
         -I"$ROOT" -o "$OUT/allocator_pairing" -- "$ARCHIVE"
     if [ -x "$OUT/allocator_pairing" ] && timeout 10 "$OUT/allocator_pairing" \

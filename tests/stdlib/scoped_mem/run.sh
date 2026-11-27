@@ -8,7 +8,7 @@ unset SDKROOT
 unset CPLUS_CLANG
 D=tests/stdlib/scoped_mem
 pass=0; fail=0; cases=0
-if ! timeout 300 ./build/c+ build "$D/test.cp" --default --no-werror --sanitize=none \
+if ! timeout 300 ${CPLUS_BIN:-./build/c+} build "$D/test.cp" --default --no-werror --sanitize=none \
       -I. -o "$D/test" -- build/libc/libcplus_hardened.a >"$D/build.log" 2>&1; then
     echo "SCOPED_MEM_TEST FAIL build"; tail -6 "$D/build.log"; exit 1
 fi
