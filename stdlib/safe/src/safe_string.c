@@ -44,18 +44,32 @@ static int cplus_safe_reject_uaf(const void *ptr, const char *api) {
  * over-read of a short source.  Unknown capacity keeps the existing policy. */
 #define CPLUS_STR_ESNOSPC 406
 
-static int cplus_str_refuse_unproven_capacity(const char *api, const void *buf,
-                                              size_t bound, const char *what) {
+/* Smallest byte capacity we can actually justify for `buf`, from tracked
+ * malloc_s metadata (remaining bytes, interior pointers included) and/or the
+ * compiler-visible object size.  (size_t)-1 means "unproven".
+ *
+ * A SOURCE scan must be bounded by the source's own proven capacity, never by
+ * a ceiling derived from the destination: a valid short string in a smaller
+ * tracked buffer must not be refused simply because the destination is larger
+ * (issue #213). */
+static size_t cplus_str_proven_capacity(const void *buf) {
     size_t provable = (size_t)-1;
     size_t tracked;
     size_t bos;
-    char msg[192];
-    if (buf == NULL) return 0; /* safeclib owns the NULL-constraint case */
+    if (buf == NULL) return (size_t)-1;
     tracked = cplus_safe_remaining_capacity(buf);
     bos = (size_t)CPLUS_SAFE_OBJ_SIZE(buf);
     if (tracked != (size_t)-1) provable = tracked;
     if (bos != (size_t)-1 && (provable == (size_t)-1 || bos < provable))
         provable = bos;
+    return provable;
+}
+
+static int cplus_str_refuse_unproven_capacity(const char *api, const void *buf,
+                                              size_t bound, const char *what) {
+    size_t provable = cplus_str_proven_capacity(buf);
+    char msg[192];
+    if (buf == NULL) return 0; /* safeclib owns the NULL-constraint case */
     if (provable == (size_t)-1 || bound <= provable) return 0;
     errno = ERANGE;
     cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "bound exceeds proven capacity");
@@ -155,10 +169,24 @@ errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *ind
         if (indicator) *indicator = 0;
         return 400;
     }
-    if (cplus_str_refuse_unproven_capacity("strcmp_s", dest, dmax, "destination") ||
-        cplus_str_refuse_unproven_capacity("strcmp_s", src, dmax, "source")) {
+    if (cplus_str_refuse_unproven_capacity("strcmp_s", dest, dmax, "destination")) {
         if (indicator) *indicator = 0;
         return CPLUS_STR_ESNOSPC;
+    }
+    /* Bound the read of src by src's OWN proven capacity rather than refusing
+     * it for being smaller than dmax (issue #213).  safeclib compares at most
+     * scan_dmax bytes from each operand, so clamping here keeps the read inside
+     * src while preserving the ordering of every terminated string. */
+    {
+        size_t srccap = cplus_str_proven_capacity(src);
+        if (srccap == 0u) { /* one-past-the-end: no byte may be read */
+            if (indicator) *indicator = 0;
+            errno = ERANGE;
+            cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcmp_s", "source capacity zero");
+            cplus_safe_stat_record("strcmp_s", 0);
+            return CPLUS_STR_ESNOSPC;
+        }
+        if (srccap != (size_t)-1 && (size_t)dmax > srccap) dmax = (rsize_t)srccap;
     }
     errno_t r = cplus_sc_strcmp_s(dest, dmax, src, indicator);
     if (r != 0) {
@@ -271,8 +299,17 @@ static size_t cplus_safe_str_scan_ceiling(const char *dest, size_t known_dmax) {
 
 static int cplus_safe_bounded_strlen(const char *s, size_t ceiling, size_t *out) {
     size_t n;
+    size_t srccap;
     if (!s || !out || ceiling == 0) return 0;
     if (ceiling > CPLUS_SAFE_BOUNDED_SCAN_MAX) ceiling = CPLUS_SAFE_BOUNDED_SCAN_MAX;
+    /* The caller's ceiling is derived from the DESTINATION.  A valid short
+     * source in a smaller tracked allocation must not be refused merely
+     * because dest is larger (issue #213).  Clamp to the source's own proven
+     * capacity before the bounded query so cplus_strnlen_s's refusal guard
+     * cannot reject a bound that was never derived from s. */
+    srccap = cplus_str_proven_capacity(s);
+    if (srccap != (size_t)-1 && ceiling > srccap) ceiling = srccap;
+    if (ceiling == 0) return 0; /* no proven byte may be read */
     n = cplus_strnlen_s(s, ceiling); /* bounded read, never strlen() */
     if (n >= ceiling) return 0;      /* no NUL within the bound */
     *out = n;
