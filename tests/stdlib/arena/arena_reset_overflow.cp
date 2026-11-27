@@ -8,11 +8,14 @@
  *   A. reset releases every spilled heap block (one spill);
  *   B. reset releases a chain of two spilled blocks;
  *   C. from_buffer(buf, 0) initialises first_block (no wild reset target);
- *   D. alloc rejects n+align overflow before allocating a new block.
+ *   D. alloc rejects n+align overflow before allocating a new block;
+ *   E. failed init and destroy leave no dangling reset target;
+ *   F. debug reset poisons the reusable first-block payload with 0xDD.
  */
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 #include "stdlib/arena.hp"
@@ -140,6 +143,75 @@ int main(void) {
     acheck("a_ov_normal_block_unchanged", a.block == first);
     stdlib_arena_destroy(&a, &e);
     acheck("a_ov_destroy_clean", a.block == (stdlib_arena_block *)0);
+
+    /* ---- E: a failed init / destroy leaves no stale reset target --------- */
+    a.block = (stdlib_arena_block *)0;
+    a.first_base = (unsigned char *)0;
+    a.first_block = (stdlib_arena_block *)(void *)buf; /* poisoned sentinel */
+    a.first_capacity = 7u;
+    acheck("a_state_init_fail",
+           stdlib_arena_init(&a, (size_t)-1, &e) == STDLIB_FAIL);
+    acheck("a_state_fail_no_target",
+           a.first_block == (stdlib_arena_block *)0 &&
+           a.first_base == (unsigned char *)0 && a.first_capacity == 0u);
+    stdlib_arena_do_reset(&a, &e);
+    acheck("a_state_fail_reset_no_block",
+           a.block == (stdlib_arena_block *)0 && a.remaining == 0u);
+
+    acheck("a_state_init_ok", stdlib_arena_init(&a, 64u, &e) == STDLIB_OK);
+    p = stdlib_arena_alloc(&a, 32u, 16u, &e);
+    acheck("a_state_alloc_ok", p != (void *)0);
+    first = a.first_block;
+    stdlib_arena_destroy(&a, &e);
+    acheck("a_state_destroy_clears_target",
+           a.first_block == (stdlib_arena_block *)0 &&
+           a.first_base == (unsigned char *)0 && a.first_capacity == 0u);
+    acheck("a_state_destroy_first_released",
+           cplus_allocation_generation(first) == 0u);
+    stdlib_arena_do_reset(&a, &e);
+    acheck("a_state_destroy_reset_no_block",
+           a.block == (stdlib_arena_block *)0 &&
+           a.cursor == (unsigned char *)0 && a.remaining == 0u);
+    acheck("a_state_destroy_reset_used_zero", stdlib_arena_used(&a) == 0u);
+
+    /* ---- F: debug reset poisons the reused first-block payload ---------- */
+    a.block = (stdlib_arena_block *)0;
+    a.first_base = (unsigned char *)0;
+    a.first_block = (stdlib_arena_block *)0;
+    acheck("a_poison_init_ok", stdlib_arena_init(&a, 64u, &e) == STDLIB_OK);
+    p = stdlib_arena_alloc(&a, 64u, 16u, &e); /* exact fit: first block full */
+    acheck("a_poison_alloc_ok", p != (void *)0);
+    if (p != (void *)0) memset(p, 0xAB, 64u);
+    {
+        unsigned char *bytes = (unsigned char *)p;
+        size_t i;
+        int written = 1;
+        for (i = 0; i < 64u; ++i)
+            if (bytes[i] != 0xABu) written = 0;
+        acheck("a_poison_written", written);
+    }
+    p = stdlib_arena_alloc(&a, 64u, 16u, &e); /* spills past first block */
+    acheck("a_poison_spill_ok", p != (void *)0);
+    stdlib_arena_do_reset(&a, &e);
+    {
+        unsigned char *bytes = (unsigned char *)a.first_base;
+        size_t i;
+        int poisoned = 1;
+        for (i = 0; i < 64u; ++i) {
+#ifdef NDEBUG
+            if (bytes[i] != 0xABu) poisoned = 0; /* no poison in release */
+#else
+            if (bytes[i] != 0xDDu) poisoned = 0;
+#endif
+        }
+        acheck("a_poison_reset_bytes", poisoned);
+    }
+    p = stdlib_arena_alloc(&a, 64u, 16u, &e);
+    acheck("a_poison_realloc_zeroed",
+           p != (void *)0 && ((unsigned char *)p)[0] == 0u &&
+           ((unsigned char *)p)[63] == 0u);
+    stdlib_arena_destroy(&a, &e);
+    acheck("a_poison_destroy_clean", a.block == (stdlib_arena_block *)0);
 
     print("ARENA", arena_checks, arena_failures);
     return arena_failures == 0 ? 0 : 1;

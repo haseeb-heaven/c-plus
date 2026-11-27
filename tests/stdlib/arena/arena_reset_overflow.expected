@@ -45,4 +45,20 @@ a_ov_near_max_no_new_block 1
 a_ov_normal_alloc_ok 1
 a_ov_normal_block_unchanged 1
 a_ov_destroy_clean 1
-ARENA 47 0
+a_state_init_fail 1
+a_state_fail_no_target 1
+a_state_fail_reset_no_block 1
+a_state_init_ok 1
+a_state_alloc_ok 1
+a_state_destroy_clears_target 1
+a_state_destroy_first_released 1
+a_state_destroy_reset_no_block 1
+a_state_destroy_reset_used_zero 1
+a_poison_init_ok 1
+a_poison_alloc_ok 1
+a_poison_written 1
+a_poison_spill_ok 1
+a_poison_reset_bytes 1
+a_poison_realloc_zeroed 1
+a_poison_destroy_clean 1
+ARENA 63 0

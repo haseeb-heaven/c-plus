@@ -317,6 +317,18 @@ static inline void stdlib_arena_do_reset(stdlib_arena *a, error *err) {
     error_reset(err);
     if (a == 0) return;
     stdlib_arena_retire_views(a);
+#ifndef NDEBUG
+    /* Debug only: overwrite the consumed prefix of the reusable first block
+     * so stale pointers into rewound storage read a deterministic pattern.
+     * Bytes never handed out are left untouched; no per-allocation work. */
+    if (a->first_base != (unsigned char *)0 && a->first_capacity != 0u) {
+        size_t poison = a->first_capacity;
+        if (a->cursor >= a->first_base &&
+            (size_t)(a->cursor - a->first_base) < poison)
+            poison = (size_t)(a->cursor - a->first_base);
+        memset(a->first_base, 0xDD, poison);
+    }
+#endif
     /* Release spilled blocks above the reset target.  Dropping the chain
      * here would orphan them: destroy only walks from the current block. */
     b = a->block;
