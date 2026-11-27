@@ -10,9 +10,15 @@
 #include <wctype.h>
 
 wctrans_t cplus_wctrans(const char *property) {
+    wctrans_t desc;
     cplus_libc_log("wctrans", "enter");
     if (!property) { errno = EINVAL; return (wctrans_t)0; }
-    return wctrans(property);
+    desc = wctrans(property);
+    /* glibc leaves errno untouched for an unknown property; enforce the
+     * checked-libc contract deterministically across hosts. */
+    if (desc == (wctrans_t)0 && errno == 0)
+        errno = EINVAL;
+    return desc;
 }
 
 wint_t cplus_towctrans(wint_t wc, wctrans_t desc) {
