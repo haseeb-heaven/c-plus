@@ -30,7 +30,7 @@ rendered from real captured stdout.
 | App | Runner | Verified verdict | Screenshot | Proof |
 | --- | --- | --- | --- | --- |
 | 3D scene app (`games3d`) | `apps/games3d/run.sh` | `SCENE3D 1 4 0 13` | [games3d.svg](../proof/all_apps_games_screenshots/cli_transcripts/games3d.svg) | [games3d.md](../proof/all_apps_games_screenshots/real/games3d_real.png) |
-| GUI app (`gui_app`) | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../proof/all_apps_games_screenshots/cli_transcripts/gui_app.svg) | [gui_app.md](../proof/all_apps_games_screenshots/real/gui_app_real.png) |
+| GUI app (`gui_app`) | `apps/gui_app/run.sh` | `GUI_APP 30 6 0 24` | [gui_app.svg](../proof/all_apps_games_screenshots/cli_transcripts/gui_app.svg) | [gui_app.md](../proof/all_apps_games_screenshots/cli_transcripts/gui_app.svg) |
 | Calculator CLI (`cli_app`) | `apps/cli_app/run.sh` | `CLI_APP_RESULT built=1 pass=17 fail=0 total=17 wincross=ok` | [cli_app.svg](../proof/all_apps_games_screenshots/cli_transcripts/cli_app.svg) | [cli_app.md](../proof/all_apps_games_screenshots/README.md) |
 
 The other three apps (`webserver`, `sqldb`, `gameeng`) are verified together by

@@ -58,7 +58,7 @@ Their exact verified verdicts and screenshots:
 
 Per-app screenshot/transcript pages:
 [games3d](../all_apps_games_screenshots/real/games3d_real.png),
-[gui_app](../all_apps_games_screenshots/real/gui_app_real.png),
+[gui_app](../all_apps_games_screenshots/cli_transcripts/gui_app.svg),
 [cli_app](../all_apps_games_screenshots/README.md).
 
 ## Reproduce
