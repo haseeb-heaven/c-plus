@@ -20,6 +20,7 @@
 #include "../../log/log.h"
 #include "../../install-include/cplus_threads.h"
 #include "../../install-include/cplus_sync_checked.h"
+#include "sync_internal.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -50,10 +51,12 @@ typedef struct cplus_sync_slot_s {
     unsigned char kind;
     unsigned char state;
     uint64_t generation;    /* monotonic per-claim token (slot-reuse ABA guard) */
+    uint64_t done_order;    /* completion order, used to evict the oldest DONE */
 } cplus_sync_slot;
 
 static cplus_sync_slot g_slots[CPLUS_SYNC_CHECKED_CAPACITY];
 static uint64_t g_generation;
+static uint64_t g_done_order;
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static pthread_mutex_t *pmtx(cplus_mtx_t *m) { return (pthread_mutex_t *)(void *)m; }
@@ -76,12 +79,15 @@ static int all_zero(const void *key, unsigned char keylen)
 }
 
 /* Reserve an identity or refuse it. Returns 0 with *out set to the reserved
- * slot, EINVAL for a repeat identity, ENOMEM when the table is full. The
- * subject object is never read here. */
+ * slot, EINVAL for a repeat identity, ENOMEM only when every slot is an
+ * operation still in flight. DONE records are retired oldest-first instead of
+ * bricking the table permanently after CPLUS_SYNC_CHECKED_CAPACITY destroys.
+ * The subject object is never read here. */
 static int claim(int kind, const void *key, unsigned char keylen, int *out)
 {
     int i;
     int free_slot = -1;
+    int oldest_done = -1;
 
     (void)pthread_mutex_lock(&g_lock);
     for (i = 0; i < (int)CPLUS_SYNC_CHECKED_CAPACITY; ++i) {
@@ -94,8 +100,22 @@ static int claim(int kind, const void *key, unsigned char keylen, int *out)
         if (g_slots[i].keylen == 0u) { free_slot = i; break; }
     }
     if (free_slot < 0) {
+        /* Recycle the DONE record that completed longest ago. CLAIMED slots
+         * stay reserved: evicting one would let a concurrent double destroy
+         * reach the live pthread object. */
+        for (i = 0; i < (int)CPLUS_SYNC_CHECKED_CAPACITY; ++i) {
+            if (g_slots[i].state != CPLUS_SYNC_STATE_DONE) continue;
+            if (oldest_done < 0 || g_slots[i].done_order < g_slots[oldest_done].done_order)
+                oldest_done = i;
+        }
+        if (oldest_done >= 0) {
+            memset(&g_slots[oldest_done], 0, sizeof g_slots[oldest_done]);
+            free_slot = oldest_done;
+        }
+    }
+    if (free_slot < 0) {
         (void)pthread_mutex_unlock(&g_lock);
-        return ENOMEM; /* bounded table refusal, no object dereference */
+        return ENOMEM; /* all slots are in flight: bounded refusal, no deref */
     }
 
     /* Generation token: bumped for every claim, so a slot recycled after a
@@ -121,11 +141,51 @@ static void finish(int slot, int ok)
 {
     (void)pthread_mutex_lock(&g_lock);
     if (ok) {
+        ++g_done_order;
+        g_slots[slot].done_order = g_done_order;
         g_slots[slot].state = CPLUS_SYNC_STATE_DONE;
     } else {
         memset(&g_slots[slot], 0, sizeof g_slots[slot]);
     }
     (void)pthread_mutex_unlock(&g_lock);
+}
+
+/* A successful init/create at a previously destroyed identity is legitimate
+ * address reuse (stack slot in another frame, recycled malloc block, recycled
+ * pthread_t). Retire that identity's DONE record so the new object can be
+ * destroyed/joined through the checked API. CLAIMED records are left alone:
+ * re-initialising an object while a checked operation on it is in flight is
+ * caller UB and must not silently drop the in-flight guard. */
+static void rearm(int kind, const void *key, unsigned char keylen)
+{
+    int i;
+    (void)pthread_mutex_lock(&g_lock);
+    for (i = 0; i < (int)CPLUS_SYNC_CHECKED_CAPACITY; ++i) {
+        if (slot_matches(&g_slots[i], kind, key, keylen) &&
+            g_slots[i].state == CPLUS_SYNC_STATE_DONE) {
+            memset(&g_slots[i], 0, sizeof g_slots[i]);
+            break;
+        }
+    }
+    (void)pthread_mutex_unlock(&g_lock);
+}
+
+void cplus_sync_checked_on_mtx_init(const cplus_mtx_t *mtx)
+{
+    if (mtx == NULL) return;
+    rearm(CPLUS_SYNC_KIND_MTX, &mtx, (unsigned char)sizeof mtx);
+}
+
+void cplus_sync_checked_on_cnd_init(const cplus_cnd_t *cnd)
+{
+    if (cnd == NULL) return;
+    rearm(CPLUS_SYNC_KIND_CND, &cnd, (unsigned char)sizeof cnd);
+}
+
+void cplus_sync_checked_on_thrd_create(const cplus_thrd_t *thr)
+{
+    if (thr == NULL) return;
+    rearm(CPLUS_SYNC_KIND_THRD, thr, (unsigned char)sizeof *thr);
 }
 
 int cplus_mtx_destroy_checked(cplus_mtx_t *mtx)

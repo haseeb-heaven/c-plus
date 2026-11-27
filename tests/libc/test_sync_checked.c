@@ -4,7 +4,8 @@
  * Covers: valid init/destroy/join, NULL (and zeroed-handle) refusal,
  * double-destroy refusal without crashing, double-join refusal, rollback on
  * an underlying pthread failure, concurrent double-destroy (exactly one
- * winner), and bounded side-table exhaustion. Output contract:
+ * winner), and oldest-first reclaim of completed DONE records so the bounded
+ * side table cannot permanently refuse every later destroy. Output contract:
  *
  *   sync_checked: <checks> <failures>
  *
@@ -99,39 +100,30 @@ static void test_concurrent_destroy(void)
     CHECK_EQ(pthread_mutex_destroy(&a.guard), 0, "race guard destroy");
 }
 
-/* ---- bounded table exhaustion ------------------------------------------ */
-static void test_exhaustion(void)
+/* ---- completed DONE records are reclaimed, never a permanent ENOMEM ------ */
+static void test_reclaim(void)
 {
     enum { EXTRA = 8 };
-    const size_t limit = (size_t)CPLUS_SYNC_CHECKED_CAPACITY + EXTRA;
+    const size_t limit = (size_t)CPLUS_SYNC_CHECKED_CAPACITY * 2u + EXTRA;
     cplus_mtx_t **objs;
-    size_t i = 0;
-    size_t successes = 0;
-    int rc = 0;
+    size_t i;
 
     objs = (cplus_mtx_t **)calloc(limit, sizeof *objs);
-    CHECK(objs != NULL, "exhaustion object array alloc");
+    CHECK(objs != NULL, "reclaim object array alloc");
     if (objs == NULL) return;
 
     for (i = 0; i < limit; ++i) {
         objs[i] = (cplus_mtx_t *)calloc(1, sizeof *objs[i]);
         if (objs[i] == NULL) break;
         CHECK_EQ(cplus_mtx_init(objs[i], CPLUS_MTX_PLAIN), CPLUS_THRD_SUCCESS,
-                 "exhaustion mtx init");
-        rc = cplus_mtx_destroy_checked(objs[i]);
-        if (rc == ENOMEM) break;
-        CHECK_EQ(rc, 0, "exhaustion destroy accepted while table has room");
-        ++successes;
+                 "reclaim mtx init");
+        /* Crossing CPLUS_SYNC_CHECKED_CAPACITY used to brick the table with a
+         * permanent ENOMEM. Completed records must be recycled instead. */
+        CHECK_EQ(cplus_mtx_destroy_checked(objs[i]), 0,
+                 "checked destroy accepted beyond table capacity");
     }
-    CHECK(i < limit, "exhaustion was reached within bounded probe");
-    CHECK_EQ(rc, ENOMEM, "exhaustion refusal code");
-    CHECK(successes <= (size_t)CPLUS_SYNC_CHECKED_CAPACITY,
-          "capacity bound respected");
-    CHECK(successes > 0u, "some destroy succeeded before exhaustion");
+    CHECK_EQ(i, limit, "every distinct object was destroyed");
 
-    /* The refused object was never passed to pthread_mutex_destroy, so release
-     * it through the legacy void API here (outside the checked table). */
-    if (i < limit && objs[i] != NULL) cplus_mtx_destroy(objs[i]);
     for (i = 0; i < limit; ++i) {
         if (objs[i] != NULL) free(objs[i]);
     }
@@ -196,8 +188,8 @@ int main(void)
     /* (6) concurrent double-destroy */
     test_concurrent_destroy();
 
-    /* (7) bounded side-table exhaustion (last, it fills the table) */
-    test_exhaustion();
+    /* (7) completed records are reclaimed after the table fills */
+    test_reclaim();
 
     printf("sync_checked: %d %d\n", g_checks, g_failures);
     return g_failures != 0;

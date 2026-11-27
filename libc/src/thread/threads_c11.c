@@ -64,6 +64,7 @@
 
 #include "../../log/log.h"
 #include "../../install-include/cplus_threads.h"
+#include "sync_internal.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -167,6 +168,9 @@ int cplus_thrd_create(cplus_thrd_t *thr, cplus_thrd_start_t func, void *arg)
         return status_from_errno(rc);
     }
     memcpy(thr_pt(thr), &pt, sizeof pt);
+    /* The checked join guard keys on the whole handle; a recycled pthread_t
+     * must not be mistaken for a handle whose join was already completed. */
+    cplus_sync_checked_on_thrd_create(thr);
     return CPLUS_THRD_SUCCESS;
 }
 
@@ -252,6 +256,7 @@ int cplus_mtx_init(cplus_mtx_t *mtx, int type)
     }
     rc = cplus_pthread_mutex_init(pmtx(mtx), &attr); /* existing wrapper */
     (void)pthread_mutexattr_destroy(&attr);
+    if (rc == 0) cplus_sync_checked_on_mtx_init(mtx); /* re-arm same address */
     return status_from_errno(rc);
 }
 
@@ -311,10 +316,13 @@ void cplus_mtx_destroy(cplus_mtx_t *mtx)
 /* ------------------------------------------------------ Condition variables */
 int cplus_cnd_init(cplus_cnd_t *cnd)
 {
+    int rc;
     cplus_libc_log("cnd_init", "enter");
     if (cnd == NULL) return CPLUS_THRD_ERROR;
     /* NULL attr => CLOCK_REALTIME on every supported platform, as C11 requires. */
-    return status_from_errno(cplus_pthread_cond_init(pcnd(cnd), NULL));
+    rc = cplus_pthread_cond_init(pcnd(cnd), NULL);
+    if (rc == 0) cplus_sync_checked_on_cnd_init(cnd); /* re-arm same address */
+    return status_from_errno(rc);
 }
 
 int cplus_cnd_signal(cplus_cnd_t *cnd)

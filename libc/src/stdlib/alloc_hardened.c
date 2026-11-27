@@ -12,6 +12,7 @@
 #include <pthread.h>
 
 #include "cplus_libc.h"
+#include "alloc_internal.h"
 
 /* Best-effort diagnostic counters. They are independent of the allocator's
  * counters in alloc.c and only describe wrapper activity. */
@@ -32,13 +33,19 @@ static void bump(unsigned long *counter) {
 
 int cplus_alloc_atomic_realloc(void **ptr, size_t new_size) {
     void *old;
-    void *fresh;
     cplus_alloc_meta before;
-    cplus_alloc_meta after;
-    int have_before = 0;
-    int saved;
+    int rc;
 
     if (ptr == NULL) {
+        errno = EINVAL;
+        bump(&g_atomic_realloc_invalid);
+        return EINVAL;
+    }
+    /* Zero-size reallocation has no unambiguous failure-atomic outcome here:
+     * cplus_realloc maps it to a 1-byte block, while hosts that release the
+     * block would leave a dangling *ptr with an EINVAL-style refusal. Refuse
+     * it before touching either the slot or the allocation. */
+    if (new_size == 0) {
         errno = EINVAL;
         bump(&g_atomic_realloc_invalid);
         return EINVAL;
@@ -53,39 +60,37 @@ int cplus_alloc_atomic_realloc(void **ptr, size_t new_size) {
             bump(&g_atomic_realloc_invalid);
             return EINVAL;
         }
-        have_before = 1;
     }
 
-    fresh = cplus_realloc(old, new_size);
-    if (fresh == NULL) {
-        saved = (errno != 0) ? errno : ENOMEM;
-        if (have_before) {
-            /* Prove failure atomicity against the metadata side table: the
-             * original block must still be the same live allocation. */
-            if (cplus_alloc_get_meta(old, &after) != 0 ||
-                after.is_live != 1 ||
-                after.byte_size != before.byte_size ||
-                after.generation != before.generation) {
-                bump(&g_atomic_realloc_inconsistent);
-                errno = EINVAL;
-                bump(&g_atomic_realloc_fail);
-                return EINVAL;
-            }
-        }
-        errno = saved; /* ENOMEM from injection/host, EINVAL if reported */
+    /* The generation observed above is re-verified inside the allocator under
+     * its own lock, across the host realloc and the metadata update. No other
+     * thread can free or recycle old between the check and the operation. */
+    rc = cplus_alloc_realloc_generation(ptr, new_size,
+                                        old != NULL ? before.generation : 0);
+    if (rc == CPLUS_ALLOC_GEN_OK) {
+        bump(&g_atomic_realloc_ok);
+        return 0;
+    }
+    if (rc == CPLUS_ALLOC_GEN_STALE) {
+        bump(&g_atomic_realloc_inconsistent);
+        errno = EINVAL;
         bump(&g_atomic_realloc_fail);
-        return (saved == EINVAL) ? EINVAL : ENOMEM;
+        return EINVAL;
     }
-
-    /* Only publish the new address after the underlying realloc succeeded. */
-    *ptr = fresh;
-    bump(&g_atomic_realloc_ok);
-    return 0;
+    if (rc == CPLUS_ALLOC_GEN_INVALID) {
+        errno = EINVAL;
+        bump(&g_atomic_realloc_invalid);
+        return EINVAL;
+    }
+    errno = ENOMEM;
+    bump(&g_atomic_realloc_fail);
+    return ENOMEM;
 }
 
 int cplus_alloc_checked_free(void **ptr) {
     void *target;
-    void *tmp;
+    cplus_alloc_meta before;
+    int rc;
 
     if (ptr == NULL || *ptr == NULL) {
         errno = EINVAL;
@@ -94,7 +99,7 @@ int cplus_alloc_checked_free(void **ptr) {
     }
 
     target = *ptr;
-    if (cplus_alloc_is_live(target) != 1) {
+    if (cplus_alloc_get_meta(target, &before) != 0 || before.is_live != 1) {
         /* Double free / stale / foreign pointer: refuse using metadata and
          * keep the caller's slot unchanged so the error is observable. */
         errno = EINVAL;
@@ -102,16 +107,15 @@ int cplus_alloc_checked_free(void **ptr) {
         return EINVAL;
     }
 
-    /* Use a local copy so a refused free inside cplus_free_checked cannot
-     * NULL the caller's pointer; only a successful free publishes NULL. */
-    tmp = target;
-    if (cplus_free_checked(&tmp) != 0) {
+    /* One lock-protected check-and-act: the generation observed above must
+     * still be live when the host free runs. On refusal the caller's slot is
+     * untouched; only a successful free publishes NULL. */
+    rc = cplus_alloc_free_generation(ptr, before.generation);
+    if (rc != CPLUS_ALLOC_GEN_OK) {
         errno = EINVAL;
         bump(&g_checked_free_refused);
         return EINVAL;
     }
-
-    *ptr = NULL;
     bump(&g_checked_free_ok);
     return 0;
 }
