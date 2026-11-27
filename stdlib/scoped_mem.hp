@@ -52,6 +52,158 @@ class stdlib_scoped_scope {
     }
 };
 
+/* Chained data-stack blocks.  The ordinary C ABI descriptor above is left
+ * untouched: spill blocks live in an explicit C+ wrapper that owns a
+ * stdlib_arena (already a chained-block allocator).  A bump that exhausts the
+ * first chunk spills into the arena, which allocates a new block instead of
+ * failing or corrupting the bump region.  Pointers from either region stay
+ * valid until the owning scope drops. */
+typedef struct stdlib_datastack_chained {
+    stdlib_datastack stack;      /* unchanged C ABI struct */
+    stdlib_arena spill;          /* out-of-band chained blocks */
+    int spill_ready;
+} stdlib_datastack_chained;
+
+static int stdlib_datastack_chained_init(stdlib_datastack_chained *c,
+                                         size_t capacity, error *err) {
+    error_reset(err);
+    if (c == (stdlib_datastack_chained *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "datastack: NULL chained stack"),
+               STDLIB_FAIL;
+    if (stdlib_datastack_init(&c->stack, capacity, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    c->spill_ready = 0;
+    return STDLIB_OK;
+}
+
+/* Number of backing blocks: one first chunk plus every arena spill block. */
+static size_t stdlib_datastack_chained_blocks(const stdlib_datastack_chained *c) {
+    stdlib_arena_block *b;
+    size_t n = 0;
+    if (c == (stdlib_datastack_chained *)0 || c->stack.base == (unsigned char *)0) return 0;
+    n = 1; /* first bump chunk */
+    if (!c->spill_ready) return n;
+    b = c->spill.block;
+    while (b != (stdlib_arena_block *)0) { n++; b = b->prev; }
+    return n;
+}
+
+/* True only while the pointer still names bytes owned by this stack. */
+static int stdlib_datastack_chained_is_live(const stdlib_datastack_chained *c,
+                                            const void *ptr) {
+    stdlib_arena_block *b;
+    const unsigned char *p = (const unsigned char *)ptr;
+    if (c == (stdlib_datastack_chained *)0 || p == (const unsigned char *)0) return 0;
+    if (p >= c->stack.base && p < c->stack.top) return 1;
+    if (!c->spill_ready) return 0;
+    b = c->spill.block;
+    while (b != (stdlib_arena_block *)0) {
+        if (p >= b->base && p < b->base + b->capacity) {
+            if (b != c->spill.block || p < c->spill.cursor) return 1;
+        }
+        if (b == c->spill.first_block) break;
+        b = b->prev;
+    }
+    return 0;
+}
+
+static void *stdlib_datastack_chained_alloc(stdlib_datastack_chained *c,
+                                            size_t n, size_t align, error *err) {
+    void *p;
+    error_reset(err);
+    if (c == (stdlib_datastack_chained *)0 || n == 0 || align == 0 ||
+        (align & (align - 1u)) != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "datastack: invalid chained request"),
+               (void *)0;
+    if (align < (size_t)STDLIB_ALIGN_DEFAULT) align = (size_t)STDLIB_ALIGN_DEFAULT;
+    p = stdlib_datastack_alloc(&c->stack, n, align, err);
+    if (p != (void *)0) return p;
+    /* Bump chunk exhausted: spill into the chained arena. */
+    if (!c->spill_ready) {
+        size_t cap = n + align;
+        if (cap < c->stack.capacity) cap = c->stack.capacity;
+        if (stdlib_arena_init(&c->spill, cap, err) != STDLIB_OK) return (void *)0;
+        c->spill_ready = 1;
+    }
+    return stdlib_arena_alloc(&c->spill, n, align, err);
+}
+
+/* Poison the spill bytes beyond a mark before the chain is rewound. */
+static void stdlib_datastack_chained_poison_spill(stdlib_arena *a,
+                                                  stdlib_arena_block *stop,
+                                                  unsigned char *stop_cursor) {
+#if STDLIB_DATASTACK_POISON
+    stdlib_arena_block *b;
+    if (a == (stdlib_arena *)0) return;
+    b = a->block;
+    while (b != (stdlib_arena_block *)0 && b != stop) {
+        stdlib_datastack_poison(b->base, b->base + b->capacity);
+        b = b->prev;
+    }
+    if (b == stop && stop_cursor != (unsigned char *)0 && a->cursor >= stop_cursor)
+        stdlib_datastack_poison(stop_cursor, a->cursor);
+#else
+    (void)a; (void)stop; (void)stop_cursor;
+#endif
+}
+
+/* Scope guard for a chained stack.  The first-chunk release stays one store;
+ * spill blocks are rewound through the arena's existing reset. */
+class stdlib_datastack_chained_scope {
+    stdlib_datastack_chained *scope_chain;
+    unsigned char *saved_top;
+    unsigned char *saved_cursor;
+    stdlib_arena_block *saved_block;
+    uint64_t saved_gen;
+    uint64_t saved_arena_gen;
+
+    stdlib_datastack_chained_scope(stdlib_datastack_chained *c) {
+        this->scope_chain = c;
+        this->saved_top = (unsigned char *)0;
+        this->saved_cursor = (unsigned char *)0;
+        this->saved_block = (stdlib_arena_block *)0;
+        this->saved_gen = 0;
+        this->saved_arena_gen = 0;
+        if (c != (stdlib_datastack_chained *)0) {
+            this->saved_top = (*c).stack.top;
+            this->saved_gen = (*c).stack.generation;
+            if ((*c).spill_ready) {
+                this->saved_cursor = (*c).spill.cursor;
+                this->saved_block = (*c).spill.block;
+                this->saved_arena_gen = (*c).spill.generation;
+            }
+        }
+    }
+
+    void drop(void) {
+        stdlib_datastack_chained *c = this->scope_chain;
+        if (c != (stdlib_datastack_chained *)0 && (*c).stack.generation == this->saved_gen) {
+            stdlib_datastack_poison(this->saved_top, (*c).stack.top);
+            (*c).stack.top = this->saved_top;
+            if ((*c).spill_ready &&
+                (this->saved_arena_gen == 0 ||
+                 (*c).spill.generation == this->saved_arena_gen)) {
+                error e = error();
+                stdlib_datastack_chained_poison_spill(&(*c).spill,
+                                                      this->saved_block,
+                                                      this->saved_cursor);
+                stdlib_arena_do_reset(&(*c).spill, &e);
+            }
+        }
+        this->scope_chain = (stdlib_datastack_chained *)0;
+    }
+};
+
+static void stdlib_datastack_chained_destroy(stdlib_datastack_chained *c, error *err) {
+    error_reset(err);
+    if (c == (stdlib_datastack_chained *)0) return;
+    if (c->spill_ready) stdlib_arena_destroy(&c->spill, err);
+    c->spill_ready = 0;
+    stdlib_datastack_destroy(&c->stack, err);
+}
+
 /* Dynamic arena: grows in blocks, reset reclaims all blocks at once. */
 typedef stdlib_arena stdlib_dyn_arena;
 
