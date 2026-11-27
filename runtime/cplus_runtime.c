@@ -135,8 +135,17 @@ static void cplus_log_impl(int level, const char *file, int line,
   va_end(ap);
 }
 #undef cplus_log
+/* Skip the varargs call entirely when the level is disabled (the default).
+ * Bind the level once so an expression with side effects keeps its previous
+ * single evaluation.  cplus_log_impl() still performs the authoritative
+ * check itself. */
 #define cplus_log(level, ...)                                                  \
-  cplus_log_impl((int)(level), __FILE__, __LINE__, __func__, __VA_ARGS__)
+  do {                                                                         \
+    int __cplus_log_level__ = (int)(level);                                    \
+    if (__cplus_log_level__ >= cplus_runtime_log_level)                        \
+      cplus_log_impl(__cplus_log_level__, __FILE__, __LINE__, __func__,        \
+                     __VA_ARGS__);                                             \
+  } while (0)
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -654,9 +663,17 @@ static void *cplus_quarantine[CPLUS_QUARANTINE_SLOTS];
 static size_t cplus_quarantine_next = 0;
 static size_t cplus_quarantine_count = 0;
 
+/* The opt-in flag is process configuration, not a per-release decision.
+ * Read it once instead of calling getenv() (which takes libc's environment
+ * lock) on every managed release.  Both call sites hold cplus_alloc_mutex,
+ * so the lazy initialization is serialized with the ring it guards. */
+static int cplus_quarantine_cached = -1;
 static int cplus_quarantine_enabled(void) {
-  const char *env = getenv("CPLUS_QUARANTINE");
-  return env && env[0] != '0';
+  if (cplus_quarantine_cached < 0) {
+    const char *env = getenv("CPLUS_QUARANTINE");
+    cplus_quarantine_cached = (env && env[0] != '0') ? 1 : 0;
+  }
+  return cplus_quarantine_cached;
 }
 
 /* Called with the allocator lock held.  If a pointer is (re)registered, any
@@ -664,6 +681,11 @@ static int cplus_quarantine_enabled(void) {
  * otherwise free a block that is live again.  O(ring slots), registration
  * path only - never on the cplus_alloc/cplus_release hot path. */
 static void cplus_quarantine_drop(const void *p) {
+  /* The ring is empty on the default (quarantine disabled) hot path.  Its
+   * count is maintained in lockstep with the slots: zero means every slot is
+   * NULL, so the full scan can be skipped without weakening any check. */
+  if (cplus_quarantine_count == 0u)
+    return;
   for (size_t k = 0; k < CPLUS_QUARANTINE_SLOTS; ++k) {
     if (cplus_quarantine[k] == p) {
       cplus_quarantine[k] = NULL;
@@ -675,6 +697,8 @@ static void cplus_quarantine_drop(const void *p) {
 }
 
 static int cplus_quarantine_contains(const void *p) {
+  if (cplus_quarantine_count == 0u)
+    return 0;
   for (size_t k = 0; k < CPLUS_QUARANTINE_SLOTS; ++k)
     if (cplus_quarantine[k] == p)
       return 1;
@@ -785,10 +809,24 @@ static cplus_live_slot *cplus_find_live(const void *p) {
 static void cplus_live_insert(const void *p, size_t size, uint64_t generation) {
   size_t mask = cplus_live_cap - 1;
   size_t i = cplus_hash(p) & mask;
-  while (cplus_live[i].ptr != NULL && cplus_live[i].ptr != CPLUS_TOMBSTONE)
+  size_t tombstone = cplus_live_cap; /* no tombstone found yet */
+  /* cplus_find_live() stops at the first NULL.  Scan the whole live probe
+   * chain and prefer any tombstone in it, falling back to the first NULL.
+   * Reusing the tombstone instead of appending after it keeps deleted slots
+   * from accumulating in alloc/free churn, so the table does not have to be
+   * rehashed every time the (count + tombstones) threshold is crossed. */
+  for (size_t probe = 0; probe <= mask; ++probe) {
+    void *slot = cplus_live[i].ptr;
+    if (slot == NULL)
+      break;
+    if (slot == CPLUS_TOMBSTONE && tombstone == cplus_live_cap)
+      tombstone = i;
     i = (i + 1) & mask;
-  if (cplus_live[i].ptr == CPLUS_TOMBSTONE)
+  }
+  if (tombstone != cplus_live_cap) {
     --cplus_live_deleted;
+    i = tombstone;
+  }
   cplus_live[i].ptr = (void *)p;
   cplus_live[i].size = size;
   cplus_live[i].generation = generation;
@@ -1048,10 +1086,12 @@ void cplus_free_registered(void *p, const char *file, int line) {
   /* The retired ledger is consulted on a live-table miss only.  A live hit is
    * a legitimate release of the current generation, so normal reuse of an
    * address produces no false double-free; a release of an address that is no
-   * longer live is deterministic even after the recent cache evicted. */
-  uint64_t retired_generation = cplus_retired_generation(p);
+   * longer live is deterministic even after the recent cache evicted.  Both
+   * tables are read under the same lock, so the live-first order changes no
+   * decision but removes a hash probe from the common release. */
   cplus_live_slot *slot = cplus_find_live(p);
   if (!slot) {
+    uint64_t retired_generation = cplus_retired_generation(p);
     cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(p)];
     int recently_freed = recent->ptr == p;
     cplus_alloc_unlock();
@@ -1220,10 +1260,11 @@ void cplus_release(void *ptr) {
 
   cplus_alloc_lock();
   /* Retired-ledger hit on a live-table miss is authoritative and survives
-   * cache eviction; a live hit is always a legitimate release. */
-  uint64_t retired_generation = cplus_retired_generation(ptr);
+   * cache eviction; a live hit is always a legitimate release.  Check the
+   * live table first so the common path does not need a second hash probe. */
   cplus_live_slot *slot = cplus_find_live(ptr);
   if (!slot) {
+    uint64_t retired_generation = cplus_retired_generation(ptr);
     cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(ptr)];
     int recently_freed = recent->ptr == ptr;
     cplus_alloc_unlock();

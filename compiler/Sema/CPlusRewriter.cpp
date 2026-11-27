@@ -5100,7 +5100,7 @@ std::string instrumentDynamicArrayBounds(
       haveBounds = true;
       guardedIndexOffsets.insert(idxBegin);
       insertions.push_back({idxBegin, outer, 0,
-                            "__cplus_bounds_check((size_t)(", 0});
+                            "__cplus_bounds_check_inline((size_t)(", 0});
       insertions.push_back({toks[close].offset, outer, 2,
                             "), " + std::to_string(ai->second) + ", \"" +
                                 toks[i].text + "\")", 0});
@@ -5146,8 +5146,8 @@ std::string instrumentDynamicArrayBounds(
       // of ours, splicing the bounds macro into its argument list and
       // producing calls with the wrong arity.
       const size_t outer = kNPos;
-      insertions.push_back({idxBegin, outer, 0, "__cplus_bounds_check((size_t)(",
-                            0});
+      insertions.push_back({idxBegin, outer, 0,
+                            "__cplus_bounds_check_inline((size_t)(", 0});
       insertions.push_back({toks[close].offset, outer, 2,
                             "), (size_t)(" + vi->second + "), \"" +
                                 toks[i].text + "\")",
@@ -5177,7 +5177,7 @@ std::string instrumentDynamicArrayBounds(
     // smaller span let a checked-arithmetic prefix sort ahead and splice the
     // guard into the helper's argument list (wrong arity).
     insertions.push_back({idxBegin, kNPos, 0,
-                          "__cplus_bounds_check((size_t)(", 0});
+                          "__cplus_bounds_check_inline((size_t)(", 0});
     insertions.push_back({close, kNPos, 2,
                           "), (size_t)(" +
                               (site.count.empty() ? std::string("1")
@@ -5654,8 +5654,23 @@ std::string instrumentDynamicArrayBounds(
   if ((haveBounds && !haveVla) || havePtrFormation)
     prelude += "#include <stddef.h>\n"; // haveVla already included it
   if (haveBounds)
+    // The runtime helper is the single authority for the diagnostic and the
+    // trap.  Keep the check on every access but make its in-range fast path
+    // local so a hot loop no longer pays a cross-TU call per subscript.  Any
+    // out-of-range index still reaches __cplus_bounds_check() unchanged.
     prelude += "extern size_t __cplus_bounds_check(size_t, size_t, "
-               "const char *);\n";
+               "const char *);\n"
+               "#if defined(__GNUC__) || defined(__clang__)\n"
+               "static __inline__ __attribute__((unused)) size_t "
+               "__cplus_bounds_check_inline(size_t __cplus_i, "
+               "size_t __cplus_n, const char *__cplus_name) {\n"
+               "  if (__cplus_i < __cplus_n) return __cplus_i;\n"
+               "  return __cplus_bounds_check(__cplus_i, __cplus_n, "
+               "__cplus_name);\n"
+               "}\n"
+               "#else\n"
+               "#define __cplus_bounds_check_inline __cplus_bounds_check\n"
+               "#endif\n";
   if (havePtrFormation)
     prelude += "#include <stdint.h>\n"
                "extern void cplus_check_ptr_formation(const void *, size_t, "
@@ -5701,15 +5716,21 @@ std::string instrumentDynamicArrayBounds(
     prelude += "extern void cplus_check_nonnull(const void *, const char *, "
                "int, const char *);\n"
                "#if defined(__GNUC__) || defined(__clang__)\n"
+               // Keep the check on every dereference, but make the fast path
+               // local: a non-null pointer never needs a cross-TU call.  The
+               // runtime trap is still invoked for every null pointer, with
+               // the same file/line/expression arguments as before.
                "#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = "
                "(P); \\\n"
-               "  cplus_check_nonnull((const void *)__cplus_nn_p, "
+               "  if (!__cplus_nn_p) \\\n"
+               "    cplus_check_nonnull((const void *)__cplus_nn_p, "
                "__FILE__, __LINE__, #P); \\\n"
                "  __cplus_nn_p; })\n"
                "#else\n"
                "#define CPLUS_NONNULL(P) \\\n"
-               "  (cplus_check_nonnull((const void *)(P), __FILE__, "
-               "__LINE__, #P), (P))\n"
+               "  ((P) ? (P) : \\\n"
+               "   (cplus_check_nonnull((const void *)0, __FILE__, "
+               "__LINE__, #P), (P)))\n"
                "#endif\n";
   if (haveRuntimeRegistry)
     prelude += "#include <stddef.h>\n"

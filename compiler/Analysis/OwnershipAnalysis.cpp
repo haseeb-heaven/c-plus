@@ -1934,7 +1934,7 @@ bool isReservedHelperName(llvm::StringRef name) {
   // Remaining individual runtime ABI entry points (runtime/include/cplus/cplus.h
   // and the rewriter's generated wrappers).
   static const std::set<llvm::StringRef> kReserved = {
-      "__cplus_bounds_check",
+      "__cplus_bounds_check", "__cplus_bounds_check_inline",
       "cplus_address_retired", "cplus_allocation_generation",
       "cplus_arith_fatal", "cplus_cleanup", "cplus_cleanup_kind",
       "cplus_fatal", "cplus_fatal_hook", "cplus_free_registered",
