@@ -157,7 +157,7 @@ static void sc_14_strtol_erange(void) {
 /* Unsupported bases (1, 37, INT_MIN, INT_MAX): EINVAL, 0, endptr == input. */
 static void sc_14_strtol_invalid_bases(void) {
     const char *s = "10";
-    char *end;
+    char *end = (char *)s;
     int bad_bases[4];
     int i;
 
@@ -167,6 +167,7 @@ static void sc_14_strtol_invalid_bases(void) {
     bad_bases[3] = INT_MAX;
     for (i = 0; i < 4; ++i) {
         errno = 0;
+        end = (char *)s; /* glibc leaves *endptr untouched for invalid base */
         assert(cplus_strtol(s, &end, bad_bases[i]) == 0L);
         assert(end == s);
         assert(errno == EINVAL);

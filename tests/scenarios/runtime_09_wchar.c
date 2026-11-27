@@ -656,13 +656,15 @@ static void sc_09_wide_huge_width(void) {
 #ifndef _WIN32
     pid_t pid = fork();
     if (pid == 0) {
-        wchar_t buf[8];
+        wchar_t buf[10]; /* 8-byte bound plus two tail canaries */
         size_t i;
         int r;
         for (i = 0u; i < NELM(buf); ++i) buf[i] = L'#';
         alarm(1);
-        r = cplus_swprintf(buf, NELM(buf), L"%1000000000ls", L"hi");
-        if (buf[0] != L'#' || buf[7] != L'#') _exit(2); /* n bound violated */
+        r = cplus_swprintf(buf, 8u, L"%1000000000ls", L"hi");
+        /* glibc truncates in-bounds and NUL-terminates; only writes PAST n
+         * are a bound violation. */
+        if (buf[8] != L'#' || buf[9] != L'#') _exit(2);
         (void)r;
         _exit(0);
     }
