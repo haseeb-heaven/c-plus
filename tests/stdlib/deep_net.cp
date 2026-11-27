@@ -60,6 +60,20 @@ ssize_t write(int fd, const void *buf, size_t n) {
     return syscall(SYS_write, fd, buf, chunk);
 }
 
+/* connection::write() now uses send() so SIGPIPE can be suppressed per call;
+ * inject the same short/zero-write faults into that path. */
+ssize_t send(int fd, const void *buf, size_t n, int flags) {
+    size_t chunk = n;
+    if (g_fault_write_zero && fd >= 0)
+        return 0;
+    if (g_fault_short_write) {
+        g_short_write_calls++;
+        if (chunk > 1024)
+            chunk = 1024;
+    }
+    return sendto(fd, buf, chunk, flags, (const struct sockaddr *)0, 0);
+}
+
 ssize_t read(int fd, void *buf, size_t n) {
     if (g_fault_read_error) {
         errno = EIO;

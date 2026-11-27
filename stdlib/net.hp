@@ -11,11 +11,58 @@
 #include <errno.h>
 #include <limits.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
+
+/* A reset peer must turn into an EPIPE-style write error, not a process-killing
+ * SIGPIPE.  Linux has MSG_NOSIGNAL per send; BSD/macOS have SO_NOSIGPIPE per
+ * socket (inherited by accepted sockets).  Apply the socket option at write
+ * time as well so borrowed descriptors get the same protection. */
+static void net_suppress_sigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    if (fd >= 0)
+        (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#else
+    (void)fd;
+#endif
+}
+
+static int net_send_flags(void) {
+#ifdef MSG_NOSIGNAL
+    return MSG_NOSIGNAL;
+#else
+    return 0;
+#endif
+}
+
+/* Last-resort POSIX fallback: ignore SIGPIPE only around the send loop and
+ * restore the previous handler/mask when done. */
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+typedef struct {
+    struct sigaction previous;
+    int installed;
+} net_sigpipe_scope;
+
+static void net_sigpipe_scope_enter(net_sigpipe_scope *scope) {
+    struct sigaction ignore;
+    scope->installed = 0;
+    memset(&ignore, 0, sizeof(ignore));
+    ignore.sa_handler = SIG_IGN;
+    sigemptyset(&ignore.sa_mask);
+    if (sigaction(SIGPIPE, &ignore, &scope->previous) == 0)
+        scope->installed = 1;
+}
+
+static void net_sigpipe_scope_leave(net_sigpipe_scope *scope) {
+    if (scope->installed)
+        (void)sigaction(SIGPIPE, &scope->previous, (struct sigaction *)0);
+}
+#endif
 
 class connection {
     int fd;
@@ -63,30 +110,48 @@ class connection {
 
     int write(const char *data, size_t length, error *err) {
         size_t sent = 0;
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+        net_sigpipe_scope sigpipe_scope;
+#endif
         error_reset(err);
         if (!this->is_valid() || data == NULL) {
             error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
                            "connection::write: invalid argument");
             return STDLIB_FAIL;
         }
+        net_suppress_sigpipe(this->fd);
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+        net_sigpipe_scope_enter(&sigpipe_scope);
+#endif
         /* A short write is not a failure: keep sending until every byte is out
-         * (retrying EINTR) or the peer reports an error. */
+         * (retrying EINTR) or the peer reports an error.  send() plus
+         * MSG_NOSIGNAL/SO_NOSIGPIPE keeps EPIPE recoverable. */
         while (sent < length) {
-            ssize_t n = write(this->fd, data + sent, length - sent);
+            ssize_t n = send(this->fd, data + sent, length - sent,
+                             net_send_flags());
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
                 error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
                                "connection::write failed");
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+                net_sigpipe_scope_leave(&sigpipe_scope);
+#endif
                 return STDLIB_FAIL;
             }
             if (n == 0) {
                 error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
                                "connection::write made no progress");
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+                net_sigpipe_scope_leave(&sigpipe_scope);
+#endif
                 return STDLIB_FAIL;
             }
             sent += (size_t)n;
         }
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+        net_sigpipe_scope_leave(&sigpipe_scope);
+#endif
         return STDLIB_OK;
     }
 
@@ -112,6 +177,7 @@ class listener {
             this->fd = socket(AF_INET, SOCK_STREAM, 0);
             if (this->fd >= 0) {
                 setsockopt(this->fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+                net_suppress_sigpipe(this->fd);
                 memset(&addr, 0, sizeof(addr));
                 addr.sin_family = AF_INET;
                 addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -154,6 +220,7 @@ class listener {
                 client_fd = accept(this->fd, NULL, NULL);
             } while (client_fd < 0 && errno == EINTR);
         }
+        net_suppress_sigpipe(client_fd);
         connection accepted = connection(client_fd);
         return accepted;
     }

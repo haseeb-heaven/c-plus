@@ -168,6 +168,7 @@ class loop {
 
     int run(int mode, error *err) {
         int rc;
+        stdlib_async_token *tok;
         error_reset(err);
         if (!this->valid()) {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "loop::run: invalid loop");
@@ -178,9 +179,20 @@ class loop {
                            "loop::run: invalid uv_run mode");
             return STDLIB_FAIL;
         }
-        this->token->running = 1;
+        tok = this->token;
+        if (tok == NULL || tok->native != &this->native_loop) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "loop::run: invalid loop token");
+            return STDLIB_FAIL;
+        }
+        /* A callback may drop() this loop re-entrantly: that clears
+         * this->token and releases the loop's reference.  Keep our own
+         * reference so the shared token (and its running flag) stays valid
+         * until uv_run() returns; never touch this->token afterwards. */
+        tok->refs = tok->refs + 1u;
+        tok->running = 1;
         rc = uv_run(&this->native_loop, (uv_run_mode)mode);
-        this->token->running = 0;
+        tok->running = 0;
+        stdlib_async_release_token(tok);
         if (rc != 0)
             cplus_log(CPLUS_LOG_DEBUG, "loop::run: active handles remain");
         return STDLIB_OK;
@@ -223,10 +235,12 @@ class loop {
         }
         tok->native = NULL;
         if (!tok->running) {
-            int guard = 0;
-            while (uv_loop_alive(&this->native_loop) && guard < 1000) {
+            /* The compiler reserves identifiers containing "guard" for its
+             * RAII lowering, so use a plain drain counter name. */
+            int drain_rounds = 0;
+            while (uv_loop_alive(&this->native_loop) && drain_rounds < 1000) {
                 uv_run(&this->native_loop, UV_RUN_NOWAIT);
-                guard++;
+                drain_rounds = drain_rounds + 1;
             }
             if (uv_loop_close(&this->native_loop) != 0) {
                 cplus_log(CPLUS_LOG_WARN, "loop::drop: libuv loop still busy");

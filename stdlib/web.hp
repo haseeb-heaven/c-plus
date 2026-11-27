@@ -23,6 +23,7 @@
 #define CPLUS_STD_WEB_HP
 
 #include <errno.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -69,6 +70,54 @@ static int web_timeout_ms(int nap_ms) {
     return nap_ms > 0 ? nap_ms : WEB_NAP_MS;
 }
 
+/* A peer that resets or closes mid-reply must never kill the process with
+ * SIGPIPE.  Linux offers MSG_NOSIGNAL per send; BSD/macOS offer the per-socket
+ * SO_NOSIGPIPE option (inherited by accepted sockets).  Both are thread-safe
+ * and let send() return EPIPE as an ordinary I/O error.  We also apply the
+ * socket option at send time so a caller-borrowed descriptor is protected. */
+static void web_suppress_sigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    if (fd >= 0)
+        (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#else
+    (void)fd;
+#endif
+}
+
+static int web_send_flags(void) {
+#ifdef MSG_NOSIGNAL
+    return MSG_NOSIGNAL;
+#else
+    return 0;
+#endif
+}
+
+/* Fallback for a POSIX platform with neither per-call nor per-socket
+ * suppression: ignore SIGPIPE only for the duration of the send loop, then
+ * restore the exact previous disposition (including a caller's handler). */
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+typedef struct {
+    struct sigaction previous;
+    int installed;
+} web_sigpipe_scope;
+
+static void web_sigpipe_scope_enter(web_sigpipe_scope *scope) {
+    struct sigaction ignore;
+    scope->installed = 0;
+    memset(&ignore, 0, sizeof(ignore));
+    ignore.sa_handler = SIG_IGN;
+    sigemptyset(&ignore.sa_mask);
+    if (sigaction(SIGPIPE, &ignore, &scope->previous) == 0)
+        scope->installed = 1;
+}
+
+static void web_sigpipe_scope_leave(web_sigpipe_scope *scope) {
+    if (scope->installed)
+        (void)sigaction(SIGPIPE, &scope->previous, (struct sigaction *)0);
+}
+#endif
+
 /* Convert milliseconds to a timeval, guarding overflow of tv_usec. */
 static struct timeval web_timeval_ms(int ms) {
     struct timeval tv;
@@ -108,18 +157,33 @@ static ssize_t web_recv_bounded(int fd, char *buf, size_t cap, int timeout_ms) {
  * success, -1 on a peer error/no-progress (the caller stops writing). */
 static int web_send_all(int fd, const char *buf, size_t len) {
     size_t sent = 0;
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    web_sigpipe_scope sigpipe_scope;
+#endif
     if (fd < 0 || (buf == (const char *)0 && len > 0))
         return -1;
+    web_suppress_sigpipe(fd);
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    web_sigpipe_scope_enter(&sigpipe_scope);
+#endif
     while (sent < len) {
-        ssize_t n = send(fd, buf + sent, len - sent, 0);
+        /* MSG_NOSIGNAL on Linux, SO_NOSIGPIPE on BSD/macOS: a dead peer is an
+         * EPIPE return, never a process-killing signal. */
+        ssize_t n = send(fd, buf + sent, len - sent, web_send_flags());
         if (n > 0) {
             sent += (size_t)n;
             continue;
         }
         if (n < 0 && errno == EINTR)
             continue;
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+        web_sigpipe_scope_leave(&sigpipe_scope);
+#endif
         return -1;                 /* closed peer, reset, or no progress */
     }
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+    web_sigpipe_scope_leave(&sigpipe_scope);
+#endif
     return 0;
 }
 
@@ -139,6 +203,7 @@ static int web_server_init(web_server *s, const char *host, int port) {
     if (fd < 0)
         return -1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    web_suppress_sigpipe(fd);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons((uint16_t)port);
@@ -203,6 +268,7 @@ static int web_accept(web_server *s, web_conn *c) {
         return 0;
     c->fd = fd;
     /* Belt and braces: cap any later recv() even if select races with it. */
+    web_suppress_sigpipe(fd);
     tv = web_timeval_ms(s->nap_ms);
     (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 

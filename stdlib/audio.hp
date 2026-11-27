@@ -19,8 +19,13 @@
 #include "stdlib/error.hp"
 #include "miniaudio.h"
 
+/* miniaudio structs are non-relocatable: ma_engine_init()/ma_device_init()
+ * register their addresses with worker threads and ma_sound_init_from_file()
+ * links &sound->engineNode into the engine's node graph.  Every wrapper owns
+ * its native struct on the stable heap so returning a wrapper by value copies
+ * only an owning pointer, never a graph/thread-visible address. */
 class audio_context {
-    ma_context context;
+    ma_context *context;
     int initialized;
 
     audio_context(int use_null, error *err) {
@@ -28,15 +33,23 @@ class audio_context {
             ma_result rc;
             error_reset(err);
             this->initialized = 0;
+            this->context = (ma_context *)stdlib_alloc(sizeof(ma_context));
+            if (this->context == NULL) {
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "audio_context: out of memory");
+                break;
+            }
             if (use_null) {
                 ma_backend backends[2];
                 backends[0] = ma_backend_null;
                 backends[1] = ma_backend_null;
-                rc = ma_context_init(backends, 1, NULL, &this->context);
+                rc = ma_context_init(backends, 1, NULL, this->context);
             } else {
-                rc = ma_context_init(NULL, 0, NULL, &this->context);
+                rc = ma_context_init(NULL, 0, NULL, this->context);
             }
             if (rc != MA_SUCCESS) {
+                stdlib_release(this->context);
+                this->context = NULL;
                 error_fail(err, CPLUS_EXIT_RESOURCE, "audio_context: init failed");
                 break;
             }
@@ -45,24 +58,27 @@ class audio_context {
     }
 
     int valid(void) {
-        return this->initialized != 0;
+        return this->initialized != 0 && this->context != NULL;
     }
 
     /* Borrowed native context for APIs that need the miniaudio type. */
     ma_context *native(void) {
-        return &this->context;
+        return this->context;
     }
 
     void drop(void) {
-        if (this->initialized) {
-            ma_context_uninit(&this->context);
-            this->initialized = 0;
+        if (this->context != NULL) {
+            if (this->initialized)
+                ma_context_uninit(this->context);
+            stdlib_release(this->context);
+            this->context = NULL;
         }
+        this->initialized = 0;
     }
 };
 
 class audio_sound {
-    ma_sound sound;
+    ma_sound *sound;
     int initialized;
 
     /* Takes the native engine pointer: a constructor must not use `->`. */
@@ -70,12 +86,21 @@ class audio_sound {
         do {
             error_reset(err);
             this->initialized = 0;
+            this->sound = NULL;
             if (owner_engine == NULL || path == NULL) {
                 error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_sound: invalid argument");
                 break;
             }
+            this->sound = (ma_sound *)stdlib_alloc(sizeof(ma_sound));
+            if (this->sound == NULL) {
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "audio_sound: out of memory");
+                break;
+            }
             if (ma_sound_init_from_file(owner_engine, path, 0, NULL, NULL,
-                                        &this->sound) != MA_SUCCESS) {
+                                        this->sound) != MA_SUCCESS) {
+                stdlib_release(this->sound);
+                this->sound = NULL;
                 error_fail(err, CPLUS_EXIT_IO, "audio_sound: cannot load file");
                 break;
             }
@@ -84,7 +109,7 @@ class audio_sound {
     }
 
     int valid(void) {
-        return this->initialized != 0;
+        return this->initialized != 0 && this->sound != NULL;
     }
 
     int play(error *err) {
@@ -93,7 +118,7 @@ class audio_sound {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_sound::play: invalid sound");
             return STDLIB_FAIL;
         }
-        if (ma_sound_start(&this->sound) != MA_SUCCESS) {
+        if (ma_sound_start(this->sound) != MA_SUCCESS) {
             error_fail(err, CPLUS_EXIT_IO, "audio_sound::play failed");
             return STDLIB_FAIL;
         }
@@ -106,7 +131,7 @@ class audio_sound {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_sound::stop: invalid sound");
             return STDLIB_FAIL;
         }
-        if (ma_sound_stop(&this->sound) != MA_SUCCESS) {
+        if (ma_sound_stop(this->sound) != MA_SUCCESS) {
             error_fail(err, CPLUS_EXIT_IO, "audio_sound::stop failed");
             return STDLIB_FAIL;
         }
@@ -114,19 +139,22 @@ class audio_sound {
     }
 
     int playing(void) {
-        return this->valid() && ma_sound_is_playing(&this->sound);
+        return this->valid() && ma_sound_is_playing(this->sound);
     }
 
     void drop(void) {
-        if (this->initialized) {
-            ma_sound_uninit(&this->sound);
-            this->initialized = 0;
+        if (this->sound != NULL) {
+            if (this->initialized)
+                ma_sound_uninit(this->sound);
+            stdlib_release(this->sound);
+            this->sound = NULL;
         }
+        this->initialized = 0;
     }
 };
 
 class audio_engine {
-    ma_engine engine;
+    ma_engine *engine;
     int initialized;
 
     /* Takes the native context so callers can select a backend (the silent
@@ -136,9 +164,18 @@ class audio_engine {
         do {
             error_reset(err);
             this->initialized = 0;
+            this->engine = NULL;
             config = ma_engine_config_init();
             config.pContext = owner_context;
-            if (ma_engine_init(&config, &this->engine) != MA_SUCCESS) {
+            this->engine = (ma_engine *)stdlib_alloc(sizeof(ma_engine));
+            if (this->engine == NULL) {
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "audio_engine: out of memory");
+                break;
+            }
+            if (ma_engine_init(&config, this->engine) != MA_SUCCESS) {
+                stdlib_release(this->engine);
+                this->engine = NULL;
                 error_fail(err, CPLUS_EXIT_RESOURCE, "audio_engine: init failed");
                 break;
             }
@@ -147,11 +184,11 @@ class audio_engine {
     }
 
     int valid(void) {
-        return this->initialized != 0;
+        return this->initialized != 0 && this->engine != NULL;
     }
 
     ma_engine *native(void) {
-        return &this->engine;
+        return this->engine;
     }
 
     int set_volume(float volume, error *err) {
@@ -160,7 +197,7 @@ class audio_engine {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_engine::set_volume: invalid engine");
             return STDLIB_FAIL;
         }
-        ma_engine_set_volume(&this->engine, volume);
+        ma_engine_set_volume(this->engine, volume);
         return STDLIB_OK;
     }
 
@@ -171,40 +208,53 @@ class audio_engine {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_engine::play: invalid argument");
             return STDLIB_FAIL;
         }
-        if (ma_engine_play_sound(&this->engine, path, NULL) != MA_SUCCESS) {
+        if (ma_engine_play_sound(this->engine, path, NULL) != MA_SUCCESS) {
             error_fail(err, CPLUS_EXIT_IO, "audio_engine::play: cannot play");
             return STDLIB_FAIL;
         }
         return STDLIB_OK;
     }
 
-    /* Loads an owned sound; check sound.valid() before playing. */
+    /* Loads an owned sound; check sound.valid() before playing.  The returned
+     * sound holds a stable heap pointer into this engine's node graph. */
     audio_sound load(const char *path, error *err) {
-        audio_sound loaded = audio_sound(&this->engine, path, err);
+        audio_sound loaded = audio_sound(this->engine, path, err);
         return loaded;
     }
 
     void drop(void) {
-        if (this->initialized) {
-            ma_engine_uninit(&this->engine);
-            this->initialized = 0;
+        if (this->engine != NULL) {
+            if (this->initialized)
+                ma_engine_uninit(this->engine);
+            stdlib_release(this->engine);
+            this->engine = NULL;
         }
+        this->initialized = 0;
     }
 };
 
 class audio_device {
-    ma_device device;
+    ma_device *device;
     int initialized;
 
     audio_device(ma_context *owner_context, int capture, unsigned sample_rate,
                  unsigned channels, ma_device_data_proc callback, void *user,
                  error *err) {
         ma_device_config config;
-        error_reset(err);
-        this->initialized = 0;
-        if (owner_context == NULL) {
-            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_device: invalid context");
-        } else {
+        do {
+            error_reset(err);
+            this->initialized = 0;
+            this->device = NULL;
+            if (owner_context == NULL) {
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_device: invalid context");
+                break;
+            }
+            this->device = (ma_device *)stdlib_alloc(sizeof(ma_device));
+            if (this->device == NULL) {
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "audio_device: out of memory");
+                break;
+            }
             config = ma_device_config_init(capture ? ma_device_type_capture
                                                    : ma_device_type_playback);
             config.sampleRate = sample_rate;
@@ -217,16 +267,18 @@ class audio_device {
                 config.playback.format = ma_format_f32;
                 config.playback.channels = channels;
             }
-            if (ma_device_init(owner_context, &config, &this->device) == MA_SUCCESS) {
-                this->initialized = 1;
-            } else {
+            if (ma_device_init(owner_context, &config, this->device) != MA_SUCCESS) {
+                stdlib_release(this->device);
+                this->device = NULL;
                 error_fail(err, CPLUS_EXIT_RESOURCE, "audio_device: init failed");
+                break;
             }
-        }
+            this->initialized = 1;
+        } while (0);
     }
 
     int valid(void) {
-        return this->initialized != 0;
+        return this->initialized != 0 && this->device != NULL;
     }
 
     int start(error *err) {
@@ -235,7 +287,7 @@ class audio_device {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_device::start: invalid device");
             return STDLIB_FAIL;
         }
-        if (ma_device_start(&this->device) != MA_SUCCESS) {
+        if (ma_device_start(this->device) != MA_SUCCESS) {
             error_fail(err, CPLUS_EXIT_IO, "audio_device::start failed");
             return STDLIB_FAIL;
         }
@@ -248,7 +300,7 @@ class audio_device {
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "audio_device::stop: invalid device");
             return STDLIB_FAIL;
         }
-        if (ma_device_stop(&this->device) != MA_SUCCESS) {
+        if (ma_device_stop(this->device) != MA_SUCCESS) {
             error_fail(err, CPLUS_EXIT_IO, "audio_device::stop failed");
             return STDLIB_FAIL;
         }
@@ -256,19 +308,22 @@ class audio_device {
     }
 
     int running(void) {
-        return this->valid() && ma_device_is_started(&this->device);
+        return this->valid() && ma_device_is_started(this->device);
     }
 
     void drop(void) {
-        if (this->initialized) {
-            ma_device_uninit(&this->device);
-            this->initialized = 0;
+        if (this->device != NULL) {
+            if (this->initialized)
+                ma_device_uninit(this->device);
+            stdlib_release(this->device);
+            this->device = NULL;
         }
+        this->initialized = 0;
     }
 };
 
 class audio_decoder {
-    ma_decoder decoder;
+    ma_decoder *decoder;
     int initialized;
 
     audio_decoder(const char *path, error *err) {
@@ -276,9 +331,18 @@ class audio_decoder {
             ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 0, 0);
             error_reset(err);
             this->initialized = 0;
+            this->decoder = NULL;
             if (path == NULL)
                 break;
-            if (ma_decoder_init_file(path, &config, &this->decoder) != MA_SUCCESS) {
+            this->decoder = (ma_decoder *)stdlib_alloc(sizeof(ma_decoder));
+            if (this->decoder == NULL) {
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "audio_decoder: out of memory");
+                break;
+            }
+            if (ma_decoder_init_file(path, &config, this->decoder) != MA_SUCCESS) {
+                stdlib_release(this->decoder);
+                this->decoder = NULL;
                 error_fail(err, CPLUS_EXIT_IO, "audio_decoder: cannot open file");
                 break;
             }
@@ -287,22 +351,22 @@ class audio_decoder {
     }
 
     int valid(void) {
-        return this->initialized != 0;
+        return this->initialized != 0 && this->decoder != NULL;
     }
 
     unsigned channels(void) {
-        return this->valid() ? this->decoder.outputChannels : 0;
+        return this->valid() ? this->decoder->outputChannels : 0;
     }
 
     unsigned sample_rate(void) {
-        return this->valid() ? this->decoder.outputSampleRate : 0;
+        return this->valid() ? this->decoder->outputSampleRate : 0;
     }
 
     unsigned long long frame_count(void) {
         ma_uint64 frames = 0;
         if (!this->valid())
             return 0;
-        if (ma_decoder_get_length_in_pcm_frames(&this->decoder, &frames) != MA_SUCCESS)
+        if (ma_decoder_get_length_in_pcm_frames(this->decoder, &frames) != MA_SUCCESS)
             return 0;
         return (unsigned long long)frames;
     }
@@ -318,7 +382,7 @@ class audio_decoder {
         }
         if (frame_count == 0)
             return 0;
-        if (ma_decoder_read_pcm_frames(&this->decoder, frames, frame_count,
+        if (ma_decoder_read_pcm_frames(this->decoder, frames, frame_count,
                                        &read) != MA_SUCCESS) {
             error_fail(err, CPLUS_EXIT_IO, "audio_decoder::read failed");
             return 0;
@@ -327,13 +391,18 @@ class audio_decoder {
     }
 
     void drop(void) {
-        if (this->initialized) {
-            ma_decoder_uninit(&this->decoder);
-            this->initialized = 0;
+        if (this->decoder != NULL) {
+            if (this->initialized)
+                ma_decoder_uninit(this->decoder);
+            stdlib_release(this->decoder);
+            this->decoder = NULL;
         }
+        this->initialized = 0;
     }
 };
 
+/* Returned by value: only the stable heap pointer is copied, never the
+ * non-relocatable ma_decoder itself. */
 static inline audio_decoder decoder_from_memory(const void *data, size_t size,
                                                 error *err) {
     audio_decoder out = audio_decoder(NULL, err);
@@ -343,7 +412,15 @@ static inline audio_decoder decoder_from_memory(const void *data, size_t size,
         error_fail(err, CPLUS_EXIT_IO, "decoder_from_memory: empty buffer");
         return out;
     }
-    if (ma_decoder_init_memory(data, size, &config, &out.decoder) != MA_SUCCESS) {
+    out.decoder = (ma_decoder *)stdlib_alloc(sizeof(ma_decoder));
+    if (out.decoder == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                       "decoder_from_memory: out of memory");
+        return out;
+    }
+    if (ma_decoder_init_memory(data, size, &config, out.decoder) != MA_SUCCESS) {
+        stdlib_release(out.decoder);
+        out.decoder = NULL;
         error_fail(err, CPLUS_EXIT_IO, "decoder_from_memory: not decodable");
         return out;
     }

@@ -261,6 +261,21 @@ if matches "multi_tu"; then
   fi
 fi
 
+if matches "multi_tu"; then
+  if "$CPLUS" build "$ROOT/tests/stdlib/multi_tu_meta/main.cp" \
+      "$ROOT/tests/stdlib/multi_tu_meta/part_a.cp" \
+      "$ROOT/tests/stdlib/multi_tu_meta/part_b.cp" \
+      -o "$OUT/multi_tu_meta" >"$OUT/multi_tu_meta.build.log" 2>&1 && \
+      "$OUT/multi_tu_meta" >"$OUT/multi_tu_meta.out" 2>"$OUT/multi_tu_meta.err" && \
+      diff -u "$ROOT/tests/stdlib/multi_tu_meta.expected" \
+        "$OUT/multi_tu_meta.out" >"$OUT/multi_tu_meta.diff" 2>&1 && \
+      [ ! -s "$OUT/multi_tu_meta.err" ]; then
+    pass "multi_tu_meta"
+  else
+    fail "multi_tu_meta" "build/run/output failed; see build/stdlib-tests/multi_tu_meta.build.log"
+  fi
+fi
+
 if matches "class_linkage"; then
   if "$CPLUS" build "$ROOT/tests/stdlib/known_gaps/class_linkage/main.cp" \
       "$ROOT/tests/stdlib/known_gaps/class_linkage/part_a.cp" \

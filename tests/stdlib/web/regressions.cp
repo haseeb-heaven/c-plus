@@ -10,6 +10,7 @@
  */
 #define WEB_REPLY_HEAD_MAX 40
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -242,6 +243,61 @@ int main(void) {
         mark("SLOWLORIS_PARTIAL", ok, &failures);
     }
 
-    printf("WEB_REGRESSIONS 6 %d\n", failures);
+    /* 7. Issue #221: a peer that resets before the reply is written must
+     *    produce a returned I/O error, never a process-killing SIGPIPE. */
+    {
+        web_server srv;
+        web_conn c;
+        struct sockaddr_in addr;
+        socklen_t alen = (socklen_t)sizeof(addr);
+        int ready[2];
+        int st = 0;
+        pid_t kid;
+        int case_ok = 0;
+        (void)signal(SIGPIPE, SIG_DFL);
+        if (pipe(ready) == 0 &&
+            web_server_init(&srv, "127.0.0.1", 0) == 0 &&
+            getsockname(srv.listen_fd, (struct sockaddr *)&addr, &alen) == 0) {
+            srv.nap_ms = 3000;
+            kid = fork();
+            if (kid == 0) {
+                int fd = socket(AF_INET, SOCK_STREAM, 0);
+                struct linger lin;
+                struct sockaddr_in peer;
+                char go = 'G';
+                lin.l_onoff = 1;
+                lin.l_linger = 0;
+                memset(&peer, 0, sizeof(peer));
+                peer.sin_family = AF_INET;
+                peer.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                peer.sin_port = addr.sin_port;
+                if (fd >= 0) {
+                    (void)setsockopt(fd, SOL_SOCKET, SO_LINGER, &lin,
+                                     sizeof(lin));
+                    if (connect(fd, (struct sockaddr *)&peer,
+                                sizeof(peer)) == 0)
+                        (void)shutdown(fd, SHUT_RDWR);
+                    close(fd);
+                }
+                (void)write(ready[1], &go, 1);
+                _exit(0);
+            }
+            if (web_accept(&srv, &c) == 1) {
+                char go = 0;
+                ssize_t got = read(ready[0], &go, 1);
+                if (got == 1 && go == 'G')
+                    web_reply(&c, 200, big_body); /* must return, not die */
+                web_conn_close(&c);
+            }
+            (void)waitpid(kid, &st, 0);
+            case_ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
+            web_server_shutdown(&srv);
+            close(ready[0]);
+            close(ready[1]);
+        }
+        mark("SIGPIPE", case_ok, &failures);
+    }
+
+    printf("WEB_REGRESSIONS 7 %d\n", failures);
     return failures == 0 ? 0 : 1;
 }
