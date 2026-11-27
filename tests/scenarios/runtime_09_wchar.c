@@ -343,7 +343,9 @@ static void sc_09_wcsftime(void) {
     for (i = 0u; i < NELM(buf); ++i) buf[i] = L'#';
     errno = 0;
     r = cplus_wcsftime(buf, (size_t)-1, L"X", &t);
-    assert(buf[1] == L'#' && buf[15] == L'#'); /* no overrun */
+    /* glibc NUL-terminates the one-character result at buf[1]; the safety
+     * property is that the tail canary survives (no write past the result). */
+    assert(buf[15] == L'#');
     if (r == 0u && errno == EINVAL)
         FINDING("wcsftime: host rejects maxsize=SIZE_MAX with EINVAL; canaries intact");
 }

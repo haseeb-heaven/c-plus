@@ -27,7 +27,7 @@ for t in tests/scenarios/scenario_*.c tests/scenarios/runtime_*.c; do
   # Compile-only negative fixtures: success would be the failure.
   case "$name" in
     scenario_06)
-      ./build/c+ check "$t" --default >"$OUT/$name.log" 2>&1
+      ${CPLUS_BIN:-./build/c+} check "$t" --default >"$OUT/$name.log" 2>&1
       rc=$?
       n=$(grep -c '\[CPLUS-' "$OUT/$name.log" 2>/dev/null || true)
       if [ "$rc" -ne 0 ] && [ "${n:-0}" -ge 1 ]; then
