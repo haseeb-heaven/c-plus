@@ -80,6 +80,37 @@ static int cplus_safe_refuse_unproven_dmax(const char *api, const void *dest,
     return 1;
 }
 
+/* Source-side mirror of the dmax guard.  safeclib bounds its READS by smax,
+ * so an unproven smax larger than the real source capacity turns a "checked"
+ * copy/compare into a heap over-read.  Refuse before entering safeclib when a
+ * capacity is provable (tracked allocation or visible object size); unknown
+ * capacity keeps the pre-existing policy, exactly as on the destination side. */
+static int cplus_safe_refuse_unproven_smax(const char *api, const void *src,
+                                           rsize_t smax) {
+    size_t provable = (size_t)-1;
+    size_t tracked;
+    size_t bos;
+    char msg[160];
+
+    if (src == NULL) return 0; /* safeclib reports ESNULLP; no read happens */
+    tracked = cplus_safe_remaining_capacity(src);
+    bos = (size_t)CPLUS_SAFE_OBJ_SIZE(src);
+    if (tracked != (size_t)-1) provable = tracked;
+    if (bos != (size_t)-1 && (provable == (size_t)-1 || bos < provable))
+        provable = bos;
+    if (provable == (size_t)-1 || smax <= provable) return 0;
+
+    errno = ERANGE;
+    cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "smax exceeds proven capacity");
+    cplus_safe_stat_record(api, 0);
+    snprintf(msg, sizeof(msg),
+             "refused before safeclib: smax %zu > proven source capacity "
+             "%zu (ESNOSPC 406); over-read skipped",
+             (size_t)smax, provable);
+    cplus_runtime_violation(api, msg);
+    return 1;
+}
+
 static void cplus_safe_publish_constraint_errno(errno_t r) {
     switch (r) {
     case 400: /* ESNULLP */
@@ -109,6 +140,8 @@ errno_t cplus_memcpy_s(void *dest, rsize_t dmax, const void *src, rsize_t smax) 
         return 400;
     if (cplus_safe_refuse_unproven_dmax("memcpy_s", dest, dmax))
         return CPLUS_SAFE_ESNOSPC;
+    if (cplus_safe_refuse_unproven_smax("memcpy_s", src, smax))
+        return CPLUS_SAFE_ESNOSPC;
     errno_t r = cplus_sc_memcpy_s(dest, dmax, src, smax);
     if (r != 0) {
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "memcpy_s", "constraint/error");
@@ -122,6 +155,8 @@ errno_t cplus_memmove_s(void *dest, rsize_t dmax, const void *src, rsize_t smax)
     if (cplus_safe_reject_uaf(dest, "memmove_s") || cplus_safe_reject_uaf(src, "memmove_s"))
         return 400;
     if (cplus_safe_refuse_unproven_dmax("memmove_s", dest, dmax))
+        return CPLUS_SAFE_ESNOSPC;
+    if (cplus_safe_refuse_unproven_smax("memmove_s", src, smax))
         return CPLUS_SAFE_ESNOSPC;
     errno_t r = cplus_sc_memmove_s(dest, dmax, src, smax);
     if (r != 0) {
@@ -152,6 +187,10 @@ errno_t cplus_memcmp_s(const void *dest, rsize_t dmax, const void *src, rsize_t 
         return 400;
     }
     if (cplus_safe_refuse_unproven_dmax("memcmp_s", dest, dmax)) {
+        if (diff) *diff = -1;
+        return CPLUS_SAFE_ESNOSPC;
+    }
+    if (cplus_safe_refuse_unproven_smax("memcmp_s", src, smax)) {
         if (diff) *diff = -1;
         return CPLUS_SAFE_ESNOSPC;
     }
@@ -291,7 +330,8 @@ void *cplus_memcpy_s_auto(void *dest, const void *src, size_t n, size_t known_dm
     if (cplus_safe_check_src_capacity("memcpy_s", src, n)) return NULL;
     r = cplus_memcpy_s(dest, dmax, src, n);
     if (r != 0) {
-        errno = EINVAL;
+        /* Preserve ERANGE/EOVERFLOW already published by the checked call. */
+        cplus_safe_publish_constraint_errno(r);
         return NULL;
     }
     return dest;
@@ -321,7 +361,7 @@ void *cplus_memmove_s_auto(void *dest, const void *src, size_t n, size_t known_d
     if (cplus_safe_check_src_capacity("memmove_s", src, n)) return NULL;
     r = cplus_memmove_s(dest, dmax, src, n);
     if (r != 0) {
-        errno = EINVAL;
+        cplus_safe_publish_constraint_errno(r);
         return NULL;
     }
     return dest;
@@ -349,7 +389,7 @@ void *cplus_memset_s_auto(void *dest, int value, size_t n, size_t known_dmax) {
     }
     r = cplus_memset_s(dest, dmax, value, n);
     if (r != 0) {
-        errno = EINVAL;
+        cplus_safe_publish_constraint_errno(r);
         return NULL;
     }
     return dest;
@@ -384,7 +424,7 @@ int cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s
     }
     r = cplus_memcmp_s(s1, d1, s2, n, &diff);
     if (r != 0) {
-        errno = EINVAL;
+        cplus_safe_publish_constraint_errno(r);
         return -1;
     }
     return diff;
