@@ -242,26 +242,33 @@ char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
         scan = (size_t)-1;
     }
     scap = source_capacity(s);
-    scan = min_bound(scan, scap);
-    if (scan == 0u) {
-        /* Only the source's first byte matters: an empty source is a valid
-         * no-op, while any character would overflow the destination.  A C
-         * string pointer is readable at least up to its terminator. */
-        slen = (s[0] == '\0') ? 0u : 1u;
-    } else if (scan != (size_t)-1) {
-        slen = bounded_strlen(s, scan);
-        if (slen == scan) {
-            /* A source that fills the destination's character room exactly
-             * is valid if byte[scan] is its terminator.  Read that one byte
-             * (the caller passed a C string) before declaring over-read. */
-            if (s[scan] != '\0') {
-                cplus_libc_log("strcat", "source over-read refused");
+    {
+        size_t room = scan;
+        int src_limited = (scap != (size_t)-1 && scap < room);
+        scan = min_bound(scan, scap);
+        if (scan == 0u) {
+            if (src_limited) { /* nothing provably readable in the source */
                 errno = ERANGE;
                 return NULL;
             }
+            /* Only the source's first byte matters: an empty source is a
+             * valid no-op, while any character would overflow the dest. */
+            slen = (s[0] == '\0') ? 0u : 1u;
+        } else if (scan != (size_t)-1) {
+            slen = bounded_strlen(s, scan);
+            if (slen == scan) {
+                /* One-byte lookahead is only legal when the source capacity
+                 * did not limit the scan.  A source-limited scan ending at
+                 * the allocation edge must refuse without reading past it. */
+                if (src_limited || s[scan] != '\0') {
+                    cplus_libc_log("strcat", "source over-read refused");
+                    errno = ERANGE;
+                    return NULL;
+                }
+            }
+        } else {
+            slen = cplus_strlen(s);
         }
-    } else {
-        slen = cplus_strlen(s);
     }
     /* With a proven destination bound the addition cannot overflow; without
      * one, guard both the exact wrap and the dlen == SIZE_MAX case. */
