@@ -996,7 +996,7 @@ static int sc_isw(int log_on) {
     size_t i, j;
     for (i = 0; i < NELM(cfns); ++i) {
         for (j = 0; j < NELM(vals); ++j) {
-            SCK(cfns[i](vals[j]) == hfns[i](vals[j]));
+            SCK(!!cfns[i](vals[j]) == !!hfns[i](vals[j])); /* C contract: nonzero == true */
         }
     }
     SCK(cplus_iswalpha((wint_t)'a') != 0 && cplus_iswalpha((wint_t)'0') == 0);
