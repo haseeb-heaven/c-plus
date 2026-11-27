@@ -157,6 +157,8 @@ inner() {
         -Dcplus_alloc_live_bytes=dup_cplus_alloc_live_bytes \
         -Dcplus_alloc_live_count=dup_cplus_alloc_live_count \
         -Dcplus_alloc_check_generation=dup_cplus_alloc_check_generation \
+        -Dcplus_alloc_realloc_generation=dup_cplus_alloc_realloc_generation \
+        -Dcplus_alloc_free_generation=dup_cplus_alloc_free_generation \
         -Dcplus_alloc_remaining_capacity=dup_cplus_alloc_remaining_capacity \
         -Dcplus_alloc_meta_register=dup_cplus_alloc_meta_register \
         -Dcplus_alloc_double_free_count=dup_cplus_alloc_double_free_count \

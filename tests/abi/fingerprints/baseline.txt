@@ -133,7 +133,7 @@ C	define __arm64__	1
 C	define __clang__	1
 C	define __clang_major__	16
 C	define __clang_minor__	0
-S	archive build/libc/libcplus_hardened.a	count=813
+S	archive build/libc/libcplus_hardened.a	count=820
 S	symbol build/libc/libcplus_hardened.a::___cplus_errno_location	1
 S	symbol build/libc/libcplus_hardened.a::_cplus__Exit	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_abort	1
@@ -152,6 +152,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_double_free_count	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_elem_size	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_fail_after	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_fail_reset	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_free_generation	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_get_meta	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_invalid_free_count	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_is_live	1
@@ -160,6 +161,7 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_live_bytes	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_live_count	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_meta_register	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_query_length	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_realloc_generation	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_remaining_capacity	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_size	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_alloc_state_dump	1
@@ -452,6 +454,8 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_ctanhl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_ctanl	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_ctime	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_ctime_r	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_datastack_tls_reclaim_count	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_datastack_tls_thread_register	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_difftime	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_div	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_drand48	1
@@ -844,6 +848,9 @@ S	symbol build/libc/libcplus_hardened.a::_cplus_swab	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_swprintf	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_swprintf_checked	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_swscanf	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_sync_checked_on_cnd_init	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_sync_checked_on_mtx_init	1
+S	symbol build/libc/libcplus_hardened.a::_cplus_sync_checked_on_thrd_create	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_system	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_tan	1
 S	symbol build/libc/libcplus_hardened.a::_cplus_tanf	1
@@ -947,7 +954,7 @@ S	symbol build/libc/libcplus_hardened.a::_nextup	1
 S	symbol build/libc/libcplus_hardened.a::_nextupf	1
 S	symbol build/libc/libcplus_hardened.a::_nextupl	1
 S	symbol build/libc/libcplus_hardened.a::_stdlib_tls_datastack	1
-S	archive build/safe/libcplus_safecrt.a	count=239
+S	archive build/safe/libcplus_safecrt.a	count=240
 S	symbol build/safe/libcplus_safecrt.a::___ubsan_on_report	1
 S	symbol build/safe/libcplus_safecrt.a::__memccpy_s_uchk	1
 S	symbol build/safe/libcplus_safecrt.a::__memchr_s_uchk	1
@@ -1065,6 +1072,7 @@ S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stat_record	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_dump	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_get	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stats_reset	1
+S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stream_cache_capacity	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_stream_was_closed	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_transfer_ownership	1
 S	symbol build/safe/libcplus_safecrt.a::_cplus_safe_transfer_ownership_generation	1
