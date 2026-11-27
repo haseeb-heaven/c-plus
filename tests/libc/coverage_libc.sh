@@ -59,6 +59,7 @@ SRCS="
   libc/src/signal/signal2.c
   libc/src/fenv/fenv.c
   libc/src/complex/complex.c
+  libc/src/thread/datastack_tls.c
   libc/src/thread/thread.c
   libc/src/thread/threads_c11.c
   libc/src/fenv/fenv_extra.c
