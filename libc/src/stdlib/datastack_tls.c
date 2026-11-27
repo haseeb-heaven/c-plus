@@ -16,6 +16,15 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Deterministic fallback for plain-C/shared-library consumers. The runtime's
+ * strong definition overrides this weak one and removes the live-ledger entry.
+ * Keeps Mach-O shared links free of undefined weak imports. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) void cplus_release(void *p) { if (p != NULL) free(p); }
+#else
+void cplus_release(void *p) { if (p != NULL) free(p); }
+#endif
 #if !defined(_WIN32)
 #include <sys/mman.h>
 #endif
@@ -53,21 +62,7 @@ static void datastack_tls_destructor(void *value)
          * block in the runtime live ledger. Release through cplus_release()
          * when the runtime is linked so the ledger entry is removed; plain-C
          * consumers without the runtime keep the host-free fallback. */
-#if defined(__GNUC__) || defined(__clang__)
-#  if defined(__APPLE__)
-        /* Mach-O shared libraries reject plain undefined weak references;
-         * weak_import is the Darwin spelling for an optional dyld symbol. */
-        extern void cplus_release(void *) __attribute__((weak_import));
-#  else
-        extern void cplus_release(void *) __attribute__((weak));
-#  endif
-        if (cplus_release != NULL)
-            cplus_release(ds->base);
-        else
-            free(ds->base);
-#else
-        free(ds->base);
-#endif
+        cplus_release(ds->base);
     }
     (void)__atomic_fetch_add(&g_datastack_reclaims, 1u, __ATOMIC_RELAXED);
     memset(ds, 0, sizeof *ds); /* also invalidates every outstanding mark */
