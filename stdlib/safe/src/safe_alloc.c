@@ -348,20 +348,24 @@ void *realloc_s(void *ptr, size_t size) {
         errno = ENOMEM;
         return NULL;
     }
-    pthread_mutex_unlock(&g_lock);
+    /* Keep g_lock held across the host realloc().  Releasing it here let a
+     * concurrent free_s() release `ptr` while this thread was still using it,
+     * and let a recycled address collide with this block's metadata (UAF and
+     * ABA corruption).  No checked allocator entry point is called by host
+     * realloc(), so holding the lock cannot self-deadlock. */
     p = realloc(ptr, req);
     if (!p) {
+        pthread_mutex_unlock(&g_lock);
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "realloc_s", "oom/failed; owner preserved");
         cplus_safe_stat_record("realloc_s", 0);
         errno = ENOMEM;
         return NULL;
     }
-    pthread_mutex_lock(&g_lock);
     {
         slot *s = tab_find_addr(old_addr);
-        /* ABA guard: host realloc() ran without the lock. Only a slot with
-         * the ORIGINAL generation belongs to this realloc; never remove a
-         * newer block that another thread allocated at the recycled address. */
+        /* The generation still guards against a stale alias from before the
+         * lock was taken; with the lock now held throughout, no other checked
+         * thread can retire or reissue this block while we update it. */
         if (s && s->generation == old_gen && old_gen != 0) {
             if ((uintptr_t)p == old_addr) {
                 g_live_bytes -= old_size;
@@ -476,23 +480,30 @@ int free_checked_generation_s(void *ptr, unsigned long long generation) {
 size_t cplus_safe_remaining_capacity(const void *ptr) {
     size_t k;
     uintptr_t p = (uintptr_t)ptr;
+    slot *s;
     if (!ptr) return (size_t)-1;
     pthread_mutex_lock(&g_lock);
-    for (k = 0; k < g_cap; ++k) {
-        void *base = g_tab[k].ptr;
-        if (base != NULL && base != TOMB && (uintptr_t)base == p) {
-            size_t cap = g_tab[k].size;
-            pthread_mutex_unlock(&g_lock);
-            return cap;
-        }
+    /* Exact base match is overwhelmingly the common case (every auto-bound
+     * check passes a base pointer).  Resolve it with the hash-table lookup
+     * instead of two full O(g_cap) scans under the global lock. */
+    s = tab_find(ptr);
+    if (s != NULL) {
+        size_t cap = s->size;
+        pthread_mutex_unlock(&g_lock);
+        return cap;
     }
+    /* Interior pointer: scan for the containing block.  Check the address
+     * addition before performing it: a corrupt/oversized size that wraps past
+     * UINTPTR_MAX must never be mistaken for a block containing `ptr`. */
     for (k = 0; k < g_cap; ++k) {
         void *base = g_tab[k].ptr;
-        uintptr_t b;
+        uintptr_t b, end;
         if (base == NULL || base == TOMB) continue;
         b = (uintptr_t)base;
-        if (p > b && p <= b + g_tab[k].size) {
-            size_t cap = (size_t)(b + g_tab[k].size - p);
+        if (p <= b || g_tab[k].size > UINTPTR_MAX - b) continue;
+        end = b + g_tab[k].size;
+        if (p <= end) {
+            size_t cap = (size_t)(end - p);
             pthread_mutex_unlock(&g_lock);
             return cap;
         }
