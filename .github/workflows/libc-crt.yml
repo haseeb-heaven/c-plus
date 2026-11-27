@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build
+        run: sudo apt-get update && sudo apt-get install -y clang llvm-dev libclang-dev cmake ninja-build
       - name: Build safe CRT
         run: sh scripts/build_safecrt.sh
       - name: CRT unit tests
