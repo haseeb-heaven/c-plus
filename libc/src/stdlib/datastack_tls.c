@@ -54,7 +54,13 @@ static void datastack_tls_destructor(void *value)
          * when the runtime is linked so the ledger entry is removed; plain-C
          * consumers without the runtime keep the host-free fallback. */
 #if defined(__GNUC__) || defined(__clang__)
+#  if defined(__APPLE__)
+        /* Mach-O shared libraries reject plain undefined weak references;
+         * weak_import is the Darwin spelling for an optional dyld symbol. */
+        extern void cplus_release(void *) __attribute__((weak_import));
+#  else
         extern void cplus_release(void *) __attribute__((weak));
+#  endif
         if (cplus_release != NULL)
             cplus_release(ds->base);
         else

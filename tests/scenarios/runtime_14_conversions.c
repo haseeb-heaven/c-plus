@@ -263,9 +263,14 @@ static void sc_14_strtoull_conversions(void) {
     assert(cplus_strtoull("99999999999999999999999999999999999", &end, 10) == ULLONG_MAX);
     assert(errno == ERANGE);
 
-    errno = 0;
-    assert(cplus_strtoull("10", &end, 37) == 0ULL);
-    assert(end - "10" == 0);
+    /* Invalid base: glibc leaves *endptr untouched; seed the same literal. */
+    {
+        const char *bad = "10";
+        errno = 0;
+        end = (char *)bad;
+        assert(cplus_strtoull(bad, &end, 37) == 0ULL);
+        assert(end == bad);
+    }
     assert(errno == EINVAL);
 }
 
