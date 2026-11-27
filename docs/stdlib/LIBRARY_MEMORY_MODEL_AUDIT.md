@@ -18,6 +18,32 @@ Rust-equivalent.**
 | `stdlib/gfx_sdl3.hp` | Real SDL3 renderer, widget rendering | `GFX_APP_TEST` real framebuffer screenshot | GUI backend uses system SDL3; no C+ memory-safety claim about SDL3 |
 | `stdlib/safe/*`, `libc/src/safecrt_vendor` | Checked wrappers, side-table liveness/bounds queries | `MEMSAFE 5 5 0`, libc 110/110 | No pointer-capability ABI; Fil-C technique adapted only as queries; checked heap remains the ABI backing allocator |
 
+## Hardening fixes: issues #211–#219 (2026-11-28)
+
+These nine findings were previously open runtime/bounds gaps. Each is now
+fixed in tree with a deterministic regression; the memory-model table above and
+the honesty boundaries below are unchanged. These are observable checks on the
+tested paths, not a safety proof. Regression files were added by the owning
+commits and were not re-run by this docs-only pass.
+
+| Issue | Area | Fix now in code | Regression |
+| --- | --- | --- | --- |
+| #211 | `libc/src/string/bounded.c` `strncat` | Scan one byte past the proven destination room so an oversized or unterminated source is refused before the raw write, then delegate only the accepted byte count instead of the caller's unclamped `n`. | `tests/libc/test_strncat_bounded_overflow.c` (overflow, exact-fit, no-op) |
+| #212 | `stdlib/safe/src/safe_format.c` scanf rewrite | Bound the `scanf` format rewrite and consume Annex K `%c` capacity so the synthesized format cannot outgrow its buffer. | `tests/crt/unit/test_issue212_scanfmt_rewrite.c`, `tests/crt/unit/test_issue212_scanf_c_capacity.c` |
+| #213 | `stdlib/safe/src/safe_string.c` | Derive source scan ceilings from the source's own proven capacity (tracked remaining bytes / object size) for `strcpy_s_auto`/`strcat_s_auto` and `cplus_strcmp_s`, rather than the destination-derived `dmax`. Read-side bounds, oversized-scan refusal and refused-empty semantics are preserved. | `tests/crt/unit/test_issue213_source_scan_bound.c` |
+| #214 | `stdlib/sqldb.hp` | Bound `sqldb_load` name writes to the destination capacity. | `tests/stdlib/issue214/` |
+| #215 | `stdlib/http.hp` | Restrict the initial URL as well as redirects to the allowed http/https list (`CURLOPT_PROTOCOLS_STR` plus `CURLOPT_REDIR_PROTOCOLS_STR`, bounded redirect chain); install the new `CURLOPT_HTTPHEADER` list before freeing the old one so a failed setopt cannot leave a dangling pointer on the handle. | `tests/stdlib/issue215/` |
+| #216 | `stdlib/widgets.hp` | Count the sign when computing serialized size and bound label writes. | `tests/stdlib/issue216/` |
+| #217 | `stdlib/view_lifetime.hp` | Reuse tombstoned slots on the probe chain (never-used slot as fallback); keep probe chains intact; tokens are never reused and registration fails closed when the counter is exhausted, so stale tokens cannot be revived. | `tests/stdlib/issue217_view_tombstone_reuse.cp` |
+| #218 | `stdlib/arena.hp`, `stdlib/datastack.hp`, `stdlib/view_lifetime.hp` | `arena` destroy/reset retire every registered view in their backing block ranges before release/rewind; `arena`/`datastack` realloc validate `old_size` against cursor/top minus `ptr`; `datastack` release validates `size` before subtraction. | `tests/stdlib/issue218_lifetime_bounds.cp` |
+| #219 | `stdlib/mempool.hp` | Zero the grown generations tail, pad slot sizes to `STDLIB_ALIGN_DEFAULT` so aligned headers and user pointers stay aligned, and keep stride consistent in slab alloc/release. | `tests/stdlib/issue219_pool_alignment_generations.cp` |
+
+Boundaries unchanged by these fixes: no 100% memory-safety guarantee; no Rust
+or Fil-C equivalence; raw-pointer escape hatches (`raw_data()`, `_unsafe`,
+low-level arena calls) remain the caller's responsibility; the checked heap is
+still the ABI backing allocator; and `stdlib/no_heap.hp` remains an opt-in
+source policy, not a compiler proof.
+
 ## Heap policy boundary (read this before claiming "no heap")
 
 - Hot paths in the modern C+ libraries use the scoped data stack, bump arenas,

@@ -202,3 +202,29 @@ Rust equivalence. The overall verdict remains **PARTIALLY COMPLETE**: all
 runnable library tests pass and every fix has a regression, but compiler gaps,
 46 open findings, untested platform modules, unsupported sanitizers and
 unverified remote gates remain.
+
+## Runtime hardening fixes #211–#219 (2026-11-28)
+
+Nine previously open runtime/bounds findings are now fixed in tree, each with
+a deterministic regression added under `tests/libc/`, `tests/crt/unit/` or
+`tests/stdlib/`. This is a source-fix status update: the regressions were not
+re-run by this docs-only pass, and nothing here changes the verdicts or limits
+above.
+
+| Issue | Fix now in code |
+| --- | --- |
+| #211 | `strncat` bounded by proven destination capacity; one-byte lookahead refuses an oversized/unterminated source before the raw write and only accepted bytes are delegated (`libc/src/string/bounded.c`). |
+| #212 | `scanf` format rewrite bounded and Annex K `%c` capacity consumed (`stdlib/safe/src/safe_format.c`). |
+| #213 | SafeCRT source scans (`strcpy_s_auto` / `strcat_s_auto` / `cplus_strcmp_s`) bounded by the source's own proven capacity instead of the destination-derived `dmax` (`stdlib/safe/src/safe_string.c`). |
+| #214 | `sqldb_load` name writes bounded (`stdlib/sqldb.hp`). |
+| #215 | HTTP initial URL and redirects both restricted to http/https; `set_headers` installs the new header list before freeing the old one (`stdlib/http.hp`). |
+| #216 | Widget serialization counts the sign and label writes are bounded (`stdlib/widgets.hp`). |
+| #217 | View-lifetime registry reuses tombstoned slots, keeps probe chains intact, never reuses tokens and fails closed when exhausted (`stdlib/view_lifetime.hp`). |
+| #218 | Arena/datastack retire registered views in backing ranges, realloc validates `old_size`, and datastack release validates `size` (`stdlib/arena.hp`, `stdlib/datastack.hp`). |
+| #219 | Pool grown generations zeroed, slots padded to `STDLIB_ALIGN_DEFAULT`, slab stride kept consistent (`stdlib/mempool.hp`). |
+
+Boundaries unchanged: these are observable runtime checks, not proof of
+memory safety. No 100% safety claim and no Rust or Fil-C equivalence; the
+checked heap remains the ABI backing allocator and `stdlib/no_heap.hp` is an
+opt-in source policy. Remote CI, Windows x86 ABI and live-game results remain
+**UNVERIFIED** (see "Explicitly UNVERIFIED" above).
