@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: sudo apt-get update && sudo apt-get install -y clang llvm-dev cmake ninja-build && sudo apt-get install -y libclang-$(ls -d /usr/lib/llvm-* | sed 's#.*/llvm-##' | sort -n | tail -1)-dev libprotobuf-dev protobuf-compiler-grpc libgrpc++-dev libabsl-dev libzstd-dev
+        run: sudo apt-get update && sudo apt-get install -y clang llvm-dev cmake ninja-build && sudo apt-get install -y libclang-$(llvm-config --version | cut -d. -f1)-dev libprotobuf-dev protobuf-compiler-grpc libgrpc++-dev libabsl-dev libzstd-dev
       - name: Build safe CRT
         run: sh scripts/build_safecrt.sh
       - name: CRT unit tests
@@ -51,7 +51,7 @@ jobs:
         run: sh tests/libc/run_corpus_tests.sh
       - name: Build C+ compiler for compile-only scenarios
         run: |
-          LLVM_VER="$(ls -d /usr/lib/llvm-* 2>/dev/null | sed 's#.*/llvm-##' | sort -n | tail -1)"
+          LLVM_VER="$(llvm-config --version | cut -d. -f1)"
           cmake -S . -B build-cplus -G Ninja \
             -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
             -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang" \
@@ -146,7 +146,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm-dev cmake ninja-build && sudo apt-get install -y libclang-$(ls -d /usr/lib/llvm-* | sed 's#.*/llvm-##' | sort -n | tail -1)-dev libprotobuf-dev protobuf-compiler-grpc libgrpc++-dev libabsl-dev libzstd-dev python3 \
+          sudo apt-get install -y clang llvm-dev cmake ninja-build && sudo apt-get install -y libclang-$(llvm-config --version | cut -d. -f1)-dev libprotobuf-dev protobuf-compiler-grpc libgrpc++-dev libabsl-dev libzstd-dev python3 \
                                   libprotobuf-dev protobuf-compiler-grpc libgrpc++-dev \
                                   libabsl-dev libzstd-dev
       - name: Build C+ compiler for stdlib integration
