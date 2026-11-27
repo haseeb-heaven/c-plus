@@ -36,6 +36,10 @@
 #  endif
 #endif
 
+static inline int stdlib_datastack_poison_enabled(void) {
+    return STDLIB_DATASTACK_POISON != 0;
+}
+
 static inline void stdlib_datastack_poison(unsigned char *from,
                                             unsigned char *to) {
 #if STDLIB_DATASTACK_POISON
