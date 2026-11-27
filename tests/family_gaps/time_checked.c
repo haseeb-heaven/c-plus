@@ -272,7 +272,9 @@ static int strftime_case(size_t max, int null_buf, const char *fmt) {
     struct tm t = tm_2000();
     char cbuf[64], hbuf[64];
     char *cs = null_buf ? NULL : cbuf;
-    char *hs = null_buf ? NULL : hbuf;
+    /* Host strftime is declared nonnull; with max==0 it never writes, so
+     * pass a real buffer to the host while the checked wrapper gets NULL. */
+    char *hs = hbuf;
     size_t rc, rh;
     if (!null_buf) {
         memset(cbuf, 0x7f, sizeof cbuf);

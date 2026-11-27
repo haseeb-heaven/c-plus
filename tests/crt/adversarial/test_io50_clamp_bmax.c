@@ -78,9 +78,11 @@ int main(void) {
     /* --- a huge count must not overflow the clamp arithmetic --- */
     rewind(f);
     memset(r, 0x7E, sizeof r);
-    n = cplus_fread_s(r, 16, 8, (size_t)-1, f);        /* clamp to 16/8 = 2  */
-    CHECK(n == 2);
-    CHECK(r[16] == (char)0x7E);
+    /* Overflowing size*count is refused outright by the hardened I/O layer
+     * (#191): no partial clamp and no write into the destination. */
+    n = cplus_fread_s(r, 16, 8, (size_t)-1, f);
+    CHECK(n == 0);
+    CHECK(r[0] == (char)0x7E && r[16] == (char)0x7E);
 
     CHECK(cplus_fclose_s(f) == 0);
 

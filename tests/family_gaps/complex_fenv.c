@@ -426,7 +426,12 @@ static void fenv_hostile_env(void)
     int r0 = cplus_fegetround(), r;
     CHECK(cplus_feclearexcept(FE_ALL_EXCEPT) == 0);
     CHECK(cplus_fegetenv(&clean) == 0);
-    memset(&fake, 0xFF, sizeof fake);
+    /* An all-FF fenv_t is rejected with SIGSEGV by glibc's fesetenv, so use
+     * a valid env carrying every sticky exception flag instead: still a
+     * non-default environment, but representable on every supported host. */
+    fake = clean;
+    cplus_feraiseexcept(FE_ALL_EXCEPT);
+    cplus_fegetenv(&fake);
     r = cplus_fesetenv(&fake);
     CHECKD(r == 0 || r == -1, "fesetenv(all-FF) returned unexpected status");
     CHECK(cplus_fesetenv(&clean) == 0);
