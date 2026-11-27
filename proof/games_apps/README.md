@@ -7,6 +7,11 @@ to this repository during the modern-stdlib work.
 > Evidence, not a universal safety proof. Results are for the recorded host,
 > toolchain and inputs only. No Windows runtime, live-game or remote-CI claim.
 
+> **FROZEN (2026-11-28).** This folder and the apps it evidences are frozen. Do
+> not add new demos, or delete or modify existing sources, runners or proof
+> images; they stay as recorded baselines. Agent 2 cycles go to stdlib/libc
+> hardening — see [docs/AGENT2_FOCUS.md](../../docs/AGENT2_FOCUS.md).
+
 ## Contents
 
 | Path | What it is |

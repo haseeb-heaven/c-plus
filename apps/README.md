@@ -4,6 +4,11 @@ Verified C+ applications live here. Each runner is bounded and prints an exact
 final verdict. The former `apps/legacy_examples/{games3d,gui_app,cli_app}` directories now
 contain compatibility shims only; the real apps are below.
 
+> **FROZEN (2026-11-28).** `apps/` and `GAME_SUITE` are frozen. No new app, game,
+> web-server or GUI demo is added here, and existing sources, runners and proof
+> images are retained unchanged as historical baselines. Agent 2 cycles go to
+> stdlib/libc hardening — see [docs/AGENT2_FOCUS.md](../docs/AGENT2_FOCUS.md).
+
 | App | Runner | Verified verdict | Screenshot | Evidence |
 | --- | --- | --- | --- | --- |
 | Web server (`stdlib/web.hp`) | `apps/webserver/run.sh` | included in `APPS 3 3 0` (aggregate) | [webserver.svg](../proof/all_apps_games_screenshots/cli_transcripts/webserver.svg) | [proof page](../proof/all_apps_games_screenshots/README.md) |

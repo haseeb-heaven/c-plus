@@ -1,5 +1,10 @@
 #!/bin/sh
 # Full C+ verification: build, automated suites, demos, benchmarks.
+#
+# Freeze directive (2026-11-28): apps/ and GAME_SUITE are frozen. No new app,
+# game, web-server or GUI demo is added; existing runners below stay intact and
+# continue to run. Agent 2 cycles go to stdlib/libc hardening, documented in
+# docs/AGENT2_FOCUS.md. This is a documentation-only change to this script.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"

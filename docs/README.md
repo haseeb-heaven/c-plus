@@ -3,10 +3,15 @@
 Start here. Everything below is verification evidence for the C+ standard
 library layer: a checked, additive C API that keeps the ordinary C ABI.
 
+> **Active scope directive (2026-11-28):** `apps/` and `GAME_SUITE` are **frozen** —
+> no new app, game, web-server or GUI demo. Agent 2 cycles go to stdlib/libc
+> hardening. See [AGENT2_FOCUS.md](AGENT2_FOCUS.md).
+
 ## Current authoritative documents
 
 | Topic | Document |
 | --- | --- |
+| **Agent 2 scope: apps/GAME_SUITE freeze** | [AGENT2_FOCUS.md](AGENT2_FOCUS.md) |
 | **Core memory philosophy (scoped-memory-style)** | [CORE_PHILOSOPHY.md](CORE_PHILOSOPHY.md) |
 | Architecture and layout | [ARCHITECTURE.md](ARCHITECTURE.md), [STRUCTURE.md](STRUCTURE.md) |
 | Standard library API | [STDLIB.md](STDLIB.md), [MODERN_STDLIB.md](MODERN_STDLIB.md) |
@@ -21,6 +26,10 @@ library layer: a checked, additive C API that keeps the ordinary C ABI.
 | Captured runtime demonstrations | [../apps/legacy_examples/screenshots/README.md](../apps/legacy_examples/screenshots/README.md) |
 
 ## Verified apps (real programs, not demos)
+
+**Frozen baseline.** This section records existing evidence only; `apps/` and
+`GAME_SUITE` are frozen, so these verdicts are not a prompt to add new apps or
+games. See [AGENT2_FOCUS.md](AGENT2_FOCUS.md).
 
 The three formerly under `apps/legacy_examples/{games3d,gui_app,cli_app}` are now real apps
 in `apps/`. `apps/legacy_examples/.../run.sh` entries are only compatibility shims. Every
