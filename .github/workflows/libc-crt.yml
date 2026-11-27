@@ -13,6 +13,8 @@ concurrency:
 jobs:
   linux-crt:
     runs-on: ubuntu-latest
+    env:
+      CPLUS_BIN: ${{ github.workspace }}/build-cplus/c+
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
@@ -47,6 +49,14 @@ jobs:
         run: sh tests/libc/run_attack_tests.sh
       - name: Bug-class corpora (thousands of cases)
         run: sh tests/libc/run_corpus_tests.sh
+      - name: Build C+ compiler for compile-only scenarios
+        run: |
+          LLVM_VER="$(ls -d /usr/lib/llvm-* 2>/dev/null | sed 's#.*/llvm-##' | sort -n | tail -1)"
+          cmake -S . -B build-cplus -G Ninja \
+            -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+            -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang" \
+            -DCPLUS_CLANG_BIN=/usr/bin/clang
+          cmake --build build-cplus --target c+ --parallel
       - name: Per-method scenario suites (1000+ each, 10-30 runtime scenarios)
         run: sh tests/scenarios/run_scenarios.sh
       - name: Per-method unit and logging-parity suites
