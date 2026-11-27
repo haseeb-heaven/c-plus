@@ -294,7 +294,11 @@ static void sc_11_fenv_allff_env(void) {
     int r0 = cplus_fegetround(), r;
     assert(cplus_feclearexcept(FE_ALL_EXCEPT) == 0);
     assert(cplus_fegetenv(&clean) == 0);
-    memset(&fake, 0xFF, sizeof fake); /* hostile but type-correct object */
+    /* An all-FF fenv_t makes glibc's fesetenv crash; use a valid env that
+     * still carries every sticky exception flag instead. */
+    fake = clean;
+    cplus_feraiseexcept(FE_ALL_EXCEPT);
+    cplus_fegetenv(&fake);
     r = cplus_fesetenv(&fake);
     assert(r == 0 || r == -1);
     assert(cplus_fesetenv(&clean) == 0);
