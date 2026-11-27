@@ -27,7 +27,8 @@ INCLUDES = [
     "-I" + str(ROOT / "stdlib/safe"),
     "-I" + str(ROOT / "runtime/include"),
 ]
-COMMON = ["-std=c11", "-Wall", "-Wextra", "-Werror"]
+COMMON = ["-std=c11", "-Wall", "-Wextra", "-Werror",
+          "-Wno-gnu-alignof-expression"]
 DEFINES = [
     r"__SIZEOF_POINTER__", r"__SIZEOF_LONG__", r"__SIZEOF_INT__",
     r"__SIZEOF_SIZE_T__", r"__BYTE_ORDER__", r"__LP64__", r"__ILP32__",

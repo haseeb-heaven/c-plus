@@ -3736,8 +3736,16 @@ collectNonnullDerefSites(const std::string &source,
     // An array in this lexical scope is never a NULL pointer at a dereference
     // site; binding one with __typeof__ would emit an invalid array
     // initializer in the C.
-    if (isScopedArrayAt(b.text, baseSi))
+    if (isScopedArrayAt(b.text, baseSi) || arrayLengths.count(b.text))
       return;
+    // A bare `name[...]` base may be an array declared in an included header;
+    // binding it with __typeof__ would emit an invalid array initializer.
+    // Subscript safety is already handled by the bounds instrumentation.
+    if (baseSi + 1 < sig.size()) {
+      const Token &after = toks[sig[baseSi + 1]];
+      if (after.kind == TokKind::Punct && after.text == "[")
+        return;
+    }
     if (seen.count(b.offset) != 0)
       return;
     if (hasObviousNonnullGuard(toks, sig, baseSi, b.text))
