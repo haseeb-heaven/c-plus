@@ -17,12 +17,12 @@ from __future__ import annotations
 import datetime
 import json
 import os
-from pathlib import Path
 import shutil
 import statistics
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
@@ -153,7 +153,7 @@ def main() -> int:
         results["filc"] = {"label": "Fil-C 0.687 (Linux aarch64 container)",
                            "runs": [one_run("filc", filc_args, filc_env)
                                     for _ in range(RUNS)]}
-    except Exception as exc:
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         results["filc"] = {"label": "Fil-C", "status": "NOT_TESTED",
                            "reason": str(exc)[:300]}
     finally:

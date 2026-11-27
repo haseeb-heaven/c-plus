@@ -10,9 +10,9 @@
 
 set -u
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)
 CPLUS_BIN="${CPLUS_BIN:-$ROOT/build/c+}"
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 OUT="$ROOT/tests/out/stress/retired_ledger"
 SCALE="${CPLUS_LEDGER_SCALE:-2400000}"
 BUDGET="${CPLUS_LEDGER_BUDGET:-30}"

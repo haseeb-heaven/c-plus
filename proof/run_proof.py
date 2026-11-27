@@ -24,10 +24,10 @@ from __future__ import annotations
 import datetime
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "proof" / "results"
@@ -403,6 +403,11 @@ def abi_case() -> dict:
     shared = [s for s in clang_syms if s in cplus_user_syms]
     only_clang = [s for s in clang_syms if s not in cplus_user_syms]
     only_cplus = [s for s in cplus_user_syms if s not in clang_syms]
+    clang_ok = clang.returncode == 0
+    cplus_ok = cplus.returncode == 0
+    # Two failed builds leave both symbol tables empty, and empty == empty
+    # would report the ABI as identical without anything having been compiled.
+    abi_identical = clang_ok and cplus_ok and clang_syms == cplus_user_syms
     return {
         "source": str(src.relative_to(ROOT)),
         "clang_symbols": clang_syms,
@@ -412,7 +417,11 @@ def abi_case() -> dict:
         "shared": shared,
         "only_clang": only_clang,
         "only_cplus": only_cplus,
-        "abi_identical": clang_syms == cplus_user_syms,
+        "clang_build_ok": clang_ok,
+        "cplus_build_ok": cplus_ok,
+        "clang_build_output": clang.stdout[-1500:],
+        "cplus_build_output": cplus.stdout[-1500:],
+        "abi_identical": abi_identical,
         "emitted_c": str(emitted.relative_to(ROOT)) if emitted.exists() else None,
         "emitted_is_c": bool(emitted.exists())
         and emitted.read_text().count("int main") >= 1,
