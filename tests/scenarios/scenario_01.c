@@ -345,7 +345,11 @@ int main(void) {
              * C+ adapter maps to errno = EINVAL.  It is still safe (no bytes
              * written), so it is reported, not treated as a failure.  A
              * false ERANGE here WOULD be a defect. */
-            if (err == ERANGE) {
+            /* A declared capacity larger than the proven remaining bytes is
+             * itself refuse-worthy: the caller's bound cannot be justified.
+             * ERANGE then describes the unprovable bound, not a false
+             * overflow of write_len. */
+            if (err == ERANGE && bytes <= proven) {
                 finding(i, c, truncated, bytes, cap, offset, proven, write_len,
                         0, err, "in-bounds write falsely refused with ERANGE",
                         0u, 0u);

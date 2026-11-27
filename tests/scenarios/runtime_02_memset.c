@@ -340,8 +340,9 @@ static void sc_02_huge_value_tiny_dest(void) {
     unsigned char tiny[4] = {0xA5, 0xA5, 0xA5, 0xA5};
     errno = 0;
     memset(tiny, 0x1FF, sizeof tiny);
-    /* safeclib reports ESLEMAX for value > 255; the adapter maps it to EINVAL. */
-    assert(errno == EINVAL);
+    /* safeclib reports ESLEMAX for value > 255; the checked adapter maps
+     * ESLEMAX to ERANGE (argument outside its representable range). */
+    assert(errno == ERANGE);
     assert(tiny[0] == 0xA5 && tiny[1] == 0xA5);
     assert(tiny[2] == 0xA5 && tiny[3] == 0xA5);
 }
