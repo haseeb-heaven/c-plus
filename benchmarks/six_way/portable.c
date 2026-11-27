@@ -108,8 +108,8 @@ int main(void) {
     for (uint32_t round_i = 0;
          round_i < ARENA_ROUNDS_PER_SCALE * scale; ++round_i) {
         for (size_t off = 0; off + RECORD_BYTES <= ARENA_BYTES; off += RECORD_BYTES) {
-            unsigned char fill = (unsigned char)next_random();
-            memset(block + off, fill, RECORD_BYTES);
+            uint64_t raw = next_random();
+            memset(block + off, (int)(raw & 0xffu), RECORD_BYTES);
             arena = mix(arena, block[off]);
         }
     }

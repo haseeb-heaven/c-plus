@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "results"
 OUT.mkdir(parents=True, exist_ok=True)
 
-SCALE = int(os.environ.get("CPLUS_SIX_SCALE", "200"))
+SCALE = int(os.environ.get("CPLUS_SIX_SCALE", "20"))
 RUNS = int(os.environ.get("CPLUS_SIX_RUNS", "1"))
 TIMEOUT = int(os.environ.get("CPLUS_SIX_TIMEOUT", "2400"))
 CPLUS = Path(os.environ.get("CPLUS_BIN", str(ROOT / "build" / "c+")))
@@ -132,13 +132,15 @@ def main() -> int:
              "-include", "cplus/cplus.h", str(HERE / "portable.c"),
              "-o", str(clang_exe), "-lpthread", "-lm"])
     results["clang"] = {"label": "clang -O2 (pure C)",
-                        "runs": [one_run("clang", [str(clang_exe)], base_env)]}
+                        "runs": [one_run("clang", [str(clang_exe)], base_env)
+                                 for _ in range(RUNS)]}
 
     plus_exe = OUT / "six_cplus"
     command([str(CPLUS), "build", "--release", str(HERE / "portable.c"),
              "-o", str(plus_exe)])
     results["cplus"] = {"label": "C+ --release (safer C)",
-                        "runs": [one_run("cplus", [str(plus_exe)], base_env)]}
+                        "runs": [one_run("cplus", [str(plus_exe)], base_env)
+                                 for _ in range(RUNS)]}
 
     try:
         prepare_filc()
@@ -149,7 +151,8 @@ def main() -> int:
         filc_args = ["docker", "exec", "-e", f"CPLUS_SIX_SCALE={SCALE}",
                      FILC_CONTAINER, "bash", "-lc", script]
         results["filc"] = {"label": "Fil-C 0.687 (Linux aarch64 container)",
-                           "runs": [one_run("filc", filc_args, filc_env)]}
+                           "runs": [one_run("filc", filc_args, filc_env)
+                                    for _ in range(RUNS)]}
     except Exception as exc:
         results["filc"] = {"label": "Fil-C", "status": "NOT_TESTED",
                            "reason": str(exc)[:300]}
@@ -170,24 +173,27 @@ def main() -> int:
     results["goose"] = {"label": "Goose Lang",
                         "runs": [one_run("goose",
                                          [GOOSE, "run", str(goose_src)],
-                                         base_env)]}
+                                         base_env) for _ in range(RUNS)]}
 
     rust_exe = OUT / "six_rust"
     command([RUSTC, "-O", "-o", str(rust_exe), str(HERE / "portable.rs")])
     results["rust"] = {"label": "Rust -O",
-                       "runs": [one_run("rust", [str(rust_exe)], base_env)]}
+                       "runs": [one_run("rust", [str(rust_exe)], base_env)
+                                for _ in range(RUNS)]}
 
     reference = None
     for name in ("clang", "cplus", "filc", "goose", "rust"):
         entry = results[name]
         if "runs" not in entry:
             continue
-        checks = entry["runs"][0]["checksums"]
-        if reference is None:
-            reference = checks
-        elif checks != reference:
-            print(f"error: checksum mismatch for {name}", file=sys.stderr)
-            return 1
+        for index, run_row in enumerate(entry["runs"]):
+            checks = run_row["checksums"]
+            if reference is None:
+                reference = checks
+            elif checks != reference:
+                print(f"error: checksum mismatch for {name} run {index + 1}",
+                      file=sys.stderr)
+                return 1
 
     report = {
         "generated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -200,7 +206,7 @@ def main() -> int:
 
     print(f"six-way workload scale={SCALE} runs={RUNS}")
     print(f"{'toolchain':<28} {'seconds':>10} {'vs clang':>10} status")
-    base_time = results["clang"]["runs"][0]["seconds"]
+    base_time = statistics.median(r["seconds"] for r in results["clang"]["runs"])
     for name in ("clang", "cplus", "filc", "trapc", "goose", "rust"):
         entry = results[name]
         if "runs" not in entry:
