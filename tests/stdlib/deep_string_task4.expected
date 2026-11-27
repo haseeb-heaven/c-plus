@@ -82,6 +82,6 @@ t4_view_utf8_valid_bytes 1
 t4_view_utf8_invalid_bytes 1
 t4_view_stale_reserve_rc 1
 t4_view_stale_pointer_moved 1
-t4_view_stale_data_unchanged 1
+t4_view_stale_data_refused 1
 t4_view_stale_size_unchanged 1
 STRING_TASK4 86 0
