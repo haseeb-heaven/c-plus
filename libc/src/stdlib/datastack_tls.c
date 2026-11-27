@@ -25,7 +25,9 @@ __attribute__((weak)) void cplus_release(void *p) { if (p != NULL) free(p); }
 #else
 void cplus_release(void *p) { if (p != NULL) free(p); }
 #endif
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #endif
 
@@ -54,7 +56,15 @@ static void datastack_tls_destructor(void *value)
     if (ds == NULL) return;
     if (ds->base == NULL) return;
     if (ds->backing == 1) {
-#if !defined(_WIN32)
+#if defined(_WIN32)
+        /* VM backing was reserved with VirtualAlloc(MEM_RESERVE) and is freed
+         * through its recorded reservation base. Win32 requires dwSize == 0
+         * with MEM_RELEASE (a non-zero size fails with ERROR_INVALID_PARAMETER),
+         * so the recorded reservation size (ds->capacity) is used only as the
+         * "was anything reserved" guard, mirroring the POSIX path below. */
+        if (ds->capacity != 0u)
+            (void)VirtualFree(ds->base, 0, MEM_RELEASE);
+#else
         if (ds->capacity != 0u) (void)munmap(ds->base, ds->capacity);
 #endif
     } else {
