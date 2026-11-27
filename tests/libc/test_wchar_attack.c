@@ -264,7 +264,10 @@ static void test_wcsftime_edges(void) {
         for (i = 0; i < NELM(small); ++i) small[i] = L'#';
         errno = 0;
         r = cplus_wcsftime(small, (size_t)-1, L"X", &tm);
-        assert(small[1] == L'#' && small[7] == L'#');
+        /* glibc NUL-terminates the short result at small[1] even for an
+         * oversized maxsize; the safety property is that the TAIL canary is
+         * untouched (no write past the formatted result). */
+        assert(small[7] == L'#');
         if (r == 0 && errno == EINVAL)
             FINDING("wcsftime: host rejects maxsize=SIZE_MAX with EINVAL (return 0); canaries intact, no overflow");
         (void)r;
