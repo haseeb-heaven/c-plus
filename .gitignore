@@ -152,3 +152,18 @@ examples/**/bin/
 examples/**/out/
 examples/**/results/
 examples/**/.run/
+examples/modern_c_ports/*.pgm
+examples/modern_c_ports/*.ppm
+
+# Generated benchmark / adversarial artifacts (runners recreate them).
+benchmarks/**/results/
+benchmarks/**/out/
+benchmarks/**/.build/
+tests/**/results/
+/deep_collections_growth
+
+# Local scratch / duplicate demo trees (not part of the source tree).
+/demos/
+/out/
+/.cache/
+/scratch/
