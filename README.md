@@ -342,6 +342,21 @@ cmake --build build --target c+ -- -j4
 > Details and open work: [Issue #22](https://github.com/haseeb-heaven/c-plus/issues/22)
 > and [PR #17](https://github.com/haseeb-heaven/c-plus/pull/17).
 
+### Production readiness: NO - alpha, not for production
+
+C+ 0.2.0-alpha is **not stable or production-ready**. Evidence: CI on
+`alpha-version` has red jobs (macOS core-safety trap cases exit 127 instead of
+abort codes; Linux ABI gate fails on a hard-coded `/opt/homebrew/bin/gcc-14`;
+deep-stdlib fails with allocation-registration errors; CRT I/O-clamp tests fail
+3 cases). The `fread_s`/`fwrite_s` contract is contradictory. Windows is
+compile-only. Independent OpenQodex review is incomplete (disk-full + quota).
+ISO C coverage, general use-after-free detection and borrow-style safety are
+not complete - see [limitations](docs/LIMITATIONS.md).
+
+What **is** real: 188/0 core tests, 118/0 libc, ctest 2/2, real
+raylib/Nuklear/microui/Olive framebuffer demos, checksum-verified benchmarks,
+and an intact C ABI. Use it for evaluation and feedback, not production.
+
 
 ### Current work
 
