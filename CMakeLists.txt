@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(cplus
-  VERSION 0.1.0
+  VERSION 0.2.0
   DESCRIPTION "C+ : C with modern memory safety, deterministic RAII, and lightweight classes"
   LANGUAGES C CXX)
 

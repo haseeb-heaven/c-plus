@@ -64,7 +64,7 @@ inline constexpr const char *kDealloc = "cplus_dealloc";
 inline constexpr const char *kLanguageName = "C+";
 
 /// Version string of the language implementation.
-inline constexpr const char *kLanguageVersion = "0.1.0";
+inline constexpr const char *kLanguageVersion = "0.2.0";
 
 /// The name of the attribute used to mark an external function as trusted
 /// (i.e. allowed to be called from safe C+ code without extra checks).
