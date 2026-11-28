@@ -1975,9 +1975,23 @@ bool isReservedHelperName(llvm::StringRef name) {
     llvm::StringRef file = entry->tryGetRealPathName();
     if (file.empty())
       return false;
+#ifdef CPLUS_INCLUDE_DIR
+    // Trust only this compiler's resolved runtime include directory. A loose
+    // substring test would trust any user header whose path happens to
+    // contain `/include/cplus/`, allowing a reserved helper to be defined in
+    // user code and bypass the STRICT FFI gate.
+    llvm::SmallString<256> runtimeDir;
+    if (llvm::sys::fs::real_path(CPLUS_INCLUDE_DIR, runtimeDir))
+      return false;
+    llvm::StringRef dir = runtimeDir.str().rtrim('/');
+    if (!file.starts_with(dir))
+      return false;
+    return file.size() == dir.size() || file[dir.size()] == '/';
+#else
     return file.contains("/runtime/include/") ||
            file.contains("/include/cplus/") ||
            file.ends_with("/cplus/cplus.h");
+#endif
   }
 
 std::set<std::string>

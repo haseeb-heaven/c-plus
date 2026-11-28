@@ -1640,7 +1640,7 @@ private:
         bool bareCallStatement =
             (before == kNPos || isPunct(before, ";") ||
              isPunct(before, "{") || isPunct(before, "}") ||
-             isPunct(before, ":")) &&
+             isPunct(before, ")") || isPunct(before, ":")) &&
             (isPunct(nextSig(rp), ";") || isPunct(nextSig(rp), "}"));
         if (!transferred.empty() && bareCallStatement) {
           std::string tail;

@@ -5372,7 +5372,9 @@ static bool lowerVariableLengthArrays(
         pendingLoop = ts.isIdent(i, "switch") ? 2 : 1;
         pendingLoopParen = paren;
         if (ts.isIdent(i, "do") && brace > 0)
-          doAwaitingWhile.push_back(brace - 1);
+          // At the trailing `while` the body's brace has closed, so `brace`
+          // is the same outer depth as at the `do` token.
+          doAwaitingWhile.push_back(brace);
       }
       continue;
     }
