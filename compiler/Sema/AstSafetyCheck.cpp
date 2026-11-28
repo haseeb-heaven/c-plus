@@ -2588,7 +2588,11 @@ public:
             if (invalidatedNonZero_.count(vd))
               return false;
             auto it = loopLowerBound_.find(vd);
-            if (it != loopLowerBound_.end() && it->second >= 0)
+            // A zero lower bound plus a zero offset is still zero; only a
+            // strictly positive bound or a positive offset keeps the value
+            // away from zero.
+            if (it != loopLowerBound_.end() && it->second >= 0 &&
+                (it->second > 0 || !off.isZero()))
               return true;
           }
       }
@@ -4088,12 +4092,16 @@ public:
       if (const auto *uo = dyn_cast_or_null<UnaryOperator>(
               s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
         if (uo->getOpcode() == UO_LNot) {
-          condVar = varNameOf(uo->getSubExpr());
-          // `if (!p) return;` proves p non-null after the statement.
+          std::string nullVar = varNameOf(uo->getSubExpr());
+          // `if (!p)` enters the then arm on the NULL path, so p must stay
+          // provably null while that arm is checked.  Only a returning arm
+          // proves p non-null afterwards, and that erase is applied after
+          // the restore at the end of this visitor.
           if (containsReturn(s->getThen())) {
             keepErase = true;
-            keepEraseVar = condVar;
+            keepEraseVar = nullVar;
           }
+          condVar.clear();
         }
       if (containsReturn(s->getThen())) {
         std::string n = nullEqualityVar(s->getCond());
@@ -4112,15 +4120,20 @@ public:
     // is non-null. Also guard the then arm itself.
     if (report_ && s->getElse() && containsReturn(s->getElse())) {
       std::string condVar = varNameOf(s->getCond());
+      bool negated = false;
       if (const auto *uo = dyn_cast_or_null<UnaryOperator>(
               s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
-        if (uo->getOpcode() == UO_LNot)
+        if (uo->getOpcode() == UO_LNot) {
           condVar = varNameOf(uo->getSubExpr());
-      if (!condVar.empty()) {
+          negated = true;
+        }
+      if (!condVar.empty() && !negated) {
         nullVars_.erase(condVar);
         keepErase = true;
         keepEraseVar = condVar;
       }
+      // For `if (!p) { ... } else return;` the then arm is the null path
+      // and the only path that continues, so p stays provably null.
     }
     // `if (n < capacity) buf[n] = 0;` bounds a snprintf return value used as
     // an index; suppress the truncation diagnostic inside that guarded arm.
@@ -4140,6 +4153,7 @@ public:
       }
     }
     const VarDecl *ifGuardVar = nullptr;
+    const VarDecl *truthyGuardVar = nullptr;
     // `if (x == 0) return;` or `if (x == 0 || y == 0) return;` proves the
     // named variables non-zero for all subsequent statements.
     if (report_ && !s->getElse() && containsReturn(s->getThen())) {
@@ -4180,6 +4194,7 @@ public:
         if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
           if (vd->getType()->isIntegerType()) {
             ifGuardVar = vd;
+            truthyGuardVar = vd;
             nonZeroVars_.insert(vd);
             invalidatedNonZero_.erase(vd);
           }
@@ -4189,8 +4204,12 @@ public:
     std::map<std::string, unsigned> savedLocks = heldLocks_;
     bool r = RecursiveASTVisitor::TraverseIfStmt(s);
     heldLocks_ = savedLocks;
-    if (ifGuardVar && !containsReturn(s->getThen()))
-      nonZeroVars_.erase(ifGuardVar);
+    // A bare `if (x)` proves x non-zero only inside the then arm.  If that
+    // arm returns, the fall-through is the false arm where x may be zero;
+    // the proof may survive only when the false arm is the one that exits.
+    if (truthyGuardVar &&
+        (!s->getElse() || !containsReturn(s->getElse())))
+      nonZeroVars_.erase(truthyGuardVar);
     guardedSnprintf_ = savedGuarded;
     // Restore every null fact saved before the branch: only the variable
     // proved non-null on the continuing path may lose its null state. The
