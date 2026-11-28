@@ -26,8 +26,11 @@ fi
 # invokes every API the static scanner cannot see a call-site for.  A failure
 # here is a real coverage regression, not a soft warning.
 CLOSURE=build/native-tools/coverage_closure
+# The closure only calls json_close_stream(), so yyjson's header is needed but
+# its object library is not linked: keep this script runnable without a prior
+# tests/stdlib/run_stdlib_tests.sh build of build/ext.
 if ! "$CPLUS" build tests/stdlib/coverage_closure.cp --default --no-werror --sanitize=none \
-        -I. -Ithird_party/yyjson -Lbuild/ext -lyyjson -o "$CLOSURE" \
+        -I. -Ithird_party/yyjson -o "$CLOSURE" \
         >"$CLOSURE.build.log" 2>&1; then
     echo "error: coverage-closure test build failed; see $CLOSURE.build.log" >&2
     cat "$CLOSURE.build.log" >&2
