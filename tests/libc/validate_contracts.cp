@@ -73,6 +73,15 @@ static void fail_message(const char *message) {
 
 /* ------------------------------------------------------------- small helpers */
 
+/* Explicit ASCII whitespace: glibc's isspace() is a macro whose internal
+ * arithmetic cannot be instrumented under C+ STRICT (CI showed "arithmetic in
+ * a macro expansion cannot be instrumented" at 7 sites). Contract text is
+ * ASCII, so this is equivalent and portable. */
+static int cp_is_ws(unsigned char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+           c == '\f' || c == '\v';
+}
+
 static int is_word_char(int c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
            (c >= '0' && c <= '9') || c == '_';
@@ -126,10 +135,10 @@ static int is_nonempty_trimmed(json_view v) {
         return 0;
     if (s == NULL)
         return 0;
-    while (*s != '\0' && isspace((unsigned char)*s))
+    while (*s != '\0' && cp_is_ws((unsigned char)*s))
         s++;
     len = strlen(s);
-    while (len > 0 && isspace((unsigned char)s[len - 1]))
+    while (len > 0 && cp_is_ws((unsigned char)s[len - 1]))
         len--;
     return len > 0;
 }
@@ -225,14 +234,14 @@ static int match_prototype_tail(const char *text, size_t n, size_t r) {
 
     /* \s* (CPLUS_[A-Z_]+\s*\([^)]*\))? \s* ; */
     t = last_close + 1;
-    while (t < n && isspace((unsigned char)body[t]))
+    while (t < n && cp_is_ws((unsigned char)body[t]))
         t++;
     if (t + 6 <= n && strncmp(body + t, "CPLUS_", 6) == 0) {
         size_t u = t + 6;
         if (u < n && ((body[u] >= 'A' && body[u] <= 'Z') || body[u] == '_')) {
             while (u < n && ((body[u] >= 'A' && body[u] <= 'Z') || body[u] == '_'))
                 u++;
-            while (u < n && isspace((unsigned char)body[u]))
+            while (u < n && cp_is_ws((unsigned char)body[u]))
                 u++;
             if (u < n && body[u] == '(') {
                 u++;
@@ -240,7 +249,7 @@ static int match_prototype_tail(const char *text, size_t n, size_t r) {
                     u++;
                 if (u < n && body[u] == ')') {
                     t = u + 1;
-                    while (t < n && isspace((unsigned char)body[t]))
+                    while (t < n && cp_is_ws((unsigned char)body[t]))
                         t++;
                 }
             }
@@ -276,7 +285,7 @@ static int declared_as_function(const char *text, const char *symbol) {
 
         /* \s* then [A-Za-z_] (the return type's first character). */
         p = i;
-        while (p < n && isspace((unsigned char)body[p]))
+        while (p < n && cp_is_ws((unsigned char)body[p]))
             p++;
         if (p >= n || !is_ident_start((unsigned char)body[p]))
             continue;
@@ -289,7 +298,7 @@ static int declared_as_function(const char *text, const char *symbol) {
                 !is_word_char((unsigned char)body[q - 1]) &&
                 strncmp(body + q, symbol, slen) == 0) {
                 size_t r = q + slen;
-                while (r < n && isspace((unsigned char)body[r]))
+                while (r < n && cp_is_ws((unsigned char)body[r]))
                     r++;
                 if (r < n && body[r] == '(' && match_prototype_tail(body, n, r))
                     return 1;
