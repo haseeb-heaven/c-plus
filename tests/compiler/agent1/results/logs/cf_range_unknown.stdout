@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_range_unknown.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/range_unknown.c:5:19: error: range requires a known .len property: 'unknown'

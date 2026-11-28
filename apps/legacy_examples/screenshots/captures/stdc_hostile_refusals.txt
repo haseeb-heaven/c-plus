@@ -1,0 +1,108 @@
+# CAPTURED TERMINAL TRANSCRIPT: stdc_hostile_refusals.txt
+# TITLE: Hostile ordinary-C inputs: force-included checked layer refuses null/small/huge cases across APIs with all canaries intact
+# CAPTURED_AT_UTC: 2026-11-23T06:29:41Z
+# TOOLCHAIN: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin
+# CWD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+# NOTE: everything between BEGIN/END markers is verbatim stdout+stderr
+#       of a real binary executed under /usr/bin/timeout 30.
+# BUILD CMD: /usr/bin/clang -O0 -fno-builtin -std=c99 -Wall -Wextra -Wno-format-nonliteral -Wno-fortify-source -Wno-builtin-memcpy-chk-size -I. -Istdlib/safe -Ilibc -Ilibc/install-include -Ithird_party/safeclib/include -Ithird_party/intel-safestringlib/include -include stdlib/safe/safe_c.h tests/abi/stdc_safety/hostile.c build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a -lm -pthread -o "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/hostile_checked"
+# RUN CMD: /usr/bin/timeout 30 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/hostile_checked /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/hostile-out
+# --- BEGIN VERBATIM OUTPUT ---
+[CPLUS-SAFE] memcpy_s: buffer overflow refused (requested 17 > capacity 16, ESNOSPC 406)
+[CPLUS-SAFE] memcpy_s: buffer overflow refused (requested 18446744073709551615 > capacity 16, ESNOSPC 406)
+[CPLUS-SAFE] memmove_s: buffer overflow refused (requested 17 > capacity 16, ESNOSPC 406)
+[CPLUS-SAFE] memmove_s: buffer overflow refused (requested 18446744073709551615 > capacity 16, ESNOSPC 406)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 17 > capacity 16, ESNOSPC 406)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 18446744073709551615 > capacity 16, ESNOSPC 406)
+[CPLUS-SAFE] printf_s: forbidden %n specifier in format string
+[CPLUS-SAFE] printf_s: non-literal format string refused (CWE-134)
+[CPLUS-SAFE] fprintf_s: forbidden %n specifier in format string
+[CPLUS-SAFE] fprintf_s: non-literal format string refused (CWE-134)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 8 > capacity 7, ESNOSPC 406)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 18446744073709551615 > capacity 8, ESNOSPC 406)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 8 > capacity 7, ESNOSPC 406)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 18446744073709551615 > capacity 8, ESNOSPC 406)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 8 > capacity 7, ESNOSPC 406)
+[CPLUS-SAFE] memset_s: buffer overflow refused (requested 18446744073709551615 > capacity 8, ESNOSPC 406)
+stdc_safety memcpy valid OK 1
+stdc_safety memcpy null REFUSED 1
+stdc_safety memcpy small REFUSED 1
+stdc_safety memcpy huge REFUSED 1
+stdc_safety memmove valid OK 1
+stdc_safety memmove null REFUSED 1
+stdc_safety memmove small REFUSED 1
+stdc_safety memmove huge REFUSED 1
+stdc_safety memset valid OK 1
+stdc_safety memset null REFUSED 1
+stdc_safety memset small REFUSED 1
+stdc_safety memset huge REFUSED 1
+stdc_safety strcpy valid OK 1
+stdc_safety strcpy null REFUSED 1
+IGNORE CONSTRAINT HANDLER: (406) strcpy_s: not enough space for src
+stdc_safety strcpy small REFUSED 1
+IGNORE CONSTRAINT HANDLER: (406) strcpy_s: not enough space for src
+stdc_safety strcpy huge REFUSED 1
+stdc_safety strncpy valid OK 1
+stdc_safety strncpy null REFUSED 1
+IGNORE CONSTRAINT HANDLER: (406) strncpy_s: not enough space for src
+stdc_safety strncpy small REFUSED 1
+IGNORE CONSTRAINT HANDLER: (403) strncpy_s: slen exceeds max
+stdc_safety strncpy huge REFUSED 1
+stdc_safety strcat valid OK 1
+stdc_safety strcat null REFUSED 1
+IGNORE CONSTRAINT HANDLER: (406) strcat_s: not enough space for src
+stdc_safety strcat small REFUSED 1
+IGNORE CONSTRAINT HANDLER: (406) strcat_s: not enough space for src
+stdc_safety strcat huge REFUSED 1
+stdc_safety strncat valid OK 1
+stdc_safety strncat null REFUSED 1
+IGNORE CONSTRAINT HANDLER: (406) strncat_s: not enough space for src
+stdc_safety strncat small REFUSED 1
+stdc_safety strncat huge REFUSED 1
+P7Q
+stdc_safety printf valid OK 1
+stdc_safety printf null REFUSED 1
+stdc_safety printf small REFUSED 1
+stdc_safety printf huge REFUSED 1
+stdc_safety fprintf valid OK 1
+stdc_safety fprintf null REFUSED 1
+stdc_safety fprintf small REFUSED 1
+stdc_safety fprintf huge REFUSED 1
+stdc_safety fopen valid OK 1
+stdc_safety fopen null REFUSED 1
+IGNORE CONSTRAINT HANDLER: (406) strcpy_s: not enough space for src
+stdc_safety fopen small REFUSED 1
+stdc_safety fopen huge REFUSED 1
+stdc_safety fread valid OK 1
+stdc_safety fread null REFUSED 1
+stdc_safety fread small REFUSED 1
+stdc_safety fread huge REFUSED 1
+stdc_safety fwrite valid OK 1
+stdc_safety fwrite null REFUSED 1
+stdc_safety fwrite small REFUSED 1
+stdc_safety fwrite huge REFUSED 1
+stdc_safety malloc valid OK 1
+stdc_safety malloc null REFUSED 1
+stdc_safety malloc small REFUSED 1
+stdc_safety malloc huge REFUSED 1
+stdc_safety calloc valid OK 1
+stdc_safety calloc null REFUSED 1
+stdc_safety calloc small REFUSED 1
+stdc_safety calloc huge REFUSED 1
+stdc_safety realloc valid OK 1
+stdc_safety realloc null REFUSED 1
+stdc_safety realloc small REFUSED 1
+stdc_safety realloc huge REFUSED 1
+stdc_safety free valid OK 1
+stdc_safety free null REFUSED 1
+stdc_safety free small REFUSED 1
+stdc_safety free huge REFUSED 1
+STDC_SAFETY 64 48 64 0
+# --- END VERBATIM OUTPUT ---
+# EXIT_CODE=0
+# TOKEN_OK: [CPLUS-SAFE] memcpy_s: buffer overflow refused (requested 17 > capacity 16, ESNOSPC 406)
+# TOKEN_OK: stdc_safety memcpy null REFUSED 1
+# TOKEN_OK: stdc_safety strcpy huge REFUSED 1
+# TOKEN_OK: stdc_safety free null REFUSED 1
+# TOKEN_OK: STDC_SAFETY 64 48 64 0
+# VERDICT: PASS -- every expected refusal token was found in real captured output

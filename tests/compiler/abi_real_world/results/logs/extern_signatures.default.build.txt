@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.default.c --default --sanitize=none -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases -lextern_signatures_default -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

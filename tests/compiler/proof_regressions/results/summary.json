@@ -1,0 +1,128 @@
+{
+  "generated": "2026-11-26T00:45:49.169803+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "array_alias_uaf",
+      "status": "PASS",
+      "expected": "use-after-free",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_array_alias_uaf.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_array_alias_uaf.c:25:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'alias'\n      *alias = 88;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: alias created: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_array_alias_uaf.c:12\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_array_alias_uaf.c:26:100: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'alias'\n      printf(\"[PROOF 2 - AGENT 1] Successfully wrote to freed memory via array element alias: %d\\n\", *alias);\n                                                                                                     ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: alias created: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_array_alias_uaf.c:12\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "struct_downcast",
+      "status": "PASS",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_struct_downcast_oob.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_struct_downcast_oob.c:18:5: error: [CPLUS-FFI] field index 3 exceeds heap allocation 'pkt' of 4 bytes\n      pkt->payload[3] = 0x1337;\n      ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_struct_downcast_oob.c:19:63: error: [CPLUS-FFI] field index 3 exceeds heap allocation 'pkt' of 4 bytes\n      printf(\"[STRUCT DOWNCAST] Wrote past allocation: 0x%x\\n\", pkt->payload[3]);\n                                                                ^~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "ptr_arith_underflow",
+      "status": "PASS",
+      "expected": "unproven runtime offset",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_ptr_arith_underflow.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_ptr_arith_underflow.c:11:5: error: [CPLUS-FFI] dereference of pointer formed with an unproven runtime offset; STRICT cannot prove it is in bounds\n      *p = 99999;\n      ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_ptr_arith_underflow.c:12:76: error: [CPLUS-FFI] dereference of pointer formed with an unproven runtime offset; STRICT cannot prove it is in bounds\n      printf(\"[PTR UNDERFLOW] Wrote via pointer arithmetic underflow: %d\\n\", *p);\n                                                                             ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "array_alias_ok",
+      "status": "PASS",
+      "expected": "accept",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof_regressions/array_alias_ok.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof_regressions/array_alias_ok.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "struct_layout_ok",
+      "status": "PASS",
+      "expected": "accept",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof_regressions/struct_layout_ok.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof_regressions/struct_layout_ok.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "ptr_arith_const_ok",
+      "status": "PASS",
+      "expected": "accept",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof_regressions/ptr_arith_const_ok.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof_regressions/ptr_arith_const_ok.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_constant_oob.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/constant_oob.c:6:5: error: [CPLUS-SAFE-BOUNDS] constant array index 10 is outside the bounds of 'arr'

@@ -1,0 +1,10 @@
+case alias_one_past_deref [aliases] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_one_past_deref.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_one_past_deref.c:2:64: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] dereference one past the end of array via pointer arithmetic
+  int main(void){ int a[4]={1,2,3,4}; int *p=a+4; printf("%d\n", *p); return 0; }
+                                                                 ^
+

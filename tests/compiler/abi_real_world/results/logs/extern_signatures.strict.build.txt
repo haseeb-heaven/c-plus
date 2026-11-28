@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.strict.c --strict --sanitize=none -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases -lextern_signatures_strict -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.strict.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'ext_add', 'ext_double', 'ext_long', 'ext_pair', 'ext_ptr' have no definition in this TU; cross-TU control/data flow is not safety-checked here
+

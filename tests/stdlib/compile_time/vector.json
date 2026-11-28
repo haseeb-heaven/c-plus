@@ -1,0 +1,110 @@
+{
+  "module": "stdlib/vector.hp",
+  "harness": "tests/stdlib/compile_time/run_compile_time.sh",
+  "compiler": "build/c+ (C+ 0.1.0, host Clang backend)",
+  "commands": {
+    "check": "c+ check --strict <file>",
+    "build": "c+ build --strict --sanitize=none <file> -o <exe>"
+  },
+  "classification_rule": "Only diagnostics containing '[CPLUS-' count as tagged C+ enforcement; plain clang warnings and untagged C+ lowering errors do not. REJECT = check+build fail with [CPLUS-; ACCEPT = both succeed; RUNTIME = compiler cannot prove the violation, so the case is a compile-time capability gap; PARTIAL = check+build fail without any [CPLUS- token.",
+  "cases": [
+    {
+      "file": "vector_const_oob.cp",
+      "expect": "RUNTIME",
+      "requested": "REJECT",
+      "reason": "Constant index 9 into a 2-element vector is statically knowable; C+ only tags constant subscripts of fixed-size C arrays, not indices passed to container methods.",
+      "observed": {
+        "check": {"exit": 0, "tagged_cplus": false, "output": "check: tests/stdlib/compile_time/vector_const_oob.cp ok"},
+        "build": {"exit": 0, "output": ""},
+        "run": {"exit": 0, "stdout": "const-oob -1 size 2 out -1"},
+        "runner_classification": "ACCEPT"
+      },
+      "gap": "No [CPLUS-BOUNDS] for vector::at_checked(); the runtime API rejects the index (-1, bounds telemetry). Probed separately: the same literal subscript on a local int[3] IS rejected with '[CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds length 3'."
+    },
+    {
+      "file": "vector_use_after_drop.cp",
+      "expect": "RUNTIME",
+      "requested": "REJECT",
+      "reason": "drop() releases the owned buffer, so later reads are use-after-free; C+ does not track an 'int *items' field inside a C+ class as a managed owner.",
+      "observed": {
+        "check": {"exit": 0, "tagged_cplus": false, "output": "check: tests/stdlib/compile_time/vector_use_after_drop.cp ok"},
+        "build": {"exit": 0, "output": ""},
+        "run": {"exit": 0, "stdout": "after-drop size 0 at_checked -1 out -1\ncompat-at 0"},
+        "runner_classification": "ACCEPT"
+      },
+      "gap": "No [CPLUS-LIFETIME]/[CPLUS-OWNER]. Checked accessors report the dead state at runtime; a raw dereference of the stale buffer is silent under --sanitize=none (probed: reads recycled memory)."
+    },
+    {
+      "file": "vector_use_after_move.cp",
+      "expect": "RUNTIME",
+      "requested": "REJECT",
+      "reason": "cplus_move(a) zeroes a and transfers the buffer to b; using a afterwards is a use-after-move.",
+      "observed": {
+        "check": {"exit": 1, "tagged_cplus": false, "output": "vector_use_after_move.cp:29:38: error: use-after-move: use of moved-from resource 'a'\nhelp: the handle was zeroed by cplus_move"},
+        "build": {"exit": 1, "output": "vector_use_after_move.cp:29:38: error: use-after-move: use of moved-from resource 'a'"},
+        "run": "not produced (build rejected)",
+        "runner_classification": "PARTIAL"
+      },
+      "gap": "The C+ RAII lowering pass DOES reject the use at compile time, but the diagnostic is UNTAGGED (no '[CPLUS-' token) and clang emits no warning, so per the suite rule this is not counted as tagged C+ enforcement. (Diagnostic source location maps to b.drop(); the offending use is a.size().)"
+    },
+    {
+      "file": "vector_mutable_alias.cp",
+      "expect": "RUNTIME",
+      "requested": "REJECT",
+      "reason": "Two mutable vector* aliases of one owner permit overlapping mutation; C+ has no aliasing/exclusivity or container-level borrow analysis.",
+      "observed": {
+        "check": {"exit": 0, "tagged_cplus": false, "output": "check: tests/stdlib/compile_time/vector_mutable_alias.cp ok"},
+        "build": {"exit": 0, "output": ""},
+        "run": {"exit": 0, "stdout": "aliases 2 2 4"},
+        "runner_classification": "ACCEPT"
+      },
+      "gap": "Pointer aliasing compiles cleanly with no [CPLUS-ALIAS]/[CPLUS-BORROW] diagnostic. Copying the owner ('vector b = a;') IS rejected at compile time as 'cannot be copied' (also untagged)."
+    },
+    {
+      "file": "vector_invalid_slice.cp",
+      "expect": "RUNTIME",
+      "requested": "REJECT",
+      "reason": "slice s borrows the pre-growth buffer; push_back reallocates and bumps the generation, making s stale. C+ cannot link a returned slice value to its source vector.",
+      "observed": {
+        "check": {"exit": 0, "tagged_cplus": false, "output": "check: tests/stdlib/compile_time/vector_invalid_slice.cp ok"},
+        "build": {"exit": 0, "output": ""},
+        "run": {"exit": 0, "stdout": "slice 0 stale 1 valid 0 after -1"},
+        "runner_classification": "ACCEPT"
+      },
+      "gap": "No compile-time staleness proof. The library catches it dynamically: stale()==1, valid()==0, at_checked() returns -1."
+    },
+    {
+      "file": "vector_valid.cp",
+      "expect": "ACCEPT",
+      "reason": "Positive control: all accesses are in-range on a live vector. check and strict build must succeed with no [CPLUS- diagnostic and the program must exit 0.",
+      "observed": {
+        "check": {"exit": 0, "tagged_cplus": false, "output": "check: tests/stdlib/compile_time/vector_valid.cp ok"},
+        "build": {"exit": 0, "output": ""},
+        "run": {"exit": 0, "stdout": "valid size 3 rc 0 out 8 at2 9\npop 0 last 9 size 2"},
+        "runner_classification": "ACCEPT"
+      }
+    },
+    {
+      "file": "vector_valid_slice.cp",
+      "expect": "ACCEPT",
+      "reason": "Positive control: the slice and its sub-slice are read before any growth, so they are valid. check and strict build must succeed with no [CPLUS- diagnostic and the program must exit 0.",
+      "observed": {
+        "check": {"exit": 0, "tagged_cplus": false, "output": "check: tests/stdlib/compile_time/vector_valid_slice.cp ok"},
+        "build": {"exit": 0, "output": ""},
+        "run": {"exit": 0, "stdout": "valid-slice size 3 sub 2 stale 0 rc 0 out 6"},
+        "runner_classification": "ACCEPT"
+      }
+    },
+    {
+      "file": "vector_valid_move.cp",
+      "expect": "ACCEPT",
+      "reason": "Positive control: cplus_move transfers ownership to b, which is the only object used afterwards. check and strict build must succeed with no [CPLUS- diagnostic and the program must exit 0.",
+      "observed": {
+        "check": {"exit": 0, "tagged_cplus": false, "output": "check: tests/stdlib/compile_time/vector_valid_move.cp ok"},
+        "build": {"exit": 0, "output": ""},
+        "run": {"exit": 0, "stdout": "valid-move size 2 rc 0 out 12"},
+        "runner_classification": "ACCEPT"
+      }
+    }
+  ]
+}

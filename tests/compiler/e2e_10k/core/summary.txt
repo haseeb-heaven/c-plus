@@ -1,0 +1,26 @@
+C+ core end-to-end scenario measurement
+c+ binary: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+scenarios generated: 5140
+scenarios executed:  5140
+passed: 5140
+failed: 0
+clang cross-check: compiled=9 executed=4230 passed=4230 failed=0
+total seconds: 49.736
+
+categories (generated/executed/passed/failed):
+  allocation_lifetime      820/820/820/0
+  arithmetic               960/960/960/0
+  bounds                   1020/1020/1020/0
+  compile_time_violation   40/40/40/0
+  exceptions               260/260/260/0
+  format_strings           250/250/250/0
+  function_pointers        260/260/260/0
+  initialization           250/250/250/0
+  nullability              260/260/260/0
+  raii                     250/250/250/0
+  recursion                260/260/260/0
+  runtime_guards           260/260/260/0
+  structs_unions           250/250/250/0
+
+failures:
+  none

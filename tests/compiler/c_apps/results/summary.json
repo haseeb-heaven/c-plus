@@ -1,0 +1,192 @@
+{
+  "generated": "2026-11-25T18:56:01.156131+00:00",
+  "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "clang": "/usr/bin/clang",
+  "results": [
+    {
+      "kind": "app",
+      "name": "tic_tac_toe",
+      "expected_stdout": "x=1 o=0\n",
+      "legacy_source_preserved": true,
+      "legacy_matches_clang": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "x=1 o=0\n",
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "x=1 o=0\n",
+          "match": true,
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "kind": "app",
+      "name": "game_2048",
+      "expected_stdout": "8 4 0 0 \n",
+      "legacy_source_preserved": true,
+      "legacy_matches_clang": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "8 4 0 0 \n",
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "8 4 0 0 \n",
+          "match": true,
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "kind": "app",
+      "name": "snake",
+      "expected_stdout": "steps=8 end=3,3\n",
+      "legacy_source_preserved": true,
+      "legacy_matches_clang": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "steps=8 end=3,3\n",
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "steps=8 end=3,3\n",
+          "match": true,
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "kind": "app",
+      "name": "calculator",
+      "expected_stdout": "result=9\n",
+      "legacy_source_preserved": true,
+      "legacy_matches_clang": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "result=9\n",
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "result=9\n",
+          "match": true,
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "kind": "app",
+      "name": "hash_tool",
+      "expected_stdout": "alpha=5d8b6dab\nbeta=af81e4c7\ngamma=d029140a\n",
+      "legacy_source_preserved": true,
+      "legacy_matches_clang": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "alpha=5d8b6dab\nbeta=af81e4c7\ngamma=d029140a\n",
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "stdout": "alpha=5d8b6dab\nbeta=af81e4c7\ngamma=d029140a\n",
+          "match": true,
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "kind": "unsafe",
+      "name": "oob_write",
+      "check_rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/oob_write.c:2:35: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void) { int a[4] = {0}; a[7] = 3; return a[7]; }\n                                    ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsaf",
+      "expected_diag": "[CPLUS-SAFE-BOUNDS]",
+      "expected_trap": null,
+      "status": "PASS"
+    },
+    {
+      "kind": "unsafe",
+      "name": "uaf",
+      "check_rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/uaf.c:7:10: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n    return *p;\n           ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/com",
+      "expected_diag": "[CPLUS-LIFETIME]",
+      "expected_trap": null,
+      "status": "PASS"
+    },
+    {
+      "kind": "unsafe",
+      "name": "null_deref",
+      "check_rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/null_deref.c:3:18: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void) { deref(0); return 0; }\n                   ^~~~~\n",
+      "expected_diag": "[CPLUS-",
+      "expected_trap": null,
+      "status": "PASS"
+    },
+    {
+      "kind": "unsafe",
+      "name": "invalid_shift",
+      "check_rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/invalid_shift.c:2:36: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand\n  int main(void) { int x = 1; return x << 32; }\n                                     ^\n",
+      "expected_diag": "[CPLUS-FFI]",
+      "expected_trap": null,
+      "status": "PASS"
+    },
+    {
+      "kind": "unsafe",
+      "name": "uninit",
+      "check_rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/uninit.c:2:32: error: variable 'x' is uninitialized when used here [-Werror,-Wuninitialized]\n    2 | int main(void) { int x; return x; }\n      |                                ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/uninit.c:2:23: note: initialize the variable 'x' to silence this w",
+      "expected_diag": "uninitialized",
+      "expected_trap": null,
+      "status": "PASS"
+    },
+    {
+      "kind": "unsafe",
+      "name": "double_free",
+      "check_rc": 1,
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/double_free.c:6:3: error: [CPLUS-OWNER] double free of 'p'\n    cplus_release(p);\n    ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/double_free.c: note: [CPLUS-MULTITU] STRICT a",
+      "expected_diag": "[CPLUS-OWNER]",
+      "expected_trap": null,
+      "status": "PASS"
+    },
+    {
+      "kind": "unsafe",
+      "name": "overflow",
+      "check_rc": 0,
+      "diagnostic": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/overflow.c ok\n",
+      "expected_diag": null,
+      "expected_trap": [
+        110,
+        "signed integer overflow"
+      ],
+      "build_rc": 0,
+      "run_rc": 110,
+      "runtime_output": "C+ runtime error: signed integer overflow: addition result does not fit in a 32-bit signed integer\n",
+      "status": "PASS"
+    }
+  ],
+  "failures": []
+}

@@ -1,0 +1,242 @@
+/* C+ standard library: 2D rendering via SDL3 (zlib licence).
+ *
+ * C++-flavoured RAII: `renderer r = renderer(w.native(), "software", &err);`
+ * draws, `r.read(&err)` snapshots into an owned surface.  SDL3 rasterises.
+ * Link with pkg-config sdl3.
+ */
+#ifndef CPLUS_STD_GRAPHICS_HP
+#define CPLUS_STD_GRAPHICS_HP
+
+#include <SDL3/SDL.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/window.hp"
+
+class surface {
+    SDL_Surface *handle;
+
+    surface(SDL_Surface *handle) {
+        this->handle = handle;
+    }
+
+    int valid(void) {
+        return this->handle != NULL;
+    }
+
+    int width(void) {
+        return this->handle != NULL ? this->handle->w : 0;
+    }
+
+    int height(void) {
+        return this->handle != NULL ? this->handle->h : 0;
+    }
+
+    /* Borrowed 32-bit sample; the four bytes follow the surface format. */
+    int pixel(int x, int y, unsigned char *out, error *err) {
+        unsigned char *pixels;
+        int bpp = 0;
+        int bytes_per_pixel;
+        unsigned int rmask = 0;
+        unsigned int gmask = 0;
+        unsigned int bmask = 0;
+        unsigned int amask = 0;
+        error_reset(err);
+        if (this->handle == NULL || out == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "surface::pixel: invalid argument");
+            return STDLIB_FAIL;
+        }
+        if (x < 0 || y < 0 || x >= this->handle->w || y >= this->handle->h) {
+            error_fail(err, CPLUS_EXIT_BOUNDS, "surface::pixel: out of range");
+            return STDLIB_FAIL;
+        }
+        /* SDL writes through every out-pointer: never pass NULL. */
+        if (!SDL_GetMasksForPixelFormat(this->handle->format, &bpp, &rmask,
+                                        &gmask, &bmask, &amask) ||
+            bpp < 32) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "surface::pixel: unsupported format");
+            return STDLIB_FAIL;
+        }
+        pixels = (unsigned char *)this->handle->pixels;
+        if (pixels == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "surface::pixel: no pixel data");
+            return STDLIB_FAIL;
+        }
+        bytes_per_pixel = bpp / 8;
+        if (this->handle->pitch <= 0 ||
+            (size_t)x * (size_t)bytes_per_pixel + 4 > (size_t)this->handle->pitch) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "surface::pixel: row pitch out of bounds");
+            return STDLIB_FAIL;
+        }
+        {
+            int locked = 0;
+            unsigned char *at;
+            if (SDL_MUSTLOCK(this->handle)) {
+                if (!SDL_LockSurface(this->handle)) {
+                    error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                                   SDL_GetError());
+                    return STDLIB_FAIL;
+                }
+                locked = 1;
+                pixels = (unsigned char *)this->handle->pixels;
+                if (pixels == NULL) {
+                    SDL_UnlockSurface(this->handle);
+                    error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                                   "surface::pixel: no pixel data");
+                    return STDLIB_FAIL;
+                }
+            }
+            at = pixels +
+                 (size_t)y * (size_t)this->handle->pitch +
+                 (size_t)x * (size_t)bytes_per_pixel;
+            out[0] = at[0];
+            out[1] = at[1];
+            out[2] = at[2];
+            out[3] = at[3];
+            if (locked)
+                SDL_UnlockSurface(this->handle);
+        }
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->handle != NULL) {
+            SDL_DestroySurface(this->handle);
+            this->handle = NULL;
+        }
+    }
+};
+
+class renderer {
+    SDL_Renderer *handle;
+
+    /* Takes the native window pointer: a constructor must not use `->`. */
+    renderer(SDL_Window *native_window, const char *driver, error *err) {
+        do {
+            error_reset(err);
+            this->handle = NULL;
+            if (native_window == NULL) {
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer: invalid window");
+                break;
+            }
+            this->handle = SDL_CreateRenderer(native_window, driver);
+            if (this->handle == NULL)
+                error_fail(err, CPLUS_EXIT_RESOURCE, SDL_GetError());
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->handle != NULL;
+    }
+
+    SDL_Renderer *native(void) {
+        return this->handle;
+    }
+
+    int set_color(unsigned char r, unsigned char g, unsigned char b,
+                  unsigned char a, error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer::set_color: invalid renderer");
+            return STDLIB_FAIL;
+        }
+        if (!SDL_SetRenderDrawColor(this->handle, r, g, b, a)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int clear(error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer::clear: invalid renderer");
+            return STDLIB_FAIL;
+        }
+        if (!SDL_RenderClear(this->handle)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int fill_rect(float x, float y, float w, float h, error *err) {
+        SDL_FRect rect;
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer::fill_rect: invalid renderer");
+            return STDLIB_FAIL;
+        }
+        rect.x = x;
+        rect.y = y;
+        rect.w = w;
+        rect.h = h;
+        if (!SDL_RenderFillRect(this->handle, &rect)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int line(float x1, float y1, float x2, float y2, error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer::line: invalid renderer");
+            return STDLIB_FAIL;
+        }
+        if (!SDL_RenderLine(this->handle, x1, y1, x2, y2)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int present(error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer::present: invalid renderer");
+            return STDLIB_FAIL;
+        }
+        if (!SDL_RenderPresent(this->handle)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int set_vsync(int enabled, error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer::set_vsync: invalid renderer");
+            return STDLIB_FAIL;
+        }
+        if (!SDL_SetRenderVSync(this->handle, enabled)) {
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    /* Snapshots the current target into an owned surface. */
+    surface read(error *err) {
+        surface shot = surface(NULL);
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "renderer::read: invalid renderer");
+            return shot;
+        }
+        shot.handle = SDL_RenderReadPixels(this->handle, NULL);
+        if (shot.handle == NULL)
+            error_fail(err, CPLUS_EXIT_IO, SDL_GetError());
+        return shot;
+    }
+
+    void drop(void) {
+        if (this->handle != NULL) {
+            SDL_DestroyRenderer(this->handle);
+            this->handle = NULL;
+        }
+    }
+};
+
+#endif

@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/raii_early_return.o0.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+drop=2
+re=-1
+
+--- stderr ---
+

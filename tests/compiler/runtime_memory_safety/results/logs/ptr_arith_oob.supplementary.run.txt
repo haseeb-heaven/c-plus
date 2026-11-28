@@ -1,0 +1,5 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_oob.supplementary.bin
+returncode: 101
+timed_out: False
+
+C+ runtime error: out-of-bounds pointer formation at <SRC>:4: pointer offset 10 is outside [0, 4] elements

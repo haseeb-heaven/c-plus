@@ -14,11 +14,17 @@ namespace cplus {
 /// See src/Sema/CPlusRewriter.cpp for the transformation rules.
 RewrittenSource rewriteCPlusSource(const std::string &source,
                                    DiagnosticEngine &diags,
-                                   const std::string &filename);
+                                   const std::string &filename,
+                                   bool headerMode = false);
 
 /// Register a class declared in a lowered `.hp` header so that a later
 /// translation unit can resolve method calls and constructor sugar for it.
 void registerExternalClass(const std::string &name, bool hasConstructor);
+
+/// Lower C+ `try { ... } catch (Exception e) { ... }` and `throw expr;` to
+/// plain C using the ABI-neutral runtime exception helpers. Safe mode only;
+/// LEGACY source is left byte-identical.
+std::string lowerExceptions(const std::string &source);
 
 /// Register an owning type declared in a lowered `.hp` header.
 void registerExternalResource(const std::string &name);

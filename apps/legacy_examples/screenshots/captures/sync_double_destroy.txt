@@ -1,0 +1,21 @@
+# CAPTURED TERMINAL TRANSCRIPT: sync_double_destroy.txt
+# TITLE: Synchronization: second destroy/join of a mutex, condition variable, and thread handle is refused with EINVAL=22; NULL handles are refused too
+# CAPTURED_AT_UTC: 2026-11-23T06:29:41Z
+# TOOLCHAIN: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin
+# CWD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+# NOTE: everything between BEGIN/END markers is verbatim stdout+stderr
+#       of a real binary executed under /usr/bin/timeout 30.
+# BUILD CMD: /usr/bin/clang -std=c99 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -I. -Ilibc/install-include examples/expanded/safety/sync_demo.c build/libc/libcplus_hardened.a -pthread -o "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/sync_demo"
+# RUN CMD: /usr/bin/timeout 30 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/sync_demo
+# --- BEGIN VERBATIM OUTPUT ---
+sync mtx_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+sync cnd_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+sync thrd_join REFUSED join=0 result=42 double=22 (EINVAL=22)
+sync null_handles REFUSED mtx_NULL=22 cnd_NULL=22 thrd_zero=22 (EINVAL=22)
+# --- END VERBATIM OUTPUT ---
+# EXIT_CODE=0
+# TOKEN_OK: sync mtx_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+# TOKEN_OK: sync cnd_destroy REFUSED init_destroy=0 double=22 (EINVAL=22)
+# TOKEN_OK: sync thrd_join REFUSED join=0 result=42 double=22 (EINVAL=22)
+# TOKEN_OK: sync null_handles REFUSED mtx_NULL=22 cnd_NULL=22 thrd_zero=22 (EINVAL=22)
+# VERDICT: PASS -- every expected refusal token was found in real captured output

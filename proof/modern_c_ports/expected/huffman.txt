@@ -1,0 +1,6 @@
+huffman a 8 0
+huffman b 3 10
+huffman c 1 11
+huffman total 12 bits 16
+huffman_bits 1
+HUFFMAN PASS

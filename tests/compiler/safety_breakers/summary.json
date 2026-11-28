@@ -1,0 +1,135 @@
+{
+  "generated": "2026-11-25T19:05:28.291645+00:00",
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "01_aliased_uaf_via_struct",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/01_aliased_uaf_via_struct.cp:15:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'dangling'\n      *dangling = 0x1337;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: alias created: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/01_aliased_uaf_via_struct",
+      "status": "PASS"
+    },
+    {
+      "case": "01_aliased_uaf_via_struct",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/01_aliased_uaf_via_struct.cp:15:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'dangling'\n      *dangling = 0x1337;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: alias created: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/01_aliased_uaf_via_struct",
+      "status": "PASS"
+    },
+    {
+      "case": "02_uaf_address_reuse_f2",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/02_uaf_address_reuse_f2.cp:26:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'stale'\n      *stale = 9999;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/02_uaf_address_reuse_f2.cp:5\nnote: ali",
+      "status": "PASS"
+    },
+    {
+      "case": "02_uaf_address_reuse_f2",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/02_uaf_address_reuse_f2.cp:26:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'stale'\n      *stale = 9999;\n      ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/02_uaf_address_reuse_f2.cp:5\nnote: ali",
+      "status": "PASS"
+    },
+    {
+      "case": "03_union_type_confusion",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-FFI]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_confusion.cp:12:23: error: [CPLUS-FFI] forged pointer from union type punning has unverifiable provenance\n      volatile int x = *u.ptr;\n                        ^~~~~\nhelp: suggested correction: store a real pointer into the union's pointer member instead of fabricating one from an integer constant\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_",
+      "status": "PASS"
+    },
+    {
+      "case": "03_union_type_confusion",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-FFI]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_confusion.cp:12:23: error: [CPLUS-FFI] forged pointer from union type punning has unverifiable provenance\n      volatile int x = *u.ptr;\n                        ^~~~~\nhelp: suggested correction: store a real pointer into the union's pointer member instead of fabricating one from an integer constant\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_",
+      "status": "PASS"
+    },
+    {
+      "case": "04_heap_oob_via_pointer_param",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-BOUNDS]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/04_heap_oob_via_pointer_param.cp:5:5: warning: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n      p[idx] = 0x5555;\n      ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/04_heap_oob_via_pointer_param.cp:12:81: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 12 exceeds heap allocation 'arr' of 16 bytes\n      printf(\"BREACH",
+      "status": "PASS"
+    },
+    {
+      "case": "04_heap_oob_via_pointer_param",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-BOUNDS]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/04_heap_oob_via_pointer_param.cp:5:5: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe\n      p[idx] = 0x5555;\n      ^\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/04_heap_oob_via_pointer_param.cp:12:81: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 12 exceeds heap allocation 'arr' of 16 bytes\n      printf(\"BREACH: ",
+      "status": "PASS"
+    },
+    {
+      "case": "05_data_race_shared_mut",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-BORROW]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/05_data_race_shared_mut.cp:17:5: error: [CPLUS-BORROW] unsynchronized shared state passed to multiple threads: 'counter'\n      pthread_create(&t1, NULL, worker, counter);\n      ^~~~~~~~~~~~~~\nhelp: suggested correction: guard the shared object with a mutex or give each thread its own object\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/05_data_race_shared_mut.cp:18:5: err",
+      "status": "PASS"
+    },
+    {
+      "case": "05_data_race_shared_mut",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-BORROW]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/05_data_race_shared_mut.cp:17:5: error: [CPLUS-BORROW] unsynchronized shared state passed to multiple threads: 'counter'\n      pthread_create(&t1, NULL, worker, counter);\n      ^~~~~~~~~~~~~~\nhelp: suggested correction: guard the shared object with a mutex or give each thread its own object\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/05_data_race_shared_mut.cp:18:5: err",
+      "status": "PASS"
+    },
+    {
+      "case": "06_dangling_stack_out_param",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/06_dangling_stack_out_param.cp:4:5: error: [CPLUS-LIFETIME] address of local escapes through out-parameter\n      int local = 777;\n      ^~~\nhelp: suggested correction: do not store the address of a frame-local through an out-parameter; heap-allocate the object or return it by value\n",
+      "status": "PASS"
+    },
+    {
+      "case": "06_dangling_stack_out_param",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/06_dangling_stack_out_param.cp:4:5: error: [CPLUS-LIFETIME] address of local escapes through out-parameter\n      int local = 777;\n      ^~~\nhelp: suggested correction: do not store the address of a frame-local through an out-parameter; heap-allocate the object or return it by value\n",
+      "status": "PASS"
+    },
+    {
+      "case": "07_func_ptr_format_bypass",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-FFI]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/07_func_ptr_format_bypass.cp:6:5: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n      fn(input);\n      ^~\n",
+      "status": "PASS"
+    },
+    {
+      "case": "07_func_ptr_format_bypass",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-FFI]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/07_func_ptr_format_bypass.cp:6:5: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n      fn(input);\n      ^~\n",
+      "status": "PASS"
+    },
+    {
+      "case": "08_struct_return_dangling_stack",
+      "mode": "--default",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/08_struct_return_dangling_stack.cp:10:5: error: [CPLUS-LIFETIME] struct result contains address of local\n      return r;\n      ^~~~~~\nhelp: suggested correction: copy the pointed-to data into the result or heap-allocate it before returning\n",
+      "status": "PASS"
+    },
+    {
+      "case": "08_struct_return_dangling_stack",
+      "mode": "--strict",
+      "rc": 1,
+      "expected_tag": "[CPLUS-LIFETIME]",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/08_struct_return_dangling_stack.cp:10:5: error: [CPLUS-LIFETIME] struct result contains address of local\n      return r;\n      ^~~~~~\nhelp: suggested correction: copy the pointed-to data into the result or heap-allocate it before returning\n",
+      "status": "PASS"
+    }
+  ],
+  "failures": []
+}

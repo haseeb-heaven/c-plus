@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/cases/alloc_zero_realloc.c --legacy-c --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/emitted/alloc_zero_realloc.guards_off.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/alloc_zero_realloc.guards_off.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

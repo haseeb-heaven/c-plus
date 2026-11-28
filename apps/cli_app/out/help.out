@@ -1,0 +1,7 @@
+Commands:
+  add - add two integers (id=1)
+  mul - multiply two integers (id=2)
+  help - print help text (id=3)
+Options:
+  --verbose
+  --tag=value

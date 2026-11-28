@@ -1,0 +1,59 @@
+{
+  "family": "f100 thread deterministic fuzz configurations",
+  "branch": "agent/modern-stdlib",
+  "date": "2026-11-23",
+  "owner_prefix": "f100_thread_",
+  "mode_order": ["--strict --sanitize=none", "--strict --sanitize=undefined"],
+  "run_timeout_seconds": 30,
+  "notes": "F100_THREAD_JSON_NOTES.md",
+  "configs": [
+    {
+      "id": "F-086",
+      "source": "tests/stdlib/fuzz/f100_thread_mutex.cp",
+      "topic": "mutex deterministic lifecycle with bounded worker threads",
+      "seed": "0xC0FFEE86",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1280,
+      "ops_kind": "4 workers x 256 seeded locked mutations + 256 main-thread mutations",
+      "extra_checks": "64 mutex create/lock/unlock/drop cycles; post-drop no-op; shadow-model counter replay",
+      "watchdog_seconds": 8,
+      "build_flags": [],
+      "expected_digest": "4c35d7a82294a3ab",
+      "expected_final_line": "F086_MUTEX 7 0",
+      "skips": []
+    },
+    {
+      "id": "F-087",
+      "source": "tests/stdlib/fuzz/f100_thread_guard.cp",
+      "topic": "guard deterministic lifecycle with ERRORCHECK mutex and bounded workers",
+      "seed": "0xC0FFEE87",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1280,
+      "ops_kind": "4 workers x 256 guard lifecycles + 256 main-thread lifecycles",
+      "extra_checks": "zero-init/NULL guard no-ops; 64 guard cycles; relock proves single unlock; ERRORCHECK double-unlock fatal detector",
+      "watchdog_seconds": 8,
+      "build_flags": [],
+      "expected_digest": "f6ba43560d079e75",
+      "expected_final_line": "F087_GUARD 11 0",
+      "skips": []
+    },
+    {
+      "id": "F-088",
+      "source": "tests/stdlib/fuzz/f100_thread_condvar.cp",
+      "topic": "condvar deterministic generation lifecycle with bounded waiters",
+      "seed": "0xC0FFEE88",
+      "lcg": "state = state*6364136223846793005 + 1442695040888963407 (mod 2^64); take state >> 33",
+      "ops": 1024,
+      "ops_kind": "4 workers x 256 generation-wait cycles (1024 waits)",
+      "extra_checks": "all-waiters-blocked handshake under mutex; 256 signal/broadcast no-waiter calls; invalid handles; 64 cv cycles; post-drop refusal",
+      "watchdog_seconds": 10,
+      "build_flags": [],
+      "expected_digest": "d391902e5ea53333",
+      "expected_final_line": "F088_CONDVAR 9 0",
+      "skips": [
+        "f088_drop_with_waiter: pthread_cond_destroy with waiters is EBUSY/UB and condvar::drop frees storage without sync",
+        "f088_wait_without_mutex: POSIX cond_wait requires the mutex to be held"
+      ]
+    }
+  ]
+}

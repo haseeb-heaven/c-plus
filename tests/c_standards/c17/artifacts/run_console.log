@@ -1,0 +1,63 @@
+/usr/bin/clang -std=c17 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_c17
+timeout 30 tests/c_standards/c17/artifacts/clang_c17
+/usr/bin/clang -std=c18 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_c18
+timeout 30 tests/c_standards/c17/artifacts/clang_c18
+/usr/bin/clang -std=iso9899:2017 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_iso9899_2017
+timeout 30 tests/c_standards/c17/artifacts/clang_iso9899_2017
+/usr/bin/clang -std=iso9899:2018 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_iso9899_2018
+timeout 30 tests/c_standards/c17/artifacts/clang_iso9899_2018
+/usr/bin/clang -std=gnu17 -pedantic-errors tests/c_standards/c17/source.c -o tests/c_standards/c17/artifacts/clang_gnu17
+timeout 30 tests/c_standards/c17/artifacts/clang_gnu17
+./build/c+ build tests/c_standards/c17/source.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_c17
+timeout 30 tests/c_standards/c17/artifacts/cplus_c17
+./build/c+ build tests/c_standards/c17/source.c -std=c17 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_c17
+./build/c+ build tests/c_standards/c17/source.c -std=c18 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_c18
+timeout 30 tests/c_standards/c17/artifacts/cplus_c18
+./build/c+ build tests/c_standards/c17/source.c -std=c18 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_c18
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2017 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_iso9899_2017
+timeout 30 tests/c_standards/c17/artifacts/cplus_iso9899_2017
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2017 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_iso9899_2017
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2018 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_iso9899_2018
+timeout 30 tests/c_standards/c17/artifacts/cplus_iso9899_2018
+./build/c+ build tests/c_standards/c17/source.c -std=iso9899:2018 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_iso9899_2018
+./build/c+ build tests/c_standards/c17/source.c -std=gnu17 --sanitize=none -o tests/c_standards/c17/artifacts/cplus_gnu17
+timeout 30 tests/c_standards/c17/artifacts/cplus_gnu17
+./build/c+ build tests/c_standards/c17/source.c -std=gnu17 --sanitize=none --verbose -o tests/c_standards/c17/artifacts/verbose_gnu17
+/usr/bin/clang -std=c89 -pedantic-errors tests/c_standards/c17/source.c (expected failure)
+./build/c+ build tests/c_standards/c17/source.c -std=c89 --sanitize=none (expected failure)
+./build/c+ build tests/c_standards/c17/source.c -std=bogus --sanitize=none (expected failure)
+./build/c+ build tests/c_standards/c17/artifacts/game_a_snake.c -std=c17 --sanitize=none (Safe mode)
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/game_a_snake.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/game_a_snake
+./build/c+ build tests/c_standards/c17/artifacts/game_b_2048.c -std=c17 --sanitize=none (Safe mode)
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/game_b_2048.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/game_b_2048
+./build/c+ build tests/c_standards/c17/artifacts/cli_app_xdump.c -std=c17 --sanitize=none (Safe mode)
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/cli_app_xdump.c -std=c17 --sanitize=none -o tests/c_standards/c17/artifacts/cli_app_xdump
+./build/c+ build --legacy-c tests/c_standards/c17/artifacts/game_b_2048.c -std=c17 --sanitize=none --verbose
+printf 'q' | timeout 30 tests/c_standards/c17/artifacts/game_a_snake
+timeout 30 tests/c_standards/c17/artifacts/game_b_2048 test
+timeout 30 tests/c_standards/c17/artifacts/game_b_2048 --version
+timeout 30 tests/c_standards/c17/artifacts/game_b_2048 --help
+timeout 30 tests/c_standards/c17/artifacts/cli_app_xdump -v | -h | file cases
+
+=== results.tsv ===
+spelling	real_std_flags	clang_exit	clang_stderr_bytes	cplus_exit	cplus_stderr_bytes	cplus_run_exit	cplus_run_matches_expected	classification
+c17	 -std=gnu17 -std=c17 	0	0	0	0	0	YES	SUPPORTED
+c18	 -std=gnu17 -std=c18 	0	0	0	0	0	YES	SUPPORTED
+iso9899:2017	 -std=gnu17 -std=iso9899:2017 	0	0	0	0	0	YES	SUPPORTED
+iso9899:2018	 -std=gnu17 -std=iso9899:2018 	0	0	0	0	0	YES	SUPPORTED
+gnu17	 -std=gnu17 -std=gnu17 	0	0	0	0	0	YES	SUPPORTED
+
+=== comparisons.txt ===
+MATCH	game_a_stdout	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_game_a.stdout	external_projects/game_a/build/run.stdout
+MATCH	game_b_test	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_game_b_test.stdout	external_projects/game_b/run_test_stdout.log
+MATCH	game_b_version	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_game_b_version.stdout	external_projects/game_b/run_version_stdout.log
+MATCH	game_b_help	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_game_b_help.stdout	external_projects/game_b/run_help_stdout.log
+MATCH	xdump_version	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_xdump_version.stdout	external_projects/cli_app/build/runs/version.stdout
+MATCH	xdump_help	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_xdump_help.stdout	external_projects/cli_app/build/runs/help.stdout
+MATCH	xdump_file_default	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_xdump_file_default.stdout	external_projects/cli_app/build/runs/file_default.stdout
+MATCH	xdump_file_width8	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_xdump_file_width8.stdout	external_projects/cli_app/build/runs/file_width8.stdout
+MATCH	xdump_file_skip_n	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_xdump_file_skip_n.stdout	external_projects/cli_app/build/runs/file_skip_n.stdout
+MATCH	xdump_missing_file	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/real_xdump_missing_file.stderr	external_projects/cli_app/build/runs/missing_file.stderr
+MATCH	xdump_bad_flag	/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c17/artifacts/xdump_bad_flag.stderr	external_projects/cli_app/build/runs/bad_flag.stderr
+
+Raw logs: tests/c_standards/c17/artifacts/

@@ -6,9 +6,10 @@ the repository's test/demo runs. "partial" is never counted as complete.
 
 | feature | implemented | tested | verified | known limitations |
 | --- | --- | --- | --- | --- |
-| Memory safety (supported subset) | yes | yes | yes | no UAF detection, no pointer-arithmetic checks, no ASan on this host |
+| Memory safety (supported subset) | yes | yes | yes | general heap bounds, arbitrary aliases and complete temporal safety remain unproven; ASan is opt-in/backend-dependent |
 | Compile-time bad array index | yes | yes | yes | constant and simple counted loops only |
 | Compile-time null pointer dereference | yes | yes | yes | Clang AST constant-initializer tracking |
+| Compile-time use-after-free (direct + simple alias) | yes | yes | yes | Clang AST release-state/alias tracking; branch-conservative |
 | Runtime bounds/null/alignment checks | yes | yes | yes | UBSan-based; aborts on first violation |
 | Return-stack-address / uninitialized checks | yes | yes | yes | Clang warnings promoted to errors |
 | Pointer-leak / raw realloc / strict-aliasing checks | yes | yes | yes | token-level static pass |
@@ -59,3 +60,54 @@ ctest --test-dir build --output-on-failure   # 2/2 suites
 ./demos/run_demos.sh                         # 16 demos
 ./benchmarks/run_bench.sh                    # performance table
 ```
+
+## Agent 1 hardening status (branch `agent/core-safety`, commit pending)
+
+### Implemented and verified compile-time checks
+- Constant/loop/multidimensional array bounds; heap allocation bounds including
+  `malloc`, `calloc(count,size)`, `realloc`, alias copies, explicit casts,
+  conflicting call-site extents and heap-factory returns.
+- Mandatory regression: `malloc(1); p[9]=42` is rejected in DEFAULT and STRICT
+  with `[CPLUS-BOUNDS] array index 9 exceeds heap allocation 'p' of 1 bytes`.
+- Runtime-valued signed add/sub/mul, division/remainder by zero, `INT_MIN/-1`,
+  shift count/left-shift validity, narrowing conversions and pointer formation
+  are enforced natively in generated C (no UBSan dependency).
+- UAF/double-free for 10 named single-TU shapes, including cast aliases,
+  helper-returned aliases, released pointers passed to callees and runtime-index
+  elements; invalid free, realloc patterns, RAII/move/ownership diagnostics.
+
+### Missing checks (not claimed)
+- General heap-pointer bounds (name-keyed extents, last-write-wins across
+  multiple call sites is now fail-closed but still not expression-keyed).
+- Arbitrary alias lifetimes, indirect calls, integer round-trips, heap address
+  reuse, threads and cross-TU ownership; complete temporal safety.
+- Sound data races, container/field element lifetimes, full pointer provenance.
+
+### Test results (exact commands and counts)
+```
+tests/run_tests.sh                     -> 109 passed, 0 failed
+tests/core/run.sh                      -> 152 passed, 0 failed
+ctest --test-dir build --output-on-failure -> 2/2
+tests/compiler/agent1/run_all.sh --full   -> 159 total, 156 PASS, 0 FAIL, 3 SKIP
+tests/compiler/agent1/run_bounds_matrix.sh -> 13 PASS, 0 FAIL
+tests/compiler/agent1/run_native_matrix.sh -> 24 PASS, 0 FAIL, 0 BLOCKED
+tests/metrics/uaf_evidence_run.py      -> 12/12 (10 static rejects, 2 safe controls)
+CLANG_BIN=/usr/bin/clang tests/metrics/measure.py
+  -> 90/90 safe DEFAULT and STRICT, 0/0 false positives, 97/107 STRICT detection
+tests/compiler/agent1/perf_run.sh      -> no config regressed >2x
+```
+
+### False-positive cases found and fixed
+- `quarantine_probe.c`: `cplus_check_live` was treated as a dereference by the
+  released-argument rule; liveness queries are now exempted.
+- STRICT 89/90 during that regression; restored to 90/90 with 0 FP.
+
+### Known false negatives
+Indirect calls, function-pointer frees, `uintptr_t` round-trips, arena/container
+elements, cross-TU ownership, races beyond the direct-global heuristic, and
+arithmetic in macro/header locations or wider than 64 bits.
+
+### Performance
+`tests/compiler/agent1/results_perf/summary.txt`: safe_release vs
+legacy_c_release is 1.0x–1.5x across five programs; no >2x regression. Debug
+is ~3x–31x slower than release, as expected for `-O0`.

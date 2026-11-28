@@ -1,0 +1,17 @@
+LRU cap 3
+LRU PUT alpha 1 update=0
+LRU PUT beta 2 update=0
+LRU PUT gamma 3 update=0
+LRU GET alpha 1
+LRU EVICT beta
+LRU PUT delta 4 update=0
+LRU dump n= 3
+LRU entry delta 4
+LRU entry alpha 1
+LRU entry gamma 3
+LRU evictions 1
+LRU evicted beta
+LRU expect alpha OK 1
+LRU expect gamma OK 3
+LRU expect delta OK 4
+LRU_SUMMARY 10 10 0 0

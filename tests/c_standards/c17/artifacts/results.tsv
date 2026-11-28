@@ -1,0 +1,6 @@
+spelling	real_std_flags	clang_exit	clang_stderr_bytes	cplus_exit	cplus_stderr_bytes	cplus_run_exit	cplus_run_matches_expected	classification
+c17	 -std=gnu17 -std=c17 	0	0	0	0	0	YES	SUPPORTED
+c18	 -std=gnu17 -std=c18 	0	0	0	0	0	YES	SUPPORTED
+iso9899:2017	 -std=gnu17 -std=iso9899:2017 	0	0	0	0	0	YES	SUPPORTED
+iso9899:2018	 -std=gnu17 -std=iso9899:2018 	0	0	0	0	0	YES	SUPPORTED
+gnu17	 -std=gnu17 -std=gnu17 	0	0	0	0	0	YES	SUPPORTED

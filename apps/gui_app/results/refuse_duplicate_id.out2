@@ -1,0 +1,2 @@
+GUI_REFUSED tag=duplicate-id category=1 code=108 message=widgets: duplicate id
+GUI_RESULT refuse duplicate-id REFUSED 108

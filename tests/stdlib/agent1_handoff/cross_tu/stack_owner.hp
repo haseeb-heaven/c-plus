@@ -1,0 +1,11 @@
+#ifndef CPLUS_CROSS_TU_STACK_OWNER_HP
+#define CPLUS_CROSS_TU_STACK_OWNER_HP
+
+/* Case C: raw borrowed pointer variant.  Unlike cases A and B this produces
+ * a backend warning/error (-Wreturn-stack-address) in the producer TU only.
+ * It is NOT a C+ tagged diagnostic and the consumer TU remains clean, so it
+ * is recorded as a backend-only signal, not as cross-TU enforcement.
+ */
+const char *produce_stack_view(void);
+
+#endif

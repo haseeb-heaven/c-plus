@@ -1,0 +1,17 @@
+empty 0 1 1 1
+grown 200 1 1
+overwrite 200 1 1
+remove 1 1 1 199
+clear 0 1 1
+tombstones 25 1
+grow 1 1 1
+dropped 0 1
+strmap-empty 0 1 1
+strmap-put 1 1 1
+strmap-get 1 1 1
+strmap-grown 1 1 1
+strmap-remove 1 1 1
+strmap-reinsert 1 1
+strmap-grow 1 1
+strmap-clear 0 1
+strmap-dropped 0 1

@@ -1,0 +1,8 @@
+# Downloaded toolchain archive and per-run binaries are local build inputs,
+# not evidence. The checked-in evidence is six_way.json.
+filc.tar.xz
+six_clang
+six_cplus
+six_rust
+portable_scale_*.goose
+*.bin

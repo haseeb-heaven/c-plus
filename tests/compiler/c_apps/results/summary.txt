@@ -1,0 +1,15 @@
+Original plain-C apps/games + unsafe variants
+tic_tac_toe    legacy=True
+game_2048      legacy=True
+snake          legacy=True
+calculator     legacy=True
+hash_tool      legacy=True
+oob_write      PASS
+uaf            PASS
+null_deref     PASS
+invalid_shift  PASS
+uninit         PASS
+double_free    PASS
+overflow       PASS
+
+failures: 0

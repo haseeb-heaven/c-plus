@@ -12,7 +12,7 @@ namespace cplus {
 /// Diagnostics are mapped back to the original source via #line directives.
 void checkAstSafety(const std::string &loweredC, const std::string &filename,
                     const std::vector<std::string> &backendArgs,
-                    DiagnosticEngine &diags);
+                    DiagnosticEngine &diags, bool strict = false);
 
 } // namespace cplus
 

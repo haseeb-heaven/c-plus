@@ -1,0 +1,564 @@
+/* C+ modern standard library: headless widget toolkit (C syntax, additive).
+ *
+ * MODERN LAYER ONLY.  This header adds a deterministic, headless core for a
+ * widget toolkit: plain C structs, allocator-aware storage and explicit
+ * `error *` diagnostics.  No window system, no threads, no callbacks and no
+ * hidden global state -- the same inputs always produce the same layout, hit
+ * test result and serialized text.  The existing GUI/window headers are not
+ * modified; a renderer can consume the bounds produced by window_layout().
+ *
+ * Design:
+ *   - `stdlib_widget` is a value type: id, kind, label, rect and flags.
+ *   - `stdlib_window` owns an allocator-aware vector of widgets plus a grid
+ *     configuration (origin, size, columns, inset).
+ *   - Every mutating operation validates its inputs first and fails closed
+ *     through `error *` with STDLIB_FAIL; the window is left unchanged.
+ *   - Labels are copied into a fixed inline buffer: oversized labels and
+ *     labels with embedded newlines (which would break line-oriented
+ *     serialization) are refused rather than truncated.
+ *   - Layout is integer-only row-major grid placement; hit testing prefers
+ *     the topmost (most recently added) enabled + visible widget.
+ *
+ * Every helper is static inline: no exported symbols and no ABI change.
+ */
+#ifndef CPLUS_STD_WIDGETS_HP
+#define CPLUS_STD_WIDGETS_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+
+/* Label capacity includes the terminating NUL: a label of 63 bytes is valid,
+ * a label of 64 bytes is refused. */
+#define STDLIB_WIDGET_LABEL_MAX 64u
+
+/* Widget kind tags.  Valid kinds are the closed range below: add() refuses
+ * anything else so downstream layout/render/serialization never sees a stray
+ * tag.  Serialization still prints the integer verbatim. */
+#define STDLIB_WIDGET_BUTTON 1
+#define STDLIB_WIDGET_LABEL  2
+#define STDLIB_WIDGET_INPUT  3
+#define STDLIB_WIDGET_PANEL  4
+#define STDLIB_WIDGET_KIND_MIN STDLIB_WIDGET_BUTTON
+#define STDLIB_WIDGET_KIND_MAX STDLIB_WIDGET_PANEL
+
+/* Flags.  New widgets start with both bits set. */
+#define STDLIB_WIDGET_ENABLED 0x1u
+#define STDLIB_WIDGET_VISIBLE 0x2u
+
+/* Layout grid inset (in pixels) applied to every cell. */
+#define STDLIB_WIDGET_GRID_INSET 1
+
+typedef struct stdlib_widget {
+    int id;
+    int kind;
+    char label[STDLIB_WIDGET_LABEL_MAX];
+    int x;
+    int y;
+    int w;
+    int h;
+    unsigned flags;
+} stdlib_widget;
+
+typedef struct stdlib_window {
+    stdlib_allocator alloc;   /* copied by value; caller owns its context */
+    stdlib_widget *items;     /* contiguous vector, NULL when capacity == 0 */
+    size_t count;
+    size_t capacity;
+    int x;                    /* grid origin */
+    int y;
+    int w;                    /* grid size; must stay positive for layout */
+    int h;
+    int columns;              /* grid columns; must be positive for layout */
+} stdlib_window;
+
+/* -------------------------------------------------------------------------
+ * Internal helpers
+ * ------------------------------------------------------------------------- */
+
+/* Rect is valid when it has positive extent and x+w-1 / y+h-1 stay in int. */
+static inline int stdlib_widgets_rect_valid(int x, int y, int w, int h) {
+    long long x1, y1;
+    if (w <= 0 || h <= 0)
+        return 0;
+    x1 = (long long)x + (long long)w - 1;
+    y1 = (long long)y + (long long)h - 1;
+    if (x1 < (long long)INT_MIN || x1 > (long long)INT_MAX)
+        return 0;
+    if (y1 < (long long)INT_MIN || y1 > (long long)INT_MAX)
+        return 0;
+    return 1;
+}
+
+/* Returns label length or -1 when NULL, too long, or contains a newline.
+ * Reads at most STDLIB_WIDGET_LABEL_MAX bytes, so oversized input is refused
+ * without reading past the advertised capacity. */
+static inline long stdlib_widgets_label_len(const char *label) {
+    long n;
+    if (label == (const char *)0)
+        return -1;
+    for (n = 0; n < (long)STDLIB_WIDGET_LABEL_MAX; n++) {
+        unsigned char c = (unsigned char)label[n];
+        if (c == '\0')
+            return n;
+        if (c == '\n' || c == '\r' || c < 0x20u || c == 0x7fu)
+            return -1;
+    }
+    return -1; /* length >= STDLIB_WIDGET_LABEL_MAX */
+}
+
+static inline int stdlib_widgets_usable(const stdlib_window *win, error *err) {
+    error_reset(err);
+    if (win == (const stdlib_window *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "widgets: NULL window"),
+               STDLIB_FAIL;
+    return STDLIB_OK;
+}
+
+static inline size_t stdlib_widgets_dec_digits(long long value) {
+    unsigned long long u;
+    size_t n = 1u;
+    if (value < 0) {
+        u = (unsigned long long)(-(value + 1)) + 1u;
+        n++; /* the leading '-' is printed too */
+    } else
+        u = (unsigned long long)value;
+    while (u >= 10u) {
+        u /= 10u;
+        n++;
+    }
+    return n;
+}
+
+/* -------------------------------------------------------------------------
+ * Window lifecycle
+ * ------------------------------------------------------------------------- */
+
+/* Initialize an empty window.  `alloc` may be NULL (checked heap default);
+ * when non-NULL its contents are copied, so its context must outlive `win`. */
+static inline int stdlib_window_init(stdlib_window *win,
+                                     const stdlib_allocator *alloc,
+                                     int x, int y, int w, int h, int columns,
+                                     error *err) {
+    error_reset(err);
+    if (win == (stdlib_window *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "widgets: NULL window"),
+               STDLIB_FAIL;
+    if (columns <= 0 || !stdlib_widgets_rect_valid(x, y, w, h))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: invalid window geometry/columns"),
+               STDLIB_FAIL;
+    if (alloc != (const stdlib_allocator *)0)
+        win->alloc = *alloc;
+    else
+        win->alloc = stdlib_heap_allocator();
+    win->items = (stdlib_widget *)0;
+    win->count = 0u;
+    win->capacity = 0u;
+    win->x = x;
+    win->y = y;
+    win->w = w;
+    win->h = h;
+    win->columns = columns;
+    return STDLIB_OK;
+}
+
+/* Release the widget vector.  Idempotent; the allocator context is NOT owned. */
+static inline void stdlib_window_drop(stdlib_window *win, error *err) {
+    error_reset(err);
+    if (win == (stdlib_window *)0)
+        return;
+    if (win->items != (stdlib_widget *)0) {
+        stdlib_deallocate(&win->alloc, win->items,
+                          win->capacity * sizeof(stdlib_widget));
+        win->items = (stdlib_widget *)0;
+    }
+    win->count = 0u;
+    win->capacity = 0u;
+}
+
+static inline size_t stdlib_window_count(const stdlib_window *win, error *err) {
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return 0u;
+    return win->count;
+}
+
+/* -------------------------------------------------------------------------
+ * Widget mutation -- all mutators take an index returned by widget_add
+ * ------------------------------------------------------------------------- */
+
+/* Ensures room for one more widget without changing state on failure. */
+static inline int stdlib_widgets_reserve(stdlib_window *win, error *err) {
+    size_t cap, bytes;
+    void *p;
+    if (win->count < win->capacity)
+        return STDLIB_OK;
+    cap = win->capacity == 0u ? 8u : win->capacity * 2u;
+    if (cap <= win->capacity ||
+        cap > ((size_t)-1) / sizeof(stdlib_widget))
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "widgets: capacity overflow"),
+               STDLIB_FAIL;
+    bytes = cap * sizeof(stdlib_widget);
+    p = stdlib_reallocate(&win->alloc, win->items,
+                          win->capacity * sizeof(stdlib_widget), bytes,
+                          STDLIB_ALIGN_DEFAULT, err);
+    if (p == (void *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE,
+                              "widgets: vector allocation refused"),
+               STDLIB_FAIL;
+    win->items = (stdlib_widget *)p;
+    win->capacity = cap;
+    return STDLIB_OK;
+}
+
+static inline int stdlib_widgets_index(const stdlib_window *win, size_t index,
+                                       error *err) {
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (index >= win->count)
+        return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS,
+                              CPLUS_EXIT_BOUNDS, "widgets: index out of range"),
+               STDLIB_FAIL;
+    return STDLIB_OK;
+}
+
+/* Append a widget.  Returns the new index (>= 0) or STDLIB_FAIL.  `kind`
+ * must be one of the STDLIB_WIDGET_* tags. */
+static inline int stdlib_widget_add(stdlib_window *win, int id, int kind,
+                                    const char *label, int x, int y, int w,
+                                    int h, error *err) {
+    long len;
+    size_t i;
+    stdlib_widget *item;
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (kind < STDLIB_WIDGET_KIND_MIN || kind > STDLIB_WIDGET_KIND_MAX)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: invalid widget kind"),
+               STDLIB_FAIL;
+    if (!stdlib_widgets_rect_valid(x, y, w, h))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: invalid widget bounds"),
+               STDLIB_FAIL;
+    len = stdlib_widgets_label_len(label);
+    if (len < 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: NULL, oversized or control-character label"),
+               STDLIB_FAIL;
+    for (i = 0u; i < win->count; i++) {
+        if (win->items[i].id == id)
+            return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                                  CPLUS_EXIT_UNSUPPORTED,
+                                  "widgets: duplicate id"),
+                   STDLIB_FAIL;
+    }
+    if (stdlib_widgets_reserve(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    item = &win->items[win->count];
+    item->id = id;
+    item->kind = kind;
+    memcpy(item->label, label, (size_t)len + 1u);
+    item->x = x;
+    item->y = y;
+    item->w = w;
+    item->h = h;
+    item->flags = STDLIB_WIDGET_ENABLED | STDLIB_WIDGET_VISIBLE;
+    win->count++;
+    return (int)win->count - 1;
+}
+
+static inline int stdlib_widget_label(stdlib_window *win, size_t index,
+                                      const char *label, error *err) {
+    long len;
+    if (stdlib_widgets_index(win, index, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    len = stdlib_widgets_label_len(label);
+    if (len < 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: NULL, oversized or control-character label"),
+               STDLIB_FAIL;
+    memcpy(win->items[index].label, label, (size_t)len + 1u);
+    return STDLIB_OK;
+}
+
+static inline int stdlib_widget_set_bounds(stdlib_window *win, size_t index,
+                                           int x, int y, int w, int h,
+                                           error *err) {
+    if (stdlib_widgets_index(win, index, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (!stdlib_widgets_rect_valid(x, y, w, h))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: invalid widget bounds"),
+               STDLIB_FAIL;
+    win->items[index].x = x;
+    win->items[index].y = y;
+    win->items[index].w = w;
+    win->items[index].h = h;
+    return STDLIB_OK;
+}
+
+static inline int stdlib_widget_enable(stdlib_window *win, size_t index,
+                                       int enabled, error *err) {
+    if (stdlib_widgets_index(win, index, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (enabled)
+        win->items[index].flags |= STDLIB_WIDGET_ENABLED;
+    else
+        win->items[index].flags &= ~STDLIB_WIDGET_ENABLED;
+    return STDLIB_OK;
+}
+
+static inline int stdlib_widget_visible(stdlib_window *win, size_t index,
+                                        int visible, error *err) {
+    if (stdlib_widgets_index(win, index, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (visible)
+        win->items[index].flags |= STDLIB_WIDGET_VISIBLE;
+    else
+        win->items[index].flags &= ~STDLIB_WIDGET_VISIBLE;
+    return STDLIB_OK;
+}
+
+/* Look up `id` with an explicit outcome.  Returns STDLIB_OK for a completed
+ * lookup (found flag tells whether the ID was present) and STDLIB_FAIL only
+ * for an invalid window, with `err` populated.  Outputs are initialized on
+ * every successful call, so callers can no longer confuse a missing ID with a
+ * corrupt window. */
+static inline int stdlib_widget_index_by_id(const stdlib_window *win, int id,
+                                            size_t *out_index, int *out_found,
+                                            error *err) {
+    size_t i;
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (out_index != (size_t *)0)
+        *out_index = 0u;
+    if (out_found != (int *)0)
+        *out_found = 0;
+    for (i = 0u; i < win->count; i++) {
+        if (win->items[i].id == id) {
+            if (out_index != (size_t *)0)
+                *out_index = i;
+            if (out_found != (int *)0)
+                *out_found = 1;
+            return STDLIB_OK;
+        }
+    }
+    return STDLIB_OK; /* absent is a completed lookup, not an error */
+}
+
+/* Borrowed pointer to the widget with `id`, or NULL when absent.  `err` is
+ * populated only when the window itself is invalid. */
+static inline stdlib_widget *stdlib_widget_find_by_id(stdlib_window *win,
+                                                      int id, error *err) {
+    size_t index = 0u;
+    int found = 0;
+    if (stdlib_widget_index_by_id(win, id, &index, &found, err) != STDLIB_OK ||
+        !found)
+        return (stdlib_widget *)0;
+    return &win->items[index];
+}
+
+/* -------------------------------------------------------------------------
+ * Deterministic layout, hit testing and serialization
+ * ------------------------------------------------------------------------- */
+
+/* Place every widget on an integer row-major grid.  Hidden/disabled widgets
+ * keep their cell so the mapping is a pure function of count and geometry.
+ * Returns STDLIB_OK (even for an empty window) or STDLIB_FAIL. */
+static inline int stdlib_window_layout(stdlib_window *win, error *err) {
+    size_t i, rows;
+    int cols, cell_w, cell_h;
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    cols = win->columns;
+    if (cols <= 0 || !stdlib_widgets_rect_valid(win->x, win->y,
+                                                win->w, win->h))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: invalid layout geometry/columns"),
+               STDLIB_FAIL;
+    if (win->count == 0u)
+        return STDLIB_OK;
+    if (win->count > (size_t)-1 - ((size_t)cols - 1u))
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "widgets: grid size overflow"),
+               STDLIB_FAIL;
+    rows = (win->count + (size_t)cols - 1u) / (size_t)cols;
+    if (rows == 0u || rows > (size_t)INT_MAX)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS, "widgets: invalid grid rows"),
+               STDLIB_FAIL;
+    cell_w = win->w / cols;
+    cell_h = win->h / (int)rows;
+    if (cell_w <= 2 * STDLIB_WIDGET_GRID_INSET ||
+        cell_h <= 2 * STDLIB_WIDGET_GRID_INSET)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS,
+                              "widgets: grid cell too small"),
+               STDLIB_FAIL;
+    /* Row-major coordinates are monotone, so the last widget has the largest
+     * ones; check them before mutating anything to keep failure atomic. */
+    {
+        int last_col = (int)((win->count - 1u) % (size_t)cols);
+        int last_row = (int)((win->count - 1u) / (size_t)cols);
+        long long max_x = (long long)win->x +
+                          (long long)last_col * cell_w +
+                          STDLIB_WIDGET_GRID_INSET;
+        long long max_y = (long long)win->y +
+                          (long long)last_row * cell_h +
+                          STDLIB_WIDGET_GRID_INSET;
+        if (max_x < (long long)INT_MIN || max_x > (long long)INT_MAX ||
+            max_y < (long long)INT_MIN || max_y > (long long)INT_MAX)
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "widgets: grid coordinate overflow"),
+                   STDLIB_FAIL;
+    }
+    for (i = 0u; i < win->count; i++) {
+        int col = (int)(i % (size_t)cols);
+        int row = (int)(i / (size_t)cols);
+        win->items[i].x = win->x + col * cell_w + STDLIB_WIDGET_GRID_INSET;
+        win->items[i].y = win->y + row * cell_h + STDLIB_WIDGET_GRID_INSET;
+        win->items[i].w = cell_w - 2 * STDLIB_WIDGET_GRID_INSET;
+        win->items[i].h = cell_h - 2 * STDLIB_WIDGET_GRID_INSET;
+    }
+    return STDLIB_OK;
+}
+
+/* Hit test: returns 1 on a hit (index written to *out_index), 0 on a miss,
+ * STDLIB_FAIL on invalid arguments.  Only enabled + visible widgets count and
+ * the most recently added matching widget wins on overlap. */
+static inline int stdlib_window_hit_test(const stdlib_window *win, int px,
+                                         int py, size_t *out_index,
+                                         error *err) {
+    size_t i;
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (out_index == (size_t *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "widgets: NULL hit-test output"),
+               STDLIB_FAIL;
+    for (i = win->count; i > 0u; i--) {
+        const stdlib_widget *w = &win->items[i - 1u];
+        if ((w->flags & (STDLIB_WIDGET_ENABLED | STDLIB_WIDGET_VISIBLE)) !=
+            (STDLIB_WIDGET_ENABLED | STDLIB_WIDGET_VISIBLE))
+            continue;
+        /* Long-long right edge: x + w may be INT_MAX + 1 for a valid rect. */
+        if (px >= w->x && (long long)px < (long long)w->x + w->w &&
+            py >= w->y && (long long)py < (long long)w->y + w->h) {
+            *out_index = i - 1u;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Exact byte length of the serialization (including the terminating NUL). */
+static inline int stdlib_window_serialized_size(const stdlib_window *win,
+                                                size_t *out_size, error *err) {
+    size_t i, need;
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (out_size == (size_t *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "widgets: NULL serialization output"),
+               STDLIB_FAIL;
+    need = 8u + stdlib_widgets_dec_digits((long long)win->count) + 1u + 1u;
+    for (i = 0u; i < win->count; i++) {
+        const stdlib_widget *w = &win->items[i];
+        size_t part = 2u;                                  /* "W " */
+        part += stdlib_widgets_dec_digits((long long)w->id) + 1u;
+        part += stdlib_widgets_dec_digits((long long)w->kind) + 1u;
+        part += stdlib_widgets_dec_digits((long long)w->x) + 1u;
+        part += stdlib_widgets_dec_digits((long long)w->y) + 1u;
+        part += stdlib_widgets_dec_digits((long long)w->w) + 1u;
+        part += stdlib_widgets_dec_digits((long long)w->h) + 1u;
+        part += stdlib_widgets_dec_digits((long long)w->flags) + 1u;
+        part += strlen(w->label) + 1u;                     /* label + '\n' */
+        if (need > ((size_t)-1) - part)
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "widgets: serialization size overflow"),
+                   STDLIB_FAIL;
+        need += part;
+    }
+    *out_size = need;
+    return STDLIB_OK;
+}
+
+/* Deterministic text form (no pointers, no locale, no allocation):
+ *
+ *   WIDGETS <count>\n
+ *   W <id> <kind> <x> <y> <w> <h> <flags> <label>\n   (one line per widget)
+ *
+ * On a too-small buffer the destination is left completely untouched.
+ */
+static inline int stdlib_window_serialize(const stdlib_window *win, char *out,
+                                          size_t out_size, error *err) {
+    size_t need = 0u, used, i;
+    int n;
+    if (stdlib_widgets_usable(win, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (out == (char *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "widgets: NULL serialization buffer"),
+               STDLIB_FAIL;
+    if (stdlib_window_serialized_size(win, &need, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (out_size < need)
+        return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS,
+                              CPLUS_EXIT_BOUNDS,
+                              "widgets: serialization buffer too small"),
+               STDLIB_FAIL;
+    used = 0u;
+    n = snprintf(out, out_size, "WIDGETS %zu\n", win->count);
+    if (n < 0 || (size_t)n >= out_size - used)
+        return error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                              "widgets: serialization write failed"),
+               STDLIB_FAIL;
+    used += (size_t)n;
+    for (i = 0u; i < win->count; i++) {
+        const stdlib_widget *w = &win->items[i];
+        size_t label_len = strlen(w->label);
+        n = snprintf(out + used, out_size - used,
+                     "W %d %d %d %d %d %d %u ", w->id, w->kind, w->x, w->y,
+                     w->w, w->h, w->flags);
+        if (n < 0 || (size_t)n >= out_size - used)
+            return error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                                  "widgets: serialization write failed"),
+                   STDLIB_FAIL;
+        used += (size_t)n;
+        /* snprintf reserved a byte for its NUL but the label, newline and
+         * final NUL are written directly: keep those writes in bounds. */
+        if (label_len + 2u > out_size - used)
+            return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "widgets: serialization label overflow"),
+                   STDLIB_FAIL;
+        memcpy(out + used, w->label, label_len);
+        used += label_len;
+        out[used++] = '\n';
+    }
+    out[used] = '\0';
+    return STDLIB_OK;
+}
+
+#endif /* CPLUS_STD_WIDGETS_HP */

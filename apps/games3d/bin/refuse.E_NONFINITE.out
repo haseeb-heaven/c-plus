@@ -1,0 +1,2 @@
+REFUSE code=E_NONFINITE reason=infinite rotation axis rejected by math3d
+SCENE_DONE status=REFUSED code=E_NONFINITE

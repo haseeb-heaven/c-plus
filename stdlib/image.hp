@@ -1,0 +1,203 @@
+/* C+ standard library: image decoding/encoding via stb_image / stb_image_write
+ * (public domain / MIT, vendored in third_party/stb).
+ *
+ * C++-flavoured RAII over upstream: `image pic = image("a.png", 0, &err);`
+ * decodes, `.pixel(x, y)` borrows a pixel, and the destructor releases the
+ * buffer.  Decoding itself is stb's job - there is no image codec here.
+ *
+ * Build third_party/stb/stb_impl.c once and add third_party/stb to the
+ * include path.
+ */
+#ifndef CPLUS_STD_IMAGE_HP
+#define CPLUS_STD_IMAGE_HP
+
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stb_image.h"
+#include "stb_image_write.h"
+
+class image {
+    unsigned char *pixels;
+    int cols;
+    int rows;
+    int channels_in_use;
+
+    /* A NULL path yields an empty image without recording an error; the
+     * from-pixels / from-memory helpers fill it in afterwards. */
+    image(const char *path, int desired_channels, error *err) {
+        do {
+            error_reset(err);
+            this->pixels = NULL;
+            this->cols = 0;
+            this->rows = 0;
+            this->channels_in_use = 0;
+            if (path == NULL)
+                break;
+            if (desired_channels < 0 || desired_channels > 4) {
+                error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                               "image: desired_channels must be 0..4");
+                break;
+            }
+            this->pixels = stbi_load(path, &this->cols, &this->rows,
+                                     &this->channels_in_use, desired_channels);
+            if (this->pixels == NULL) {
+                const char *why = stbi_failure_reason();
+                error_fail(err, CPLUS_EXIT_IO,
+                           why != NULL ? why : "image decode failed");
+                this->cols = 0;
+                this->rows = 0;
+                this->channels_in_use = 0;
+            } else if (desired_channels > 0) {
+                this->channels_in_use = desired_channels;
+            }
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->pixels != NULL && this->cols > 0 && this->rows > 0 &&
+               this->channels_in_use > 0;
+    }
+
+    int width(void) {
+        return this->cols;
+    }
+
+    int height(void) {
+        return this->rows;
+    }
+
+    int channels(void) {
+        return this->channels_in_use;
+    }
+
+    size_t size_bytes(void) {
+        if (!this->valid())
+            return 0;
+        return (size_t)this->cols * (size_t)this->rows *
+               (size_t)this->channels_in_use;
+    }
+
+    /* Borrowed pixel; NULL when out of range.  Valid while the image lives. */
+    const unsigned char *pixel(int x, int y) {
+        if (!this->valid() || x < 0 || y < 0 || x >= this->cols || y >= this->rows)
+            return NULL;
+        return this->pixels + ((size_t)y * (size_t)this->cols + (size_t)x) *
+                                  (size_t)this->channels_in_use;
+    }
+
+    int write_png(const char *path, error *err) {
+        error_reset(err);
+        if (path == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "image::write_png: null path");
+            return STDLIB_FAIL;
+        }
+        if (!this->valid()) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "image::write_png: empty image");
+            return STDLIB_FAIL;
+        }
+        if (this->cols > INT_MAX / this->channels_in_use) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "image::write_png: stride overflow");
+            return STDLIB_FAIL;
+        }
+        if (stbi_write_png(path, this->cols, this->rows, this->channels_in_use,
+                           this->pixels, this->cols * this->channels_in_use) == 0) {
+            error_fail(err, CPLUS_EXIT_IO, "image::write_png: write failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int write_bmp(const char *path, error *err) {
+        error_reset(err);
+        if (path == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "image::write_bmp: null path");
+            return STDLIB_FAIL;
+        }
+        if (!this->valid()) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "image::write_bmp: empty image");
+            return STDLIB_FAIL;
+        }
+        if (stbi_write_bmp(path, this->cols, this->rows, this->channels_in_use,
+                           this->pixels) == 0) {
+            error_fail(err, CPLUS_EXIT_IO, "image::write_bmp: write failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->pixels != NULL) {
+            stbi_image_free(this->pixels);
+            this->pixels = NULL;
+        }
+        this->cols = 0;
+        this->rows = 0;
+        this->channels_in_use = 0;
+    }
+};
+
+/* Copies caller pixels into an stb-owned buffer, so the result always owns
+ * memory that image_drop can release.  An image is move-only: transfer it
+ * with cplus_move instead of copying the struct. */
+static inline image image_from_pixels(const unsigned char *source, int width,
+                                      int height, int channels, error *err) {
+    image out = image(NULL, 0, err);
+    size_t total;
+    error_reset(err);
+    if (source == NULL || width <= 0 || height <= 0 || channels <= 0) {
+        error_fail(err, CPLUS_EXIT_IO, "image_from_pixels: invalid dimensions");
+        return out;
+    }
+    /* Checked arithmetic: the byte count must not wrap size_t. */
+    if ((size_t)width > SIZE_MAX / (size_t)channels ||
+        (size_t)width * (size_t)channels > SIZE_MAX / (size_t)height) {
+        error_fail(err, CPLUS_EXIT_BOUNDS, "image_from_pixels: size overflow");
+        return out;
+    }
+    total = (size_t)width * (size_t)height * (size_t)channels;
+    /* stbi_image_free() is free(); allocate from the same allocator. */
+    out.pixels = (unsigned char *)malloc(total);
+    if (out.pixels == NULL) {
+        error_fail(err, CPLUS_EXIT_RESOURCE, "image_from_pixels: allocation failed");
+        return out;
+    }
+    memcpy(out.pixels, source, total);
+    out.cols = width;
+    out.rows = height;
+    out.channels_in_use = channels;
+    return out;
+}
+
+/* Decodes from a caller-owned buffer; the buffer is not retained. */
+static inline image image_from_memory(const unsigned char *data, int size,
+                                      int desired_channels, error *err) {
+    image out = image(NULL, 0, err);
+    error_reset(err);
+    if (desired_channels < 0 || desired_channels > 4) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "image_from_memory: desired_channels must be 0..4");
+        return out;
+    }
+    if (data == NULL || size <= 0) {
+        error_fail(err, CPLUS_EXIT_IO, "image_from_memory: empty buffer");
+        return out;
+    }
+    out.pixels = stbi_load_from_memory(data, size, &out.cols, &out.rows,
+                                       &out.channels_in_use, desired_channels);
+    if (out.pixels == NULL) {
+        const char *why = stbi_failure_reason();
+        error_fail(err, CPLUS_EXIT_IO, why != NULL ? why : "image decode failed");
+        out.cols = 0;
+        out.rows = 0;
+        out.channels_in_use = 0;
+    } else if (desired_channels > 0) {
+        out.channels_in_use = desired_channels;
+    }
+    return out;
+}
+
+#endif

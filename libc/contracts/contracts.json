@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "library": "cplus-hardened-libc",
+  "apis": [
+    {"name":"malloc","header":"stdlib.h","ownership":"returns owned or NULL","bounds":"bytes argument","invalid":"size overflow impl-defined; allocator failure NULL","errors":"errno may be ENOMEM"},
+    {"name":"calloc","header":"stdlib.h","ownership":"returns owned zeroed or NULL","bounds":"count*size overflow checked","invalid":"overflow -> NULL","errors":"ENOMEM"},
+    {"name":"realloc","header":"stdlib.h","ownership":"on success transfers; on failure preserves old","bounds":"bytes","invalid":"NULL ptr acts as malloc; bytes 0 impl-defined","errors":"ENOMEM"},
+    {"name":"free","header":"stdlib.h","ownership":"invalidates owner","bounds":"must be prior malloc/calloc/realloc","invalid":"NULL no-op; double free/UAF UB","errors":"none"},
+    {"name":"memcpy","header":"string.h","ownership":"none","bounds":"n bytes readable/writable","invalid":"overlap UB; null+nonzero UB","errors":"none"},
+    {"name":"memmove","header":"string.h","ownership":"none","bounds":"n bytes","invalid":"null+nonzero UB","errors":"none"},
+    {"name":"memset","header":"string.h","ownership":"none","bounds":"n bytes writable","invalid":"null+nonzero UB","errors":"none"},
+    {"name":"strlen","header":"string.h","ownership":"none","bounds":"NUL-terminated readable","invalid":"nonterminated UB","errors":"none"},
+    {"name":"strcpy","header":"string.h","ownership":"none","bounds":"dest capacity >= src+1","invalid":"overflow UB","errors":"none"},
+    {"name":"printf_s","header":"stdio.h","ownership":"none","bounds":"literal format required (CWE-134); forbids %n","invalid":"non-literal format or %n triggers runtime violation (exit 70 / EINVAL)","errors":"EINVAL on null/violation","format_literal_required":true,"forbids_percent_n":true},
+    {"name":"fprintf_s","header":"stdio.h","ownership":"none","bounds":"non-null stream; literal format required (CWE-134); forbids %n","invalid":"null stream/format, non-literal format, or %n rejected","errors":"EINVAL on null/violation","format_literal_required":true,"forbids_percent_n":true},
+    {"name":"snprintf_s","header":"stdio.h","ownership":"none","bounds":"dmax <= dest capacity; literal format required (CWE-134); forbids %n","invalid":"dmax overflow, UAF, non-literal format, or %n triggers runtime violation","errors":"EINVAL on invalid/violation","format_literal_required":true,"forbids_percent_n":true,"bounds_checked_dest":true},
+    {"name":"sprintf_s","header":"stdio.h","ownership":"none","bounds":"dmax <= dest capacity; literal format required (CWE-134); forbids %n","invalid":"dmax overflow, UAF, non-literal format, or %n triggers runtime violation","errors":"EINVAL on invalid/violation","format_literal_required":true,"forbids_percent_n":true,"bounds_checked_dest":true},
+    {"name":"scanf_s","header":"stdio.h","ownership":"none","bounds":"literal format required (CWE-134); %s/%[ require field width (CWE-120); forbids %n","invalid":"non-literal format, unbounded %s/%[, or %n triggers runtime violation","errors":"EINVAL on invalid/violation, EOF on input end","format_literal_required":true,"forbids_percent_n":true,"scanf_bounded_width_required":true},
+    {"name":"fscanf_s","header":"stdio.h","ownership":"none","bounds":"non-null stream; literal format required (CWE-134); %s/%[ require field width (CWE-120); forbids %n","invalid":"null stream/format, non-literal format, unbounded %s/%[, or %n rejected","errors":"EINVAL on invalid/violation, EOF on input end","format_literal_required":true,"forbids_percent_n":true,"scanf_bounded_width_required":true},
+    {"name":"sscanf_s","header":"stdio.h","ownership":"none","bounds":"non-null str; literal format required (CWE-134); %s/%[ require field width (CWE-120); forbids %n","invalid":"null/UAF str or format, non-literal format, unbounded %s/%[, or %n rejected","errors":"EINVAL on invalid/violation, EOF on input end","format_literal_required":true,"forbids_percent_n":true,"scanf_bounded_width_required":true}
+  ]
+}

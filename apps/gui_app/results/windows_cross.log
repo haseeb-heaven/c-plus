@@ -1,0 +1,3 @@
+WIN_PROBE bytes=157 crc32=a52b03af OK
+WIN_CROSS_COFF Intel amd64 COFF object file, no line number info, not stripped, 10 sections, symbol offset=0x6e6, 33 symbols, 1st section name ".text"
+GUI_APP_WINDOWS_COFF compile_only=1 native_probe=PASS object=PASS runtime=BLOCKED

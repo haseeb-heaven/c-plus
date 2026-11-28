@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.c --default --sanitize=none -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases -labi_lib_helper_default -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

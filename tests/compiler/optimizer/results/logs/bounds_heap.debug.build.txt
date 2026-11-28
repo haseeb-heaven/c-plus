@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/cases/bounds_heap.c --debug --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/emitted/bounds_heap.debug.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/bounds_heap.debug.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

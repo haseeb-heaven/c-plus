@@ -1,0 +1,434 @@
+/* C+ additive adaptation of Microsoft GSL: narrow / not_null / span.
+ *
+ * This header is ADDITIVE.  It defines new C+ names only.  It does not redefine
+ * any pointer type, does not add a "fat pointer", and does not touch any
+ * existing ABI.  Ordinary C pointers keep their exact representation and all
+ * existing stdlib/error.hp APIs are used unchanged.
+ *
+ * ---------------------------------------------------------------------------
+ * UPSTREAM PROVENANCE (fetched 2026-11-23, branch `main`)
+ * ---------------------------------------------------------------------------
+ *   span      https://raw.githubusercontent.com/microsoft/GSL/main/include/gsl/span
+ *             latest visible touch on main: 417ef68 (2026-08-25,
+ *             "Prevent external construction of checked iterators (#1263)")
+ *   pointers  https://raw.githubusercontent.com/microsoft/GSL/main/include/gsl/pointers
+ *             latest visible touch on main: a75212b (2026-07-13,
+ *             "feat: implementation of gsl::dyn_array (#1228)")
+ *   narrow    https://raw.githubusercontent.com/microsoft/GSL/main/include/gsl/narrow
+ *             latest visible touch on main: 08687fb (2026-08-25,
+ *             "Fix floating-to-integral narrow undefined behavior (#1266)")
+ *   LICENSE   https://raw.githubusercontent.com/microsoft/GSL/main/LICENSE
+ *
+ *   Upstream license: MIT.  Copyright (c) 2015 Microsoft Corporation.
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ *   copy of this software and associated documentation files (the "Software"),
+ *   to deal in the Software without restriction, including without limitation
+ *   the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ *   and/or sell copies of the Software, and to permit persons to whom the
+ *   Software is furnished to do so, subject to the following conditions: the
+ *   above copyright notice and this permission notice shall be included in all
+ *   copies or substantial portions of the Software.  THE SOFTWARE IS PROVIDED
+ *   "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ *   NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ *   PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ *   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ *   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ *   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT WAS PORTED (and how it was adapted to a C-like language)
+ * ---------------------------------------------------------------------------
+ *   gsl::narrow<T>(U)  -> gsl_narrow_*() below.  C+ has no templates and no
+ *     C++ exceptions, so each width pair is an explicit function that returns
+ *     STDLIB_OK / STDLIB_FAIL and reports failure through `error *err` with
+ *     STDLIB_CATEGORY_RANGE / CPLUS_EXIT_TYPE_CONFUSION.  The actual upstream
+ *     representability check is preserved in full:
+ *       1. PREFLIGHT (upstream static_cast_is_defined / range precondition)
+ *       2. CAST       (upstream narrow_cast<T>)
+ *       3. ROUND-TRIP equality (upstream static_cast<U>(t) != u)
+ *       4. SIGN CHECK (upstream is_different_signedness &&
+ *                      ((t < T{}) != (u < U{})))
+ *     The preflight runs BEFORE the cast, so no out-of-range conversion is
+ *     ever performed; stages 3 and 4 are retained verbatim in spirit.
+ *
+ *   gsl::not_null<T>   -> gsl_not_null_i32 / gsl_not_null_void below.  The
+ *     C++ deleted nullptr constructor becomes a factory that refuses NULL.
+ *     The wrapper has exactly one pointer member (zero size overhead, as in
+ *     GSL).  Increment/decrement/subscript are deliberately NOT provided.
+ *
+ *   gsl::span<T>       -> gsl_span_i32 below.  Explicit (base, count) view,
+ *     plus two provenance fields used only for strict-mode range validation.
+ *     GSL's Expects(index < size()) in at()/operator[] becomes a refusal that
+ *     writes an error and performs NO dereference.  first/last/subspan mirror
+ *     the upstream bounds preconditions.  A span only accepts a base returned
+ *     by stdlib_alloc / stdlib_calloc, because strict-safe pointer arithmetic
+ *     needs provenance (see LIMITS).
+ *
+ * ---------------------------------------------------------------------------
+ * LIMITS (documented, not bugs)
+ * ---------------------------------------------------------------------------
+ *   - A span over an arbitrary stack/static/malloc pointer, or over an
+ *     interior pointer with no allocation base, is refused.  This is the same
+ *     provenance rule already used by stdlib/memory.hp; it does NOT change how
+ *     ordinary pointers are represented.
+ *   - A span does not extend the lifetime of its owner.  Freeing the owner
+ *     while a span exists makes later at() calls fail the metadata check (the
+ *     stale address is never dereferenced), but the caller must still release
+ *     ownership correctly.
+ *   - not_null's invariant is enforced by its factory.  C cannot stop a caller
+ *     from aggregate-initialising the struct directly; doing so voids the
+ *     invariant, exactly as bypassing a C++ constructor would.
+ *   - Floating-point sources are intentionally out of scope for the typed
+ *     narrow_* entry points: the strict checker rejects lossy float-to-int
+ *     conversions, and the upstream preflight for that case is documented in
+ *     NOTES.md rather than re-implemented with host FP limits.
+ */
+#ifndef CPLUS_STD_GSL_ADAPT_HP
+#define CPLUS_STD_GSL_ADAPT_HP
+
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+/* memory.hp supplies stdlib_mem_check_range / stdlib_alloc_size and includes
+ * stdlib/error.hp; reusing it keeps the span range check on the exact same
+ * subtraction-based, fail-closed path as the rest of the C+ stdlib. */
+#include "stdlib/memory.hp"
+
+/* ---- shared fail-closed refusals (same convention as stdlib/memory.hp) ---- */
+
+static inline int gsl_adapt_refuse_null(error *err) {
+    return error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_NULL_POINTER,
+                          "gsl_adapt: NULL pointer or out parameter"),
+           STDLIB_FAIL;
+}
+
+static inline int gsl_adapt_refuse_range(error *err) {
+    return error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_TYPE_CONFUSION,
+                          "gsl_narrow: value is not representable in target type"),
+           STDLIB_FAIL;
+}
+
+static inline int gsl_adapt_refuse_bounds(error *err) {
+    return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                          "gsl_span: element index or subrange out of bounds"),
+           STDLIB_FAIL;
+}
+
+/* ==========================================================================
+ * 1. narrow port -- preflight, cast, round-trip equality, sign check
+ * ========================================================================== */
+
+static inline int gsl_narrow_i64_i8(long long u, signed char *out, error *err) {
+    signed char t;
+    if (out == (signed char *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u < (long long)SCHAR_MIN || u > (long long)SCHAR_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (signed char)u;
+    /* 3. roundtrip */ if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign     */ if ((t < (signed char)0) != (u < 0LL))
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_i64_u8(long long u, unsigned char *out, error *err) {
+    unsigned char t;
+    if (out == (unsigned char *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u < 0LL || u > (long long)UCHAR_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (unsigned char)u;
+    /* 3. roundtrip */ if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign (different signedness: GSL tests u < U{}; preflight covers it) */
+    if (u < 0LL) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_i64_i16(long long u, short *out, error *err) {
+    short t;
+    if (out == (short *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u < (long long)SHRT_MIN || u > (long long)SHRT_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (short)u;
+    /* 3. roundtrip */ if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign     */ if ((t < (short)0) != (u < 0LL))
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_i64_u16(long long u, unsigned short *out, error *err) {
+    unsigned short t;
+    if (out == (unsigned short *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u < 0LL || u > (long long)USHRT_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (unsigned short)u;
+    /* 3. roundtrip */ if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign (u < U{} for unsigned source is always false) */
+    if (u < 0LL) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_i64_i32(long long u, int *out, error *err) {
+    int t;
+    if (out == (int *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u < (long long)INT_MIN || u > (long long)INT_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (int)u;
+    /* 3. roundtrip */ if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign     */ if ((t < 0) != (u < 0LL))
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_i64_u32(long long u, unsigned int *out, error *err) {
+    unsigned int t;
+    if (out == (unsigned int *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u < 0LL || u > (long long)UINT_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (unsigned int)u;
+    /* 3. roundtrip */ if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign (different signedness: GSL tests u < U{}) */
+    if (u < 0LL) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_i64_i64(long long u, long long *out, error *err) {
+    long long t;
+    if (out == (long long *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* identity: preflight is the full source range */
+    if (u < LLONG_MIN || u > LLONG_MAX) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    t = (long long)u;
+    if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    if ((t < 0LL) != (u < 0LL)) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_i64_u64(long long u, unsigned long long *out, error *err) {
+    unsigned long long t;
+    if (out == (unsigned long long *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight (negative signed -> unsigned is a GSL sign-check refusal) */
+    if (u < 0LL || u > (long long)LLONG_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (unsigned long long)u;
+    /* 3. roundtrip */ if ((long long)t != u) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign     */ if (u < 0LL) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_u64_i64(unsigned long long u, long long *out, error *err) {
+    long long t;
+    if (out == (long long *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u > (unsigned long long)LLONG_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (long long)u;
+    /* 3. roundtrip */ if ((unsigned long long)t != u)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign (u < U{} is always false for an unsigned source) */
+    if (t < 0LL) return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_u64_u8(unsigned long long u, unsigned char *out, error *err) {
+    unsigned char t;
+    if (out == (unsigned char *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u > (unsigned long long)UCHAR_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (unsigned char)u;
+    /* 3. roundtrip */ if ((unsigned long long)t != u)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign: GSL's (t < T{}) != (u < U{}) is false on both sides for an
+     *          unsigned -> unsigned pair, so the check is vacuous here. */
+    *out = t;
+    return STDLIB_OK;
+}
+
+static inline int gsl_narrow_u64_u32(unsigned long long u, unsigned int *out, error *err) {
+    unsigned int t;
+    if (out == (unsigned int *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    /* 1. preflight */ if (u > (unsigned long long)UINT_MAX)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 2. cast     */ t = (unsigned int)u;
+    /* 3. roundtrip */ if ((unsigned long long)t != u)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    /* 4. sign: vacuous for unsigned -> unsigned (both sides always false). */
+    *out = t;
+    return STDLIB_OK;
+}
+
+/* ==========================================================================
+ * 2. not_null port -- guarded construction, zero size overhead
+ * ========================================================================== */
+
+typedef struct gsl_not_null_i32 {
+    int *ptr;
+} gsl_not_null_i32;
+
+typedef struct gsl_not_null_void {
+    void *ptr;
+} gsl_not_null_void;
+
+static inline int gsl_not_null_i32_make(int *p, gsl_not_null_i32 *out, error *err) {
+    if (out == (gsl_not_null_i32 *)0 || p == (int *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    out->ptr = p;
+    return STDLIB_OK;
+}
+
+static inline int gsl_not_null_i32_get(const gsl_not_null_i32 *nn, int **out, error *err) {
+    if (nn == (const gsl_not_null_i32 *)0 || out == (int **)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (nn->ptr == (int *)0) /* re-assert the invariant before handing it out */
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    *out = nn->ptr;
+    return STDLIB_OK;
+}
+
+static inline void gsl_not_null_i32_swap(gsl_not_null_i32 *a, gsl_not_null_i32 *b) {
+    int *tmp;
+    if (a == (gsl_not_null_i32 *)0 || b == (gsl_not_null_i32 *)0)
+        return;
+    tmp = a->ptr;
+    a->ptr = b->ptr;
+    b->ptr = tmp;
+}
+
+static inline int gsl_not_null_void_make(void *p, gsl_not_null_void *out, error *err) {
+    if (out == (gsl_not_null_void *)0 || p == (void *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    out->ptr = p;
+    return STDLIB_OK;
+}
+
+static inline int gsl_not_null_void_get(const gsl_not_null_void *nn, void **out, error *err) {
+    if (nn == (const gsl_not_null_void *)0 || out == (void **)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (nn->ptr == (void *)0) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    *out = nn->ptr;
+    return STDLIB_OK;
+}
+
+/* ==========================================================================
+ * 3. span port -- explicit (base, count) view with at() refusal
+ * ========================================================================== */
+
+typedef struct gsl_span_i32 {
+    int *base;        /* element 0 of this view (explicit base)              */
+    size_t count;     /* number of int elements in this view (explicit count)*/
+    void *owner;      /* tracked stdlib allocation base (provenance)         */
+    size_t off_elems; /* base == owner + off_elems int elements              */
+} gsl_span_i32;
+
+/* Internal constructor for a subview.  Range math uses subtraction so the
+ * byte offset can never overflow, matching stdlib_mem_check_range. */
+static inline int gsl_span_i32_view(void *owner, size_t off_elems, size_t count,
+                                    gsl_span_i32 *out, error *err) {
+    size_t off_bytes;
+    size_t bytes;
+    if (out == (gsl_span_i32 *)0 || owner == (void *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (off_elems > SIZE_MAX / sizeof(int) || count > SIZE_MAX / sizeof(int))
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    off_bytes = off_elems * sizeof(int);
+    bytes = count * sizeof(int);
+    if (stdlib_alloc_size(owner) < off_bytes || stdlib_alloc_size(owner) - off_bytes < bytes)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    out->owner = owner;
+    out->off_elems = off_elems;
+    out->count = count;
+    out->base = (int *)((char *)owner + off_bytes);
+    return STDLIB_OK;
+}
+
+/* Make a span over a whole tracked allocation.  Mirrors GSL's
+ * Expects(data || size == 0): a NULL base is only legal for an empty span. */
+static inline int gsl_span_i32_make(int *base, size_t count,
+                                    gsl_span_i32 *out, error *err) {
+    if (out == (gsl_span_i32 *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (base == (int *)0) {
+        if (count != 0u) return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+        out->base = (int *)0;
+        out->count = 0u;
+        out->owner = (void *)0;
+        out->off_elems = 0u;
+        return STDLIB_OK;
+    }
+    return gsl_span_i32_view((void *)base, 0u, count, out, err);
+}
+
+static inline size_t gsl_span_i32_size(const gsl_span_i32 *s) {
+    return (s == (const gsl_span_i32 *)0) ? 0u : s->count;
+}
+
+static inline size_t gsl_span_i32_size_bytes(const gsl_span_i32 *s) {
+    return gsl_span_i32_size(s) * sizeof(int);
+}
+
+static inline int gsl_span_i32_empty(const gsl_span_i32 *s) {
+    return gsl_span_i32_size(s) == 0u;
+}
+
+static inline int *gsl_span_i32_data(const gsl_span_i32 *s) {
+    return (s == (const gsl_span_i32 *)0) ? (int *)0 : s->base;
+}
+
+/* GSL: reference operator[](size_type idx) { Expects(idx < size()); ... }.
+ * Here an out-of-range index REFUSES with STDLIB_CATEGORY_BOUNDS and performs
+ * no dereference at all.  Nothing is written to *out on refusal. */
+static inline int gsl_span_i32_at(const gsl_span_i32 *s, size_t idx,
+                                  int *out, error *err) {
+    size_t off_bytes;
+    if (s == (const gsl_span_i32 *)0 || out == (int *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (idx >= s->count) return gsl_adapt_refuse_bounds(err), STDLIB_FAIL;
+    if (s->off_elems > (SIZE_MAX / sizeof(int)) - idx)
+        return gsl_adapt_refuse_range(err), STDLIB_FAIL;
+    off_bytes = (s->off_elems + idx) * sizeof(int);
+    if (stdlib_mem_check_range(s->owner, off_bytes, sizeof(int), 0, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    memcpy(out, (const char *)s->owner + off_bytes, sizeof(int));
+    return STDLIB_OK;
+}
+
+/* GSL first(count): Expects(count <= size()). */
+static inline int gsl_span_i32_first(const gsl_span_i32 *s, size_t count,
+                                     gsl_span_i32 *out, error *err) {
+    if (s == (const gsl_span_i32 *)0 || out == (gsl_span_i32 *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (count > s->count) return gsl_adapt_refuse_bounds(err), STDLIB_FAIL;
+    return gsl_span_i32_view(s->owner, s->off_elems, count, out, err);
+}
+
+/* GSL last(count): Expects(count <= size()). */
+static inline int gsl_span_i32_last(const gsl_span_i32 *s, size_t count,
+                                    gsl_span_i32 *out, error *err) {
+    if (s == (const gsl_span_i32 *)0 || out == (gsl_span_i32 *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (count > s->count) return gsl_adapt_refuse_bounds(err), STDLIB_FAIL;
+    return gsl_span_i32_view(s->owner, s->off_elems + (s->count - count), count, out, err);
+}
+
+/* GSL subspan(offset, count): Expects(size() >= offset &&
+ * (count == dynamic_extent || count <= size() - offset)).  Here an explicit
+ * `count_is_all` flag plays the role of dynamic_extent. */
+static inline int gsl_span_i32_subspan(const gsl_span_i32 *s, size_t offset,
+                                       size_t count, int count_is_all,
+                                       gsl_span_i32 *out, error *err) {
+    size_t n;
+    if (s == (const gsl_span_i32 *)0 || out == (gsl_span_i32 *)0)
+        return gsl_adapt_refuse_null(err), STDLIB_FAIL;
+    if (offset > s->count) return gsl_adapt_refuse_bounds(err), STDLIB_FAIL;
+    n = count_is_all ? (s->count - offset) : count;
+    if (n > s->count - offset) return gsl_adapt_refuse_bounds(err), STDLIB_FAIL;
+    return gsl_span_i32_view(s->owner, s->off_elems + offset, n, out, err);
+}
+
+#endif /* CPLUS_STD_GSL_ADAPT_HP */

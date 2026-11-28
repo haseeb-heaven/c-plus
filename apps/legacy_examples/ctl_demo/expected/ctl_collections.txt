@@ -1,0 +1,10 @@
+CTL_COLLECTIONS events=10 unique=5 window=12
+TOP 2:11 5:10 3:9
+CTL_EDGE duplicate_accumulate ok
+CTL_FREE board
+CTL_EDGE double_drop ok
+CTL_FREE seen
+CTL_EXPLICIT_DROP seen
+CTL_FREE line
+CTL_FREE window
+CTL_RAII frees=4

@@ -1,0 +1,10 @@
+case macro_multi_statement [macros] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_multi_statement.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_multi_statement.c:3:26: error: [CPLUS-FFI] arithmetic in a macro expansion cannot be instrumented; STRICT cannot prove it safe
+  int main(void){ int n=1; TWICE(n++); printf("%d\n", n); return 0; }
+                           ^~~~~
+

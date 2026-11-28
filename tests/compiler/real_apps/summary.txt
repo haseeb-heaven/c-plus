@@ -1,0 +1,140 @@
+Pinned real C apps/games: c+ LEGACY/DEFAULT/STRICT vs clang and gcc-14
+==============================================================================
+generated : 2026-11-25T18:58:25.442656+00:00
+host      : macOS-27.2.1-arm64-arm-64bit
+compiler  : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ (mtime 2026-11-25T18:55:19.692760+00:00)
+clang     : /usr/bin/clang
+gcc-14    : /opt/homebrew/bin/gcc-14 (available)
+nm        : /usr/bin/nm
+upstream  : https://github.com/TheAlgorithms/C @ e5dad3fa8def3726ec850ca66a7f51521f8ad393
+license   : GPL-3.0-or-later (LICENSE at pinned commit: 'GNU GENERAL PUBLIC LICENSE Version 3, 29 June 2007'); local build/test only, no redistribution of upstream source in this repository
+
+counts: cases=10 configs=120 pass=53 safe_mode_rule=61 reference_rejected=6 failed=0 mismatch_entries=0
+source preservation: 38/38 LEGACY configs byte-identical after #line
+symbols: LEGACY exact 38/38; safe-mode application symbols 15/15
+strict rejections: 34 (SAFE_MODE_RULE=34 DEFECT=0)
+
+per-config:
+  bisection_method       c11   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Safe-mode diagnostic categories; docs/SAFE_MODE_SPEC.md: proven errors are always rejected in both Safe modes
+  bisection_method       c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  bisection_method       c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  bisection_method       c17   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Safe-mode diagnostic categories; docs/SAFE_MODE_SPEC.md: proven errors are always rejected in both Safe modes
+  bisection_method       c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  bisection_method       c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  bisection_method       c89   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Safe-mode diagnostic categories; docs/SAFE_MODE_SPEC.md: proven errors are always rejected in both Safe modes
+  bisection_method       c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  bisection_method       c89   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  bisection_method       c99   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Safe-mode diagnostic categories; docs/SAFE_MODE_SPEC.md: proven errors are always rejected in both Safe modes
+  bisection_method       c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  bisection_method       c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c11   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  boyer_moore_search     c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c17   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  boyer_moore_search     c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c89   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  boyer_moore_search     c89   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c99   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  boyer_moore_search     c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  boyer_moore_search     c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  decimal_to_any_base    c11   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/ARITHMETIC_SAF
+  decimal_to_any_base    c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  decimal_to_any_base    c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/ARITHMETIC_SAF
+  decimal_to_any_base    c17   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/ARITHMETIC_SAF
+  decimal_to_any_base    c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  decimal_to_any_base    c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/ARITHMETIC_SAF
+  decimal_to_any_base    c89   --default   REFERENCE_REJECTED  pass=True  REFERENCE_REJECTED: clang cannot build this source with -std=c89; recorded diagnostics are in reference_builds
+  decimal_to_any_base    c89   --legacy-c  REFERENCE_REJECTED  pass=True  REFERENCE_REJECTED: clang cannot build this source with -std=c89; recorded diagnostics are in reference_builds
+  decimal_to_any_base    c89   --strict    REFERENCE_REJECTED  pass=True  REFERENCE_REJECTED: clang cannot build this source with -std=c89; recorded diagnostics are in reference_builds
+  decimal_to_any_base    c99   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/ARITHMETIC_SAF
+  decimal_to_any_base    c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  decimal_to_any_base    c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/ARITHMETIC_SAF
+  hamming_distance       c11   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hamming_distance       c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hamming_distance       c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hamming_distance       c17   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hamming_distance       c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hamming_distance       c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hamming_distance       c89   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hamming_distance       c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hamming_distance       c89   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hamming_distance       c99   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hamming_distance       c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hamming_distance       c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  hash_adler32           c11   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  hash_adler32           c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hash_adler32           c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT
+  hash_adler32           c17   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  hash_adler32           c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hash_adler32           c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT
+  hash_adler32           c89   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  hash_adler32           c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hash_adler32           c89   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT
+  hash_adler32           c99   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  hash_adler32           c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  hash_adler32           c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT
+  infix_to_postfix       c11   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  infix_to_postfix       c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  infix_to_postfix       c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  infix_to_postfix       c17   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  infix_to_postfix       c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  infix_to_postfix       c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  infix_to_postfix       c89   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  infix_to_postfix       c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  infix_to_postfix       c89   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  infix_to_postfix       c99   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  infix_to_postfix       c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  infix_to_postfix       c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c11   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  merge_sort             c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c17   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  merge_sort             c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c89   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  merge_sort             c89   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c99   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  merge_sort             c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  merge_sort             c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT; docs/SAFE_MODE_SPEC
+  prime_sieve            c11   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  prime_sieve            c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  prime_sieve            c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT
+  prime_sieve            c17   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  prime_sieve            c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  prime_sieve            c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT
+  prime_sieve            c89   --default   REFERENCE_REJECTED  pass=True  REFERENCE_REJECTED: clang cannot build this source with -std=c89; recorded diagnostics are in reference_builds
+  prime_sieve            c89   --legacy-c  REFERENCE_REJECTED  pass=True  REFERENCE_REJECTED: clang cannot build this source with -std=c89; recorded diagnostics are in reference_builds
+  prime_sieve            c89   --strict    REFERENCE_REJECTED  pass=True  REFERENCE_REJECTED: clang cannot build this source with -std=c89; recorded diagnostics are in reference_builds
+  prime_sieve            c99   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  prime_sieve            c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  prime_sieve            c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compiler/compatibility-matrix.md: unknown contracts fail closed in STRICT
+  shunting_yard          c11   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  shunting_yard          c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  shunting_yard          c11   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  shunting_yard          c17   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  shunting_yard          c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  shunting_yard          c17   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  shunting_yard          c89   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  shunting_yard          c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  shunting_yard          c89   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  shunting_yard          c99   --default   SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  shunting_yard          c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  shunting_yard          c99   --strict    SAFE_MODE_RULE      pass=True  SAFE_MODE_RULE: docs/SAFE_MODE_SPEC.md: goto/longjmp cleanup (STRICT rejects jumps past live resources); docs/SAFE_MODE_SPEC.md: Unsafe/FFI boundary; docs/compi
+  tower_of_hanoi         c11   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  tower_of_hanoi         c11   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  tower_of_hanoi         c11   --strict    PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  tower_of_hanoi         c17   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  tower_of_hanoi         c17   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  tower_of_hanoi         c17   --strict    PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  tower_of_hanoi         c89   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  tower_of_hanoi         c89   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  tower_of_hanoi         c89   --strict    PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  tower_of_hanoi         c99   --default   PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+  tower_of_hanoi         c99   --legacy-c  PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified
+  tower_of_hanoi         c99   --strict    PASS                pass=True  stdout and exit match manifest, clang and gcc; symbols and source preservation verified; full symbol set differs only by documented cplus_* runtime exports
+
+mismatches (0):
+  none

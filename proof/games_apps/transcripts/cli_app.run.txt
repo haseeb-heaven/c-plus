@@ -1,0 +1,18 @@
+=== cli_calc add 2 3 ===
+CLI add 2 3 5
+EXIT=0
+=== cli_calc mul 6 7 ===
+CLI mul 6 7 42
+EXIT=0
+=== cli_calc help ===
+Commands:
+  add - add two integers (id=1)
+  mul - multiply two integers (id=2)
+  help - print help text (id=3)
+Options:
+  --verbose
+  --tag=value
+EXIT=0
+=== cli_calc bad command ===
+CLI refuse unknown command 7
+EXIT=2

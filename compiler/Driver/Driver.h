@@ -23,6 +23,35 @@ namespace llvm { class raw_ostream; }
 
 namespace cplus {
 
+/// Runtime sanitizers selected for the generated binary. These are added to
+/// BOTH the compile and the final link command lines. Values are a bitmask so
+/// compatible combinations can be expressed.
+enum class Sanitizer : unsigned {
+  None = 0,
+  Address = 1u << 0,   ///< AddressSanitizer
+  Undefined = 1u << 1, ///< UndefinedBehaviorSanitizer
+  Memory = 1u << 2,    ///< MemorySanitizer (Linux x86-64 only)
+  Thread = 1u << 3,    ///< ThreadSanitizer
+  Leak = 1u << 4,      ///< LeakSanitizer
+  Cfi = 1u << 5,       ///< Control Flow Integrity (requires LTO)
+  Integer = 1u << 6,   ///< unsigned overflow / suspicious conversions
+};
+
+inline Sanitizer operator|(Sanitizer a, Sanitizer b) {
+  return static_cast<Sanitizer>(static_cast<unsigned>(a) |
+                                static_cast<unsigned>(b));
+}
+inline Sanitizer operator&(Sanitizer a, Sanitizer b) {
+  return static_cast<Sanitizer>(static_cast<unsigned>(a) &
+                                static_cast<unsigned>(b));
+}
+inline bool wants(Sanitizer set, Sanitizer bit) {
+  return (set & bit) != Sanitizer::None;
+}
+inline Sanitizer bothAsanUbsan() {
+  return Sanitizer::Address | Sanitizer::Undefined;
+}
+
 struct DriverOptions {
   std::string command; // "build", "run", "check"
   std::string input;
@@ -31,12 +60,30 @@ struct DriverOptions {
   std::string emitC; // if non-empty, write the lowered C here
   Mode mode = Mode::Safe;
   OptMode opt = OptMode::Debug;
+  // Safe mode defaults to UBSan; --sanitize=... overrides, --sanitize=none
+  // disables all runtime sanitizers.
+  Sanitizer sanitizer = Sanitizer::Undefined;
+  bool sanitizerExplicit = false;
+  // Opt-in: runtime safety violations become catchable C+ exceptions inside
+  // try/catch and stay fatal when no handler exists. Driver option only; never
+  // forwarded as a pass-through token to the C backend.
+  bool autoRuntime = false;
+  // DEFAULT (false): report proven errors, warn on unverified operations.
+  // STRICT (true): reject unverified operations rather than warn.
+  bool strict = false;
+  // --safety=fast keeps compile-time checks, data-stack handling and UBSan
+  // but omits pointer-to-extent side-table lookups in lowered C.
+  bool fastSafety = true;
   bool verbose = false;
-  bool warningsAsErrors = false;
+  // Issue #34: every C+ warning is fatal by default. --legacy-c keeps plain-C
+  // behaviour unless -Werror is requested explicitly; -w never suppresses C+
+  // diagnostics in Safe mode.
+  bool warningsAsErrors = true;
+  bool warningsAsErrorsExplicit = false; // -Werror was requested explicitly
   bool keepTemp = false;
   bool logging = false;
   std::string logLevel = "warn";
-  bool disableWarnings = false;
+  bool disableWarnings = false; // -w; backend scope only in --legacy-c
   bool compileOnly = false;
   bool preprocessOnly = false;
   bool assemblyOnly = false;
@@ -53,6 +100,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
 /// Resolve the host C compiler used as the C+ backend.
 std::string findClangBinary();
+
+/// Print a short, build-free diagnostic listing every sanitizer name accepted
+/// by `--sanitize=`, the disable aliases, the Safe-mode default and the backend
+/// resolved by findClangBinary(). Used by `--print-sanitizers`.
+void printSanitizerInfo(llvm::raw_ostream &os);
 
 /// Resolve the directory containing the C+ runtime headers.
 std::string findCPlusIncludeDir();

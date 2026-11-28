@@ -1,0 +1,176 @@
+/* Checked non-owning span view for CTL contiguous containers (ctl_span.hp).
+ *
+ * Issue #24 ADOPT decision: CTL's span (`third_party/ctl/ctl/span.h:1-25`) is
+ * a borrow-only {T *data; size_t size} view with no allocation or destructor.
+ * Its `at` uses release-disabled assert (`:38-42`), so this additive wrapper
+ * supplies checked access with error* refusal. No CTL source is edited, no
+ * ownership is taken, and no other code is copied.
+ *
+ * Issue #45: init now REFUSES backing storage that is not tracked by the
+ * checked heap or the shared lifetime registry (stdlib/view_lifetime.hp).
+ * A stack array therefore fails at init with STDLIB_CATEGORY_LIFECYCLE.  The
+ * explicit ctl_span_init_unsafe() escape hatch preserves the old raw-pointer
+ * contract for callers that deliberately keep storage alive themselves.
+ *
+ * Contract: init/from_ctl_vector return STDLIB_OK (0) or a non-zero code;
+ * at() returns 0 and sets *err on null/empty/out-of-range/stale views; slice()
+ * refuses ranges outside the parent view.
+ */
+#ifndef CPLUS_STD_CTL_SPAN_HP
+#define CPLUS_STD_CTL_SPAN_HP
+
+#include <stddef.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/view_lifetime.hp"
+
+typedef struct {
+    void *data;
+    size_t len;
+    size_t elem_size;
+    unsigned long long backing_token; /* 0 = unsafe/caller-managed view */
+    const void *owner_base;           /* tracked base (slices use parent base) */
+} ctl_span;
+
+/* 1 when the span's backing allocation is still live.  Untracked spans keep
+ * the legacy behaviour (no runtime liveness check). */
+static inline int ctl_span_backing_live(const ctl_span *s) {
+    if (s == (ctl_span *)0 || s->data == (void *)0)
+        return 0;
+    if (s->backing_token == 0)
+        return 1;
+    if (stdlib_alloc_check_generation(s->owner_base, s->backing_token) == 1)
+        return 1;
+    return stdlib_view_validate(s->owner_base, s->backing_token) == 1 ? 1 : 0;
+}
+
+/* Checked init: only heap/arena tracked storage is accepted. */
+static inline int ctl_span_init(ctl_span *s, void *data, size_t len,
+                                size_t elem_size, error *err) {
+    size_t bytes = 0;
+    unsigned long long token = 0;
+    error_reset(err);
+    if (s == (ctl_span *)0 || elem_size == 0u ||
+        (len > 0u && data == (void *)0)) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "ctl_span: invalid view");
+        return -1;
+    }
+    if (len == 0u) {
+        s->data = data;
+        s->len = 0u;
+        s->elem_size = elem_size;
+        s->backing_token = 0;
+        s->owner_base = data;
+        return STDLIB_OK;
+    }
+    if (__builtin_mul_overflow(len, elem_size, &bytes) ||
+        bytes > STDLIB_ALLOC_LIMIT)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                              "ctl_span: extent overflow"),
+               STDLIB_FAIL;
+    if (stdlib_alloc_size(data) != 0u) {
+        if (bytes > stdlib_alloc_size(data))
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "ctl_span: extent exceeds heap block"),
+                   STDLIB_FAIL;
+        token = stdlib_alloc_generation(data);
+    } else if (stdlib_view_is_live(data)) {
+        if (bytes > stdlib_view_size(data))
+            return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "ctl_span: extent exceeds tracked block"),
+                   STDLIB_FAIL;
+        token = stdlib_view_token_of(data);
+    } else {
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "ctl_span: backing storage is not tracked "
+                              "(use ctl_span_init_unsafe for stack storage)"),
+               STDLIB_FAIL;
+    }
+    if (token == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "ctl_span: no lifetime token for storage"),
+               STDLIB_FAIL;
+    s->data = data;
+    s->len = len;
+    s->elem_size = elem_size;
+    s->backing_token = token;
+    s->owner_base = data;
+    return STDLIB_OK;
+}
+
+/* Explicit unsafe opt-in: accepts any raw pointer, including stack arrays.
+ * The caller must keep the storage alive for the whole span lifetime. */
+static inline int ctl_span_init_unsafe(ctl_span *s, void *data, size_t len,
+                                       size_t elem_size, error *err) {
+    error_reset(err);
+    if (s == (ctl_span *)0 || elem_size == 0u ||
+        (len > 0u && data == (void *)0)) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "ctl_span: invalid view");
+        return -1;
+    }
+    s->data = data;
+    s->len = len;
+    s->elem_size = elem_size;
+    s->backing_token = 0;
+    s->owner_base = data;
+    return STDLIB_OK;
+}
+
+/* Wrap the contiguous storage of a CTL vector (e.g. vec_int.vector/.size).
+ * The caller keeps ownership of the vector; the span never frees anything. */
+static inline int ctl_span_from_ctl_vector(void *items, size_t count,
+                                            size_t elem_size, ctl_span *out,
+                                            error *err) {
+    return ctl_span_init(out, items, count, elem_size, err);
+}
+
+static inline int ctl_span_from_ctl_vector_unsafe(void *items, size_t count,
+                                                   size_t elem_size,
+                                                   ctl_span *out, error *err) {
+    return ctl_span_init_unsafe(out, items, count, elem_size, err);
+}
+
+static inline void *ctl_span_at(ctl_span *s, size_t index, error *err) {
+    error_reset(err);
+    if (s == (ctl_span *)0 || s->data == (void *)0 || index >= s->len) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "ctl_span: index out of bounds");
+        return (void *)0;
+    }
+    if (ctl_span_backing_live(s) != 1)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "ctl_span: backing storage is no longer live"),
+               (void *)0;
+    return (void *)((unsigned char *)s->data + index * s->elem_size);
+}
+
+static inline int ctl_span_slice(ctl_span *s, size_t off, size_t len,
+                                  ctl_span *out, error *err) {
+    error_reset(err);
+    if (s == (ctl_span *)0 || out == (ctl_span *)0 ||
+        off > s->len || len > s->len - off) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "ctl_span: slice out of bounds");
+        return -1;
+    }
+    out->elem_size = s->elem_size;
+    out->len = len;
+    out->data = len ? (void *)((unsigned char *)s->data + off * s->elem_size)
+                    : (void *)0;
+    out->backing_token = s->backing_token;
+    out->owner_base = s->owner_base;
+    return STDLIB_OK;
+}
+
+static inline size_t ctl_span_size(const ctl_span *s) {
+    return s == (const ctl_span *)0 ? 0u : s->len;
+}
+
+#endif /* CPLUS_STD_CTL_SPAN_HP */

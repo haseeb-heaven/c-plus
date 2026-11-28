@@ -1,0 +1,11 @@
+case: cc_ptr_formation_lower
+mode: strict
+step: run
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/cc_ptr_formation_lower.strict
+rc: 101
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+C+ runtime error: out-of-bounds pointer formation at <SRC>:6: pointer offset -1 is outside [0, 4] elements
+

@@ -7,7 +7,15 @@
 // Currently detects:
 //   * constant subscripts past a known array extent;
 //   * simple counted `for` loops (`i = 0; i < N; i++`) whose index reaches
-//     past an array subscripted with `i`.
+//     past an array subscripted with `i`;
+//   * negative constant indices into a fixed array, including through a
+//     pointer whose value is a provable constant offset from that array;
+//   * dereferences of a one-past-the-end pointer derived from a fixed array
+//     (forming the one-past pointer is still allowed);
+//   * constant indices in multi-dimensional subscript chains, including
+//     through a pointer-to-row alias of a fixed array.
+// All three extensions require both the index and the extent to be provable
+// constants; anything else is left to the host C compiler and UBSan.
 //
 //===----------------------------------------------------------------------===//
 

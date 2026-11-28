@@ -1,0 +1,88 @@
+PAIRED C+/RUST SAFETY PROOF RUNNER (permanent suite)
+c+        : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+c+ version: C+ 0.1.0
+Language: C+ (C with memory safety, deterministic RAII, lightweight classes)
+Backend: host Clang/LLVM
+rustc     : rustc 1.100.0 (0ef1bc386 2026-11-09)
+timeout   : 45s   (hard, no || true)
+
+COUNTS: scenarios=14 passed=14 failed=0
+BY CLASSIFICATION: AGREE_COMPILE=10, AGREE_TRAP=1, CPLUS_STRICTER=3
+
+=== MISMATCH / FAIL (0) ===
+  (none)
+
+=== PER-SCENARIO ===
+[PASS] const_oob          AGREE_COMPILE    constant out-of-bounds array read
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/const_oob.c:2:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'
+    Rust compile_rc=1 codes=['E0080'] runtime_rc=None
+    Rust diag: error[E0080]: index out of bounds: the length is 4 but the index is 7
+[PASS] dyn_oob            AGREE_TRAP       runtime-determined out-of-bounds array read
+    C   check_rc=0 build_rc=0 runtime_rc=-6
+    C   diag: C+ error: index 100 is outside the bounds of 'a' (length 4)
+    Rust compile_rc=0 codes=[] runtime_rc=101
+    Rust diag: thread 'main' (6899868) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dyn_oob.rs:3:19: | index out of bounds: the len is 4 but the index is 100
+[PASS] uaf                CPLUS_STRICTER   use-after-free: dereference a released allocation
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uaf.c:2:62: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'
+    Rust compile_rc=0 codes=[] runtime_rc=0
+    Rust diag: 3
+    why: C+ emits the named [CPLUS-SAFE-LIFETIME] use-after-free diagnostic at compile time. Rust has no safe spelling for this operation: the equivalent needs `unsafe` raw pointers and is undefined behaviour with no guaranteed deterministic trap (observed here: rustc accepts and the binary ran to completion). This is an intentional difference in enforcement point, not an agreement.
+[PASS] double_free        CPLUS_STRICTER   double release of one owner
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/double_free.c:3:33: error: [CPLUS-OWNER] double free of 'p'
+    Rust compile_rc=0 codes=[] runtime_rc=-5
+    Rust diag: (no text; runtime_rc=-5)
+    why: C+ emits the named [CPLUS-OWNER] double free diagnostic at compile time. The Rust equivalent of the same operation requires `unsafe` raw pointers (safe Rust rejects it as a move error, which would not be the same operation). rustc therefore accepts; the allocator traps at runtime instead. Intentional difference: compile-time named diagnostic vs runtime UB trap.
+[PASS] null_deref         CPLUS_STRICTER   null pointer dereference
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.c:1:31: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference
+    Rust compile_rc=0 codes=[] runtime_rc=-6
+    Rust diag: thread 'main' (6900409) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/null_deref.rs:3:18: | null pointer dereference occurred
+    why: C+ emits the named [CPLUS-SAFE-LIFETIME] null pointer dereference diagnostic at compile time. A literal null dereference has no safe Rust spelling; the equivalent needs `unsafe`, so rustc accepts and the trap happens at runtime (panic/abort). Intentional difference in enforcement point; not faked as agreement.
+[PASS] signed_overflow    AGREE_COMPILE    signed integer overflow at i32::MAX + 1
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/signed_overflow.c:1:57: error: [CPLUS-ARITH] signed integer overflow in addition
+    Rust compile_rc=1 codes=[] runtime_rc=None
+    Rust diag: error: this arithmetic operation will overflow
+[PASS] div_zero           AGREE_COMPILE    integer division by zero
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/div_zero.c:1:49: error: [CPLUS-ARITH] division by zero
+    Rust compile_rc=1 codes=[] runtime_rc=None
+    Rust diag: error: this operation will panic at runtime
+[PASS] invalid_shift      AGREE_COMPILE    shift count greater than operand width
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/invalid_shift.c:2:42: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand
+    Rust compile_rc=1 codes=[] runtime_rc=None
+    Rust diag: error: this arithmetic operation will overflow
+[PASS] uninit_read        AGREE_COMPILE    read of an uninitialised local
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/uninit_read.c:1:28: error: variable 'x' is uninitialized when used here [-Werror,-Wuninitialized]
+    Rust compile_rc=1 codes=['E0381'] runtime_rc=None
+    Rust diag: error[E0381]: used binding `x` isn't initialized
+[PASS] use_after_move     AGREE_COMPILE    use of a moved-from owner
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/use_after_move.c:4:58: error: use-after-move: use of moved-from resource 'p'
+    Rust compile_rc=1 codes=['E0382'] runtime_rc=None
+    Rust diag: error[E0382]: borrow of moved value: `s`
+[PASS] exclusive_borrow   AGREE_COMPILE    exclusive mutable borrow alias: f(&x,&x)
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/exclusive_borrow.c:2:24: error: [CPLUS-BORROW] exclusive mutable borrow violated: arguments 0 and 1 both borrow '&x' passed to 'f'
+    Rust compile_rc=1 codes=['E0499'] runtime_rc=None
+    Rust diag: error[E0499]: cannot borrow `x` as mutable more than once at a time
+[PASS] dangling_stack     AGREE_COMPILE    return of a pointer/reference to a stack local
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/dangling_stack.c:1:30: error: address of stack memory associated with local variable 'x' returned [-Werror,-Wreturn-stack-address]
+    Rust compile_rc=1 codes=['E0515'] runtime_rc=None
+    Rust diag: error[E0515]: cannot return reference to local variable `x`
+[PASS] format_string      AGREE_COMPILE    non-literal format string passed to printf/println
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/format_string.c:2:61: error: [CPLUS-FFI] format string is not a string literal (potentially insecure)
+    Rust compile_rc=1 codes=[] runtime_rc=None
+    Rust diag: error: format argument must be a string literal
+[PASS] enum_switch        AGREE_COMPILE    non-exhaustive switch/match over an enum (C+ -Werror=switch)
+    C   check_rc=1 build_rc=1 runtime_rc=None
+    C   diag: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/rust_proof/scenarios/enum_switch.c:2:24: error: enumeration value 'C' not handled in switch [-Werror,-Wswitch]
+    Rust compile_rc=1 codes=['E0004'] runtime_rc=None
+    Rust diag: error[E0004]: non-exhaustive patterns: `E::C` not covered

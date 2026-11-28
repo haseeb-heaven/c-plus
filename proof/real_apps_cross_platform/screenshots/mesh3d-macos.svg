@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1152" height="980" viewBox="0 0 1152 980">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">mesh3d (macos)</text>
+  <text class="sub" x="84" y="48">3D scene / mesh / math demo  |  exit=0</text>
+  <text class="sub" x="84" y="68">run: env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin timeout 30 ./mesh3d</text>
+  <rect y="84" width="100%" height="838" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">init 1 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="134">build 1 1 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="156">bbox 1 1 1 1 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="178">center 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="200">normals-ok 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="222">normals-unit 1</text>
+  <text class="body" xml:space="preserve" x="20" y="244">normals-outward 1</text>
+  <text class="body" xml:space="preserve" x="20" y="266">normals-exact 1 1 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="288">validate-clean 1 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="310">translate 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="332">scale 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="354">transformed 1 1 1 1 1 1 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="376">refuse-index 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="398">refuse-repeat-index 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="420">refuse-nan-vertex 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="442">refuse-inf-vertex 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="464">refuse-collinear 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="486">refuse-nan-scale 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="508">scale-atomic 1</text>
+  <text class="body" xml:space="preserve" x="20" y="530">refuse-inf-translate 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="552">translate-atomic 1</text>
+  <text class="body" xml:space="preserve" x="20" y="574">refuse-overflow-scale 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="596">refuse-oversized-vertices 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="618">refuse-oversized-triangles 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="640">refuse-at 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="662">validate-degenerate 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="684">validate-bad-index 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="706">validate-restored 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="728">clear 1 1 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="750">reuse-after-clear 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="772">single-center 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="794">empty-center-refused 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="816">custom-init 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="838">custom-build 1 1 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="860">custom-drop 1 1</text>
+  <text class="body" xml:space="preserve" x="20" y="882">custom-double-drop 1</text>
+  <text class="body" xml:space="preserve" x="20" y="904">drop 1 1</text>
+  <rect y="922" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="944">Verbatim captured terminal output for mesh3d on macos — evidence for the recorded host/toolchain only; not a memory-safety proof.</text>
+  <text class="disclaimer" x="20" y="964">rendered terminal output from a real captured run — not a fabricated GUI capture</text>
+  <desc>Verbatim captured output:
+    init 1 1 1 1 1
+    build 1 1 1 1 1 1
+    bbox 1 1 1 1 1 1 1 1
+    center 1 1 1 1
+    normals-ok 1 1
+    normals-unit 1
+    normals-outward 1
+    normals-exact 1 1 1 1 1 1
+    validate-clean 1 1 1 1 1
+    translate 1 1
+    scale 1 1
+    transformed 1 1 1 1 1 1 1 1 1 1
+    refuse-index 1 1 1
+    refuse-repeat-index 1 1 1
+    refuse-nan-vertex 1 1 1
+    refuse-inf-vertex 1 1 1
+    refuse-collinear 1 1 1
+    refuse-nan-scale 1 1
+    scale-atomic 1
+    refuse-inf-translate 1 1
+    translate-atomic 1
+    refuse-overflow-scale 1 1
+    refuse-oversized-vertices 1 1 1
+    refuse-oversized-triangles 1 1 1
+    refuse-at 1 1 1 1
+    validate-degenerate 1 1 1 1
+    validate-bad-index 1 1 1 1
+    validate-restored 1 1
+    clear 1 1 1 1 1 1
+    reuse-after-clear 1 1 1 1
+    single-center 1 1 1 1
+    empty-center-refused 1 1
+    custom-init 1 1
+    custom-build 1 1 1 1
+    custom-drop 1 1
+    custom-double-drop 1
+    drop 1 1
+  </desc>
+</svg>

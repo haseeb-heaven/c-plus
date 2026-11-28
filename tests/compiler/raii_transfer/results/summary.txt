@@ -1,0 +1,8 @@
+RAII transfer suite
+macOS-27.2.1-arm64-arm-64bit
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+by_value_transfer PASS
+by_reference_control PASS
+
+cases=2 passed=2 failed=0

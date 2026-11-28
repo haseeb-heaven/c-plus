@@ -23,6 +23,20 @@ const char *const kPunctuators[] = {
     "+=",  "-=",  "*=",  "/=",  "%=",  "&=",  "|=",  "^=", ".*", "#",
 };
 
+/// Length of an ISO C phase-2 line splice at `i`: a backslash immediately
+/// followed by LF or CRLF.  Returns 0 when there is no splice.  Splicing
+/// happens before comment/literal recognition, so `//` continues past a
+/// spliced newline and a spliced newline cannot terminate a literal.
+size_t lineSpliceLength(const std::string &src, size_t i) {
+  if (i >= src.size() || src[i] != '\\')
+    return 0;
+  if (i + 1 < src.size() && src[i + 1] == '\n')
+    return 2;
+  if (i + 2 < src.size() && src[i + 1] == '\r' && src[i + 2] == '\n')
+    return 3;
+  return 0;
+}
+
 } // namespace
 
 std::vector<Token> lexCPlus(const std::string &src) {
@@ -66,8 +80,15 @@ std::vector<Token> lexCPlus(const std::string &src) {
     // Comments.
     if (c == '/' && i + 1 < n && src[i + 1] == '/') {
       size_t start = i;
-      while (i < n && src[i] != '\n')
+      while (i < n) {
+        if (size_t splice = lineSpliceLength(src, i)) {
+          advance(splice); // spliced newline: the comment continues
+          continue;
+        }
+        if (src[i] == '\n')
+          break;
         advance(1);
+      }
       t.kind = TokKind::Comment;
       t.text = src.substr(start, i - start);
       toks.push_back(std::move(t));
@@ -89,9 +110,13 @@ std::vector<Token> lexCPlus(const std::string &src) {
     }
 
     // String literals (including prefixes) and char literals.
-    if (c == '"' || c == '\'' ||
-        ((c == 'u' || c == 'u8' || c == 'U' || c == 'L') && i + 1 < n &&
-         (src[i + 1] == '"' || src[i + 1] == '\''))) {
+    bool prefixedLiteral =
+        (c == 'u' || c == 'U' || c == 'L') && i + 1 < n &&
+        (src[i + 1] == '"' || src[i + 1] == '\'');
+    if (!prefixedLiteral && c == 'u' && i + 2 < n && src[i + 1] == '8' &&
+        (src[i + 2] == '"' || src[i + 2] == '\''))
+      prefixedLiteral = true; // u8"..." / u8'...'
+    if (c == '"' || c == '\'' || prefixedLiteral) {
       size_t start = i;
       char quote;
       if (c == '"' || c == '\'') {
@@ -107,13 +132,22 @@ std::vector<Token> lexCPlus(const std::string &src) {
         quote = src[i];
         advance(1);
       }
-      while (i < n && src[i] != quote) {
-        if (src[i] == '\\' && i + 1 < n)
-          advance(1);
+      // An unclosed quote in prose (e.g. inside `#if 0`) must not swallow
+      // the rest of the translation unit: a raw newline always ends the
+      // token.  A spliced newline is not raw and stays inside the literal.
+      while (i < n && src[i] != quote && src[i] != '\n' && src[i] != '\r') {
+        if (size_t splice = lineSpliceLength(src, i)) {
+          advance(splice);
+          continue;
+        }
+        if (src[i] == '\\' && i + 1 < n) {
+          advance(2); // escaped character, including an escaped quote
+          continue;
+        }
         advance(1);
       }
-      if (i < n)
-        advance(1); // closing quote
+      if (i < n && src[i] == quote)
+        advance(1); // closing quote; leave a raw newline for the next token
       t.kind = (quote == '"') ? TokKind::StringLit : TokKind::CharLit;
       t.text = src.substr(start, i - start);
       toks.push_back(std::move(t));
@@ -141,6 +175,10 @@ std::vector<Token> lexCPlus(const std::string &src) {
         if (std::isalnum(static_cast<unsigned char>(d)) || d == '.' ||
             d == '_') {
           advance(1);
+        } else if (d == '\'' && i > start && i + 1 < n &&
+                   (std::isalnum(static_cast<unsigned char>(src[i + 1])) ||
+                    src[i + 1] == '_')) {
+          advance(1); // C23 digit separator: 1'000'000
         } else if ((d == '+' || d == '-') && i > start &&
                    (src[i - 1] == 'e' || src[i - 1] == 'E' ||
                     src[i - 1] == 'p' || src[i - 1] == 'P')) {

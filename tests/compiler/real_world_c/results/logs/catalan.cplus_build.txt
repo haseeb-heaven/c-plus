@@ -1,0 +1,8 @@
+case: catalan
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --legacy-c --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/generated/catalan.generated.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/cache/catalan.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/catalan.cplus
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

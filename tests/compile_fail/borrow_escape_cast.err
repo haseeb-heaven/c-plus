@@ -1,0 +1,1 @@
+borrow 'b' of local 'f' cannot escape the function

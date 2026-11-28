@@ -1,0 +1,4 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check --strict user.cp
+check: user.cp ok
+
+[exit code: 0]

@@ -1,0 +1,9 @@
+command: c+ check --legacy-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_oob.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:1:29: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+    1 | static void wr(int *p){ for(int i=0;i<6;i++) p[i]=i; }
+      |                             ^
+1 warning generated.

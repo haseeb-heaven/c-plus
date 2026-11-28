@@ -1,0 +1,27 @@
+cyc_200_parse_write_drop 1
+cyc_valid_count_100 1
+cyc_fail_count_100 1
+json_leak_telemetry 1
+mal_extra_close_bracket 1
+mal_trailing_junk 1
+mal_trailing_comma_nested 1
+mal_double_comma 1
+mal_missing_colon 1
+mal_missing_comma 1
+dup_keys_parse_and_write 1
+nul_strlen_truncation 1
+nul_incomplete_prefix 1
+nul_in_string_value 1
+empty_object_root 1
+empty_array_root 1
+nested_empty_containers 1
+nested_wrong_type_refusal 1
+nested_correct_type_ok 1
+builder_empty_write 1
+builder_mutate_between_writes 1
+doc_repeat_write_identical 1
+postdrop_doc_view_refusal 1
+postdrop_builder_refusal 1
+view_use_after_free 1
+json_alloc_failure_hook 1
+EXTRA_JSON_CLEANUP 26 0

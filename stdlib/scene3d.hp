@@ -1,0 +1,614 @@
+/* C+ modern standard library: additive 3D scene graph (plain C syntax).
+ *
+ * MODERN LAYER ONLY.  This header defines no new allocation model and changes
+ * no existing API.  Every function is `static inline`: there are no exported
+ * symbols, no global state and no ABI change.  Storage comes from the unified
+ * allocator interface in stdlib/alloc_iface.hp; a NULL allocator means the
+ * checked heap (stdlib_alloc / stdlib_release).
+ *
+ * Data model
+ * ----------
+ * A scene owns one growable vector of nodes plus a stable root index (0).
+ * Each node owns a growable vector of child indices, a parent index, a name,
+ * a local transform, a visibility flag and a cached depth.  Indices are
+ * STABLE: node_remove marks a node (and its subtree) dead rather than shifting
+ * the vector, so a caller can keep an index across mutations.  Dead nodes are
+ * skipped by traversal, search and the child lists of living parents.
+ *
+ * Determinism
+ * -----------
+ * Children are kept in insertion order.  scene3d_traverse is a preorder walk
+ * that visits children in that order, so the emitted index sequence is fully
+ * determined by the call sequence that built the scene.  No hash iteration,
+ * no pointer ordering and no clock is involved.
+ *
+ * Refusals (all reported through error*, never by aborting)
+ * ---------------------------------------------------------
+ *   - NULL scene / out pointers, invalid or dead node indices;
+ *   - duplicate names among living nodes, including the root name;
+ *   - names that are not NUL-terminated within SCENE3D_MAX_NAME bytes;
+ *   - parenting a node to itself or to one of its descendants (cycle);
+ *   - operations that would push a node past SCENE3D_MAX_DEPTH;
+ *   - removing the root, or a traversal whose output buffer is too small.
+ * Every mutating operation is failure-atomic with respect to observable
+ * state: when it returns STDLIB_FAIL / SCENE3D_NO_INDEX the scene's live
+ * nodes, names, parents, children, transforms and visibility are unchanged.
+ */
+#ifndef CPLUS_STD_SCENE3D_HP
+#define CPLUS_STD_SCENE3D_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
+
+/* Public limits and sentinels. */
+#define SCENE3D_ROOT_INDEX ((size_t)0)
+#define SCENE3D_NO_INDEX ((size_t)-1)
+#define SCENE3D_MAX_NAME 64u  /* bytes, including the terminating NUL */
+#define SCENE3D_MAX_DEPTH 32u /* root depth is 0; deepest allowed node = 32 */
+#define SCENE3D_INITIAL_NODES 8u
+#define SCENE3D_INITIAL_CHILDREN 4u
+#define SCENE3D_ROOT_NAME "root"
+
+typedef struct scene3d_vec3 {
+    float x;
+    float y;
+    float z;
+} scene3d_vec3;
+
+typedef struct scene3d_transform {
+    scene3d_vec3 position;
+    scene3d_vec3 rotation; /* Euler angles in radians */
+    scene3d_vec3 scale;
+} scene3d_transform;
+
+/* Growable index vector (child lists and internal traversal scratch). */
+typedef struct scene3d_index_array {
+    size_t *items;
+    size_t count;
+    size_t cap;
+} scene3d_index_array;
+
+typedef struct scene3d_node {
+    char name[SCENE3D_MAX_NAME];
+    size_t parent;                  /* SCENE3D_NO_INDEX only for the root */
+    scene3d_index_array children;   /* indices, insertion order */
+    scene3d_transform transform;    /* local transform */
+    int visible;                    /* 0 or 1 */
+    int alive;                      /* 0 after node_remove (tombstone) */
+    size_t depth;                   /* cached distance from the root */
+} scene3d_node;
+
+typedef struct scene3d_scene {
+    scene3d_node *nodes;            /* growable vector of nodes */
+    size_t count;                   /* slots used, including tombstones */
+    size_t cap;                     /* allocated slots */
+    size_t root;                    /* stable root index */
+    const stdlib_allocator *alloc;  /* borrowed; NULL = checked heap */
+} scene3d_scene;
+
+/* ---- small internal helpers -------------------------------------------- */
+
+static inline scene3d_transform scene3d_transform_identity(void) {
+    scene3d_transform t;
+    t.position.x = 0.0f; t.position.y = 0.0f; t.position.z = 0.0f;
+    t.rotation.x = 0.0f; t.rotation.y = 0.0f; t.rotation.z = 0.0f;
+    t.scale.x = 1.0f; t.scale.y = 1.0f; t.scale.z = 1.0f;
+    return t;
+}
+
+/* Grow *items to hold at least `want` elements of elem_size.  Always uses
+ * allocate + copy + release (never realloc), so it works with monotonic and
+ * pool allocators alike and is failure-atomic: on -1 nothing is published. */
+static inline int scene3d_grow(void **items, size_t *cap, size_t want,
+                               size_t elem_size, const stdlib_allocator *a,
+                               error *err) {
+    size_t newcap;
+    size_t bytes;
+    size_t oldbytes;
+    void *fresh;
+    if (want <= *cap)
+        return 0;
+    if (elem_size == 0 || want > STDLIB_ALLOC_LIMIT / elem_size)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                              "scene3d: array size overflow"),
+               STDLIB_FAIL;
+    newcap = *cap == 0 ? SCENE3D_INITIAL_CHILDREN : *cap;
+    while (newcap < want) {
+        if (newcap > STDLIB_ALLOC_LIMIT / 2u / elem_size) {
+            newcap = want;
+            break;
+        }
+        newcap *= 2u;
+    }
+    bytes = newcap * elem_size;
+    oldbytes = (*cap) * elem_size;
+    fresh = stdlib_allocate(a, bytes, STDLIB_ALIGN_DEFAULT, err);
+    if (fresh == (void *)0)
+        return STDLIB_FAIL;
+    if (*items != (void *)0)
+        memcpy(fresh, *items, oldbytes);
+    if (*items != (void *)0)
+        stdlib_deallocate(a, *items, oldbytes);
+    *items = fresh;
+    *cap = newcap;
+    return STDLIB_OK;
+}
+
+static inline int scene3d_live(const scene3d_scene *s, size_t index) {
+    return s != (const scene3d_scene *)0 && index < s->count &&
+           s->nodes[index].alive != 0;
+}
+
+static inline int scene3d_name_ok(const char *name) {
+    size_t i;
+    if (name == (const char *)0)
+        return 0;
+    for (i = 0; i < SCENE3D_MAX_NAME; ++i) {
+        if (name[i] == '\0')
+            return 1;
+    }
+    return 0; /* no terminator inside the limit => oversized */
+}
+
+/* Name lookup that never reports an error: SCENE3D_NO_INDEX means absent. */
+static inline size_t scene3d_find_index(const scene3d_scene *s,
+                                        const char *name) {
+    size_t i;
+    if (s == (const scene3d_scene *)0 || !scene3d_name_ok(name))
+        return SCENE3D_NO_INDEX;
+    for (i = 0; i < s->count; ++i) {
+        if (s->nodes[i].alive != 0 && strcmp(s->nodes[i].name, name) == 0)
+            return i;
+    }
+    return SCENE3D_NO_INDEX;
+}
+
+/* ---- lifecycle ----------------------------------------------------------- */
+
+static inline int scene3d_init(scene3d_scene *s, const stdlib_allocator *a,
+                               error *err) {
+    scene3d_node *root;
+    error_reset(err);
+    if (s == (scene3d_scene *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "scene3d_init: NULL scene"),
+               STDLIB_FAIL;
+    s->nodes = (scene3d_node *)0;
+    s->count = 0;
+    s->cap = 0;
+    s->root = SCENE3D_ROOT_INDEX;
+    s->alloc = a;
+    if (scene3d_grow((void **)&s->nodes, &s->cap, SCENE3D_INITIAL_NODES,
+                     sizeof(scene3d_node), a, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    root = &s->nodes[SCENE3D_ROOT_INDEX];
+    root->name[0] = '\0';
+    memcpy(root->name, SCENE3D_ROOT_NAME, sizeof(SCENE3D_ROOT_NAME));
+    root->parent = SCENE3D_NO_INDEX;
+    root->children.items = (size_t *)0;
+    root->children.count = 0;
+    root->children.cap = 0;
+    root->transform = scene3d_transform_identity();
+    root->visible = 1;
+    root->alive = 1;
+    root->depth = 0;
+    s->count = 1;
+    return STDLIB_OK;
+}
+
+static inline void scene3d_drop(scene3d_scene *s) {
+    size_t i;
+    if (s == (scene3d_scene *)0 || s->nodes == (scene3d_node *)0)
+        return;
+    for (i = 0; i < s->count; ++i) {
+        if (s->nodes[i].children.items != (size_t *)0) {
+            stdlib_deallocate(s->alloc, s->nodes[i].children.items,
+                              s->nodes[i].children.cap * sizeof(size_t));
+            s->nodes[i].children.items = (size_t *)0;
+            s->nodes[i].children.count = 0;
+            s->nodes[i].children.cap = 0;
+        }
+    }
+    stdlib_deallocate(s->alloc, s->nodes, s->cap * sizeof(scene3d_node));
+    s->nodes = (scene3d_node *)0;
+    s->count = 0;
+    s->cap = 0;
+    s->root = SCENE3D_ROOT_INDEX;
+    s->alloc = (const stdlib_allocator *)0;
+}
+
+static inline size_t scene3d_root(const scene3d_scene *s) {
+    return s == (const scene3d_scene *)0 ? SCENE3D_NO_INDEX : s->root;
+}
+
+/* Number of living nodes (tombstones are not counted). */
+static inline size_t scene3d_count(const scene3d_scene *s) {
+    size_t i, n = 0;
+    if (s == (const scene3d_scene *)0)
+        return 0;
+    for (i = 0; i < s->count; ++i)
+        if (s->nodes[i].alive != 0)
+            ++n;
+    return n;
+}
+
+static inline const char *scene3d_node_name(const scene3d_scene *s,
+                                            size_t index) {
+    if (!scene3d_live(s, index))
+        return (const char *)0;
+    return s->nodes[index].name;
+}
+
+static inline size_t scene3d_node_parent(const scene3d_scene *s, size_t index) {
+    if (!scene3d_live(s, index))
+        return SCENE3D_NO_INDEX;
+    return s->nodes[index].parent;
+}
+
+static inline size_t scene3d_node_depth(const scene3d_scene *s, size_t index) {
+    if (!scene3d_live(s, index))
+        return SCENE3D_NO_INDEX;
+    return s->nodes[index].depth;
+}
+
+static inline size_t scene3d_node_child_count(const scene3d_scene *s,
+                                              size_t index) {
+    size_t i, n = 0;
+    if (!scene3d_live(s, index))
+        return 0;
+    for (i = 0; i < s->nodes[index].children.count; ++i) {
+        size_t c = s->nodes[index].children.items[i];
+        if (c < s->count && s->nodes[c].alive != 0)
+            ++n;
+    }
+    return n;
+}
+
+/* Deterministic child lookup by position (insertion order). */
+static inline size_t scene3d_node_child_at(const scene3d_scene *s,
+                                           size_t index, size_t position) {
+    size_t i, n = 0;
+    if (!scene3d_live(s, index))
+        return SCENE3D_NO_INDEX;
+    for (i = 0; i < s->nodes[index].children.count; ++i) {
+        size_t c = s->nodes[index].children.items[i];
+        if (c < s->count && s->nodes[c].alive != 0) {
+            if (n == position)
+                return c;
+            ++n;
+        }
+    }
+    return SCENE3D_NO_INDEX;
+}
+
+/* ---- add / remove / reparent -------------------------------------------- */
+
+static inline size_t scene3d_node_add(scene3d_scene *s, size_t parent,
+                                      const char *name, error *err) {
+    size_t index;
+    scene3d_node *node;
+    error_reset(err);
+    if (s == (scene3d_scene *)0 || s->nodes == (scene3d_node *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER, "scene3d_node_add: NULL scene"),
+               SCENE3D_NO_INDEX;
+    if (!scene3d_live(s, parent))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS, "scene3d_node_add: invalid parent"),
+               SCENE3D_NO_INDEX;
+    if (!scene3d_name_ok(name))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "scene3d_node_add: invalid name"),
+               SCENE3D_NO_INDEX;
+    if (scene3d_find_index(s, name) != SCENE3D_NO_INDEX)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED, "scene3d_node_add: duplicate name"),
+               SCENE3D_NO_INDEX;
+    if (s->nodes[parent].depth >= SCENE3D_MAX_DEPTH)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                              "scene3d_node_add: depth limit"), SCENE3D_NO_INDEX;
+
+    /* Commit-last discipline: grow both arrays before touching live state. */
+    if (scene3d_grow((void **)&s->nodes, &s->cap, s->count + 1u,
+                     sizeof(scene3d_node), s->alloc, err) != STDLIB_OK)
+        return SCENE3D_NO_INDEX;
+    {
+        scene3d_node *p = &s->nodes[parent]; /* re-fetch after node growth */
+        if (scene3d_grow((void **)&p->children.items, &p->children.cap,
+                         p->children.count + 1u, sizeof(size_t),
+                         s->alloc, err) != STDLIB_OK)
+            return SCENE3D_NO_INDEX;
+    }
+    index = s->count;
+    node = &s->nodes[index];
+    node->name[0] = '\0';
+    memcpy(node->name, name, strlen(name) + 1u);
+    node->parent = parent;
+    node->children.items = (size_t *)0;
+    node->children.count = 0;
+    node->children.cap = 0;
+    node->transform = scene3d_transform_identity();
+    node->visible = 1;
+    node->alive = 1;
+    node->depth = s->nodes[parent].depth + 1u;
+    s->nodes[parent].children.items[s->nodes[parent].children.count++] = index;
+    s->count = index + 1u;
+    return index;
+}
+
+static inline int scene3d_collect_rec(const scene3d_scene *s, size_t start,
+                                      scene3d_index_array *out, error *err) {
+    size_t i;
+    if (scene3d_grow((void **)&out->items, &out->cap, out->count + 1u,
+                     sizeof(size_t), s->alloc, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    out->items[out->count++] = start;
+    for (i = 0; i < s->nodes[start].children.count; ++i) {
+        size_t c = s->nodes[start].children.items[i];
+        if (c < s->count && s->nodes[c].alive != 0) {
+            if (scene3d_collect_rec(s, c, out, err) != STDLIB_OK)
+                return STDLIB_FAIL;
+        }
+    }
+    return STDLIB_OK;
+}
+
+static inline int scene3d_node_remove(scene3d_scene *s, size_t index,
+                                      error *err) {
+    scene3d_index_array removed;
+    size_t parent, i, n;
+    error_reset(err);
+    removed.items = (size_t *)0;
+    removed.count = 0;
+    removed.cap = 0;
+    if (!scene3d_live(s, index))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS, "scene3d_node_remove: invalid index"),
+               STDLIB_FAIL;
+    if (index == s->root)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP, "scene3d_node_remove: root is fixed"),
+               STDLIB_FAIL;
+    if (scene3d_collect_rec(s, index, &removed, err) != STDLIB_OK) {
+        if (removed.items != (size_t *)0)
+            stdlib_deallocate(s->alloc, removed.items, removed.cap * sizeof(size_t));
+        return STDLIB_FAIL;
+    }
+    /* Detach the subtree root from its living parent. */
+    parent = s->nodes[index].parent;
+    if (parent < s->count && s->nodes[parent].alive != 0) {
+        for (i = 0; i < s->nodes[parent].children.count; ++i) {
+            if (s->nodes[parent].children.items[i] == index) {
+                size_t j;
+                for (j = i; j + 1u < s->nodes[parent].children.count; ++j)
+                    s->nodes[parent].children.items[j] =
+                        s->nodes[parent].children.items[j + 1u];
+                --s->nodes[parent].children.count;
+                break;
+            }
+        }
+    }
+    /* Tombstone every node in the collected subtree and release its arrays. */
+    for (n = 0; n < removed.count; ++n) {
+        size_t r = removed.items[n];
+        if (s->nodes[r].children.items != (size_t *)0) {
+            stdlib_deallocate(s->alloc, s->nodes[r].children.items,
+                              s->nodes[r].children.cap * sizeof(size_t));
+            s->nodes[r].children.items = (size_t *)0;
+            s->nodes[r].children.count = 0;
+            s->nodes[r].children.cap = 0;
+        }
+        s->nodes[r].alive = 0;
+        s->nodes[r].parent = SCENE3D_NO_INDEX;
+    }
+    stdlib_deallocate(s->alloc, removed.items, removed.cap * sizeof(size_t));
+    return STDLIB_OK;
+}
+
+/* Greatest depth reached anywhere under `index` (including index itself). */
+static inline size_t scene3d_subtree_height(const scene3d_scene *s, size_t index) {
+    size_t i, best = s->nodes[index].depth;
+    for (i = 0; i < s->nodes[index].children.count; ++i) {
+        size_t c = s->nodes[index].children.items[i];
+        size_t h;
+        if (c >= s->count || s->nodes[c].alive == 0)
+            continue;
+        h = scene3d_subtree_height(s, c);
+        if (h > best)
+            best = h;
+    }
+    return best;
+}
+
+static inline void scene3d_set_depth_rec(scene3d_scene *s, size_t index,
+                                         size_t depth) {
+    size_t i;
+    s->nodes[index].depth = depth;
+    for (i = 0; i < s->nodes[index].children.count; ++i) {
+        size_t c = s->nodes[index].children.items[i];
+        if (c < s->count && s->nodes[c].alive != 0)
+            scene3d_set_depth_rec(s, c, depth + 1u);
+    }
+}
+
+static inline int scene3d_node_reparent(scene3d_scene *s, size_t index,
+                                        size_t new_parent, error *err) {
+    size_t walk, new_depth, height;
+    scene3d_node *p;
+    error_reset(err);
+    if (!scene3d_live(s, index) || !scene3d_live(s, new_parent))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS, "scene3d_node_reparent: invalid index"),
+               STDLIB_FAIL;
+    if (index == s->root)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP, "scene3d_node_reparent: root is fixed"),
+               STDLIB_FAIL;
+    if (index == new_parent)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP, "scene3d_node_reparent: self cycle"),
+               STDLIB_FAIL;
+    /* Cycle check: new_parent must not be a descendant of index. */
+    walk = new_parent;
+    while (walk != SCENE3D_NO_INDEX) {
+        if (walk == index)
+            return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                                  CPLUS_EXIT_OWNERSHIP,
+                                  "scene3d_node_reparent: descendant cycle"),
+                   STDLIB_FAIL;
+        walk = s->nodes[walk].parent;
+    }
+    new_depth = s->nodes[new_parent].depth + 1u;
+    height = scene3d_subtree_height(s, index);
+    if (new_depth > SCENE3D_MAX_DEPTH ||
+        height - s->nodes[index].depth > SCENE3D_MAX_DEPTH - new_depth)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                              "scene3d_node_reparent: depth limit"), STDLIB_FAIL;
+
+    /* Grow the destination child list before changing any link. */
+    p = &s->nodes[new_parent];
+    if (scene3d_grow((void **)&p->children.items, &p->children.cap,
+                     p->children.count + 1u, sizeof(size_t),
+                     s->alloc, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+
+    /* Detach from the old parent (no allocation involved). */
+    walk = s->nodes[index].parent;
+    if (walk < s->count && s->nodes[walk].alive != 0) {
+        for (size_t i = 0; i < s->nodes[walk].children.count; ++i) {
+            if (s->nodes[walk].children.items[i] == index) {
+                size_t j;
+                for (j = i; j + 1u < s->nodes[walk].children.count; ++j)
+                    s->nodes[walk].children.items[j] =
+                        s->nodes[walk].children.items[j + 1u];
+                --s->nodes[walk].children.count;
+                break;
+            }
+        }
+    }
+    s->nodes[new_parent].children.items[s->nodes[new_parent].children.count++] = index;
+    s->nodes[index].parent = new_parent;
+    scene3d_set_depth_rec(s, index, new_depth);
+    return STDLIB_OK;
+}
+
+/* ---- transform / visibility --------------------------------------------- */
+
+static inline int scene3d_node_transform_set(scene3d_scene *s, size_t index,
+                                             const scene3d_transform *t,
+                                             error *err) {
+    error_reset(err);
+    if (!scene3d_live(s, index) || t == (const scene3d_transform *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "scene3d_node_transform_set: invalid argument"),
+               STDLIB_FAIL;
+    s->nodes[index].transform = *t;
+    return STDLIB_OK;
+}
+
+static inline int scene3d_node_transform_get(const scene3d_scene *s,
+                                             size_t index,
+                                             scene3d_transform *out,
+                                             error *err) {
+    error_reset(err);
+    if (!scene3d_live(s, index) || out == (scene3d_transform *)0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "scene3d_node_transform_get: invalid argument"),
+               STDLIB_FAIL;
+    *out = s->nodes[index].transform;
+    return STDLIB_OK;
+}
+
+static inline int scene3d_node_set_visible(scene3d_scene *s, size_t index,
+                                           int visible, error *err) {
+    error_reset(err);
+    if (!scene3d_live(s, index))
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS,
+                              "scene3d_node_set_visible: invalid index"),
+               STDLIB_FAIL;
+    s->nodes[index].visible = visible ? 1 : 0;
+    return STDLIB_OK;
+}
+
+static inline int scene3d_node_is_visible(const scene3d_scene *s, size_t index) {
+    if (!scene3d_live(s, index))
+        return 0;
+    return s->nodes[index].visible ? 1 : 0;
+}
+
+/* ---- traversal / search -------------------------------------------------- */
+
+static inline int scene3d_visit_preorder(const scene3d_scene *s, size_t node,
+                                         size_t *out, size_t cap, size_t *used) {
+    size_t i;
+    if (*used >= cap)
+        return STDLIB_FAIL; /* caller records the error exactly once */
+    out[*used] = node;
+    ++*used;
+    for (i = 0; i < s->nodes[node].children.count; ++i) {
+        size_t c = s->nodes[node].children.items[i];
+        if (c < s->count && s->nodes[c].alive != 0) {
+            if (scene3d_visit_preorder(s, c, out, cap, used) != STDLIB_OK)
+                return STDLIB_FAIL;
+        }
+    }
+    return STDLIB_OK;
+}
+
+/* Fill `out` with the preorder indices of the `start` subtree.  Pass
+ * scene3d_root(s) as `start` to traverse the whole scene.  On success sets
+ * *out_count to the number written; on failure (bad arguments or a buffer
+ * smaller than the subtree) *out_count is set to 0 and no out slot is used. */
+static inline int scene3d_traverse(const scene3d_scene *s, size_t start,
+                                   size_t *out, size_t out_cap,
+                                   size_t *out_count, error *err) {
+    size_t used = 0;
+    error_reset(err);
+    if (s == (const scene3d_scene *)0 || out == (size_t *)0 ||
+        out_count == (size_t *)0 || out_cap == 0) {
+        *out_count = 0;
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "scene3d_traverse: invalid argument"),
+               STDLIB_FAIL;
+    }
+    if (!scene3d_live(s, start)) {
+        *out_count = 0;
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS,
+                              "scene3d_traverse: invalid start node"), STDLIB_FAIL;
+    }
+    if (scene3d_visit_preorder(s, start, out, out_cap, &used) != STDLIB_OK) {
+        *out_count = 0;
+        if (err != (error *)0)
+            error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "scene3d_traverse: output buffer too small");
+        return STDLIB_FAIL;
+    }
+    *out_count = used;
+    return STDLIB_OK;
+}
+
+static inline size_t scene3d_find(const scene3d_scene *s, const char *name,
+                                  error *err) {
+    size_t found;
+    error_reset(err);
+    if (s == (const scene3d_scene *)0 || !scene3d_name_ok(name)) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "scene3d_find: invalid name/scene");
+        return SCENE3D_NO_INDEX;
+    }
+    found = scene3d_find_index(s, name);
+    if (found == SCENE3D_NO_INDEX)
+        return SCENE3D_NO_INDEX; /* absence is not an error */
+    return found;
+}
+
+#endif /* CPLUS_STD_SCENE3D_HP */

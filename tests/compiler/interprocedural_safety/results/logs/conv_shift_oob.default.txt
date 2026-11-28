@@ -1,0 +1,11 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/conv_shift_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:32: warning: [CPLUS-FFI] shift count 64 is not less than the width 32 of the left operand
+  int main(void){ int x=1; int y=x<<64; return y; }
+                                 ^
+<SRC>:1:33: error: shift count >= width of type [-Werror,-Wshift-count-overflow]
+    1 | int main(void){ int x=1; int y=x<<64; return y; }
+      |                                 ^ ~~
+1 error generated.

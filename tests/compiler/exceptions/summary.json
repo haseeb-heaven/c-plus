@@ -1,0 +1,38 @@
+{
+  "generated": "2026-11-25T18:44:03.095844+00:00",
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "throw_catch",
+      "build_rc": 0,
+      "build_stderr": "",
+      "run_rc": 0,
+      "stdout": "before\ncaught 1 boom\ndone\n",
+      "legacy_build_rc": 1,
+      "legacy_source_identical": true,
+      "status": "PASS"
+    },
+    {
+      "case": "nested",
+      "build_rc": 0,
+      "build_stderr": "",
+      "run_rc": 0,
+      "stdout": "inner 42\nmiddle\nend\n",
+      "legacy_build_rc": 1,
+      "legacy_source_identical": true,
+      "status": "PASS"
+    },
+    {
+      "case": "demo",
+      "build_rc": 0,
+      "build_stderr": "",
+      "good_rc": 0,
+      "bad_rc": 111,
+      "bad_stderr": "C+ runtime error: input overflow at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/exceptions/demo.cp:5: cannot store '0xFFFFFF' into 'arr[3]' (short, valid range -32768..32767) - the number is too large/small for this variable type and would overflow memory\n",
+      "legacy_build_rc": 1,
+      "legacy_source_identical": false,
+      "status": "PASS"
+    }
+  ],
+  "failures": []
+}

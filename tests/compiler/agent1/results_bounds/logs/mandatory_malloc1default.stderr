@@ -1,0 +1,8 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/mandatory_malloc1.c:3:48: warning: allocation 'p' leaks on this return path (no matching free)
+help: free/close the resource on every return path, or use a C+ managed allocation
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/mandatory_malloc1.c:2:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 1 bytes
+  int main(void){ int *p = malloc(1); p[9] = 42; return p[9]; }
+                                      ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/mandatory_malloc1.c:2:55: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 1 bytes
+  int main(void){ int *p = malloc(1); p[9] = 42; return p[9]; }
+                                                        ^

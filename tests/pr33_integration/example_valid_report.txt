@@ -1,0 +1,27 @@
+# PR #33 agent report -- VALID EXAMPLE.
+# Copy this structure for every parallel-agent PR. Schema is in
+# docs/abi/PR33_INTEGRATION_GATES.md. Expected check_report.sh exit: 0.
+SCOPE: runtime allocation guard hardening (PR AGENT 1 / agent/core-safety)
+DEPENDENCIES: none
+COMMIT_SHA: 4f1c9a7b2e6d8a0c3b5f7d9e1a2c4b6d8e0f2a4b
+CHANGED_PATHS_BEGIN
+runtime/cplus_runtime.c
+runtime/include/cplus/cplus.h
+tests/runtime/test_runtime_cleanup.c
+CHANGED_PATHS_END
+EXACT_COMMANDS_BEGIN
+cmake --build build --target c+ -- -j4
+sh tests/run_tests.sh
+sh tests/runtime/run_runtime_tests.sh
+EXACT_COMMANDS_END
+TEST_OUTPUT_BEGIN
+cplus_tests: 900 passed, 0 failed
+runtime tests: 2 passed, 0 failed
+runtime cleanup: no leaks reported
+TEST_OUTPUT_END
+KNOWN_FAILURES: none
+INDEPENDENT_REVIEW: PENDING (no verifier assigned yet)
+CLAIMS_BEGIN
+test:tests/runtime/test_runtime_cleanup.c
+api:cplus_runtime_recover
+CLAIMS_END

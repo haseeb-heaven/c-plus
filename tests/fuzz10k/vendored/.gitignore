@@ -1,0 +1,7 @@
+# Generated harness artifacts (gitignored).  The small digest.txt is
+# intentionally tracked as evidence; scenarios.log is large and ignored.
+scenarios.log
+logs/
+bin/
+*.bin
+*.out

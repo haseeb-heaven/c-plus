@@ -1,0 +1,95 @@
+libc contract matrix (issue #25)
+macOS-27.2.1-arm64-arm-64bit
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+calloc       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.neg.c:3:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 4 bytes\n  int main(void){ int *p=calloc(1,4); p[9]=1; free(p); return 0; }\n                            "
+fclose       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.neg.c:3:88: error: double close of FILE* 'f'\nhelp: release the stream exactly once\n"
+fopen        assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.neg.c:3:88: error: use of closed FILE* 'f'\nhelp: the stream was already closed\n"
+fread        assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.neg.c
+  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.neg.c:2:98: error: [CPLUS-FFI] fread reads 9 bytes into destination \'b\' of 4 bytes\n  int main(void){ char b[4]; FILE *f=fopen("/tmp/cplus_matrix.txt","rb"); if(!f)return 1; size_t n=fread(b,1,9,f); fclos'
+free         assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.neg.c:3:52: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n  int main(void){ int *p=malloc(16); if(!p)return 1; free(p+1); return 0; }\n                                                 "
+fwrite       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.neg.c
+  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.neg.c:2:52: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 3 passed to fwrite\n  int main(void){ char b[4]={0}; FILE *f=0; size_t n=fwrite(b,1,4,f); return n==4?0:1; }\n              '
+malloc       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.neg.c:3:35: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 4 bytes\n  int main(void){ int *p=malloc(4); p[9]=1; free(p); return 0; }\n                              "
+memcpy       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.neg.c:3:33: warning: [CPLUS-FFI] 'memcpy' will always overflow; destination buffer has size 4, but size argument is 9\n  int main(void){ char a[4],b[8]; memcpy(a,b,9); return a[0]; }\n                    "
+memmove      assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.neg.c:3:33: warning: [CPLUS-FFI] 'memmove' will always overflow; destination buffer has size 4, but size argument is 9\n  int main(void){ char a[4],b[8]; memmove(a,b,9); return a[0]; }\n                 "
+memset       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.neg.c:3:28: warning: [CPLUS-FFI] 'memset' will always overflow; destination buffer has size 4, but size argument is 9\n  int main(void){ char a[4]; memset(a,0,9); return a[0]; }\n                         "
+realloc      assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.neg.c
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.neg.c:3:88: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'q' of 4 bytes\n  int main(void){ int *p=malloc(4); if(!p)return 1; int *q=realloc(p,4); if(!q)return 1; q[9]="
+strcat       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.neg.c
+  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.neg.c:3:32: warning: [CPLUS-FFI] \'strcat\' will always overflow; destination buffer has size 2, but the source string has length 9 (including NUL byte)\n  int main(void){ char a[2]="x"; strcat(a,"overflow'
+strcpy       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.neg.c
+  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.neg.c:3:28: warning: [CPLUS-FFI] \'strcpy\' will always overflow; destination buffer has size 2, but the source string has length 9 (including NUL byte)\n  int main(void){ char a[2]; strcpy(a,"overflow"); '
+strlen       assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.neg.c
+  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.neg.c:3:35: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to strlen\n  int main(void){ char *p=0; return strlen(p); }\n                                    ^~~~~~\n'
+strncpy      assert PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.pos.c
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.pos.c ok\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.neg.c
+  rc=1 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.neg.c:3:28: warning: [CPLUS-FFI] \'strncpy\' will always overflow; destination buffer has size 2, but size argument is 9\n  int main(void){ char a[2]; strncpy(a,"overflow",9); return a[0]; }\n             '
+strcpy_s     partial PASS
+strncpy_s    partial PASS
+strcat_s     partial PASS
+memcpy_s     partial PASS
+memmove_s    partial PASS
+memset_s     partial PASS
+strnlen_s    partial PASS
+sprintf_s    partial PASS
+snprintf_s   partial PASS
+fopen_s      partial PASS
+malloc_s     partial PASS
+calloc_s     partial PASS
+realloc_s    partial PASS
+free_s       partial PASS
+
+contracts=29 cases=29 passed=29 failed=0

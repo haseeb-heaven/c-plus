@@ -1,0 +1,134 @@
+{
+  "generated": "2026-11-25T18:56:35.891835+00:00",
+  "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "clang": "/usr/bin/clang",
+  "results": [
+    {
+      "name": "snake_full",
+      "stdin": "dddswq",
+      "legacy_preserved": true,
+      "legacy_match": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        }
+      },
+      "stdout": "##########\n#        #\n#        #\n#        #\n#        #\n#    *   #\n#        #\n#        #\n#        #\n##########\nscore=0 len=1\n##########\n#        #\n#        #\n#        #\n#        #\n#    *o  #\n#        #\n#        #\n#        #\n##########\nscore=0 len=1\n##########\n#        #\n#        #\n#        #\n#        #\n#    * o #\n#        #\n#        #\n#        #\n##########\nscore=0 len=1\n##########\n#        #\n#        #\n#        #\n#        #\n#    *  o#\n#        #\n#        #\n#        #\n##########\nscore=0 len=1\n####"
+    },
+    {
+      "name": "game2048_full",
+      "stdin": "aawsdaq",
+      "legacy_preserved": true,
+      "legacy_match": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        }
+      },
+      "stdout": "   2   2   0   0\n   0   0   0   0\n   0   0   0   0\n   0   0   0   0\n   4   0   2   0\n   0   0   0   0\n   0   0   0   0\n   0   0   0   0\n   4   2   0   2\n   0   0   0   0\n   0   0   0   0\n   0   0   0   0\n   4   2   0   2\n   2   0   0   0\n   0   0   0   0\n   0   0   0   0\n   4   2   0   2\n   2   2   0   0\n   0   0   0   0\n   0   0   0   0\n   4   4   0   0\n   4   0   2   0\n   0   0   0   0\n   0   0   0   0\n   8   0   0   0\n   4   2   0   2\n   0   0   0   0\n   0   0   0   0\n   8   0   0   0\n   4   "
+    },
+    {
+      "name": "tic_tac_toe_full",
+      "stdin": "1529q",
+      "legacy_preserved": true,
+      "legacy_match": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        }
+      },
+      "stdout": ".|.|.\n.|.|.\n.|.|.\nX|O|.\n.|.|.\n.|.|.\nX|O|O\n.|X|.\n.|.|.\nX|O|O\nO|X|.\n.|.|.\nX|O|O\nO|X|.\n.|.|X\nhuman wins\n"
+    },
+    {
+      "name": "tetris_mini",
+      "stdin": "rrddlldq",
+      "legacy_preserved": true,
+      "legacy_match": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/full_apps/tetris_mini.c:55:11: warning: 'goto' bypasses C+ cleanup; destructors may not run\n          }\nhelp: use structured cont"
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/full_apps/tetris_mini.c:55:11: warning: 'goto' bypasses C+ cleanup; destructors may not run\n          }\nhelp: use structured cont"
+        }
+      },
+      "stdout": "........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n........\n....."
+    },
+    {
+      "name": "line_editor",
+      "stdin": "a hello\na world\np\nd\np\nq\n",
+      "legacy_preserved": true,
+      "legacy_match": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        }
+      },
+      "stdout": "1: hello\n2: world\n1: hello\nlines=1\n"
+    },
+    {
+      "name": "calc_repl",
+      "stdin": "1+2*3\n4*4\nq\n",
+      "legacy_preserved": true,
+      "legacy_match": true,
+      "modes": {
+        "--default": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        },
+        "--strict": {
+          "build_rc": 0,
+          "run_rc": 0,
+          "match": true,
+          "stderr": ""
+        }
+      },
+      "stdout": "= 9\n= 16\nbye\n"
+    }
+  ],
+  "failures": []
+}

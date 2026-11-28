@@ -28,9 +28,107 @@ cplus_rewritten.c
 
 scratch
 
+# Root-level compiled test/demo artifacts (user-run, not shipped)
+# (ignore the file/dir name; git will ignore both files and dirs with these names)
+branch_free_null_ok
+case_CTRL_direct_null
+len_runtime_metadata
+init_all_branches
+null_outparam
+repro_shadow_return
+t
+
+# Dev scratch dir
+scratch
+
 benchmarks/out/
 
 examples/out/
 
 # Ignore all Apple property-list files
 *.plist
+
+__pycache__/
+*.pyc
+
+# Transient test output (binaries + logs). Kept gitignored; do not commit.
+tests/out/
+tests/**/out/
+tests/**/bin/
+demos/**/out/
+
+# Transient perf-runner work directories (binaries/timing logs)
+tests/compiler/agent1/results_perf/work*/
+
+# Generated differential/optimizer binaries
+tests/compiler/optimizer/results/bin/
+tests/compiler/fuzz/results/failures/
+tests/compiler/differential/results/mismatches/*/*.bin
+tests/compiler/differential/probe/cases/*.bin
+
+# Benchmark and comparison binaries
+tests/compiler/memory_safety_compare/cases/*.bin
+benchmarks/cplus_vs_rust/results/*.bin
+benchmarks/rust_vs_cplus/results/*.bin
+
+# Generated binaries from the new compatibility/adversarial harnesses
+tests/compiler/abi_real_world/cases/*.bin
+tests/compiler/abi_real_world/cases/*.o
+tests/compiler/abi_real_world/cases/*.a
+tests/compiler/real_world_c/bin/
+tests/compiler/real_world_c/cache/
+tests/compiler/c_standards/results/generated/*.bin
+tests/compiler/adversarial_campaign/results/*.bin
+
+# Wave 3 real-world harness generated artifacts
+tests/compiler/real_world_c/wave3/cache/
+tests/compiler/real_world_c/wave3/bin/
+tests/compiler/real_world_c/wave3/results/bin/
+tests/compiler/real_world_c/wave3/results/logs/
+tests/compiler/real_world_c/wave3/results/generated/
+
+tests/compiler/full_coverage/out/
+tests/compiler/full_coverage/logs/
+tests/compiler/safety_matrix/__pycache__/
+tests/compiler/optimized_traps/results/*.bin
+tests/compiler/full_coverage/out/
+tests/compiler/full_coverage/logs/
+tests/compiler/optimized_traps/results/*.bin
+tests/compiler/abi_mixed/results/abi_mixed_*/
+tests/compiler/c_apps/results/*.bin
+tests/compiler/c_apps/results/*.clang
+tests/compiler/c_apps/results/*.bin
+
+tests/compiler/cross_compiler/results/*.bin
+tests/compiler/cross_compiler/results/*.rs
+tests/compiler/cross_compiler/results/*.c
+tests/compiler/cross_compiler/results/filc.tar.xz
+tests/compiler/cross_compiler/results/filc/
+tests/compiler/cross_compiler/results/*.out
+tests/compiler/cross_compiler/results/*.err
+tests/compiler/cross_compiler/results/*.bench
+tests/compiler/cross_compiler/results/core
+tests/compiler/input_safety/*.bin
+tests/compiler/exceptions/*.bin
+tests/compiler/exceptions/fuzz_work/
+
+# Regenerated scenario scratch/build artifacts
+tests/compiler/web_10000/scratch/
+tests/compiler/api_coverage/.scratch/
+tests/compiler/stdlib_api_coverage/build/
+tests/compiler/cert_rules_1000/scratch/
+tests/compiler/e2e_10k/*/scratch/
+tests/compiler/e2e_10k/*/generated/
+tests/compiler/auto_runtime/*.bin
+tests/compiler/borrow_escape/results/*.bin
+tests/compiler/default_policy/results/*.bin
+tests/compiler/pointer_provenance/results/*.bin
+tests/compiler/ast_identity/results/*.bin
+tests/compiler/data_race/results/*.bin
+tests/compiler/abi_link_flags/results/*.bin
+tests/compiler/abi_link_flags/cases/*.o
+tests/compiler/abi_link_flags/cases/*.a
+tests/compiler/abi_link_flags/cases/*.dylib
+tests/compiler/raii_cleanup/results/*.bin
+tests/compiler/proof1_uaf/results/*.bin
+tests/compiler/libc_contract_matrix/results/*.bin

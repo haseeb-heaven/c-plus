@@ -1,0 +1,5 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_ok.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/struct_ptr_ok.primary.bin
+returncode: 0
+timed_out: False
+
+

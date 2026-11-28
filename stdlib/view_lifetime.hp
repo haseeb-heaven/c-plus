@@ -1,0 +1,327 @@
+/* C+ standard library: shared runtime buffer-lifetime registry.
+ *
+ * Additive, header-only infrastructure for view types that need to reject
+ * access after their owner is gone.  C+ classes lower to plain C structs and
+ * have no access control or lifetime parameters, so this is a RUNTIME check,
+ * not compile-time borrow enforcement.  A view carries a stable token that is
+ * registered when the owner's buffer is published and retired when the buffer
+ * is released, reallocated or rewound.  Address reuse alone cannot revive a
+ * stale token because tokens are never reused.
+ *
+ * The table is a fixed-size, open-addressed hash table in a weak file-scope
+ * object (one instance per program, even across translation units).  It stores
+ * pointers for identity only: it never dereferences them.  A slot keeps its
+ * key after retirement so probe chains stay intact; `live` distinguishes a
+ * retired slot from a live one.
+ *
+ * Exhaustion fails closed: register() returns 0, which callers treat as "no
+ * valid owner token".  Nothing here allocates, formats or reports errors.
+ */
+#ifndef CPLUS_STD_VIEW_LIFETIME_HP
+#define CPLUS_STD_VIEW_LIFETIME_HP
+
+#include <stddef.h>
+#include <stdint.h>
+#include "cplus/cplus.h"
+
+#define STDLIB_VIEW_TABLE_BITS 12u
+#define STDLIB_VIEW_TABLE_SIZE ((size_t)1u << STDLIB_VIEW_TABLE_BITS)
+#define STDLIB_VIEW_TABLE_MASK (STDLIB_VIEW_TABLE_SIZE - 1u)
+
+typedef struct stdlib_view_slot {
+    const void *ptr;
+    size_t bytes;
+    unsigned long long token;
+    unsigned long long generation; /* owner-supplied shape version */
+    int live;
+} stdlib_view_slot;
+
+typedef struct stdlib_view_registry {
+    int lock;
+    unsigned long long next_token;
+    stdlib_view_slot slots[STDLIB_VIEW_TABLE_SIZE];
+} stdlib_view_registry;
+
+/* Weak definition: merged into one instance across all translation units. */
+__attribute__((weak)) stdlib_view_registry stdlib_view_registry_state;
+
+static inline void stdlib_view_lock(void) {
+    while (__atomic_exchange_n(&stdlib_view_registry_state.lock, 1,
+                               __ATOMIC_ACQUIRE) != 0) {
+    }
+}
+
+static inline void stdlib_view_unlock(void) {
+    __atomic_store_n(&stdlib_view_registry_state.lock, 0, __ATOMIC_RELEASE);
+}
+
+static inline size_t stdlib_view_hash(const void *p) {
+    uintptr_t x = (uintptr_t)p;
+    x ^= x >> 33;
+    x *= (uintptr_t)0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    return (size_t)x & STDLIB_VIEW_TABLE_MASK;
+}
+
+/* Publish `ptr` and return a fresh non-zero token, or 0 if the table is full
+ * (or ptr == NULL).  Re-registering a retired/live address retires all older
+ * tokens for that address by replacing the slot contents. */
+static inline unsigned long long stdlib_view_register(const void *ptr,
+                                                      size_t bytes) {
+    unsigned long long token = 0;
+    if (ptr == (const void *)0)
+        return 0;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        size_t empty = STDLIB_VIEW_TABLE_SIZE;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                if (stdlib_view_registry_state.next_token == 0xFFFFFFFFFFFFFFFFULL)
+                    stdlib_view_registry_state.next_token = 1u;
+                else
+                    ++stdlib_view_registry_state.next_token;
+                if (stdlib_view_registry_state.next_token == 0)
+                    stdlib_view_registry_state.next_token = 1u;
+                token = stdlib_view_registry_state.next_token;
+                s->bytes = bytes;
+                s->token = token;
+                s->generation = 0;
+                s->live = 1;
+                break;
+            }
+            /* Issues #100/#217: a retired slot keeps its key as a tombstone
+             * so probe chains stay intact, but it is reusable.  Remember the
+             * first tombstone (or never-used slot) while continuing to probe
+             * so an existing key is still updated in place.  Reusing tombstones
+             * is what prevents permanent registry exhaustion (and the resulting
+             * dead string/vector/arena views) after 4096 distinct addresses.
+             * Lookups likewise continue past retired slots and only stop at a
+             * never-used one. */
+            if (empty == STDLIB_VIEW_TABLE_SIZE && (!s->live ||
+                                                    s->ptr == (const void *)0))
+                empty = i;
+            if (s->ptr == (const void *)0)
+                break; /* never used: chain ends here */
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+        if (token == 0 && empty != STDLIB_VIEW_TABLE_SIZE) {
+            if (stdlib_view_registry_state.next_token == 0xFFFFFFFFFFFFFFFFULL)
+                stdlib_view_registry_state.next_token = 1u;
+            else
+                ++stdlib_view_registry_state.next_token;
+            if (stdlib_view_registry_state.next_token == 0)
+                stdlib_view_registry_state.next_token = 1u;
+            token = stdlib_view_registry_state.next_token;
+            stdlib_view_registry_state.slots[empty].ptr = ptr;
+            stdlib_view_registry_state.slots[empty].bytes = bytes;
+            stdlib_view_registry_state.slots[empty].token = token;
+            stdlib_view_registry_state.slots[empty].generation = 0;
+            stdlib_view_registry_state.slots[empty].live = 1;
+        }
+    }
+    stdlib_view_unlock();
+    return token;
+}
+
+/* 1 only when ptr is currently published with exactly this token. */
+static inline int stdlib_view_validate(const void *ptr,
+                                       unsigned long long token) {
+    int ok = 0;
+    if (ptr == (const void *)0 || token == 0)
+        return 0;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                ok = s->live && s->token == token ? 1 : 0;
+                break;
+            }
+            if (s->ptr == (const void *)0)
+                break;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+    }
+    stdlib_view_unlock();
+    return ok;
+}
+
+/* 1 when ptr has any live registration, regardless of token. */
+static inline int stdlib_view_is_live(const void *ptr) {
+    int ok = 0;
+    if (ptr == (const void *)0)
+        return 0;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                ok = s->live ? 1 : 0;
+                break;
+            }
+            if (s->ptr == (const void *)0)
+                break;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+    }
+    stdlib_view_unlock();
+    return ok;
+}
+
+/* Registered byte extent, or 0 for NULL/unregistered/retired pointers. */
+static inline size_t stdlib_view_size(const void *ptr) {
+    size_t bytes = 0;
+    if (ptr == (const void *)0)
+        return 0;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                if (s->live)
+                    bytes = s->bytes;
+                break;
+            }
+            if (s->ptr == (const void *)0)
+                break;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+    }
+    stdlib_view_unlock();
+    return bytes;
+}
+
+/* Token currently registered for ptr, or 0 when unregistered/retired. */
+static inline unsigned long long stdlib_view_token_of(const void *ptr) {
+    unsigned long long token = 0;
+    if (ptr == (const void *)0)
+        return 0;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                if (s->live)
+                    token = s->token;
+                break;
+            }
+            if (s->ptr == (const void *)0)
+                break;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+    }
+    stdlib_view_unlock();
+    return token;
+}
+
+/* Retire by address.  The slot key is kept so probe chains remain valid. */
+static inline void stdlib_view_retire(const void *ptr) {
+    if (ptr == (const void *)0)
+        return;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                s->live = 0;
+                s->token = 0;
+                s->generation = 0;
+                break;
+            }
+            if (s->ptr == (const void *)0)
+                break;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+    }
+    stdlib_view_unlock();
+}
+
+static inline void stdlib_view_retire_token(unsigned long long token) {
+    if (token == 0)
+        return;
+    stdlib_view_lock();
+    {
+        size_t i;
+        for (i = 0; i < STDLIB_VIEW_TABLE_SIZE; ++i) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->live && s->token == token) {
+                s->live = 0;
+                s->token = 0;
+                s->generation = 0;
+                break;
+            }
+        }
+    }
+    stdlib_view_unlock();
+}
+
+/* Owner-supplied shape generation (vector push/pop/etc.).  0 on a stale or
+ * unknown (ptr, token) pair. */
+static inline void stdlib_view_set_generation(const void *ptr,
+                                              unsigned long long token,
+                                              unsigned long long generation) {
+    if (ptr == (const void *)0 || token == 0)
+        return;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                if (s->live && s->token == token)
+                    s->generation = generation;
+                break;
+            }
+            if (s->ptr == (const void *)0)
+                break;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+    }
+    stdlib_view_unlock();
+}
+
+static inline int stdlib_view_get_generation(const void *ptr,
+                                             unsigned long long token,
+                                             unsigned long long *out) {
+    int ok = 0;
+    if (out != (unsigned long long *)0)
+        *out = 0;
+    if (ptr == (const void *)0 || token == 0 || out == (unsigned long long *)0)
+        return 0;
+    stdlib_view_lock();
+    {
+        size_t i = stdlib_view_hash(ptr);
+        size_t probe;
+        for (probe = 0; probe < STDLIB_VIEW_TABLE_SIZE; ++probe) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->ptr == ptr) {
+                if (s->live && s->token == token) {
+                    *out = s->generation;
+                    ok = 1;
+                }
+                break;
+            }
+            if (s->ptr == (const void *)0)
+                break;
+            i = (i + 1u) & STDLIB_VIEW_TABLE_MASK;
+        }
+    }
+    stdlib_view_unlock();
+    return ok;
+}
+
+#endif /* CPLUS_STD_VIEW_LIFETIME_HP */

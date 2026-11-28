@@ -1,0 +1,19 @@
+SAFETY oversized_key REFUSED 101
+SAFETY oversized_key DETAIL range key length out of bounds
+SAFETY oversized_key CANARY ok
+SAFETY null_value REFUSED 108
+SAFETY null_value DETAIL invalid null value
+SAFETY null_value CANARY ok
+SAFETY overflowing_sum REFUSED 101
+SAFETY overflowing_sum DETAIL range sum overflow
+SAFETY overflowing_sum CANARY ok
+SAFETY duplicate_key REFUSED 108
+SAFETY duplicate_key DETAIL invalid duplicate key
+SAFETY duplicate_key CANARY ok
+SAFETY delete_missing REFUSED 108
+SAFETY delete_missing DETAIL invalid no such key
+SAFETY delete_missing CANARY ok
+SAFETY FINAL_VALUE dup one
+SAFETY FINAL_CANARY ok
+SAFETY FINAL_STORE 1
+SAFETY_SUMMARY 5 5 5 0

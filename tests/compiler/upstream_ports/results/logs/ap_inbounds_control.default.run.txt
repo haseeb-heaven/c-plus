@@ -1,0 +1,11 @@
+case: ap_inbounds_control
+mode: default
+step: run
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_inbounds_control.default
+rc: 0
+timed_out: False
+--- stdout ---
+6
+
+--- stderr ---
+

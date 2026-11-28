@@ -1,0 +1,13 @@
+0000000000000000 T _cplus_v__strcmpfld_s_chk
+0000000000000000 T _cplus_v__strfirstchar_s_chk
+0000000000000104 T __strfirstchar_s_uchk
+000000000000010c T __strcmpfld_s_uchk
+0000000000000150 T _cplus_v__strcpyfld_s_chk
+000000000000015c T _cplus_v__strlastchar_s_chk
+0000000000000268 T __strlastchar_s_uchk
+00000000000002c0 T _cplus_v__strfirstdiff_s_chk
+00000000000003dc T __strfirstdiff_s_uchk
+0000000000000428 T _cplus_v__strlastdiff_s_chk
+0000000000000554 T __strlastdiff_s_uchk
+00000000000005d0 T _cplus_v__strcoll_s_chk
+00000000000006b8 T __strcoll_s_uchk

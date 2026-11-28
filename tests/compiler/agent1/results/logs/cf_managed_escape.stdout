@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_managed_escape.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/managed_escape.c:9:12: error: managed pointer 'b' cannot escape its owning scope

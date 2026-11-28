@@ -1,0 +1,518 @@
+{
+  "generated": "2026-11-25T18:43:48.861966+00:00",
+  "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "note": "fil-c/trapc recorded only when binaries are supplied via FILC_BIN/TRAPC_BIN",
+  "scenarios": [
+    {
+      "scenario": "toolchain_availability",
+      "toolchain": "fil-c",
+      "lang": "C",
+      "outcome": "TOOLCHAIN_UNAVAILABLE",
+      "compiler_output": "set FILC_BIN=/path/to/compiler to enable",
+      "command": [
+        "FILC_BIN"
+      ]
+    },
+    {
+      "scenario": "toolchain_availability",
+      "toolchain": "trapc",
+      "lang": "C",
+      "outcome": "TOOLCHAIN_UNAVAILABLE",
+      "compiler_output": "set TRAPC_BIN=/path/to/compiler to enable",
+      "command": [
+        "TRAPC_BIN"
+      ]
+    },
+    {
+      "scenario": "const_oob",
+      "toolchain": "cplus_strict",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--strict",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.bin"
+      ],
+      "compile_rc": 1,
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.c:1:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.c:1:36: error: [CPLUS-FFI] out-of-bounds access: index 7 reaches past array 'a' of length 4\n  int main(void){int a[4]={0};return a[7];}\n                      ",
+      "outcome": "compile_reject"
+    },
+    {
+      "scenario": "const_oob",
+      "toolchain": "cplus_default",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--default",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.bin"
+      ],
+      "compile_rc": 1,
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.c:1:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.c:1:36: error: [CPLUS-FFI] out-of-bounds access: index 7 reaches past array 'a' of length 4\n  int main(void){int a[4]={0};return a[7];}\n                    ",
+      "outcome": "compile_reject"
+    },
+    {
+      "scenario": "const_oob",
+      "toolchain": "clang",
+      "lang": "C",
+      "command": [
+        "/usr/bin/clang",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_clang.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_clang.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_clang.c:1:36: warning: array index 7 is past the end of the array (that has type 'int[4]') [-Warray-bounds]\n    1 | int main(void){int a[4]={0};return a[7];}\n      |                                    ^ ~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_clang.c:1:16: note: array 'a' declared here\n    1 | int main(void){int a[4]={0};return a[7];}\n      |                ^\n1 warning generated.\n",
+      "run_rc": 1,
+      "runtime_output": "",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "const_oob",
+      "toolchain": "gcc",
+      "lang": "C",
+      "command": [
+        "/opt/homebrew/bin/gcc-14",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_gcc.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_gcc.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "const_oob",
+      "toolchain": "rustc_debug",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-C",
+        "opt-level=0",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_rustc_debug.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_rustc_debug.bin"
+      ],
+      "compile_rc": 1,
+      "compiler_output": "error: this operation will panic at runtime\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_rustc_debug.rs:1:43\n  |\n1 | fn main(){ let a=[0i32;4]; println!(\"{}\", a[7]); }\n  |                                           ^^^^ index out of bounds: the length is 4 but the index is 7\n  |\n  = note: `#[deny(unconditional_panic)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+      "outcome": "compile_reject"
+    },
+    {
+      "scenario": "const_oob",
+      "toolchain": "rustc_release",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-O",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_rustc_release.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_rustc_release.bin"
+      ],
+      "compile_rc": 1,
+      "compiler_output": "error: this operation will panic at runtime\n --> /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_rustc_release.rs:1:43\n  |\n1 | fn main(){ let a=[0i32;4]; println!(\"{}\", a[7]); }\n  |                                           ^^^^ index out of bounds: the length is 4 but the index is 7\n  |\n  = note: `#[deny(unconditional_panic)]` on by default\n\nerror: aborting due to 1 previous error\n\n",
+      "outcome": "compile_reject"
+    },
+    {
+      "scenario": "overflow",
+      "toolchain": "cplus_strict",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--strict",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_cplus_strict.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_cplus_strict.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 110,
+      "runtime_output": "C+ runtime error: signed integer overflow: addition result does not fit in a 32-bit signed integer\n",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "overflow",
+      "toolchain": "cplus_default",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--default",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_cplus_default.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_cplus_default.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 110,
+      "runtime_output": "C+ runtime error: signed integer overflow: addition result does not fit in a 32-bit signed integer\n",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "overflow",
+      "toolchain": "clang",
+      "lang": "C",
+      "command": [
+        "/usr/bin/clang",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_clang.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_clang.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "overflow",
+      "toolchain": "gcc",
+      "lang": "C",
+      "command": [
+        "/opt/homebrew/bin/gcc-14",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_gcc.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_gcc.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "overflow",
+      "toolchain": "rustc_debug",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-C",
+        "opt-level=0",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_rustc_debug.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_rustc_debug.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 101,
+      "runtime_output": "\nthread 'main' (3892989) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_rustc_debug.rs:1:21:\nattempt to add with overflow\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "overflow",
+      "toolchain": "rustc_release",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-O",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_rustc_release.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_rustc_release.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "-2147483648\n",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "null_deref",
+      "toolchain": "cplus_strict",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--strict",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_strict.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_strict.bin"
+      ],
+      "compile_rc": 1,
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_strict.c:2:16: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'd'\n  int main(void){d(0);return 0;}\n                 ^\n",
+      "outcome": "compile_reject"
+    },
+    {
+      "scenario": "null_deref",
+      "toolchain": "cplus_default",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--default",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_default.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_default.bin"
+      ],
+      "compile_rc": 1,
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_default.c:2:16: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'd'\n  int main(void){d(0);return 0;}\n                 ^\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+      "outcome": "compile_reject"
+    },
+    {
+      "scenario": "null_deref",
+      "toolchain": "clang",
+      "lang": "C",
+      "command": [
+        "/usr/bin/clang",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_clang.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_clang.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": -5,
+      "runtime_output": "",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "null_deref",
+      "toolchain": "gcc",
+      "lang": "C",
+      "command": [
+        "/opt/homebrew/bin/gcc-14",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_gcc.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_gcc.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": -11,
+      "runtime_output": "",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "null_deref",
+      "toolchain": "rustc_debug",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-C",
+        "opt-level=0",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_rustc_debug.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_rustc_debug.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": -6,
+      "runtime_output": "\nthread 'main' (3895132) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_rustc_debug.rs:1:58:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "null_deref",
+      "toolchain": "rustc_release",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-O",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_rustc_release.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_rustc_release.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": -5,
+      "runtime_output": "",
+      "outcome": "runtime_trap"
+    },
+    {
+      "scenario": "clean",
+      "toolchain": "cplus_strict",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--strict",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_cplus_strict.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_cplus_strict.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "clean",
+      "toolchain": "cplus_default",
+      "lang": "C",
+      "command": [
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+        "build",
+        "--default",
+        "--sanitize=none",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_cplus_default.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_cplus_default.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "clean",
+      "toolchain": "clang",
+      "lang": "C",
+      "command": [
+        "/usr/bin/clang",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_clang.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_clang.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "clean",
+      "toolchain": "gcc",
+      "lang": "C",
+      "command": [
+        "/opt/homebrew/bin/gcc-14",
+        "-std=gnu17",
+        "-O2",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_gcc.c",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_gcc.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "clean",
+      "toolchain": "rustc_debug",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-C",
+        "opt-level=0",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_rustc_debug.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_rustc_debug.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    },
+    {
+      "scenario": "clean",
+      "toolchain": "rustc_release",
+      "lang": "Rust",
+      "command": [
+        "rustc",
+        "--edition",
+        "2021",
+        "-O",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_rustc_release.rs",
+        "-o",
+        "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/clean_rustc_release.bin"
+      ],
+      "compile_rc": 0,
+      "compiler_output": "",
+      "run_rc": 0,
+      "runtime_output": "",
+      "outcome": "clean_run"
+    }
+  ],
+  "benchmarks": [
+    {
+      "bench": "compute",
+      "toolchain": "cplus_strict",
+      "status": "OK",
+      "runs": 3,
+      "median_s": 14.35,
+      "median_rss_bytes": 1687552
+    },
+    {
+      "bench": "compute",
+      "toolchain": "cplus_default",
+      "status": "OK",
+      "runs": 3,
+      "median_s": 12.7,
+      "median_rss_bytes": 1687552
+    },
+    {
+      "bench": "compute",
+      "toolchain": "clang",
+      "status": "OK",
+      "runs": 3,
+      "median_s": 0.43,
+      "median_rss_bytes": 1654784
+    },
+    {
+      "bench": "compute",
+      "toolchain": "gcc",
+      "status": "OK",
+      "runs": 3,
+      "median_s": 0.91,
+      "median_rss_bytes": 1507328
+    },
+    {
+      "bench": "compute",
+      "toolchain": "rustc_debug",
+      "status": "OK",
+      "runs": 3,
+      "median_s": 16.67,
+      "median_rss_bytes": 1720320
+    },
+    {
+      "bench": "compute",
+      "toolchain": "rustc_release",
+      "status": "OK",
+      "runs": 3,
+      "median_s": 0.58,
+      "median_rss_bytes": 1802240
+    }
+  ],
+  "failures": []
+}

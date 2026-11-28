@@ -1,0 +1,25 @@
+CASE=b_runtime_signed_overflow
+CONFIG=check_default
+STATUS=PASS
+REASON=PASS: rc=0 with asserted diagnostic [] and generated-C token [x + 1]; runtime operand 2147483647 + 1 must trap (native 110 or UBSan 134), never wrap to -2147483648
+EXPECT_COMPILE=accept
+EXPECT_DIAG=
+EXPECT_REJECT_DIAG=
+EXPECT_GEN_SUBSTR=x + 1
+EXPECT_RUN=
+EXPECT_RUN_RC=
+EXPECT_RUN_DIAG=
+EXPECT_RUN2_RC=
+EXPECT_RUN2_DIAG=
+COMPILE_CMD=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/b_runtime_signed_overflow__check_default.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/b_runtime_signed_overflow.c
+COMPILE_RC=0
+COMPILE_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__check_default__compile.stdout
+COMPILE_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__check_default__compile.stderr
+GENERATED_C=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/b_runtime_signed_overflow__check_default.c
+NATIVE_GUARD_WRAPPER_COUNT=0
+RUN1_RC=NA
+RUN1_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__check_default__run1.stdout
+RUN1_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__check_default__run1.stderr
+RUN2_RC=NA
+RUN2_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__check_default__run2.stdout
+RUN2_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__check_default__run2.stderr

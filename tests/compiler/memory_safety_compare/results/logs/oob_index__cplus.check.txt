@@ -1,0 +1,5 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__cplus.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok

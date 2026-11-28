@@ -1,0 +1,8 @@
+BENCH bump_ms_bucket fast
+BENCH release_ms_bucket one_store
+BENCH heap_ms_bucket slow
+BENCH ratio_ge_2 yes
+BENCH bump_ns_per_op 30
+BENCH heap_ns_per_op 328
+BENCH scope_release_ns 1000
+BENCH_OK

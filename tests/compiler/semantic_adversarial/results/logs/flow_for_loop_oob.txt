@@ -1,0 +1,14 @@
+case flow_for_loop_oob [dataflow] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c:2:54: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={0}; for(int i=0;i<10;i++) a[i]=1; printf("%d\n", a[0]); return 0; }
+                                                       ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c:2:53: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4
+  int main(void){ int a[4]={0}; for(int i=0;i<10;i++) a[i]=1; printf("%d\n", a[0]); return 0; }
+                                                      ^
+

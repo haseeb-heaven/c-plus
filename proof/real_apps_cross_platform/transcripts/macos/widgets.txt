@@ -1,0 +1,5 @@
+# COMMAND: env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin timeout 30 ./widgets
+# EXIT: 0
+# --- STDOUT ---
+WIDGETS 144 0
+# --- STDERR ---

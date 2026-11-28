@@ -1,0 +1,26 @@
+ADV_EXPANDED kv_store oversized_key REFUSED 0
+ADV_EXPANDED kv_store size_max_key REFUSED 0
+ADV_EXPANDED kv_store oversized_value REFUSED 0
+ADV_EXPANDED kv_store empty_key REFUSED 0
+ADV_EXPANDED kv_store invalid_utf8_key REFUSED 0
+ADV_EXPANDED kv_store duplicate_key REFUSED 0
+ADV_EXPANDED kv_store missing_operand REFUSED 0
+ADV_EXPANDED kv_store invalid_command REFUSED 0
+ADV_EXPANDED kv_store out_of_range_key REFUSED 0
+ADV_EXPANDED kv_store null_like_operand REFUSED 0
+ADV_EXPANDED kv_store oversized_stdin REFUSED 0
+ADV_EXPANDED kv_store post_hostile_integrity REFUSED 0
+ADV_EXPANDED table_query oversized_field REFUSED 0
+ADV_EXPANDED table_query size_max_predicate REFUSED 0
+ADV_EXPANDED table_query empty_field REFUSED 0
+ADV_EXPANDED table_query invalid_command REFUSED 0
+ADV_EXPANDED table_query duplicate_id REFUSED 0
+ADV_EXPANDED table_query out_of_range_index REFUSED 0
+ADV_EXPANDED table_query null_like_operand REFUSED 0
+ADV_EXPANDED table_query invalid_utf8_field REFUSED 0
+ADV_EXPANDED table_query post_hostile_integrity REFUSED 0
+ADV_EXPANDED safety_demo oversized_argv REFUSED 0
+ADV_EXPANDED safety_demo size_max_argv REFUSED 0
+ADV_EXPANDED safety_demo empty_argv REFUSED 0
+ADV_EXPANDED safety_demo null_like_argv REFUSED 0
+ADV_EXPANDED_SUBTOTAL database cases=25 refused=25 crashed=0 unexpected_ok=0 blocked=0

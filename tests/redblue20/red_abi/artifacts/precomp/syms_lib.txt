@@ -1,0 +1,3 @@
+T _red_probe_add
+T _red_probe_alloc
+T _red_probe_copy

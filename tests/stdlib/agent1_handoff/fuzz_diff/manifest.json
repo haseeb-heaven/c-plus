@@ -1,0 +1,130 @@
+{
+  "handoff": "P2 fuzzing and compiler differential testing",
+  "branch": "agent/modern-stdlib",
+  "date": "2026-11-23",
+  "documentation_only": true,
+  "harness_exists": false,
+  "no_percentage_claimed": true,
+  "definition_source": {
+    "file": "docs/libc/AGENT1_PRIORITY_HANDOFF.md",
+    "lines": [22, 60, 61, 62],
+    "quote": "a differential harness measures false negatives against randomized valid programs"
+  },
+  "path_correction": {
+    "claimed": "tests/compile_time/",
+    "actual": "tests/stdlib/compile_time/",
+    "note": "52 cases belongs to compile_time; tests/compile_fail has 98 source files"
+  },
+  "existing_assets": [
+    {
+      "id": "fuzz_hp",
+      "path": "tests/stdlib/fuzz/fuzz_hp.cp",
+      "case_count": 1200,
+      "case_count_kind": "runtime valid operations",
+      "seed": "0xC0FFEE",
+      "recurrence": "state = state*6364136223846793005 + 1442695040888963407; take state >> 33",
+      "expected_digest": "4237bdfb74e154a4",
+      "measures": "runtime correctness of .hp containers against shadow models; no UB generated",
+      "compiler_differential": false,
+      "evidence": ["tests/stdlib/fuzz/fuzz_hp.cp:36", "tests/stdlib/fuzz/fuzz_hp.cp:46-51", "docs/stdlib/HP_FUZZ_NOTES.md:145"]
+    },
+    {
+      "id": "fuzz_libc",
+      "path": "tests/libc/fuzz_libc.c",
+      "case_count": 4800,
+      "case_count_kind": "validated operations (300 iterations x 8 APIs x 2 logging passes)",
+      "seed": "0x5EED1234",
+      "recurrence": "state = state*1664525 + 1013904223 (mod 2^32)",
+      "expected_digest": "2b62150fb0777106",
+      "measures": "hardened libc string/memory API canary checks plus logging on/off parity",
+      "compiler_differential": false,
+      "evidence": ["tests/libc/fuzz_libc.c:27-48", "docs/libc/LIBC_FUZZ_NOTES.md:93-106"]
+    },
+    {
+      "id": "rust_vs_cplus",
+      "path": "tests/rust_vs_cplus/run_compare.sh",
+      "case_count": 600,
+      "case_count_kind": "runtime scenario comparisons (6 families x 100)",
+      "seed": null,
+      "measures": "cross-language runtime outcome tokens ACCEPTED/REFUSED/SKIP; differences documented, not failures",
+      "compiler_differential": false,
+      "evidence": ["tests/rust_vs_cplus/run_compare.sh:21-22", "tests/rust_vs_cplus/run_compare.sh:42-63"]
+    },
+    {
+      "id": "compile_fail",
+      "path": "tests/compile_fail/",
+      "case_count": 98,
+      "case_count_kind": "hand-written source files (97 .c + 1 .cp), each with a .err substring",
+      "seed": null,
+      "measures": "c+ check must reject; log must contain golden diagnostic substring",
+      "compiler_differential": false,
+      "evidence": ["tests/run_tests.sh:84-112"]
+    },
+    {
+      "id": "compile_time",
+      "path": "tests/stdlib/compile_time/",
+      "case_count": 52,
+      "case_count_kind": "manifest cases across 8 .json manifests",
+      "seed": null,
+      "expected": {"REJECT": 9, "ACCEPT": 19, "RUNTIME": 24},
+      "observed_recorded_by_others": {
+        "tagged_REJECT": 5,
+        "untagged_PARTIAL": 7,
+        "compiles_clean": 40,
+        "declared_gaps": 27
+      },
+      "measures": "c+ check --strict and c+ build --strict --sanitize=none; only [CPLUS- tagged rejections count as enforcement",
+      "compiler_differential": "partial_front_end_vs_backend_no_clang_reference",
+      "evidence": ["tests/stdlib/compile_time/run_compile_time.sh:13-83", "docs/libc/COMPILE_TIME_GAPS.md:9-20", "docs/libc/COMPILE_TIME_GAPS.md:133-158"]
+    },
+    {
+      "id": "stack_escape_probe",
+      "path": "tests/scenarios/scenario_06.c",
+      "case_count": 1200,
+      "case_count_kind": "enumerated stack-escape scenarios",
+      "seed": null,
+      "observed_recorded_by_others": {
+        "diagnostics": 695,
+        "cases_with_diagnostic": 653,
+        "undiagnosed": 547
+      },
+      "measures": "one-shot false-negative inventory with a real denominator; enumerated, not randomized",
+      "compiler_differential": false,
+      "evidence": ["docs/libc/KNOWN_COMPILER_GAPS.md:64-81"]
+    }
+  ],
+  "missing": [
+    "seeded generator emitting .cp translation units whose compile-time acceptance is the observable",
+    "c+ check vs clang -fsyntax-only accept/reject differential on the emitted lowered C",
+    "diagnostic-equivalence expectation: tagged diagnostic must name the seeded invalid operation, and SAFE controls must be tag-free",
+    "false-negative count and rate with explicit N_unsafe denominator",
+    "false-positive count and rate with explicit N_safe denominator",
+    "mode delta (--default vs --strict) and seed/version metadata in machine-readable results",
+    "denominator discipline: do not reuse 1200/4800/600 runtime counts as compiler-diagnostic denominators"
+  ],
+  "proposed_design_not_implemented": {
+    "generator": "tests/stdlib/agent1_handoff/fuzz_diff/gen_cases.py",
+    "driver": "tests/stdlib/agent1_handoff/fuzz_diff/run_diff.sh",
+    "commands": [
+      "timeout 10 \"$CPLUS\" check --strict case.cp",
+      "\"$CPLUS\" build case.cp --emit-c case.c --keep-temp -o case.bin",
+      "timeout 10 /usr/bin/clang -fsyntax-only -std=c11 -include cplus/cplus.h case.c"
+    ],
+    "labels": ["SAFE", "UNSAFE_<KIND>"],
+    "violation_kinds": ["use-after-free", "double-free", "fixed-array-OOB", "use-after-move", "mutable-alias-escape"],
+    "interpretation": {
+      "SAFE_and_cplus_tagged_rejection": "C+ false positive",
+      "SAFE_and_clang_rejection_only": "generator/backend defect, not a C+ finding",
+      "UNSAFE_and_cplus_accept_or_untagged_rejection": "C+ false negative (the P2 quantity)",
+      "UNSAFE_and_tagged_rejection_naming_kind": "enforcement hit",
+      "rc_mismatch_alone": "not a failure; C+ is expected to reject C+-specific violations Clang accepts"
+    }
+  },
+  "denominators": {
+    "N_safe": "generated programs labelled SAFE; denominator of FP_count / N_safe",
+    "N_unsafe": "generated programs with exactly one seeded labelled violation; denominator of FN_count / N_unsafe",
+    "N_total": "N_safe + N_unsafe; denominator of any overall or parity-mismatch rate",
+    "N_unsafe_K": "subset seeded with violation kind K; denominator of FN_K / N_unsafe_K",
+    "metadata": ["generator seed", "c+ version", "clang version", "programs actually executed; timeouts/crashes listed"]
+  }
+}

@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_borrow_escape.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/borrow_escape.c:12:66: error: [CPLUS-BORROW] borrow 'borrow' of local 'f' cannot escape the function

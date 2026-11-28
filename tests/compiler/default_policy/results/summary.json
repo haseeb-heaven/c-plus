@@ -1,0 +1,322 @@
+{
+  "generated": "2026-11-25T18:40:01.945059+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "clean_c_no_flags",
+      "status": "PASS",
+      "expected_rc": 0,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/clean_c_no_flags.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/clean_c_no_flags.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/clean_c_no_flags.bin"
+          ],
+          "rc": 0,
+          "stdout": "clean\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "clean_cp_no_flags",
+      "status": "PASS",
+      "expected_rc": 0,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/clean_cp_no_flags.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/clean_cp_no_flags.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/clean_cp_no_flags.bin"
+          ],
+          "rc": 0,
+          "stdout": "clean-cp\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "clean_c_werror",
+      "status": "PASS",
+      "expected_rc": 0,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "-Werror",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/clean_c_werror.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/clean_c_werror.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/clean_c_werror.bin"
+          ],
+          "rc": 0,
+          "stdout": "clean\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cplus_warning_check_default",
+      "status": "PASS",
+      "expected_rc": 1,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_default.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_default.c:3:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cplus_warning_build_default",
+      "status": "PASS",
+      "expected_rc": 1,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_build_default.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/cplus_warning_build_default.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_build_default.c:3:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cplus_warning_check_werror",
+      "status": "PASS",
+      "expected_rc": 1,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "-Werror",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_werror.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_werror.c:3:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cplus_warning_check_w",
+      "status": "PASS",
+      "expected_rc": 1,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "-w",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_w.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_w.c:3:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cplus_warning_check_release",
+      "status": "PASS",
+      "expected_rc": 1,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--release",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_release.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_release.c:3:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cplus_warning_check_no_werror",
+      "status": "PASS",
+      "expected_rc": 0,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--no-werror",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_no_werror.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_no_werror.c ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_check_no_werror.c:3:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "cplus_warning_legacy_accepted",
+      "status": "PASS",
+      "expected_rc": 0,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--legacy-c",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_legacy_accepted.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/cplus_warning_legacy_accepted.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "legacy_werror_explicit",
+      "status": "PASS",
+      "expected_rc": 0,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--legacy-c",
+            "-Werror",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/legacy_werror_explicit.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/legacy_werror_explicit.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "host_warning_default",
+      "status": "PASS",
+      "expected_rc": 1,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "-Wall",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/host_warning_default.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/host_warning_default.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/host_warning_default.c:1:21: error: unused variable 'unused' [-Werror,-Wunused-variable]\n    1 | int main(void){ int unused=1; (void)0; return 0; }\n      |                     ^~~~~~\n1 error generated.\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "host_warning_with_w",
+      "status": "PASS",
+      "expected_rc": 1,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "-Wall",
+            "-w",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/host_warning_with_w.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/host_warning_with_w.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/host_warning_with_w.c:1:21: error: unused variable 'unused' [-Werror,-Wunused-variable]\n    1 | int main(void){ int unused=1; (void)0; return 0; }\n      |                     ^~~~~~\n1 error generated.\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "host_warning_legacy_w",
+      "status": "PASS",
+      "expected_rc": 0,
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--legacy-c",
+            "-Wall",
+            "-w",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/cases/host_warning_legacy_w.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/default_policy/results/host_warning_legacy_w.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

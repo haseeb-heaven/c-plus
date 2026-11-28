@@ -1,0 +1,3 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/d_invalid_shift_count.c:15:18: warning: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+    printf("%u\n", x << n);
+                   ^

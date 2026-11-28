@@ -1,0 +1,232 @@
+/* C+ modern standard library: minimal POSIX HTTP/1.1 server (web.hp).
+ *
+ * Additive, C-style header.  No classes, no templates, no exported symbols,
+ * no ABI change.  Deterministic behavior: a web server bound to host:port,
+ * a tiny request parser, and reply helpers.  POSIX sockets only
+ * (non-blocking off; single accept loop; the host app iterates).
+ *
+ * Contract:
+ *   web_server_start() returns a non-null web_server on success, 0 on failure.
+ *   web_accept() returns 1 with a filled web_conn, 0 on timeout/error (see
+ *   srv->nap_ms), -1 on terminal failure.
+ *   web_reply() writes a response line and body; body may be "" (header only).
+ *   web_server_stop() closes the listening socket.
+ */
+#ifndef CPLUS_STD_WEB_HP
+#define CPLUS_STD_WEB_HP
+
+#include <errno.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include "cplus/cplus.h"
+
+#define WEB_MAX_PATH 256
+#define WEB_MAX_BODY 512
+#define WEB_NAP_MS 50
+
+typedef struct {
+    char method[16];
+    char path[WEB_MAX_PATH];
+    char body[WEB_MAX_BODY];
+    size_t body_len;
+} web_request;
+
+typedef struct {
+    int listen_fd;
+    int nap_ms;
+} web_server;
+
+typedef struct {
+    int fd;
+    web_request req;
+} web_conn;
+
+/* --- SIGPIPE suppression -------------------------------------------------
+ * SIGPIPE's default disposition kills the process.  A remote peer that
+ * disconnects before a reply is finished must instead be a normal I/O error.
+ * macOS/BSD expose SO_NOSIGPIPE (set on every socket we create or accept);
+ * Linux has no such option, so send() carries MSG_NOSIGNAL there. */
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
+static void web_no_sigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    int set = 1;
+    if (fd >= 0)
+        (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+#else
+    (void)fd;
+#endif
+}
+
+/* Send every byte, retrying EINTR.  Returns 0 on success and -1 on a closed,
+ * reset or stalled peer; the caller reports that as a normal reply failure,
+ * never as a fatal signal. */
+static int web_send_all(int fd, const char *buf, size_t len) {
+    size_t sent = 0;
+    if (fd < 0 || (buf == (const char *)0 && len > 0))
+        return -1;
+    while (sent < len) {
+        ssize_t n = send(fd, buf + sent, len - sent, MSG_NOSIGNAL);
+        if (n > 0) {
+            sent += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        return -1;
+    }
+    return 0;
+}
+
+/* Initialize a caller-owned web_server (stack or static storage) on host:port.
+ * Returns 0 on success, -1 on failure. No heap allocation: this is the
+ * heap-free path used by the app; the *_start wrapper below is the malloc
+ * convenience variant for existing callers. */
+static int web_server_init(web_server *s, const char *host, int port) {
+    struct sockaddr_in addr;
+    int one = 1;
+    int fd;
+    if (s == (web_server *)0)
+        return -1;
+    s->listen_fd = -1;
+    s->nap_ms = WEB_NAP_MS;
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    web_no_sigpipe(fd);
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)port);
+    addr.sin_addr.s_addr =
+        (host == (const char *)0) ? INADDR_ANY : inet_addr(host);
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 8) != 0) {
+        close(fd);
+        return -1;
+    }
+    s->listen_fd = fd;
+    return 0;
+}
+
+/* Malloc convenience wrapper; prefer web_server_init() for a stack server. */
+static web_server *web_server_start(const char *host, int port) {
+    web_server *s = (web_server *)malloc(sizeof(web_server));
+    if (s == (web_server *)0)
+        return (web_server *)0;
+    if (web_server_init(s, host, port) != 0) {
+        free(s);
+        return (web_server *)0;
+    }
+    return s;
+}
+
+/* Accept one connection; returns 1 with *c filled, 0 on no-pending (timeout),
+ * -1 on terminal error. */
+static int web_accept(web_server *s, web_conn *c) {
+    struct timeval tv;
+    fd_set set;
+    int fd;
+    int n;
+    char line[256];
+    size_t used = 0;
+    if (s == (web_server *)0 || c == (web_conn *)0)
+        return -1;
+    c->req.body_len = 0;
+    FD_ZERO(&set);
+    FD_SET(s->listen_fd, &set);
+    tv.tv_sec = 0;
+    tv.tv_usec = (suseconds_t)(s->nap_ms * 1000);
+    if (select(s->listen_fd + 1, &set, (fd_set *)0, (fd_set *)0, &tv) <= 0)
+        return 0;
+    fd = accept(s->listen_fd, (struct sockaddr *)0, (socklen_t *)0);
+    if (fd < 0)
+        return 0;
+    c->fd = fd;
+    web_no_sigpipe(fd);
+    c->req.method[0] = 0;
+    c->req.path[0] = 0;
+    /* Request line. */
+    for (n = 0; n < 200; n++) {
+        char ch = 0;
+        ssize_t got = recv(fd, &ch, 1, 0);
+        if (got <= 0)
+            break;
+        if (ch == '\n')
+            break;
+        line[used++] = ch;
+    }
+    line[used] = 0;
+    {
+        /* METHOD SP PATH SP HTTP/x.y */
+        char *sp1 = strchr(line, ' ');
+        char *sp2 = sp1 ? strchr(sp1 + 1, ' ') : (char *)0;
+        if (sp1 != (char *)0 && sp2 != (char *)0) {
+            size_t mlen = (size_t)(sp1 - line) < 15 ? (size_t)(sp1 - line) : 15;
+            size_t plen = (size_t)(sp2 - sp1 - 1) < WEB_MAX_PATH - 1
+                              ? (size_t)(sp2 - sp1 - 1) : WEB_MAX_PATH - 1;
+            memcpy(c->req.method, line, mlen);
+            c->req.method[mlen] = 0;
+            memcpy(c->req.path, sp1 + 1, plen);
+            c->req.path[plen] = 0;
+        }
+    }
+    return 1;
+}
+
+/* Write a reply: "HTTP/1.1 <status>\r\nContent-Length: N\r\n\r\n<body>". */
+static void web_reply(web_conn *c, int status, const char *body) {
+    char head[128];
+    const char *text;
+    size_t len = strlen(body);
+    switch (status) {
+        case 200: text = "OK"; break;
+        case 404: text = "Not Found"; break;
+        default:  text = "Status"; break;
+    }
+    {
+        int hlen = snprintf(head, sizeof(head),
+                            "HTTP/1.1 %d %s\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
+                            status, text, len);
+        (void)web_send_all(c->fd, head, (size_t)hlen);
+    }
+    (void)web_send_all(c->fd, body, len);
+}
+
+/* Close a connection: write-shutdown, settle briefly so the reply reaches
+ * the client, then close. */
+static void web_conn_close(web_conn *c) {
+    if (c != (web_conn *)0 && c->fd >= 0) {
+        shutdown(c->fd, SHUT_WR);
+        usleep(10000);              /* let the reply bytes reach the peer */
+        close(c->fd);
+    }
+    if (c != (web_conn *)0)
+        c->fd = -1;
+}
+
+/* Stop the listening server. */
+/* Close a caller-owned server without releasing its storage. */
+static void web_server_shutdown(web_server *s) {
+    if (s != (web_server *)0 && s->listen_fd >= 0) {
+        close(s->listen_fd);
+        s->listen_fd = -1;
+    }
+}
+
+/* Close and release a web_server returned by web_server_start(). */
+static void web_server_stop(web_server *s) {
+    if (s != (web_server *)0) {
+        web_server_shutdown(s);
+        free(s);
+    }
+}
+
+#endif /* CPLUS_STD_WEB_HP */

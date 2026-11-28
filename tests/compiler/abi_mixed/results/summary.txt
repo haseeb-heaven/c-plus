@@ -1,0 +1,15 @@
+Cross-compiler ABI proof: c+ <-> clang objects from real C app
+helper.clang.o                 rc=0 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_rp18_hwe/helper.c:11:14: war
+helper.cplus.o                 rc=0 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_rp18_hwe/helper.c:11:14: war
+caller.clang.o                 rc=0 
+caller.cplus.o                 rc=0 
+all_clang                      rc=0 Tests passed
+all_cplus                      rc=0 Tests passed
+cplus_caller_clang_helper      rc=0 Tests passed
+clang_caller_cplus_helper      rc=0 Tests passed
+nm:helper.clang.o              rc=0 ['0000000000000000 T _crc32']
+nm:helper.cplus.o              rc=0 ['0000000000000000 T _crc32']
+nm:caller.clang.o              rc=0 ['                 U _crc32', '0000000000000000 T _test_crc32']
+nm:caller.cplus.o              rc=0 ['                 U _crc32', '0000000000000000 T _test_crc32']
+
+failures: 0

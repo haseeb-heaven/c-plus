@@ -1,0 +1,1 @@
+'fprintf' is not async-signal-safe

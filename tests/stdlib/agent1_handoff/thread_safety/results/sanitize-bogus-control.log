@@ -1,0 +1,3 @@
+COMMAND: ./build/c+ check --strict --sanitize=bogus <file>  (control: prove value validation)
+error: invalid sanitizer 'bogus' (expected none|address|undefined|memory|thread|leak|cfi|integer)
+EXIT: 1

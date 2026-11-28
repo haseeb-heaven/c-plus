@@ -1,0 +1,6 @@
+self-append 8 1
+suffix-append xyzyz 1
+http-headers-lifetime 1 1
+timer-lifetime 1 1
+no-silent-partial-write 1 1
+safety-regressions clean 0

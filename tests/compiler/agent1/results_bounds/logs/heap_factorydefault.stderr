@@ -1,0 +1,6 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/heap_factory.c:3:46: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'q' of 16 bytes
+  int main(void){ int *q=mk(); if(!q)return 1; q[4]=1; return q[4]; }
+                                               ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/heap_factory.c:3:61: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'q' of 16 bytes
+  int main(void){ int *q=mk(); if(!q)return 1; q[4]=1; return q[4]; }
+                                                              ^

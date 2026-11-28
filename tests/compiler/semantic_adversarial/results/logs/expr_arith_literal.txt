@@ -1,0 +1,15 @@
+case expr_arith_literal [expressions] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:53: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; printf("%d\n", a[1+8]); return 0; }
+                                                      ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; printf("%d\n", a[1+8]); return 0; }
+                                                     ^
+help: array contains 4 elements; valid indices are 0..3
+

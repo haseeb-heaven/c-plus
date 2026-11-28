@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1387" height="320" viewBox="0 0 1387 320">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">lifetime_demo  |  stale-token and double-release refusal</text>
+  <text class="sub" x="84" y="48">./build/c+ build lifetime_demo.cp --strict --sanitize=none -I.  |  timeout 30 ./lifetime_demo</text>
+  <text class="sub" x="84" y="68">toolchain: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin</text>
+  <rect y="84" width="100%" height="178" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">lifetime valid_borrow <tspan class="ok">OK</tspan> init=1 borrow=1 live=1 write=1 read_exact=1</text>
+  <text class="body" xml:space="preserve" x="20" y="134">lifetime stale_token_refused <tspan class="refused">REFUSED</tspan> released=1 retired=1 not_live=1 read=-1 cat=1 untouched=1 write=-1 wcat=1</text>
+  <text class="body" xml:space="preserve" x="20" y="156">lifetime double_release_refused <tspan class="refused">REFUSED</tspan> init=1 first=1 second=-1 double_free_cat=1 live_stable=1</text>
+  <text class="body" xml:space="preserve" x="20" y="178">bounds exact_fit <tspan class="ok">OK</tspan> cap=16 span_full=1 span_interior=1 query_full=1 query_interior=1</text>
+  <text class="body" xml:space="preserve" x="20" y="200">bounds one_over <tspan class="refused">REFUSED</tspan> span_1over=0 span_tail=0 query=-1 bounds_cat=1</text>
+  <text class="body" xml:space="preserve" x="20" y="222">bounds interior_pointer <tspan class="ok">OK</tspan> interior_has_metadata=0 contains_24=1 contains_25=0</text>
+  <text class="body" xml:space="preserve" x="20" y="244">bounds stale_generation <tspan class="refused">REFUSED</tspan> moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1 fresh_query=1</text>
+  <rect y="262" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="284">Guarded write/read refuse a stale borrow token; a second owner release is refused without a double free. Bounds demo also shows the lifecycle-category refusal.</text>
+  <text class="disclaimer" x="20" y="304">captured real output — evidence, not proof</text>
+  <desc>Verbatim captured output:
+    lifetime valid_borrow OK init=1 borrow=1 live=1 write=1 read_exact=1
+    lifetime stale_token_refused REFUSED released=1 retired=1 not_live=1 read=-1 cat=1 untouched=1 write=-1 wcat=1
+    lifetime double_release_refused REFUSED init=1 first=1 second=-1 double_free_cat=1 live_stable=1
+    bounds exact_fit OK cap=16 span_full=1 span_interior=1 query_full=1 query_interior=1
+    bounds one_over REFUSED span_1over=0 span_tail=0 query=-1 bounds_cat=1
+    bounds interior_pointer OK interior_has_metadata=0 contains_24=1 contains_25=0
+    bounds stale_generation REFUSED moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1 fresh_query=1
+  </desc>
+</svg>

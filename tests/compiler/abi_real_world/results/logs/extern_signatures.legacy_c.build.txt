@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.legacy_c.c --legacy-c --sanitize=none -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases -lextern_signatures_legacy_c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.legacy_c.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

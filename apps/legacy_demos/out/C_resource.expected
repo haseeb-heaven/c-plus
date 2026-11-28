@@ -1,0 +1,6 @@
+normal return
+close log
+run(0)=0
+early return
+close log
+run(1)=1

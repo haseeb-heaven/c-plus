@@ -1,0 +1,39 @@
+KNOWN_OPEN reproduction: cross-TU incompatible ownership declarations are NOT diagnosed
+TU A: void resource_release(int *)  (defines)
+TU B: void resource_release(long *) (declares -> INCOMPATIBLE)
+compiler: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+ref cc: /usr/bin/clang
+Expectation: every step rc=0, no mismatch diagnostic, stdout='no cross-TU diagnostic'
+
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c --legacy-c --sanitize=none -c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.legacy-c.o
+  rc=0 timed_out=False
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c --legacy-c --sanitize=none -c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.legacy-c.o
+  rc=0 timed_out=False
+$ /usr/bin/clang -std=gnu11 -O1 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.legacy-c.o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.legacy-c.o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.legacy-c
+  rc=0 timed_out=False
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.legacy-c
+  rc=0 timed_out=False
+  stdout: 'no cross-TU diagnostic\n'
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c --default --sanitize=none -c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.default.o
+  rc=0 timed_out=False
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c --default --sanitize=none -c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.default.o
+  rc=0 timed_out=False
+$ /usr/bin/clang -std=gnu11 -O1 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.default.o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.default.o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.default
+  rc=0 timed_out=False
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.default
+  rc=0 timed_out=False
+  stdout: 'no cross-TU diagnostic\n'
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c --strict --sanitize=none -c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.strict.o
+  rc=0 timed_out=False
+  stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_def.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c --strict --sanitize=none -c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.strict.o
+  rc=0 timed_out=False
+  stderr: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/cross_tu_owner_decl.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'resource_acquire', 'resource_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here
+$ /usr/bin/clang -std=gnu11 -O1 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_def.strict.o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/cross_tu_owner_decl.strict.o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.strict
+  rc=0 timed_out=False
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/known_gaps/abi_mismatch/results/work/prog.strict
+  rc=0 timed_out=False
+  stdout: 'no cross-TU diagnostic\n'
+
+problems: 0
+verdict: KNOWN_OPEN

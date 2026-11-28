@@ -1,0 +1,358 @@
+/* C+ standard library: HTTP via libcurl (curl licence, linked).
+ *
+ * C++-flavoured RAII over libcurl's easy interface: `http global = http(&err);
+ * http_client c = http_client(&err); c.get(url, buf, sizeof(buf), &err);`
+ * HTTP and TLS are libcurl's job.  Link with pkg-config libcurl.
+ */
+#ifndef CPLUS_STD_HTTP_HP
+#define CPLUS_STD_HTTP_HP
+
+#include <curl/curl.h>
+#include <stdint.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+/* Protocol policy for the initial URL and every redirect.  libcurl copies
+ * these strings, so literals are safe here; the hop cap stops redirect loops.
+ * Non-HTTP schemes (file://, gopher://, dict://, ...) must never reach
+ * curl_easy_perform. */
+#define HTTP_REDIRECT_PROTOCOLS "http,https"
+#define HTTP_MAX_REDIRECTS 5L
+
+/* Process-wide libcurl lifetime; clients must be dropped before it. */
+class http {
+    int initialized;
+
+    http(error *err) {
+        do {
+            error_reset(err);
+            this->initialized = 0;
+            if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "http: curl_global_init failed");
+                break;
+            }
+            this->initialized = 1;
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->initialized != 0;
+    }
+
+    void drop(void) {
+        if (this->initialized) {
+            curl_global_cleanup();
+            this->initialized = 0;
+        }
+    }
+};
+
+static inline const char *http_version(void) {
+    return curl_version();
+}
+
+class http_headers {
+    struct curl_slist *list;
+
+    http_headers(void) {
+        this->list = NULL;
+    }
+
+    int valid(void) {
+        return this->list != NULL;
+    }
+
+    /* Borrowed list for curl_easy_setopt(CURLOPT_HTTPHEADER, ...). */
+    struct curl_slist *native(void) {
+        return this->list;
+    }
+
+    /* Copies the line, so the caller keeps ownership of its string. */
+    int add(const char *line, error *err) {
+        struct curl_slist *fresh;
+        error_reset(err);
+        if (line == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_headers::add: null line");
+            return STDLIB_FAIL;
+        }
+        fresh = curl_slist_append(this->list, line);
+        if (fresh == NULL) {
+            error_fail(err, CPLUS_EXIT_RESOURCE, "http_headers::add: allocation failed");
+            return STDLIB_FAIL;
+        }
+        this->list = fresh;
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->list != NULL) {
+            curl_slist_free_all(this->list);
+            this->list = NULL;
+        }
+    }
+};
+
+/* Bounded, caller-owned response sink used by the write callback. */
+typedef struct http_sink {
+    char *buf;
+    size_t size;
+    size_t used;
+    int overflow;
+} http_sink;
+
+static size_t http_sink_write(char *ptr, size_t size, size_t nmemb,
+                              void *userdata) {
+    http_sink *sink = (http_sink *)userdata;
+    size_t bytes;
+    if (sink == NULL || sink->buf == NULL || sink->size == 0)
+        return 0;
+    if (size != 0 && nmemb > SIZE_MAX / size) {
+        sink->overflow = 1;
+        return 0;
+    }
+    bytes = size * nmemb;
+    if (bytes == 0)
+        return 0;
+    if (ptr == NULL)
+        return 0;
+    /* Overflow-safe: `used` never exceeds `size - 1`, so the subtraction
+     * cannot wrap, and an oversized chunk cannot wrap the sum either. */
+    /* Defense: refuse before any write when the sink is already full or the
+     * bookkeeping is corrupt (used >= size).  The old code computed
+     * `size - used - 1` and wrote `buf[used]`, which underflows when
+     * used == SIZE_MAX and writes one byte past the buffer when
+     * used == size.  Never touch the buffer on a refusal. */
+    if (sink->buf == NULL || sink->used >= sink->size) {
+        sink->overflow = 1;
+        return 0; /* refuse: no write, no NUL, no underflow */
+    }
+    if (bytes > sink->size - sink->used - 1) {
+        /* Clamp to the remaining capacity (at most size - used - 1 >= 1).
+         * Copy only what fits, NUL-terminate at the final index, and set
+         * overflow.  `used` stays < size, so buf[used] is always in range. */
+        size_t room = sink->size - sink->used - 1;
+        memcpy(sink->buf + sink->used, ptr, room);
+        sink->used += room;
+        sink->buf[sink->used] = '\0';
+        sink->overflow = 1;
+        return 0; /* abort: the caller's buffer is full */
+    }
+    memcpy(sink->buf + sink->used, ptr, bytes);
+    sink->used += bytes;
+    sink->buf[sink->used] = '\0';
+    return bytes;
+}
+
+class http_client {
+    CURL *handle;
+    /* Owned copy: libcurl keeps the pointer, so the caller's http_headers may
+     * die before the request is performed. */
+    struct curl_slist *header_copy;
+
+    http_client(error *err) {
+        error_reset(err);
+        do {
+            this->handle = curl_easy_init();
+            this->header_copy = NULL;
+            if (this->handle == NULL) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
+                break;
+            }
+            /* Fail closed: the initial URL and every redirect are restricted
+             * to http/https.  REDIR_PROTOCOLS_STR alone only guards the hop;
+             * without PROTOCOLS_STR a caller could pass file://, gopher://,
+             * dict://, ... straight to perform().  Bound the chain too. */
+            int policy_ok;
+#if defined(LIBCURL_VERSION_NUM) && LIBCURL_VERSION_NUM >= 0x075500
+            policy_ok =
+                curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS_STR,
+                                 HTTP_REDIRECT_PROTOCOLS) == CURLE_OK &&
+                curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS_STR,
+                                 HTTP_REDIRECT_PROTOCOLS) == CURLE_OK;
+#else
+            {
+                long mask = (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                policy_ok =
+                    curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS, mask) == CURLE_OK &&
+                    curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS, mask) == CURLE_OK;
+            }
+#endif
+            if (!policy_ok ||
+                curl_easy_setopt(this->handle, CURLOPT_MAXREDIRS,
+                                 HTTP_MAX_REDIRECTS) != CURLE_OK) {
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED,
+                           "http_client: protocol policy setopt failed");
+                curl_easy_cleanup(this->handle);
+                this->handle = NULL;
+                break;
+            }
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->handle != NULL;
+    }
+
+    int set_timeout(long seconds, error *err) {
+        error_reset(err);
+        if (this->handle == NULL || seconds < 0) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "http_client::set_timeout: invalid argument");
+            return STDLIB_FAIL;
+        }
+        if (curl_easy_setopt(this->handle, CURLOPT_TIMEOUT, seconds) != CURLE_OK) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "http_client::set_timeout failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int follow_redirects(int enabled, error *err) {
+        error_reset(err);
+        if (this->handle == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::follow_redirects: invalid client");
+            return STDLIB_FAIL;
+        }
+        if (curl_easy_setopt(this->handle, CURLOPT_FOLLOWLOCATION,
+                             enabled ? 1L : 0L) != CURLE_OK) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::follow_redirects failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int set_headers(http_headers *headers, error *err) {
+        struct curl_slist *copy = NULL;
+        struct curl_slist *line;
+        error_reset(err);
+        if (this->handle == NULL || headers == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers: invalid argument");
+            return STDLIB_FAIL;
+        }
+        for (line = headers->list; line != NULL; line = line->next) {
+            struct curl_slist *fresh = curl_slist_append(copy, line->data);
+            if (fresh == NULL) {
+                if (copy != NULL)
+                    curl_slist_free_all(copy);
+                error_fail(err, CPLUS_EXIT_RESOURCE, "http_client::set_headers: copy failed");
+                return STDLIB_FAIL;
+            }
+            copy = fresh;
+        }
+        /* Install the new list BEFORE releasing the old one.  libcurl keeps
+         * the CURLOPT_HTTPHEADER pointer until the next setopt or cleanup;
+         * freeing the previous list first leaves a dangling pointer on the
+         * handle if this setopt fails.  On failure the caller's previous
+         * headers stay installed and the unused copy is released. */
+        if (curl_easy_setopt(this->handle, CURLOPT_HTTPHEADER, copy) != CURLE_OK) {
+            if (copy != NULL)
+                curl_slist_free_all(copy);
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers failed");
+            return STDLIB_FAIL;
+        }
+        if (this->header_copy != NULL)
+            curl_slist_free_all(this->header_copy);
+        this->header_copy = copy;
+        return STDLIB_OK;
+    }
+
+    /* Number of header lines the client owns (proof that set_headers copied
+     * the caller's list instead of borrowing it). */
+    int header_lines(void) {
+        int count = 0;
+        struct curl_slist *line;
+        for (line = this->header_copy; line != NULL; line = line->next)
+            count++;
+        return count;
+    }
+
+    /* Shared body of get/post: writes at most size-1 response bytes. */
+    int request(const char *url, const char *body, char *buf, size_t size,
+                error *err) {
+        http_sink sink;
+        CURLcode rc;
+        error_reset(err);
+        if (this->handle == NULL || url == NULL || buf == NULL || size == 0) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::request: invalid argument");
+            return STDLIB_FAIL;
+        }
+        sink.buf = buf;
+        sink.size = size;
+        sink.used = 0;
+        sink.overflow = 0;
+        buf[0] = '\0';
+
+        if (curl_easy_setopt(this->handle, CURLOPT_URL, url) != CURLE_OK ||
+            curl_easy_setopt(this->handle, CURLOPT_WRITEFUNCTION,
+                             http_sink_write) != CURLE_OK ||
+            curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, &sink) != CURLE_OK ||
+            (body == NULL
+                 ? curl_easy_setopt(this->handle, CURLOPT_HTTPGET, 1L) != CURLE_OK
+                 : (curl_easy_setopt(this->handle, CURLOPT_POSTFIELDS, body) != CURLE_OK ||
+                    curl_easy_setopt(this->handle, CURLOPT_POSTFIELDSIZE,
+                                     (long)strlen(body)) != CURLE_OK))) {
+            curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, NULL);
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "http_client::request: setopt failed");
+            return STDLIB_FAIL;
+        }
+        rc = curl_easy_perform(this->handle);
+        curl_easy_setopt(this->handle, CURLOPT_WRITEDATA, NULL);
+        /* The write callback returns 0 (abort) when the response does not fit,
+         * so libcurl reports CURLE_WRITE_ERROR.  Check the sink FIRST: otherwise
+         * that generic transport error masks the documented bounds refusal and
+         * makes the STDLIB_CATEGORY_BOUNDS branch below unreachable.  Reordering
+         * two checks is ABI-neutral: no signature, layout or symbol change. */
+        if (sink.overflow) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_IO,
+                           "response larger than the caller buffer");
+            return STDLIB_FAIL;
+        }
+        if (rc != CURLE_OK) {
+            error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                           curl_easy_strerror(rc));
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int get(const char *url, char *buf, size_t size, error *err) {
+        return http_client_request(this, url, NULL, buf, size, err);
+    }
+
+    int post(const char *url, const char *body, char *buf, size_t size,
+             error *err) {
+        return http_client_request(this, url, body, buf, size, err);
+    }
+
+    long status(void) {
+        long code = 0;
+        if (this->handle == NULL)
+            return 0;
+        curl_easy_getinfo(this->handle, CURLINFO_RESPONSE_CODE, &code);
+        return code;
+    }
+
+    unsigned long long bytes(void) {
+        curl_off_t total = 0;
+        if (this->handle == NULL)
+            return 0;
+        curl_easy_getinfo(this->handle, CURLINFO_SIZE_DOWNLOAD_T, &total);
+        return (unsigned long long)total;
+    }
+
+    void drop(void) {
+        if (this->handle != NULL) {
+            curl_easy_cleanup(this->handle);
+            this->handle = NULL;
+        }
+        if (this->header_copy != NULL) {
+            curl_slist_free_all(this->header_copy);
+            this->header_copy = NULL;
+        }
+    }
+};
+
+#endif

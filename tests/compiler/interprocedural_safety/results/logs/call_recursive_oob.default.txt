@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/call_recursive_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:49: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 from recursive call is out of bounds of 'p' of extent 4
+  static void rec(int *p,int i){ if(i>5) return; p[i]=1; rec(p,i+1); }
+                                                  ^
+help: use C+ managed allocations and cplus_* helpers

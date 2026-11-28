@@ -1,0 +1,283 @@
+/* C+ standard library: additive token-based lifetime/borrow adaptation.
+ *
+ * PROVENANCE (see tests/stdlib/upstream_reuse/lifetime_adapt_NOTES.md)
+ * ------------------------------------------------------------------
+ * Adapted from SaferCPlusPlus (duneroadrunner/SaferCPlusPlus), master commit
+ * 5edaf67acf746d9ee472a06a51094b31a3db57c0, fetched 2026-11-23 from:
+ *   https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/include/msepointerbasics.h
+ *   https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/include/msescope.h
+ * License: Boost Software License 1.0 (BSL-1.0),
+ *   https://raw.githubusercontent.com/duneroadrunner/SaferCPlusPlus/master/LICENSE_1_0.txt
+ * Copyright (c) 2015 Noah Lopez.  BSL-1.0 notice reproduced in the NOTES file.
+ *
+ * WHAT IS ADAPTED
+ * ---------------
+ * SaferCPlusPlus encodes lifetime safety in the *type system*:
+ *   - `lifetime_info1_t lt_info1` / `no_lifetime_info1` (msescope.h:140-141)
+ *     is a size_t lifetime token carried as a non-type template parameter so
+ *     that a scope pointer and its target object share the same lifetime tag.
+ *   - `TScopeID` (msescope.h:98) is an empty token type used as the `_TID`
+ *     template argument of `TPointer<_Ty, _TID>` (msepointerbasics.h:1508-1516)
+ *     to distinguish a scope pointer from an ordinary pointer.
+ *   - `TXScopeOwnerPointer` / `make_xscope_owner` (msescope.h:2985, 983-993)
+ *     is the owning wrapper from which scope pointers are borrowed, and the
+ *     `XScopeTagBase` / `ReferenceableByScopePointerTagBase` /
+ *     `ContainsNonOwningScopeReferenceTagBase` marker bases restrict where a
+ *     scope pointer may be stored.
+ * C+ (C17) has no templates, inheritance or non-type template parameters, so
+ * the token is carried as a runtime value and checked against the same
+ * metadata table that the rest of the stdlib already uses for generation
+ * tokens (stdlib/error.hp:519-542, 564-585).  The mapping is:
+ *
+ *   SaferCPlusPlus lifetime_info1_t / no_lifetime_info1 = 0
+ *       -> lifetime_token_t / LIFETIME_NO_TOKEN (0)
+ *   TXScopeOwnerPointer (owner of a scoped object)
+ *       -> lifetime_owner (owner of a stdlib_alloc block)
+ *   scope pointer obtained from the owner
+ *       -> lifetime_borrow (raw pointer + captured lifetime token)
+ *   scope pointer may not outlive / escape its owner
+ *       -> guarded accessors re-check the token via metadata BEFORE touching
+ *          memory; a stale or moved-from token is refused (STDLIB_FAIL)
+ *   ownership transfer invalidates scope pointers into the old owner
+ *       -> lifetime_transfer() bumps the generation via
+ *          stdlib_transfer_ownership, so pre-transfer borrows are stale
+ *
+ * WHAT IS NOT CHANGED
+ * -------------------
+ * No fat pointers: ordinary `T *` values keep their exact size, layout and
+ * semantics.  `lifetime_borrow` is a NEW, additive value descriptor, not a
+ * redefinition of any existing pointer type.  No ABI, allocator or compiler
+ * change is needed; this header only calls existing stdlib helpers.
+ *
+ * LIMITS (documented, not bugs)
+ * -----------------------------
+ * - Like SaferCPlusPlus's runtime-check mode (as opposed to its scpptool
+ *   static mode), a borrow used without the guarded accessors is not checked;
+ *   callers must route reads/writes through lifetime_read/lifetime_write.
+ * - Single-threaded use: the token is a scalar stamp, not an ownership lock.
+ * - Detection relies on the block being tracked by stdlib_alloc and on the
+ *   monotonically increasing generation, so address reuse by a later block
+ *   still yields a different token and is refused.
+ */
+#ifndef CPLUS_STD_LIFETIME_ADAPT_HP
+#define CPLUS_STD_LIFETIME_ADAPT_HP
+
+#include <stddef.h>
+#include "stdlib/error.hp"
+#include "stdlib/memory.hp"
+
+/* Lifetime token.  Mirrors SaferCPlusPlus's `typedef size_t lifetime_info1_t;
+ * static const lifetime_info1_t no_lifetime_info1 = 0;` (msescope.h:140-141).
+ * A zero token means "no lifetime" and is always refused by guarded access. */
+typedef unsigned long long lifetime_token_t;
+#define LIFETIME_NO_TOKEN 0ULL
+
+/* Owning handle.  Analogous to TXScopeOwnerPointer: it owns the object that
+ * scope-style borrows may target, and holds the token those borrows carry. */
+typedef struct lifetime_owner {
+    void *ptr;
+    lifetime_token_t token;
+} lifetime_owner;
+
+/* Non-owning borrow descriptor (NOT a replacement for T*).  `ptr` is a plain
+ * raw pointer; `token` is the lifetime stamp captured from the owner at borrow
+ * time, analogous to the lt_info1 template token of a scope pointer. */
+typedef struct lifetime_borrow {
+    void *ptr;
+    lifetime_token_t token;
+} lifetime_borrow;
+
+/* ---- internal helpers ---------------------------------------------------- */
+
+/* Fail-closed validation of (ptr, token) against the metadata table.  This
+ * performs NO memory access on the target: it only consults stdlib's metadata,
+ * so a stale pointer is refused rather than dereferenced. */
+static inline int lifetime_check(const void *ptr, lifetime_token_t token,
+                                 error *err) {
+    if (ptr == NULL || token == LIFETIME_NO_TOKEN)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "lifetime: empty borrow or missing token"),
+               STDLIB_FAIL;
+    if (stdlib_alloc_size(ptr) == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "lifetime: borrow target is not a tracked block"),
+               STDLIB_FAIL;
+    if (!stdlib_alloc_check_generation(ptr, token))
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "lifetime: stale lifetime token refused"),
+               STDLIB_FAIL;
+    return STDLIB_OK;
+}
+
+/* ---- owner lifecycle ----------------------------------------------------- */
+
+/* Acquire a tracked block and stamp it with a fresh lifetime token. */
+static inline int lifetime_owner_init(lifetime_owner *o, size_t bytes,
+                                      error *err) {
+    if (o == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "lifetime_owner_init: NULL owner"),
+               STDLIB_FAIL;
+    if (o->ptr != NULL || o->token != LIFETIME_NO_TOKEN)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP,
+                              "lifetime_owner_init: owner already holds a block"),
+               STDLIB_FAIL;
+    o->ptr = stdlib_alloc(bytes);
+    if (o->ptr == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
+                              CPLUS_EXIT_RESOURCE,
+                              "lifetime_owner_init: allocation refused"),
+               STDLIB_FAIL;
+    o->token = stdlib_alloc_generation(o->ptr);
+    if (o->token == LIFETIME_NO_TOKEN) {
+        stdlib_release(o->ptr);
+        o->ptr = NULL;
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "lifetime_owner_init: no lifetime token stamped"),
+               STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+/* Release an owner exactly once.  A second release, or a release of a moved-
+ * from owner, is REFUSED (STDLIB_FAIL + CPLUS_EXIT_DOUBLE_FREE) rather than
+ * silently accepted; no allocator call is made on the refused path. */
+static inline int lifetime_owner_release(lifetime_owner *o, error *err) {
+    if (o == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "lifetime_owner_release: NULL owner"),
+               STDLIB_FAIL;
+    if (o->ptr == NULL || o->token == LIFETIME_NO_TOKEN)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_DOUBLE_FREE,
+                              "lifetime_owner_release: double release or moved-from owner refused"),
+               STDLIB_FAIL;
+    if (!stdlib_alloc_check_generation(o->ptr, o->token))
+        return error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE,
+                              CPLUS_EXIT_USE_AFTER_FREE,
+                              "lifetime_owner_release: stale token refused"),
+               STDLIB_FAIL;
+    stdlib_release(o->ptr); /* retires the metadata generation to 0 */
+    o->ptr = NULL;
+    o->token = LIFETIME_NO_TOKEN;
+    return STDLIB_OK;
+}
+
+/* Transfer ownership dst <- src.  Uses stdlib_transfer_ownership, which bumps
+ * the generation: every borrow captured from `src` becomes stale, while a new
+ * borrow from `dst` is valid.  The moved-from `src` can no longer be borrowed
+ * or released. */
+static inline int lifetime_transfer(lifetime_owner *dst, lifetime_owner *src,
+                                    error *err) {
+    if (dst == NULL || src == NULL || dst == src || dst->ptr != NULL ||
+        dst->token != LIFETIME_NO_TOKEN)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP,
+                              "lifetime_transfer: invalid handles"),
+               STDLIB_FAIL;
+    if (lifetime_check(src->ptr, src->token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    if (stdlib_transfer_ownership(&dst->ptr, &src->ptr) != 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_OWNERSHIP,
+                              CPLUS_EXIT_OWNERSHIP,
+                              "lifetime_transfer: source is not a live block"),
+               STDLIB_FAIL;
+    dst->token = stdlib_alloc_generation(dst->ptr);
+    src->token = LIFETIME_NO_TOKEN;
+    return STDLIB_OK;
+}
+
+/* ---- borrow creation and guarded access --------------------------------- */
+
+/* Borrow a live owner.  Refuses to borrow from a released or moved-from owner
+ * (token == 0), just as a scope pointer cannot be obtained from an expired
+ * scope owner. */
+static inline int lifetime_borrow_from(lifetime_borrow *b,
+                                       const lifetime_owner *o, error *err) {
+    if (b == NULL || o == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "lifetime_borrow_from: NULL descriptor"),
+               STDLIB_FAIL;
+    if (lifetime_check(o->ptr, o->token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    b->ptr = o->ptr;
+    b->token = o->token;
+    return STDLIB_OK;
+}
+
+/* Non-dereferencing liveness query: consults metadata only. */
+static inline int lifetime_borrow_is_live(const lifetime_borrow *b) {
+    return b != NULL && b->ptr != NULL && b->token != LIFETIME_NO_TOKEN &&
+           stdlib_alloc_size(b->ptr) != 0 &&
+           stdlib_alloc_check_generation(b->ptr, b->token);
+}
+
+/* HARDENING (blue-10): non-dereferencing liveness query for OWNERS, the missing
+ * counterpart of lifetime_borrow_is_live().  Without it a caller that wants to
+ * avoid the error/telemetry side effects of lifetime_owner_release() or
+ * lifetime_transfer() has no side-effect-free way to ask whether an owner still
+ * holds a live block, and is tempted to inspect o->ptr directly (which is
+ * insufficient: a recycled address can be live under a different generation).
+ * This predicate consults metadata only, never touches the target, and fails
+ * closed for NULL, empty, untracked and stale-generation owners.  It is purely
+ * additive -- no signature, layout or existing behaviour changes. */
+static inline int lifetime_owner_is_live(const lifetime_owner *o) {
+    return o != NULL && o->ptr != NULL && o->token != LIFETIME_NO_TOKEN &&
+           stdlib_alloc_size(o->ptr) != 0 &&
+           stdlib_alloc_check_generation(o->ptr, o->token);
+}
+
+/* Guarded read.  The token and [off, off+n) range are validated against
+ * metadata BEFORE any byte of the target is read.  On failure nothing is
+ * copied and `err` describes the refusal. */
+static inline int lifetime_read(const lifetime_borrow *b, size_t off,
+                                void *dst, size_t n, error *err) {
+    size_t cap;
+    if (dst == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "lifetime_read: NULL destination"),
+               STDLIB_FAIL;
+    if (b == NULL || lifetime_check(b->ptr, b->token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    cap = stdlib_alloc_size(b->ptr);
+    if (off > cap || n > cap - off)
+        return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                              "lifetime_read: range exceeds borrow target"),
+               STDLIB_FAIL;
+    if (n != 0)
+        __builtin_memcpy(dst, (const unsigned char *)b->ptr + off, n);
+    return STDLIB_OK;
+}
+
+/* Guarded write.  Same ordering as lifetime_read: validate token and range
+ * first, write only on success. */
+static inline int lifetime_write(lifetime_borrow *b, size_t off,
+                                 const void *src, size_t n, error *err) {
+    size_t cap;
+    if (src == NULL)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_NULL_POINTER,
+                              "lifetime_write: NULL source"),
+               STDLIB_FAIL;
+    if (b == NULL || lifetime_check(b->ptr, b->token, err) != STDLIB_OK)
+        return STDLIB_FAIL;
+    cap = stdlib_alloc_size(b->ptr);
+    if (off > cap || n > cap - off)
+        return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                              "lifetime_write: range exceeds borrow target"),
+               STDLIB_FAIL;
+    if (n != 0)
+        __builtin_memcpy((unsigned char *)b->ptr + off, src, n);
+    return STDLIB_OK;
+}
+
+#endif /* CPLUS_STD_LIFETIME_ADAPT_HP */

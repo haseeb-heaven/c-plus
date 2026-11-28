@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/null_arg_callee.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:2:34: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'
+  int main(void){ int *q=0; return deref(q); }
+                                   ^~~~~

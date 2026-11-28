@@ -1,0 +1,7 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/call_nested_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:24: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds stack array 'p' of 16 bytes
+  static void g(int *p){ p[5]=1; }
+                         ^

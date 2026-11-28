@@ -1,0 +1,11 @@
+case: ap_global_oob_trap
+mode: strict
+step: run
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_global_oob_trap.strict
+rc: -6
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+C+ error: index 9 is outside the bounds of 'g' (length 4)
+

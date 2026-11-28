@@ -1,0 +1,11 @@
+case macro_literal_index [macros] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; printf("%d\n", a[NINE]); return 0; }
+                                                     ^
+help: array contains 4 elements; valid indices are 0..3
+

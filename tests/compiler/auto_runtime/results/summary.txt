@@ -1,0 +1,16 @@
+C+ --auto-runtime evidence
+macOS-27.2.1-arm64-arm-64bit
+c+ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+fatal_without_auto_runtime     PASS
+  rc=110 want=110, stdout='start\n' want='start\n', diagnostic=True
+handled_with_auto_runtime      PASS
+  rc=0 want=0, stdout='start\ncaught 110\nafter try\n' want='start\ncaught 110\nafter try\n', diagnostic=True
+fatal_without_handler_auto_runtime PASS
+  rc=110 want=110, stdout='start\n' want='start\n', diagnostic=True
+constructor_before_first_line  PASS
+  build_rc=0 missing_guards=[] ctor@114 first_line@7619
+legacy_source_preserved        PASS
+  build_rc=0 prefix=True bytes_equal=True
+
+cases: 5, passed: 5, failed: 0

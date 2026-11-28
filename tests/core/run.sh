@@ -1,0 +1,351 @@
+#!/bin/sh
+set -u
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
+OUT="$ROOT/tests/out/core"
+mkdir -p "$OUT"
+PASS=0; FAIL=0
+
+ok() { echo "  ok   $1"; PASS=$((PASS+1)); }
+bad() { echo "  FAIL $1: $2"; FAIL=$((FAIL+1)); }
+
+build_run() {
+  name=$1; src=$2
+  if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
+    bad "$name" "build failed"; return
+  fi
+  if ! "$OUT/$name" >"$OUT/$name.stdout" 2>>"$OUT/$name.log"; then
+    bad "$name" "runtime failed"; return
+  fi
+  ok "$name"
+}
+
+build_expect_stderr() {
+  name=$1; src=$2; needle=$3
+  if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
+    bad "$name" "build failed"; return
+  fi
+  if ! grep -q "$needle" "$OUT/$name.stderr"; then
+    bad "$name" "missing warning: $needle"; return
+  fi
+  ok "$name"
+}
+
+# Issue #25 criterion 1: the NULL allocation-failure return must NOT be
+# diagnosed as a leak. Build under the DEFAULT warnings-as-errors policy (no
+# --no-werror) so a leak warning fails the build, then assert the exact leak
+# diagnostic is absent and the program runs cleanly. Deliberately scoped to
+# this one fixture: other positives keep --no-werror and safety fixtures keep
+# their existing reject/warn assertions unchanged.
+build_run_no_leak() {
+  name=$1; src=$2
+  if ! "$CPLUS" build "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
+    bad "$name" "default-policy build failed (unexpected warning, e.g. NULL-path leak)"
+    return
+  fi
+  if grep -q 'leaks on this return path' "$OUT/$name.log"; then
+    bad "$name" "NULL allocation-failure path diagnosed as a leak"
+    return
+  fi
+  if ! "$OUT/$name" >"$OUT/$name.stdout" 2>>"$OUT/$name.log"; then
+    bad "$name" "runtime failed"
+    return
+  fi
+  ok "$name"
+}
+
+expect_reject() {
+  name=$1; src=$2
+  if "$CPLUS" check "$src" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
+    bad "$name" "unsafe program accepted"
+  else
+    ok "$name"
+  fi
+}
+
+expect_strict_reject() {
+  name=$1; src=$2
+  if "$CPLUS" check --strict "$src" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
+    bad "$name" "unsafe program accepted in STRICT"
+  else
+    ok "$name"
+  fi
+}
+
+expect_trap() {
+  name=$1; src=$2; code=$3
+  if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
+    bad "$name" "build failed"; return
+  fi
+  # Some sanitizer runtimes print a fatal diagnostic and then hang on this
+  # host. Bound each trap probe so a hang is a recorded failure, never an
+  # infinite gate. A timed-out probe with a real diagnostic still counts as a
+  # trap because the safety error was emitted before the runtime stalled.
+  timeout 20 "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  rc=$?
+  # Platform sanitizer abort codes differ (SIGABRT 134 on macOS, exit 1 on
+  # some Linux toolchains). Accept a different non-zero code only when the
+  # program emitted a real sanitizer/C+ diagnostic, never for a bare exit.
+  if [ "$rc" -eq "$code" ]; then
+    ok "$name"
+  elif [ "$rc" -ne 0 ] && \
+       cat "$OUT/$name.stdout" "$OUT/$name.stderr" 2>/dev/null | \
+         grep -qE 'runtime error:|AddressSanitizer|UndefinedBehaviorSanitizer|C\+ error:'; then
+    # A real sanitizer diagnostic was emitted; the runtime may stall after it.
+    ok "$name"
+  else
+    bad "$name" "exit $rc != $code"
+  fi
+}
+
+echo "core safety: positive"
+build_run raii_basic "$ROOT/tests/core/positive/raii_basic.cp"
+build_run move_and_borrow "$ROOT/tests/core/positive/move_and_borrow.cp"
+build_run method_array_element "$ROOT/tests/core/positive/method_array_element.cp"
+build_run len_static_and_managed "$ROOT/tests/core/positive/len_static_and_managed.cp"
+build_run len_runtime_metadata "$ROOT/tests/core/positive/len_runtime_metadata.cp"
+build_run len_malloc_constant "$ROOT/tests/core/positive/len_malloc_constant.c"
+build_run realloc_null_seed "$ROOT/tests/core/positive/realloc_null_seed.c"
+build_run goto_no_resources "$ROOT/tests/core/positive/goto_no_resources.c"
+build_run format_string_literal "$ROOT/tests/core/positive/format_string_literal.c"
+build_run null_assignment_guard "$ROOT/tests/core/positive/null_assignment_guard.cp"
+build_run alloc_failure_guard "$ROOT/tests/core/positive/alloc_failure_guard.c"
+build_run_no_leak libccontract_null_path "$ROOT/tests/core/positive/libccontract_null_path.c"
+build_run uninit_scanf_output "$ROOT/tests/core/positive/uninit_scanf_output.c"
+build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
+build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"
+build_run bounds_var_index_ok "$ROOT/tests/core/positive/bounds_var_index_ok.c"
+build_run memset_ok "$ROOT/tests/core/positive/memset_ok.c"
+build_run libc_bounds_ok "$ROOT/tests/core/positive/libc_bounds_ok.c"
+build_run branch_free_null_ok "$ROOT/tests/core/positive/branch_free_null_ok.c"
+build_run null_return_guard "$ROOT/tests/core/positive/null_return_guard.c"
+build_run init_all_branches "$ROOT/tests/core/positive/init_all_branches.c"
+build_run pointer_one_past "$ROOT/tests/core/positive/pointer_one_past.c"
+build_run explicit_drop_once "$ROOT/tests/core/positive/explicit_drop_once.cp"
+build_run raii_cast_drop "$ROOT/tests/core/positive/raii_cast_drop.cp"
+build_run vla_managed_ok "$ROOT/tests/core/positive/vla_managed_ok.c"
+build_run classic_bug53_vla_stack "$ROOT/tests/core/positive/classic_bug53_vla_stack.c"
+build_run raii_conditional_drop "$ROOT/tests/core/positive/raii_conditional_drop.cp"
+build_run raii_defer_cond "$ROOT/tests/core/positive/raii_defer_cond.cp"
+build_run raii_switch_continue "$ROOT/tests/core/positive/raii_switch_continue.cp"
+build_run loop_cleanup "$ROOT/tests/core/positive/loop_cleanup.cp"
+build_run recursive_resource "$ROOT/tests/core/positive/recursive_resource.cp"
+build_run partial_init "$ROOT/tests/core/positive/partial_init.cp"
+build_run double_explicit_drop "$ROOT/tests/core/positive/double_explicit_drop.cp"
+build_run safe_memory "$ROOT/tests/core/positive/safe_memory.c"
+build_run move_chain_ok "$ROOT/tests/core/positive/move_chain_ok.cp"
+build_run managed_len_fold "$ROOT/tests/core/positive/managed_len_fold.c"
+build_run nested_raii "$ROOT/tests/core/positive/nested_raii.cp"
+build_run borrow_valid "$ROOT/tests/core/positive/borrow_valid.cp"
+build_run realloc_chain "$ROOT/tests/core/positive/realloc_chain.c"
+build_run zero_alloc "$ROOT/tests/core/positive/zero_alloc.c"
+build_run thread_guard_ok "$ROOT/tests/core/positive/thread_guard_ok.cp"
+build_run allocator_fuzz "$ROOT/tests/core/allocator_fuzz.c"
+build_run checked_copy_overlap "$ROOT/tests/core/positive/checked_copy_overlap.c"
+build_run null_outparam "$ROOT/tests/core/positive/null_outparam.c"
+build_run libc_valid "$ROOT/tests/core/positive/libc_valid.c"
+build_run interproc_borrow "$ROOT/tests/core/positive/interproc_borrow.c"
+build_run interproc_return_ok "$ROOT/tests/core/positive/interproc_return_ok.c"
+build_run expr_array_bound "$ROOT/tests/core/positive/expr_array_bound.c"
+build_run uaf_conditional "$ROOT/tests/core/positive/uaf_conditional.c"
+build_run borrow_field_ok "$ROOT/tests/core/positive/borrow_field_ok.c"
+build_run valid_alias_writes "$ROOT/tests/core/positive/valid_alias_writes.c"
+build_expect_stderr thread_stack_borrow "$ROOT/tests/safety/thread_stack_borrow.c" "stack borrow passed to thread"
+build_expect_stderr longjmp_warning "$ROOT/tests/safety/classic_bug34_longjmp.c" "bypasses C+ deterministic cleanup"
+
+if "$CPLUS" build "$ROOT/tests/core/positive/multi_tu_main.c" \
+   "$ROOT/tests/core/positive/multi_tu_helper.c" -o "$OUT/multi_tu" \
+   >"$OUT/multi_tu.log" 2>&1 && [ "$("$OUT/multi_tu")" = "40" ]; then
+  ok multi_tu
+else
+  bad multi_tu "build/link/run failed"
+fi
+
+if "$CPLUS" build "$ROOT/tests/core/positive/recursive_resource.cp" --release -o "$OUT/release_recursive" \
+   >"$OUT/release_recursive.log" 2>&1 && "$OUT/release_recursive"; then
+  ok release_recursive
+else
+  bad release_recursive "release recursive build/run failed"
+fi
+if "$CPLUS" build "$ROOT/tests/safety/release_mode.cp" --release -o "$OUT/release_mode" \
+   >"$OUT/release_mode.log" 2>&1 && "$OUT/release_mode"; then
+  ok release_mode
+else
+  bad release_mode "release build/run failed"
+fi
+
+if "$CPLUS" build "$ROOT/tests/core/positive/multi_tu_resource_main.c" \
+   "$ROOT/tests/core/positive/multi_tu_resource_a.c" \
+   -I"$ROOT/tests/core/positive" -o "$OUT/multi_tu_resource" \
+   >"$OUT/multi_tu_resource.log" 2>&1 && "$OUT/multi_tu_resource"; then
+  ok multi_tu_resource
+else
+  bad multi_tu_resource "multi-TU resource build/run failed"
+fi
+
+if "$CPLUS" build "$ROOT/tests/core/multi_tu_lib/part_a.cp" \
+   "$ROOT/tests/core/multi_tu_lib/part_b.cp" \
+   -I "$ROOT/tests/core/multi_tu_lib" -o "$OUT/multi_tu_lib" \
+   >"$OUT/multi_tu_lib.log" 2>&1 && "$OUT/multi_tu_lib"; then
+  ok multi_tu_lib
+else
+  bad multi_tu_lib "multi-TU stdlib-like .hp build/link/run failed"
+fi
+
+if "$CPLUS" build "$ROOT/tests/core/multi_tu_hp/part_a.cp" \
+   "$ROOT/tests/core/multi_tu_hp/part_b.cp" \
+   -I "$ROOT/tests/core/multi_tu_hp" -o "$OUT/multi_tu_hp" \
+   >"$OUT/multi_tu_hp.log" 2>&1 && "$OUT/multi_tu_hp"; then
+  ok multi_tu_hp
+else
+  bad multi_tu_hp "multi-TU .hp class build/link/run failed"
+fi
+
+build_run malloc_valid "$ROOT/tests/core/positive/malloc_valid.c"
+build_run realloc_success "$ROOT/tests/core/positive/realloc_success.c"
+build_run realloc_success_pattern "$ROOT/tests/core/positive/realloc_success_pattern.c"
+build_run memcpy_valid "$ROOT/tests/core/positive/memcpy_valid.c"
+build_run strcpy_valid "$ROOT/tests/core/positive/strcpy_valid.c"
+build_run strcpy_s_valid "$ROOT/tests/core/positive/strcpy_s_valid.c"
+build_run raii_early_return "$ROOT/tests/core/positive/raii_early_return.cp"
+
+expect_reject malloc_alias_uaf "$ROOT/tests/safety/malloc_alias_uaf.c"
+expect_reject malloc_double_free "$ROOT/tests/safety/malloc_double_free.c"
+expect_reject interproc_return_uaf "$ROOT/tests/safety/interproc_return_uaf.c"
+expect_reject branch_double_free "$ROOT/tests/safety/branch_double_free.c"
+expect_reject null_return_deref "$ROOT/tests/safety/null_return_deref.c"
+expect_reject malloc_negative_deref "$ROOT/tests/safety/malloc_negative_deref.c"
+expect_reject interproc_heap_extent "$ROOT/tests/safety/interproc_heap_extent.c"
+expect_reject loop_index_plus_one "$ROOT/tests/safety/loop_index_plus_one.c"
+expect_reject loop_le_len "$ROOT/tests/safety/loop_le_len.c"
+expect_reject loop_cross_array_bound "$ROOT/tests/safety/loop_cross_array_bound.c"
+expect_reject pointer_subtraction_allocations "$ROOT/tests/safety/pointer_subtraction_allocations.c"
+expect_reject pointer_compare_allocations "$ROOT/tests/safety/pointer_compare_allocations.c"
+expect_reject pointer_subtract_arrays "$ROOT/tests/safety/pointer_subtract_arrays.c"
+expect_reject len_untracked_pointer "$ROOT/tests/safety/len_untracked_pointer.cp"
+expect_reject len_expired_pointer "$ROOT/tests/safety/len_expired_pointer.cp"
+expect_reject null_assignment_deref "$ROOT/tests/safety/null_assignment_deref.cp"
+expect_reject heap_extent_libc_overflow "$ROOT/tests/safety/heap_extent_libc_overflow.c"
+expect_reject libccontract_free_interior_offset "$ROOT/tests/safety/libccontract_free_interior_offset.c"
+expect_strict_reject libccontract_genuine_leak "$ROOT/tests/safety/libccontract_genuine_leak.c"
+expect_strict_reject mutable_borrow_alias "$ROOT/tests/safety/mutable_borrow_alias.c"
+expect_strict_reject stale_int_alias_free "$ROOT/tests/safety/stale_int_alias_free.c"
+expect_strict_reject longjmp_owner_reject "$ROOT/tests/safety/longjmp_owner_reject.cp"
+expect_reject realloc_failure "$ROOT/tests/safety/realloc_failure.c"
+expect_reject realloc_success_alias_uaf "$ROOT/tests/safety/realloc_success_alias_uaf.c"
+expect_reject memcpy_overflow "$ROOT/tests/safety/memcpy_overflow.c"
+expect_reject strcpy_overflow "$ROOT/tests/safety/strcpy_overflow.c"
+expect_reject strcpy_s_invalid_size "$ROOT/tests/safety/strcpy_s_invalid_size.c"
+expect_reject borrow_escape "$ROOT/tests/safety/borrow_escape.c"
+expect_reject thread_invalid_sharing "$ROOT/tests/safety/thread_invalid_sharing.c"
+
+# Diagnostics regression: STRICT must fail closed when the safety AST cannot
+# be built, in BOTH `check` and `build` (previously only `check` did).
+ast_parse_fail() {
+  name=$1; shift
+  if "$@" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
+    bad "$name" "STRICT accepted a TU with an unbuildable safety AST"
+  elif grep -q 'CPLUS-ANALYSIS' "$OUT/$name.stderr"; then
+    ok "$name"
+  else
+    bad "$name" "missing CPLUS-ANALYSIS diagnostic"
+  fi
+}
+ast_parse_fail ast_parse_check "$CPLUS" check --strict --sanitize=none "$ROOT/tests/safety/ast_parse_failure.c"
+ast_parse_fail ast_parse_build "$CPLUS" build --strict --sanitize=none "$ROOT/tests/safety/ast_parse_failure.c" -o "$OUT/ast_parse_failure.bin"
+
+echo "core safety: ownership warnings"
+build_expect_stderr moved_from_warning "$ROOT/tests/safety/moved_from_warning.cp" "use of moved-from"
+build_expect_stderr double_move_warning "$ROOT/tests/safety/double_move_warning.cp" "moved more than once"
+
+echo "core safety: rejected"
+build_expect_stderr move_chain "$ROOT/tests/safety/move_chain.c" "use of moved-from"
+expect_reject borrow_after_move "$ROOT/tests/safety/borrow_after_move.c"
+expect_reject borrow_invalid_destructor "$ROOT/tests/safety/borrow_invalid_destructor.cp"
+expect_reject managed_escape_expr "$ROOT/tests/safety/managed_escape_expr.c"
+expect_reject multi_dim_negative "$ROOT/tests/safety/multi_dim_negative.c"
+expect_trap alloc_overflow_mul "$ROOT/tests/safety/alloc_overflow_mul.cp" 107
+expect_trap double_release_after_realloc "$ROOT/tests/safety/double_release_after_realloc.c" 104
+expect_reject alias_borrow_escape "$ROOT/tests/safety/alias_borrow_escape.c"
+expect_reject thread_global_write "$ROOT/tests/safety/thread_global_write.c"
+build_run alloc_bytes_wrong "$ROOT/tests/safety/alloc_bytes_wrong.c"
+expect_reject constructor_early_return "$ROOT/tests/safety/constructor_early_return.cp"
+expect_reject bounds_loop "$ROOT/tests/safety/bounds_loop.c"
+expect_reject uninit_branch "$ROOT/tests/safety/uninit_branch.c"
+expect_reject pointer_arithmetic "$ROOT/tests/safety/pointer_arithmetic.c"
+expect_reject uninit "$ROOT/tests/safety/uninit.c"
+expect_reject null_deref "$ROOT/tests/safety/null_deref.c"
+
+echo "core safety: traps"
+expect_reject double_release "$ROOT/tests/safety/double_release.cp"
+# Stronger guarantee: the stale liveness query is rejected at compile time.
+expect_reject uaf_check "$ROOT/tests/safety/uaf_check.cp"
+expect_reject string_overflow "$ROOT/tests/safety/string_overflow.c"
+expect_trap null_memcpy "$ROOT/tests/safety/null_memcpy.c" 134
+expect_trap null_memmove "$ROOT/tests/safety/null_memmove.c" 134
+expect_trap strnlen_null "$ROOT/tests/safety/strnlen_null.c" 134
+expect_reject double_release_alias "$ROOT/tests/safety/double_release_from_alias.c"
+# Stronger guarantee: the compiler rejects releasing a stack address outright.
+expect_reject release_stack_pointer "$ROOT/tests/safety/release_stack_pointer.c"
+expect_reject invalid_free_stack "$ROOT/tests/safety/invalid_free_stack.c"
+expect_reject invalid_free_interior "$ROOT/tests/safety/invalid_free_interior.c"
+expect_reject invalid_free_global "$ROOT/tests/safety/invalid_free_global.c"
+expect_reject invalid_free_string "$ROOT/tests/safety/invalid_free_string.c"
+expect_reject invalid_free_array "$ROOT/tests/safety/invalid_free_array.c"
+expect_reject bounds_var_index "$ROOT/tests/safety/bounds_var_index.c"
+expect_reject memset_overflow "$ROOT/tests/safety/memset_overflow.c"
+expect_reject strcat_overflow "$ROOT/tests/safety/strcat_overflow.c"
+expect_reject strncpy_overflow "$ROOT/tests/safety/strncpy_overflow.c"
+expect_reject snprintf_overflow "$ROOT/tests/safety/snprintf_overflow.c"
+expect_reject memcpy_null_source "$ROOT/tests/safety/memcpy_null_source.c"
+
+if "$CPLUS" build --no-werror "$ROOT/tests/core/positive/safe_memory.c" --log --log-level trace \
+   -o "$OUT/safe_memory_log" >"$OUT/safe_memory_log.build" 2>&1 && \
+   "$OUT/safe_memory_log" >"$OUT/safe_memory_log.stdout" 2>"$OUT/safe_memory_log.stderr" && \
+   grep -q "c+ driver start" "$OUT/safe_memory_log.build"; then
+  ok runtime_logging
+else
+  bad runtime_logging "missing runtime trace log"
+fi
+
+if "$CPLUS" build "$ROOT/tests/core/positive/quarantine_probe.c" \
+   -o "$OUT/quarantine_probe" >"$OUT/quarantine_probe.log" 2>&1; then
+  CPLUS_QUARANTINE=1 "$OUT/quarantine_probe" \
+    >"$OUT/quarantine_probe.stdout" 2>"$OUT/quarantine_probe.stderr"
+  qrc=$?
+  if [ "$qrc" -eq 105 ]; then ok quarantine_uaf; else bad quarantine_uaf "exit $qrc"; fi
+else
+  bad quarantine_uaf "build failed"
+fi
+
+# Format-string / stdio review corpus (25 scenarios): all must be rejected
+# in STRICT mode. Fixtures are generated from scratch/review inputs.
+for f in "$ROOT"/tests/safety/fmt25_*.c; do
+  expect_strict_reject "$(basename "$f" .c)" "$f"
+done
+
+# All compiler safety unit tests are native C+ programs built by the C+
+# driver itself (no Python test harness). The harness embeds negative cases
+# with exact expected diagnostics and positive counterparts.
+if "$CPLUS" build --legacy-c "$ROOT/tests/native/cplus_safety_tests.c" \
+   -o "$OUT/native_safety_tests" >"$OUT/native_safety_build.log" 2>&1 && \
+   CPLUS_BIN="$CPLUS" "$OUT/native_safety_tests" >"$OUT/native_safety.log" 2>&1; then
+  ok native_safety_suite
+else
+  bad native_safety_suite "$(head -3 "$OUT/native_safety.log")"
+fi
+
+# The authoritative 40-test STRICT suite (check --strict and
+# --strict --sanitize=none) is driven by a native C+ runner.
+if "$CPLUS" build --legacy-c "$ROOT/tests/native/strict40_runner.c" \
+   -o "$OUT/strict40_runner" >"$OUT/strict40_build.log" 2>&1 && \
+   CPLUS_BIN="$CPLUS" "$OUT/strict40_runner" \
+     "$ROOT/tests/fixtures/strict40" >"$OUT/strict40.log" 2>&1; then
+  ok strict40_suite
+else
+  bad strict40_suite "$(tail -1 "$OUT/strict40.log")"
+fi
+
+echo
+echo "core safety: $PASS passed, $FAIL failed"
+[ "$FAIL" -eq 0 ]

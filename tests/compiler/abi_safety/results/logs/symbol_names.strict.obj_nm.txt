@@ -1,0 +1,11 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.o
+returncode: 0
+timed_out: False
+
+--- stdout ---
+0000000000000000 T _abi_add_exported
+0000000000000320 D _abi_glob_counter
+000000000000014c T _main
+
+--- stderr ---
+

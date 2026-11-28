@@ -11,6 +11,11 @@
 //                                        /*cplus$own:h:T_drop*/
 //   p.method(args)                    -> Player_method(&p, args)
 //   p->method(args)                   -> Player_method(p, args)
+//   generic Vec<T>;                   -> one monomorphised `struct Vec_T` per
+//                                        distinct element type, with plain C
+//                                        fields and static inline C helpers;
+//                                        no hidden field, vtable or descriptor
+//   Vec<int>                          -> Vec_int
 //
 // Unchanged source is copied verbatim, so rejected C constructs produce the
 // same diagnostics as the host C compiler.
@@ -18,6 +23,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Sema/CPlusRewriter.h"
+
+#include <cstring> // std::strcmp (used by helper-name reservation checks)
 
 #include "LangFeatures.h"
 #include "Sema/CPlusLexer.h"
@@ -28,13 +35,47 @@
 #include <map>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace cplus {
 
+// Issue #179: qualifier facts recorded by this rewriter and consumed by the
+// AST safety checker. Defined in Analysis/OwnershipAnalysis.cpp; primitive
+// parameter types keep this boundary header-free.
+void cplusCakeClearQualifiers();
+void cplusCakeRecordQualifier(const std::string &name, unsigned line, int kind);
+
+// Issue #184: call-site validation for spatial annotations.  Implemented in
+// TypeChecker.cpp so the annotation contracts are checked by the type-checking
+// half of Sema while the C+ syntax rewriter stays responsible only for erasing
+// the annotations and inserting the ABI-preserving dynamic guards.
+void checkAnnotatedCallSites(const std::string &source,
+                             const std::vector<std::string> &contracts,
+                             DiagnosticEngine &diags,
+                             const std::string &filename);
+
+// Issue #185: static active-variant validation for erased `@tagged` unions.
+// Implemented in TypeChecker.cpp; the rewriter owns only erasure/lowering.
+void checkTaggedVariantAccess(const std::string &source,
+                              const std::vector<std::string> &facts,
+                              DiagnosticEngine &diags,
+                              const std::string &filename);
+
 namespace {
 
 constexpr size_t kNPos = static_cast<size_t>(-1);
+
+/// Cake pointer qualifier spelling -> stable kind code (0 = not a qualifier).
+inline int cakeQualifierKind(const std::string &text) {
+  if (text == "_Opt")
+    return 1;
+  if (text == "_Owner")
+    return 2;
+  if (text == "_View")
+    return 3;
+  return 0;
+}
 
 std::set<std::string> &externalClasses() {
   static std::set<std::string> names;
@@ -88,6 +129,28 @@ struct ResourceInfo {
   size_t nameIdx = 0;
   size_t bodyOpen = 0;
   size_t bodyClose = 0;
+};
+
+/// Issue #183: documented generic container spelling.
+///
+///   generic Vec<T>;
+///
+/// declares a single-parameter container whose C representation is fixed:
+///
+///   struct Vec_T { T *data; size_t len; size_t cap; };
+///
+/// Every distinct `Vec<int>` / `Vec<double>` use site is monomorphised into a
+/// concrete struct plus three `static inline` C functions.  The emitted struct
+/// contains only the three declared fields: there is no hidden field, vtable
+/// pointer or runtime type descriptor, and a `Vec_int *` is an ordinary C
+/// pointer with the platform ABI.
+struct GenericDecl {
+  std::string name;
+  std::string param;
+  size_t keyword = 0;
+  size_t nameIdx = 0;
+  size_t paramIdx = 0;
+  size_t semi = 0;
 };
 
 class TokenStream {
@@ -195,6 +258,43 @@ private:
   const std::vector<Token> &toks_;
 };
 
+/// Find the identifier introduced by the pointer declaration that carries the
+/// Cake qualifier at token `qi`. Handles both `_Opt T *p` (qualifier before
+/// the type) and `T *_Opt p` (qualifier after the star). Declaration
+/// specifiers, tag names and the declarator star run are skipped; the first
+/// remaining identifier is the declared binding.
+static std::string cakeDeclaredName(const TokenStream &ts, size_t qi) {
+  static const std::set<std::string> specifiers = {
+      "const", "volatile", "restrict", "static", "extern", "register",
+      "struct", "union", "enum", "unsigned", "signed", "long", "short",
+      "int", "char", "float", "double", "void", "_Bool", "_Atomic"};
+  size_t i = ts.nextSig(qi);
+  for (unsigned guard = 0; i < ts.size() && guard < 24; ++guard) {
+    const Token &t = ts[i];
+    if (ts.isPunct(i, "*") || ts.isPunct(i, "&")) {
+      i = ts.nextSig(i);
+      continue;
+    }
+    if (t.kind == TokKind::Identifier && cakeQualifierKind(t.text) != 0) {
+      i = ts.nextSig(i);
+      continue;
+    }
+    if (t.kind == TokKind::Identifier &&
+        (specifiers.count(t.text) ||
+         (!t.text.empty() && t.text[0] >= 'A' && t.text[0] <= 'Z'))) {
+      if ((t.text == "struct" || t.text == "union" || t.text == "enum") &&
+          ts.nextSig(i) < ts.size())
+        i = ts.nextSig(i); // skip the tag name
+      i = ts.nextSig(i);
+      continue;
+    }
+    if (t.kind == TokKind::Identifier)
+      return t.text;
+    break;
+  }
+  return std::string();
+}
+
 bool isTypeStarter(const std::string &s) {
   static const std::set<std::string> kStarters = {
       "struct", "union", "enum", "const",   "volatile", "static",
@@ -227,24 +327,603 @@ std::string lineDirective(const std::string &file, unsigned line) {
   return "#line " + std::to_string(line) + " \"" + escaped + "\"\n";
 }
 
+// ---------------------------------------------------------------------------
+// Issue #184: spatial / thin-boundary annotations.
+//
+// `@notnull`, `@zeroterm` and `@numelts(expr)` are C+ source-only contracts.
+// They are consumed here, erased from the emitted C, and turned into:
+//   * a serialized contract checked at call sites in TypeChecker.cpp, and
+//   * a per-pointer dynamic guard emitted at subscript / dereference sites
+//     using the existing ABI-preserving cplus_check_bounds /
+//     cplus_check_nonnull runtime hooks.
+// The emitted parameter list is still exactly `T *, size_t`: no fat pointer,
+// hidden struct field or adapter is introduced.
+// ---------------------------------------------------------------------------
+
+struct SafetyAnnotation {
+  enum class Kind { NotNull, ZeroTerm, NumElts };
+  Kind kind = Kind::NotNull;
+  std::string pointer;
+  std::string lengthExpr;
+  std::string function;
+  size_t paramIndex = kNPos;
+  unsigned line = 1;
+  unsigned column = 1;
+};
+
+namespace {
+
+bool annTrivia(const Token &t) {
+  return t.kind == TokKind::Whitespace || t.kind == TokKind::Comment;
+}
+
+size_t annNext(const std::vector<Token> &toks, size_t i) {
+  ++i;
+  while (i < toks.size() && annTrivia(toks[i]))
+    ++i;
+  return i;
+}
+
+size_t annPrev(const std::vector<Token> &toks, size_t i) {
+  while (i > 0) {
+    --i;
+    if (!annTrivia(toks[i]))
+      return i;
+  }
+  return kNPos;
+}
+
+bool annIsIdent(const std::vector<Token> &toks, size_t i, const char *s) {
+  return i < toks.size() && toks[i].kind == TokKind::Identifier &&
+         toks[i].text == s;
+}
+
+bool annIsPunct(const std::vector<Token> &toks, size_t i, const char *s) {
+  return i < toks.size() && toks[i].kind == TokKind::Punct &&
+         toks[i].text == s;
+}
+
+size_t annMatch(const std::vector<Token> &toks, size_t open,
+                const char *o, const char *c) {
+  int depth = 0;
+  for (size_t i = open; i < toks.size(); ++i) {
+    if (annIsPunct(toks, i, o))
+      ++depth;
+    else if (annIsPunct(toks, i, c) && --depth == 0)
+      return i;
+  }
+  return kNPos;
+}
+
+std::string annJoin(const std::vector<Token> &toks, size_t from, size_t to) {
+  std::string out;
+  for (size_t i = from; i < to; ++i) {
+    if (annTrivia(toks[i]))
+      continue;
+    if (!out.empty())
+      out += " ";
+    out += toks[i].text;
+  }
+  return out;
+}
+
+std::string annQuote(const std::string &s) {
+  std::string out;
+  for (char c : s) {
+    if (c == '\\' || c == '"')
+      out += '\\';
+    out += c;
+  }
+  return out;
+}
+
+/// Find the function definition whose parameter list contains `starIdx`.
+/// Returns the function name through `name` and the zero-based parameter index
+/// through `param`.  A struct field annotation has no enclosing function and
+/// is still erased, but it produces no call-site contract.
+bool annEnclosingFunction(const std::vector<Token> &toks, size_t starIdx,
+                          std::string &name, size_t &param) {
+  for (size_t k = starIdx; k != kNPos; k = annPrev(toks, k)) {
+    if (toks[k].kind != TokKind::Identifier)
+      continue;
+    size_t lp = annNext(toks, k);
+    if (!annIsPunct(toks, lp, "("))
+      continue;
+    size_t rp = annMatch(toks, lp, "(", ")");
+    if (rp == kNPos || rp <= starIdx)
+      continue;
+    size_t open = annNext(toks, rp);
+    if (!annIsPunct(toks, open, "{"))
+      continue;
+    size_t close = annMatch(toks, open, "{", "}");
+    if (close == kNPos || close < starIdx)
+      continue;
+    name = toks[k].text;
+    param = 0;
+    size_t partStart = lp + 1;
+    int depth = 0;
+    for (size_t j = lp + 1; j <= rp; ++j) {
+      bool end = j == rp;
+      if (!end && annIsPunct(toks, j, "("))
+        ++depth;
+      if (!end && annIsPunct(toks, j, ")"))
+        --depth;
+      if (!end && !(depth == 0 && annIsPunct(toks, j, ",")))
+        continue;
+      if (starIdx >= partStart && starIdx < j)
+        return true;
+      ++param;
+      partStart = j + 1;
+    }
+    return false;
+  }
+  return false;
+}
+
+} // namespace
+
+/// Strip annotations from `toks` (in place) and collect their contracts.
+/// Keeping this as a token pass rather than a text regex means annotations in
+/// comments and string literals are never touched, and diagnostics retain the
+/// original line/column even though the emitted C is shorter.
+std::vector<SafetyAnnotation>
+extractSafetyAnnotations(std::vector<Token> &toks, DiagnosticEngine &diags,
+                         const std::string &filename,
+                         std::vector<std::string> &contracts) {
+  struct EraseRange {
+    size_t from;
+    size_t to; // exclusive
+  };
+  std::vector<EraseRange> erase;
+  std::vector<SafetyAnnotation> out;
+
+  for (size_t i = 0; i < toks.size(); ++i) {
+    if (!annIsPunct(toks, i, "@"))
+      continue;
+    size_t nameTok = annNext(toks, i);
+    if (nameTok >= toks.size() || toks[nameTok].kind != TokKind::Identifier)
+      continue;
+    const std::string tag = toks[nameTok].text;
+    SafetyAnnotation::Kind kind;
+    if (tag == "notnull")
+      kind = SafetyAnnotation::Kind::NotNull;
+    else if (tag == "zeroterm")
+      kind = SafetyAnnotation::Kind::ZeroTerm;
+    else if (tag == "numelts")
+      kind = SafetyAnnotation::Kind::NumElts;
+    else
+      continue; // an unrelated '@' is left verbatim for the C compiler
+
+    size_t last = nameTok;
+    size_t valueFrom = kNPos, valueTo = kNPos;
+    if (kind == SafetyAnnotation::Kind::NumElts) {
+      size_t lp = annNext(toks, nameTok);
+      if (!annIsPunct(toks, lp, "(")) {
+        diags.error("[CPLUS-SPATIAL] @numelts requires a count expression in "
+                    "parentheses",
+                    filename, toks[i].line, toks[i].column);
+        continue;
+      }
+      size_t rp = annMatch(toks, lp, "(", ")");
+      if (rp == kNPos) {
+        diags.error("[CPLUS-SPATIAL] unterminated @numelts expression",
+                    filename, toks[i].line, toks[i].column);
+        continue;
+      }
+      valueFrom = lp + 1;
+      valueTo = rp;
+      last = rp;
+    } else if (annIsPunct(toks, annNext(toks, nameTok), "(")) {
+      diags.error("[CPLUS-SPATIAL] @" + tag + " takes no arguments", filename,
+                  toks[i].line, toks[i].column);
+    }
+
+    // The annotation must sit on a pointer declarator.  Cyclone-style
+    // annotations are written after the `*` (`T *@notnull p`).
+    size_t star = kNPos;
+    for (size_t k = annPrev(toks, i); k != kNPos; k = annPrev(toks, k)) {
+      if (annIsPunct(toks, k, "*")) {
+        star = k;
+        break;
+      }
+      if (annIsPunct(toks, k, ";") || annIsPunct(toks, k, "{") ||
+          annIsPunct(toks, k, "}") || annIsPunct(toks, k, ","))
+        break;
+    }
+    size_t pointerTok = annNext(toks, last);
+    if (star == kNPos || pointerTok >= toks.size() ||
+        toks[pointerTok].kind != TokKind::Identifier) {
+      diags.error("[CPLUS-SPATIAL] @" + tag +
+                      " must annotate a pointer declarator (T *@" + tag +
+                      " name)",
+                  filename, toks[i].line, toks[i].column);
+      erase.push_back({i, last + 1});
+      continue;
+    }
+
+    SafetyAnnotation a;
+    a.kind = kind;
+    a.pointer = toks[pointerTok].text;
+    a.line = toks[i].line;
+    a.column = toks[i].column;
+    if (kind == SafetyAnnotation::Kind::NumElts)
+      a.lengthExpr = annJoin(toks, valueFrom, valueTo);
+    annEnclosingFunction(toks, star, a.function, a.paramIndex);
+    out.push_back(a);
+    if (!a.function.empty()) {
+      const char *tagText = kind == SafetyAnnotation::Kind::NotNull
+                                ? "notnull"
+                                : (kind == SafetyAnnotation::Kind::ZeroTerm
+                                       ? "zeroterm"
+                                       : "numelts");
+      contracts.push_back("F|" + a.function + "|" +
+                          std::to_string(a.paramIndex) + "|" + a.pointer +
+                          "|" + tagText + "|" + a.lengthExpr + "|" +
+                          std::to_string(a.line) + "|" +
+                          std::to_string(a.column));
+    }
+    erase.push_back({i, last + 1});
+  }
+
+  // Erase back-to-front so earlier indices stay valid.
+  std::sort(erase.begin(), erase.end(),
+            [](const EraseRange &a, const EraseRange &b) {
+              return a.from > b.from;
+            });
+  for (const auto &r : erase)
+    toks.erase(toks.begin() + static_cast<long>(r.from),
+               toks.begin() + static_cast<long>(r.to));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Issue #185: `@tagged union` contracts.
+//
+//   @tagged union Value { int i; float f; };
+//
+// declares an ordinary C union; the `@tagged` spelling is erased before
+// Clang sees the translation unit, so the emitted union has exactly the
+// declared fields and C layout.  Each variable of a tagged-union type gets a
+// side table entry (a local `int` tag) and every member access is wrapped in a
+// check that traps when the member is not the active variant.  The facts are
+// also serialized for TypeChecker.cpp so a statically provable wrong-variant
+// access is rejected before code generation.
+// ---------------------------------------------------------------------------
+
+struct TaggedUnionDef {
+  std::string name;
+  std::vector<std::string> fields;
+};
+
+struct TaggedVar {
+  std::string name;
+  std::string type;
+  std::string tag;
+  size_t semi = kNPos;
+  size_t block = kNPos;
+  unsigned line = 1;
+  unsigned column = 1;
+};
+
+struct TaggedAccess {
+  size_t varTok = kNPos;
+  size_t fieldTok = kNPos;
+  std::string var;
+  std::string field;
+  std::string tag;
+  int index = -1;
+  bool store = false;
+  size_t block = kNPos;
+  unsigned line = 1;
+  unsigned column = 1;
+};
+
+struct TaggedInfo {
+  std::map<std::string, TaggedUnionDef> unions;
+  std::vector<TaggedVar> vars;
+  std::vector<TaggedAccess> accesses;
+  std::vector<std::string> facts;
+  bool used = false;
+};
+
+/// Token index of the innermost enclosing `{` at `pos`, used to keep the
+/// static variant replay inside one straight-line block (an if/else that sets
+/// different variants must not be reported as a definite error).
+static size_t taggedBlockAt(const std::vector<Token> &toks, size_t pos) {
+  std::vector<size_t> open;
+  for (size_t i = 0; i < pos && i < toks.size(); ++i) {
+    if (toks[i].kind != TokKind::Punct)
+      continue;
+    if (toks[i].text == "{")
+      open.push_back(i);
+    else if (toks[i].text == "}" && !open.empty())
+      open.pop_back();
+  }
+  return open.empty() ? kNPos : open.back();
+}
+
+static std::string taggedFieldList(const TaggedUnionDef &def) {
+  std::string out;
+  for (const auto &f : def.fields) {
+    if (!out.empty())
+      out += ",";
+    out += f;
+  }
+  return out;
+}
+
+/// Consume `@tagged` from the token stream, recording union definitions,
+/// tagged variables and member accesses.  The token stream that reaches the
+/// Lowerer no longer contains the annotation: only plain C `union` syntax and
+/// the generated side-tag statements remain.
+static TaggedInfo extractTaggedUnions(std::vector<Token> &toks,
+                                      DiagnosticEngine &diags,
+                                      const std::string &filename) {
+  TaggedInfo info;
+  std::vector<size_t> erase;
+
+  // Pass 1: erase every `@tagged` marker, definitions and declarations alike.
+  // The annotation is source-only and must never reach the C compiler.  Doing
+  // this before Passes 2/3 means the variable/access token indices recorded
+  // below refer to the exact stream the Lowerer will emit from, so the
+  // side-tag and variant-check hooks stay aligned.  Definitions additionally
+  // contribute a union fact; `@tagged union Name v;` is recognised by Pass 2
+  // as an ordinary `union Name v;` declaration once the marker is gone.
+  for (size_t i = 0; i < toks.size(); ++i) {
+    if (!annIsPunct(toks, i, "@") || !annIsIdent(toks, annNext(toks, i),
+                                                 "tagged"))
+      continue;
+    size_t kw = annNext(toks, i);
+    erase.push_back(i);
+    erase.push_back(kw);
+    info.used = true;
+
+    size_t u = annNext(toks, kw);
+    if (!annIsIdent(toks, u, "union"))
+      continue;
+    size_t nameIdx = annNext(toks, u);
+    if (nameIdx >= toks.size() ||
+        toks[nameIdx].kind != TokKind::Identifier)
+      continue;
+    size_t open = annNext(toks, nameIdx);
+    if (!annIsPunct(toks, open, "{"))
+      continue;
+    size_t close = annMatch(toks, open, "{", "}");
+    if (close == kNPos) {
+      diags.error("[CPLUS-VARIANT] unterminated @tagged union body", filename,
+                  toks[i].line, toks[i].column);
+      continue;
+    }
+    TaggedUnionDef def;
+    def.name = toks[nameIdx].text;
+    int depth = 0;
+    for (size_t k = open + 1; k <= close; ++k) {
+      if (annIsPunct(toks, k, "{"))
+        ++depth;
+      else if (annIsPunct(toks, k, "}"))
+        --depth;
+      if (depth != 0 || !annIsPunct(toks, k, ";"))
+        continue;
+      size_t last = annPrev(toks, k);
+      if (last != kNPos && toks[last].kind == TokKind::Identifier)
+        def.fields.push_back(toks[last].text);
+    }
+    if (def.fields.empty())
+      diags.error("[CPLUS-VARIANT] @tagged union '" + def.name +
+                      "' has no members",
+                  filename, toks[i].line, toks[i].column);
+    info.facts.push_back("D|" + def.name + "|" + taggedFieldList(def));
+    info.unions[def.name] = def;
+  }
+  std::sort(erase.begin(), erase.end(),
+            [](size_t a, size_t b) { return a > b; });
+  for (size_t e : erase)
+    toks.erase(toks.begin() + static_cast<long>(e));
+
+  // Pass 2: declarations of a tagged-union type (`union Name v;`).
+  unsigned tagCounter = 0;
+  for (size_t i = 0; i + 3 < toks.size(); ++i) {
+    if (!annIsIdent(toks, i, "union"))
+      continue;
+    size_t typeIdx = annNext(toks, i);
+    if (typeIdx >= toks.size() || toks[typeIdx].kind != TokKind::Identifier)
+      continue;
+    auto uit = info.unions.find(toks[typeIdx].text);
+    if (uit == info.unions.end())
+      continue;
+    size_t varIdx = annNext(toks, typeIdx);
+    if (varIdx >= toks.size() || toks[varIdx].kind != TokKind::Identifier)
+      continue;
+    // `union Name {` is the definition, not a variable declaration.
+    if (annIsPunct(toks, varIdx, "{"))
+      continue;
+    size_t after = annNext(toks, varIdx);
+    while (annIsPunct(toks, after, "[")) {
+      size_t rb = annMatch(toks, after, "[", "]");
+      if (rb == kNPos)
+        break;
+      after = annNext(toks, rb);
+    }
+    if (!annIsPunct(toks, after, ";") && !annIsPunct(toks, after, "=") &&
+        !annIsPunct(toks, after, ","))
+      continue;
+    size_t semi = after;
+    while (semi < toks.size() && !annIsPunct(toks, semi, ";"))
+      ++semi;
+    if (semi >= toks.size())
+      continue;
+
+    TaggedVar v;
+    v.name = toks[varIdx].text;
+    v.type = toks[typeIdx].text;
+    v.tag = "__cplus_tag_" + std::to_string(tagCounter++) + "_" + v.name;
+    v.semi = semi;
+    v.block = taggedBlockAt(toks, i);
+    v.line = toks[varIdx].line;
+    v.column = toks[varIdx].column;
+    info.vars.push_back(v);
+    info.facts.push_back("V|" + v.name + "|" + v.type + "|" +
+                         std::to_string(v.line) + "|" +
+                         std::to_string(v.column) + "|" +
+                         std::to_string(v.block));
+  }
+
+  // Pass 3: member accesses (`v.field`) of those variables.
+  static const std::set<std::string> kAssignOps = {
+      "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="};
+  for (size_t i = 0; i + 2 < toks.size(); ++i) {
+    if (toks[i].kind != TokKind::Identifier)
+      continue;
+    const TaggedVar *tv = nullptr;
+    for (auto it = info.vars.rbegin(); it != info.vars.rend(); ++it)
+      if (it->name == toks[i].text && it->semi <= i) {
+        tv = &*it;
+        break;
+      }
+    if (!tv)
+      continue;
+    size_t dot = annNext(toks, i);
+    if (!annIsPunct(toks, dot, "."))
+      continue;
+    size_t fld = annNext(toks, dot);
+    if (fld >= toks.size() || toks[fld].kind != TokKind::Identifier)
+      continue;
+    auto uit = info.unions.find(tv->type);
+    if (uit == info.unions.end())
+      continue;
+    const std::vector<std::string> &fields = uit->second.fields;
+    auto fit = std::find(fields.begin(), fields.end(), toks[fld].text);
+    if (fit == fields.end()) {
+      diags.error("[CPLUS-VARIANT] member '" + toks[fld].text +
+                      "' is not declared in tagged union '" + tv->type + "'",
+                  filename, toks[fld].line, toks[fld].column);
+      continue;
+    }
+    TaggedAccess a;
+    a.varTok = i;
+    a.fieldTok = fld;
+    a.var = tv->name;
+    a.field = toks[fld].text;
+    a.tag = tv->tag;
+    a.index = static_cast<int>(fit - fields.begin());
+    a.store = kAssignOps.count(toks[annNext(toks, fld)].text) != 0 ||
+              annIsPunct(toks, annNext(toks, fld), "++") ||
+              annIsPunct(toks, annNext(toks, fld), "--");
+    a.block = taggedBlockAt(toks, i);
+    a.line = toks[i].line;
+    a.column = toks[i].column;
+    info.accesses.push_back(a);
+    info.facts.push_back(std::string(a.store ? "S|" : "R|") + a.var + "|" +
+                         a.field + "|" + std::to_string(a.line) + "|" +
+                         std::to_string(a.column) + "|" +
+                         std::to_string(a.block));
+  }
+  return info;
+}
+
+/// Self-contained trap helper.  It is emitted once per translation unit and
+/// carries no user-visible symbol: the union itself keeps its plain C layout.
+static const char *const kTaggedPrelude =
+    "#line 1 \"<cplus-tagged-prelude>\"\n"
+    "#ifndef CPLUS_TAGGED_PRELUDE_DEFINED\n"
+    "#define CPLUS_TAGGED_PRELUDE_DEFINED\n"
+    "#include <stdio.h>\n"
+    "#include <stdlib.h>\n"
+    "static inline void cplus_variant_check(int active, int expected,\n"
+    "                                       const char *member,\n"
+    "                                       const char *file, unsigned line) {\n"
+    "  if (active != expected) {\n"
+    "    fprintf(stderr, \"[CPLUS-VARIANT] wrong active variant for '%s' at "
+    "%s:%u (active=%d, expected=%d)\\n\",\n"
+    "            member, file, line, active, expected);\n"
+    "    abort();\n"
+    "  }\n"
+    "}\n"
+    "#endif\n";
+
 class Lowerer {
 public:
   Lowerer(const std::vector<Token> &toks, DiagnosticEngine &diags,
-          const std::string &filename)
-      : ts(toks), diags_(diags), filename_(filename) {}
+          const std::string &filename, bool headerMode,
+          const std::vector<SafetyAnnotation> &annotations,
+          const TaggedInfo &tagged)
+      : ts(toks), annotations_(annotations), tagged_(tagged), diags_(diags),
+        filename_(filename), headerMode_(headerMode) {
+    for (const auto &a : annotations) {
+      if (a.pointer.empty())
+        continue;
+      if (a.kind == SafetyAnnotation::Kind::NumElts)
+        countExpr_[spatialKey(a)] = a.lengthExpr;
+      else if (a.kind == SafetyAnnotation::Kind::NotNull)
+        notNullPtrs_.insert(spatialKey(a));
+      else
+        zeroTermPtrs_.insert(spatialKey(a));
+    }
+  }
+  static std::string spatialKey(const SafetyAnnotation &a) {
+    return a.function + "::" + a.pointer;
+  }
+  /// Resolve the enclosing function at a use site so annotations from two
+  /// functions that declare the same pointer name stay distinct.
+  std::string spatialKeyAt(size_t pos, const std::string &name) const {
+    for (size_t k = pos; k != kNPos && k < ts.size(); --k) {
+      if (ts[k].kind != TokKind::Identifier || ts[k].text != name)
+        continue;
+      for (const auto &a : annotations_)
+        if (a.pointer == name &&
+            (a.function.empty() || enclosingFunctionAt(k) == a.function))
+          return spatialKey(a);
+    }
+    return name; // legacy unqualified lookup
+  }
+  std::string enclosingFunctionAt(size_t pos) const {
+    std::string name, dummyParamIndex;
+    size_t param = kNPos;
+    (void)param;
+    // Find the function whose body brace encloses `pos` by scanning forward
+    // through identifiers followed by '(' ... '{' ... '}' wrapping pos.
+    for (size_t k = 0; k + 1 < ts.size(); ++k) {
+      if (ts[k].kind != TokKind::Identifier)
+        continue;
+      size_t lp = ts.nextSig(k);
+      if (lp == kNPos || !ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos || rp >= pos)
+        continue;
+      size_t open = ts.nextSig(rp);
+      if (open == kNPos || !ts.isPunct(open, "{"))
+        continue;
+      size_t close = ts.matchBrace(open);
+      if (close != kNPos && pos >= open && pos <= close)
+        return ts[k].text;
+    }
+    return name;
+  }
+
 
   RewrittenSource run() {
     collectDeclarations();
+    collectGenerics();
     collectDefaultArgs();
     collectVariableTypes();
     collectAutoClasses();
+    collectShadowingNonClassVars();
     collectArrays();
     collectDynamicPointers();
+    collectTaggedAccesses();
     emitTranslationUnit();
 
     RewrittenSource result;
-    result.text = lineDirective(filename_, 1) + out_;
-    result.changed = changed_;
+    result.text = lineDirective(filename_, 1);
+    if (tagged_.used) {
+      // The helper prelude must not displace source locations: restore the
+      // location the leading #line established before the first user token.
+      result.text += kTaggedPrelude;
+      result.text += lineDirective(filename_, 1);
+    }
+    result.text += out_;
+    result.changed = changed_ || tagged_.used;
     result.resourceTypes = resourceTypes_;
     result.classTypes = classTypes_;
     result.arrayLengths = arrays_;
@@ -290,6 +969,110 @@ private:
       if (externalCtors().count(name))
         classNamesWithCtor_.insert(name);
     }
+  }
+
+  /// Issue #183: discover `generic Name<T>;` declarations and the set of
+  /// concrete element types actually used as `Name<type>` in this TU.  Both
+  /// passes are single, ordered scans, so emitted definitions are deterministic
+  /// (declaration order, then lexicographically ordered element types).
+  ///
+  /// Idempotent: the tables are rebuilt from scratch on every call, and
+  /// declarations are deduplicated by name.  Re-running a lowering phase
+  /// therefore neither duplicates declarations / instantiations nor re-emits
+  /// diagnostics or monomorphised definitions.
+  void collectGenerics() {
+    generics_.clear();
+    genericDeclNameIdx_.clear();
+    instantiations_.clear();
+    genericStructVars_.clear();
+    suppressedGenericDecls_.clear();
+
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (!ts.isIdent(i, "generic"))
+        continue;
+      GenericDecl g;
+      g.keyword = i;
+      size_t s = ts.nextSig(i);
+      if (s >= ts.size() || ts[s].kind != TokKind::Identifier)
+        continue;
+      g.nameIdx = s;
+      g.name = ts[s].text;
+      size_t lt = ts.nextSig(s);
+      if (!ts.isPunct(lt, "<"))
+        continue;
+      size_t p = ts.nextSig(lt);
+      if (p >= ts.size() || ts[p].kind != TokKind::Identifier)
+        continue;
+      g.paramIdx = p;
+      g.param = ts[p].text;
+      size_t gt = ts.nextSig(p);
+      if (!ts.isPunct(gt, ">"))
+        continue;
+      size_t semi = ts.nextSig(gt);
+      if (!ts.isPunct(semi, ";"))
+        continue;
+      g.semi = semi;
+      genericDeclNameIdx_.insert(g.nameIdx);
+      // Deduplicate by name *before* recording the declaration.  Comparing
+      // against a just-pushed entry would diagnose every valid declaration as
+      // a duplicate of itself; a repeated visit of the same spelling is not a
+      // redefinition either.  Keep the first declaration as the canonical one
+      // and remember any later spelling only so its tokens are still erased.
+      bool duplicate = false;
+      for (const auto &prior : generics_)
+        if (prior.name == g.name) {
+          duplicate = true;
+          break;
+        }
+      if (duplicate)
+        suppressedGenericDecls_[g.keyword] = g.semi;
+      else
+        generics_.push_back(g);
+      i = semi;
+    }
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Identifier || genericDeclNameIdx_.count(i))
+        continue;
+      size_t gi = genericAt(i);
+      if (gi == kNPos)
+        continue;
+      size_t lt = ts.nextSig(i);
+      if (!ts.isPunct(lt, "<"))
+        continue;
+      size_t ty = ts.nextSig(lt);
+      if (ty >= ts.size() || ts[ty].kind != TokKind::Identifier)
+        continue;
+      size_t gt = ts.nextSig(ty);
+      if (!ts.isPunct(gt, ">"))
+        continue;
+      // Only the declared parameter identifier is substituted; a second
+      // parameter spelling is rejected rather than silently emitted.
+      if (ts[ty].text == generics_[gi].param)
+        continue;
+      const std::string concrete = generics_[gi].name + "_" + ts[ty].text;
+      instantiations_[generics_[gi].name].insert(ts[ty].text);
+      // `Vec<int> vi;` declares a plain C struct, so vi.len is an ordinary
+      // writable field.  Remember such variables so `.len` assignment is not
+      // mistaken for the C+ array-length property (see tryEmitArrayLen).
+      size_t var = ts.nextSig(gt);
+      if (var < ts.size() && ts[var].kind == TokKind::Identifier) {
+        size_t after = ts.nextSig(var);
+        if (ts.isPunct(after, ";") || ts.isPunct(after, "=") ||
+            ts.isPunct(after, ",") || ts.isPunct(after, "[")) {
+          genericStructVars_.push_back(
+              {ts[var].text, concrete, var, computeScopeEnd(var)});
+        }
+      }
+    }
+  }
+
+  size_t genericAt(size_t i) const {
+    if (i >= ts.size() || ts[i].kind != TokKind::Identifier)
+      return kNPos;
+    for (size_t k = 0; k < generics_.size(); ++k)
+      if (generics_[k].name == ts[i].text)
+        return k;
+    return kNPos;
   }
 
   bool parseResource(size_t i, ResourceInfo *r) {
@@ -422,6 +1205,87 @@ private:
     return true;
   }
 
+  bool isAggregateBraceOpen(size_t openBrace) const {
+    size_t p1 = ts.prevSig(openBrace);
+    if (p1 == kNPos || ts[p1].kind != TokKind::Identifier)
+      return false;
+    if (ts[p1].text == "struct" || ts[p1].text == "union" ||
+        ts[p1].text == "enum")
+      return true;
+    size_t p2 = ts.prevSig(p1);
+    return p2 != kNPos && ts[p2].kind == TokKind::Identifier &&
+           (ts[p2].text == "struct" || ts[p2].text == "union" ||
+            ts[p2].text == "enum");
+  }
+
+  /// Compute the inclusive closing token index of the lexical scope in which
+  /// `declPos` is declared (matching `}` of the enclosing block/function, or
+  /// the end of the function prototype / `for`-loop body).  Fields declared
+  /// inside `struct`/`union`/`enum` bodies inherit the scope enclosing the
+  /// aggregate definition so `w.c.method()` stays lowerable across functions.
+  size_t computeScopeEnd(size_t declPos) const {
+    std::vector<size_t> braceStack;
+    std::vector<size_t> parenStack;
+    for (size_t k = 0; k < declPos && k < ts.size(); ++k) {
+      if (ts.isTrivia(k))
+        continue;
+      if (ts.isPunct(k, "{"))
+        braceStack.push_back(k);
+      else if (ts.isPunct(k, "}")) {
+        if (!braceStack.empty())
+          braceStack.pop_back();
+      } else if (ts.isPunct(k, "("))
+        parenStack.push_back(k);
+      else if (ts.isPunct(k, ")")) {
+        if (!parenStack.empty())
+          parenStack.pop_back();
+      }
+    }
+    while (!braceStack.empty() && isAggregateBraceOpen(braceStack.back()))
+      braceStack.pop_back();
+    if (!braceStack.empty()) {
+      // If `declPos` sits inside a `for (...)` header inside a function, its
+      // scope ends at the end of the `for` body.
+      if (!parenStack.empty()) {
+        size_t pOpen = parenStack.back();
+        if (pOpen > braceStack.back()) {
+          size_t kw = ts.prevSig(pOpen);
+          if (kw != kNPos && ts.isIdent(kw, "for")) {
+            size_t rp = ts.matchParen(pOpen);
+            if (rp != kNPos) {
+              size_t body = ts.nextSig(rp);
+              if (ts.isPunct(body, "{")) {
+                size_t close = ts.matchBrace(body);
+                if (close != kNPos)
+                  return close;
+              } else {
+                size_t semi = ts.statementEnd(body);
+                if (semi != kNPos)
+                  return semi;
+              }
+            }
+          }
+        }
+      }
+      size_t close = ts.matchBrace(braceStack.back());
+      return close == kNPos ? ts.size() : close;
+    }
+    if (!parenStack.empty()) {
+      // Function parameter at file brace-depth 0: scope covers the function body
+      // (or ends at `)` for a forward declaration).
+      size_t rp = ts.matchParen(parenStack.front());
+      if (rp != kNPos) {
+        size_t body = ts.nextSig(rp);
+        if (ts.isPunct(body, "{")) {
+          size_t close = ts.matchBrace(body);
+          return close == kNPos ? ts.size() : close;
+        }
+        return rp;
+      }
+    }
+    return ts.size();
+  }
+
   /// Record `ClassName var` and `ClassName *var` so member calls can be
   /// lowered without a type checker.
   void collectVariableTypes() {
@@ -441,9 +1305,111 @@ private:
         n = ts.nextSig(n);
       if (n < ts.size() && ts[n].kind == TokKind::Identifier &&
           !isTypeStarter(ts[n].text)) {
-        varClasses_[ts[n].text] = ts[i].text;
+        varClasses_.push_back(
+            {ts[n].text, ts[i].text, n, computeScopeEnd(n)});
       }
     }
+  }
+
+  /// Built-in type words / qualifiers that may follow `owned` or `managed`
+  /// in a genuine C+ declaration.  Kept here (rather than local to
+  /// isDeclarationName) so both helpers agree on what a type token is.
+  static bool isBuiltinTypeWord(const std::string &s) {
+    static const std::set<std::string> kWords = {
+        "int",     "char",    "short",   "long",    "float",   "double",
+        "_Bool",   "void",    "size_t",  "struct",  "union",   "enum",
+        "unsigned", "signed", "const",   "volatile", "static", "extern",
+        "register", "_Atomic"};
+    return kWords.count(s) != 0;
+  }
+
+  /// Declaration qualifiers that may precede the actual type word.
+  static bool isDeclQualifier(const std::string &s) {
+    static const std::set<std::string> kWords = {
+        "const", "volatile", "static", "register", "extern",
+        "unsigned", "signed", "short", "long", "_Atomic"};
+    return kWords.count(s) != 0;
+  }
+
+  /// `owned` and `managed` are *contextual* keywords: ordinary C programs may
+  /// legitimately use them as identifiers (parameters, typedef names, struct
+  /// tags, function names, macro names).  Only lower them when the token
+  /// begins a genuine C+ declaration:
+  ///   [statement boundary] KEYWORD [quals] TYPE [*] NAME = ... ;
+  /// Anything else is emitted verbatim as plain C.  This is mode-independent
+  /// on purpose -- plain C that happens to use these names must never be
+  /// rewritten or diagnosed, in LEGACY *or* Safe mode.
+  bool looksLikeOwnedDeclaration(size_t start) const {
+    // 1. Must begin a declaration, not appear inside an expression or as a
+    //    declarator name following a type/keyword/punctuation.
+    size_t prev = ts.prevSig(start);
+    if (prev != kNPos &&
+        !(ts.isPunct(prev, ";") || ts.isPunct(prev, "{") ||
+          ts.isPunct(prev, "}") || ts.isPunct(prev, ":")))
+      return false;
+    // Not part of a preprocessor directive (#define managed ...).
+    size_t lineStart = start;
+    while (lineStart > 0 && ts[lineStart - 1].line == ts[start].line)
+      --lineStart;
+    for (size_t k = lineStart; k < start; ++k)
+      if (ts.isPunct(k, "#"))
+        return false;
+
+    // 2. Must have a statement terminator at this nesting level.
+    size_t semi = ts.statementEnd(start);
+    if (semi == kNPos)
+      return false;
+
+    // 3. Must have a top-level initializer (both C+ forms initialise).
+    size_t eq = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t i = start + 1; i < semi; ++i) {
+      if (ts.isPunct(i, "(")) ++paren;
+      else if (ts.isPunct(i, ")")) --paren;
+      else if (ts.isPunct(i, "[")) ++bracket;
+      else if (ts.isPunct(i, "]")) --bracket;
+      else if (ts.isPunct(i, "=") && paren == 0 && bracket == 0) {
+        eq = i;
+        break;
+      }
+    }
+    if (eq == kNPos)
+      return false;
+
+    // 4. Skip only declaration qualifiers; the next token is the type.  We
+    //    must NOT skip the core type word: `owned int v = 1;` is the genuine
+    //    C+ declaration that produces the "'int' is not a resource" error.
+    size_t typeIdx = ts.nextSig(start);
+    while (typeIdx != kNPos && typeIdx < semi &&
+           isDeclQualifier(ts[typeIdx].text))
+      typeIdx = ts.nextSig(typeIdx);
+    if (typeIdx == kNPos || typeIdx >= semi ||
+        ts[typeIdx].kind != TokKind::Identifier)
+      return false;
+    const std::string typeName = ts[typeIdx].text;
+    const bool isManaged = ts.isIdent(start, kw::kManaged);
+    const bool knownType = isBuiltinTypeWord(typeName) ||
+                           classNames_.count(typeName) ||
+                           resourceNames_.count(typeName) ||
+                           externalClassNames_.count(typeName);
+    if (!knownType) {
+      // An unknown identifier type after `owned` is a plain C typedef name
+      // ("typedef int owned; owned x = 1;"), not a C+ declaration.
+      if (!isManaged)
+        return false;
+      // `managed` always declares a pointer; require a '*' to disambiguate
+      // from an ordinary C identifier.
+      size_t star = ts.nextSig(typeIdx);
+      if (star == kNPos || star >= semi || !ts.isPunct(star, "*"))
+        return false;
+    }
+
+    // 5. A declared name must appear between the type and the '='.
+    bool haveName = false;
+    for (size_t i = ts.nextSig(typeIdx); i < eq; ++i)
+      if (ts[i].kind == TokKind::Identifier && !isBuiltinTypeWord(ts[i].text))
+        haveName = true;
+    return haveName;
   }
 
   /// True when `nameIdx` looks like the declared name of an array rather than
@@ -521,7 +1487,144 @@ private:
           ts[cls].kind != TokKind::Identifier ||
           !classNames_.count(ts[cls].text))
         continue;
-      varClasses_[ts[name].text] = ts[cls].text;
+      varClasses_.push_back(
+          {ts[name].text, ts[cls].text, name, computeScopeEnd(name)});
+    }
+  }
+
+  /// Record non-class variable/parameter declarations that share a name with
+  /// a known class variable so inner/sibling shadowing suppresses stale class
+  /// method lowering on plain structs/scalars.
+  void collectShadowingNonClassVars() {
+    if (varClasses_.empty())
+      return;
+    std::set<std::string> trackedNames;
+    std::set<size_t> classVarPositions;
+    for (const auto &v : varClasses_) {
+      trackedNames.insert(v.name);
+      classVarPositions.insert(v.pos);
+    }
+
+    static const std::set<std::string> kNonTypeKeywords = {
+        "return", "if",       "else",  "for",   "while",  "do",
+        "switch", "case",     "break", "continue", "goto", "sizeof",
+        "throw",  "defer",    "delete", "typeof", "__typeof__", "typedef",
+        "auto"};
+    static const std::set<std::string> kBuiltinDecl = {
+        "void",     "char",    "short",    "int",      "long",    "float",
+        "double",   "signed",  "unsigned", "_Bool",    "size_t",  "ptrdiff_t",
+        "uintptr_t","intptr_t","uint64_t", "int64_t",  "uint32_t","int32_t",
+        "uint16_t", "int16_t", "uint8_t",  "int8_t",   "const",   "volatile",
+        "static",   "extern",  "register", "restrict", "_Atomic"};
+
+    std::vector<size_t> aggBraces;
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts.isTrivia(i))
+        continue;
+      if (ts.isPunct(i, "{")) {
+        aggBraces.push_back(isAggregateBraceOpen(i) ? 1 : 0);
+        continue;
+      }
+      if (ts.isPunct(i, "}")) {
+        if (!aggBraces.empty())
+          aggBraces.pop_back();
+        continue;
+      }
+      if (!aggBraces.empty() && aggBraces.back() != 0)
+        continue;
+      if (ts[i].kind != TokKind::Identifier ||
+          !trackedNames.count(ts[i].text) || classVarPositions.count(i))
+        continue;
+      bool inClassDecl = false;
+      for (const auto &c : classes_)
+        if (i >= c.keyword && i <= c.bodyClose) {
+          inClassDecl = true;
+          break;
+        }
+      if (inClassDecl)
+        continue;
+      size_t nxt = ts.nextSig(i);
+      if (!(ts.isPunct(nxt, ";") || ts.isPunct(nxt, "=") ||
+            ts.isPunct(nxt, "[") || ts.isPunct(nxt, ",") ||
+            ts.isPunct(nxt, ")")))
+        continue;
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos || ts.isPunct(prev, ".") || ts.isPunct(prev, "->"))
+        continue;
+
+      bool isNonClassDecl = false;
+      if (ts.isPunct(prev, "*")) {
+        size_t r = prev;
+        while (r != kNPos && (ts.isPunct(r, "*") ||
+               (ts[r].kind == TokKind::Identifier &&
+                (ts[r].text == "const" || ts[r].text == "volatile" ||
+                 ts[r].text == "restrict"))))
+          r = ts.prevSig(r);
+        if (r != kNPos && ts[r].kind == TokKind::Identifier &&
+            !classNames_.count(ts[r].text) &&
+            !kNonTypeKeywords.count(ts[r].text)) {
+          if (kBuiltinDecl.count(ts[r].text))
+            isNonClassDecl = true;
+          else {
+            size_t rr = ts.prevSig(r);
+            if (rr != kNPos && ts[rr].kind == TokKind::Identifier &&
+                (ts[rr].text == "struct" || ts[rr].text == "union" ||
+                 ts[rr].text == "enum"))
+              isNonClassDecl = true;
+            else if (rr == kNPos || ts.isPunct(rr, ";") ||
+                     ts.isPunct(rr, "{") || ts.isPunct(rr, "}") ||
+                     ts.isPunct(rr, "(") || ts.isPunct(rr, ","))
+              isNonClassDecl = true;
+          }
+        } else if (r != kNPos && ts.isPunct(r, "}")) {
+          isNonClassDecl = true; // `struct { ... } *s;`
+        }
+      } else if (ts[prev].kind == TokKind::Identifier &&
+                 !classNames_.count(ts[prev].text) &&
+                 !kNonTypeKeywords.count(ts[prev].text)) {
+        if (kBuiltinDecl.count(ts[prev].text)) {
+          isNonClassDecl = true;
+        } else {
+          size_t prev2 = ts.prevSig(prev);
+          if (prev2 != kNPos && ts[prev2].kind == TokKind::Identifier &&
+              (ts[prev2].text == "struct" || ts[prev2].text == "union" ||
+               ts[prev2].text == "enum")) {
+            isNonClassDecl = true;
+          } else if (prev2 == kNPos || ts.isPunct(prev2, ";") ||
+                     ts.isPunct(prev2, "{") || ts.isPunct(prev2, "}") ||
+                     ts.isPunct(prev2, "(") || ts.isPunct(prev2, ",")) {
+            isNonClassDecl = true;
+          }
+        }
+      } else if (ts.isPunct(prev, "}")) {
+        // `struct Foo { ... } s;` or `struct { ... } s;`
+        size_t open = kNPos;
+        int depth = 0;
+        for (size_t k = prev + 1; k > 0;) {
+          --k;
+          if (ts.isPunct(k, "}")) ++depth;
+          else if (ts.isPunct(k, "{")) {
+            if (--depth == 0) { open = k; break; }
+          }
+        }
+        if (open != kNPos) {
+          size_t pre = ts.prevSig(open);
+          if (pre != kNPos && ts[pre].kind == TokKind::Identifier) {
+            if (ts[pre].text == "struct" || ts[pre].text == "union" ||
+                ts[pre].text == "enum")
+              isNonClassDecl = true;
+            else {
+              size_t pre2 = ts.prevSig(pre);
+              if (pre2 != kNPos && ts[pre2].kind == TokKind::Identifier &&
+                  (ts[pre2].text == "struct" || ts[pre2].text == "union" ||
+                   ts[pre2].text == "enum"))
+                isNonClassDecl = true;
+            }
+          }
+        }
+      }
+      if (isNonClassDecl)
+        varClasses_.push_back({ts[i].text, "", i, computeScopeEnd(i)});
     }
   }
 
@@ -549,7 +1652,8 @@ private:
         if (end == kNPos)
           continue;
         len = initializerCount(brace, end);
-      } else if (ts[inner].kind == TokKind::Number) {
+      } else if (ts[inner].kind == TokKind::Number &&
+                 ts.nextSig(inner) == close) {
         len = static_cast<size_t>(strtoull(ts[inner].text.c_str(), nullptr, 0));
       }
       if (len != kNPos && len > 0)
@@ -678,6 +1782,12 @@ private:
     const FuncDefaults &f = funcsWithDefaults_[it->second];
     if (f.nameIdx == i)
       return false;
+    size_t prevDefault = ts.prevSig(i);
+    if (prevDefault != kNPos &&
+        (ts.isPunct(prevDefault, ".") || ts.isPunct(prevDefault, "->")))
+      return false; // obj.method() / p->method() is not the free function
+    if (i + 1 < ts.size() && ts.isPunct(ts.nextSig(i), "{"))
+      return false; // function definition, not a call site
     size_t lp = ts.nextSig(i);
     if (!ts.isPunct(lp, "("))
       return false;
@@ -710,11 +1820,112 @@ private:
     return true;
   }
 
+  /// Token index just after the assignment expression that starts at `from`:
+  /// the first `;`, `,`, `)`, `]` or `}` at nesting depth zero.  The store guard
+  /// needs this boundary so `tag = i, v.m = x` is one expression rather than a
+  /// separate statement; `if (c) v.i = 7; else ...` must not be split by the
+  /// tag write into an `if` body followed by a dangling `else`.
+  size_t taggedExprEnd(size_t from) const {
+    int paren = 0, bracket = 0, brace = 0;
+    for (size_t i = from; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Punct)
+        continue;
+      const std::string &p = ts[i].text;
+      if (p == "(") {
+        ++paren;
+      } else if (p == ")") {
+        if (paren == 0)
+          return i == 0 ? 0 : i - 1;
+        --paren;
+      } else if (p == "[") {
+        ++bracket;
+      } else if (p == "]") {
+        if (bracket == 0)
+          return i == 0 ? 0 : i - 1;
+        --bracket;
+      } else if (p == "{") {
+        ++brace;
+      } else if (p == "}") {
+        if (brace == 0)
+          return i == 0 ? 0 : i - 1;
+        --brace;
+      } else if (paren == 0 && bracket == 0 && brace == 0 &&
+                 (p == ";" || p == ",")) {
+        // The suffix is emitted AFTER the token at this index; return the
+        // last expression token so the closing ')' precedes the ';'.
+        return i == 0 ? 0 : i - 1;
+      }
+    }
+    return kNPos;
+  }
+
+  /// Map tagged-union facts onto token emission points.  A declaration gets a
+  /// side tag initialised to "no variant"; a read is wrapped in a trap check;
+  /// a store first records the new active variant.  No field is added to the
+  /// emitted union, so its C layout and ABI stay unchanged.
+  void collectTaggedAccesses() {
+    for (const auto &v : tagged_.vars) {
+      if (v.semi < ts.size())
+        taggedSuffix_[v.semi] += " int " + v.tag + " = -1;";
+    }
+    for (const auto &a : tagged_.accesses) {
+      const std::string member = a.var + "." + a.field;
+      const std::string check =
+          "(cplus_variant_check(" + a.tag + ", " + std::to_string(a.index) +
+          ", \"" + annQuote(member) + "\", \"" + annQuote(filename_) +
+          "\", " + std::to_string(a.line) + "), ";
+      if (a.store) {
+        size_t end = taggedExprEnd(a.fieldTok);
+        if (end != kNPos) {
+          taggedPrefix_[a.varTok] =
+              "(" + a.tag + " = " + std::to_string(a.index) + ", ";
+          taggedSuffix_[end] += ")";
+        } else {
+          // No statement terminator: keep the original statement prefix rather
+          // than emitting an unmatched '(' into the C output.
+          taggedPrefix_[a.varTok] =
+              a.tag + " = " + std::to_string(a.index) + "; ";
+        }
+      } else {
+        taggedPrefix_[a.varTok] = check;
+        taggedSuffix_[a.fieldTok] = ")";
+      }
+    }
+    if (!taggedPrefix_.empty() || !taggedSuffix_.empty())
+      changed_ = true;
+  }
+
   // --- emission -------------------------------------------------------------
 
   void emit(const std::string &s) { out_ += s; }
 
-  void emitToken(size_t i) {
+  /// Emit one token with no annotation-aware rewriting.  Kept separate from
+  /// emitToken() so a rewritten expression can emit its own token range
+  /// without recursing back into the annotation rules.
+  void emitPlainToken(size_t i) {
+    // Issue #179: Cake qualifiers are compile-time-only. Record the fact for
+    // the safety checker, then emit NOTHING here: the generated C always has
+    // a bare `T *`, so layout, offsets and calling conventions are unchanged.
+    if (ts[i].kind == TokKind::Identifier) {
+      int qk = cakeQualifierKind(ts[i].text);
+      if (qk != 0) {
+        std::string name = cakeDeclaredName(ts, i);
+        if (!name.empty())
+          cplusCakeRecordQualifier(name, ts[i].line, qk);
+        changed_ = true;
+        return;
+      }
+      // cplus_move is a macro, so the safety AST has no CallExpr for it.
+      // Record the moved name at the token level for the Cake checker.
+      if (ts[i].text == "cplus_move") {
+        size_t lp = ts.nextSig(i);
+        if (ts.isPunct(lp, "(")) {
+          size_t arg = ts.nextSig(lp);
+          if (arg < ts.size() && ts[arg].kind == TokKind::Identifier)
+            cplusCakeRecordQualifier(ts[arg].text, ts[i].line, 4);
+        }
+      }
+    }
     bool instance = ts.isIdent(i, "self") || ts.isIdent(i, "this");
     if (ctorBody_ && instance) {
       out_ += "_cplus_self";
@@ -725,10 +1936,327 @@ private:
       return;
     }
     if (ctorBody_ && ts.isPunct(i, "->")) {
-      out_ += ".";
+      // Only `this->member` / `self->member` uses the lowered receiver's dot
+      // access. Rewriting every arrow breaks pointer parameters/locals.
+      size_t prev = ts.prevSig(i);
+      if (prev != kNPos &&
+          (ts.isIdent(prev, "this") || ts.isIdent(prev, "self") ||
+           ts.isIdent(prev, "_cplus_self"))) {
+        out_ += ".";
+        return;
+      }
+    }
+    if (ts[i].kind == TokKind::Number &&
+        ts[i].text.find('\'') != std::string::npos) {
+      // C23 digit separators are lexed as one number but gnu17 cannot parse
+      // them; emit the plain value.
+      std::string plain = ts[i].text;
+      plain.erase(std::remove(plain.begin(), plain.end(), '\''), plain.end());
+      out_ += plain;
       return;
     }
     out_ += ts[i].text;
+  }
+
+  bool isDtorType(const std::string &name) const {
+    if (std::find(resourceTypes_.begin(), resourceTypes_.end(), name) !=
+            resourceTypes_.end() ||
+        std::find(classTypes_.begin(), classTypes_.end(), name) !=
+            classTypes_.end())
+      return true;
+    // A plain C struct with a matching `Type_drop` function is enough: the
+    // marker only names a direct C call, never a hidden field or vtable.
+    const std::string symbol = name + "_drop";
+    for (size_t k = 0; k < ts.size(); ++k)
+      if (ts[k].kind == TokKind::Identifier && ts[k].text == symbol)
+        return true;
+    return false;
+  }
+
+  /// Issue #183: `dtor T x = init;` is Cforall-style RAII sugar.  It lowers to
+  /// the ordinary declaration plus the existing `/*cplus$own:...*/` marker;
+  /// RaiiLowering then emits a direct `T_drop(&x)` at every scope exit.  No
+  /// hidden field is added to `T` and no cleanup record is allocated.
+  bool tryEmitDtorDecl(size_t i) {
+    if (!ts.isIdent(i, "dtor"))
+      return false;
+    size_t semi = ts.statementEnd(i);
+    if (semi == kNPos || semi <= i + 1)
+      return false;
+    size_t eq = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t k = i + 1; k < semi; ++k) {
+      if (ts.isPunct(k, "("))
+        ++paren;
+      else if (ts.isPunct(k, ")"))
+        --paren;
+      else if (ts.isPunct(k, "["))
+        ++bracket;
+      else if (ts.isPunct(k, "]"))
+        --bracket;
+      else if (ts.isPunct(k, "=") && paren == 0 && bracket == 0) {
+        eq = k;
+        break;
+      }
+    }
+    size_t nameIdx = eq != kNPos ? ts.prevSig(eq) : ts.prevSig(semi);
+    if (nameIdx == kNPos || nameIdx <= i + 1 ||
+        ts[nameIdx].kind != TokKind::Identifier)
+      return false;
+    size_t typeIdx = ts.nextSig(i);
+    if (typeIdx == kNPos || typeIdx >= nameIdx ||
+        ts[typeIdx].kind != TokKind::Identifier ||
+        ts.nextSig(typeIdx) != nameIdx)
+      return false;
+    const std::string type = ts[typeIdx].text;
+    if (!isDtorType(type))
+      return false;
+    const std::string name = ts[nameIdx].text;
+    for (size_t k = i + 1; k <= semi; ++k)
+      emitPlainToken(k);
+    emit(" /*cplus$own:" + name + ":" + type + "_drop*/");
+    suppressUntil_ = semi;
+    changed_ = true;
+    return true;
+  }
+
+  /// `guard stmt;` is scoped-guard sugar lowered to the existing `defer`
+  /// machinery.  Defer records live in an OwnedVar on the stack, so cleanup
+  /// is a direct source-level call on every exit path, never a malloc'd
+  /// cplus_cleanup node.
+  bool tryEmitGuardStmt(size_t i) {
+    if (!ts.isIdent(i, "guard"))
+      return false;
+    size_t prev = ts.prevSig(i);
+    // `guard` is sugar only at the start of a statement. A local variable or
+    // expression named `guard` (e.g. `char guard; ... guard == 0x5a`) must
+    // stay an ordinary identifier.
+    if (prev == kNPos ||
+        !(ts.isPunct(prev, ";") || ts.isPunct(prev, "{") ||
+          ts.isPunct(prev, "}")))
+      return false;
+    size_t body = ts.nextSig(i);
+    if (body >= ts.size() || ts.isPunct(body, "=") || ts.isPunct(body, "("))
+      return false;
+    // `guard z;` / `guard g = guard(&m);` declare a guard object. Sugar
+    // requires an expression or block body, not a bare identifier that is
+    // immediately followed by ';' or '='.
+    if (ts[body].kind == TokKind::Identifier) {
+      size_t after = ts.nextSig(body);
+      if (after != kNPos &&
+          (ts.isPunct(after, ";") || ts.isPunct(after, "=")))
+        return false;
+    }
+    // `guard g = guard(&m);` is a C+ guard-object declaration/constructor
+    // call, not the `guard stmt;` statement form. Never rewrite it here.
+    if (ts[body].kind == TokKind::Identifier) {
+      size_t after = ts.nextSig(body);
+      if (after != kNPos && ts.isPunct(after, "="))
+        return false;
+    }
+    size_t semi;
+    if (ts.isPunct(body, "{")) {
+      semi = ts.matchBrace(body);
+      if (semi == kNPos)
+        return false;
+    } else {
+      semi = ts.statementEnd(i + 1);
+      if (semi == kNPos || semi == i + 1)
+        return false;
+    }
+    // A one-shot flag makes the guard idempotent when the defer text is
+    // emitted both at an early exit and again at normal scope close.
+    const std::string flag = "__cplus_guard_" + std::to_string(guardCounter_++);
+    emit("int " + flag + " = 0; defer if (!" + flag + ") { " + flag +
+         " = 1; ");
+    for (size_t k = i + 1; k <= semi; ++k)
+      emitPlainToken(k);
+    emit(" };");
+    suppressUntil_ = semi;
+    changed_ = true;
+    return true;
+  }
+
+  static bool parseDecimal(const std::string &s, unsigned long long &v) {
+    if (s.empty())
+      return false;
+    v = 0;
+    for (char c : s) {
+      if (c < '0' || c > '9')
+        return false;
+      v = v * 10 + static_cast<unsigned long long>(c - '0');
+    }
+    return true;
+  }
+
+  /// `p[i]` on an `@numelts(n)` pointer becomes a checked subscript.  The
+  /// check is a plain C call returning void, wrapped in a comma expression so
+  /// the index value is preserved; `p` and `n` remain bare C values.
+  bool tryEmitAnnotatedSubscript(size_t i) {
+    if (ts[i].kind != TokKind::Identifier)
+      return false;
+    auto it = countExpr_.find(spatialKeyAt(i, ts[i].text));
+    if (it == countExpr_.end())
+      return false;
+    size_t lb = ts.nextSig(i);
+    if (!ts.isPunct(lb, "["))
+      return false;
+    size_t rb = ts.matchBracket(lb);
+    if (rb == kNPos || rb <= lb + 1)
+      return false;
+
+    const std::string name = ts[i].text;
+    const std::string count = it->second;
+    const std::string index = joinTokens(ts, lb + 1, rb);
+    unsigned long long iv = 0, cv = 0;
+    if (parseDecimal(index, iv) && parseDecimal(count, cv) && iv >= cv) {
+      diags_.error("[CPLUS-SPATIAL] constant index " + index +
+                       " exceeds the @numelts(" + count + ") bound",
+                   filename_, ts[i].line, ts[i].column);
+    }
+
+    // Issue #231: evaluate the index ONCE.  Emitting the token range twice
+    // (once for the check, once for the subscript) made a side-effecting index
+    // such as `p[i++]` advance twice: the check saw n-1 (in bounds) while the
+    // subscript used n (out of bounds).  A statement expression stores the
+    // index in a temporary first; both the check and the subscript then read
+    // that temporary.  `size_t` matches the cast the old lowering applied to
+    // both uses, so accepted programs keep their exact subscript semantics.
+    const std::string idx =
+        "__cplus_gs_idx_" + std::to_string(subscriptCounter_++);
+    emitPlainToken(i);
+    emit("[({ size_t " + idx + " = (size_t)(");
+    for (size_t k = lb + 1; k < rb; ++k)
+      emitPlainToken(k);
+    emit("); cplus_check_bounds(" + name + ", (size_t)(" + count +
+         "), " + idx + ", \"" + annQuote(filename_) + "\", " +
+         std::to_string(ts[i].line) + ", \"" + name + "[" + index +
+         "\"); " + idx + "; })]");
+    suppressUntil_ = rb;
+    changed_ = true;
+    return true;
+  }
+
+  bool emitNotNullGuard(const std::string &name, const Token &at) {
+    emit("(cplus_check_nonnull(" + name + ", \"" + annQuote(filename_) +
+         "\", " + std::to_string(at.line) + ", \"" + name + "\"), " + name +
+         ")");
+    changed_ = true;
+    return true;
+  }
+
+  bool tryEmitNotNullArrow(size_t i) {
+    if (ts[i].kind != TokKind::Identifier ||
+        notNullPtrs_.count(spatialKeyAt(i, ts[i].text)) == 0)
+      return false;
+    if (!ts.isPunct(ts.nextSig(i), "->"))
+      return false;
+    emitNotNullGuard(ts[i].text, ts[i]);
+    suppressUntil_ = i;
+    return true;
+  }
+
+  static bool isUnaryPrefix(const Token &t) {
+    if (t.kind != TokKind::Punct && t.kind != TokKind::Identifier)
+      return false;
+    static const std::set<std::string> kPrefix = {
+        "(", ",", "=", "return", "{", ";", "[", "!", "~", "&&", "||",
+        "?", ":", "+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==",
+        "!=", "sizeof"};
+    return kPrefix.count(t.text) != 0;
+  }
+
+  bool tryEmitNotNullStar(size_t i) {
+    if (!ts.isPunct(i, "*"))
+      return false;
+    size_t nameIdx = ts.nextSig(i);
+    if (nameIdx >= ts.size() || ts[nameIdx].kind != TokKind::Identifier ||
+        notNullPtrs_.count(spatialKeyAt(nameIdx, ts[nameIdx].text)) == 0)
+      return false;
+    size_t prev = ts.prevSig(i);
+    if (prev == kNPos || !isUnaryPrefix(ts[prev]))
+      return false;
+    const std::string name = ts[nameIdx].text;
+    // Issue #231: `*` must stay OUTSIDE the comma expression.  In C the
+    // result of `(check, *p)` is an rvalue and cannot be assigned to, while
+    // `*(check, p)` is an lvalue, so `*p = v` keeps working.  Reuse the same
+    // guard form as tryEmitNotNullArrow().
+    emit("*");
+    emitNotNullGuard(name, ts[i]);
+    suppressUntil_ = nameIdx;
+    changed_ = true;
+    return true;
+  }
+
+  /// Annotation-aware token emission.  A rewritten construct marks its last
+  /// token in `suppressUntil_`; the plain top-level loop then skips those
+  /// tokens without needing to know which rewrite consumed them.
+  void emitToken(size_t i) {
+    if (suppressUntil_ != kNPos) {
+      if (i <= suppressUntil_)
+        return;
+      suppressUntil_ = kNPos;
+    }
+    auto pre = taggedPrefix_.find(i);
+    if (pre != taggedPrefix_.end())
+      emit(pre->second);
+    if (!tryEmitGenericUse(i) && !tryEmitDtorDecl(i) && !tryEmitGuardStmt(i) &&
+        !tryEmitAnnotatedSubscript(i) && !tryEmitNotNullArrow(i) &&
+        !tryEmitNotNullStar(i))
+      emitPlainToken(i);
+    auto post = taggedSuffix_.find(i);
+    if (post != taggedSuffix_.end())
+      emit(post->second);
+  }
+
+  /// Rewrite `Vec<int>` -> `Vec_int`.  A single type token is accepted: that
+  /// keeps the spelling unambiguous in plain C and avoids the `>>` token that
+  /// a nested instantiation would produce.  The declaration spelling itself
+  /// is never rewritten (it is erased by emitTranslationUnit()).
+  bool tryEmitGenericUse(size_t i) {
+    if (ts[i].kind != TokKind::Identifier || genericDeclNameIdx_.count(i))
+      return false;
+    size_t gi = genericAt(i);
+    if (gi == kNPos)
+      return false;
+    size_t lt = ts.nextSig(i), ty = ts.nextSig(lt), gt = ts.nextSig(ty);
+    if (!ts.isPunct(lt, "<") || ty >= ts.size() ||
+        ts[ty].kind != TokKind::Identifier || !ts.isPunct(gt, ">"))
+      return false;
+    if (ts[ty].text == generics_[gi].param)
+      return false;
+    emit(generics_[gi].name + "_" + ts[ty].text);
+    suppressUntil_ = gt;
+    changed_ = true;
+    return true;
+  }
+
+  /// Emit the monomorphised definitions in place of `generic Vec<T>;`.
+  /// Everything is plain C: the struct has exactly the three declared fields,
+  /// and the helpers are `static inline` functions with ordinary signatures.
+  void emitMonomorphizations(const GenericDecl &g) {
+    emit("#include <stddef.h>\n");
+    auto it = instantiations_.find(g.name);
+    if (it != instantiations_.end()) {
+      for (const auto &ty : it->second) {
+        const std::string n = g.name + "_" + ty;
+        emit("struct " + n + " {\n");
+        emit("  " + ty + " *data;\n");
+        emit("  size_t len;\n");
+        emit("  size_t cap;\n");
+        emit("};\n");
+        emit("typedef struct " + n + " " + n + ";\n");
+        emit("static inline void " + n + "_init(" + n +
+             " *self) { self->data = 0; self->len = 0; self->cap = 0; }\n");
+        emit("static inline " + ty + " " + n + "_at(const " + n + " *self, "
+             "size_t i) { return self->data[i]; }\n");
+        emit("static inline size_t " + n + "_len(const " + n +
+             " *self) { return self->len; }\n");
+      }
+    }
+    emit(lineDirective(filename_, g.semi < ts.size()
+                                       ? ts[ts.nextSig(g.semi)].line
+                                       : ts[g.semi].line + 1));
   }
 
   size_t classAt(size_t i) const {
@@ -747,6 +2275,30 @@ private:
 
   void emitTranslationUnit() {
     for (size_t i = 0; i < ts.size(); ++i) {
+      // Issue #183: replace the generic declaration with the monomorphised
+      // definitions.  The `generic`/`<T>`/`;` spelling never reaches the C
+      // output, so no downstream pass can mistake it for a comparison.
+      bool emittedGeneric = false;
+      for (const auto &g : generics_) {
+        if (g.keyword == i) {
+          emitMonomorphizations(g);
+          i = g.semi;
+          emittedGeneric = true;
+          changed_ = true;
+          break;
+        }
+      }
+      if (emittedGeneric)
+        continue;
+      // A deduplicated same-name declaration is erased but never emitted a
+      // second time, so the C output contains exactly one struct/helper set
+      // per generic name even if the source repeats the declaration.
+      if (auto dup = suppressedGenericDecls_.find(i);
+          dup != suppressedGenericDecls_.end()) {
+        i = dup->second;
+        changed_ = true;
+        continue;
+      }
       if (tryEmitRangeFor(i) || tryEmitDefaultDefinition(i) ||
           tryEmitDefaultCall(i)) {
         i = skipTo_;
@@ -774,7 +2326,8 @@ private:
           emit(lineDirective(filename_, ts[next].line));
         continue;
       }
-      if (ts.isIdent(i, kw::kManaged) || ts.isIdent(i, kw::kOwned)) {
+      if ((ts.isIdent(i, kw::kManaged) || ts.isIdent(i, kw::kOwned)) &&
+          looksLikeOwnedDeclaration(i)) {
         if (emitOwnedDeclaration(i)) {
           i = skipTo_;
           skipTo_ = kNPos;
@@ -801,6 +2354,14 @@ private:
         extraBraces_.erase(extra);
       }
     }
+  }
+
+  /// `.hp` headers are lowered into each including translation unit; class
+  /// members get internal linkage so repeated inclusion cannot duplicate
+  /// symbols. `static inline` also avoids unused-function warnings.
+  void emitMemberLinkage() {
+    if (headerMode_)
+      emit("static inline ");
   }
 
   void emitResource(const ResourceInfo &r) {
@@ -837,12 +2398,15 @@ private:
     }
     emit("};\n");
     emit("typedef struct " + c.name + " " + c.name + ";\n");
-    if (c.hasDrop)
+    if (c.hasDrop) {
+      emitMemberLinkage();
       emit("void " + c.name + "_drop(" + c.name + " *self);\n");
+    }
 
     for (const auto &m : c.methods) {
       emit(lineDirective(filename_, ts[m.itemStart].line));
       if (m.name == c.name) {
+        emitMemberLinkage();
         emit(c.name + " " + c.name + "_ctor(");
         std::string params = joinTokens(ts, m.lparen + 1, m.rparen);
         params.erase(0, params.find_first_not_of(' '));
@@ -863,8 +2427,10 @@ private:
       if (ret.empty()) {
         diags_.error("method '" + m.name + "' is missing a return type",
                      filename_, ts[m.nameIdx].line, ts[m.nameIdx].column);
+        emitMemberLinkage();
         emit("void ");
       } else {
+        emitMemberLinkage();
         emit(ret);
         emit(" ");
       }
@@ -959,8 +2525,7 @@ private:
 
     if (nameIdx == kNPos || typeIdx == kNPos ||
         ts[typeIdx].kind != TokKind::Identifier) {
-      diags_.error("cannot determine the declared name in this declaration",
-                   filename_, ts[start].line, ts[start].column);
+      // Not a C+ resource declaration we understand; leave ordinary C alone.
       return false;
     }
     const std::string typeName = ts[typeIdx].text;
@@ -998,7 +2563,7 @@ private:
   void collectDynamicPointers() {
     static const std::set<std::string> kAllocators = {
         "cplus_alloc", "cplus_zalloc", "cplus_realloc", "cplus_new",
-        "cplus_new_array"};
+        "cplus_new_array", "malloc", "calloc"};
     for (size_t i = 0; i < ts.size(); ++i) {
       if (ts[i].kind != TokKind::Identifier ||
           !kAllocators.count(ts[i].text))
@@ -1031,6 +2596,25 @@ private:
       size_t exprFrom = kNPos, exprTo = kNPos;
       if (ts.isIdent(i, "cplus_new")) {
         expr = "1";
+      } else if (ts.isIdent(i, "malloc") || ts.isIdent(i, "calloc")) {
+        // Derive the element count from the explicit allocation size only when
+        // it is a constant expression. Never infer a length from pointer
+        // arithmetic or a runtime value: those remain untracked.
+        size_t sizeFrom = argStart, sizeTo = argEnd;
+        if (ts.isIdent(i, "calloc")) {
+          if (comma == kNPos)
+            continue;
+          sizeFrom = ts.nextSig(comma);
+          sizeTo = rp;
+          // `calloc(count, size)` gives count elements of `size` bytes, and
+          // the pointee type is `*name`, so count = count*size / sizeof(*name).
+        }
+        if (!isConstantSizeExpr(sizeFrom, sizeTo))
+          continue;
+        exprFrom = sizeFrom;
+        exprTo = sizeTo;
+        std::string sizeExpr = "(" + joinTokens(ts, sizeFrom, sizeTo) + ")";
+        expr = sizeExpr + " / sizeof(*@NAME@)";
       } else if (ts.isIdent(i, "cplus_new_array")) {
         if (comma == kNPos)
           continue;
@@ -1084,6 +2668,28 @@ private:
       if (at != std::string::npos)
         expr.replace(at, 6, var);
       dynamicLengths_.push_back({i, var, expr, exprFrom, exprTo});
+    }
+    // Propagate length metadata to simple aliases: `int *q = p;` where p is
+    // already a tracked managed allocation. No arithmetic is inferred.
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Identifier || !ts.isPunct(ts.nextSig(i), "="))
+        continue;
+      size_t rhs = ts.nextSig(ts.nextSig(i));
+      if (rhs >= ts.size() || ts[rhs].kind != TokKind::Identifier)
+        continue;
+      const std::string alias = ts[i].text, src = ts[rhs].text;
+      if (src == alias || dynamicPointers_.count(alias) ||
+          !dynamicPointers_.count(src))
+        continue;
+      dynamicPointers_.insert(alias);
+      for (const auto &entry : dynamicLengths_)
+        if (entry.name == src) {
+          std::string e = entry.expr;
+          size_t at = e.find(src);
+          if (at != std::string::npos)
+            e.replace(at, src.size(), alias);
+          dynamicLengths_.push_back({i, alias, e, entry.exprFrom, entry.exprTo});
+        }
     }
     // Record explicit releases so a `.len` query after release can be made
     // to trap instead of returning the folded constant.
@@ -1181,13 +2787,19 @@ private:
       return false;
 
     size_t first = ts.nextSig(lp);
-    if (first >= rp ||
-        !(ts.isIdent(first, "auto") || ts[first].kind == TokKind::Identifier))
+    if (first >= rp || ts[first].kind != TokKind::Identifier)
       return false;
-    size_t name = ts.nextSig(first);
-    size_t colon = ts.nextSig(name);
-    if (name >= rp || ts[name].kind != TokKind::Identifier ||
-        !ts.isPunct(colon, ":"))
+    size_t colon = kNPos;
+    for (size_t k = first + 1; k < rp; ++k)
+      if (ts.isPunct(k, ":")) {
+        colon = k;
+        break;
+      }
+    if (colon == kNPos)
+      return false;
+    size_t name = ts.prevSig(colon);
+    if (name < first || name >= rp ||
+        ts[name].kind != TokKind::Identifier)
       return false;
     size_t exprStart = ts.nextSig(colon);
     if (exprStart >= rp || ts[exprStart].kind != TokKind::Identifier ||
@@ -1213,9 +2825,22 @@ private:
       return false;
     }
     std::string idx = "__cplus_range_i" + std::to_string(rangeCounter_++);
+    std::string elementType = "__typeof__(" + range + "[" + idx + "])";
+    if (!ts.isIdent(first, "auto")) {
+      elementType.clear(); // preserve explicit element type and qualifiers
+      for (size_t k = first; k < name; ++k) {
+        if (ts.isTrivia(k))
+          continue;
+        if (!elementType.empty())
+          elementType += " ";
+        elementType += ts[k].text;
+      }
+      if (elementType.empty())
+        return false;
+    }
     emit("for (size_t " + idx + " = 0; " + idx + " < " + len + "; " +
-         idx + "++) { __typeof__(" + range + "[" + idx + "]) " + var + " = " +
-         range + "[" + idx + "];");
+         idx + "++) { " + elementType + " " + var + " = " + range + "[" +
+         idx + "];");
     extraBraces_[bodyClose]++;
     skipTo_ = rp; // resume at the original body's opening brace
     changed_ = true;
@@ -1314,15 +2939,26 @@ private:
     }
     if (end == kNPos)
       return false;
+    // Consume the whole else/else-if chain so the closing brace for the
+    // lowered declaration lands after the final branch, not in the middle.
     size_t after = ts.nextSig(end);
-    if (ts.isIdent(after, "else")) {
+    while (ts.isIdent(after, "else")) {
       size_t other = ts.nextSig(after);
       if (ts.isPunct(other, "{"))
         end = ts.matchBrace(other);
-      else
+      else if (ts.isIdent(other, "if")) {
+        size_t lp2 = ts.nextSig(other);
+        size_t rp2 = lp2 == kNPos ? kNPos : ts.matchParen(lp2);
+        size_t body2 = rp2 == kNPos ? kNPos : ts.nextSig(rp2);
+        if (body2 == kNPos)
+          return false;
+        end = ts.isPunct(body2, "{") ? ts.matchBrace(body2)
+                                     : ts.statementEnd(body2);
+      } else
         end = ts.statementEnd(other);
       if (end == kNPos)
         return false;
+      after = ts.nextSig(end);
     }
     extraBraces_[end]++;
     skipTo_ = rp;
@@ -1368,11 +3004,18 @@ private:
 
   /// `T(args)` calls a synthesized constructor for class T.
   bool tryEmitCtorCall(size_t i) {
+    size_t prevCtor = ts.prevSig(i);
+    if (prevCtor != kNPos &&
+        (ts.isPunct(prevCtor, ".") || ts.isPunct(prevCtor, "->")))
+      return false; // member call named after a class, not a constructor
     if (ts[i].kind != TokKind::Identifier ||
         !classNamesWithCtor_.count(ts[i].text))
       return false;
     size_t lp = ts.nextSig(i);
     if (!ts.isPunct(lp, "("))
+      return false;
+    // `file (*opener)(...)` is a function-pointer declarator, not a call.
+    if (ts.isPunct(ts.nextSig(lp), "*"))
       return false;
     emit(ts[i].text + "_ctor");
     skipTo_ = i;
@@ -1388,14 +3031,42 @@ private:
       return false;
     bool isStatic = arrays_.count(ts[i].text) != 0;
     bool isDynamic = dynamicPointers_.count(ts[i].text) != 0;
-    if (!isStatic && !isDynamic)
-      return false;
     size_t dot = ts.nextSig(i);
     if (!ts.isPunct(dot, "."))
       return false;
     size_t member = ts.nextSig(dot);
     if (!ts.isIdent(member, "len"))
       return false;
+    // `obj.len()` is a method call on a class/String/Vector, not the array
+    // length property; leave it to the method-call rewriter.
+    if (ts.isPunct(ts.nextSig(member), "("))
+      return false;
+    if (!isStatic && !isDynamic) {
+      // A monomorphised generic container is an ordinary C struct: its `len`
+      // member is a plain writable field, not the C+ array-length property.
+      // Keep `v.len = n` verbatim for variables declared as `Vec<T>` only.
+      // All other untracked receivers keep the diagnostic below, so managed
+      // metadata and raw pointers remain read-only / length-inference-free.
+      size_t afterMember = ts.nextSig(member);
+      if (ts.isPunct(afterMember, "=")) {
+        bool genericVar = false;
+        for (const auto &v : genericStructVars_)
+          if (v.name == ts[i].text)
+            genericVar = true;
+        if (genericVar)
+          return false;
+      }
+      // A pointer with no C+ length metadata (e.g. raw malloc) cannot have
+      // `.len` inferred: pointer arithmetic is never used to guess a length.
+      // Replace with 0 so Clang does not emit a cascade of follow-on errors.
+      diags_.error("'.len' requires a static array or a C+ managed allocation; "
+                   "pointer '" + ts[i].text + "' has no tracked length",
+                   filename_, ts[i].line, ts[i].column);
+      emit("0");
+      skipTo_ = member;
+      changed_ = true;
+      return true;
+    }
     if (isStatic) {
       emit("(" + std::to_string(arrays_[ts[i].text]) + ")");
     } else {
@@ -1414,21 +3085,137 @@ private:
     return true;
   }
 
+  std::string fieldClass(const ClassInfo *owner, const std::string &name) const {
+    if (!owner)
+      return std::string();
+    for (const auto &range : owner->fields)
+      for (size_t k = range.first + 1; k <= range.second; ++k) {
+        if (ts[k].text != name)
+          continue;
+        size_t p = ts.prevSig(k == 0 ? 0 : k - 1);
+        if (p != kNPos && classNames_.count(ts[p].text))
+          return ts[p].text;
+      }
+    return std::string();
+  }
+
   bool tryEmitMethodCall(size_t i, const ClassInfo *selfClass = nullptr) {
     if (ts[i].kind != TokKind::Identifier)
       return false;
 
-    std::string className;
-    auto it = varClasses_.find(ts[i].text);
-    if (it != varClasses_.end())
-      className = it->second;
-    else if (selfClass && (ts[i].text == kw::kSelf ||
-                           ts[i].text == "this"))
+    // Nested receiver: `w.c.inc()` or `this->c.inc()`. The receiver is a
+    // class-typed MEMBER of another object, so the whole chain `w.c` / 
+    // `self->c` must be passed as the hidden self argument. Handling this at
+    // the base identifier avoids emitting a stray `w.` before the rewrite.
+    {
+      size_t op = ts.nextSig(i);
+      size_t sep = kNPos, memberEnd = kNPos, methodIdx = kNPos;
+      std::string nestedClass;
+      if (ts.isPunct(op, ".") || ts.isPunct(op, "->")) {
+        size_t cur = i;
+        for (;;) {
+          size_t s = ts.nextSig(cur);
+          if (!ts.isPunct(s, ".") && !ts.isPunct(s, "->"))
+            break;
+          size_t mem = ts.nextSig(s);
+          if (mem >= ts.size() || ts[mem].kind != TokKind::Identifier)
+            break;
+          std::string cls = classOfVar(ts[mem].text, mem);
+          if (cls.empty() && selfClass)
+            cls = fieldClass(selfClass, ts[mem].text);
+          if (cls.empty())
+            break;
+          nestedClass = cls;
+          sep = s;
+          memberEnd = mem;
+          size_t after = ts.nextSig(mem);
+          if (ts.isPunct(after, ".") || ts.isPunct(after, "->")) {
+            size_t candidate = ts.nextSig(after);
+            // The identifier after the separator is the method when it is
+            // followed by '('; otherwise the chain goes one level deeper.
+            if (candidate < ts.size() &&
+                ts[candidate].kind == TokKind::Identifier &&
+                ts.isPunct(ts.nextSig(candidate), "(")) {
+              sep = after;
+              memberEnd = mem;
+              methodIdx = candidate;
+              break;
+            }
+            cur = mem; // deeper chain: w.a.b.method() / this->a->b.method()
+            continue;
+          }
+          break;
+        }
+      }
+      if (!nestedClass.empty() && memberEnd != kNPos &&
+          (ts.isPunct(sep, ".") || ts.isPunct(sep, "->"))) {
+        size_t method =
+            methodIdx != kNPos ? methodIdx : ts.nextSig(memberEnd);
+        if (method < ts.size() && ts[method].kind == TokKind::Identifier) {
+          bool known = false;
+          for (const auto &c : classes_)
+            if (c.name == nestedClass && c.methodNames.count(ts[method].text))
+              known = true;
+          if (known || externalClassNames_.count(nestedClass)) {
+            size_t lp = ts.nextSig(method);
+            if (ts.isPunct(lp, "(")) {
+              emit(nestedClass + "_" + ts[method].text + "(");
+              // Object members need their address; pointer members already
+              // are pointers. This also covers 3+ level chains.
+              if (ts.isPunct(sep, "."))
+                emit("&");
+              for (size_t k = i; k <= memberEnd; ++k)
+                emitToken(k);
+              if (!ts.isPunct(ts.nextSig(lp), ")"))
+                emit(", ");
+              skipTo_ = lp;
+              changed_ = true;
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    std::string className = classOfVar(ts[i].text, i);
+    if (className.empty() && selfClass &&
+        (ts[i].text == kw::kSelf || ts[i].text == "this"))
       className = selfClass->name;
-    else
+    else if (className.empty()) {
+      // A method-style call on a plain pointer/array is invalid. Give a
+      // clear C+ error instead of Clang's "not a structure or union", while
+      // leaving plain C struct function-pointer members (`s.len()`) alone.
+      if (arrays_.count(ts[i].text) != 0 ||
+          dynamicPointers_.count(ts[i].text) != 0) {
+        size_t dot = ts.nextSig(i);
+        if (ts.isPunct(dot, ".") || ts.isPunct(dot, "->")) {
+          size_t member = ts.nextSig(dot);
+          if (member < ts.size() && ts.isIdent(member, "len") &&
+              ts.isPunct(ts.nextSig(member), "(")) {
+            diags_.error("'len()' cannot be called on '" + ts[i].text +
+                             "'; use the .len property on a static "
+                             "array or C+ managed allocation",
+                         filename_, ts[i].line, ts[i].column);
+            emit("0");
+            skipTo_ = member;
+            changed_ = true;
+            return true;
+          }
+        }
+      }
       return false;
+    }
 
     size_t op = ts.nextSig(i);
+    // Allow a method call on an array element: `vec[0].method()`.
+    size_t receiverEnd = i;
+    if (ts.isPunct(op, "[")) {
+      size_t close = ts.matchBracket(op);
+      if (close == kNPos || close <= op)
+        return false;
+      receiverEnd = close;
+      op = ts.nextSig(close);
+    }
     if (!ts.isPunct(op, ".") && !ts.isPunct(op, "->"))
       return false;
     bool arrow = ts.isPunct(op, "->");
@@ -1450,12 +3237,10 @@ private:
       return false;
 
     emit(className + "_" + ts[methodIdx].text + "(");
-    if (arrow)
-      emitToken(i);
-    else {
+    if (!arrow)
       emit("&");
-      emitToken(i);
-    }
+    for (size_t k = i; k <= receiverEnd; ++k)
+      emitToken(k);
     size_t firstArg = ts.nextSig(lparen);
     if (!ts.isPunct(firstArg, ")"))
       emit(", ");
@@ -1472,7 +3257,33 @@ private:
   bool changed_ = false;
   bool ctorBody_ = false;
   bool inMethod_ = false;
+  bool headerMode_ = false;
   size_t skipTo_ = kNPos;
+
+  // Issue #184: annotations are erased before Lowerer sees the token stream;
+  // these maps carry the contracts needed to insert dynamic guards.
+  const std::vector<SafetyAnnotation> &annotations_;
+  /// Issue #185: tagged-union facts and token-indexed emission hooks.
+  const TaggedInfo &tagged_;
+  std::map<size_t, std::string> taggedPrefix_;
+  std::map<size_t, std::string> taggedSuffix_;
+  std::map<std::string, std::string> countExpr_;
+  std::set<std::string> notNullPtrs_;
+  std::set<std::string> zeroTermPtrs_;
+  size_t suppressUntil_ = kNPos;
+  unsigned guardCounter_ = 0;
+  // Issue #231: unique temporary names for single-evaluation @numelts indexes.
+  unsigned subscriptCounter_ = 0;
+
+  // Issue #183: monomorphised generics.  `instantiations_` is a set so the
+  // emitted order is deterministic; declaration order comes from generics_.
+  std::vector<GenericDecl> generics_;
+  std::set<size_t> genericDeclNameIdx_;
+  std::map<std::string, std::set<std::string>> instantiations_;
+  /// Same-name `generic ...;` spellings beyond the canonical declaration:
+  /// keyword -> semicolon.  Their tokens are erased without emitting a
+  /// second (duplicate) set of monomorphisations or a diagnostic.
+  std::map<size_t, size_t> suppressedGenericDecls_;
 
   std::map<size_t, int> extraBraces_;
   unsigned rangeCounter_ = 0;
@@ -1486,7 +3297,41 @@ private:
   std::set<std::string> classNames_;
   std::set<std::string> classNamesWithCtor_;
   std::set<std::string> externalClassNames_;
-  std::map<std::string, std::string> varClasses_;
+  struct VarClass {
+    std::string name;
+    std::string cls;
+    size_t pos;
+    size_t scopeEnd = kNPos;
+  };
+  std::vector<VarClass> varClasses_;
+  std::string classOfVar(const std::string &name, size_t usePos) const {
+    std::string result;
+    size_t best = kNPos;
+    // Pick the innermost enclosing declaration covering `usePos`, so inner
+    // shadowed blocks and earlier functions cannot leak stale class bindings.
+    for (const auto &v : varClasses_)
+      if (v.name == name && v.pos <= usePos && usePos <= v.scopeEnd &&
+          (best == kNPos || v.pos >= best)) {
+        best = v.pos;
+        result = v.cls;
+      }
+    return result;
+  }
+  /// Issue #183: locals declared as `Vec<int>` / `Vec<double>`.  Their C
+  /// representation is a plain struct, so `v.len` is a real field rather than
+  /// the managed-array length property.
+  std::vector<VarClass> genericStructVars_;
+  std::string genericStructVarType(const std::string &name, size_t usePos) const {
+    std::string result;
+    size_t best = kNPos;
+    for (const auto &v : genericStructVars_)
+      if (v.name == name && v.pos <= usePos && usePos <= v.scopeEnd &&
+          (best == kNPos || v.pos >= best)) {
+        best = v.pos;
+        result = v.cls;
+      }
+    return result;
+  }
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;
   struct DynamicLength {
@@ -1508,10 +3353,39 @@ private:
 
 RewrittenSource rewriteCPlusSource(const std::string &source,
                                    DiagnosticEngine &diags,
-                                   const std::string &filename) {
+                                   const std::string &filename,
+                                   bool headerMode) {
+  // Facts are per-TU: a prior translation unit must not leak its qualifiers
+  // into this one's safety check.
+  cplusCakeClearQualifiers();
   std::vector<Token> toks = lexCPlus(source);
-  Lowerer lowerer(toks, diags, filename);
-  return lowerer.run();
+  std::vector<std::string> contracts;
+  std::vector<SafetyAnnotation> annotations =
+      extractSafetyAnnotations(toks, diags, filename, contracts);
+  // Issue #185: erase `@tagged` before Clang parses the buffer; serialize the
+  // variant facts for the static checker in TypeChecker.cpp.
+  TaggedInfo tagged = extractTaggedUnions(toks, diags, filename);
+  Lowerer lowerer(toks, diags, filename, headerMode, annotations, tagged);
+  RewrittenSource result = lowerer.run();
+  // Contracts are checked against the original source (still carrying the
+  // annotation spellings) by the type-checking half of Sema.
+  if (!contracts.empty())
+    checkAnnotatedCallSites(source, contracts, diags, filename);
+  if (!tagged.facts.empty())
+    checkTaggedVariantAccess(source, tagged.facts, diags, filename);
+  // Preserve the original source's trailing newlines exactly.  Token
+  // reconstruction drops trailing trivia, so a naive single-newline restore
+  // collapsed multiple blank lines at EOF and broke byte identity (e.g. an
+  // input ending `}\n\n\n` came back as `}\n`).  Normalise ALL trailing
+  // newlines of the reconstructed text to the exact count in the source.
+  size_t trailingNewlines = 0;
+  while (trailingNewlines < source.size() &&
+         source[source.size() - 1 - trailingNewlines] == '\n')
+    ++trailingNewlines;
+  while (!result.text.empty() && result.text.back() == '\n')
+    result.text.pop_back();
+  result.text.append(trailingNewlines, '\n');
+  return result;
 }
 
 void registerExternalClass(const std::string &name, bool hasConstructor) {
@@ -1528,6 +3402,4189 @@ void clearExternalClasses() {
   externalClasses().clear();
   externalCtors().clear();
   externalResources().clear();
+}
+
+namespace {
+
+std::vector<CheckedArithmeticSite> &checkedArithmeticSiteRegistry() {
+  static std::vector<CheckedArithmeticSite> sites;
+  return sites;
+}
+
+} // namespace
+
+void setCheckedArithmeticSites(std::vector<CheckedArithmeticSite> sites) {
+  checkedArithmeticSiteRegistry() = std::move(sites);
+}
+
+const std::vector<CheckedArithmeticSite> &checkedArithmeticSites() {
+  return checkedArithmeticSiteRegistry();
+}
+
+std::vector<CheckedPointerSite> &checkedPointerSiteRegistry() {
+  static std::vector<CheckedPointerSite> sites;
+  return sites;
+}
+
+void setCheckedPointerSites(std::vector<CheckedPointerSite> sites) {
+  checkedPointerSiteRegistry() = std::move(sites);
+}
+
+const std::vector<CheckedPointerSite> &checkedPointerSites() {
+  return checkedPointerSiteRegistry();
+}
+
+std::vector<CheckedBoundsSite> &checkedBoundsSiteRegistry() {
+  static std::vector<CheckedBoundsSite> sites;
+  return sites;
+}
+
+void setCheckedBoundsSites(std::vector<CheckedBoundsSite> sites) {
+  checkedBoundsSiteRegistry() = std::move(sites);
+}
+
+const std::vector<CheckedBoundsSite> &checkedBoundsSites() {
+  return checkedBoundsSiteRegistry();
+}
+
+std::vector<CheckedAllocSite> &checkedAllocSiteRegistry(bool freeSite) {
+  static std::vector<CheckedAllocSite> allocs;
+  static std::vector<CheckedAllocSite> frees;
+  return freeSite ? frees : allocs;
+}
+
+void setCheckedAllocSites(std::vector<CheckedAllocSite> sites) {
+  checkedAllocSiteRegistry(false) = std::move(sites);
+}
+const std::vector<CheckedAllocSite> &checkedAllocSites() {
+  return checkedAllocSiteRegistry(false);
+}
+void setCheckedFreeSites(std::vector<CheckedAllocSite> sites) {
+  checkedAllocSiteRegistry(true) = std::move(sites);
+}
+const std::vector<CheckedAllocSite> &checkedFreeSites() {
+  return checkedAllocSiteRegistry(true);
+}
+
+namespace {
+
+/// One text edit applied to the lowered C. `priority` orders nested edits at
+/// the same offset: prefixes outside-in, operator separators, suffixes
+/// inside-out. `span` breaks ties between prefixes/suffixes of nested
+/// expressions; bounds checks use the maximum span so they wrap arithmetic.
+struct SafetyInsertion {
+  size_t offset = 0;
+  size_t span = 0;
+  int priority = 0; // 0 = prefix, 1 = operator separator, 2 = suffix
+  std::string text;
+  size_t replace = 0; // source bytes consumed at `offset`
+};
+
+const char *checkedOpName(CheckedArithmeticSite::Op kind) {
+  switch (kind) {
+  case CheckedArithmeticSite::Op::Add: return "add";
+  case CheckedArithmeticSite::Op::Sub: return "sub";
+  case CheckedArithmeticSite::Op::Mul: return "mul";
+  case CheckedArithmeticSite::Op::Div: return "div";
+  case CheckedArithmeticSite::Op::Rem: return "rem";
+  case CheckedArithmeticSite::Op::Shl: return "shl";
+  case CheckedArithmeticSite::Op::Shr: return "shr";
+  case CheckedArithmeticSite::Op::Narrow: return "narrow";
+  case CheckedArithmeticSite::Op::FloatToInt: return "f2i";
+  case CheckedArithmeticSite::Op::AllocExtent: return "size_mul";
+  case CheckedArithmeticSite::Op::Inc: return "add";
+  case CheckedArithmeticSite::Op::Dec: return "sub";
+  case CheckedArithmeticSite::Op::Neg: return "sub";
+  }
+  return "add";
+}
+
+/// Build a self-contained guarded expression for one conversion site.  Unlike
+/// the prefix/suffix insertions used for binary operators, this returns a
+/// complete C expression so nested conversion chains can be composed
+/// innermost-first without their argument lists colliding at a shared offset.
+static std::string wrapConversionText(const CheckedArithmeticSite &s,
+                                      const std::string &operand) {
+  const std::string dst = s.type.empty() ? std::string("int") : s.type;
+  const std::string bits = std::to_string(s.bits);
+  const std::string sgn = s.isSigned ? "1" : "0";
+  if (s.kind == CheckedArithmeticSite::Op::FloatToInt)
+    return "((" + dst + ")__cplus_inline_f2i_i64((double)(" + operand +
+           "), " + bits + ", " + sgn + "))";
+  const unsigned sb = s.srcBits ? s.srcBits : s.bits;
+  return "((" + dst + ")__cplus_inline_narrow_i64((uint64_t)(" + operand +
+         "), " + std::to_string(sb) + ", " +
+         (s.srcIsSigned ? "1" : "0") + ", " + bits + ", " + sgn + "))";
+}
+
+/// Nesting order for conversion chains.  Float->int happens first, then
+/// wider-to-narrower integer casts.  Smaller rank means "inner".
+static int conversionRank(const CheckedArithmeticSite &s) {
+  if (s.kind == CheckedArithmeticSite::Op::FloatToInt)
+    return 0;
+  return 1 + (s.srcBits >= 64 ? 0 : static_cast<int>(64 - s.srcBits));
+}
+
+/// Byte ranges of file-scope (static/global) initialisers.  C requires these
+/// to be constant expressions, so a runtime guard call must never be inserted
+/// into one: clang would reject the lowered C with "initializer element is not
+/// a compile-time constant".  The static checker validates the constants; the
+/// rewriter leaves them untouched.
+static std::vector<std::pair<size_t, size_t>>
+staticInitializerRanges(const std::string &source) {
+  const std::vector<Token> toks = lexCPlus(source);
+  std::vector<std::pair<size_t, size_t>> ranges;
+  int brace = 0;
+  for (size_t i = 0; i < toks.size(); ++i) {
+    if (toks[i].kind == TokKind::Punct && toks[i].text == "{") { ++brace; continue; }
+    if (toks[i].kind == TokKind::Punct && toks[i].text == "}") {
+      if (brace > 0) --brace;
+      continue;
+    }
+    if (brace != 0 || toks[i].kind != TokKind::Punct || toks[i].text != "=")
+      continue;
+    int par = 0, brk = 0, brc = 0;
+    size_t end = kNPos;
+    for (size_t k = i + 1; k < toks.size(); ++k) {
+      if (toks[k].kind != TokKind::Punct) continue;
+      const std::string &p = toks[k].text;
+      if (p == "(") ++par;
+      else if (p == ")") { if (par > 0) --par; }
+      else if (p == "[") ++brk;
+      else if (p == "]") { if (brk > 0) --brk; }
+      else if (p == "{") ++brc;
+      else if (p == "}") { if (brc > 0) --brc; }
+      else if ((p == ";" || p == ",") && par == 0 && brk == 0 && brc == 0) {
+        end = toks[k].offset;
+        break;
+      }
+    }
+    if (end != kNPos)
+      ranges.emplace_back(toks[i].offset + toks[i].text.size(), end);
+  }
+  return ranges;
+}
+
+/// Byte slice clamped to the source.  Producers may record degenerate
+/// offsets for implicit sites; never let an out-of-range slice crash the
+/// rewriter or silently drop a site.
+std::string sourceSlice(const std::string &s, size_t from, size_t to) {
+  if (from > s.size())
+    from = s.size();
+  if (to < from)
+    to = from;
+  if (to > s.size())
+    to = s.size();
+  return s.substr(from, to - from);
+}
+
+// ---------------------------------------------------------------------------
+// Token-level fallback site recovery.
+//
+// The AST pass cannot record every guard-worthy spelling: compound operators
+// are distinct opcodes, macro/header locations are intentionally skipped, and
+// implicit conversions have no CStyleCastExpr.  The rewriter therefore recovers
+// the unambiguous forms directly from declaration/operator tokens.  No new
+// CheckedArithmeticSite kinds are needed -- the existing single-evaluation
+// emission below consumes these sites unchanged.
+// ---------------------------------------------------------------------------
+
+struct TokenType {
+  std::string spelling; ///< spelling usable in a generated C cast
+  unsigned bits = 0;
+  bool isSigned = true;
+  bool isFloat = false;
+  bool valid = false;
+};
+
+static bool isTriviaTok(const Token &t) {
+  return t.kind == TokKind::Whitespace || t.kind == TokKind::Comment;
+}
+
+static size_t nextSigTok(const std::vector<Token> &toks, size_t i) {
+  ++i;
+  while (i < toks.size() && isTriviaTok(toks[i]))
+    ++i;
+  return i;
+}
+
+static size_t prevSigTok(const std::vector<Token> &toks, size_t i) {
+  while (i > 0) {
+    --i;
+    if (!isTriviaTok(toks[i]))
+      return i;
+  }
+  return kNPos;
+}
+
+static size_t endOfToken(const Token &t) { return t.offset + t.text.size(); }
+
+static TokenType lookupVar(const std::map<std::string, TokenType> &vars,
+                           const std::string &name) {
+  auto it = vars.find(name);
+  return it == vars.end() ? TokenType() : it->second;
+}
+
+static bool isDeclQualifierTok(const std::string &s) {
+  return s == "const" || s == "volatile" || s == "static" ||
+         s == "extern" || s == "register" || s == "restrict" ||
+         s == "_Atomic" || s == "inline" || s == "auto";
+}
+
+static bool isBuiltinTypeKeyword(const std::string &w) {
+  static const std::set<std::string> kTypeWords = {
+      "unsigned",  "signed",    "int",       "char",      "short",
+      "long",      "float",     "double",    "_Bool",     "size_t",
+      "uintptr_t", "uint64_t",  "uint32_t",  "uint16_t",  "uint8_t",
+      "ptrdiff_t", "intptr_t",  "int64_t",   "int32_t",   "int16_t",
+      "int8_t"};
+  return kTypeWords.count(w) != 0;
+}
+
+/// Parse a built-in / fixed-width integer (or float) type spelling at `i`.
+static TokenType parseTokenType(const std::vector<Token> &toks, size_t i,
+                                size_t limit, size_t &next) {
+  TokenType out;
+  std::vector<std::string> words;
+  size_t k = i;
+  while (k < limit) {
+    if (isTriviaTok(toks[k])) {
+      ++k;
+      continue;
+    }
+    if (toks[k].kind != TokKind::Identifier)
+      break;
+    const std::string &w = toks[k].text;
+    if (isDeclQualifierTok(w)) {
+      ++k;
+      continue;
+    }
+    if (!isBuiltinTypeKeyword(w))
+      break;
+    words.push_back(w);
+    ++k;
+  }
+  while (k < limit && isTriviaTok(toks[k]))
+    ++k;
+  next = k;
+  if (words.empty())
+    return out;
+
+  bool uns = false, sgn = false, ch = false, sh = false;
+  int lng = 0;
+  bool flt = false, dbl = false, bl = false;
+  std::string fixed;
+  for (const std::string &w : words) {
+    if (w == "unsigned") uns = true;
+    else if (w == "signed") sgn = true;
+    else if (w == "int") { /* default integer base word */ }
+    else if (w == "char") ch = true;
+    else if (w == "short") sh = true;
+    else if (w == "long") ++lng;
+    else if (w == "float") flt = true;
+    else if (w == "double") dbl = true;
+    else if (w == "_Bool") bl = true;
+    else if (w == "size_t" || w == "uintptr_t" || w == "uint64_t" ||
+             w == "uint32_t" || w == "uint16_t" || w == "uint8_t") {
+      fixed = w;
+      uns = true;
+    } else if (w == "ptrdiff_t" || w == "intptr_t" || w == "int64_t" ||
+               w == "int32_t" || w == "int16_t" || w == "int8_t") {
+      fixed = w;
+      sgn = true;
+    } else {
+      return out; // user-defined type: not modelled
+    }
+  }
+  for (size_t j = 0; j < words.size(); ++j) {
+    if (j)
+      out.spelling += " ";
+    out.spelling += words[j];
+  }
+  if (flt) {
+    out.bits = 32; out.isFloat = true; out.isSigned = true;
+  } else if (dbl) {
+    out.bits = 64; out.isFloat = true; out.isSigned = true;
+  } else if (bl) {
+    out.bits = 1; out.isSigned = false;
+  } else if (!fixed.empty()) {
+    if (fixed == "uint8_t" || fixed == "int8_t") out.bits = 8;
+    else if (fixed == "uint16_t" || fixed == "int16_t") out.bits = 16;
+    else if (fixed == "uint32_t" || fixed == "int32_t") out.bits = 32;
+    else out.bits = 64;
+    out.isSigned = sgn;
+  } else if (ch) {
+    out.bits = 8; out.isSigned = !uns;
+  } else if (sh) {
+    out.bits = 16; out.isSigned = !uns;
+  } else {
+    out.bits = (lng >= 1) ? 64 : 32;
+    out.isSigned = !uns;
+  }
+  out.valid = true;
+  return out;
+}
+
+/// Index of the first `;`/`,`/`}` at declaration nesting depth zero.
+static size_t findStmtEnd(const std::vector<Token> &toks, size_t from) {
+  int par = 0, brk = 0;
+  for (size_t k = from; k < toks.size(); ++k) {
+    if (toks[k].kind != TokKind::Punct)
+      continue;
+    const std::string &p = toks[k].text;
+    if (p == "(") ++par;
+    else if (p == ")") { if (par > 0) --par; }
+    else if (p == "[") ++brk;
+    else if (p == "]") { if (brk > 0) --brk; }
+    else if (par == 0 && brk == 0 &&
+             (p == ";" || p == "," || p == "}"))
+      return k;
+  }
+  return kNPos;
+}
+
+/// Whether a token can end a value operand.  Keywords such as `sizeof` are
+/// unary operators, not factors: `sizeof *p` is a dereference, not a product.
+static bool canEndFactor(const Token &t) {
+  if (t.kind == TokKind::Identifier) {
+    static const std::set<std::string> kKeywords = {
+        "sizeof", "return", "if", "while", "for", "switch", "case", "else",
+        "do", "goto", "break", "continue", "typedef", "struct", "union",
+        "enum", "const", "volatile", "unsigned", "signed", "long", "short",
+        "int", "char", "float", "double", "void", "static", "extern",
+        "register", "auto", "inline", "_Atomic"};
+    return kKeywords.count(t.text) == 0;
+  }
+  return t.kind == TokKind::Number || t.kind == TokKind::CharLit ||
+         t.kind == TokKind::StringLit ||
+         (t.kind == TokKind::Punct && (t.text == ")" || t.text == "]"));
+}
+
+static bool canStartFactor(const Token &t) {
+  return t.kind == TokKind::Identifier || t.kind == TokKind::Number ||
+         t.kind == TokKind::CharLit ||
+         (t.kind == TokKind::Punct && t.text == "(");
+}
+
+/// True when `inner` is a type spelling such as `int`, `long`, `unsigned int`
+/// or `uint32_t` (and not a parenthesized expression like `(d)`).
+static bool isTypeSpelling(const std::string &inner) {
+  const std::vector<Token> ts = lexCPlus(inner);
+  size_t next = 0;
+  const TokenType ty = parseTokenType(ts, 0, ts.size(), next);
+  if (!ty.valid)
+    return false;
+  for (size_t i = next; i < ts.size(); ++i)
+    // lexCPlus appends an EndOfFile token; it is not trivia but must not
+    // invalidate an otherwise complete type spelling such as "int".
+    if (!isTriviaTok(ts[i]) && ts[i].kind != TokKind::EndOfFile)
+      return false;
+  return true;
+}
+
+/// Offset just past any leading `(TYPE)` cast prefixes in `source[begin,end)`.
+/// The caller consumes those bytes so the f2i guard sees the original float
+/// expression rather than the already-truncated integer result.
+static size_t skipLeadingCasts(const std::string &source, size_t begin,
+                               size_t end) {
+  size_t p = begin;
+  while (p < end && source[p] == '(') {
+    size_t q = p + 1;
+    int par = 1;
+    while (q < end && par > 0) {
+      if (source[q] == '(') ++par;
+      else if (source[q] == ')') --par;
+      if (par > 0) ++q;
+    }
+    if (par != 0 || q >= end)
+      break;
+    if (!isTypeSpelling(sourceSlice(source, p + 1, q)))
+      break;
+    p = q + 1;
+    while (p < end && (source[p] == ' ' || source[p] == '\t' ||
+                       source[p] == '\n' || source[p] == '\r'))
+      ++p;
+  }
+  return p;
+}
+
+static bool needsIntegerConversionGuard(const TokenType &src,
+                                        const TokenType &dst) {
+  return src.valid && dst.valid && !src.isFloat && !dst.isFloat &&
+         (src.bits > dst.bits ||
+          (src.bits == dst.bits && src.isSigned != dst.isSigned));
+}
+
+static std::vector<CheckedArithmeticSite>
+collectTokenArithmeticSites(const std::string &source) {
+  std::vector<Token> toks = lexCPlus(source);
+  std::vector<CheckedArithmeticSite> sites;
+  if (toks.empty())
+    return sites;
+
+  // Precompute brace/paren matches and mark aggregate (`struct`/`union`/`enum`)
+  // bodies so field declarations do not shadow local/parameter variables.
+  std::vector<size_t> braceMatch(toks.size(), kNPos);
+  std::vector<size_t> parenMatch(toks.size(), kNPos);
+  std::vector<bool> isAggregateBrace(toks.size(), false);
+  {
+    std::vector<size_t> bStack, pStack;
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind != TokKind::Punct)
+        continue;
+      if (toks[i].text == "{") {
+        bool agg = false;
+        size_t p1 = prevSigTok(toks, i);
+        if (p1 != kNPos && toks[p1].kind == TokKind::Identifier) {
+          if (toks[p1].text == "struct" || toks[p1].text == "union" ||
+              toks[p1].text == "enum") {
+            agg = true;
+          } else {
+            size_t p2 = prevSigTok(toks, p1);
+            if (p2 != kNPos && toks[p2].kind == TokKind::Identifier &&
+                (toks[p2].text == "struct" || toks[p2].text == "union" ||
+                 toks[p2].text == "enum"))
+              agg = true;
+          }
+        }
+        isAggregateBrace[i] = agg;
+        bStack.push_back(i);
+      } else if (toks[i].text == "}") {
+        if (!bStack.empty()) {
+          braceMatch[bStack.back()] = i;
+          bStack.pop_back();
+        }
+      } else if (toks[i].text == "(") {
+        pStack.push_back(i);
+      } else if (toks[i].text == ")") {
+        if (!pStack.empty()) {
+          parenMatch[pStack.back()] = i;
+          pStack.pop_back();
+        }
+      }
+    }
+  }
+
+  struct ScopedTokenVar {
+    std::string name;
+    TokenType type;
+    size_t startTok;
+    size_t endTok;
+  };
+  std::vector<ScopedTokenVar> scopedVars;
+  auto lookupScopedVar = [&](const std::string &name,
+                             size_t useTok) -> TokenType {
+    size_t bestStart = kNPos;
+    TokenType bestTy;
+    for (const auto &v : scopedVars) {
+      if (v.name == name && v.startTok <= useTok && useTok <= v.endTok &&
+          (bestStart == kNPos || v.startTok >= bestStart)) {
+        bestStart = v.startTok;
+        bestTy = v.type;
+      }
+    }
+    return bestTy;
+  };
+
+  // Phase 1: recover declared types with lexical scope spans, and implicit
+  // integer conversions in simple `TYPE name = identifier;` initializers.
+  {
+    std::vector<size_t> bStack, pStack;
+    auto inAggregateBody = [&]() -> bool {
+      for (size_t b : bStack)
+        if (isAggregateBrace[b])
+          return true;
+      return false;
+    };
+    auto enclosingScopeEnd = [&](size_t fallbackTok) -> size_t {
+      if (!bStack.empty()) {
+        if (!pStack.empty() && pStack.back() > bStack.back()) {
+          size_t kw = prevSigTok(toks, pStack.back());
+          if (kw != kNPos && toks[kw].kind == TokKind::Identifier &&
+              toks[kw].text == "for") {
+            size_t rp = parenMatch[pStack.back()];
+            if (rp != kNPos) {
+              size_t body = nextSigTok(toks, rp);
+              if (body != kNPos && toks[body].kind == TokKind::Punct &&
+                  toks[body].text == "{") {
+                size_t close = braceMatch[body];
+                if (close != kNPos)
+                  return close;
+              } else if (body != kNPos) {
+                size_t semi = findStmtEnd(toks, body);
+                if (semi != kNPos)
+                  return semi;
+              }
+            }
+          }
+        }
+        size_t close = braceMatch[bStack.back()];
+        return close == kNPos ? toks.size() - 1 : close;
+      }
+      if (!pStack.empty()) {
+        size_t rp = parenMatch[pStack.front()];
+        if (rp != kNPos) {
+          size_t body = nextSigTok(toks, rp);
+          if (body != kNPos && toks[body].kind == TokKind::Punct &&
+              toks[body].text == "{") {
+            size_t close = braceMatch[body];
+            return close == kNPos ? toks.size() - 1 : close;
+          }
+          return rp;
+        }
+      }
+      (void)fallbackTok;
+      return toks.size() - 1;
+    };
+
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind == TokKind::Punct) {
+        if (toks[i].text == "{")
+          bStack.push_back(i);
+        else if (toks[i].text == "}" && !bStack.empty())
+          bStack.pop_back();
+        else if (toks[i].text == "(")
+          pStack.push_back(i);
+        else if (toks[i].text == ")" && !pStack.empty())
+          pStack.pop_back();
+        continue;
+      }
+      if (inAggregateBody())
+        continue;
+
+      // Shadow outer/earlier integer variables when a local/param uses a
+      // `struct`/`union`/`enum` type (including pointers to one).
+      if (toks[i].kind == TokKind::Identifier &&
+          (toks[i].text == "struct" || toks[i].text == "union" ||
+           toks[i].text == "enum")) {
+        size_t tag = nextSigTok(toks, i);
+        size_t q = (tag != kNPos && toks[tag].kind == TokKind::Identifier)
+                       ? nextSigTok(toks, tag)
+                       : kNPos;
+        while (q != kNPos && toks[q].kind == TokKind::Punct &&
+               toks[q].text == "*")
+          q = nextSigTok(toks, q);
+        if (q != kNPos && q < toks.size() &&
+            toks[q].kind == TokKind::Identifier) {
+          size_t aq = nextSigTok(toks, q);
+          if (aq != kNPos && toks[aq].kind == TokKind::Punct &&
+              (toks[aq].text == "=" || toks[aq].text == "," ||
+               toks[aq].text == ";" || toks[aq].text == "[" ||
+               toks[aq].text == ")"))
+            scopedVars.push_back(
+                {toks[q].text, TokenType(), q, enclosingScopeEnd(q)});
+        }
+        continue;
+      }
+
+      // Skip mid-specifier keywords/qualifiers (e.g. `int` in `unsigned int`)
+      // so a multi-token type is only parsed once from its first token.
+      size_t prevTok = prevSigTok(toks, i);
+      if (prevTok != kNPos && toks[prevTok].kind == TokKind::Identifier &&
+          (isDeclQualifierTok(toks[prevTok].text) ||
+           isBuiltinTypeKeyword(toks[prevTok].text)))
+        continue;
+
+      size_t after = kNPos;
+      TokenType ty = parseTokenType(toks, i, toks.size(), after);
+      if (!ty.valid || after == kNPos || after >= toks.size())
+        continue;
+      size_t n = after;
+      bool isPointer = false;
+      while (n < toks.size()) {
+        if (isTriviaTok(toks[n])) {
+          ++n;
+          continue;
+        }
+        if (toks[n].kind == TokKind::Punct && toks[n].text == "*") {
+          isPointer = true;
+          ++n;
+          continue;
+        }
+        if (toks[n].kind == TokKind::Identifier &&
+            (toks[n].text == "const" || toks[n].text == "volatile" ||
+             toks[n].text == "restrict")) {
+          ++n;
+          continue;
+        }
+        break;
+      }
+      if (n >= toks.size() || toks[n].kind != TokKind::Identifier)
+        continue;
+      size_t afterName = nextSigTok(toks, n);
+      if (afterName == kNPos || toks[afterName].kind != TokKind::Punct)
+        continue;
+      const std::string &p = toks[afterName].text;
+      if (p != "=" && p != "," && p != ";" && p != "[" && p != ")" &&
+          p != "(")
+        continue;
+      const size_t scopeEnd = enclosingScopeEnd(n);
+      // Pointer declarations record an invalid sentinel TokenType so they
+      // properly shadow any earlier/outer integer variable of the same name.
+      if (isPointer) {
+        scopedVars.push_back({toks[n].text, TokenType(), n, scopeEnd});
+        continue;
+      }
+      scopedVars.push_back({toks[n].text, ty, n, scopeEnd});
+
+      if (p == "=") {
+        size_t rhs = nextSigTok(toks, afterName);
+        if (rhs == kNPos || toks[rhs].kind != TokKind::Identifier)
+          continue;
+        // Only a bare identifier has a source type we can prove here.  A
+        // compound RHS (e.g. `char c = a + b`) must be guarded on the *result*,
+        // which is the AST producer's job; guessing from its first token would
+        // narrow the wrong operand.
+        size_t afterRhs = nextSigTok(toks, rhs);
+        if (afterRhs == kNPos || toks[afterRhs].kind != TokKind::Punct ||
+            (toks[afterRhs].text != ";" && toks[afterRhs].text != ","))
+          continue;
+        TokenType src = lookupScopedVar(toks[rhs].text, rhs);
+        if (!src.valid || ty.isFloat)
+          continue;
+        CheckedArithmeticSite s;
+        s.begin = toks[rhs].offset;
+        s.op = s.begin;
+        s.opLength = 0;
+        s.end = endOfToken(toks[rhs]);
+        s.bits = ty.bits;
+        s.isSigned = ty.isSigned;
+        s.type = ty.spelling;
+        if (src.isFloat) {
+          // Implicit float -> integer in an initializer: guard the float value.
+          s.kind = CheckedArithmeticSite::Op::FloatToInt;
+        } else {
+          if (!needsIntegerConversionGuard(src, ty))
+            continue;
+          s.kind = CheckedArithmeticSite::Op::Narrow;
+          s.srcBits = src.bits;
+          s.srcIsSigned = src.isSigned;
+          s.srcType = src.spelling;
+        }
+        sites.push_back(std::move(s));
+      }
+    }
+  }
+
+  // Phase 1b: function signatures.  Record return types and parameter types so
+  // implicit narrowing in `return x;` and `f(x)` can be recovered lexically in
+  // DEFAULT mode (where the AST producer intentionally emits no native guards
+  // because the backend UBSan handles signed overflow but NOT integer
+  // truncation).  Only concrete definitions with a known type are modelled.
+  struct FnSig {
+    TokenType ret;
+    std::vector<TokenType> params;
+  };
+  std::map<std::string, FnSig> fnSigs;
+  std::vector<std::tuple<size_t, size_t, TokenType>> fnBodies; // [open, close]
+  for (size_t i = 0; i < toks.size(); ++i) {
+    size_t after = kNPos;
+    TokenType ret = parseTokenType(toks, i, toks.size(), after);
+    const bool voidRet = !ret.valid &&
+                         toks[i].kind == TokKind::Identifier &&
+                         toks[i].text == "void";
+    if (voidRet)
+      after = nextSigTok(toks, i);
+    if ((!ret.valid && !voidRet) || after == kNPos || after >= toks.size())
+      continue;
+    size_t n = after;
+    if (n < toks.size() && toks[n].kind == TokKind::Punct &&
+        toks[n].text == "*")
+      continue; // pointer return: no integer narrowing
+    if (toks[n].kind != TokKind::Identifier)
+      continue;
+    const std::string name = toks[n].text;
+    size_t lp = nextSigTok(toks, n);
+    if (lp == kNPos || toks[lp].kind != TokKind::Punct ||
+        toks[lp].text != "(")
+      continue;
+    int par = 0;
+    size_t rp = kNPos;
+    for (size_t k = lp; k < toks.size(); ++k) {
+      if (toks[k].kind != TokKind::Punct)
+        continue;
+      if (toks[k].text == "(") ++par;
+      else if (toks[k].text == ")" && --par == 0) { rp = k; break; }
+    }
+    if (rp == kNPos)
+      continue;
+    size_t body = nextSigTok(toks, rp);
+    if (body == kNPos || toks[body].kind != TokKind::Punct ||
+        toks[body].text != "{")
+      continue;
+    size_t close = kNPos;
+    int depth = 0;
+    for (size_t k = body; k < toks.size(); ++k) {
+      if (toks[k].kind != TokKind::Punct)
+        continue;
+      if (toks[k].text == "{") ++depth;
+      else if (toks[k].text == "}" && --depth == 0) { close = k; break; }
+    }
+    if (close == kNPos)
+      continue;
+    FnSig sig;
+    sig.ret = ret;
+    size_t p = nextSigTok(toks, lp);
+    auto advancePastParam = [&](size_t from) {
+      int pd = 0;
+      size_t k = from;
+      while (k < rp) {
+        if (toks[k].kind == TokKind::Punct) {
+          if (toks[k].text == "(" || toks[k].text == "[")
+            ++pd;
+          else if ((toks[k].text == ")" || toks[k].text == "]") && pd > 0)
+            --pd;
+          else if (toks[k].text == "," && pd == 0)
+            break;
+        }
+        ++k;
+      }
+      return nextSigTok(toks, k);
+    };
+    while (p != kNPos && p < rp) {
+      size_t pa = kNPos;
+      TokenType pt = parseTokenType(toks, p, rp, pa);
+      if (!pt.valid) {
+        sig.params.push_back(TokenType()); // keep argument indices aligned
+        p = advancePastParam(p);
+        continue;
+      }
+      size_t q = pa;
+      bool ptrParam = false;
+      while (q < rp) {
+        if (isTriviaTok(toks[q])) {
+          ++q;
+          continue;
+        }
+        if (toks[q].kind == TokKind::Punct && toks[q].text == "*") {
+          ptrParam = true;
+          ++q;
+          continue;
+        }
+        if (toks[q].kind == TokKind::Identifier &&
+            (toks[q].text == "const" || toks[q].text == "volatile" ||
+             toks[q].text == "restrict")) {
+          ++q;
+          continue;
+        }
+        break;
+      }
+      TokenType paramTy = ptrParam ? TokenType() : pt;
+      sig.params.push_back(paramTy);
+      if (q < rp && toks[q].kind == TokKind::Identifier) {
+        scopedVars.push_back({toks[q].text, paramTy, q, close});
+      }
+      p = advancePastParam(q);
+    }
+    fnSigs[name] = sig;
+    fnBodies.emplace_back(toks[body].offset, endOfToken(toks[close]), ret);
+  }
+
+  // Phase 2: operator spellings.  Skip preprocessor lines -- macro bodies are
+  // not rewritable at their expansion point.
+  for (size_t i = 0; i < toks.size(); ++i) {
+    const Token &tk = toks[i];
+    if (isTriviaTok(tk))
+      continue;
+    size_t ls = i;
+    while (ls > 0 && toks[ls - 1].line == tk.line)
+      --ls;
+    bool ppLine = false;
+    for (size_t k = ls; k <= i; ++k)
+      if (toks[k].kind == TokKind::Punct && toks[k].text == "#")
+        ppLine = true;
+    if (ppLine)
+      continue;
+
+    const std::string op = tk.text;
+
+    // Helper: a bare identifier `value` converted to a known narrower or
+    // sign-changing destination type.
+    auto emitNarrowAt = [&](size_t value, const TokenType &dst) {
+      if (value == kNPos || toks[value].kind != TokKind::Identifier ||
+          !dst.valid || dst.isFloat)
+        return;
+      TokenType src = lookupScopedVar(toks[value].text, value);
+      if (!needsIntegerConversionGuard(src, dst))
+        return;
+      CheckedArithmeticSite s;
+      s.kind = CheckedArithmeticSite::Op::Narrow;
+      s.begin = toks[value].offset;
+      s.op = s.begin;
+      s.opLength = 0;
+      s.end = endOfToken(toks[value]);
+      s.bits = dst.bits;
+      s.isSigned = dst.isSigned;
+      s.type = dst.spelling;
+      s.srcBits = src.bits;
+      s.srcIsSigned = src.isSigned;
+      s.srcType = src.spelling;
+      sites.push_back(std::move(s));
+    };
+
+    // Implicit narrowing in a plain assignment `c = x;` where both sides are
+    // bare, typed identifiers.  Declarations (`TYPE c = x;`) are handled by
+    // Phase 1 and dedup by the full site tuple; conditions (`if (c = x)`)
+    // are skipped because the value is not followed by ';'/','.
+    if (tk.kind == TokKind::Punct && op == "=") {
+      size_t lhs = prevSigTok(toks, i);
+      size_t rhs = nextSigTok(toks, i);
+      size_t afterRhs = rhs == kNPos ? kNPos : nextSigTok(toks, rhs);
+      if (lhs != kNPos && rhs != kNPos && afterRhs != kNPos &&
+          toks[lhs].kind == TokKind::Identifier &&
+          toks[afterRhs].kind == TokKind::Punct &&
+          (toks[afterRhs].text == ";" || toks[afterRhs].text == ","))
+        emitNarrowAt(rhs, lookupScopedVar(toks[lhs].text, lhs));
+    }
+
+    // Implicit narrowing in `return x;` against the enclosing function's
+    // return type.
+    if (tk.kind == TokKind::Identifier && op == "return") {
+      size_t value = nextSigTok(toks, i);
+      size_t afterVal = value == kNPos ? kNPos : nextSigTok(toks, value);
+      if (afterVal != kNPos && toks[afterVal].kind == TokKind::Punct &&
+          toks[afterVal].text == ";") {
+        for (const auto &b : fnBodies) {
+          if (tk.offset < std::get<0>(b) || tk.offset >= std::get<1>(b))
+            continue;
+          emitNarrowAt(value, std::get<2>(b));
+          break;
+        }
+      }
+    }
+
+    // Implicit narrowing of a bare identifier passed to a known parameter.
+    if (tk.kind == TokKind::Identifier) {
+      auto fit = fnSigs.find(op);
+      if (fit != fnSigs.end()) {
+        size_t lp = nextSigTok(toks, i);
+        if (lp != kNPos && toks[lp].kind == TokKind::Punct &&
+            toks[lp].text == "(") {
+          size_t rp = kNPos;
+          {
+            int pd = 0;
+            for (size_t q = lp; q < toks.size(); ++q) {
+              if (toks[q].kind != TokKind::Punct) continue;
+              if (toks[q].text == "(") ++pd;
+              else if (toks[q].text == ")" && --pd == 0) { rp = q; break; }
+            }
+          }
+          size_t after = rp == kNPos ? kNPos : nextSigTok(toks, rp);
+          // Function definition, not a call: its parameters were handled in
+          // Phase 1b and must not be re-treated as arguments.
+          bool definition = after != kNPos && toks[after].kind == TokKind::Punct &&
+                            toks[after].text == "{";
+          if (!definition && rp != kNPos) {
+            size_t arg = 0;
+            size_t t = lp + 1;
+            while (t < rp) {
+              while (t < rp && isTriviaTok(toks[t]))
+                ++t;
+              if (t >= rp)
+                break;
+              size_t argStart = t;
+              size_t argEnd = rp;
+              int depth = 0;
+              for (size_t q = t; q < rp; ++q) {
+                if (isTriviaTok(toks[q]) || toks[q].kind != TokKind::Punct)
+                  continue;
+                const std::string &pt = toks[q].text;
+                if (pt == "(" || pt == "[" || pt == "{") {
+                  ++depth;
+                } else if (pt == ")" || pt == "]" || pt == "}") {
+                  if (depth > 0)
+                    --depth;
+                } else if (pt == "," && depth == 0) {
+                  argEnd = q;
+                  break;
+                }
+              }
+              if (arg < fit->second.params.size() &&
+                  toks[argStart].kind == TokKind::Identifier) {
+                size_t afterArg = nextSigTok(toks, argStart);
+                if (afterArg == kNPos || afterArg >= argEnd)
+                  emitNarrowAt(argStart, fit->second.params[arg]);
+              }
+              ++arg;
+              t = (argEnd < rp) ? argEnd + 1 : rp;
+            }
+          }
+        }
+      }
+    }
+
+    // Allocation extent: malloc(count * size), calloc(a * b, c * d),
+    // realloc(ptr, count * size) can wrap before the allocator sees the
+    // request.  Guard every depth-0 multiplication in the byte-size argument(s).
+    if (tk.kind == TokKind::Identifier &&
+        (op == "malloc" || op == "calloc" || op == "realloc")) {
+      size_t lp = nextSigTok(toks, i);
+      if (lp != kNPos && toks[lp].kind == TokKind::Punct &&
+          toks[lp].text == "(") {
+        std::vector<std::pair<size_t, size_t>> callArgs;
+        int par = 0;
+        size_t curStart = kNPos;
+        for (size_t k = lp + 1; k < toks.size(); ++k) {
+          const Token &a = toks[k];
+          if (isTriviaTok(a))
+            continue;
+          if (a.kind == TokKind::Punct &&
+              (a.text == "(" || a.text == "[" || a.text == "{")) {
+            if (curStart == kNPos)
+              curStart = k;
+            ++par;
+            continue;
+          }
+          if (a.kind == TokKind::Punct &&
+              (a.text == ")" || a.text == "]" || a.text == "}")) {
+            if (par == 0) {
+              if (curStart != kNPos)
+                callArgs.emplace_back(curStart, k);
+              break;
+            }
+            --par;
+            continue;
+          }
+          if (par != 0)
+            continue;
+          if (a.kind == TokKind::Punct && a.text == ",") {
+            callArgs.emplace_back(curStart == kNPos ? k : curStart, k);
+            curStart = kNPos;
+            continue;
+          }
+          if (curStart == kNPos)
+            curStart = k;
+        }
+        auto scanAllocArg = [&](size_t argIdx) {
+          if (argIdx >= callArgs.size())
+            return;
+          const size_t argStart = callArgs[argIdx].first;
+          const size_t argEnd = callArgs[argIdx].second;
+          if (argStart == kNPos || argEnd == kNPos || argEnd <= argStart)
+            return;
+          // Significant tokens at nesting depth zero of this argument.
+          // A parenthesised group is kept as a single factor (its '(' and ')'
+          // are recorded); tokens inside it are not separate operators here.
+          std::vector<size_t> d0;
+          {
+            int depth = 0;
+            for (size_t k = argStart; k < argEnd; ++k) {
+              if (isTriviaTok(toks[k]))
+                continue;
+              bool open = false, close = false;
+              if (toks[k].kind == TokKind::Punct) {
+                const std::string &p = toks[k].text;
+                open = p == "(" || p == "[" || p == "{";
+                close = p == ")" || p == "]" || p == "}";
+              }
+              if (close && depth > 0) --depth;
+              if (depth == 0) d0.push_back(k);
+              if (open) ++depth;
+            }
+          }
+          auto isLowPrec = [](const Token &t) {
+            if (t.kind != TokKind::Punct)
+              return false;
+            static const std::set<std::string> kBoundary = {
+                "+",  "-",  "<<", ">>", "<",  ">",  "<=", ">=",
+                "==", "!=", "&",  "^",  "|",  "&&", "||", "?", ":"};
+            return kBoundary.count(t.text) != 0;
+          };
+          auto isMulOp = [](const Token &t) {
+            return t.kind == TokKind::Punct &&
+                   (t.text == "*" || t.text == "/" || t.text == "%");
+          };
+          for (size_t d = 0; d < d0.size(); ++d) {
+            const size_t k = d0[d];
+            if (toks[k].kind != TokKind::Punct || toks[k].text != "*" ||
+                d == 0 || d + 1 >= d0.size())
+              continue;
+            // A `*` is binary multiplication only when it separates two complete
+            // factors.  In `malloc(sizeof *p)` it is a unary dereference.
+            if (!canEndFactor(toks[d0[d - 1]]) ||
+                !canStartFactor(toks[d0[d + 1]]))
+              continue;
+            // Left boundary: first token after the nearest low-precedence
+            // separator.  Multiplicative operators do NOT reset it, so the
+            // k-th `*` guard covers the whole left-associative prefix.
+            size_t beginIdx = d0[0];
+            for (size_t q = d; q > 0; --q)
+              if (isLowPrec(toks[d0[q - 1]])) { beginIdx = d0[q]; break; }
+            // Right boundary: last significant token before the next
+            // multiplicative or low-precedence operator at this level.
+            size_t endIdx = kNPos;
+            for (size_t q = d + 1; q < d0.size(); ++q)
+              if (isMulOp(toks[d0[q]]) || isLowPrec(toks[d0[q]])) {
+                endIdx = prevSigTok(toks, d0[q]);
+                break;
+              }
+            if (endIdx == kNPos) {
+              endIdx = argEnd;
+              while (endIdx > argStart && isTriviaTok(toks[endIdx - 1]))
+                --endIdx;
+              if (endIdx > argStart) --endIdx;
+            }
+            if (endIdx == kNPos || endIdx <= k)
+              continue;
+            CheckedArithmeticSite s;
+            s.kind = CheckedArithmeticSite::Op::AllocExtent;
+            s.begin = toks[beginIdx].offset;
+            s.op = toks[k].offset;
+            s.opLength = toks[k].text.size();
+            s.end = endOfToken(toks[endIdx]);
+            sites.push_back(std::move(s));
+          }
+        };
+        if (op == "malloc") {
+          scanAllocArg(0);
+        } else if (op == "realloc") {
+          scanAllocArg(1);
+        } else {
+          scanAllocArg(0);
+          scanAllocArg(1);
+        }
+      }
+      continue;
+    }
+
+    if (tk.kind == TokKind::Punct &&
+        (op == "+=" || op == "-=" || op == "*=" || op == "/=" ||
+         op == "%=" || op == "<<=" || op == ">>=")) {
+      size_t lhs = prevSigTok(toks, i);
+      TokenType ty = lhs == kNPos
+                         ? TokenType()
+                         : lookupScopedVar(toks[lhs].text, lhs);
+      if (!ty.valid || ty.isFloat)
+        continue;
+      if (!ty.isSigned && (op == "+=" || op == "-=" || op == "*="))
+        continue; // unsigned add/sub/mul wrap by definition
+      CheckedArithmeticSite::Op kind = CheckedArithmeticSite::Op::Add;
+      if (op == "-=") kind = CheckedArithmeticSite::Op::Sub;
+      else if (op == "*=") kind = CheckedArithmeticSite::Op::Mul;
+      else if (op == "/=") kind = CheckedArithmeticSite::Op::Div;
+      else if (op == "%=") kind = CheckedArithmeticSite::Op::Rem;
+      else if (op == "<<=") kind = CheckedArithmeticSite::Op::Shl;
+      else if (op == ">>=") kind = CheckedArithmeticSite::Op::Shr;
+      // Bound the RHS scan at the first `)` that is not nested inside a
+      // call/cast.  findStmtEnd() starts at depth zero and therefore runs past
+      // a `for (...; ...; i += K)` header into the loop body, giving this
+      // token site a different `end` from the AST site and defeating dedup.
+      size_t stop = kNPos;
+      int par = 0, brk = 0, brc = 0;
+      for (size_t k = nextSigTok(toks, i); k < toks.size(); ++k) {
+        if (toks[k].kind != TokKind::Punct)
+          continue;
+        const std::string &p = toks[k].text;
+        if (p == "(") ++par;
+        else if (p == "[") ++brk;
+        else if (p == "{") ++brc;
+        else if (p == ")") {
+          if (par > 0) --par;
+          else { stop = k; break; } // closes the enclosing for-header
+        } else if (p == "]") { if (brk > 0) --brk; }
+        else if (p == "}") { if (brc > 0) --brc; }
+        else if (p == ";" || p == ",") {
+          if (par == 0 && brk == 0 && brc == 0) { stop = k; break; }
+        }
+      }
+      if (stop == kNPos || stop <= i)
+        continue;
+      const size_t last = prevSigTok(toks, stop);
+      if (last == kNPos || last < i || endOfToken(toks[last]) <= tk.offset)
+        continue;
+      CheckedArithmeticSite s;
+      s.kind = kind;
+      s.compound = true;
+      s.begin = toks[lhs].offset;
+      s.op = tk.offset;
+      s.opLength = op.size();
+      s.end = endOfToken(toks[last]);
+      s.bits = ty.bits;
+      s.isSigned = ty.isSigned;
+      s.type = ty.spelling;
+      sites.push_back(std::move(s));
+      continue;
+    }
+
+    if (tk.kind == TokKind::Punct && (op == "++" || op == "--")) {
+      size_t prev = prevSigTok(toks, i);
+      size_t nxt = nextSigTok(toks, i);
+      size_t target = kNPos;
+      bool postfix = false;
+      if (prev != kNPos &&
+          (toks[prev].kind == TokKind::Identifier ||
+           toks[prev].kind == TokKind::Number ||
+           (toks[prev].kind == TokKind::Punct &&
+            (toks[prev].text == ")" || toks[prev].text == "]" ||
+             toks[prev].text == "++" || toks[prev].text == "--")))) {
+        target = prev;
+        postfix = true;
+      } else if (nxt != kNPos && toks[nxt].kind == TokKind::Identifier) {
+        target = nxt;
+      }
+      TokenType ty = target == kNPos
+                         ? TokenType()
+                         : lookupScopedVar(toks[target].text, target);
+      if (!ty.valid || ty.isFloat || !ty.isSigned)
+        continue;
+      CheckedArithmeticSite s;
+      s.kind = (op == "++") ? CheckedArithmeticSite::Op::Inc
+                           : CheckedArithmeticSite::Op::Dec;
+      s.postfix = postfix;
+      s.begin = postfix ? toks[target].offset : tk.offset;
+      s.op = tk.offset;
+      s.opLength = 2;
+      s.end = postfix ? endOfToken(tk) : endOfToken(toks[target]);
+      s.bits = ty.bits;
+      s.isSigned = ty.isSigned;
+      s.type = ty.spelling;
+      sites.push_back(std::move(s));
+      continue;
+    }
+
+    if (tk.kind == TokKind::Punct && op == "-") {
+      size_t prev = prevSigTok(toks, i);
+      bool unary = true;
+      if (prev != kNPos) {
+        const Token &p = toks[prev];
+        if (p.kind == TokKind::Identifier || p.kind == TokKind::Number ||
+            p.kind == TokKind::StringLit || p.kind == TokKind::CharLit ||
+            (p.kind == TokKind::Punct &&
+             (p.text == ")" || p.text == "]" || p.text == "++" ||
+              p.text == "--")))
+          unary = false;
+      }
+      if (!unary)
+        continue;
+      size_t nxt = nextSigTok(toks, i);
+      if (nxt == kNPos || toks[nxt].kind != TokKind::Identifier)
+        continue;
+      TokenType ty = lookupScopedVar(toks[nxt].text, nxt);
+      if (!ty.valid || ty.isFloat)
+        continue;
+      CheckedArithmeticSite s;
+      s.kind = CheckedArithmeticSite::Op::Neg;
+      s.begin = tk.offset;
+      s.op = tk.offset;
+      s.opLength = 1;
+      s.end = endOfToken(toks[nxt]);
+      s.bits = ty.bits;
+      s.isSigned = ty.isSigned;
+      s.type = ty.spelling;
+      sites.push_back(std::move(s));
+      continue;
+    }
+
+    // Explicit integer cast of a known float operand: (int)d, (long)x, ...
+    if (tk.kind == TokKind::Punct && op == "(") {
+      size_t ts = nextSigTok(toks, i);
+      if (ts == kNPos || toks[ts].kind != TokKind::Identifier)
+        continue;
+      size_t after = kNPos;
+      TokenType dst = parseTokenType(toks, ts, toks.size(), after);
+      if (!dst.valid || dst.isFloat || after == kNPos || after >= toks.size())
+        continue;
+      if (!(toks[after].kind == TokKind::Punct && toks[after].text == ")"))
+        continue;
+      size_t val = nextSigTok(toks, after);
+      if (val == kNPos || toks[val].kind != TokKind::Identifier)
+        continue;
+      TokenType src = lookupScopedVar(toks[val].text, val);
+      if (!src.valid)
+        continue;
+      CheckedArithmeticSite s;
+      s.begin = toks[val].offset;
+      s.op = s.begin;
+      s.opLength = 0;
+      s.end = endOfToken(toks[val]);
+      s.bits = dst.bits;
+      s.isSigned = dst.isSigned;
+      s.type = dst.spelling;
+      if (src.isFloat) {
+        s.kind = CheckedArithmeticSite::Op::FloatToInt;
+      } else {
+        // `(T)x` where x is a wider integer: a genuine truncating cast.  A
+        // nested cast such as `(char)(int)x` leaves the outer operand as '('
+        // and is therefore handled by the AST producer / composed chain; we
+        // only recover the unambiguous bare-identifier form here.
+        if (dst.isFloat || src.bits <= dst.bits)
+          continue;
+        s.kind = CheckedArithmeticSite::Op::Narrow;
+        s.srcBits = src.bits;
+        s.srcIsSigned = src.isSigned;
+        s.srcType = src.spelling;
+      }
+      sites.push_back(std::move(s));
+      continue;
+    }
+  }
+  return sites;
+}
+
+// ---------------------------------------------------------------------------
+// Null-dereference site recovery.
+//
+// The runtime exposes cplus_check_nonnull() ("emitted by the compiler for
+// every checked pointer dereference"), but the AST pass does not record plain
+// `*p` / `p->f` / `p[i]` sites.  Recover the unambiguous identifier-base forms
+// directly from the lowered C tokens.  Restricting the base to a bare
+// identifier keeps evaluation single, avoids the array-vs-pointer ambiguity
+// for subscripts, and never injects a call into a declaration.  Forms we
+// cannot classify confidently are left untouched so the generated C stays
+// valid; a redundant check is harmless (it only traps on an actual null).
+// ---------------------------------------------------------------------------
+
+struct NonnullSite {
+  size_t baseBegin = 0; ///< first byte of the pointer expression's spelling
+  size_t baseEnd = 0;   ///< one past its last byte
+  std::string expr;     ///< spelling used in the runtime diagnostic
+};
+
+static bool isDeclTypeTok(const std::string &s) {
+  static const std::set<std::string> kTypes = {
+      "void", "char", "short", "int", "long", "float", "double", "signed",
+      "unsigned", "_Bool", "struct", "union", "enum", "const", "volatile",
+      "static", "extern", "register", "restrict", "auto", "typedef",
+      "inline", "_Atomic", "size_t", "ptrdiff_t", "uintptr_t", "intptr_t",
+      "uint64_t", "int64_t", "uint32_t", "int32_t", "uint16_t", "int16_t",
+      "uint8_t", "int8_t"};
+  return kTypes.count(s) != 0;
+}
+
+/// True when this `*` is a declarator star in a type such as `char **argv`,
+/// `int **q` or `struct S **p`.  Walk back over the whole run of stars: if
+/// the token before the run is a type keyword (or a struct/union/enum tag),
+/// the stars declare a name rather than dereference a value.  A run preceded
+/// by an expression token (`=`, `{`, `return`, ...) is a nested deref and is
+/// intentionally left to the normal expression path.
+static bool isDeclaratorStarRun(const std::vector<Token> &toks,
+                                const std::vector<size_t> &sig, size_t si) {
+  size_t r = si;
+  while (r > 0 && toks[sig[r - 1]].kind == TokKind::Punct &&
+         toks[sig[r - 1]].text == "*")
+    --r;
+  if (r == 0)
+    return false;
+  const Token &before = toks[sig[r - 1]];
+  if (isDeclTypeTok(before.text))
+    return true;
+  if (r >= 2 && before.kind == TokKind::Identifier) {
+    const Token &pre = toks[sig[r - 2]];
+    if (pre.kind == TokKind::Identifier &&
+        (pre.text == "struct" || pre.text == "union" || pre.text == "enum"))
+      return true;
+  }
+  // Typedefs and C+ class names are ordinary identifiers to the lexer.  A
+  // name such as `Node **p` or `size_t **p` is a declarator, not a deref;
+  // otherwise a NULL check gets injected into the declaration itself.
+  if (before.kind == TokKind::Identifier) {
+    const std::string &n = before.text;
+    bool typeLike = !n.empty() &&
+        ((n[0] >= 'A' && n[0] <= 'Z') ||
+         (n.size() > 2 && n.compare(n.size() - 2, 2, "_t") == 0));
+    if (typeLike)
+      return true;
+  }
+  return false;
+}
+
+/// True when an obvious local guard proves `name` non-null before baseSi.
+/// We keep this deliberately narrow (short-circuit RHS and `if(!p) return;`)
+/// and fall back to emitting a check whenever there is any doubt.
+static bool hasObviousNonnullGuard(const std::vector<Token> &toks,
+                                   const std::vector<size_t> &sig,
+                                   size_t baseSi, const std::string &name) {
+  size_t stmtStart = 0, blockStart = 0;
+  for (size_t k = baseSi; k > 0; --k) {
+    const Token &t = toks[sig[k]];
+    if (t.kind != TokKind::Punct)
+      continue;
+    if (stmtStart == 0 && (t.text == ";" || t.text == "}"))
+      stmtStart = k + 1;
+    if (blockStart == 0 && t.text == "{")
+      blockStart = k + 1;
+    if (stmtStart != 0 && blockStart != 0)
+      break;
+  }
+
+  // `p && ...<deref>` / `!p || ...<deref>` in the same expression.
+  for (size_t k = stmtStart; k < baseSi; ++k) {
+    const Token &t = toks[sig[k]];
+    if (t.kind != TokKind::Punct || k == 0)
+      continue;
+    const Token &prev = toks[sig[k - 1]];
+    if (t.text == "&&" && prev.kind == TokKind::Identifier &&
+        prev.text == name)
+      return true;
+    if (t.text == "||" && prev.kind == TokKind::Identifier &&
+        prev.text == name && k >= 2 &&
+        toks[sig[k - 2]].kind == TokKind::Punct &&
+        toks[sig[k - 2]].text == "!")
+      return true;
+  }
+
+  // `if (!p) return;` / `if (p == 0) return;` earlier in the same block,
+  // provided p is not reassigned between the guard and the dereference.
+  for (size_t k = blockStart; k + 3 < baseSi; ++k) {
+    if (!(toks[sig[k]].kind == TokKind::Identifier &&
+          toks[sig[k]].text == "if"))
+      continue;
+    if (!(toks[sig[k + 1]].kind == TokKind::Punct &&
+          toks[sig[k + 1]].text == "("))
+      continue;
+    size_t c = k + 2;
+    bool negated = false;
+    if (c + 1 < baseSi && toks[sig[c]].kind == TokKind::Punct &&
+        toks[sig[c]].text == "!") {
+      negated = true;
+      ++c;
+    }
+    if (c >= baseSi || !(toks[sig[c]].kind == TokKind::Identifier &&
+                         toks[sig[c]].text == name))
+      continue;
+    size_t close = c + 1;
+    if (!negated && close + 1 < baseSi &&
+        toks[sig[close]].kind == TokKind::Punct &&
+        toks[sig[close]].text == "==") {
+      const Token &z = toks[sig[close + 1]];
+      if (!((z.kind == TokKind::Number && z.text == "0") ||
+            (z.kind == TokKind::Identifier && z.text == "NULL")))
+        continue;
+      close += 2;
+    }
+    if (!(close + 1 < baseSi && toks[sig[close]].kind == TokKind::Punct &&
+          toks[sig[close]].text == ")" &&
+          toks[sig[close + 1]].kind == TokKind::Identifier &&
+          toks[sig[close + 1]].text == "return"))
+      continue;
+    bool reassigned = false;
+    for (size_t q = close + 2; q + 1 < baseSi; ++q)
+      if (toks[sig[q]].kind == TokKind::Identifier &&
+          toks[sig[q]].text == name &&
+          toks[sig[q + 1]].kind == TokKind::Punct &&
+          toks[sig[q + 1]].text == "=") {
+        reassigned = true;
+        break;
+      }
+    if (!reassigned)
+      return true;
+  }
+  return false;
+}
+
+/// Type names declared in this translation unit (typedef aliases plus
+/// struct/union/enum tags).  Derived from the same token stream the rewriter
+/// uses for its variable/type tables; no new persistent global registry.
+static std::set<std::string> collectDeclTypeNames(
+    const std::vector<Token> &toks, const std::vector<size_t> &sig) {
+  std::set<std::string> names;
+  for (size_t si = 0; si < sig.size(); ++si) {
+    const Token &t = toks[sig[si]];
+    if (t.kind != TokKind::Identifier)
+      continue;
+    if (t.text == "struct" || t.text == "union" || t.text == "enum") {
+      if (si + 1 < sig.size() &&
+          toks[sig[si + 1]].kind == TokKind::Identifier)
+        names.insert(toks[sig[si + 1]].text);
+    }
+    if (t.text != "typedef")
+      continue;
+    // Last identifier at declaration nesting depth zero before the `;`.
+    // Brace tracking skips identifiers inside a `typedef struct T {...} T;`
+    // body so the trailing alias name is the one recorded.
+    int par = 0, brk = 0, brc = 0;
+    size_t last = kNPos;
+    for (size_t k = si + 1; k < sig.size(); ++k) {
+      const Token &u = toks[sig[k]];
+      if (u.kind == TokKind::Punct) {
+        if (u.text == "(") ++par;
+        else if (u.text == ")") { if (par > 0) --par; }
+        else if (u.text == "[") ++brk;
+        else if (u.text == "]") { if (brk > 0) --brk; }
+        else if (u.text == "{") ++brc;
+        else if (u.text == "}") { if (brc > 0) --brc; }
+        else if (u.text == ";" && par == 0 && brk == 0 && brc == 0) break;
+      } else if (u.kind == TokKind::Identifier && par == 0 && brk == 0 &&
+                 brc == 0) {
+        last = k;
+      }
+    }
+    if (last != kNPos)
+      names.insert(toks[sig[last]].text);
+  }
+  return names;
+}
+
+/// True when the `[` at `si` follows the declared name of an array, e.g.
+/// `int buf[N];`, `char text[] = "...";`, `void *slots[N];` or a struct
+/// field declaration.  The name is NOT a pointer: array-to-pointer decay at
+/// a subscript site cannot produce NULL, and binding it with __typeof__
+/// would emit an invalid array initializer in the generated C.
+static bool isArrayDeclaratorBracket(const std::vector<Token> &toks,
+                                     const std::vector<size_t> &sig, size_t si,
+                                     const std::set<std::string> &typeNames) {
+  if (si < 2 || toks[sig[si - 1]].kind != TokKind::Identifier)
+    return false;
+  const Token &before = toks[sig[si - 2]];
+  const std::string &bt = before.text;
+  if (isDeclTypeTok(bt) || bt == "*" || bt == "typedef" ||
+      typeNames.count(bt) != 0)
+    return true;
+  if (si >= 3 && before.kind == TokKind::Identifier) {
+    const Token &pre = toks[sig[si - 3]];
+    if (pre.kind == TokKind::Identifier &&
+        (pre.text == "struct" || pre.text == "union" || pre.text == "enum"))
+      return true;
+  }
+  if (bt == ",") {
+    size_t stmtStart = 0;
+    for (size_t k = si - 2; k > 0; --k) {
+      const Token &u = toks[sig[k]];
+      if (u.kind == TokKind::Punct &&
+          (u.text == ";" || u.text == "{" || u.text == "}")) {
+        stmtStart = k + 1;
+        break;
+      }
+    }
+    if (stmtStart < si && isDeclTypeTok(toks[sig[stmtStart]].text))
+      return true;
+  }
+  return false;
+}
+
+static std::vector<NonnullSite>
+collectNonnullDerefSites(const std::string &source,
+                         const std::map<std::string, size_t> &arrayLengths) {
+  std::vector<NonnullSite> sites;
+  const std::vector<Token> toks = lexCPlus(source);
+  std::vector<size_t> sig;
+  for (size_t i = 0; i < toks.size(); ++i)
+    if (!isTriviaTok(toks[i]) && toks[i].kind != TokKind::EndOfFile)
+      sig.push_back(i);
+
+  // Collect declared array names syntactically.  `arrayLengths` only covers
+  // arrays whose extent the rewriter could evaluate; macro extents
+  // (`buf[BUFSIZE]`), inferred extents (`text[] = "..."`) and typedef element
+  // types (`Node nodes[NODES];`) are absent, yet wrapping them with
+  // __typeof__ is still invalid C.
+  const std::set<std::string> typeNames = collectDeclTypeNames(toks, sig);
+  (void)arrayLengths;
+
+  // Match every `{` -> `}` and `(` -> `)` in `sig` and mark struct/union/enum
+  // bodies so field arrays (`struct S { int p[4]; };`) do not pollute local
+  // pointer NULL checks across the TU.
+  std::vector<size_t> braceMatch(sig.size(), kNPos);
+  std::vector<size_t> parenMatch(sig.size(), kNPos);
+  std::vector<bool> isAggregateBrace(sig.size(), false);
+  {
+    std::vector<size_t> bStack, pStack;
+    for (size_t si = 0; si < sig.size(); ++si) {
+      const Token &t = toks[sig[si]];
+      if (t.kind != TokKind::Punct)
+        continue;
+      if (t.text == "{") {
+        bool agg = false;
+        if (si >= 1 && toks[sig[si - 1]].kind == TokKind::Identifier) {
+          const std::string &p1 = toks[sig[si - 1]].text;
+          if (p1 == "struct" || p1 == "union" || p1 == "enum") {
+            agg = true;
+          } else if (si >= 2 && toks[sig[si - 2]].kind == TokKind::Identifier) {
+            const std::string &p2 = toks[sig[si - 2]].text;
+            if (p2 == "struct" || p2 == "union" || p2 == "enum")
+              agg = true;
+          }
+        }
+        isAggregateBrace[si] = agg;
+        bStack.push_back(si);
+      } else if (t.text == "}") {
+        if (!bStack.empty()) {
+          braceMatch[bStack.back()] = si;
+          bStack.pop_back();
+        }
+      } else if (t.text == "(") {
+        pStack.push_back(si);
+      } else if (t.text == ")") {
+        if (!pStack.empty()) {
+          parenMatch[pStack.back()] = si;
+          pStack.pop_back();
+        }
+      }
+    }
+  }
+
+  struct ScopedVarKind {
+    std::string name;
+    size_t startSi;
+    size_t endSi;
+    bool isArray;
+  };
+  std::vector<ScopedVarKind> scopedVars;
+  {
+    std::vector<size_t> bStack, pStack;
+    auto enclosingScopeEnd = [&](size_t fallbackSi) -> size_t {
+      if (!bStack.empty()) {
+        size_t close = braceMatch[bStack.back()];
+        return close == kNPos ? sig.size() - 1 : close;
+      }
+      if (!pStack.empty()) {
+        size_t rp = parenMatch[pStack.front()];
+        if (rp != kNPos && rp + 1 < sig.size() &&
+            toks[sig[rp + 1]].kind == TokKind::Punct &&
+            toks[sig[rp + 1]].text == "{") {
+          size_t close = braceMatch[rp + 1];
+          return close == kNPos ? sig.size() - 1 : close;
+        }
+        return rp == kNPos ? fallbackSi : rp;
+      }
+      return sig.size() - 1;
+    };
+    auto inAggregateBody = [&]() -> bool {
+      for (size_t b : bStack)
+        if (isAggregateBrace[b])
+          return true;
+      return false;
+    };
+
+    for (size_t si = 0; si < sig.size(); ++si) {
+      const Token &t = toks[sig[si]];
+      if (t.kind == TokKind::Punct) {
+        if (t.text == "{") { bStack.push_back(si); continue; }
+        if (t.text == "}") { if (!bStack.empty()) bStack.pop_back(); continue; }
+        if (t.text == "(") { pStack.push_back(si); continue; }
+        if (t.text == ")") { if (!pStack.empty()) pStack.pop_back(); continue; }
+
+        if (t.text == "*" && !inAggregateBody() && si > 0 && si + 1 < sig.size()) {
+          bool ptrDecl = isDeclaratorStarRun(toks, sig, si);
+          if (!ptrDecl && toks[sig[si - 1]].kind == TokKind::Identifier &&
+              typeNames.count(toks[sig[si - 1]].text) != 0)
+            ptrDecl = true;
+          if (ptrDecl) {
+            size_t k = si + 1;
+            while (k < sig.size() &&
+                   ((toks[sig[k]].kind == TokKind::Punct &&
+                     toks[sig[k]].text == "*") ||
+                    (toks[sig[k]].kind == TokKind::Identifier &&
+                     (toks[sig[k]].text == "const" ||
+                      toks[sig[k]].text == "volatile" ||
+                      toks[sig[k]].text == "restrict"))))
+              ++k;
+            if (k < sig.size() && toks[sig[k]].kind == TokKind::Identifier) {
+              // Do not confuse pointer-array declarator `void *slots[N];` with
+              // a scalar pointer: `[` right after `name` is handled below.
+              if (!(k + 1 < sig.size() &&
+                    toks[sig[k + 1]].kind == TokKind::Punct &&
+                    toks[sig[k + 1]].text == "["))
+                scopedVars.push_back(
+                    {toks[sig[k]].text, k, enclosingScopeEnd(k), false});
+            }
+          }
+        }
+
+        if (t.text == "[" && si >= 1 && !inAggregateBody() &&
+            toks[sig[si - 1]].kind == TokKind::Identifier) {
+          bool isDecl = isArrayDeclaratorBracket(toks, sig, si, typeNames);
+          if (!isDecl) {
+            for (int k = static_cast<int>(si) - 2; k >= 0; --k) {
+              const Token &u = toks[sig[k]];
+              if (u.kind == TokKind::Punct &&
+                  (u.text == ";" || u.text == "{" || u.text == "}" ||
+                   u.text == "(" || u.text == ",")) {
+                isDecl = true;
+                break;
+              }
+              if (u.kind == TokKind::Punct &&
+                  (u.text == ")" || u.text == "]" || u.text == "["))
+                break;
+            }
+          }
+          if (isDecl) {
+            // In C, array syntax in a function parameter (`void f(int a[4])`)
+            // decays to a pointer and CAN be NULL at runtime.
+            const bool isParam = bStack.empty() && !pStack.empty();
+            scopedVars.push_back({toks[sig[si - 1]].text, si - 1,
+                                  enclosingScopeEnd(si - 1), !isParam});
+          }
+        }
+      }
+    }
+  }
+
+  auto isScopedArrayAt = [&](const std::string &name, size_t useSi) -> bool {
+    size_t bestStart = kNPos;
+    bool bestIsArray = false;
+    for (const auto &sv : scopedVars) {
+      if (sv.name == name && sv.startSi <= useSi && useSi <= sv.endSi &&
+          (bestStart == kNPos || sv.startSi >= bestStart)) {
+        bestStart = sv.startSi;
+        bestIsArray = sv.isArray;
+      }
+    }
+    return bestStart != kNPos && bestIsArray;
+  };
+
+  std::set<size_t> seen;
+  auto tryAdd = [&](size_t baseSi) {
+    const Token &b = toks[sig[baseSi]];
+    if (b.kind != TokKind::Identifier)
+      return;
+    // An array in this lexical scope is never a NULL pointer at a dereference
+    // site; binding one with __typeof__ would emit an invalid array
+    // initializer in the C.
+    if (isScopedArrayAt(b.text, baseSi) || arrayLengths.count(b.text))
+      return;
+    // A bare `name[...]` base may be an array declared in an included header;
+    // binding it with __typeof__ would emit an invalid array initializer.
+    // Subscript safety is already handled by the bounds instrumentation.
+    if (baseSi + 1 < sig.size()) {
+      const Token &after = toks[sig[baseSi + 1]];
+      if (after.kind == TokKind::Punct && after.text == "[")
+        return;
+    }
+    if (seen.count(b.offset) != 0)
+      return;
+    if (hasObviousNonnullGuard(toks, sig, baseSi, b.text))
+      return;
+    seen.insert(b.offset);
+    sites.push_back(NonnullSite{b.offset, endOfToken(b), b.text});
+  };
+
+  for (size_t si = 0; si < sig.size(); ++si) {
+    const Token &t = toks[sig[si]];
+    if (t.kind != TokKind::Punct)
+      continue;
+
+    if (t.text == "->") {
+      if (si == 0)
+        continue;
+      const Token &base = toks[sig[si - 1]];
+      if (base.kind != TokKind::Identifier)
+        continue;
+      if (si >= 2) {
+        const std::string &bt = toks[sig[si - 2]].text;
+        if (bt == "." || bt == "->" || isDeclTypeTok(bt))
+          continue; // struct field / declarator, not a standalone pointer
+      }
+      tryAdd(si - 1);
+      continue;
+    }
+
+    if (t.text == "*") {
+      if (si == 0 || si + 1 >= sig.size())
+        continue;
+      const Token &prev = toks[sig[si - 1]];
+      // `int *p;` is a declaration; `a * b` is multiplication.  `canEndFactor`
+      // also treats unary operators (return, sizeof, ...) as non-factors.
+      if (canEndFactor(prev) || isDeclTypeTok(prev.text) ||
+          prev.text == "sizeof" || prev.text == "&")
+        continue;
+      if (isDeclaratorStarRun(toks, sig, si))
+        continue; // `char **argv`, `int **q`, `struct T **p`
+      const Token &base = toks[sig[si + 1]];
+      if (base.kind != TokKind::Identifier)
+        continue; // nested/parenthesised derefs: leave as-is
+      if (si + 2 < sig.size()) {
+        const Token &after = toks[sig[si + 2]];
+        if (after.kind == TokKind::Punct &&
+            (after.text == "." || after.text == "->" || after.text == "[" ||
+             after.text == "(" || after.text == ")" || after.text == "++" ||
+             after.text == "--"))
+          continue;
+      }
+      tryAdd(si + 1);
+      continue;
+    }
+
+    if (t.text == "[") {
+      if (si == 0 || si + 1 >= sig.size())
+        continue;
+      if (toks[sig[si + 1]].kind == TokKind::Punct &&
+          toks[sig[si + 1]].text == "]")
+        continue; // empty subscript: declaration / incomplete type
+      const Token &base = toks[sig[si - 1]];
+      if (base.kind != TokKind::Identifier)
+        continue;
+      if (si >= 2) {
+        const Token &before = toks[sig[si - 2]];
+        const std::string &bt = before.text;
+        if (isDeclTypeTok(bt) || bt == "typedef" || bt == "*" || bt == "." ||
+            bt == "->")
+          continue; // declarator or struct field, not a pointer variable
+        if (si >= 3 && before.kind == TokKind::Identifier) {
+          const Token &pre = toks[sig[si - 3]];
+          if (pre.kind == TokKind::Identifier &&
+              (pre.text == "struct" || pre.text == "union" ||
+               pre.text == "enum"))
+            continue; // `struct S arr[N];` declares an array
+        }
+        if (bt == ",") {
+          size_t stmtStart = 0;
+          for (size_t k = si - 2; k > 0; --k) {
+            const Token &u = toks[sig[k]];
+            if (u.kind == TokKind::Punct &&
+                (u.text == ";" || u.text == "{" || u.text == "}")) {
+              stmtStart = k + 1;
+              break;
+            }
+          }
+          if (stmtStart < si && isDeclTypeTok(toks[sig[stmtStart]].text))
+            continue; // declarator list: `int a[N], b[M];`
+        }
+      }
+      tryAdd(si - 1);
+      continue;
+    }
+  }
+  return sites;
+}
+
+// ---------------------------------------------------------------------------
+// Safe-mode lowering of C99 variable-length arrays.
+//
+// Rationale: Safe mode promises that an allocation whose element count is only
+// known at run time is bounded and deterministically released.  Rejecting a
+// plain `T a[n];` out of hand forbids ordinary C99 code for no safety benefit:
+// the runtime already exposes cplus_alloc_array (overflow-checked count *
+// element-size) and cplus_release.  We therefore lower the VLA declaration in
+// the *final* lowered C to a managed allocation with the same element type and
+// count, preserving the identifier so bounds instrumentation and all later
+// uses keep working.  An explicit `cplus_release(name);` is emitted at every
+// scope exit that ends the array's lifetime, plus before each `return`.
+//
+// This helper is called only from instrumentDynamicArrayBounds(), which the
+// driver invokes exclusively in Safe mode.  LEGACY mode never reaches it, so
+// its byte-for-byte source preservation is untouched.  No C99 inline, no VLA
+// and no new subsystem are introduced -- only declarations of the existing
+// runtime helpers in the generated prelude.
+// ---------------------------------------------------------------------------
+
+static bool isVlaTypeWord(const Token &t) {
+  if (t.kind != TokKind::Identifier)
+    return false;
+  static const std::set<std::string> kWords = {
+      "int",      "char",     "short",    "long",     "float",
+      "double",   "void",     "unsigned", "signed",   "struct",
+      "union",    "enum",     "size_t",   "ptrdiff_t", "_Bool",
+      "int8_t",   "uint8_t",  "int16_t",  "uint16_t", "int32_t",
+      "uint32_t", "int64_t",  "uint64_t", "intptr_t", "uintptr_t"};
+  return kWords.count(t.text) != 0;
+}
+
+static bool isVlaQualifier(const Token &t) {
+  return t.kind == TokKind::Identifier &&
+         (t.text == "const" || t.text == "volatile" || t.text == "_Atomic");
+}
+
+/// Constant-expression exclusions mirror the old static check: numeric
+/// extents, sizeof/alignof/offsetof subexpressions, and ALL-CAPS macro
+/// constants are not VLAs, but compound expressions containing any non-constant
+/// identifier or function call (e.g. `2 * n`, `N + n`, `sizeof(int) * n`,
+/// `foo() + 1`) are runtime VLAs and must be lowered.
+static bool isDynamicVlaExtent(const TokenStream &ts, size_t inner, size_t rb) {
+  if (inner >= rb)
+    return false;
+  for (size_t k = inner; k < rb; k = ts.nextSig(k)) {
+    const Token &t = ts[k];
+    if (t.kind == TokKind::Number || t.kind == TokKind::CharLit ||
+        t.kind == TokKind::Punct)
+      continue;
+    if (t.kind != TokKind::Identifier)
+      return true;
+    if (t.text == "sizeof" || t.text == "_Alignof" || t.text == "alignof" ||
+        t.text == "offsetof") {
+      size_t lp = ts.nextSig(k);
+      if (lp < rb && ts.isPunct(lp, "(")) {
+        size_t rp = ts.matchParen(lp);
+        if (rp != kNPos && rp < rb) {
+          k = rp;
+          continue;
+        }
+      }
+      return true;
+    }
+    if (isVlaTypeWord(t) || isVlaQualifier(t))
+      continue;
+    bool macroLike = !t.text.empty();
+    bool hasUpper = false;
+    for (char c : t.text) {
+      if (c >= 'A' && c <= 'Z')
+        hasUpper = true;
+      else if (!((c >= '0' && c <= '9') || c == '_'))
+        macroLike = false;
+    }
+    if (macroLike && hasUpper)
+      continue;
+    return true;
+  }
+  return false;
+}
+
+/// The token immediately before a declarator name must belong to a
+/// declaration specifier (type word, qualifier, '*' or comma).  This rejects
+/// ordinary subscripts such as `f(a[n])`, `return a[n]` and `x = a[n]` while
+/// accepting `int a[n]`, `int *p[n]` and `int a[n], b[m]`.
+static bool hasDeclarationPrefix(const TokenStream &ts, size_t name) {
+  size_t p = ts.prevSig(name);
+  if (p == kNPos)
+    return false;
+  if (isVlaTypeWord(ts[p]) || isVlaQualifier(ts[p]) || ts.isPunct(p, "*"))
+    return true;
+  if (ts.isPunct(p, ",")) {
+    // A comma separates declarators only at file/block scope.  Inside `(` it
+    // is a call-argument separator (`f(x, a[i])`), i.e. a real subscript.
+    int depth = 0;
+    for (size_t k = 0; k < p; ++k) {
+      if (ts.isPunct(k, "(")) ++depth;
+      else if (ts.isPunct(k, ")")) --depth;
+    }
+    return depth == 0;
+  }
+  if (ts[p].kind == TokKind::Identifier) {
+    size_t pp = ts.prevSig(p);
+    if (pp != kNPos && (ts.isIdent(pp, "struct") || ts.isIdent(pp, "union") ||
+                        ts.isIdent(pp, "enum")))
+      return true; // struct/union/enum tag before the declarator
+  }
+  return false;
+}
+
+/// Lower every single-dimensional VLA declaration in `source`, appending text
+/// edits to `out`.  Returns true when at least one VLA was lowered.  `source`
+/// is already the fully lowered C (post-RAII), so the edits operate on final
+/// tokens and cannot disturb earlier passes.
+static bool lowerVariableLengthArrays(
+    const std::string &source, std::vector<SafetyInsertion> &out,
+    std::map<std::string, std::string> &vlaCounts) {
+  std::vector<Token> toks = lexCPlus(source);
+  TokenStream ts(toks);
+
+  // Pre-collect `label:` positions per top-level function brace so `goto` can
+  // release every live VLA whose declaring `{` scope it exits.
+  std::map<std::pair<size_t, std::string>, std::vector<size_t>> labelBraces;
+  {
+    std::vector<size_t> bStack;
+    size_t pDepth = 0;
+    for (size_t i = 0; i < ts.size(); ++i) {
+      const Token &t = toks[i];
+      if (t.kind == TokKind::Whitespace || t.kind == TokKind::Comment)
+        continue;
+      if (ts.isPunct(i, "#")) {
+        size_t e = i;
+        while (e < ts.size() && toks[e].line == t.line)
+          ++e;
+        i = e > i ? e - 1 : i;
+        continue;
+      }
+      if (ts.isPunct(i, "{")) { bStack.push_back(i); continue; }
+      if (ts.isPunct(i, "}")) { if (!bStack.empty()) bStack.pop_back(); continue; }
+      if (ts.isPunct(i, "(")) { ++pDepth; continue; }
+      if (ts.isPunct(i, ")")) { if (pDepth) --pDepth; continue; }
+      if (pDepth == 0 && !bStack.empty() && t.kind == TokKind::Identifier &&
+          t.text != "case" && t.text != "default" &&
+          ts.isPunct(ts.nextSig(i), ":")) {
+        size_t prev = ts.prevSig(i);
+        if (prev != kNPos && (ts.isPunct(prev, ";") || ts.isPunct(prev, "{") ||
+                              ts.isPunct(prev, "}") || ts.isPunct(prev, ":")))
+          labelBraces[{bStack.front(), t.text}] = bStack;
+      }
+    }
+  }
+
+  struct LiveVla {
+    size_t scope;
+    size_t scopeOpenTok;
+    std::string release;
+  };
+  struct LoopFrame {
+    size_t depth;
+    bool isSwitch;
+  };
+  std::vector<LiveVla> live;
+  std::vector<size_t> braceStack;
+  std::vector<LoopFrame> loops;
+  int pendingLoop = 0; // 1 = loop, 2 = switch
+  size_t pendingLoopParen = 0;
+  // Stack of outer brace depths for `do` bodies awaiting their trailing
+  // `while`. A nested `while` inside the body must push its own loop frame
+  // instead of consuming the outer `do`'s trailing condition.
+  std::vector<size_t> doAwaitingWhile;
+  std::set<std::string> loweredNames;
+  std::vector<SafetyInsertion> edits;
+  std::vector<SafetyInsertion> sizeofEdits;
+  size_t brace = 0, paren = 0;
+  bool haveVla = false;
+
+  for (size_t i = 0; i < ts.size(); ++i) {
+    const Token &t = ts[i];
+    if (t.kind == TokKind::Whitespace || t.kind == TokKind::Comment)
+      continue;
+    // Preprocessor directives may hold unbalanced braces in conditional
+    // compilation; the token stream cannot resolve them, so skip the line.
+    if (ts.isPunct(i, "#")) {
+      size_t e = i;
+      while (e < ts.size() && toks[e].line == t.line)
+        ++e;
+      i = e > i ? e - 1 : i;
+      continue;
+    }
+    if (ts.isPunct(i, "{")) {
+      braceStack.push_back(i);
+      brace = braceStack.size();
+      if (pendingLoop != 0 && paren == pendingLoopParen) {
+        loops.push_back({brace, pendingLoop == 2});
+        pendingLoop = 0;
+      }
+      continue;
+    }
+    if (ts.isPunct(i, "}")) {
+      // Reverse declaration order, innermost scopes first.
+      for (size_t k = live.size(); k > 0; --k)
+        if (live[k - 1].scope == brace)
+          edits.push_back({t.offset, 0, 0, live[k - 1].release, 0});
+      std::vector<LiveVla> kept;
+      for (const auto &v : live)
+        if (v.scope != brace)
+          kept.push_back(v);
+      live.swap(kept);
+      if (!loops.empty() && loops.back().depth == brace)
+        loops.pop_back();
+      if (!braceStack.empty()) {
+        braceStack.pop_back();
+        brace = braceStack.size();
+      }
+      continue;
+    }
+    if (ts.isPunct(i, "(")) { ++paren; continue; }
+    if (ts.isPunct(i, ")")) { if (paren) --paren; continue; }
+    if (ts.isPunct(i, ";")) {
+      if (pendingLoop != 0 && paren == pendingLoopParen)
+        pendingLoop = 0;
+      continue;
+    }
+    if (brace > 0 && (ts.isIdent(i, "for") || ts.isIdent(i, "while") ||
+                      ts.isIdent(i, "switch") || ts.isIdent(i, "do"))) {
+      bool consumedDoWhile = false;
+      if (ts.isIdent(i, "while") && !doAwaitingWhile.empty() &&
+          brace == doAwaitingWhile.back()) {
+        doAwaitingWhile.pop_back();
+        consumedDoWhile = true;
+      }
+      if (!consumedDoWhile) {
+        pendingLoop = ts.isIdent(i, "switch") ? 2 : 1;
+        pendingLoopParen = paren;
+        if (ts.isIdent(i, "do") && brace > 0)
+          // At the trailing `while` the body's brace has closed, so `brace`
+          // is the same outer depth as at the `do` token.
+          doAwaitingWhile.push_back(brace);
+      }
+      continue;
+    }
+    if ((ts.isIdent(i, "break") || ts.isIdent(i, "continue")) &&
+        !live.empty() && !loops.empty()) {
+      size_t semi = ts.statementEnd(i);
+      if (semi != kNPos && semi < ts.size()) {
+        size_t targetDepth = kNPos;
+        if (ts.isIdent(i, "break")) {
+          targetDepth = loops.back().depth;
+        } else {
+          for (size_t p = loops.size(); p > 0; --p) {
+            if (!loops[p - 1].isSwitch) {
+              targetDepth = loops[p - 1].depth;
+              break;
+            }
+          }
+        }
+        if (targetDepth != kNPos) {
+          std::string rel;
+          for (size_t k = live.size(); k > 0; --k)
+            if (live[k - 1].scope >= targetDepth)
+              rel += live[k - 1].release;
+          if (!rel.empty()) {
+            edits.push_back({t.offset, 0, 0,
+                             "{ " + rel + t.text + "; }",
+                             endOfToken(toks[semi]) - t.offset});
+          }
+        }
+      }
+      continue;
+    }
+    if (ts.isIdent(i, "goto") && !live.empty() && !braceStack.empty()) {
+      size_t lbl = ts.nextSig(i);
+      size_t semi = ts.statementEnd(i);
+      if (lbl < semi && semi != kNPos && semi < ts.size() &&
+          toks[lbl].kind == TokKind::Identifier) {
+        auto it = labelBraces.find({braceStack.front(), toks[lbl].text});
+        std::set<size_t> targetSet;
+        if (it != labelBraces.end())
+          targetSet.insert(it->second.begin(), it->second.end());
+        std::string rel;
+        for (size_t k = live.size(); k > 0; --k) {
+          if (it == labelBraces.end() ||
+              targetSet.count(live[k - 1].scopeOpenTok) == 0)
+            rel += live[k - 1].release;
+        }
+        if (!rel.empty()) {
+          edits.push_back({t.offset, 0, 0,
+                           "{ " + rel + "goto " + toks[lbl].text + "; }",
+                           endOfToken(toks[semi]) - t.offset});
+        }
+      }
+      continue;
+    }
+    if (ts.isIdent(i, "return") && !live.empty()) {
+      // A GNU statement expression keeps the release inside the single
+      // `return` statement (so an unbraced `if (c) return x;` stays intact),
+      // and captures the value BEFORE releasing: releasing first would make
+      // `return a[i];` read freed memory.  For bare `return;` in void
+      // functions, emit `{ cplus_release(...); return; }` with no stray `;`.
+      size_t semi = ts.statementEnd(i);
+      if (semi != kNPos && semi < ts.size()) {
+        std::string rel;
+        for (size_t k = live.size(); k > 0; --k)
+          rel += live[k - 1].release;
+        size_t exprStart = ts.nextSig(i);
+        if (exprStart < semi) {
+          std::string expr =
+              sourceSlice(source, toks[exprStart].offset, toks[semi].offset);
+          size_t b = expr.find_first_not_of(" \t\n\r");
+          size_t e = expr.find_last_not_of(" \t\n\r");
+          expr = b == std::string::npos ? std::string()
+                                        : expr.substr(b, e - b + 1);
+          edits.push_back({toks[exprStart].offset, kNPos, 0,
+                           "({ __typeof__(" + expr +
+                               ") __cplus_vla_ret = (",
+                           0});
+          edits.push_back({toks[semi].offset, kNPos, 2,
+                           "); " + rel + "__cplus_vla_ret; })", 0});
+        } else {
+          edits.push_back({t.offset, 0, 0, "{ " + rel + "return; }",
+                           endOfToken(toks[semi]) - t.offset});
+        }
+      }
+      continue;
+    }
+    if (t.kind != TokKind::Identifier || brace == 0 || paren != 0)
+      continue;
+    if (!hasDeclarationPrefix(ts, i))
+      continue;
+    size_t lb = ts.nextSig(i);
+    if (!ts.isPunct(lb, "["))
+      continue;
+    size_t rb = ts.matchBracket(lb);
+    if (rb == kNPos || rb == ts.nextSig(lb))
+      continue;
+    // Multi-dimensional VLAs need pointer-to-row types and a VLA element size
+    // in sizeof; leave them to the STRICT policy rather than lower them wrong.
+    if (ts.isPunct(ts.nextSig(rb), "["))
+      continue;
+    size_t inner = ts.nextSig(lb);
+    if (!isDynamicVlaExtent(ts, inner, rb))
+      continue;
+
+    // Recover the declaration specifiers from the start of the statement.
+    size_t start = i;
+    while (start > 0) {
+      size_t p = ts.prevSig(start);
+      if (p == kNPos)
+        break;
+      if (ts.isPunct(p, ";") || ts.isPunct(p, "{") || ts.isPunct(p, "}")) {
+        start = ts.nextSig(p);
+        break;
+      }
+      start = p;
+    }
+    size_t lastComma = kNPos;
+    for (size_t k = start; k < i; ++k)
+      if (ts.isPunct(k, ","))
+        lastComma = k;
+    std::string base;
+    int stars = 0;
+    for (size_t k = start; k < i;) {
+      if (ts.isPunct(k, ",") || ts.isPunct(k, "[") || ts.isPunct(k, "]")) {
+        ++k;
+        continue;
+      }
+      if (k > lastComma && ts.isPunct(k, "*")) {
+        ++stars;
+        ++k;
+        continue;
+      }
+      if (isVlaQualifier(ts[k])) { ++k; continue; } // strip from the cast
+      if (isVlaTypeWord(ts[k])) {
+        base += ts[k].text + " ";
+        if (ts.isIdent(k, "struct") || ts.isIdent(k, "union") ||
+            ts.isIdent(k, "enum")) {
+          size_t tag = ts.nextSig(k);
+          if (tag < i && toks[tag].kind == TokKind::Identifier) {
+            base += toks[tag].text + " ";
+            k = tag;
+          }
+        }
+        ++k;
+        continue;
+      }
+      ++k;
+    }
+    if (base.empty())
+      continue; // not a real declaration after all
+
+    std::string count = sourceSlice(source, endOfToken(toks[lb]),
+                                    toks[rb].offset);
+    size_t b = count.find_first_not_of(" \t\n\r");
+    size_t e = count.find_last_not_of(" \t\n\r");
+    count = b == std::string::npos ? std::string()
+                                   : count.substr(b, e - b + 1);
+    if (count.empty())
+      continue;
+
+    const std::string name = t.text;
+    // Bind the extent exactly once.  The temporary is declared immediately
+    // before the VLA declaration (still a declaration, so C89-valid) and the
+    // allocation reads the temporary rather than re-evaluating the original
+    // expression.  Reusing `n` directly would be wrong when it changes value
+    // later, and would double-evaluate side effects such as `n++`.
+    const std::string countVar =
+        "__cplus_vla_count_" + std::to_string(vlaCounts.size()) + "_" + name;
+    edits.push_back({toks[start].offset, 0, 0,
+                     "size_t " + countVar + " = (size_t)(" + count + "); ", 0});
+    const std::string elem = base + std::string(stars, '*');
+    const std::string cast = base + std::string(stars + 1, '*');
+    // `T a[n];` -> `size_t tmp = (size_t)(n); T *a = (T *)cplus_alloc_array(tmp, sizeof(T));`
+    edits.push_back({t.offset, 0, 0, " *", 0});
+    edits.push_back({toks[lb].offset, 0, 0,
+                     " = (" + cast + ")cplus_alloc_array(" + countVar +
+                         ", sizeof(" + elem + "))",
+                     endOfToken(toks[rb]) - toks[lb].offset});
+    // Export the runtime extent so instrumentDynamicArrayBounds() can guard
+    // every `a[index]` with the very same count the allocation used.
+    vlaCounts[name] = countVar;
+    live.push_back({brace, braceStack.empty() ? 0 : braceStack.back(),
+                    "cplus_release((void *)" + name + "); "});
+    loweredNames.insert(name);
+    haveVla = true;
+  }
+
+  // `sizeof(a)` on a lowered VLA must report the allocation's byte count, not
+  // sizeof(pointer).  cplus_alloc_bytes() is the existing introspection helper
+  // for exactly this; it aborts if the pointer is not a live C+ allocation.
+  for (size_t i = 0; i + 3 < ts.size(); ++i) {
+    if (!ts.isIdent(i, "sizeof") || !ts.isPunct(ts.nextSig(i), "("))
+      continue;
+    size_t nm = ts.nextSig(ts.nextSig(i));
+    if (nm >= ts.size() || toks[nm].kind != TokKind::Identifier ||
+        !loweredNames.count(toks[nm].text))
+      continue;
+    size_t rp = ts.nextSig(nm);
+    if (!ts.isPunct(rp, ")"))
+      continue;
+    sizeofEdits.push_back(
+        {ts[i].offset, 0, 0, "cplus_alloc_bytes(" + toks[nm].text + ")",
+         endOfToken(toks[rp]) - ts[i].offset});
+  }
+
+  edits.insert(edits.end(), sizeofEdits.begin(), sizeofEdits.end());
+  out.insert(out.end(), edits.begin(), edits.end());
+  return haveVla;
+}
+
+// ---------------------------------------------------------------------------
+// Alias-extent recovery for pointer subscripts.
+//
+// Fixed-array subscripts are handled by name above, but an access through a
+// pointer that provably points into a tracked object (`int a[4]; int *p=a;
+// p[i]`) previously received no runtime guard at all.  The AST pass records
+// such facts in CheckedBoundsSite, but no producer wires that registry today;
+// this lexical pass recovers the same facts from the lowered C so no
+// recorded site is required.  Only objects whose extent is *proved* enter the
+// fact table, so unrelated pointers are never blanket-wrapped.
+// ---------------------------------------------------------------------------
+
+struct AliasExtent {
+  std::string count; ///< C expression for the element count
+  std::string name;  ///< diagnostic name
+};
+
+static std::string trimAlias(const std::string &s) {
+  size_t b = s.find_first_not_of(" \t\n\r");
+  if (b == std::string::npos) return std::string();
+  size_t e = s.find_last_not_of(" \t\n\r");
+  return s.substr(b, e - b + 1);
+}
+
+static std::string sliceAlias(const std::string &src,
+                              const std::vector<Token> &toks, size_t from,
+                              size_t to) {
+  if (from >= to || from >= toks.size() || to > toks.size())
+    return std::string();
+  size_t b = toks[from].offset;
+  size_t e = toks[to - 1].offset + toks[to - 1].text.size();
+  return trimAlias(src.substr(b, e - b));
+}
+
+/// Skip a leading run of C casts `(type)` so an aliasing initialiser such as
+/// `p = (int *)v` resolves to `v`.
+static size_t skipAliasCasts(const TokenStream &ts, size_t from, size_t to) {
+  size_t i = from;
+  while (i < to && ts.isPunct(i, "(")) {
+    size_t p = i + 1, depth = 1;
+    while (p < to && depth) {
+      if (ts.isPunct(p, "(")) ++depth;
+      else if (ts.isPunct(p, ")")) --depth;
+      ++p;
+    }
+    if (depth) break;
+    bool typey = false;
+    for (size_t k = i + 1; k + 1 < p; ++k)
+      if (ts[k].kind == TokKind::Identifier || ts.isPunct(k, "*")) {
+        typey = true;
+        break;
+      }
+    if (!typey) break;
+    i = p;
+    while (i < to && ts.isTrivia(i)) ++i;
+  }
+  return i;
+}
+
+/// Index of the first top-level ',' or ';' in [from, limit), else `limit`.
+static size_t topLevelEnd(const TokenStream &ts, size_t from, size_t limit) {
+  int par = 0, brk = 0, brc = 0;
+  for (size_t i = from; i < limit; ++i) {
+    if (!ts.isPunct(i, "(") && !ts.isPunct(i, ")") && !ts.isPunct(i, "[") &&
+        !ts.isPunct(i, "]") && !ts.isPunct(i, "{") && !ts.isPunct(i, "}") &&
+        !ts.isPunct(i, ",") && !ts.isPunct(i, ";"))
+      continue;
+    if (ts.isPunct(i, "(")) ++par;
+    else if (ts.isPunct(i, ")")) { if (par > 0) --par; }
+    else if (ts.isPunct(i, "[")) ++brk;
+    else if (ts.isPunct(i, "]")) { if (brk > 0) --brk; }
+    else if (ts.isPunct(i, "{")) ++brc;
+    else if (ts.isPunct(i, "}")) { if (brc > 0) --brc; }
+    else if (par == 0 && brk == 0 && brc == 0) return i;
+  }
+  return limit;
+}
+
+/// Token range of argument `index` of the call whose '(' is `lp`.
+static std::pair<size_t, size_t> callArgRange(const TokenStream &ts, size_t lp,
+                                              size_t rp, unsigned index) {
+  unsigned arg = 0;
+  size_t start = ts.nextSig(lp);
+  int par = 0, brk = 0, brc = 0;
+  for (size_t i = start; i < rp; ++i) {
+    if (ts.isPunct(i, "(")) ++par;
+    else if (ts.isPunct(i, ")")) --par;
+    else if (ts.isPunct(i, "[")) ++brk;
+    else if (ts.isPunct(i, "]")) --brk;
+    else if (ts.isPunct(i, "{")) ++brc;
+    else if (ts.isPunct(i, "}")) --brc;
+    else if (ts.isPunct(i, ",") && par == 0 && brk == 0 && brc == 0) {
+      if (arg++ == index) return {start, i};
+      start = ts.nextSig(i);
+    }
+  }
+  if (arg == index && start < rp) return {start, rp};
+  return {kNPos, kNPos};
+}
+
+/// Derive an element count from an allocation argument expression.
+static std::string allocCount(const std::string &countText,
+                              const std::string &name, bool hasSizeof) {
+  std::string c = trimAlias(countText);
+  if (c.empty())
+    return std::string();
+  if (!hasSizeof)
+    return "((size_t)(" + c + ") / sizeof(*" + name + "))";
+  // `n * sizeof(T)` / `n*sizeof(T)`: take the factor before the last '*'
+  // that precedes sizeof.
+  size_t sp = c.find("sizeof");
+  size_t star = c.rfind('*', sp == std::string::npos ? c.size() : sp);
+  if (star != std::string::npos && star > 0)
+    return trimAlias(c.substr(0, star));
+  return c;
+}
+
+static bool resolveAliasExtent(
+    const std::string &src, const std::vector<Token> &toks,
+    const TokenStream &ts, size_t from, size_t end,
+    const std::map<std::string, AliasExtent> &facts,
+    const std::map<std::string, AliasExtent> &members,
+    const std::map<std::string, AliasExtent> &rows,
+    const std::map<std::string, std::string> &ptrAlias, AliasExtent &out) {
+  if (from >= end || from >= toks.size())
+    return false;
+  from = skipAliasCasts(ts, from, end);
+  if (from >= end)
+    return false;
+
+  // Trailing interior offset: `a + 4` / `a - 2`.
+  std::string adjust;
+  size_t last = ts.prevSig(end - 1);
+  if (last != kNPos && last > from && toks[last].kind == TokKind::Number) {
+    size_t op = ts.prevSig(last);
+    if (op != kNPos && op > from &&
+        (ts.isPunct(op, "+") || ts.isPunct(op, "-"))) {
+      adjust = std::string(ts.isPunct(op, "-") ? " - " : " + ") +
+               toks[last].text;
+      end = op;
+    }
+  }
+
+  bool found = false;
+  if (ts.isPunct(from, "&")) {
+    // `int **q = &p` : dereferencing q yields p's extent.
+    size_t nm = ts.nextSig(from);
+    if (nm < end && toks[nm].kind == TokKind::Identifier &&
+        ts.nextSig(nm) >= end) {
+      auto a = ptrAlias.find(toks[nm].text);
+      if (a != ptrAlias.end()) {
+        auto f = facts.find(a->second);
+        if (f != facts.end()) { out = f->second; found = true; }
+      }
+    }
+  } else if (toks[from].kind == TokKind::Identifier) {
+    const std::string name = toks[from].text;
+    if (ts.prevSig(end) == from) { // exactly one significant token
+      auto f = facts.find(name);
+      if (f != facts.end()) { out = f->second; found = true; }
+    }
+    if (!found) {
+      size_t op = ts.nextSig(from);
+      if (op < end && ts.isPunct(op, "[") && ts.nextSig(op) < end) {
+        // `m[i]` selects a row of a multidimensional array.
+        auto r = rows.find(name);
+        if (r != rows.end()) { out = r->second; found = true; }
+      }
+    }
+    if (!found) {
+      // Member access `s.a` / `s->a` / `o.in.x`.
+      size_t id = ts.prevSig(end - 1);
+      if (id != kNPos && toks[id].kind == TokKind::Identifier) {
+        size_t dot = ts.prevSig(id);
+        if (dot != kNPos && (ts.isPunct(dot, ".") || ts.isPunct(dot, "->"))) {
+          auto m = members.find(toks[id].text);
+          if (m != members.end()) { out = m->second; found = true; }
+        }
+      }
+    }
+  }
+  if (!found)
+    return false;
+  if (!adjust.empty()) {
+    out.count = "((" + out.count + ")" + adjust + ")";
+    out.name += adjust;
+  }
+  return true;
+}
+
+/// Collect runtime bounds sites for pointer aliases of tracked objects.
+static void collectAliasBoundsSites(
+    const std::string &src, const std::map<std::string, size_t> &arrayLengths,
+    const std::map<std::string, std::string> &vlaCounts,
+    std::vector<CheckedBoundsSite> &out) {
+  const std::vector<Token> toks = lexCPlus(src);
+  TokenStream ts(toks);
+  std::vector<size_t> sig;
+  for (size_t i = 0; i < toks.size(); ++i)
+    if (!isTriviaTok(toks[i]) && toks[i].kind != TokKind::EndOfFile)
+      sig.push_back(i);
+
+  std::map<std::string, AliasExtent> facts, members, rows;
+  std::map<std::string, std::string> ptrAlias;
+  std::map<std::string, std::string> typedefCounts;
+  std::set<std::string> countParams = {"n", "N", "count", "cnt", "len",
+                                       "length", "size", "num"};
+
+  // Fixed-size and member array declarations.
+  for (size_t si = 1; si < sig.size(); ++si) {
+    if (!ts.isPunct(sig[si], "["))
+      continue;
+    size_t prev = ts.prevSig(sig[si]);
+    if (prev == kNPos || toks[prev].kind != TokKind::Identifier)
+      continue;
+    if (!hasDeclarationPrefix(ts, prev))
+      continue;
+    size_t rb = ts.matchBracket(sig[si]);
+    if (rb == kNPos || rb == ts.nextSig(sig[si]))
+      continue;
+    const std::string count = sliceAlias(src, toks, ts.nextSig(sig[si]), rb);
+    if (count.empty())
+      continue;
+    const std::string name = toks[prev].text;
+    AliasExtent e{count, name};
+    facts[name] = e;
+    members[name] = e;
+    auto al = arrayLengths.find(name);
+    if (al != arrayLengths.end() && count.find_first_not_of("0123456789") !=
+                                        std::string::npos)
+      facts[name].count = std::to_string(al->second);
+    // `int m[2][3]` : m[i] is a row of 3 elements.
+    size_t rb2 = ts.nextSig(rb);
+    if (rb2 < toks.size() && ts.isPunct(rb2, "[")) {
+      size_t close2 = ts.matchBracket(rb2);
+      if (close2 != kNPos && close2 > rb2)
+        rows[name] =
+            AliasExtent{sliceAlias(src, toks, ts.nextSig(rb2), close2),
+                        name + "[]"};
+    }
+  }
+
+  // Typedef arrays: `typedef int I4[4]; I4 a;`
+  for (size_t si = 0; si + 1 < sig.size(); ++si) {
+    if (!ts.isIdent(sig[si], "typedef"))
+      continue;
+    for (size_t k = si + 1; k + 1 < sig.size(); ++k) {
+      if (toks[sig[k]].kind != TokKind::Identifier)
+        continue;
+      size_t lb = ts.nextSig(sig[k]);
+      if (lb >= toks.size() || !ts.isPunct(lb, "["))
+        continue;
+      size_t rb = ts.matchBracket(lb);
+      if (rb == kNPos || rb == ts.nextSig(lb))
+        continue;
+      typedefCounts[toks[sig[k]].text] =
+          sliceAlias(src, toks, ts.nextSig(lb), rb);
+      break;
+    }
+  }
+
+  // VLAs are lowered to cplus_alloc_array with a bound count temporary.
+  for (const auto &v : vlaCounts)
+    facts[v.first] = AliasExtent{v.second, v.first};
+
+  // Assignments and allocation calls.
+  for (size_t si = 0; si < sig.size(); ++si) {
+    size_t eq = sig[si];
+    if (!ts.isPunct(eq, "="))
+      continue;
+    size_t lhs = ts.prevSig(eq);
+    if (lhs == kNPos || toks[lhs].kind != TokKind::Identifier)
+      continue;
+    // Pointer-to-array declarator `int (*row)[3] = m`.
+    if (ts.isPunct(lhs, "]")) {
+      size_t k = lhs, star = ts.prevSig(k);
+      while (star != kNPos && !ts.isPunct(star, "*")) {
+        k = star;
+        star = ts.prevSig(k);
+      }
+      if (star != kNPos && toks[k].kind == TokKind::Identifier)
+        lhs = k;
+    }
+    if (toks[lhs].kind != TokKind::Identifier)
+      continue;
+    const std::string name = toks[lhs].text;
+    size_t semi = ts.statementEnd(eq);
+    if (semi == kNPos || semi > toks.size())
+      semi = toks.size();
+    size_t rhs = ts.nextSig(eq);
+    size_t rend = topLevelEnd(ts, rhs, semi);
+    if (rhs >= rend)
+      continue;
+
+    AliasExtent ext;
+    if (resolveAliasExtent(src, toks, ts, rhs, rend, facts, members, rows,
+                           ptrAlias, ext)) {
+      facts[name] = ext;
+      continue;
+    }
+    // `&p` pointer alias.
+    if (ts.isPunct(rhs, "&")) {
+      size_t id = ts.nextSig(rhs);
+      if (id < rend && toks[id].kind == TokKind::Identifier)
+        ptrAlias[name] = toks[id].text;
+      continue;
+    }
+    // Typedef array declarator `I4 a = ...`.
+    size_t before = ts.prevSig(lhs);
+    if (before != kNPos && toks[before].kind == TokKind::Identifier) {
+      auto td = typedefCounts.find(toks[before].text);
+      if (td != typedefCounts.end())
+        facts[name] = AliasExtent{td->second, name};
+    }
+    // Allocation helpers.
+    bool hasSizeof = false;
+    unsigned countArg = 0;
+    for (size_t i = rhs; i < rend; ++i) {
+      if (!ts.isIdent(i, "malloc") && !ts.isIdent(i, "calloc") &&
+          !ts.isIdent(i, "realloc") && !ts.isIdent(i, "cplus_alloc_array") &&
+          !ts.isIdent(i, "cplus_new_array"))
+        continue;
+      size_t lp = ts.nextSig(i);
+      if (lp >= rend || !ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos || rp >= rend)
+        continue;
+      if (ts.isIdent(i, "calloc")) { countArg = 0; hasSizeof = true; }
+      else if (ts.isIdent(i, "realloc")) { countArg = 1; }
+      else if (ts.isIdent(i, "cplus_alloc_array")) {
+        countArg = 0;
+        hasSizeof = true; // first argument is already an element count
+      } else if (ts.isIdent(i, "cplus_new_array")) {
+        countArg = 1;
+        hasSizeof = true; // (T, N): N is the element count
+      } else {
+        countArg = 0;
+        for (size_t q = lp; q < rp; ++q)
+          if (ts.isIdent(q, "sizeof")) hasSizeof = true;
+      }
+      auto ar = callArgRange(ts, lp, rp, countArg);
+      if (ar.first == kNPos)
+        break;
+      const std::string c = allocCount(sliceAlias(src, toks, ar.first, ar.second),
+                                       name, hasSizeof);
+      if (!c.empty())
+        facts[name] = AliasExtent{c, name};
+      break;
+    }
+  }
+
+  // Interior pointer increments: `p++` / `++p` / `p += K`.
+  for (size_t si = 0; si < sig.size(); ++si) {
+    size_t i = sig[si];
+    std::string name;
+    long long k = 1;
+    if (ts.isPunct(i, "++") || ts.isPunct(i, "--")) {
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos || toks[prev].kind != TokKind::Identifier)
+        continue;
+      name = toks[prev].text;
+      if (ts.isPunct(i, "--")) k = -1;
+    } else if (ts.isPunct(i, "+=") || ts.isPunct(i, "-=")) {
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos || toks[prev].kind != TokKind::Identifier)
+        continue;
+      name = toks[prev].text;
+      size_t nx = ts.nextSig(i);
+      if (nx < toks.size() && toks[nx].kind == TokKind::Number) {
+        try { k = std::stoll(toks[nx].text); } catch (...) { continue; }
+      }
+      if (ts.isPunct(i, "-=")) k = -k;
+    }
+    if (name.empty())
+      continue;
+    auto f = facts.find(name);
+    if (f != facts.end())
+      f->second.count = "((" + f->second.count + ")" +
+                        (k >= 0 ? " - " : " + ") +
+                        std::to_string(k >= 0 ? k : -k) + ")";
+  }
+
+  // Call-site argument propagation: `sum(a, n)` gives parameter `p` the
+  // extent of argument `a`.  Parameter names are recovered from definitions.
+  std::map<std::string, std::vector<std::string>> params;
+  for (size_t si = 0; si < sig.size(); ++si) {
+    if (!ts.isPunct(sig[si], "("))
+      continue;
+    size_t rp = ts.matchParen(sig[si]);
+    if (rp == kNPos || rp == ts.nextSig(sig[si]))
+      continue;
+    size_t after = ts.nextSig(rp);
+    if (after >= toks.size() || !ts.isPunct(after, "{"))
+      continue; // function definition only
+    std::vector<std::string> names;
+    for (size_t a = 0;; ++a) {
+      auto ar = callArgRange(ts, sig[si], rp, a);
+      if (ar.first == kNPos)
+        break;
+      size_t id = ar.first;
+      for (size_t q = ar.first; q < ar.second; ++q)
+        if (toks[q].kind == TokKind::Identifier) id = q;
+      names.push_back(toks[id].text);
+    }
+    // Companion count heuristic: a signature with a `n`/`len`/`count`
+    // parameter lends that extent to its other (pointer) parameter.  Names
+    // like the index `i` are deliberately excluded to avoid false guards.
+    std::string cparam;
+    for (const std::string &pn : names)
+      if (countParams.count(pn) != 0) cparam = pn;
+    if (!cparam.empty() && names.size() >= 2) {
+      for (const std::string &pn : names)
+        // A name-keyed companion guess must NEVER overwrite an extent that is
+        // already known from a declaration. In a TU with `int arr[N]` and
+        // `void count(int *arr, int size)`, overwriting facts["arr"] with
+        // "size" made the call site prime(arr) lend the bogus extent "size"
+        // to prime's parameter p, emitting __cplus_bounds_check(i, size)
+        // where `size` is not in scope (real_apps/prime_sieve DEFECT).
+        if (pn != cparam && facts.find(pn) == facts.end()) {
+          facts[pn] = AliasExtent{cparam, pn};
+          break;
+        }
+    }
+    // Record the parameter list under the preceding identifier (function
+    // name) for call-site propagation below.
+    size_t fn = ts.prevSig(sig[si]);
+    if (fn != kNPos && toks[fn].kind == TokKind::Identifier)
+      params[toks[fn].text] = names;
+  }
+  for (const auto &p : params) {
+    // Find calls `name(...)` outside the definition header.
+    for (size_t si = 0; si < sig.size(); ++si) {
+      if (!ts.isIdent(sig[si], p.first.c_str()))
+        continue;
+      size_t lp = ts.nextSig(sig[si]);
+      if (lp >= toks.size() || !ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos)
+        continue;
+      for (size_t a = 0; a < p.second.size(); ++a) {
+        auto ar = callArgRange(ts, lp, rp, a);
+        if (ar.first == kNPos)
+          continue;
+        AliasExtent ext;
+        if (resolveAliasExtent(src, toks, ts, ar.first, ar.second, facts,
+                               members, rows, ptrAlias, ext))
+          facts[p.second[a]] = ext;
+      }
+    }
+  }
+
+  // Emit subscript sites.  `guarded` keeps one guard per index expression;
+  // the fixed-array and VLA passes run earlier and are deduplicated by the
+  // caller through guardedIndexOffsets.
+  std::set<size_t> guarded;
+  auto addSite = [&](size_t indexBegin, size_t close, const AliasExtent &ext) {
+    if (indexBegin == kNPos || close == kNPos || close <= indexBegin)
+      return;
+    if (guarded.count(indexBegin))
+      return;
+    guarded.insert(indexBegin);
+    out.push_back(CheckedBoundsSite{indexBegin, close, close, ext.count,
+                                    ext.name});
+  };
+  for (size_t si = 0; si < sig.size(); ++si) {
+    size_t i = sig[si];
+    // p[i] / row[i] / s.a[i]
+    if (ts.isPunct(i, "[")) {
+      size_t close = ts.matchBracket(i);
+      if (close == kNPos || close == ts.nextSig(i))
+        continue;
+      AliasExtent ext;
+      size_t first = ts.nextSig(i);
+      if (first >= close)
+        continue;
+      if (toks[first].kind == TokKind::Number && ts.nextSig(first) >= close)
+        continue; // constant index: static checker handles it
+      size_t prev = ts.prevSig(i);
+      if (prev == kNPos)
+        continue;
+      // Declaration bracket: skip.
+      if (hasDeclarationPrefix(ts, prev))
+        continue;
+      // `row[1][i]`: second subscript uses the row extent.
+      if (ts.isPunct(prev, "]")) {
+        size_t depth = 0, k = prev + 1;
+        size_t open = kNPos;
+        for (; k > 0; --k) {
+          if (ts.isPunct(k - 1, "]")) ++depth;
+          else if (ts.isPunct(k - 1, "[")) {
+            if (--depth == 0) { open = k - 1; break; }
+          }
+        }
+        if (open != kNPos) {
+          size_t base = ts.prevSig(open);
+          // A multi-dimensional DECLARATOR (`static int grid[H][W]`,
+          // `int board[N][M]`) is not a subscript access. Guarding W here
+          // turns a fixed file-scope array into a VLA and breaks compilation.
+          if (base != kNPos && hasDeclarationPrefix(ts, base))
+            continue;
+          if (base != kNPos && toks[base].kind == TokKind::Identifier) {
+            auto r = rows.find(toks[base].text);
+            if (r != rows.end()) ext = r->second;
+          }
+        }
+      } else if (ts.isPunct(prev, ")")) {
+        // `(*q)[i]` : q is a pointer-to-pointer alias of a tracked object.
+        size_t depth = 0, k = prev + 1, open = kNPos;
+        for (; k > 0; --k) {
+          if (ts.isPunct(k - 1, ")")) ++depth;
+          else if (ts.isPunct(k - 1, "(")) {
+            if (--depth == 0) { open = k - 1; break; }
+          }
+        }
+        if (open != kNPos) {
+          size_t star = ts.nextSig(open);
+          size_t id = ts.nextSig(star);
+          if (ts.isPunct(star, "*") && id < toks.size() &&
+              toks[id].kind == TokKind::Identifier && ts.nextSig(id) >= prev) {
+            auto a = ptrAlias.find(toks[id].text);
+            if (a != ptrAlias.end()) {
+              auto f = facts.find(a->second);
+              if (f != facts.end()) ext = f->second;
+            }
+          }
+        }
+      } else if (toks[prev].kind == TokKind::Identifier) {
+        auto f = facts.find(toks[prev].text);
+        if (f != facts.end()) ext = f->second;
+      }
+      if (!ext.count.empty())
+        addSite(toks[first].offset, toks[close].offset, ext);
+      continue;
+    }
+    // `*(p + i)` : guard the integer operand once.
+    if (!ts.isPunct(i, "*"))
+      continue;
+    size_t lp = ts.nextSig(i);
+    if (lp >= toks.size() || !ts.isPunct(lp, "("))
+      continue;
+    size_t id = ts.nextSig(lp);
+    if (id >= toks.size() || toks[id].kind != TokKind::Identifier)
+      continue;
+    auto f = facts.find(toks[id].text);
+    if (f == facts.end())
+      continue;
+    size_t op = ts.nextSig(id);
+    if (op >= toks.size() || (!ts.isPunct(op, "+") && !ts.isPunct(op, "-")))
+      continue;
+    size_t idx = ts.nextSig(op), rp = ts.nextSig(idx);
+    if (rp >= toks.size() || !ts.isPunct(rp, ")"))
+      continue;
+    AliasExtent ext = f->second;
+    if (ts.isPunct(op, "-"))
+      ext.name += " (negative)";
+    addSite(toks[idx].offset, toks[rp].offset, ext);
+  }
+}
+
+} // namespace
+
+std::string instrumentDynamicArrayBounds(
+    const std::string &source,
+    const std::map<std::string, size_t> &arrayLengths,
+    bool sideTable) {
+  // Merge producer sites with the token-level fallback.  Dedup on the *full*
+  // (begin, op, opLength, end) tuple: nested sites legitimately share `begin`
+  // (e.g. `a+b+c`), so deduping on begin alone would drop required inner
+  // guards.
+  std::vector<CheckedArithmeticSite> arith = checkedArithmeticSites();
+  std::set<std::tuple<size_t, size_t, size_t, size_t>> seenArith;
+  for (const CheckedArithmeticSite &s : arith)
+    seenArith.insert(std::make_tuple(s.begin, s.op, s.opLength, s.end));
+  // Issue #232: compound assignments are recorded by both the AST pass and
+  // the token fallback.  A disagreement in their `end` offsets used to defeat
+  // the full-tuple dedup above (the token scan ran past a for-header into the
+  // loop body) and emit two CPLUS_CMPD_BIN wrappers around one operator.
+  // Keep one site per compound operator, preferring the AST-registered site.
+  std::set<std::tuple<size_t, size_t, size_t>> seenCompoundArith;
+  for (const CheckedArithmeticSite &s : arith)
+    if (s.compound)
+      seenCompoundArith.insert(std::make_tuple(s.begin, s.op, s.opLength));
+  for (CheckedArithmeticSite &s : collectTokenArithmeticSites(source)) {
+    if (s.compound &&
+        !seenCompoundArith.insert(
+             std::make_tuple(s.begin, s.op, s.opLength)).second)
+      continue;
+    if (seenArith.insert(std::make_tuple(s.begin, s.op, s.opLength, s.end))
+            .second)
+      arith.push_back(std::move(s));
+  }
+  std::vector<CheckedBoundsSite> bounds = checkedBoundsSites();
+  // RaiiLowering can emit `cplus_zero(&owner, sizeof(owner))` for an
+  // explicitly invoked destructor.  Those TUs may otherwise have no safety
+  // sites at all, so the declaration need must be part of the early-return
+  // condition (LEGACY never calls this function, so its bytes are untouched).
+  const bool needZeroDecl = source.find("cplus_zero") != std::string::npos;
+  // Plain pointer dereferences are recovered lexically (the AST pass does not
+  // record them).  This pass runs only in Safe mode, so LEGACY source bytes
+  // remain untouched.
+  const std::vector<NonnullSite> nonnullSites =
+      collectNonnullDerefSites(source, arrayLengths);
+  // Safe-mode C99 VLA lowering (see rationale above).  This runs here, and
+  // only here, because the driver calls this function exclusively in Safe
+  // mode; LEGACY byte preservation therefore remains exact.
+  std::vector<SafetyInsertion> vlaEdits;
+  std::map<std::string, std::string> vlaCounts; // VLA name -> runtime count temp
+  const bool haveVla =
+      lowerVariableLengthArrays(source, vlaEdits, vlaCounts);
+  // Recover pointer-alias subscripts (arrays, VLAs, heap allocations, rows,
+  // interior pointers) from the lowered C; these are emitted by the same
+  // CheckedBoundsSite path as AST-recorded sites.
+  collectAliasBoundsSites(source, arrayLengths, vlaCounts, bounds);
+  if (arrayLengths.empty() && arith.empty() && bounds.empty() &&
+      checkedPointerSites().empty() && checkedAllocSites().empty() &&
+      checkedFreeSites().empty() && nonnullSites.empty() && !needZeroDecl &&
+      !haveVla)
+    return source;
+
+  // Enum initializers must be integer constant expressions.  A checked helper
+  // call is not an ICE, so every site located inside an enum body is left as
+  // plain source (the static checker still validates the constants).
+  std::vector<std::pair<size_t, size_t>> enumRanges;
+  {
+    const std::vector<Token> etoks = lexCPlus(source);
+    for (size_t i = 0; i < etoks.size(); ++i) {
+      if (!(etoks[i].kind == TokKind::Identifier && etoks[i].text == "enum"))
+        continue;
+      size_t k = nextSigTok(etoks, i);
+      if (k != kNPos && etoks[k].kind == TokKind::Identifier)
+        k = nextSigTok(etoks, k);
+      if (k == kNPos || !(etoks[k].kind == TokKind::Punct &&
+                          etoks[k].text == "{"))
+        continue;
+      int depth = 0;
+      size_t close = kNPos;
+      for (size_t j = k; j < etoks.size(); ++j) {
+        if (etoks[j].kind != TokKind::Punct)
+          continue;
+        if (etoks[j].text == "{") ++depth;
+        else if (etoks[j].text == "}") {
+          if (--depth == 0) { close = j; break; }
+        }
+      }
+      if (close != kNPos)
+        enumRanges.emplace_back(etoks[k].offset, endOfToken(etoks[close]));
+    }
+  }
+  const std::vector<std::pair<size_t, size_t>> staticRanges =
+      staticInitializerRanges(source);
+
+  std::vector<SafetyInsertion> insertions;
+  // Offsets already guarded by the token-level pass; a resolved AST site for
+  // the same access must not emit a duplicate check.
+  std::set<size_t> guardedIndexOffsets;
+  bool haveBounds = false;
+  bool havePtrFormation = false;
+  bool haveNonnull = false;
+  bool haveRuntimeRegistry = false;
+  bool haveFloatToInt = false;
+  bool haveSizeMul = false;
+
+  if (!arrayLengths.empty()) {
+    std::vector<Token> toks = lexCPlus(source);
+    auto significant = [&](size_t i) -> bool {
+      return toks[i].kind != TokKind::Whitespace &&
+             toks[i].kind != TokKind::Comment;
+    };
+    auto nextSig = [&](size_t i) -> size_t {
+      while (i < toks.size() && !significant(i))
+        ++i;
+      return i < toks.size() ? i : kNPos;
+    };
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind != TokKind::Identifier)
+        continue;
+      auto ai = arrayLengths.find(toks[i].text);
+      if (ai == arrayLengths.end())
+        continue;
+      size_t open = nextSig(i + 1);
+      if (open == kNPos || toks[open].text != "[")
+        continue;
+      int depth = 0;
+      size_t close = kNPos;
+      for (size_t k = open; k < toks.size(); ++k) {
+        if (toks[k].kind == TokKind::Punct) {
+          if (toks[k].text == "[") ++depth;
+          else if (toks[k].text == "]") {
+            if (--depth == 0) { close = k; break; }
+          }
+        }
+      }
+      if (close == kNPos)
+        continue;
+      size_t first = nextSig(open + 1);
+      if (first >= close)
+        continue; // empty subscript: declaration, not an access
+      // Constant indices are diagnosed statically; no runtime check needed.
+      size_t last = close;
+      do { --last; } while (last > first && !significant(last));
+      size_t sigCount = 0;
+      bool onlyNumber = true;
+      for (size_t k = first; k <= last; ++k) {
+        if (!significant(k)) continue;
+        ++sigCount;
+        if (toks[k].kind != TokKind::Number) onlyNumber = false;
+      }
+      if (sigCount == 1 && onlyNumber)
+        continue;
+      size_t idxBegin = toks[first].offset;
+      size_t outer = kNPos;
+      haveBounds = true;
+      guardedIndexOffsets.insert(idxBegin);
+      insertions.push_back({idxBegin, outer, 0,
+                            "__cplus_bounds_check((size_t)(", 0});
+      insertions.push_back({toks[close].offset, outer, 2,
+                            "), " + std::to_string(ai->second) + ", \"" +
+                                toks[i].text + "\")", 0});
+    }
+  }
+
+  // VLA subscripts have a *runtime* extent, so a constant index such as
+  // `a[9]` is NOT statically provable in bounds and must be checked too.
+  // The extent is the single-evaluation temporary emitted by the lowering
+  // above, which keeps the check consistent with the allocation even when the
+  // original count expression has side effects or is later reassigned.
+  if (!vlaCounts.empty()) {
+    std::vector<Token> toks = lexCPlus(source);
+    TokenStream ts(toks);
+    for (size_t i = 0; i < toks.size(); ++i) {
+      if (toks[i].kind != TokKind::Identifier)
+        continue;
+      auto vi = vlaCounts.find(toks[i].text);
+      if (vi == vlaCounts.end())
+        continue;
+      // Skip the now-lowered declaration itself (`int a[n];` in the source).
+      if (hasDeclarationPrefix(ts, i))
+        continue;
+      size_t open = ts.nextSig(i);
+      if (open >= toks.size() || !ts.isPunct(open, "["))
+        continue;
+      size_t close = ts.matchBracket(open);
+      if (close == kNPos || close == ts.nextSig(open))
+        continue;
+      // nextSig() pre-increments, so nextSig(open) is the first token inside
+      // the brackets; nextSig(open+1) would skip a single-token index.
+      size_t first = ts.nextSig(open);
+      if (first >= close || first >= toks.size())
+        continue;
+      size_t idxBegin = toks[first].offset;
+      if (guardedIndexOffsets.count(idxBegin))
+        continue; // already guarded by the fixed-array or AST pass
+      haveBounds = true;
+      guardedIndexOffsets.insert(idxBegin);
+      // Match the fixed-array bounds pass: span kNPos makes this the OUTERMOST
+      // prefix (sorted first at a shared offset) and the OUTERMOST suffix
+      // (sorted last).  A span of 0 let an arithmetic site's prefix sort ahead
+      // of ours, splicing the bounds macro into its argument list and
+      // producing calls with the wrong arity.
+      const size_t outer = kNPos;
+      insertions.push_back({idxBegin, outer, 0, "__cplus_bounds_check((size_t)(",
+                            0});
+      insertions.push_back({toks[close].offset, outer, 2,
+                            "), (size_t)(" + vi->second + "), \"" +
+                                toks[i].text + "\")",
+                            0});
+    }
+  }
+
+  // Resolved sites from the AST pass.  These cover every aliased form the
+  // purely lexical pass cannot see (cast aliases, struct/union fields,
+  // multidim row pointers, interior pointers, typedef aliases, ...).  Wrap
+  // the index expression in place so it is evaluated exactly once; the helper
+  // returns the checked index.
+  for (const CheckedBoundsSite &site : bounds) {
+    if (guardedIndexOffsets.count(site.indexBegin))
+      continue; // same access already guarded by the token-level pass
+    // Clamp malformed producer offsets instead of dropping the site: a
+    // recorded site must never be silently skipped.
+    size_t idxBegin = site.indexBegin;
+    size_t idxEnd = site.indexEnd;
+    size_t close = site.close ? site.close : idxEnd;
+    if (idxBegin > source.size()) idxBegin = source.size();
+    if (idxEnd < idxBegin) idxEnd = idxBegin;
+    if (idxEnd > source.size()) idxEnd = source.size();
+    if (close < idxEnd) close = idxEnd;
+    if (close > source.size()) close = source.size();
+    // kNPos span keeps this the OUTERMOST wrapper at a shared offset: a
+    // smaller span let a checked-arithmetic prefix sort ahead and splice the
+    // guard into the helper's argument list (wrong arity).
+    insertions.push_back({idxBegin, kNPos, 0,
+                          "__cplus_bounds_check((size_t)(", 0});
+    insertions.push_back({close, kNPos, 2,
+                          "), (size_t)(" +
+                              (site.count.empty() ? std::string("1")
+                                                  : site.count) +
+                              "), \"" + site.name + "\")", 0});
+    guardedIndexOffsets.insert(idxBegin);
+    haveBounds = true;
+  }
+
+  // A guard call is illegal wherever C requires a constant expression: enum
+  // bodies, file-scope/static initialisers, array sizes and case labels.  The
+  // static checker already validates those constants; skip the site here.
+  auto inConstantContext = [&](const CheckedArithmeticSite &s) {
+    for (const auto &r : enumRanges)
+      if (s.begin >= r.first && s.end <= r.second) return true;
+    for (const auto &r : staticRanges)
+      if (s.begin >= r.first && s.begin < r.second) return true;
+    return false;
+  };
+
+  // --- nested conversion chains: compose innermost-first -------------------
+  // A cast chain such as `(char)(int)d` yields one conversion site per cast.
+  // Emitting them as independent prefix/suffix insertions makes their suffixes
+  // collide at the operand's end offset and swaps the argument lists (f2i gets
+  // narrow's 5 args, narrow gets f2i's 3), producing malformed C.  Compose the
+  // whole chain into one self-contained replacement, innermost guard first.
+  std::set<size_t> composedConversions;
+  {
+    std::vector<size_t> convIdx;
+    for (size_t i = 0; i < arith.size(); ++i) {
+      const CheckedArithmeticSite::Op k = arith[i].kind;
+      if (k == CheckedArithmeticSite::Op::Narrow ||
+          k == CheckedArithmeticSite::Op::FloatToInt)
+        convIdx.push_back(i);
+    }
+    for (size_t root = 0; root < convIdx.size(); ++root) {
+      const size_t ri = convIdx[root];
+      if (composedConversions.count(ri))
+        continue;
+      const CheckedArithmeticSite &R = arith[ri];
+      if (R.end <= R.begin)
+        continue;
+      if (inConstantContext(R))
+        continue; // integer constant expression: no runtime call is legal
+      // Gather the other conversion sites that guard the same operand.  We
+      // allow a shared `end` (nested casts on one value) as well as strictly
+      // contained spans (a cast wrapped around a larger expression).
+      std::vector<size_t> chain;
+      for (size_t j : convIdx) {
+        if (j == ri || composedConversions.count(j))
+          continue;
+        const CheckedArithmeticSite &C = arith[j];
+        if (C.end <= C.begin || C.begin < R.begin || C.end > R.end)
+          continue;
+        chain.push_back(j);
+      }
+      if (chain.empty())
+        continue;
+      // Never drop an independent guard (bounds, allocation, pointer, other
+      // arithmetic) that lives inside the region we would replace wholesale.
+      bool hasForeign = false;
+      for (const SafetyInsertion &ins : insertions)
+        if (ins.offset >= R.begin && ins.offset < R.end) {
+          hasForeign = true;
+          break;
+        }
+      if (hasForeign)
+        continue; // keep the independent insertions; emit normally below
+      chain.push_back(ri);
+      std::sort(chain.begin(), chain.end(), [&](size_t a, size_t b) {
+        const int ra = conversionRank(arith[a]);
+        const int rb = conversionRank(arith[b]);
+        if (ra != rb)
+          return ra < rb;
+        return arith[a].begin > arith[b].begin;
+      });
+      const size_t first = chain.front();
+      // Drop any leading (TYPE) casts already present in the source: the
+      // wrappers we compose below re-emit the destination casts, and keeping
+      // the originals would check an already-truncated value.
+      const size_t opStart = skipLeadingCasts(source, arith[first].begin,
+                                              arith[first].end);
+      std::string text = sourceSlice(source, opStart, arith[first].end);
+      for (size_t j : chain) {
+        if (arith[j].kind == CheckedArithmeticSite::Op::FloatToInt)
+          haveFloatToInt = true;
+        text = wrapConversionText(arith[j], text);
+      }
+      insertions.push_back({R.begin, R.end - R.begin, 0, text,
+                            R.end - R.begin});
+      for (size_t j : chain)
+        composedConversions.insert(j);
+    }
+  }
+
+  for (size_t arithIdx = 0; arithIdx < arith.size(); ++arithIdx) {
+    const CheckedArithmeticSite &site = arith[arithIdx];
+    if (composedConversions.count(arithIdx))
+      continue; // emitted as a composed chain replacement above
+    if (inConstantContext(site))
+      continue; // integer constant expression: no runtime guard is legal
+    const size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    const std::string fn =
+        std::string("__cplus_inline_") + checkedOpName(site.kind) + "_i64";
+    const std::string bits = std::to_string(site.bits);
+    const std::string sgn = site.isSigned ? "1" : "0";
+    const std::string dst = site.type.empty() ? std::string("int") : site.type;
+    const std::string opText =
+        sourceSlice(source, site.op, site.op + site.opLength);
+
+    // Classify the syntactic form.  Producers may either set the explicit
+    // Op/flag fields or reuse a plain binary Op at a compound/inc/dec/unary
+    // token; both are recognised here so no recorded site is skipped.
+    CheckedArithmeticSite::Op kind = site.kind;
+    bool compound = site.compound;
+    bool postfix = site.postfix;
+    // Implicit conversion / extent sites carry no meaningful operator token;
+    // leave their classification to the producer.
+    if (kind != CheckedArithmeticSite::Op::Narrow &&
+        kind != CheckedArithmeticSite::Op::FloatToInt &&
+        kind != CheckedArithmeticSite::Op::AllocExtent) {
+      if (opText == "+=") { kind = CheckedArithmeticSite::Op::Add; compound = true; }
+      else if (opText == "-=") { kind = CheckedArithmeticSite::Op::Sub; compound = true; }
+      else if (opText == "*=") { kind = CheckedArithmeticSite::Op::Mul; compound = true; }
+      else if (opText == "/=") { kind = CheckedArithmeticSite::Op::Div; compound = true; }
+      else if (opText == "%=") { kind = CheckedArithmeticSite::Op::Rem; compound = true; }
+      else if (opText == "<<=") { kind = CheckedArithmeticSite::Op::Shl; compound = true; }
+      else if (opText == ">>=") { kind = CheckedArithmeticSite::Op::Shr; compound = true; }
+      else if (opText == "++") {
+        kind = CheckedArithmeticSite::Op::Inc;
+        postfix = site.op > site.begin;
+      } else if (opText == "--") {
+        kind = CheckedArithmeticSite::Op::Dec;
+        postfix = site.op > site.begin;
+      } else if (opText == "-" && site.op == site.begin &&
+                 kind == CheckedArithmeticSite::Op::Sub) {
+        kind = CheckedArithmeticSite::Op::Neg;
+      }
+    }
+
+    // --- value conversions: wrap the operand, no lvalue update needed ---
+    if (kind == CheckedArithmeticSite::Op::Narrow ||
+        kind == CheckedArithmeticSite::Op::FloatToInt) {
+      if (kind == CheckedArithmeticSite::Op::FloatToInt) {
+        // Guard the ORIGINAL floating value.  A recorded site may span the
+        // explicit cast itself (`(int)d`); consuming that prefix here avoids
+        // checking the already-clamped integer result, which would silently
+        // accept an out-of-range conversion.
+        const size_t castEnd = skipLeadingCasts(source, site.begin, site.end);
+        insertions.push_back({site.begin, span, 0,
+                              "((" + dst + ")__cplus_inline_f2i_i64((double)(",
+                              castEnd > site.begin ? castEnd - site.begin : 0});
+        insertions.push_back({site.end, span, 2, "), " + bits + ", " + sgn +
+                                                    "))", 0});
+        haveFloatToInt = true;
+      } else {
+        // ((DST)__cplus_inline_narrow_i64((SRC)(value), sb, ss, db, ds))
+        const unsigned sb = site.srcBits ? site.srcBits : site.bits;
+        insertions.push_back({site.begin, span, 0,
+                              "((" + dst + ")" + fn + "((uint64_t)(", 0});
+        insertions.push_back({site.end, span, 2,
+                              "), " + std::to_string(sb) + ", " +
+                                  (site.srcIsSigned ? "1" : "0") + ", " +
+                                  bits + ", " + sgn + "))", 0});
+      }
+      continue;
+    }
+
+    // --- allocation extent size multiplication ---
+    if (kind == CheckedArithmeticSite::Op::AllocExtent) {
+      if (span == 0) {
+        // Implicit extent: use producer-supplied expression text verbatim.
+        const std::string c = site.countExpr.empty() ? std::string("1")
+                                                    : site.countExpr;
+        const std::string e = site.elemExpr.empty() ? std::string("1")
+                                                   : site.elemExpr;
+        insertions.push_back({site.begin, 0, 0,
+                              "__cplus_inline_size_mul((size_t)(" + c +
+                                  "), (size_t)(" + e + "))", 0});
+      } else {
+        // Split at the '*' so nested insertions inside the operands survive.
+        insertions.push_back({site.begin, span, 0,
+                              "__cplus_inline_size_mul((size_t)(", 0});
+        insertions.push_back({site.op, span, 1, "), (size_t)(",
+                              site.opLength});
+        insertions.push_back({site.end, span, 2, "))", 0});
+      }
+      haveSizeMul = true;
+      continue;
+    }
+
+    // --- ++ / -- : add/sub one with a single-evaluation lvalue update ---
+    if (kind == CheckedArithmeticSite::Op::Inc ||
+        kind == CheckedArithmeticSite::Op::Dec) {
+      // A decrement must SUBTRACT one, not add it: using `add` with +1 for
+      // `j--` silently turned real programs (Boyer-Moore, shunting-yard)
+      // into infinite/overflowing loops.
+      const std::string op = kind == CheckedArithmeticSite::Op::Dec
+                                 ? "sub" : "add";
+      const std::string tail = ", " + dst + ", " + bits + ", " + sgn +
+                               ", 1, " + (postfix ? "1" : "0") + ")";
+      if (postfix) {
+        // `a++`: prefix before `a`, convert the operator into macro args.
+        insertions.push_back({site.begin, span, 0, "CPLUS_INC(" + op + ", ", 0});
+        insertions.push_back({site.op, span, 1, tail, site.opLength});
+      } else {
+        // `++a`: swallow the operator, append macro args after the operand.
+        insertions.push_back({site.begin, span, 0, "CPLUS_INC(" + op + ", ", 0});
+        insertions.push_back({site.op, span, 1, "", site.opLength});
+        insertions.push_back({site.end, span, 2, tail, 0});
+      }
+      continue;
+    }
+
+    // --- unary minus: checked 0 - operand ---
+    if (kind == CheckedArithmeticSite::Op::Neg) {
+      // A literal operand (`-1`, `-0x10u`) is a compile-time constant; the
+      // static checker already handles it and a macro call here would break
+      // integer constant expressions (enum bodies, case labels, array sizes).
+      const std::string operand =
+          sourceSlice(source, site.op + site.opLength, site.end);
+      auto isConstDigit = [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+               (c >= 'A' && c <= 'F');
+      };
+      size_t p = 0;
+      while (p < operand.size() &&
+             (operand[p] == ' ' || operand[p] == '\t' || operand[p] == '\n' ||
+              operand[p] == '\r'))
+        ++p;
+      bool literal = p < operand.size() && isConstDigit(operand[p]);
+      for (size_t k = p; literal && k < operand.size(); ++k) {
+        const char c = operand[k];
+        if (!(isConstDigit(c) || c == 'x' || c == 'X' || c == 'u' ||
+              c == 'U' || c == 'l' || c == 'L' || c == ' ' || c == '\t'))
+          literal = false;
+      }
+      if (literal) {
+        // A literal RHS is already range-safe by inspection; keep the plain
+        // compound assignment instead of emitting a malformed macro.
+        continue;
+      }
+      insertions.push_back({site.begin, span, 0, "CPLUS_NEG(", 0});
+      insertions.push_back({site.op, span, 1, "", site.opLength});
+      insertions.push_back({site.end, span, 2,
+                            ", " + dst + ", " + bits + ", " + sgn + ")", 0});
+      continue;
+    }
+
+    // --- compound assignment: preserve the lvalue update ---
+    if (compound) {
+      // Issue #232: every compound assignment is instrumented.  The old
+      // leading-digit skip suppressed traps for `x += 1`, `x /= 0`,
+      // `x <<= 32` and `x += 1 + y`; duplicate sites are now removed when
+      // sites are collected above, so no skip is needed here.
+      insertions.push_back({site.begin, span, 0,
+                            "CPLUS_CMPD_BIN(" + std::string(checkedOpName(kind)) +
+                                ", ", 0});
+      insertions.push_back({site.op, span, 1, ", " + dst + ", ",
+                            site.opLength});
+      insertions.push_back({site.end, span, 2,
+                            ", " + bits + ", " + sgn + ")", 0});
+      continue;
+    }
+
+    // --- plain binary: ((T)helper((int64_t)(lhs), (int64_t)(rhs), bits)) ---
+    insertions.push_back({site.begin, span, 0,
+                          "((" + dst + ")" + fn + "((int64_t)(", 0});
+    insertions.push_back({site.op, span, 1, "), (int64_t)(", site.opLength});
+    insertions.push_back({site.end, span, 2,
+                          "), " + bits + ", " + sgn + "))", 0});
+  }
+  // Route ABI-visible malloc/calloc/realloc calls through the runtime side
+  // table.  Managed allocation helpers (cplus_realloc, cplus_realloc_registered,
+  // cplus_alloc/cplus_alloc_array/... ) already register or transfer the block
+  // inside the runtime: wrapping their result again makes the pointer "already
+  // a live C+ allocation" (rc=104).  Raw realloc remains handled by the
+  // isRealloc path below, which emits exactly one cplus_realloc_registered.
+  auto managedAllocIn = [](const std::string &text) {
+    static const char *names[] = {"cplus_alloc", "cplus_zalloc", "cplus_realloc",
+                                  "cplus_alloc_array", "cplus_new",
+                                  "cplus_new_array"};
+    auto ident = [](char c) {
+      return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+             (c >= '0' && c <= '9') || c == '_';
+    };
+    for (const char *n : names) {
+      size_t len = std::strlen(n);
+      for (size_t i = 0; i + len <= text.size(); ++i)
+        if (text.compare(i, len, n) == 0 && (i == 0 || !ident(text[i - 1])) &&
+            (i + len == text.size() || !ident(text[i + len])))
+          return true;
+    }
+    return false;
+  };
+  // --safety=fast keeps compile-time bounds checks, data-stack handling and
+  // UBSan but omits every pointer-to-extent side-table lookup. Cross-thread
+  // free/double-free detection still belongs to --safety=strict.
+  if (sideTable) {
+  const auto &allocSites = checkedAllocSites();
+  for (const CheckedAllocSite &site : allocSites) {
+    if (managedAllocIn(sourceSlice(source, site.begin, site.end)) ||
+        managedAllocIn(site.argText))
+      continue; // runtime already owns the registration/transfer
+    size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    if (span == 0) {
+      // Degenerate/implicit extent: never silently drop a recorded site.
+      const std::string arg = site.argText.empty() ? std::string("0")
+                                                   : site.argText;
+      const std::string bytes = std::to_string(site.bytes);
+      insertions.push_back({site.begin, 0, 0,
+                            site.isRealloc
+                                ? "cplus_realloc_registered((0), (" + arg +
+                                      "), " + bytes + ", __FILE__, __LINE__)"
+                                : "cplus_register_allocation((" + arg + "), " +
+                                      bytes + ", __FILE__, __LINE__)",
+                            0});
+      haveRuntimeRegistry = true;
+      continue;
+    }
+    if (site.isRealloc && !site.argText.empty()) {
+      insertions.push_back({site.begin, span, 0,
+                            "cplus_realloc_registered((" + site.argText +
+                                "), (", 0});
+      insertions.push_back({site.end, span, 2,
+                            "), " + std::to_string(site.bytes) +
+                                ", __FILE__, __LINE__)", 0});
+    } else {
+      insertions.push_back({site.begin, span, 0,
+                            "cplus_register_allocation((", 0});
+      insertions.push_back({site.end, span, 2,
+                            "), " + std::to_string(site.bytes) +
+                                ", __FILE__, __LINE__)", 0});
+    }
+    haveRuntimeRegistry = true;
+  }
+  const auto &freeSites = checkedFreeSites();
+  for (const CheckedAllocSite &site : freeSites) {
+    size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    const std::string arg = site.argText.empty() ? std::string("0")
+                                                 : site.argText;
+    std::string repl = "cplus_free_registered(" + arg +
+                       ", __FILE__, __LINE__)";
+    insertions.push_back({site.begin, span, 0, repl, span ? span : 0});
+    haveRuntimeRegistry = true;
+  }
+  const auto &ptrSites = checkedPointerSites();
+  for (const CheckedPointerSite &site : ptrSites) {
+    size_t span = site.end > site.begin ? site.end - site.begin : 0;
+    const std::string macro = site.compound ? "CPLUS_PTR_CHECK_ASSIGN("
+                                            : "CPLUS_PTR_CHECK(";
+    const std::string tail =
+        ", " + (site.count.empty() ? std::string("0") : site.count) + ", " +
+        (site.negative ? "1" : "0") + ", \"" + site.expr + "\", " +
+        (site.deref ? "1" : "0") + ")";
+    if (span == 0) {
+      // No source extent (implicit site): use producer-supplied text verbatim.
+      const std::string call = macro + "(" + site.base + ", " + site.index +
+                               tail;
+      insertions.push_back({site.begin, 0, 0, call, 0});
+    } else {
+      size_t opPos = site.op;
+      size_t opLen = site.opLength;
+      if (opPos < site.begin || opPos + opLen > site.end || opLen == 0) {
+        opPos = source.find_first_of("+-", site.begin);
+        opLen = 1;
+        if (opPos != std::string::npos && opPos < site.end &&
+            opPos + 1 < source.size() && source[opPos + 1] == '=')
+          opLen = 2;
+      }
+      if (opPos == std::string::npos || opPos >= site.end)
+        opPos = site.begin; // never skip a recorded site
+      insertions.push_back({site.begin, span, 0, macro, 0});
+      insertions.push_back({opPos, span, 1, ", ", opLen});
+      insertions.push_back({site.end, span, 2, tail, 0});
+    }
+    havePtrFormation = true;
+  }
+  } // sideTable
+
+  // Plain pointer dereferences: wrap the base once so it is evaluated a
+  // single time.  CPLUS_NONNULL yields the original pointer value after the
+  // runtime check, so `*p`, `p->f` and `p[i]` keep their exact semantics.
+  for (const NonnullSite &site : nonnullSites) {
+    const size_t span = site.baseEnd - site.baseBegin;
+    insertions.push_back({site.baseBegin, span, 0, "CPLUS_NONNULL(", 0});
+    insertions.push_back({site.baseEnd, span, 2, ")", 0});
+    haveNonnull = true;
+  }
+
+  // VLA lowering edits are already in final lowered-C coordinates; merge them
+  // with the instrumentation edits so one sorted pass emits everything.
+  insertions.insert(insertions.end(), vlaEdits.begin(), vlaEdits.end());
+
+  if (insertions.empty())
+    return source;
+
+  // Nested sites can share an offset: for `a+b+c` the inner expression ends
+  // exactly where the outer operator sits.  At a shared offset the required
+  // order is prefix (outermost first), then suffix (innermost first), then the
+  // operator separator (which consumes the operator token).  Emitting a
+  // separator before the inner suffix used to skip the suffix entirely and
+  // leave unbalanced parentheses in the generated C.
+  auto insertionRank = [](int p) -> int {
+    if (p == 0) return 0; // prefix
+    if (p == 2) return 1; // suffix
+    return 2;             // operator separator
+  };
+  std::stable_sort(insertions.begin(), insertions.end(),
+                   [&](const SafetyInsertion &a, const SafetyInsertion &b) {
+                     if (a.offset != b.offset)
+                       return a.offset < b.offset;
+                     const int ra = insertionRank(a.priority);
+                     const int rb = insertionRank(b.priority);
+                     if (ra != rb)
+                       return ra < rb;
+                     if (a.priority == 0 && b.priority == 0)
+                       return a.span > b.span; // outer prefix first
+                     if (a.priority == 2 && b.priority == 2)
+                       return a.span < b.span; // inner suffix first
+                     return false;
+                   });
+
+  std::string out;
+  out.reserve(source.size() + 64 * insertions.size());
+  size_t pos = 0, next = 0;
+  while (pos < source.size() || next < insertions.size()) {
+    // A wide insertion (e.g. a free-call replacement) may consume source past
+    // a weaker insertion recorded inside it; skip those defensively so the
+    // loop always makes progress.
+    while (next < insertions.size() && insertions[next].offset < pos)
+      ++next;
+    if (next < insertions.size() && insertions[next].offset > pos) {
+      const size_t upto = std::min(insertions[next].offset, source.size());
+      out.append(source, pos, upto - pos);
+      pos = upto;
+    }
+    // Emit *all* insertions at this offset before consuming source bytes.
+    // Taking the max replace length (rather than advancing per insertion) is
+    // what preserves the inner suffix that shares an outer operator offset.
+    size_t consume = 0;
+    while (next < insertions.size() && insertions[next].offset == pos) {
+      out += insertions[next].text;
+      consume = std::max(consume, insertions[next].replace);
+      ++next;
+    }
+    if (consume != 0) {
+      pos += consume;
+      if (pos > source.size())
+        pos = source.size();
+    } else {
+      if (pos >= source.size())
+        break;
+      out += source[pos];
+      ++pos;
+    }
+  }
+
+  // Emit the helper declarations before the first #line directive so the
+  // original source line numbers are preserved.
+  std::string prelude;
+  // Opt-in "auto runtime": when the generated C is compiled with
+  // -DCPLUS_AUTO_RUNTIME=1, install a constructor that switches the runtime
+  // into catchable-violation mode before main runs.  The preprocessor guard
+  // keeps ordinary builds byte-for-byte unchanged (LEGACY never reaches this
+  // prelude at all), and placing this ahead of the first #line preserves the
+  // original source line numbers in every diagnostic.
+  prelude +=
+      "#if defined(CPLUS_AUTO_RUNTIME)\n"
+      "extern void cplus_set_auto_runtime(int);\n"
+      "static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {\n"
+      "  cplus_set_auto_runtime(1);\n"
+      "}\n"
+      "#endif\n";
+  if (needZeroDecl)
+    prelude += "#include <stddef.h>\n"
+               "extern void cplus_zero(void *, size_t);\n";
+  if (haveVla)
+    // Signatures mirror runtime/include/cplus/cplus.h.  Declared before the
+    // first #line so original source line numbers are preserved, and reused
+    // from the existing runtime instead of adding a new subsystem.
+    prelude += "#include <stddef.h>\n"
+               "extern void *cplus_alloc_array(size_t, size_t);\n"
+               "extern void cplus_release(void *);\n"
+               "extern size_t cplus_alloc_bytes(const void *);\n";
+  if ((haveBounds && !haveVla) || havePtrFormation)
+    prelude += "#include <stddef.h>\n"; // haveVla already included it
+  if (haveBounds)
+    prelude += "extern size_t __cplus_bounds_check(size_t, size_t, "
+               "const char *);\n";
+  if (havePtrFormation)
+    prelude += "#include <stdint.h>\n"
+               "extern void cplus_check_ptr_formation(const void *, size_t, "
+               "int64_t, const char *, int, const char *);\n"
+               "extern void cplus_check_bounds(const void *, size_t, size_t, "
+               "const char *, int, const char *);\n"
+               // Bind the base address and the index once each (GNU statement
+               // expressions; Clang accepts them in gnu89/gnu17/c99).  This
+               // avoids the double evaluation of base/index that a bare comma
+               // guard would cause for side-effecting operands.
+               "#if defined(__GNUC__) || defined(__clang__)\n"
+               "#define CPLUS_PTR_BODY(B, I, C, N, T, D) \\\n"
+               "  __typeof__(&(B)) __cplus_bp = &(B); \\\n"
+               "  __typeof__(I) __cplus_ip = (I); \\\n"
+               "  if (D) cplus_check_bounds((const void *)(*__cplus_bp), \\\n"
+               "      (size_t)(C), (size_t)(__cplus_ip), __FILE__, __LINE__, T); \\\n"
+               "  else cplus_check_ptr_formation((const void *)(*__cplus_bp), \\\n"
+               "      (size_t)(C), (int64_t)(__cplus_ip) * ((N) ? -1 : 1), \\\n"
+               "      __FILE__, __LINE__, T);\n"
+               "#define CPLUS_PTR_CHECK(B, I, C, N, T, D) \\\n"
+               "  ({ CPLUS_PTR_BODY(B, I, C, N, T, D) \\\n"
+               "     ((N) ? (*__cplus_bp - __cplus_ip) \\\n"
+               "          : (*__cplus_bp + __cplus_ip)); })\n"
+               "#define CPLUS_PTR_CHECK_ASSIGN(B, I, C, N, T, D) \\\n"
+               "  ({ CPLUS_PTR_BODY(B, I, C, N, T, D) \\\n"
+               "     *__cplus_bp = ((N) ? (*__cplus_bp - __cplus_ip) \\\n"
+               "                       : (*__cplus_bp + __cplus_ip)); \\\n"
+               "     *__cplus_bp; })\n"
+               "#else\n"
+               "#define CPLUS_PTR_CHECK(B, I, C, N, T, D) \\\n"
+               "  ((D) ? (cplus_check_bounds((const void *)(B), (size_t)(C), \\\n"
+               "       (size_t)(I), __FILE__, __LINE__, T), (B) + (I)) \\\n"
+               "       : (cplus_check_ptr_formation((const void *)(B), \\\n"
+               "       (size_t)(C), (int64_t)(I) * ((N) ? -1 : 1), \\\n"
+               "       __FILE__, __LINE__, T), (B) + (I)))\n"
+               "#define CPLUS_PTR_CHECK_ASSIGN(B, I, C, N, T, D) \\\n"
+               "  ((B) = CPLUS_PTR_CHECK(B, I, C, N, T, D))\n"
+               "#endif\n";
+  if (haveNonnull)
+    // The signature must match runtime/include/cplus/cplus.h exactly.  Bind
+    // the pointer once (GNU statement expression where available; the
+    // portable fallback is safe here because the base is a bare identifier).
+    prelude += "extern void cplus_check_nonnull(const void *, const char *, "
+               "int, const char *);\n"
+               "#if defined(__GNUC__) || defined(__clang__)\n"
+               "#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = "
+               "(P); \\\n"
+               "  cplus_check_nonnull((const void *)__cplus_nn_p, "
+               "__FILE__, __LINE__, #P); \\\n"
+               "  __cplus_nn_p; })\n"
+               "#else\n"
+               "#define CPLUS_NONNULL(P) \\\n"
+               "  (cplus_check_nonnull((const void *)(P), __FILE__, "
+               "__LINE__, #P), (P))\n"
+               "#endif\n";
+  if (haveRuntimeRegistry)
+    prelude += "#include <stddef.h>\n"
+               "extern void *cplus_register_allocation(void *, size_t, "
+               "const char *, int);\n"
+               "extern void cplus_free_registered(void *, const char *, "
+               "int);\n"
+               "extern void *cplus_realloc_registered(void *, void *, "
+               "size_t, const char *, int);\n";
+  if (!arith.empty()) {
+    // The runtime helpers produce the deterministic trap, but an ordinary
+    // cross-TU call on every operation is far too expensive in hot loops.
+    // Emit inline wrappers: the fast path folds into surrounding code and
+    // only the failure path calls the runtime helper.  Predicates follow
+    // Clang's EmitUndefinedBehaviorIntegerDivAndRemCheck / EmitShl and UBSan's
+    // handleDivremOverflowImpl (Apache-2.0 WITH LLVM-exception), expressed as
+    // plain C so no sanitizer runtime is required.
+    static const char *ops[] = {"add", "sub", "mul", "div",
+                                "rem", "shl", "shr", "narrow"};
+    prelude += "#include <stdint.h>\n"
+               // `inline` is not a C89 keyword.  A plain `static` definition
+               // is accepted by every C standard and keeps internal linkage;
+               // the GNU unused attribute (where available) still silences
+               // unused-function diagnostics.  Semantics are unchanged.
+               "#if defined(__GNUC__) || defined(__clang__)\n"
+               "#  define CPLUS_STATIC_INLINE __attribute__((unused)) static\n"
+               "#else\n"
+               "#  define CPLUS_STATIC_INLINE static\n"
+               "#endif\n";
+    for (const char *op : ops) {
+      if (std::strcmp(op, "narrow") == 0) {
+        prelude += "extern int64_t __cplus_checked_narrow_i64(uint64_t, "
+                   "unsigned, unsigned, unsigned, unsigned);\n";
+        continue;
+      }
+      prelude += std::string("extern int64_t __cplus_checked_") + op +
+                 "_i64(int64_t, int64_t, unsigned, unsigned);\n";
+    }
+    // Float->int and allocation-extent helpers are emitted only when a site
+    // of that kind was actually recorded, so TUs that do not need them gain
+    // no new external dependencies.  The wrappers keep the check inline and
+    // defer diagnostics to the existing runtime trap symbols.
+    if (haveFloatToInt)
+      prelude +=
+          "extern int64_t __cplus_checked_f2i_i64(double, unsigned, "
+          "unsigned);\n"
+          "CPLUS_STATIC_INLINE int64_t __cplus_inline_f2i_i64(double v, "
+          "unsigned bits, unsigned sgn) {\n"
+          "  double lo, hi;\n"
+          "  if (v != v) return __cplus_checked_f2i_i64(v, bits, sgn);\n"
+          "  if (sgn) {\n"
+          "    if (bits == 32) { lo = -2147483648.0; hi = 2147483648.0; }\n"
+          "    else if (bits == 64) {\n"
+          "      lo = -9223372036854775808.0; hi = 9223372036854775808.0;\n"
+          "    } else {\n"
+          "      int b = (int)bits, i; double p = 1.0;\n"
+          "      for (i = 0; i < b - 1; ++i) p *= 2.0;\n"
+          "      lo = -p; hi = p;\n"
+          "    }\n"
+          "  } else {\n"
+          "    if (bits == 32) { lo = 0.0; hi = 4294967296.0; }\n"
+          "    else if (bits == 64) {\n"
+          "      lo = 0.0; hi = 18446744073709551616.0;\n"
+          "    } else {\n"
+          "      int b = (int)bits, i; double p = 1.0;\n"
+          "      for (i = 0; i < b; ++i) p *= 2.0;\n"
+          "      lo = 0.0; hi = p;\n"
+          "    }\n"
+          "  }\n"
+          "  if (!(v >= lo && v < hi)) return __cplus_checked_f2i_i64(v, "
+          "bits, sgn);\n"
+          "  return (int64_t)v;\n"
+          "}\n";
+    if (haveSizeMul)
+      prelude += "#include <stddef.h>\n"
+                 "extern size_t __cplus_checked_size_mul(size_t, size_t);\n"
+                 "CPLUS_STATIC_INLINE size_t __cplus_inline_size_mul(size_t a, "
+                 "size_t b) {\n"
+                 "  if (b != 0 && a > ((size_t)-1) / b)\n"
+                 "    return __cplus_checked_size_mul(a, b);\n"
+                 "  return a * b;\n"
+                 "}\n";
+    prelude +=
+        "#if defined(__has_builtin)\n"
+        "#  if __has_builtin(__builtin_add_overflow) && "
+        "__has_builtin(__builtin_sub_overflow) && "
+        "__has_builtin(__builtin_mul_overflow)\n"
+        "#    define CPLUS_HAVE_INLINE_ARITH 1\n"
+        "#  endif\n"
+        "#endif\n"
+        "#ifdef CPLUS_HAVE_INLINE_ARITH\n"
+        "#define CPLUS_ARITH_INLINE CPLUS_STATIC_INLINE\n";
+
+    auto emitWrapper = [&](const char *op, const std::string &body) {
+      prelude += std::string("CPLUS_ARITH_INLINE int64_t __cplus_inline_") +
+                 op + "_i64(int64_t a, int64_t b, unsigned bits, "
+                      "unsigned sgn) {\n" +
+                 body + "}\n";
+    };
+    emitWrapper("add",
+                "  int64_t r; int32_t r32;\n"
+                "  if (bits == 32) {\n"
+                "    if (__builtin_add_overflow((int32_t)a, (int32_t)b, &r32))\n"
+                "      return __cplus_checked_add_i64(a, b, bits, sgn);\n"
+                "    return (int64_t)r32;\n"
+                "  }\n"
+                "  if (bits == 64 && sgn) {\n"
+                "    if (__builtin_add_overflow(a, b, &r))\n"
+                "      return __cplus_checked_add_i64(a, b, bits, sgn);\n"
+                "    return r;\n"
+                "  }\n"
+                "  return __cplus_checked_add_i64(a, b, bits, sgn);\n");
+    emitWrapper("sub",
+                "  int64_t r; int32_t r32;\n"
+                "  if (bits == 32) {\n"
+                "    if (__builtin_sub_overflow((int32_t)a, (int32_t)b, &r32))\n"
+                "      return __cplus_checked_sub_i64(a, b, bits, sgn);\n"
+                "    return (int64_t)r32;\n"
+                "  }\n"
+                "  if (bits == 64 && sgn) {\n"
+                "    if (__builtin_sub_overflow(a, b, &r))\n"
+                "      return __cplus_checked_sub_i64(a, b, bits, sgn);\n"
+                "    return r;\n"
+                "  }\n"
+                "  return __cplus_checked_sub_i64(a, b, bits, sgn);\n");
+    emitWrapper("mul",
+                "  int64_t r; int32_t r32;\n"
+                "  if (bits == 32) {\n"
+                "    if (__builtin_mul_overflow((int32_t)a, (int32_t)b, &r32))\n"
+                "      return __cplus_checked_mul_i64(a, b, bits, sgn);\n"
+                "    return (int64_t)r32;\n"
+                "  }\n"
+                "  if (bits == 64 && sgn) {\n"
+                "    if (__builtin_mul_overflow(a, b, &r))\n"
+                "      return __cplus_checked_mul_i64(a, b, bits, sgn);\n"
+                "    return r;\n"
+                "  }\n"
+                "  return __cplus_checked_mul_i64(a, b, bits, sgn);\n");
+    emitWrapper("div",
+                "  if (b == 0)\n"
+                "    return __cplus_checked_div_i64(a, b, bits, sgn);\n"
+                "  if (sgn && bits > 1 && bits <= 64 && b == -1 &&\n"
+                "      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
+                "    return __cplus_checked_div_i64(a, b, bits, sgn);\n"
+                "  return a / b;\n");
+    emitWrapper("rem",
+                "  if (b == 0)\n"
+                "    return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
+                "  if (sgn && bits > 1 && bits <= 64 && b == -1 &&\n"
+                "      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
+                "    return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
+                "  return a % b;\n");
+    emitWrapper("shl",
+                "  if (b < 0 || (unsigned long long)b >= bits)\n"
+                "    return __cplus_checked_shl_i64(a, b, bits, sgn);\n"
+                "  if (sgn) {\n"
+                "    uint64_t ua = (uint64_t)a; unsigned c = (unsigned)b;\n"
+                "    uint64_t limit = (~(uint64_t)0) >> (64 - bits);\n"
+                "    if (a < 0 || ((ua << c) & ~limit))\n"
+                "      return __cplus_checked_shl_i64(a, b, bits, sgn);\n"
+                "  }\n"
+                "  return (int64_t)((uint64_t)a << (uint64_t)b);\n");
+    emitWrapper("shr",
+                "  if (b < 0 || (unsigned long long)b >= bits)\n"
+                "    return __cplus_checked_shr_i64(a, b, bits, sgn);\n"
+                "  return (int64_t)(a >> (uint64_t)b);\n");
+    // Round-trip predicate from Clang's any-extend + compare, expressed in C.
+    prelude +=
+        "CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(\n"
+        "    uint64_t v, unsigned sb, unsigned ss, unsigned db, unsigned ds) {\n"
+        "  uint64_t sv = v;\n"
+        "  if (ss && sb > 0 && sb < 64 && ((v >> (sb - 1)) & 1u))\n"
+        "    sv = v | (~((uint64_t)0) << sb);\n"
+        "  if (db < 64) {\n"
+        "    uint64_t m = (((uint64_t)1) << db) - 1;\n"
+        "    uint64_t t = sv & m;\n"
+        "    if (ds && ((t >> (db - 1)) & 1u)) t |= ~m;\n"
+        "    if (t == sv) return (int64_t)t;\n"
+        "  } else if (sv == v && (ss == ds || !((sv >> 63) & 1u))) {\n"
+        "    return (int64_t)v;\n"
+        "  }\n"
+        "  return __cplus_checked_narrow_i64(v, sb, ss, db, ds);\n"
+        "}\n";
+    prelude += "#else\n";
+    for (const char *op : ops)
+      prelude += std::string("#define __cplus_inline_") + op +
+                 "_i64 __cplus_checked_" + op + "_i64\n";
+    prelude += "#endif\n";
+
+    // Lvalue-preserving forms.  The GNU variants bind the lvalue address once
+    // so operands with side effects (e.g. `a[i++] += f()`) are evaluated
+    // exactly once; the portable fallback covers strict ISO C compilers.
+    prelude +=
+        "#if defined(__GNUC__) || defined(__clang__)\n"
+        "#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \\\n"
+        "  ({ __typeof__(&(P)) __cplus_ap = &(P); \\\n"
+        "     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \\\n"
+        "         (int64_t)(*__cplus_ap), (int64_t)(B), (BT), (SG)); \\\n"
+        "     *__cplus_ap; })\n"
+        "#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \\\n"
+        "  ({ __typeof__(&(P)) __cplus_ap = &(P); \\\n"
+        "     __typeof__(*__cplus_ap) __cplus_ov = *__cplus_ap; \\\n"
+        "     *__cplus_ap = (T)__cplus_inline_##OP##_i64( \\\n"
+        "         (int64_t)__cplus_ov, (int64_t)(D), (BT), (SG)); \\\n"
+        "     (POST) ? __cplus_ov : *__cplus_ap; })\n"
+        "#else\n"
+        "#define CPLUS_CMPD_BIN(OP, P, T, B, BT, SG) \\\n"
+        "  ((P) = (T)__cplus_inline_##OP##_i64( \\\n"
+        "      (int64_t)(P), (int64_t)(B), (BT), (SG)))\n"
+        "#define CPLUS_INC(OP, P, T, BT, SG, D, POST) \\\n"
+        "  ((P) = (T)__cplus_inline_##OP##_i64((int64_t)(P), \\\n"
+        "      (int64_t)(D), (BT), (SG)))\n"
+        "#endif\n"
+        "#define CPLUS_NEG(X, T, BT, SG) \\\n"
+        "  ((T)__cplus_inline_sub_i64(0, (int64_t)(X), (BT), (SG)))\n";
+  }
+  return prelude + out;
+}
+
+//===----------------------------------------------------------------------===//
+// C+ exception lowering (Safe mode only)
+//
+// `try { body } catch (Exception e) { handler }` becomes a setjmp/longjmp
+// frame using additive runtime helpers. This keeps plain C pointers and the
+// existing ABI: no C++ unwinding tables, no fat pointers, no new object file
+// format. LEGACY source is never passed through this pass.
+//===----------------------------------------------------------------------===//
+namespace {
+
+bool isWordAt(const std::string &s, size_t i, const char *word) {
+  size_t n = std::strlen(word);
+  if (i + n > s.size() || s.compare(i, n, word) != 0)
+    return false;
+  auto ident = [](char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_';
+  };
+  if (i > 0 && ident(s[i - 1]))
+    return false;
+  if (i + n < s.size() && ident(s[i + n]))
+    return false;
+  return true;
+}
+
+size_t skipSpace(const std::string &s, size_t i) {
+  while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                          s[i] == '\r'))
+    ++i;
+  return i;
+}
+
+bool isIdentCharC(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '_';
+}
+
+/// Advance past a string/char literal beginning at `i`.  A keyword such as
+/// `try`/`throw` or a brace inside a literal is data, not syntax; scanning it
+/// as code used to corrupt the generated C (unterminated strings, unbalanced
+/// braces, wrong `throw` operands).  Escape sequences and adjacent literals are
+/// handled so `";"` and `"\\\""` cannot terminate the scan early.
+size_t skipLiteralC(const std::string &s, size_t i) {
+  const char quote = s[i];
+  ++i;
+  while (i < s.size() && s[i] != quote) {
+    if (s[i] == '\\' && i + 1 < s.size()) { i += 2; continue; }
+    if (s[i] == '\n') break; // unterminated literal: resync at the newline
+    ++i;
+  }
+  if (i < s.size() && s[i] == quote) ++i;
+  return i;
+}
+
+/// Advance past a // or /* ... */ comment beginning at `i`.
+size_t skipCommentC(const std::string &s, size_t i) {
+  if (i + 1 >= s.size() || s[i] != '/')
+    return i;
+  if (s[i + 1] == '/') {
+    size_t nl = s.find('\n', i + 2);
+    return nl == std::string::npos ? s.size() : nl + 1;
+  }
+  if (s[i + 1] == '*') {
+    size_t end = s.find("*/", i + 2);
+    return end == std::string::npos ? s.size() : end + 2;
+  }
+  return i;
+}
+
+/// True if `s[i]` starts a // or /* comment.
+bool isCommentStart(const std::string &s, size_t i) {
+  return i + 1 < s.size() && s[i] == '/' &&
+         (s[i + 1] == '/' || s[i + 1] == '*');
+}
+
+size_t matchBrace(const std::string &s, size_t open) {
+  int depth = 0;
+  for (size_t i = open; i < s.size();) {
+    char c = s[i];
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
+    if (c == '{') ++depth;
+    else if (c == '}') {
+      if (--depth == 0)
+        return i;
+    }
+    ++i;
+  }
+  return std::string::npos;
+}
+
+/// Find the closing ')' for the '(' at `open`, ignoring literals/comments.
+size_t matchParenText(const std::string &s, size_t open) {
+  if (open >= s.size() || s[open] != '(')
+    return std::string::npos;
+  int depth = 0;
+  for (size_t i = open; i < s.size();) {
+    char c = s[i];
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
+    if (c == '(') ++depth;
+    else if (c == ')') {
+      if (--depth == 0) return i;
+    }
+    ++i;
+  }
+  return std::string::npos;
+}
+
+/// Find the next whole-word occurrence of `word` that is real C code (not
+/// inside a string/char literal or a comment).
+size_t findWordC(const std::string &s, size_t from, const char *word) {
+  for (size_t i = from; i < s.size();) {
+    char c = s[i];
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
+    if (c == word[0] && isWordAt(s, i, word)) return i;
+    ++i;
+  }
+  return std::string::npos;
+}
+
+/// Find the ';' that terminates a `throw` expression, skipping literals,
+/// comments and any nested (), [] or {} so a semicolon inside a string or a
+/// compound literal cannot truncate the operand.
+size_t findThrowSemicolon(const std::string &s, size_t from) {
+  int par = 0, brk = 0, brc = 0;
+  for (size_t i = from; i < s.size();) {
+    char c = s[i];
+    if (c == '"' || c == '\'') { i = skipLiteralC(s, i); continue; }
+    if (isCommentStart(s, i)) { i = skipCommentC(s, i); continue; }
+    if (c == '(') ++par;
+    else if (c == ')') { if (par > 0) --par; }
+    else if (c == '[') ++brk;
+    else if (c == ']') { if (brk > 0) --brk; }
+    else if (c == '{') ++brc;
+    else if (c == '}') { if (brc > 0) --brc; }
+    else if (c == ';' && par == 0 && brk == 0 && brc == 0) return i;
+    ++i;
+  }
+  return std::string::npos;
+}
+
+std::string trimC(const std::string &s) {
+  size_t b = s.find_first_not_of(" \t\n\r");
+  if (b == std::string::npos) return std::string();
+  size_t e = s.find_last_not_of(" \t\n\r");
+  return s.substr(b, e - b + 1);
+}
+
+/// Extract a usable C identifier for a catch parameter.  The producer may
+/// spell `catch (Exception e)`, `catch (const Exception &e)`, `catch (Exception)`
+/// or add trailing whitespace; taking the last identifier (and rejecting C
+/// keywords) keeps the emitted `Exception <name> = ...;` valid C.
+std::string catchNameFromDecl(const std::string &decl) {
+  static const std::set<std::string> keywords = {
+      "Exception", "const", "volatile", "struct", "union", "enum",
+      "unsigned", "signed", "int", "long", "short", "char", "void",
+      "return", "if", "else", "while", "for", "do", "switch", "case"};
+  size_t end = decl.size();
+  while (end > 0 && !isIdentCharC(decl[end - 1])) --end;
+  size_t begin = end;
+  while (begin > 0 && isIdentCharC(decl[begin - 1])) --begin;
+  std::string name = decl.substr(begin, end - begin);
+  if (name.empty() || keywords.count(name) != 0 ||
+      (name[0] >= '0' && name[0] <= '9'))
+    return "ex";
+  return name;
+}
+
+/// True when `expr` is syntactically malformed as a C expression (unbalanced
+/// delimiters or adjacent non-operator tokens such as `4 print("x")` from a
+/// missing semicolon between statements).
+bool isMalformedThrowExpr(const std::string &expr) {
+  std::vector<Token> toks = lexCPlus(expr);
+  int par = 0, brk = 0, brc = 0;
+  TokKind prevKind = TokKind::EndOfFile;
+  std::string prevText;
+  int prevDepth = -1;
+  for (const Token &t : toks) {
+    if (t.kind == TokKind::Whitespace || t.kind == TokKind::Comment ||
+        t.kind == TokKind::EndOfFile)
+      continue;
+    if (t.kind == TokKind::Punct) {
+      if (t.text == "(") {
+        if (par == 0 && brk == 0 && brc == 0 && prevDepth == 0 &&
+            prevKind == TokKind::Number)
+          return true; // e.g. `4 ("x")`
+        ++par;
+      } else if (t.text == ")") {
+        if (--par < 0) return true;
+      } else if (t.text == "[") {
+        ++brk;
+      } else if (t.text == "]") {
+        if (--brk < 0) return true;
+      } else if (t.text == "{") {
+        ++brc;
+      } else if (t.text == "}") {
+        if (--brc < 0) return true;
+      }
+      prevKind = t.kind;
+      prevText = t.text;
+      prevDepth = par + brk + brc;
+      continue;
+    }
+    const int curDepth = par + brk + brc;
+    if (curDepth == 0 && prevDepth == 0 &&
+        (t.kind == TokKind::Identifier || t.kind == TokKind::Number ||
+         t.kind == TokKind::StringLit || t.kind == TokKind::CharLit)) {
+      if (prevKind == TokKind::Number || prevKind == TokKind::StringLit ||
+          prevKind == TokKind::CharLit)
+        return true;
+      if (prevKind == TokKind::Identifier && prevText != "sizeof" &&
+          prevText != "_Alignof" && prevText != "alignof")
+        return true;
+    }
+    prevKind = t.kind;
+    prevText = t.text;
+    prevDepth = curDepth;
+  }
+  return par != 0 || brk != 0 || brc != 0;
+}
+
+std::string lowerThrows(const std::string &s, bool &changed) {
+  std::string out;
+  size_t pos = 0;
+  while (pos < s.size()) {
+    size_t t = findWordC(s, pos, "throw");
+    if (t == std::string::npos) {
+      out += s.substr(pos);
+      break;
+    }
+    out += s.substr(pos, t - pos);
+    size_t semi = findThrowSemicolon(s, t + 5);
+    if (semi == std::string::npos) {
+      // Malformed throw: keep the remaining bytes verbatim but remove the
+      // C+ keyword so the emitted C is still parseable.
+      out += s.substr(t + 5);
+      changed = true;
+      break;
+    }
+    const std::string expr = trimC(sourceSlice(s, skipSpace(s, t + 5), semi));
+    if (expr.empty()) {
+      // Bare `throw;` rethrows the exception captured on entry to the
+      // innermost active handler instead of silently raising code 1.
+      out += "cplus_exception_raise(cplus_rethrow_exc.code, "
+             "cplus_rethrow_exc.message, cplus_rethrow_exc.file, "
+             "cplus_rethrow_exc.line);";
+    } else if (isMalformedThrowExpr(expr)) {
+      // Malformed adjacent statement (`throw 4 print("x");`): consume the
+      // statement and raise a neutral code rather than emitting invalid C.
+      out += "cplus_exception_raise(1, 0, __FILE__, __LINE__);";
+    } else if (expr[0] == '"') {
+      out += "cplus_exception_raise(1, " + expr + ", __FILE__, __LINE__);";
+    } else {
+      // Support arbitrary integer and string expressions including function/
+      // method calls (`throw get_code();`, `throw obj.code();`, `throw msg()`).
+      out += "__extension__ _Generic((" + expr + "), "
+             "char *: __cplus_throw_str, "
+             "const char *: __cplus_throw_str, "
+             "void *: __cplus_throw_ptr, "
+             "const void *: __cplus_throw_ptr, "
+             "default: __cplus_throw_int)((" + expr +
+             "), __FILE__, __LINE__);";
+    }
+    changed = true;
+    pos = semi + 1;
+  }
+  return out;
+}
+
+/// Recursive worker.  `counter` is shared across nesting so frame names are
+/// unique even for `try { try {...} ... try {...} }`; previously each recursive
+/// call restarted at 0 and could redeclare the same frame in one scope.
+std::string lowerExceptionsImpl(const std::string &source, unsigned &counter,
+                                bool &changed) {
+  std::string out;
+  size_t pos = 0;
+  while (pos < source.size()) {
+    size_t t = findWordC(source, pos, "try");
+    if (t == std::string::npos) {
+      out += source.substr(pos);
+      break;
+    }
+    size_t open = skipSpace(source, t + 3);
+    if (open >= source.size() || source[open] != '{') {
+      // Malformed `try` (no compound statement).  Drop the keyword rather than
+      // emitting it verbatim into C, where it is not a valid identifier.
+      out += source.substr(pos, t - pos);
+      pos = t + 3;
+      changed = true;
+      continue;
+    }
+    size_t close = matchBrace(source, open);
+    if (close == std::string::npos) {
+      out += source.substr(pos);
+      break;
+    }
+    const std::string frame = "__cplus_exc_" + std::to_string(counter++);
+    changed = true;
+    out += source.substr(pos, t - pos);
+    const std::string body = lowerExceptionsImpl(
+        lowerThrows(source.substr(open + 1, close - open - 1), changed),
+        counter, changed);
+
+    // C+ has a single `Exception` type, so extra catch clauses cannot be
+    // type-matched.  Consume them (so no `catch` syntax leaks into the C) but
+    // run only the first handler; emitting every handler sequentially was
+    // silent wrong behaviour.
+    std::string handlerCode;
+    size_t resume = close + 1;
+    size_t scan = skipSpace(source, resume);
+    bool firstHandler = true;
+    while (scan < source.size() && isWordAt(source, scan, "catch")) {
+      size_t lp = skipSpace(source, scan + 5);
+      if (lp >= source.size() || source[lp] != '(')
+        break;
+      size_t rp = matchParenText(source, lp);
+      if (rp == std::string::npos || rp <= lp)
+        break;
+      const std::string name =
+          catchNameFromDecl(source.substr(lp + 1, rp - lp - 1));
+      size_t ho = skipSpace(source, rp + 1);
+      if (ho >= source.size() || source[ho] != '{')
+        break;
+      size_t hc = matchBrace(source, ho);
+      if (hc == std::string::npos)
+        break;
+      if (firstHandler) {
+        const std::string handler = lowerExceptionsImpl(
+            lowerThrows(source.substr(ho + 1, hc - ho - 1), changed), counter,
+            changed);
+        // Wrap the handler in its own block so declarations inside the catch
+        // cannot collide with frame fields, and restore cplus_rethrow_exc via
+        // CPlusExcGuard cleanup even on return/break/continue/goto.
+        handlerCode = "Exception " + name + " = " + frame + ".base.exc; " +
+                      handler;
+        firstHandler = false;
+      } else {
+        // Fail closed instead of silently discarding a handler. Since this
+        // lowering has no DiagnosticEngine, emit a compile-time assertion in
+        // the generated C; check and build both reject the source.
+        out += "\n_Static_assert(0, \"multiple catch clauses are not supported\");\n";
+      }
+      resume = hc + 1;
+      scan = skipSpace(source, resume);
+    }
+
+    // A plain compound block, not `do { ... } while (0)`: the latter is a
+    // loop and silently captures break/continue meant for an enclosing loop
+    // or switch (issue #82).  Save `prev_rethrow` BEFORE `setjmp` / entering
+    // the handler so nested `try/catch` inside an outer `catch` preserves
+    // the outer rethrow exception across both normal and early-exit paths.
+    out += "{ CPLUS_EXC_FRAME(" + frame + "); " + frame + ".active = 1; " +
+           frame + ".restore_rethrow = 0; " + frame +
+           ".prev_rethrow = cplus_rethrow_exc; "
+           "if (setjmp(" + frame + ".base.env) == 0) { "
+           "cplus_exception_enter(&" + frame + ".base); " + body +
+           " " + frame + ".active = 0; cplus_exception_pop(); }";
+    if (!handlerCode.empty())
+      out += " else { " + frame + ".active = 0; " + frame +
+             ".restore_rethrow = 1; cplus_rethrow_exc = " + frame +
+             ".base.exc; { " + handlerCode + " } " + frame +
+             ".restore_rethrow = 0; cplus_rethrow_exc = " + frame +
+             ".prev_rethrow; }";
+    out += " }";
+    pos = resume;
+  }
+  // Throws outside a try block are lowered too: they become deterministic
+  // "unhandled C+ exception" fatals at runtime rather than compile errors.
+  return lowerThrows(out, changed);
+}
+
+} // namespace
+
+std::string lowerExceptions(const std::string &source) {
+  unsigned counter = 0;
+  bool changed = false;
+  std::string out = lowerExceptionsImpl(source, counter, changed);
+  if (!changed)
+    return out;
+  // Guard declarations so a source that includes "cplus/cplus.h" (which uses
+  // the same CPLUS_EXCEPTION_DEFINED guard) does not redefine the types, while
+  // a source that omits the header still emits valid C.  Mark the prelude with
+  // a synthetic #line header name so AstSafetyCheck's isHeaderLocation() does
+  // not mistake compiler-emitted exception helpers for user declarations; the
+  // #line 1 "<filename>" emitted by rewriteCPlusSource follows immediately.
+  return "#line 1 \"<cplus-exception-prelude>\"\n"
+         "#ifndef CPLUS_EXCEPTION_DEFINED\n"
+         "#define CPLUS_EXCEPTION_DEFINED\n"
+         "#include <setjmp.h>\n"
+         "#include <stdint.h>\n"
+         "typedef struct Exception { int code; const char *message; "
+         "const char *file; int line; } Exception;\n"
+         "typedef struct CPlusExceptionFrame { jmp_buf env; "
+         "struct CPlusExceptionFrame *prev; Exception exc; "
+         "uint64_t generation; } CPlusExceptionFrame;\n"
+         "#endif\n"
+         "extern void cplus_exception_enter(CPlusExceptionFrame *);\n"
+         "extern void cplus_exception_pop(void);\n"
+         "extern void cplus_exception_raise(int, const char *, "
+         "const char *, int);\n"
+         // A bare `throw;` rethrows the most recently caught exception.  The
+         // runtime pops the active frame before longjmp, so handlers copy the
+         // exception into this slot on entry; a rethrow then raises it again.
+         "#if defined(__GNUC__) || defined(__clang__)\n"
+         "#  define CPLUS_EXC_TLS __thread\n"
+         "#else\n"
+         "#  define CPLUS_EXC_TLS\n"
+         "#endif\n"
+         "static CPLUS_EXC_TLS Exception cplus_rethrow_exc = "
+         "{1, 0, 0, 0};\n"
+         "__attribute__((unused)) static inline void __cplus_throw_int("
+         "long long c, const char *f, int l) { "
+         "cplus_exception_raise((int)c, 0, f, l); }\n"
+         "__attribute__((unused)) static inline void __cplus_throw_str("
+         "const char *m, const char *f, int l) { "
+         "cplus_exception_raise(1, m, f, l); }\n"
+         "__attribute__((unused)) static inline void __cplus_throw_ptr("
+         "const void *p, const char *f, int l) { "
+         "cplus_exception_raise(p ? 1 : 0, 0, f, l); }\n"
+         // Scope guard: `cplus_exception_pop()` on the setjmp==0 path alone
+         // left a stale runtime frame when a try was left by return/break/
+         // continue/goto.  A cleanup attribute pops on *every* exit edge and
+         // restores any outer catch's `cplus_rethrow_exc` on early exit.
+         // `active` / `restore_rethrow` are volatile so their values survive
+         // a longjmp.
+         "typedef struct CPlusExcGuard { CPlusExceptionFrame base; "
+         "volatile int active; Exception prev_rethrow; "
+         "volatile int restore_rethrow; } CPlusExcGuard;\n"
+         "static void cplus_exc_guard_cleanup(CPlusExcGuard *g) {\n"
+         "  if (g->active) { g->active = 0; cplus_exception_pop(); }\n"
+         "  if (g->restore_rethrow) { g->restore_rethrow = 0; "
+         "cplus_rethrow_exc = g->prev_rethrow; }\n"
+         "}\n"
+         "#if defined(__GNUC__) || defined(__clang__)\n"
+         "#  define CPLUS_EXC_FRAME(N) CPlusExcGuard N "
+         "__attribute__((cleanup(cplus_exc_guard_cleanup)))\n"
+         "#else\n"
+         "#  define CPLUS_EXC_FRAME(N) CPlusExcGuard N\n"
+         "#endif\n" +
+         out;
 }
 
 } // namespace cplus

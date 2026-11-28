@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.strict.c --strict --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.strict.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_check_bounds', 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here
+

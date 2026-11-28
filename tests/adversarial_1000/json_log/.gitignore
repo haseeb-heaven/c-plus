@@ -1,0 +1,6 @@
+# Generated evidence for the ADV1000 json_log suite (never commit).
+results/
+*.bin
+*.stderr
+*.out
+*.log

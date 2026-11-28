@@ -1,0 +1,57 @@
+# nm evidence snapshot - per-method strquery C+/Rust safety comparison
+# Archive: build/safe/libcplus_safecrt.a
+# NOTE: the archive is rebuilt concurrently by other work. The sha/mtime below
+# are a snapshot; compare.sh re-runs nm live on every invocation.
+# Mach-O nm prefixes C symbols with a leading underscore; 'T' = defined text symbol.
+# Exact per-method command (from repo root), METHOD replaced below:
+#   nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*METHOD|_(METHOD)([^A-Za-z0-9_]|$)"
+# captured: 2026-11-23T04:58:51Z
+# sha256:  374705ddbd488cfbf74455dfcc5e92f2967c0e0c812e0733bcc72f1fedd1f13b
+# mtime:   2026-11-23T10:28:26
+#
+=== METHOD strlen_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strlen_s|_(strlen_s)([^A-Za-z0-9_]|$)"
+(no matching symbol -> BLOCKED)
+
+=== METHOD strnlen_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strnlen_s|_(strnlen_s)([^A-Za-z0-9_]|$)"
+up_strnlen_s.o:
+0000000000000000 T _cplus_upstream_strnlen_s
+00000000000004bc T _cplus_strnlen_s
+sc_strnlen_s.o:
+0000000000000030 T _cplus_sc__strnlen_s_chk
+000000000000005c T _cplus_sc_strnlen_s
+
+=== METHOD strchr_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strchr_s|_(strchr_s)([^A-Za-z0-9_]|$)"
+0000000000000000 T _cplus_v__strchr_s_chk
+
+=== METHOD strrchr_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strrchr_s|_(strrchr_s)([^A-Za-z0-9_]|$)"
+000000000000016c T _cplus_v__strrchr_s_chk
+
+=== METHOD strstr_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strstr_s|_(strstr_s)([^A-Za-z0-9_]|$)"
+0000000000000000 T _cplus_v__strstr_s_chk
+
+=== METHOD strcasestr_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strcasestr_s|_(strcasestr_s)([^A-Za-z0-9_]|$)"
+00000000000002fc T _cplus_v__strcasestr_s_chk
+
+=== METHOD strspn_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strspn_s|_(strspn_s)([^A-Za-z0-9_]|$)"
+0000000000000000 T _cplus_v__strspn_s_chk
+
+=== METHOD strcspn_s ===
+$ nm -g --defined-only build/safe/libcplus_safecrt.a | grep -E "cplus_(sc|v)_.*strcspn_s|_(strcspn_s)([^A-Za-z0-9_]|$)"
+000000000000021c T _cplus_v__strcspn_s_chk
+
+=== harness entry points (C spelling) ===
+strlen_s      -> BLOCKED (no symbol in archive at snapshot time)
+strnlen_s     -> cplus_sc_strnlen_s
+strchr_s      -> cplus_v__strchr_s_chk
+strrchr_s     -> cplus_v__strrchr_s_chk
+strstr_s      -> cplus_v__strstr_s_chk
+strcasestr_s  -> cplus_v__strcasestr_s_chk
+strspn_s      -> cplus_v__strspn_s_chk
+strcspn_s     -> cplus_v__strcspn_s_chk

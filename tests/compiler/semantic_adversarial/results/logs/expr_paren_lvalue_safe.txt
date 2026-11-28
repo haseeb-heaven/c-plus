@@ -1,0 +1,21 @@
+case expr_paren_lvalue_safe [expressions] expectation=run
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c
+rc=0 note=
+stdout:
+check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c ok
+
+stderr:
+
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_paren_lvalue_safe
+rc=0 note=
+stdout:
+
+stderr:
+
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_paren_lvalue_safe
+rc=0 note=
+stdout:
+2
+
+stderr:
+

@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_ring_cursor_wrap.c:13:5: error: [CPLUS-SAFE-BOUNDS] constant array index 260 is outside the bounds of 'ring'
+      ring[tail] = 0;
+      ^~~~
+help: array contains 4 elements; valid indices are 0..3

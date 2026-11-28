@@ -1,0 +1,11 @@
+# Optional ignore / allow-list for `run.sh compare <baseline> <ignore-file>`.
+# Blank lines and lines starting with '#' are comments.
+# A bare section letter ignores the whole section.
+# "SECTION<TAB>key-prefix" ignores records whose key starts with that prefix.
+# Fields are separated by a real TAB character.
+#
+# Examples (toolchain-version facts that are expected to drift across CI
+# images but are not ABI layout changes):
+V	clang_version
+C	define __clang_major__
+C	define __clang_minor__

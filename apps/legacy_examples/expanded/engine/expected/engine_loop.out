@@ -1,0 +1,19 @@
+LOOP ticks= 12 seed=0xabcd1234 lane= -8 .. 8
+STATE tick= 0 input= N x= 0 hazard= 6 score= 0 lives= 3 hits= 0
+STATE tick= 1 input= N x= 0 hazard= 5 score= 0 lives= 3 hits= 0
+STATE tick= 2 input= N x= 0 hazard= 4 score= 0 lives= 3 hits= 0
+STATE tick= 3 input= N x= 0 hazard= 3 score= 0 lives= 3 hits= 0
+STATE tick= 4 input= N x= 0 hazard= 2 score= 0 lives= 3 hits= 0
+STATE tick= 5 input= N x= 0 hazard= 1 score= 0 lives= 3 hits= 0
+COLLISION tick= 6 lives= 2
+HIT tick= 6 target= 1 score= 10
+STATE tick= 6 input= F x= 0 hazard= 0 score= 10 lives= 2 hits= 1
+MISS tick= 7 x= 0
+STATE tick= 7 input= F x= 0 hazard= -1 score= 10 lives= 2 hits= 1
+MISS tick= 8 x= 0
+STATE tick= 8 input= F x= 0 hazard= -2 score= 10 lives= 2 hits= 1
+MISS tick= 9 x= 0
+STATE tick= 9 input= F x= 0 hazard= -3 score= 10 lives= 2 hits= 1
+STATE tick= 10 input= N x= 0 hazard= -4 score= 10 lives= 2 hits= 1
+STATE tick= 11 input= N x= 0 hazard= -5 score= 10 lives= 2 hits= 1
+SUMMARY ticks= 12 score= 10 hits= 1 collisions= 1 lives= 2 checksum= 1025

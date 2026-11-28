@@ -1,0 +1,25 @@
+CASE=b_runtime_signed_overflow
+CONFIG=build_ubsan
+STATUS=PASS
+REASON=PASS: run rc=134/NA with asserted diagnostic [signed integer overflow]/[] and generated-C token [x + 1]; runtime operand 2147483647 + 1 must trap (native 110 or UBSan 134), never wrap to -2147483648
+EXPECT_COMPILE=either
+EXPECT_DIAG=
+EXPECT_REJECT_DIAG=overflow
+EXPECT_GEN_SUBSTR=x + 1
+EXPECT_RUN=trap
+EXPECT_RUN_RC=134
+EXPECT_RUN_DIAG=signed integer overflow
+EXPECT_RUN2_RC=
+EXPECT_RUN2_DIAG=
+COMPILE_CMD=env CPLUS_CLANG=/opt/homebrew/opt/llvm/bin/clang /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=undefined --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/b_runtime_signed_overflow__build_ubsan.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/b_runtime_signed_overflow.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/bins/b_runtime_signed_overflow__build_ubsan.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+COMPILE_RC=0
+COMPILE_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__build_ubsan__compile.stdout
+COMPILE_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__build_ubsan__compile.stderr
+GENERATED_C=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/b_runtime_signed_overflow__build_ubsan.c
+NATIVE_GUARD_WRAPPER_COUNT=0
+RUN1_RC=134
+RUN1_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__build_ubsan__run1.stdout
+RUN1_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__build_ubsan__run1.stderr
+RUN2_RC=NA
+RUN2_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__build_ubsan__run2.stdout
+RUN2_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/b_runtime_signed_overflow__build_ubsan__run2.stderr

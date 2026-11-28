@@ -1,0 +1,5 @@
+In file included from /tmp/resolve2/proof/goose_samples/huffman.c:3:
+/tmp/resolve2/proof/goose_samples/common.h:15:12: warning: unused function 'cmp_int' [-Wunused-function]
+   15 | static int cmp_int(const void *a, const void *b) {
+      |            ^~~~~~~
+1 warning generated.

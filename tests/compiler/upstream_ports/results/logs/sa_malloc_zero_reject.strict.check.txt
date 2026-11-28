@@ -1,0 +1,14 @@
+case: sa_malloc_zero_reject
+mode: strict
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_malloc_zero_reject.c
+rc: 1
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:5:14: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc
+      int *p = malloc(0);
+               ^~~~~~
+help: use C+ managed allocations and cplus_* helpers
+

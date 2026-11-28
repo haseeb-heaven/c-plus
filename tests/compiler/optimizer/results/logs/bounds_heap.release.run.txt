@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/bounds_heap.release.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+bh=3,9
+
+--- stderr ---
+

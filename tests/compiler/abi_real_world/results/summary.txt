@@ -1,0 +1,64 @@
+C+ real-world-style native ABI regression suite
+======================================================================
+binary       : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+version      : C+ 0.1.0
+oracle       : /usr/bin/clang (Apple clang version 16.0.0 (clang-1600.0.26.6))
+oracle stds  : -std=gnu17, -std=c99
+platform     : Darwin/arm64 (symbol prefix '_')
+generated    : 2026-11-25T23:05:53
+modes        : --legacy-c, --default, --strict
+backend flags: --sanitize=none (no sanitizer instrumentation; ABI only)
+timeout      : 90s build/nm, 30s execution
+
+SUMMARY
+----------------------------------------------------------------------
+cases                 : 12
+checks (case x mode)  : 36
+passed                : 36
+failed                : 0
+skipped               : 0
+oracle runs           : 24 (12 cases x 2 stds)
+oracle failed cases   : 0
+
+BY MODE
+----------------------------------------------------------------------
+  --legacy-c checks=12 passed=12 failed= 0 skipped= 0
+  --default  checks=12 passed=12 failed= 0 skipped= 0
+  --strict   checks=12 passed=12 failed= 0 skipped= 0
+
+BY FAMILY
+----------------------------------------------------------------------
+  callback             checks= 6 passed= 6 failed= 0 skipped= 0
+  enum                 checks= 3 passed= 3 failed= 0 skipped= 0
+  extern_signature     checks= 3 passed= 3 failed= 0 skipped= 0
+  function_pointer     checks= 3 passed= 3 failed= 0 skipped= 0
+  library_interop      checks= 3 passed= 3 failed= 0 skipped= 0
+  pointer_size         checks= 3 passed= 3 failed= 0 skipped= 0
+  struct_layout        checks= 9 passed= 9 failed= 0 skipped= 0
+  symbol_names         checks= 3 passed= 3 failed= 0 skipped= 0
+  variadic             checks= 3 passed= 3 failed= 0 skipped= 0
+
+ORACLE (clang reference, exact stdout)
+----------------------------------------------------------------------
+  pointer_sizes            OK   'ptr=8,obj=8,ip=8,fn=8,vfn=8,up=8,st=8\nnull=1,call=7\n'
+  struct_layout            OK   'header=24,0,4,8,16\nwire=13,0,1,5\nseg=24,0,4,12,20,4,8,12,16\nsamples=40,0,8,32\n'
+  union_layout             OK   'size=16 d=2.5:00000000000004400000000000000000\ni=-7:f9ffffffffffffff0000000000000000\n'
+  bitfield_layout          OK   'flags=4:8da53412\nsparse=4:01000700\nreg=8:8d00000001fb0000,5,17,257,-3\n'
+  enum_sizes               OK   'e=4,4,4 v=7,2147483647,2147483646 raw=07000000\n'
+  fnptr_representation     OK   'sz=8,8 ua=8 eq=1 same=1 diff=1 call=42 rt=53\n'
+  callback_conventions     OK   'cb=42,6.0,7,2.5,struct=7,6.0\n'
+  qsort_callbacks          OK   'items=abcd nums=13459\n'
+  variadic_abi             OK   'sum=36,42\nd=v,7,2.50,100,ok\nret=107\nsnp=11:fmt=3/1.5/z\n'
+  extern_signatures        OK   'x=42,6,6.0,5,7,2.5,h=7\n'
+  exported_symbols         OK   'sym=7,7,rw,42\n'
+  static_library_interop   OK   'lib=42,2.5,6,7.0,cb=9\n'
+
+FAILURES (exact case names and modes)
+----------------------------------------------------------------------
+  none
+
+SKIPS
+----------------------------------------------------------------------
+  none
+
+Full records: results/summary.json

@@ -1,0 +1,4 @@
+BOUNDS exact OK cap=16 span_full=1 query_full=1
+BOUNDS one_over REFUSED code=101 cat=5 span_1over=0 query=-1
+BOUNDS interior OK interior_has_metadata=0 contains_24=1 contains_25=0
+BOUNDS stale REFUSED code=103 cat=7 moved=1 old_key_current=0 old_query=-1 fresh_query=1

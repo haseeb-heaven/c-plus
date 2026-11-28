@@ -1,0 +1,10 @@
+case macro_cast_launder [macros] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_cast_launder.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_cast_launder.c:4:44: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+  int main(void){ int a[4]={1,2,3,4}; int *p=LAUNDER(a); printf("%d\n", p[0]); return 0; }
+                                             ^~~~~~~
+

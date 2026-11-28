@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.strict.c --strict --sanitize=none -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases -lstatic_library_interop_strict -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.strict.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'lib_apply', 'lib_mul', 'lib_pair', 'lib_scale' have no definition in this TU; cross-TU control/data flow is not safety-checked here
+

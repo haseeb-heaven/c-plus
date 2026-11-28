@@ -1,0 +1,26 @@
+line 1 1 1 0 1
+line_roundtrip 1
+line 2 1 11 10 1
+line_roundtrip 1
+line 3 1 1 0 1
+line_roundtrip 1
+line 4 0 0 0 0
+line_parse_refusal 1
+line 5 1 4 1 1
+line_roundtrip 1
+s_stdin_lines 1
+s_big_parse 1
+s_big_size 1
+s_big_first 1
+s_big_last 1
+s_big_write 1
+s_big_walk 1
+s_deep_obj_parse 1
+s_deep_obj_leaf 1
+s_deep_obj_write 1
+s_fault_parse 1
+s_fault_build 1
+s_fault_reset 1
+s_post_fault_builder 1
+s_post_fault_parse 1
+RESULT 20 0

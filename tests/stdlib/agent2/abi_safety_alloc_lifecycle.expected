@@ -1,0 +1,30 @@
+asal_a_alloc_nonnull 1
+asal_a_gen_nonzero 1
+asal_a_size 1
+asal_a_live_increment 1
+asal_a_released_gen 1
+asal_a_live_restored 1
+asal_a_balance 1
+asal_b_alloc 1
+asal_b_stale_gen_zero 1
+asal_b_stale_check_reject 1
+asal_b_stale_query_reject 1
+asal_b_double_release_refused 1
+asal_b_balance 1
+asal_c_untracked_size_zero 1
+asal_c_untracked_gen_zero 1
+asal_c_untracked_query_reject 1
+asal_c_invalid_free_refused 1
+asal_c_stack_anchor_intact 1
+asal_d_alloc 1
+asal_d_live_check 1
+asal_d_query_len 1
+asal_d_uaf_gen_zero 1
+asal_d_uaf_check_reject 1
+asal_d_uaf_query_reject 1
+asal_d_balance 1
+asal_e_repeated_cycles 1
+asal_e_balance 1
+SKIP abi_custom_alloc: no custom allocator plug-in point in stdlib/error.hp or the C+ runtime
+asal_custom_alloc_unavailable 1
+ABI_SAFETY 28 0

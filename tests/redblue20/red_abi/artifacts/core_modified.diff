@@ -1,0 +1,209 @@
+diff --git a/libc/src/math/math3.c b/libc/src/math/math3.c
+index 9a6fa14..52ddc7e 100644
+--- a/libc/src/math/math3.c
++++ b/libc/src/math/math3.c
+@@ -3,7 +3,7 @@
+ #include "../../log/log.h"
+ #include <math.h>
+ 
+-double cplus_nan(const char *tagp){ cplus_libc_log("nan","enter"); return nan(tagp); }
++double cplus_nan(const char *tagp){ cplus_libc_log("nan","enter"); return nan(tagp ? tagp : ""); }
+ double cplus_nextafter(double x,double y){ cplus_libc_log("nextafter","enter"); return nextafter(x,y); }
+ double cplus_fdim(double x,double y){ cplus_libc_log("fdim","enter"); return fdim(x,y); }
+ double cplus_remainder(double x,double y){ cplus_libc_log("remainder","enter"); return remainder(x,y); }
+diff --git a/libc/src/math/math_float.c b/libc/src/math/math_float.c
+index 7ebf6a6..dae3bc3 100644
+--- a/libc/src/math/math_float.c
++++ b/libc/src/math/math_float.c
+@@ -70,7 +70,7 @@ float cplus_tgammaf(float x){ cplus_libc_log("tgammaf","enter"); return tgammaf(
+ float cplus_lgammaf(float x){ cplus_libc_log("lgammaf","enter"); return lgammaf(x); }
+ float cplus_nextafterf(float x,float y){ cplus_libc_log("nextafterf","enter"); return nextafterf(x,y); }
+ float cplus_nexttowardf(float x,long double y){ cplus_libc_log("nexttowardf","enter"); return nexttowardf(x,y); }
+-float cplus_nanf(const char *tagp){ cplus_libc_log("nanf","enter"); return nanf(tagp); }
++float cplus_nanf(const char *tagp){ cplus_libc_log("nanf","enter"); return nanf(tagp ? tagp : ""); }
+ 
+ /* Hardened pointer-out-parameter paths: NULL would be undefined behavior. */
+ float cplus_frexpf(float x,int *e){
+diff --git a/libc/src/math/math_ldouble.c b/libc/src/math/math_ldouble.c
+index b069488..c6aa083 100644
+--- a/libc/src/math/math_ldouble.c
++++ b/libc/src/math/math_ldouble.c
+@@ -109,4 +109,4 @@ int cplus_ilogbl(long double x){ cplus_libc_log("ilogbl","enter"); return ilogbl
+ long double cplus_logbl(long double x){ cplus_libc_log("logbl","enter"); return logbl(x); }
+ long double cplus_nextafterl(long double x, long double y){ cplus_libc_log("nextafterl","enter"); return nextafterl(x,y); }
+ long double cplus_nexttowardl(long double x, long double y){ cplus_libc_log("nexttowardl","enter"); return nexttowardl(x,y); }
+-long double cplus_nanl(const char *tagp){ cplus_libc_log("nanl","enter"); return nanl(tagp); }
++long double cplus_nanl(const char *tagp){ cplus_libc_log("nanl","enter"); return nanl(tagp ? tagp : ""); }
+diff --git a/libc/src/stdlib/stdlib_extra5.c b/libc/src/stdlib/stdlib_extra5.c
+index 38f2f2d..8bc6ee2 100644
+--- a/libc/src/stdlib/stdlib_extra5.c
++++ b/libc/src/stdlib/stdlib_extra5.c
+@@ -2,6 +2,7 @@
+  * installed system libc; logged per C+ convention. Covers the legacy
+  * floating-point-to-string converters (ecvt/fcvt/gcvt) and the POSIX
+  * drand48() pseudo-random family, both of which are ABI-tied to the host. */
++#define _XOPEN_SOURCE 700
+ #define _DEFAULT_SOURCE
+ #include "../../log/log.h"
+ #include <stdlib.h>
+diff --git a/libc/src/stdlib/stdlib_extra6.c b/libc/src/stdlib/stdlib_extra6.c
+index 9daed2b..0eb8eea 100644
+--- a/libc/src/stdlib/stdlib_extra6.c
++++ b/libc/src/stdlib/stdlib_extra6.c
+@@ -7,32 +7,54 @@
+  *                int (*)(void *, const void *, const void *));
+  * (the context pointer precedes the comparator -- the BSD, not the glibc,
+  * argument order). */
+-#define _DEFAULT_SOURCE
++#define _GNU_SOURCE
+ #include "../../log/log.h"
++#include <errno.h>
+ #include <stdlib.h>
+ #include <unistd.h>   /* on macOS mkstemp()/mkdtemp() are declared here, not <stdlib.h> */
+ 
++#if defined(__GLIBC__)
++typedef struct cplus_qsort_r_ctx {
++    int (*compar)(void *, const void *, const void *);
++    void *thunk;
++} cplus_qsort_r_ctx;
++
++static int cplus_qsort_r_glibc_trampoline(const void *a, const void *b, void *arg) {
++    cplus_qsort_r_ctx *ctx = (cplus_qsort_r_ctx *)arg;
++    return ctx->compar(ctx->thunk, a, b);
++}
++#endif
++
+ int cplus_mkstemp(char *template) {
+     cplus_libc_log("mkstemp", "enter");
++    if (!template) { errno = EINVAL; return -1; }
+     return mkstemp(template);
+ }
+ char *cplus_mkdtemp(char *template) {
+     cplus_libc_log("mkdtemp", "enter");
++    if (!template) { errno = EINVAL; return NULL; }
+     return mkdtemp(template);
+ }
+ char *cplus_realpath(const char *path, char *resolved) {
+     cplus_libc_log("realpath", "enter");
++    if (!path) { errno = EINVAL; return NULL; }
+     return realpath(path, resolved);
+ }
+ void cplus_qsort_r(void *base, size_t nmemb, size_t size, void *thunk,
+                    int (*compar)(void *, const void *, const void *)) {
+     cplus_libc_log("qsort_r", "enter");
++    if (!base || !compar || size == 0 || nmemb <= 1) return;
+ #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+     /* BSD/macOS: qsort_r(base, nmemb, size, thunk, compar) */
+     qsort_r(base, nmemb, size, thunk, compar);
+ #elif defined(__GLIBC__)
+-    /* glibc: qsort_r(base, nmemb, size, compar, thunk) — reversed order. */
+-    qsort_r(base, nmemb, size, compar, thunk);
++    /* glibc: qsort_r(base, nmemb, size, compar, thunk) — adapt via trampoline. */
++    {
++        cplus_qsort_r_ctx ctx;
++        ctx.compar = compar;
++        ctx.thunk = thunk;
++        qsort_r(base, nmemb, size, cplus_qsort_r_glibc_trampoline, &ctx);
++    }
+ #else
+     /* Unknown qsort_r ABI: do NOT call it with a guessed argument order. */
+     errno = ENOSYS;
+diff --git a/libc/src/string/string_extra5.c b/libc/src/string/string_extra5.c
+index e42cc6a..00087bd 100644
+--- a/libc/src/string/string_extra5.c
++++ b/libc/src/string/string_extra5.c
+@@ -2,6 +2,7 @@
+  * installed system libc; logged per C+ convention.
+  * NOTE: mempcpy/memfrob are glibc/BSD extensions that are NOT declared by
+  * the macOS libc, so they are intentionally omitted from this slice. */
++#define _XOPEN_SOURCE 700
+ #define _DEFAULT_SOURCE
+ #include "../../log/log.h"
+ #include <string.h>
+@@ -10,5 +11,6 @@
+ 
+ void cplus_swab(const void *restrict from, void *restrict to, ssize_t n) {
+     cplus_libc_log("swab", "enter");
++    if (!from || !to || n <= 0) return;
+     swab(from, to, n);
+ }
+diff --git a/libc/src/string/string_extra6.c b/libc/src/string/string_extra6.c
+index 1f346cd..c12b817 100644
+--- a/libc/src/string/string_extra6.c
++++ b/libc/src/string/string_extra6.c
+@@ -5,17 +5,50 @@
+  * (extra.c / musl_extra.c) and are therefore intentionally not re-defined. */
+ #define _DEFAULT_SOURCE
+ #include "../../log/log.h"
++#include <stddef.h>
+ #include <string.h>
+ 
+ size_t cplus_strlcpy(char *dst, const char *src, size_t size) {
++    size_t slen;
+     cplus_libc_log("strlcpy", "enter");
+-    return strlcpy(dst, src, size);
++    if (!src) return 0;
++    slen = strlen(src);
++    if (dst && size > 0) {
++        size_t n = slen < size - 1 ? slen : size - 1;
++        if (n > 0) memcpy(dst, src, n);
++        dst[n] = '\0';
++    }
++    return slen;
+ }
+ size_t cplus_strlcat(char *dst, const char *src, size_t size) {
++    size_t dlen = 0;
++    size_t slen;
+     cplus_libc_log("strlcat", "enter");
+-    return strlcat(dst, src, size);
++    if (!src) return 0;
++    slen = strlen(src);
++    if (!dst) return slen;
++    while (dlen < size && dst[dlen] != '\0') ++dlen;
++    if (dlen == size) return size + slen;
++    {
++        size_t avail = size - dlen - 1;
++        size_t n = slen < avail ? slen : avail;
++        if (n > 0) memcpy(dst + dlen, src, n);
++        dst[dlen + n] = '\0';
++    }
++    return dlen + slen;
+ }
+ char *cplus_strnstr(const char *haystack, const char *needle, size_t len) {
++    size_t nlen;
++    size_t i;
+     cplus_libc_log("strnstr", "enter");
+-    return strnstr(haystack, needle, len);
++    if (!haystack || !needle) return NULL;
++    if (needle[0] == '\0') return (char *)haystack;
++    nlen = strlen(needle);
++    if (nlen > len) return NULL;
++    for (i = 0; i <= len - nlen && haystack[i] != '\0'; ++i) {
++        if (memcmp(haystack + i, needle, nlen) == 0) {
++            return (char *)(haystack + i);
++        }
++    }
++    return NULL;
+ }
+diff --git a/libc/src/time/time_extra.c b/libc/src/time/time_extra.c
+index 9fc4e81..247417b 100644
+--- a/libc/src/time/time_extra.c
++++ b/libc/src/time/time_extra.c
+@@ -1,7 +1,17 @@
+ /* Platform-backed time extras (C+ libc slice). Delegate to the installed
+  * system libc; logged per C+ convention. Covers the POSIX clock_gettime()/
+  * nanosleep() pair and the C11 timespec_get(). */
++#ifndef _DEFAULT_SOURCE
+ #define _DEFAULT_SOURCE
++#endif
++#if !defined(__APPLE__)
++#  ifndef _POSIX_C_SOURCE
++#    define _POSIX_C_SOURCE 200809L
++#  endif
++#  ifndef _ISOC11_SOURCE
++#    define _ISOC11_SOURCE
++#  endif
++#endif
+ #include "../../log/log.h"
+ #include <errno.h>
+ #include <time.h>

@@ -1,0 +1,5 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/ptr_arith_oob.primary.bin
+returncode: 0
+timed_out: False
+
+

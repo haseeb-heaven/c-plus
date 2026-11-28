@@ -36,7 +36,10 @@ std::vector<std::string> buildClangArgs(const FrontendOptions &opts,
     args.push_back("-g");
   }
 
-  if (opts.warningsAsErrors)
+  const bool promoteWarnings =
+      opts.warningsAsErrors && (opts.mode != Mode::LegacyC ||
+                                opts.warningsAsErrorsExplicit);
+  if (promoteWarnings)
     args.push_back("-Werror");
 
   for (const auto &d : opts.defines)

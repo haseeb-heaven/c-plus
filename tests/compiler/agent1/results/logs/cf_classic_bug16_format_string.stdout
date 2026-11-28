@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug16_format_string.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug16_format_string.c:5:12: warning: [CPLUS-FFI] format string is not a string literal (potentially insecure)

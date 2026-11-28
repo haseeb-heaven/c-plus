@@ -1,0 +1,22 @@
+baseline_live 1
+alloc_live 2
+alloc_gen_nonzero 1
+alloc_bytes 32
+stdlib_size 32
+realloc_ptr_diff 1
+realloc_new_runtime_bytes 64
+realloc_new_stdlib_size 0
+realloc_old_stdlib_size 32
+realloc_old_gen 2
+realloc_live_after 2
+str_gen0 1
+str_reserve 0
+str_old_gen_zero 0
+str_new_gen_diff 1
+slice_valid 1
+slice_stale0 0
+slice_at0 0
+slice_stale_after_growth 1
+slice_at_after_growth -1
+end_live 0
+ABI_SAFETY 0 0

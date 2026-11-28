@@ -1,0 +1,13 @@
+case: sb_realloc_alias
+mode: default
+step: build
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_realloc_alias.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_realloc_alias.default
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:6:14: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      int *q = realloc(p, 32);
+               ^~~~~~~
+

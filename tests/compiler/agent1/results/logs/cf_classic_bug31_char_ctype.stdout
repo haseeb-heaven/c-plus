@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug31_char_ctype.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug31_char_ctype.c:4:52: error: [CPLUS-FFI] cast a plain char to unsigned char before <ctype.h>

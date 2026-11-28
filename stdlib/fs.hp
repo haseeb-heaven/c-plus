@@ -1,0 +1,119 @@
+/* C+ standard library: filesystem queries and operations (POSIX stat family).
+ *
+ * Stateless helpers with C++-flavoured names; no new filesystem engine.  Every
+ * fallible operation reports through `error` instead of setting errno only.
+ */
+#ifndef CPLUS_STD_FS_HP
+#define CPLUS_STD_FS_HP
+
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+static inline int fs_exists(const char *path) {
+    struct stat info;
+    if (path == NULL)
+        return 0;
+    return stat(path, &info) == 0;
+}
+
+static inline int fs_is_file(const char *path) {
+    struct stat info;
+    if (path == NULL || stat(path, &info) != 0)
+        return 0;
+    return S_ISREG(info.st_mode) ? 1 : 0;
+}
+
+static inline int fs_is_dir(const char *path) {
+    struct stat info;
+    if (path == NULL || stat(path, &info) != 0)
+        return 0;
+    return S_ISDIR(info.st_mode) ? 1 : 0;
+}
+
+/* Byte size, or -1 with the error record set. */
+static inline long long fs_size(const char *path, error *err) {
+    struct stat info;
+    error_reset(err);
+    if (path == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_size: null path");
+        return -1;
+    }
+    if (stat(path, &info) != 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO, strerror(errno));
+        return -1;
+    }
+    return (long long)info.st_size;
+}
+
+static inline int fs_remove(const char *path, error *err) {
+    error_reset(err);
+    if (path == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_remove: null path");
+        return STDLIB_FAIL;
+    }
+    if (unlink(path) != 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO, strerror(errno));
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+static inline int fs_rename(const char *from, const char *to, error *err) {
+    error_reset(err);
+    if (from == NULL || to == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_rename: null path");
+        return STDLIB_FAIL;
+    }
+    if (rename(from, to) != 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO, strerror(errno));
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+static inline int fs_mkdir(const char *path, error *err) {
+    error_reset(err);
+    if (path == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_mkdir: null path");
+        return STDLIB_FAIL;
+    }
+    if (mkdir(path, 0777) != 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO, strerror(errno));
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+/* Create a unique temporary directory from a mutable template ending in
+ * "XXXXXX" (e.g. "/tmp/cplus_dir_XXXXXX"). */
+static inline int fs_mkdtemp(char *tmpl, size_t size, error *err) {
+    size_t len;
+    error_reset(err);
+    if (tmpl == NULL || size < 7) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_mkdtemp: invalid template buffer");
+        return STDLIB_FAIL;
+    }
+    len = strnlen(tmpl, size);
+    if (len >= size || len < 6 || strcmp(tmpl + len - 6, "XXXXXX") != 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "fs_mkdtemp: template must end with XXXXXX");
+        return STDLIB_FAIL;
+    }
+    if (mkdtemp(tmpl) == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO, strerror(errno));
+        return STDLIB_FAIL;
+    }
+    return STDLIB_OK;
+}
+
+#endif

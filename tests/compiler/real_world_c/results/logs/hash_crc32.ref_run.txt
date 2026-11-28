@@ -1,0 +1,9 @@
+case: hash_crc32
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/hash_crc32.clang
+rc: 0
+timed_out: False
+--- stdout ---
+Tests passed
+
+--- stderr ---
+

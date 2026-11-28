@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1270" height="452" viewBox="0 0 1270 452">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">gui_app (macos)</text>
+  <text class="sub" x="84" y="48">GUI widget / layout app  |  exit=0</text>
+  <text class="sub" x="84" y="68">run: env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin SDL_VIDEODRIVER=dummy timeout 30 ./gui_app describe 0</text>
+  <rect y="84" width="100%" height="310" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90</text>
+  <text class="body" xml:space="preserve" x="20" y="134">GUI_LAYOUT cell=80x45 origin=0,0</text>
+  <text class="body" xml:space="preserve" x="20" y="156">WIDGETS 6</text>
+  <text class="body" xml:space="preserve" x="20" y="178">W 1 4 1 1 78 43 3 root</text>
+  <text class="body" xml:space="preserve" x="20" y="200">W 2 2 81 1 78 43 3 user</text>
+  <text class="body" xml:space="preserve" x="20" y="222">W 3 3 161 1 78 43 3 name</text>
+  <text class="body" xml:space="preserve" x="20" y="244">W 4 2 1 46 78 43 3 pass</text>
+  <text class="body" xml:space="preserve" x="20" y="266">W 5 3 81 46 78 43 3 secret</text>
+  <text class="body" xml:space="preserve" x="20" y="288">W 6 1 161 46 78 43 3 <tspan class="ok">OK</tspan></text>
+  <text class="body" xml:space="preserve" x="20" y="310">GUI_SERIAL bytes=157 crc32=a52b03af</text>
+  <text class="body" xml:space="preserve" x="20" y="332">GUI_HIT p=5,5 index=0 id=1 label=root</text>
+  <text class="body" xml:space="preserve" x="20" y="354">GUI_HIT p=85,5 index=1 id=2 label=user</text>
+  <text class="body" xml:space="preserve" x="20" y="376">GUI_RESULT describe:0,0,0 <tspan class="ok">OK</tspan></text>
+  <rect y="394" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="416">Verbatim captured terminal output for gui_app on macos — evidence for the recorded host/toolchain only; not a memory-safety proof.</text>
+  <text class="disclaimer" x="20" y="436">rendered terminal output from a real captured run — not a fabricated GUI capture</text>
+  <desc>Verbatim captured output:
+    GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90
+    GUI_LAYOUT cell=80x45 origin=0,0
+    WIDGETS 6
+    W 1 4 1 1 78 43 3 root
+    W 2 2 81 1 78 43 3 user
+    W 3 3 161 1 78 43 3 name
+    W 4 2 1 46 78 43 3 pass
+    W 5 3 81 46 78 43 3 secret
+    W 6 1 161 46 78 43 3 OK
+    GUI_SERIAL bytes=157 crc32=a52b03af
+    GUI_HIT p=5,5 index=0 id=1 label=root
+    GUI_HIT p=85,5 index=1 id=2 label=user
+    GUI_RESULT describe:0,0,0 OK
+  </desc>
+</svg>

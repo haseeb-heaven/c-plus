@@ -1,0 +1,21 @@
+/* C+ no-heap policy (additive, opt-in): when CPLUS_NO_HEAP is defined, direct
+ * dynamic-heap calls in C+ source are compile-time errors. C+ code must use
+ * the scoped-memory-style data stack, dynamic arena and slot pools from
+ * stdlib/scoped_mem.hp. Ordinary C ABI/ABI-compatible headers are NOT changed:
+ * malloc/free remain available to precompiled C libraries and legacy C mode.
+ *
+ * Usage: ./build/c+ build app.cp -DCPLUS_NO_HEAP -include stdlib/no_heap.hp ...
+ * (or include this header first in the .cp source).
+ */
+#ifndef CPLUS_STD_NO_HEAP_HP
+#define CPLUS_STD_NO_HEAP_HP
+
+#ifdef CPLUS_NO_HEAP
+#define malloc(s)            CPLUS_NO_HEAP_FORBIDDEN_malloc((s))
+#define calloc(n, s)         CPLUS_NO_HEAP_FORBIDDEN_calloc((n), (s))
+#define realloc(p, s)        CPLUS_NO_HEAP_FORBIDDEN_realloc((p), (s))
+#define free(p)              CPLUS_NO_HEAP_FORBIDDEN_free((p))
+#define aligned_alloc(a, s)  CPLUS_NO_HEAP_FORBIDDEN_aligned_alloc((a), (s))
+#endif
+
+#endif /* CPLUS_STD_NO_HEAP_HP */

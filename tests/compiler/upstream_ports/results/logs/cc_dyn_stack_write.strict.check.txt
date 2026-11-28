@@ -1,0 +1,11 @@
+case: cc_dyn_stack_write
+mode: strict
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_dyn_stack_write.c
+rc: 0
+timed_out: False
+--- stdout ---
+check: <SRC> ok
+
+--- stderr ---
+

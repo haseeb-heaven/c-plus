@@ -1,0 +1,129 @@
+=== C+ -> C interoperability lab ===
+date_utc=2026-11-24T05:18:15Z
+PATH=/usr/bin:/bin
+CPLUS_CLANG=/usr/bin/clang
+arch=arm64 os=Darwin
+ROOT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+--- clang --version ---
+Apple clang version 16.0.0 (clang-1600.0.26.6)
+Target: arm64-apple-darwin27.2.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+--- c+ --version ---
+C+ 0.1.0
+Language: C+ (C with memory safety, deterministic RAII, lightweight classes)
+Backend: host Clang/LLVM
+================================
+PREREQUISITE OK: -rw-r--r--@ 1 haseeb-mir  staff  297096 Nov 24 10:47 build/libc/libcplus_hardened.a
+CMD[T1_cplus_lower_compile] timeout=180s: ./build/c+ build --strict --sanitize=none tests/abi/cp_to_c/cp_to_c_lib.cp --emit-c tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c -c -o tests/abi/cp_to_c/artifacts/cp_to_c_lib.o -- -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/cp_to_c
+tests/abi/cp_to_c/cp_to_c_lib.cp: warning: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc_get_meta', 'cplus_calloc', 'cplus_free_checked', 'cplus_transfer_ownership' have no definition in this TU; cross-TU control/data flow is not safety-checked here
+RC[T1_cplus_lower_compile]=0
+CMD[T1_ar_archive] timeout=60s: /usr/bin/ar rcs tests/abi/cp_to_c/artifacts/libcp_to_c.a tests/abi/cp_to_c/artifacts/cp_to_c_lib.o
+RC[T1_ar_archive]=0
+CMD[T2_c_driver_link] timeout=180s: /usr/bin/clang -O1 -std=c99 -Wall -Wextra -pedantic -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/abi/cp_to_c tests/abi/cp_to_c/cp_to_c_driver.c tests/abi/cp_to_c/artifacts/libcp_to_c.a build/libc/libcplus_hardened.a -lm -pthread -o tests/abi/cp_to_c/artifacts/cp_to_c_driver
+Undefined symbols for architecture arm64:
+  "___cplus_checked_add_i64", referenced from:
+      ___cplus_inline_add_i64 in libcp_to_c.a[2](cp_to_c_lib.o)
+      ___cplus_inline_add_i64 in libcp_to_c.a[2](cp_to_c_lib.o)
+      ___cplus_inline_add_i64 in libcp_to_c.a[2](cp_to_c_lib.o)
+  "_cplus_check_nonnull", referenced from:
+      _CpAdder_apply in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      _CpRecordValidator_check in libcp_to_c.a[2](cp_to_c_lib.o)
+      ...
+ld: symbol(s) not found for architecture arm64
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+RC[T2_c_driver_link]=1
+CMD[T3_driver_run] timeout=60s: tests/abi/cp_to_c/artifacts/cp_to_c_driver > tests/abi/cp_to_c/artifacts/driver.out
+timeout: exec(tests/abi/cp_to_c/artifacts/cp_to_c_driver): No such file or directory
+RC[T3_driver_run]=127
+CHECK[T3_driver_summary]: grep -F 'boundary checks match' tests/abi/cp_to_c/artifacts/driver.out
+MISSING in tests/abi/cp_to_c/artifacts/driver.out: boundary checks match
+CMD[T4_nm_archive] timeout=60s: /usr/bin/nm -gU tests/abi/cp_to_c/artifacts/libcp_to_c.a
+
+cp_to_c_lib.o:
+0000000000000000 T _CpAdder_apply
+0000000000000644 T _CpBuffer_read
+000000000000056c T _CpBuffer_write
+0000000000000740 T _CpLayoutProbe_fill
+0000000000000170 T _CpRecordValidator_check
+0000000000000470 T _CpScaler_apply
+00000000000007e0 T _cp_to_c_add
+0000000000000b80 T _cp_to_c_buffer_create
+0000000000000f34 T _cp_to_c_buffer_destroy
+0000000000000e88 T _cp_to_c_buffer_meta
+0000000000000e08 T _cp_to_c_buffer_read
+0000000000000cb0 T _cp_to_c_buffer_write
+0000000000000ff0 T _cp_to_c_echo_err
+0000000000000a8c T _cp_to_c_layout_report
+0000000000000814 T _cp_to_c_mixcall
+0000000000000a1c T _cp_to_c_ptr_roundtrip
+00000000000009b8 T _cp_to_c_record_by_ptr
+0000000000000968 T _cp_to_c_record_by_value
+0000000000000ab4 T _cp_to_c_scale_sum
+RC[T4_nm_archive]=0
+--- nm -gU tests/abi/cp_to_c/artifacts/libcp_to_c.a (full) ---
+
+cp_to_c_lib.o:
+0000000000000000 T _CpAdder_apply
+0000000000000644 T _CpBuffer_read
+000000000000056c T _CpBuffer_write
+0000000000000740 T _CpLayoutProbe_fill
+0000000000000170 T _CpRecordValidator_check
+0000000000000470 T _CpScaler_apply
+00000000000007e0 T _cp_to_c_add
+0000000000000b80 T _cp_to_c_buffer_create
+0000000000000f34 T _cp_to_c_buffer_destroy
+0000000000000e88 T _cp_to_c_buffer_meta
+0000000000000e08 T _cp_to_c_buffer_read
+0000000000000cb0 T _cp_to_c_buffer_write
+0000000000000ff0 T _cp_to_c_echo_err
+0000000000000a8c T _cp_to_c_layout_report
+0000000000000814 T _cp_to_c_mixcall
+0000000000000a1c T _cp_to_c_ptr_roundtrip
+00000000000009b8 T _cp_to_c_record_by_ptr
+0000000000000968 T _cp_to_c_record_by_value
+0000000000000ab4 T _cp_to_c_scale_sum
+--- end nm ---
+CHECK[T4_exact_symbols:CpAdder_apply]: grep -Eq '^[0-9A-Fa-f]+ T _CpAdder_apply$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:CpBuffer_read]: grep -Eq '^[0-9A-Fa-f]+ T _CpBuffer_read$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:CpBuffer_write]: grep -Eq '^[0-9A-Fa-f]+ T _CpBuffer_write$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:CpLayoutProbe_fill]: grep -Eq '^[0-9A-Fa-f]+ T _CpLayoutProbe_fill$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:CpRecordValidator_check]: grep -Eq '^[0-9A-Fa-f]+ T _CpRecordValidator_check$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:CpScaler_apply]: grep -Eq '^[0-9A-Fa-f]+ T _CpScaler_apply$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_add]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_add$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_buffer_create]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_buffer_create$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_buffer_destroy]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_buffer_destroy$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_buffer_meta]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_buffer_meta$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_buffer_read]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_buffer_read$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_buffer_write]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_buffer_write$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_echo_err]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_echo_err$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_layout_report]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_layout_report$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_mixcall]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_mixcall$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_ptr_roundtrip]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_ptr_roundtrip$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_record_by_ptr]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_record_by_ptr$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_record_by_value]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_record_by_value$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_exact_symbols:cp_to_c_scale_sum]: grep -Eq '^[0-9A-Fa-f]+ T _cp_to_c_scale_sum$' tests/abi/cp_to_c/artifacts/nm_cp_to_c.txt
+CHECK[T4_no_cxx_mangling]: no ' T __Z' in nm_cp_to_c.txt
+CHECK[T5_lowering:struct CpAdder]: grep -F 'struct CpAdder' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:int32_t CpAdder_apply]: grep -F 'int32_t CpAdder_apply' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:struct CpRecordValidator]: grep -F 'struct CpRecordValidator' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:int CpRecordValidator_check]: grep -F 'int CpRecordValidator_check' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:struct CpScaler]: grep -F 'struct CpScaler' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:double CpScaler_apply]: grep -F 'double CpScaler_apply' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:struct CpBuffer]: grep -F 'struct CpBuffer' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:int CpBuffer_write]: grep -F 'int CpBuffer_write' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:struct CpLayoutProbe]: grep -F 'struct CpLayoutProbe' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CHECK[T5_lowering:int CpLayoutProbe_fill]: grep -F 'int CpLayoutProbe_fill' tests/abi/cp_to_c/artifacts/cp_to_c_lib.lowered.c
+CMD[T6_file_object] timeout=60s: /usr/bin/file tests/abi/cp_to_c/artifacts/cp_to_c_lib.o
+tests/abi/cp_to_c/artifacts/cp_to_c_lib.o: Mach-O 64-bit object arm64
+RC[T6_file_object]=0
+RESULT: cp_to_c lab: 34 passed, 3 failed
+Full command/exit-code log: tests/abi/cp_to_c/artifacts/results.log

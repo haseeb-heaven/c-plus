@@ -1,0 +1,4 @@
+scan() input-range safety
+valid: rc=0 output='Arr is  10\nArr is  30\nEnter value:\nArr is  50\nArr is  123\n'
+overflow: rc=111 output="Arr is  10\nArr is  30\nEnter value:\nC+ runtime error: input overflow at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/input_safety/scan_short.cp:5: cannot store '0xFFFFFF' into 'arr[3"
+pass=True

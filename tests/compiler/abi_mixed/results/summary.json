@@ -1,0 +1,83 @@
+{
+  "generated": "2026-11-25T18:40:35.990347+00:00",
+  "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "clang": "/usr/bin/clang",
+  "source": "tests/compiler/real_world_c/cache/hash_crc32.c (verbatim functions)",
+  "results": [
+    {
+      "step": "helper.clang.o",
+      "rc": 0,
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_rp18_hwe/helper.c:11:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   11 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning g"
+    },
+    {
+      "step": "helper.cplus.o",
+      "rc": 0,
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_mixed/results/abi_mixed_rp18_hwe/helper.c:11:14: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]\n   11 |         for (uint8_t j = 8; j > 0; --j)\n      |              ^\n1 warning g"
+    },
+    {
+      "step": "caller.clang.o",
+      "rc": 0,
+      "stderr": ""
+    },
+    {
+      "step": "caller.cplus.o",
+      "rc": 0,
+      "stderr": ""
+    },
+    {
+      "step": "all_clang",
+      "rc": 0,
+      "stdout": "Tests passed",
+      "stderr": ""
+    },
+    {
+      "step": "all_cplus",
+      "rc": 0,
+      "stdout": "Tests passed",
+      "stderr": ""
+    },
+    {
+      "step": "cplus_caller_clang_helper",
+      "rc": 0,
+      "stdout": "Tests passed",
+      "stderr": ""
+    },
+    {
+      "step": "clang_caller_cplus_helper",
+      "rc": 0,
+      "stdout": "Tests passed",
+      "stderr": ""
+    },
+    {
+      "step": "nm:helper.clang.o",
+      "rc": 0,
+      "symbols": [
+        "0000000000000000 T _crc32"
+      ]
+    },
+    {
+      "step": "nm:helper.cplus.o",
+      "rc": 0,
+      "symbols": [
+        "0000000000000000 T _crc32"
+      ]
+    },
+    {
+      "step": "nm:caller.clang.o",
+      "rc": 0,
+      "symbols": [
+        "                 U _crc32",
+        "0000000000000000 T _test_crc32"
+      ]
+    },
+    {
+      "step": "nm:caller.cplus.o",
+      "rc": 0,
+      "symbols": [
+        "                 U _crc32",
+        "0000000000000000 T _test_crc32"
+      ]
+    }
+  ],
+  "failures": []
+}

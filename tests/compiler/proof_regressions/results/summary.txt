@@ -1,0 +1,12 @@
+Proof regressions
+macOS-27.2.1-arm64-arm-64bit
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+array_alias_uaf PASS
+struct_downcast PASS
+ptr_arith_underflow PASS
+array_alias_ok PASS
+struct_layout_ok PASS
+ptr_arith_const_ok PASS
+
+cases=6 passed=6 failed=0

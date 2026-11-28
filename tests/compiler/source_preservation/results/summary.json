@@ -1,0 +1,53 @@
+{
+  "generated": "2026-11-25T18:40:45.578472+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "reference": "/usr/bin/clang",
+  "results": [
+    {
+      "case": "tests/cases/c_abi.c",
+      "source_identical": true,
+      "stdout_identical": true,
+      "symbols_identical": true,
+      "stdout": "1 2 3 4 5\nlen=5",
+      "executable_symbols": [
+        "__mh_execute_header",
+        "_main"
+      ]
+    },
+    {
+      "case": "benchmarks/bounds_sum.c",
+      "source_identical": true,
+      "stdout_identical": true,
+      "symbols_identical": true,
+      "stdout": "bounds_sum 1350000000",
+      "executable_symbols": [
+        "__mh_execute_header",
+        "_main"
+      ]
+    },
+    {
+      "case": "tests/legacy/plain.c",
+      "source_identical": true,
+      "stdout_identical": true,
+      "symbols_identical": true,
+      "stdout": "legacy ok",
+      "executable_symbols": [
+        "__mh_execute_header",
+        "_main"
+      ]
+    },
+    {
+      "case": "tests/cases/hello.c",
+      "source_identical": true,
+      "stdout_identical": true,
+      "symbols_identical": true,
+      "stdout": "hello from C+",
+      "executable_symbols": [
+        "__mh_execute_header",
+        "_main"
+      ]
+    }
+  ],
+  "failures": []
+}

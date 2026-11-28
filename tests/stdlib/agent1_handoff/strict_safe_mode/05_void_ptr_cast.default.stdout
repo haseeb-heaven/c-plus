@@ -1,0 +1,1 @@
+check: tests/stdlib/agent1_handoff/strict_safe_mode/05_void_ptr_cast.cp ok

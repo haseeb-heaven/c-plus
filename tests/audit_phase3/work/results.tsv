@@ -1,0 +1,114 @@
+deep	deep_collections_alloc	FAIL	runtime terminated by signal 6 (rc=134); stderr: C+ error: index 3 is outside the bounds of 'pre' (length 3)
+deep	deep_collections_boundary	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_collections_collisions	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_collections_growth	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_cross_family	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_error_task5	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_error_vector	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_file_lifecycle	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_file_lines	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_file_task2	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_fs_task5	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_fs_time	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_io_1byte	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_io_task2	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_io_token	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_json_stress	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_json_task5	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_json_types	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_log_task5	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_memory_bounds	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_net	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_net_task5	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_string_append	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_string_task4	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_string_view	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_thread_guard	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_thread_nested	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_thread_task5	PASS	exit 0; stdout/stderr match .expected fixtures
+deep	deep_vector_task4	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	abi_safety_alloc_lifecycle	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	abi_safety_containers_borrow	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	abi_safety_injection_mem	PASS	exit 0 (no byte-exact fixture; exit-code only)
+agent2	abi_safety_meta_integrity	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	abi_safety_safecrt	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	cross_module	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_collections_clear	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_error_metadata	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_file_binary	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_fs_edges	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_io_whitespace	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_json_cleanup	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_log_edges	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_string_vector_alias	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_thread_condvar	PASS	exit 0; stdout/stderr match .expected fixtures
+agent2	extra_time_boundaries	PASS	exit 0; stdout/stderr match .expected fixtures
+regression	adv_alloc_failure	PASS	exit 0 (no byte-exact fixture; exit-code only)
+regression	adv_containers	FAIL	runtime terminated by signal 6 (rc=134); stderr: C+ error: index 40 is outside the bounds of 'present' (length 40)
+regression	adv_exact_fit	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/regressions/adv_exact_fit.cp:59:13: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe
+regression	adv_integer_bounds	PASS	exit 0 (no byte-exact fixture; exit-code only)
+regression	adv_json_fs_net	FAIL	runtime exit 1; stderr: C+ error: index 8 is outside the bounds of 'rb' (length 8)
+regression	adv_lifecycle	PASS	exit 0 (no byte-exact fixture; exit-code only)
+regression	adv_long_input	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/regressions/adv_long_input.cp:46:9: error: [CPLUS-FFI] pointer parameter 'ali_buf' has unverifiable extent; subscript cannot be proven s
+regression	adv_null_zero	PASS	exit 0 (no byte-exact fixture; exit-code only)
+regression	adv_stale_views	PASS	exit 0 (no byte-exact fixture; exit-code only)
+regression	adv_thread_contention	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_v3	01_raii_loop_exits	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	02_defer_return_order	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	03_this_nested_methods	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	04_class_destruct_order	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	05_managed_churn	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	06_vector_realloc_stress	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	07_string_nested_cleanup	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	08_three_dimensional_bounds	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	09_fread_used_result	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	10_signal_outside_handler	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stress/cplus_breaker_v3/10_signal_outside_handler.cp:5:44: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+breaker_v3	11_bitfields_and_macros	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	12_new_octal_if_decl	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	13_range_countof	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	14_resource_transfer	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stress/cplus_breaker_v3/14_resource_transfer.cp:9:68: error: use-after-move: use of moved-from resource 'a'
+breaker_v3	15_defer_and_managed_return	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	16_stdlib_file_raii	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	17_stdlib_thread_guard	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	18_c_aliasing_valid	PASS	exit 0; stdout/stderr match .expected fixtures
+breaker_v3	19_resource_copy_should_fail	PASS	expected compile-time rejection (build rc=1)
+breaker_v3	20_managed_owner_escape_should_fail	PASS	expected compile-time rejection (build rc=1)
+breaker_v3	21_array_oob_should_fail	PASS	expected compile-time rejection (build rc=1)
+breaker_v3	22_countof_pointer_should_fail	PASS	expected compile-time rejection (build rc=1)
+breaker_v3	23_double_free_trap	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stress/cplus_breaker_v3/23_double_free_trap.cp:2:73: error: [CPLUS-OWNER] double free of 'p'
+breaker_v3	24_invalid_free_trap	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stress/cplus_breaker_v3/24_invalid_free_trap.cp:2:28: error: [CPLUS-OWNER] invalid free of address of non-heap object 'value' via cplus_release
+breaker_v3	25_freed_len_trap	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stress/cplus_breaker_v3/25_freed_len_trap.cp:5:3: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released poin
+stress10	01_class_this_destructor	PASS	exit 0 (no byte-exact fixture; exit-code only)
+stress10	02_resource_early_return	PASS	exit 0 (no byte-exact fixture; exit-code only)
+stress10	03_managed_len	PASS	exit 0 (no byte-exact fixture; exit-code only)
+stress10	04_stdlib_string_vector	PASS	exit 0 (no byte-exact fixture; exit-code only)
+stress10	05_range_countof_auto	PASS	exit 0 (no byte-exact fixture; exit-code only)
+stress10	06_real_c_compatibility	PASS	exit 0 (no byte-exact fixture; exit-code only)
+stress10	07_defer_nested_returns	PASS	exit 0 (no byte-exact fixture; exit-code only)
+stress10	08_reject_resource_copy	PASS	expected compile-time rejection (build rc=1)
+stress10	09_reject_borrow_escape	PASS	expected compile-time rejection (build rc=1)
+stress10	10_trap_double_free	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stress/cplus_stress_10/10_trap_double_free.cp:7:5: error: [CPLUS-OWNER] double free of 'value'
+breaker_probe	cplus_probe_bad_constant_oob	PASS	expected compile-time rejection (build rc=1)
+breaker_probe	cplus_probe_bad_countof_pointer	PASS	expected compile-time rejection (build rc=1)
+breaker_probe	cplus_probe_bad_loop_oob	PASS	expected compile-time rejection (build rc=1)
+breaker_probe	cplus_probe_bad_managed_escape	PASS	expected compile-time rejection (build rc=1)
+breaker_probe	cplus_probe_bad_null_deref	PASS	expected compile-time rejection (build rc=1)
+breaker_probe	cplus_probe_bad_resource_copy	PASS	expected compile-time rejection (build rc=1)
+breaker_probe	cplus_probe_class_this	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_default_arguments	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_defer_return	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_double_release	BUILD_FAIL	build rc=1; /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/breaker/cplus_probe_double_release.cp:2:59: error: [CPLUS-OWNER] double free of 'p'
+breaker_probe	cplus_probe_explicit_bounds	PASS	expected runtime trap (exit 101)
+breaker_probe	cplus_probe_if_decl	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_managed_len	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_octal_rotation	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_raii_order	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_range_auto_len	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_resource_early_return	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_stdlib_raii	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_valid_bitfield	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_valid_fread_store	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_valid_macro	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_valid_multidim	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_valid_printf	PASS	exit 0 (no byte-exact fixture; exit-code only)
+breaker_probe	cplus_probe_valid_user_print	PASS	exit 0 (no byte-exact fixture; exit-code only)

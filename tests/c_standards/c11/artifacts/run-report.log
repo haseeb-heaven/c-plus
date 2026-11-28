@@ -1,0 +1,122 @@
+======================================================================
+C11 standard-support evidence  (repo: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib)
+C+ driver : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+
+clang     : Apple clang version 16.0.0 (clang-1600.0.26.6)
+date      : 2026-11-23T07:04:36Z
+======================================================================
+
+SECTION 1 -- reference compile (plain clang, -std=c11 -pedantic-errors)
+CMD: /usr/bin/clang -std=c11 -pedantic-errors tests/c_standards/c11/source.c -o artifacts/ref_c11
+  [ref-c11] exit=0
+CMD: artifacts/ref_c11
+int counter=7
+  [ref-run] exit=0
+CMD: /usr/bin/clang -std=c1x -pedantic-errors tests/c_standards/c11/source.c -o artifacts/ref_c1x
+  [ref-c1x] exit=0
+CMD: artifacts/ref_c1x
+int counter=7
+  [ref-run-c1x] exit=0
+CMD: /usr/bin/clang -std=gnu11 -pedantic-errors tests/c_standards/c11/source.c -o artifacts/ref_gnu11
+  [ref-gnu11] exit=0
+CMD: artifacts/ref_gnu11
+int counter=7
+  [ref-run-gnu11] exit=0
+CMD: /usr/bin/clang -std=c99 -pedantic-errors ... source.c  (expected FAIL)
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/source.c:14:1: error: '_Static_assert' is a C11 extension [-Werror,-Wc11-extensions]
+   14 | _Static_assert(sizeof(int) >= 4, "int must be at least 32 bits");
+      | ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/source.c:18:12: error: '_Generic' is a C11 extension [-Werror,-Wc11-extensions]
+   18 |     return _Generic(x,
+      |            ^
+2 errors generated.
+  [ref-c99-negative] exit=1
+
+SECTION 2 -- C+ driver, each -std spelling, minimal C11 program
+CMD: ./build/c+ build tests/c_standards/c11/source.c -std=c11 --sanitize=none -o artifacts/src_c11 --verbose
+  [cplus-build-c11] exit=0
+  [cplus-build-c11] -std tokens seen in verbose log:    2 -std=c11    1 -std=gnu17 
+CMD: artifacts/src_c11
+int counter=7
+  [cplus-run-c11] exit=0
+  [cplus-clean-build-c11] exit=0 ; diagnostics bytes=       0
+CMD: ./build/c+ build tests/c_standards/c11/source.c -std=c1x --sanitize=none -o artifacts/src_c1x --verbose
+  [cplus-build-c1x] exit=0
+  [cplus-build-c1x] -std tokens seen in verbose log:    2 -std=c1x    1 -std=gnu17 
+CMD: artifacts/src_c1x
+int counter=7
+  [cplus-run-c1x] exit=0
+  [cplus-clean-build-c1x] exit=0 ; diagnostics bytes=       0
+CMD: ./build/c+ build tests/c_standards/c11/source.c -std=gnu11 --sanitize=none -o artifacts/src_gnu11 --verbose
+  [cplus-build-gnu11] exit=0
+  [cplus-build-gnu11] -std tokens seen in verbose log:    2 -std=gnu11    1 -std=gnu17 
+CMD: artifacts/src_gnu11
+int counter=7
+  [cplus-run-gnu11] exit=0
+  [cplus-clean-build-gnu11] exit=0 ; diagnostics bytes=       0
+CMD: ./build/c+ build source.c -std=c99 --sanitize=none -o artifacts/src_c99  (strictness caveat)
+  [cplus-build-c99-of-C11-source] exit=0 ; diagnostics bytes=       0
+
+SECTION 3 -- real projects, C+ driver -std=c11
+NOTE: C+ SAFE mode rejects these legacy C sources for C+ *safety*
+      reasons (bounds/lifetime/FFI), not for C11-standard reasons.
+      --legacy-c is the documented mode for compiling legacy C and is
+      used here. The -std=c11 spelling is still passed verbatim to clang.
+  [SAFE-mode game_a] exit=1 (diagnostics in artifacts/game_a_safe.build.log)
+CMD: ./build/c+ build external_projects/game_a/original/snake.c -std=c11 --sanitize=none --legacy-c -o artifacts/game_a_c11
+  [legacy-c game_a build] exit=0 ; diagnostics bytes=       0
+  [SAFE-mode game_b] exit=1 (diagnostics in artifacts/game_b_safe.build.log)
+CMD: ./build/c+ build external_projects/game_b/original/2048.c -std=c11 --sanitize=none --legacy-c -o artifacts/game_b_c11
+  [legacy-c game_b build] exit=0 ; diagnostics bytes=       0
+  [SAFE-mode cli_app] exit=1 (diagnostics in artifacts/cli_app_safe.build.log)
+CMD: ./build/c+ build external_projects/cli_app/original/xdump.c -std=c11 --sanitize=none --legacy-c -o artifacts/cli_app_c11
+  [legacy-c cli_app build] exit=0 ; diagnostics bytes=       0
+CMD: ./build/c+ build snake.c -std=c11 --sanitize=none --legacy-c --verbose  (std-token check)
+  [legacy-c std tokens in verbose log]    2 -std=c11    1 -std=gnu89 
+
+GAME_A: printf 'q' | timeout 30 artifacts/game_a_c11
+  [game_a run] exit=0 ; stdout bytes=      44 ; stderr bytes=       0
+  [game_a stdout vs recorded original] cmp_exit=0 (0 = byte-identical)
+
+GAME_B: timeout 30 artifacts/game_b_c11 test
+  [game_b test] exit=0 ; stdout bytes=      35
+  [game_b test stdout vs recorded original] cmp_exit=0
+GAME_B: timeout 30 artifacts/game_b_c11 --version
+  [game_b --version] exit=0 ; stdout bytes=      21
+  [game_b --version stdout vs recorded original] cmp_exit=0
+GAME_B: timeout 30 artifacts/game_b_c11 --help
+  [game_b --help] exit=0 ; stdout bytes=     338
+  [game_b --help stdout vs recorded original] cmp_exit=0
+GAME_B: timeout 30 artifacts/game_b_c11 < external_projects/game_b/quit_input.txt  (stdin 'qy')
+  [game_b stdin quit] exit=0 ; stdout bytes=    1492 ; ref bytes=    1492
+  [game_b stdin quit] QUIT prompt count=1 ; keyboard-error count=0
+  [game_b stdin quit exact byte cmp] cmp_exit=1 (board is time-seeded, so byte differences are expected)
+
+CLI_APP: fixture copied from external_projects (read-only) -> artifacts/cli_fixtures/sample.bin
+CLI_APP: timeout 30 artifacts/cli_app_c11 -v
+  [cli_app version] exit=0 ; stdout bytes=      20 ; stderr bytes=       0
+  [cli_app version stdout vs recorded original] cmp_exit=0
+CLI_APP: timeout 30 artifacts/cli_app_c11 -h
+  [cli_app help] exit=0 ; stdout bytes=     433 ; stderr bytes=       0
+  [cli_app help stdout vs recorded original] cmp_exit=0
+CLI_APP: timeout 30 artifacts/cli_app_c11 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/artifacts/cli_fixtures/sample.bin
+  [cli_app file_default] exit=0 ; stdout bytes=     313 ; stderr bytes=       0
+  [cli_app file_default stdout vs recorded original] cmp_exit=0
+CLI_APP: timeout 30 artifacts/cli_app_c11 -w 8 -g 4 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/artifacts/cli_fixtures/sample.bin
+  [cli_app file_width8] exit=0 ; stdout bytes=     334 ; stderr bytes=       0
+  [cli_app file_width8 stdout vs recorded original] cmp_exit=0
+CLI_APP: timeout 30 artifacts/cli_app_c11 -s 32 -n 16 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/c_standards/c11/artifacts/cli_fixtures/sample.bin
+  [cli_app file_skip_n] exit=0 ; stdout bytes=      88 ; stderr bytes=       0
+  [cli_app file_skip_n stdout vs recorded original] cmp_exit=0
+CLI_APP: timeout 30 artifacts/cli_app_c11 < fixture
+  [cli_app stdin_default] exit=0
+  [cli_app stdin_default stdout vs recorded original] cmp_exit=0
+CLI_APP: timeout 30 artifacts/cli_app_c11 -Z
+  [cli_app bad_flag] exit=1 ; stdout bytes=       0 ; stderr bytes=     116
+  [cli_app bad_flag stdout vs recorded original] cmp_exit=0
+CLI_APP: timeout 30 artifacts/cli_app_c11 /definitely/not/a/file
+  [cli_app missing_file] exit=0 ; stdout bytes=       0 ; stderr bytes=      71
+  [cli_app missing_file stdout vs recorded original] cmp_exit=0
+
+======================================================================
+END OF REPORT. Full raw command output above; see RESULTS.md for summary.
+======================================================================

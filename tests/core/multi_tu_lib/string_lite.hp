@@ -1,0 +1,12 @@
+#ifndef CPLUS_CORE_STRING_LITE_HP
+#define CPLUS_CORE_STRING_LITE_HP
+#include "cplus/cplus.h"
+static inline size_t string_lite_len(const char *s) { return cplus_strnlen(s, 256); }
+class StringLite {
+  char *data;
+  size_t n;
+  StringLite(const char *s) { self->n = string_lite_len(s); self->data = (char *)cplus_alloc(self->n + 1); cplus_memcpy(self->data, s, self->n + 1); }
+  size_t len(void) { return self->n; }
+  void drop(void) { if (self->data) { cplus_release(self->data); self->data = NULL; } }
+};
+#endif

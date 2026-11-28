@@ -1,0 +1,25 @@
+CASE=a_array_decay_bounds
+CONFIG=build_default
+STATUS=PASS
+REASON=PASS: rejected with asserted diagnostic [CPLUS-BOUNDS|array index 4]; proven OOB p[4] on decayed pointer with recorded extent 4 must be rejected statically
+EXPECT_COMPILE=reject
+EXPECT_DIAG=CPLUS-BOUNDS|array index 4
+EXPECT_REJECT_DIAG=
+EXPECT_GEN_SUBSTR=
+EXPECT_RUN=
+EXPECT_RUN_RC=
+EXPECT_RUN_DIAG=
+EXPECT_RUN2_RC=
+EXPECT_RUN2_DIAG=
+COMPILE_CMD=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/a_array_decay_bounds__build_default.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/a_array_decay_bounds.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/bins/a_array_decay_bounds__build_default.bin
+COMPILE_RC=1
+COMPILE_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/a_array_decay_bounds__build_default__compile.stdout
+COMPILE_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/a_array_decay_bounds__build_default__compile.stderr
+GENERATED_C=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/a_array_decay_bounds__build_default.c.NOT_EMITTED
+NATIVE_GUARD_WRAPPER_COUNT=0
+RUN1_RC=NA
+RUN1_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/a_array_decay_bounds__build_default__run1.stdout
+RUN1_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/a_array_decay_bounds__build_default__run1.stderr
+RUN2_RC=NA
+RUN2_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/a_array_decay_bounds__build_default__run2.stdout
+RUN2_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/a_array_decay_bounds__build_default__run2.stderr

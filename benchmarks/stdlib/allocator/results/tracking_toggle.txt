@@ -1,0 +1,7 @@
+# tracking toggle - identical source, CPLUS_MALLOC_TRACKING on/off
+# build_off: /usr/bin/clang -O2 -std=gnu17 -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include benchmarks/stdlib/allocator/tracking_toggle.c build/libc/libcplus_hardened.a -lm -pthread -o benchmarks/stdlib/allocator/tracking_off
+# build_on:  /usr/bin/clang -O2 -std=gnu17 -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/libc/install-include -DCPLUS_MALLOC_TRACKING benchmarks/stdlib/allocator/tracking_toggle.c build/libc/libcplus_hardened.a -lm -pthread -o benchmarks/stdlib/allocator/tracking_on
+# run: ./benchmarks/stdlib/allocator/tracking_off 200000
+tracking=OFF ops=200000 runs=11 min=0.003874000 median=0.004004000 max=0.004179000 ns_per_op=20.02
+# run: ./benchmarks/stdlib/allocator/tracking_on 200000
+tracking=ON ops=200000 runs=11 min=0.011407000 median=0.012287000 max=0.016104000 ns_per_op=61.44

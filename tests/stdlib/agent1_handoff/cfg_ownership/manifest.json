@@ -1,0 +1,118 @@
+{
+  "handoff": "agent1",
+  "topic": "P0 CFG-based ownership analysis",
+  "compiler": "./build/c+",
+  "compiler_version": "C+ 0.1.0",
+  "repo_head": "a90b69c",
+  "branch": "agent/modern-stdlib",
+  "command_template": "./build/c+ check --strict tests/stdlib/agent1_handoff/cfg_ownership/<file>",
+  "run_from": "repo root",
+  "classification_rule": "REJECT requires check rc!=0, build --strict --sanitize=none rc!=0, and a [CPLUS- tagged diagnostic; both rc==0 is ACCEPT; rejection without [CPLUS- is GAP-UNTAGGED.",
+  "expected_for_all_cases": {
+    "expect": "REJECT",
+    "diagnostic_tag": "[CPLUS-LIFETIME]",
+    "diagnostic_family": "use-after-free / use-after-move at the use site",
+    "note": "Expectations only. Observed classifications are recorded per case and are intentionally not overwritten."
+  },
+  "cases": [
+    {
+      "file": "conditional_drop.cp",
+      "scenario": "conditional drop: if (flag) s.drop(); ... s.at(0)",
+      "expect": "REJECT",
+      "expected_diagnostic": "[CPLUS-LIFETIME] use-after-free / use-after-release at s.at(0)",
+      "observed": {
+        "check_command": "./build/c+ check --strict tests/stdlib/agent1_handoff/cfg_ownership/conditional_drop.cp",
+        "check_exit_code": 0,
+        "check_stdout": "check: tests/stdlib/agent1_handoff/cfg_ownership/conditional_drop.cp ok\n",
+        "check_stderr": "",
+        "tagged_diagnostic_present": false,
+        "build_strict_sanitize_none_exit_code": 0,
+        "classification": "ACCEPT"
+      },
+      "gap": "false negative: guarded drop never reaches the post-if use",
+      "cfg_fact": "At the if join, s is Live on the false edge and Released on the true edge: join = MaybeReleased. A use (s.at(0)) in MaybeReleased must be rejected. Requires edge-sensitive merge at the join."
+    },
+    {
+      "file": "conditional_move.cp",
+      "scenario": "conditional move: if (flag) b = cplus_move(a); ... a.size()",
+      "expect": "REJECT",
+      "expected_diagnostic": "[CPLUS-LIFETIME] use-after-move at a.size()",
+      "observed": {
+        "check_command": "./build/c+ check --strict tests/stdlib/agent1_handoff/cfg_ownership/conditional_move.cp",
+        "check_exit_code": 1,
+        "check_stdout": "",
+        "check_stderr": "tests/stdlib/agent1_handoff/cfg_ownership/conditional_move.cp:25:29: error: use-after-move: use of moved-from resource 'a'\n      print(\"n\", n);\nhelp: the handle was zeroed by cplus_move\n",
+        "tagged_diagnostic_present": false,
+        "build_strict_sanitize_none_exit_code": 1,
+        "classification": "GAP-UNTAGGED"
+      },
+      "gap": "rejected without a [CPLUS- tag; path-insensitive tracker; diagnostic mis-located to the following print statement (line 25 col 29) instead of a.size() on line 24",
+      "cfg_fact": "At the if join, a is MovedFrom on the true edge and Live on the false edge (MaybeMovedFrom), and b is MaybeOwning. Reject a.size() on the may-move path and treat b's scope-exit drop as conditional. A use in the else branch only must NOT be rejected (probe D)."
+    },
+    {
+      "file": "mixed_path_init.cp",
+      "scenario": "mixed-path initialization: release in one branch, use after join",
+      "expect": "REJECT",
+      "expected_diagnostic": "[CPLUS-LIFETIME] use-after-free / use-after-release at s.at(0)",
+      "observed": {
+        "check_command": "./build/c+ check --strict tests/stdlib/agent1_handoff/cfg_ownership/mixed_path_init.cp",
+        "check_exit_code": 0,
+        "check_stdout": "check: tests/stdlib/agent1_handoff/cfg_ownership/mixed_path_init.cp ok\n",
+        "check_stderr": "",
+        "tagged_diagnostic_present": false,
+        "build_strict_sanitize_none_exit_code": 0,
+        "classification": "ACCEPT"
+      },
+      "gap": "false negative: if/else states are not phi-merged",
+      "cfg_fact": "At the if/else join, owner s has {Released (then), Live (else)} -> MaybeReleased. The use after the join must be rejected on the released path. Merge per-predecessor states keyed by owner identity, not by source line or fallthrough only."
+    },
+    {
+      "file": "loop_carried_release.cp",
+      "scenario": "loop-carried release: release inside a loop, use after loop",
+      "expect": "REJECT",
+      "expected_diagnostic": "[CPLUS-LIFETIME] use-after-free / use-after-release at s.at(0)",
+      "observed": {
+        "check_command": "./build/c+ check --strict tests/stdlib/agent1_handoff/cfg_ownership/loop_carried_release.cp",
+        "check_exit_code": 0,
+        "check_stdout": "check: tests/stdlib/agent1_handoff/cfg_ownership/loop_carried_release.cp ok\n",
+        "check_stderr": "",
+        "tagged_diagnostic_present": false,
+        "build_strict_sanitize_none_exit_code": 0,
+        "classification": "ACCEPT"
+      },
+      "gap": "false negative: release inside nested if in a loop is not carried across the back-edge",
+      "cfg_fact": "The loop header merges entry state with the back-edge state. After i==0 the owner is Released; fixed-point iteration propagates that to the loop exit -> MaybeReleased at s.at(0). Requires back-edge modelling and iteration to a fixed point."
+    }
+  ],
+  "supplementary_probes": [
+    {
+      "id": "A",
+      "description": "straight-line cplus_release(p) then cplus_check_live(p)",
+      "check_exit_code": 1,
+      "tagged_diagnostic": "[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'p'",
+      "conclusion": "tagged lifetime diagnostics exist, but only in straight-line code"
+    },
+    {
+      "id": "B",
+      "description": "same release guarded by if (flag)",
+      "check_exit_code": 0,
+      "tagged_diagnostic": null,
+      "conclusion": "guarded release is invisible to the liveness checker"
+    },
+    {
+      "id": "C",
+      "description": "same release inside a loop with a nested if",
+      "check_exit_code": 0,
+      "tagged_diagnostic": null,
+      "conclusion": "loop-carried release is invisible to the liveness checker"
+    },
+    {
+      "id": "D",
+      "description": "cplus_move(a) in then branch, a.size() used only in else branch",
+      "check_exit_code": 1,
+      "tagged_diagnostic": null,
+      "conclusion": "move tracker is path-insensitive and emits a false positive; a CFG analysis must suppress it"
+    }
+  ],
+  "integration_note": "These cases are a handoff, not wired into the shared runner. No runner, compiler, runtime, header, or manifest outside tests/stdlib/agent1_handoff/cfg_ownership/ was modified."
+}

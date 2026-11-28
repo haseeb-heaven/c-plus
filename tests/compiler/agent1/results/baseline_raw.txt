@@ -1,0 +1,21 @@
+=== repo tests ===
+
+C+ tests: 109 passed, 0 failed
+=== core run ===
+
+core safety: 152 passed, 0 failed
+=== ctest ===
+100% tests passed out of 2
+
+Total Test time (real) =  64.39 sec
+=== native ===
+native C+ safety suite: 44/44 passed
+=== strict40 ===
+STRICT 40-test suite: 40 tests, check rejected 27, build rejected 27, mismatches 0
+=== measure ===
+safe C acceptance (DEFAULT): 90/90 (100.0%)
+safe C acceptance (STRICT):  90/90 (100.0%)
+clang -Wall -Wextra -Werror clean (curated real C): 51/51
+false positives (DEFAULT/STRICT): 0/0
+bug detection (DEFAULT): 80/107 (74.8%)
+bug detection (STRICT):  97/107 (90.7%)

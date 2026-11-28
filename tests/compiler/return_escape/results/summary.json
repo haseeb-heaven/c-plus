@@ -1,0 +1,110 @@
+{
+  "generated": "2026-11-25T23:11:25.405818+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "neg_struct_field_local",
+      "status": "PASS",
+      "expected": "CPLUS-LIFETIME",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_struct_local_escape.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_struct_local_escape.c:11:5: error: [CPLUS-LIFETIME] struct result contains address of local\n      return r;\n      ^~~~~~\nhelp: suggested correction: copy the pointed-to data into the result or heap-allocate it before returning\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_this_escape",
+      "status": "PASS",
+      "expected": "CPLUS-LIFETIME",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_this_escape.cp"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/proof_agent1_this_escape.cp:6:9: error: [CPLUS-LIFETIME] address of local instance 'self' cannot escape the method\n          return this;\n          ^~~~~~\nhelp: return a copied value or use an explicit owner\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_return_by_value",
+      "status": "PASS",
+      "expected": "7",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/return_escape/pos_return_by_value.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/return_escape/results/pos_return_by_value.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/return_escape/results/pos_return_by_value.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_return_heap",
+      "status": "PASS",
+      "expected": "7",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/return_escape/pos_return_heap.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/return_escape/results/pos_return_heap.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/return_escape/results/pos_return_heap.bin"
+          ],
+          "rc": 0,
+          "stdout": "7\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

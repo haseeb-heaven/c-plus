@@ -1,0 +1,2325 @@
+{
+  "version": 2,
+  "description": "C+ compiler-visible libc contracts (v2). Agent 2 must match these in libc/contracts.",
+  "functions": {
+    "malloc": {
+      "params": [
+        "size_t bytes"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "bytes",
+      "effects": [
+        "allocates"
+      ],
+      "borrow": [],
+      "failure": "returns NULL",
+      "diagnostics": "CPLUS-SAFE-ALLOC",
+      "dynamic": [
+        "null-check"
+      ],
+      "paramTypes": [
+        "size_t bytes"
+      ],
+      "pointerBounds": "bytes",
+      "allocationSize": "bytes",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "calloc": {
+      "params": [
+        "size_t count",
+        "size_t size"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "count*size (overflow-checked)",
+      "effects": [
+        "allocates",
+        "zero-init"
+      ],
+      "borrow": [],
+      "failure": "returns NULL",
+      "diagnostics": "CPLUS-SAFE-ALLOC",
+      "dynamic": [
+        "overflow-check",
+        "null-check"
+      ],
+      "paramTypes": [
+        "size_t count",
+        "size_t size"
+      ],
+      "pointerBounds": "count*size (overflow-checked)",
+      "allocationSize": "count*size (overflow-checked)",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "realloc": {
+      "params": [
+        "void *ptr",
+        "size_t size"
+      ],
+      "nullableArgs": [
+        0
+      ],
+      "ownership": "returns_owned",
+      "transfer": "success-only old alias invalid",
+      "extent": "size",
+      "effects": [
+        "allocates",
+        "frees-on-success"
+      ],
+      "borrow": [],
+      "failure": "returns NULL; original valid",
+      "diagnostics": "CPLUS-SAFE-REALLOC",
+      "dynamic": [
+        "success-branch alias invalidation (planned)"
+      ],
+      "paramTypes": [
+        "void *ptr",
+        "size_t size"
+      ],
+      "pointerBounds": "size",
+      "allocationSize": "size",
+      "ownershipTransfer": "success-only old alias invalid",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [
+        "frees-on-success"
+      ],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL; original valid",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "free": {
+      "params": [
+        "void *ptr"
+      ],
+      "nullableArgs": [
+        0
+      ],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": null,
+      "effects": [
+        "frees"
+      ],
+      "borrow": [],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-FREE",
+      "dynamic": [
+        "managed double/invalid release"
+      ],
+      "paramTypes": [
+        "void *ptr"
+      ],
+      "pointerBounds": null,
+      "allocationSize": null,
+      "ownershipTransfer": "arg",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [
+        "frees"
+      ],
+      "returnState": "consumes",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "memcpy": {
+      "params": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-BOUNDS",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "memmove": {
+      "params": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst",
+        "overlap-safe"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-BOUNDS",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "void *dst",
+        "const void *src",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "memset": {
+      "params": [
+        "void *dst",
+        "int c",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-BOUNDS",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "void *dst",
+        "int c",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strcpy": {
+      "params": [
+        "char *dst",
+        "const char *src"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(src)+1 <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "char *dst",
+        "const char *src"
+      ],
+      "pointerBounds": "strlen(src)+1 <= dst_capacity",
+      "allocationSize": "strlen(src)+1 <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strncpy": {
+      "params": [
+        "char *dst",
+        "const char *src",
+        "size_t n"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "n <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "char *dst",
+        "const char *src",
+        "size_t n"
+      ],
+      "pointerBounds": "n <= dst_capacity",
+      "allocationSize": "n <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strcat": {
+      "params": [
+        "char *dst",
+        "const char *src"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "strlen(dst)+strlen(src)+1 <= dst_capacity",
+      "effects": [
+        "writes dst"
+      ],
+      "borrow": [
+        "dst",
+        "src"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "object-size/FORTIFY"
+      ],
+      "paramTypes": [
+        "char *dst",
+        "const char *src"
+      ],
+      "pointerBounds": "strlen(dst)+strlen(src)+1 <= dst_capacity",
+      "allocationSize": "strlen(dst)+strlen(src)+1 <= dst_capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strlen": {
+      "params": [
+        "const char *s"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "reads until NUL",
+      "effects": [
+        "reads"
+      ],
+      "borrow": [
+        "s"
+      ],
+      "failure": "none",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [],
+      "paramTypes": [
+        "const char *s"
+      ],
+      "pointerBounds": "reads until NUL",
+      "allocationSize": "reads until NUL",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [
+        "reads"
+      ],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "none",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "fopen": {
+      "params": [
+        "const char *path",
+        "const char *mode"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": null,
+      "effects": [
+        "allocates FILE*"
+      ],
+      "borrow": [],
+      "failure": "returns NULL",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "null-check"
+      ],
+      "paramTypes": [
+        "const char *path",
+        "const char *mode"
+      ],
+      "pointerBounds": null,
+      "allocationSize": null,
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "returns NULL",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "fclose": {
+      "params": [
+        "FILE *stream"
+      ],
+      "nullableArgs": [],
+      "ownership": "consumes",
+      "transfer": "arg",
+      "extent": null,
+      "effects": [
+        "frees FILE*"
+      ],
+      "borrow": [],
+      "failure": "native errno",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [],
+      "paramTypes": [
+        "FILE *stream"
+      ],
+      "pointerBounds": null,
+      "allocationSize": null,
+      "ownershipTransfer": "arg",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [
+        "frees FILE*"
+      ],
+      "returnState": "consumes",
+      "failureBehavior": "native errno",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "fread": {
+      "params": [
+        "void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size*nmemb <= buffer capacity",
+      "effects": [
+        "writes ptr",
+        "advances stream"
+      ],
+      "borrow": [
+        "ptr",
+        "stream"
+      ],
+      "failure": "short read/EOF",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "return-value convention"
+      ],
+      "paramTypes": [
+        "void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "pointerBounds": "size*nmemb <= buffer capacity",
+      "allocationSize": "size*nmemb <= buffer capacity",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "short read/EOF",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "fwrite": {
+      "params": [
+        "const void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "size*nmemb <= buffer extent",
+      "effects": [
+        "reads ptr",
+        "advances stream"
+      ],
+      "borrow": [
+        "ptr",
+        "stream"
+      ],
+      "failure": "short write",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "return-value convention"
+      ],
+      "paramTypes": [
+        "const void *ptr",
+        "size_t size",
+        "size_t nmemb",
+        "FILE *stream"
+      ],
+      "pointerBounds": "size*nmemb <= buffer extent",
+      "allocationSize": "size*nmemb <= buffer extent",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "short write",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strcpy_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strncpy_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strcat_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "memcpy_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "memmove_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "memset_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "strnlen_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "sprintf_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "snprintf_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "fopen_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "platform/checked CRT",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "malloc_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "calloc_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "realloc_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "returns_owned",
+      "transfer": "return",
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": "return",
+      "borrowLifetime": "n/a",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "returns_owned",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    },
+    "free_s": {
+      "params": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "nullableArgs": [],
+      "ownership": "borrow",
+      "transfer": null,
+      "extent": "explicit capacity argument when required",
+      "effects": [
+        "checked CRT"
+      ],
+      "borrow": [],
+      "failure": "native/CRT status",
+      "diagnostics": "CPLUS-SAFE-CRT",
+      "dynamic": [
+        "capacity and error checks"
+      ],
+      "optional": true,
+      "origin": "C+ extension",
+      "paramTypes": [
+        "checked API -- exact signature from Agent 2 capability layer"
+      ],
+      "pointerBounds": "explicit capacity argument",
+      "allocationSize": "explicit capacity argument when required",
+      "ownershipTransfer": null,
+      "borrowLifetime": "call + returned/assigned owner lifetime",
+      "readEffects": [],
+      "writeEffects": [],
+      "freeEffects": [],
+      "returnState": "borrow",
+      "failureBehavior": "native/CRT status",
+      "threadAssumptions": [
+        "not thread-safe unless externally synchronised"
+      ]
+    }
+  },
+  "safeSAbiCatalog": {
+    "version": 1,
+    "description": "Canonical machine-readable catalog of safer _s ABI facts. Consumed by -Wcplus-suggest-safe-s and verified against the shipped headers and the three SAFE_S_* docs by the ABI gate.",
+    "diagnosticFlag": "-Wcplus-suggest-safe-s",
+    "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+    "abiTags": {
+      "preserving": "ABI_PRESERVING_DROP_IN: identical C signature/source spelling; safe at an exported boundary.",
+      "changing": "ABI_CHANGING_ANNEX_K: changed parameters, return type or out-parameters; keep the legacy symbol at a public boundary."
+    },
+    "symbols": {
+      "malloc_s": {
+        "legacy": "malloc",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_alloc.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void *malloc_s(size_t size)",
+        "legacySignature": "void *malloc(size_t size)",
+        "reason": "Identical parameter types and return type to the legacy C allocator; the suffix names a checked implementation, not a new ABI shape.",
+        "preconditions": "Allocation is tracked; call through safe_c.h macros when replacing an existing call site, not at a public C export boundary."
+      },
+      "calloc_s": {
+        "legacy": "calloc",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_alloc.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void *calloc_s(size_t count, size_t size)",
+        "legacySignature": "void *calloc(size_t count, size_t size)",
+        "reason": "Identical parameter types and return type to the legacy C allocator; the suffix names a checked implementation, not a new ABI shape.",
+        "preconditions": "Allocation is tracked; call through safe_c.h macros when replacing an existing call site, not at a public C export boundary."
+      },
+      "realloc_s": {
+        "legacy": "realloc",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_alloc.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void *realloc_s(void *ptr, size_t size)",
+        "legacySignature": "void *realloc(void *ptr, size_t size)",
+        "reason": "Identical parameter types and return type to the legacy C allocator; the suffix names a checked implementation, not a new ABI shape.",
+        "preconditions": "Allocation is tracked; call through safe_c.h macros when replacing an existing call site, not at a public C export boundary."
+      },
+      "free_s": {
+        "legacy": "free",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_alloc.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void free_s(void *ptr)",
+        "legacySignature": "void free(void *ptr)",
+        "reason": "Identical parameter types and return type to the legacy C allocator; the suffix names a checked implementation, not a new ABI shape.",
+        "preconditions": "Allocation is tracked; call through safe_c.h macros when replacing an existing call site, not at a public C export boundary."
+      },
+      "aligned_alloc_s": {
+        "legacy": "aligned_alloc",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_alloc.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void *aligned_alloc_s(size_t alignment, size_t size)",
+        "legacySignature": "void *aligned_alloc(size_t alignment, size_t size)",
+        "reason": "Identical parameter types and return type to the legacy C allocator; the suffix names a checked implementation, not a new ABI shape.",
+        "preconditions": "Allocation is tracked; call through safe_c.h macros when replacing an existing call site, not at a public C export boundary."
+      },
+      "free_checked_s": {
+        "legacy": "free",
+        "abi": "changing",
+        "mechanism": "additive-symbol",
+        "header": "stdlib/safe/safe_alloc.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int free_checked_s(void *ptr)",
+        "legacySignature": "void free(void *ptr)",
+        "reason": "Returns an int status instead of void and refuses invalid releases; it is an additional API, not a drop-in replacement for free.",
+        "preconditions": "Allocation is tracked; call through safe_c.h macros when replacing an existing call site, not at a public C export boundary."
+      },
+      "free_checked_generation_s": {
+        "legacy": "free",
+        "abi": "changing",
+        "mechanism": "additive-symbol",
+        "header": "stdlib/safe/safe_alloc.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int free_checked_generation_s(void *ptr, unsigned long long generation)",
+        "legacySignature": "void free(void *ptr)",
+        "reason": "Adds a generation argument and an int status; pointer-ABI only, not a replacement at a public C boundary.",
+        "preconditions": "Allocation is tracked; call through safe_c.h macros when replacing an existing call site, not at a public C export boundary."
+      },
+      "cplus_fopen_s": {
+        "legacy": "fopen",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_io.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "FILE *cplus_fopen_s(const char *name, const char *mode)",
+        "legacySignature": "FILE *fopen(const char *name, const char *mode)",
+        "reason": "Type-for-type identical to fopen (FILE * / two const char *). This is the shipped adapter; the Annex K fopen_s (FILE ** + errno_t) is not shipped.",
+        "preconditions": "Stream handles are owned by the caller; close with cplus_fclose_s or fclose consistently."
+      },
+      "cplus_fclose_s": {
+        "legacy": "fclose",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_io.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_fclose_s(FILE *stream)",
+        "legacySignature": "int fclose(FILE *stream)",
+        "reason": "Type-for-type identical to fclose; adds double-close detection without changing the C ABI.",
+        "preconditions": "Do not close the same stream twice."
+      },
+      "cplus_printf_s": {
+        "legacy": "printf",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_printf_s(const char *fmt, ...)",
+        "legacySignature": "int printf(const char *fmt, ...)",
+        "reason": "Type-for-type identical to printf; rejects non-literal formats and %n at compile time.",
+        "preconditions": "Format must be a literal (or already trusted); %n is rejected by the compiled adapters."
+      },
+      "cplus_fprintf_s": {
+        "legacy": "fprintf",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_fprintf_s(FILE *stream, const char *fmt, ...)",
+        "legacySignature": "int fprintf(FILE *stream, const char *fmt, ...)",
+        "reason": "Type-for-type identical to fprintf.",
+        "preconditions": "Format must be a literal (or already trusted); %n is rejected by the compiled adapters."
+      },
+      "cplus_scanf_s": {
+        "legacy": "scanf",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_scanf_s(const char *fmt, ...)",
+        "legacySignature": "int scanf(const char *fmt, ...)",
+        "reason": "Type-for-type identical to scanf at the C ABI level; the Annex K scanf_s adds size arguments for %s/%c and is not shipped.",
+        "preconditions": "Format must be a literal (or already trusted); %n is rejected by the compiled adapters."
+      },
+      "cplus_fscanf_s": {
+        "legacy": "fscanf",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_fscanf_s(FILE *stream, const char *fmt, ...)",
+        "legacySignature": "int fscanf(FILE *stream, const char *fmt, ...)",
+        "reason": "Type-for-type identical to fscanf at the C ABI level.",
+        "preconditions": "Format must be a literal (or already trusted); %n is rejected by the compiled adapters."
+      },
+      "cplus_sscanf_s": {
+        "legacy": "sscanf",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_sscanf_s(const char *str, const char *fmt, ...)",
+        "legacySignature": "int sscanf(const char *str, const char *fmt, ...)",
+        "reason": "Type-for-type identical to sscanf at the C ABI level.",
+        "preconditions": "Format must be a literal (or already trusted); %n is rejected by the compiled adapters."
+      },
+      "cplus_snprintf_s": {
+        "legacy": "snprintf",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_snprintf_s(char *dest, size_t dmax, const char *fmt, ...)",
+        "legacySignature": "int snprintf(char *dest, size_t n, const char *fmt, ...)",
+        "reason": "size_t and rsize_t are the same underlying type on supported LP64 hosts and the parameter order/return type match snprintf/vsnprintf; no errno_t is introduced.",
+        "preconditions": "Format must be a literal (or already trusted); %n is rejected by the compiled adapters. dmax must be the real destination capacity."
+      },
+      "cplus_vsnprintf_s": {
+        "legacy": "vsnprintf",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_vsnprintf_s(char *dest, size_t dmax, const char *fmt, va_list ap)",
+        "legacySignature": "int vsnprintf(char *dest, size_t n, const char *fmt, va_list ap)",
+        "reason": "size_t and rsize_t are the same underlying type on supported LP64 hosts and the parameter order/return type match snprintf/vsnprintf; no errno_t is introduced.",
+        "preconditions": "Format must be a literal (or already trusted); %n is rejected by the compiled adapters. dmax must be the real destination capacity."
+      },
+      "cplus_strnlen_s": {
+        "legacy": "strnlen",
+        "abi": "preserving",
+        "mechanism": "direct-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "rsize_t cplus_strnlen_s(const char *str, rsize_t smax)",
+        "legacySignature": "size_t strnlen(const char *str, size_t maxlen)",
+        "reason": "POSIX-origin strnlen shape (rsize_t is size_t on supported hosts); same argument order and return width.",
+        "preconditions": "smax must not exceed the readable extent of str."
+      },
+      "cplus_memcpy_s_auto": {
+        "legacy": "memcpy",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void *cplus_memcpy_s_auto(void *dest, const void *src, size_t n, size_t known_dmax)",
+        "legacySignature": "void *memcpy(void *dest, const void *src, size_t n)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_memmove_s_auto": {
+        "legacy": "memmove",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void *cplus_memmove_s_auto(void *dest, const void *src, size_t n, size_t known_dmax)",
+        "legacySignature": "void *memmove(void *dest, const void *src, size_t n)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_memset_s_auto": {
+        "legacy": "memset",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "void *cplus_memset_s_auto(void *dest, int value, size_t n, size_t known_dmax)",
+        "legacySignature": "void *memset(void *dest, int value, size_t n)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_memcmp_s_auto": {
+        "legacy": "memcmp",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_memcmp_s_auto(const void *s1, const void *s2, size_t n, size_t known_s1, size_t known_s2)",
+        "legacySignature": "int memcmp(const void *s1, const void *s2, size_t n)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_strcpy_s_auto": {
+        "legacy": "strcpy",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "char *cplus_strcpy_s_auto(char *dest, const char *src, size_t known_dmax)",
+        "legacySignature": "char *strcpy(char *dest, const char *src)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_strncpy_s_auto": {
+        "legacy": "strncpy",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "char *cplus_strncpy_s_auto(char *dest, const char *src, size_t n, size_t known_dmax)",
+        "legacySignature": "char *strncpy(char *dest, const char *src, size_t n)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_strcat_s_auto": {
+        "legacy": "strcat",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "char *cplus_strcat_s_auto(char *dest, const char *src, size_t known_dmax)",
+        "legacySignature": "char *strcat(char *dest, const char *src)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_strncat_s_auto": {
+        "legacy": "strncat",
+        "abi": "preserving",
+        "mechanism": "source-macro",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "char *cplus_strncat_s_auto(char *dest, const char *src, size_t n, size_t known_dmax)",
+        "legacySignature": "char *strncat(char *dest, const char *src, size_t n)",
+        "reason": "The safe_c.h macro presents the original C call shape to callers; the extra capacity argument is supplied from __builtin_object_size/metadata inside the including TU. The helper symbol itself is additive and must not be exported as the legacy name.",
+        "preconditions": "Destination capacity must be proven by __builtin_object_size or tracked allocation metadata; unknown capacity is refused in strict mode."
+      },
+      "cplus_memcpy_s": {
+        "legacy": "memcpy",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_memcpy_s(void *dest, rsize_t dmax, const void *src, rsize_t smax)",
+        "legacySignature": "void *memcpy(void *dest, const void *src, size_t n)",
+        "reason": "Adds rsize_t dmax/smax and returns errno_t instead of void *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_memmove_s": {
+        "legacy": "memmove",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_memmove_s(void *dest, rsize_t dmax, const void *src, rsize_t smax)",
+        "legacySignature": "void *memmove(void *dest, const void *src, size_t n)",
+        "reason": "Adds rsize_t dmax/smax and returns errno_t instead of void *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_memset_s": {
+        "legacy": "memset",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_memset_s(void *dest, rsize_t dmax, int value, rsize_t n)",
+        "legacySignature": "void *memset(void *dest, int value, size_t n)",
+        "reason": "Adds rsize_t dmax and returns errno_t instead of void *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_memcmp_s": {
+        "legacy": "memcmp",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_memcmp_s(const void *dest, rsize_t dmax, const void *src, rsize_t smax, int *diff)",
+        "legacySignature": "int memcmp(const void *s1, const void *s2, size_t n)",
+        "reason": "Adds two capacities and an out-parameter; returns errno_t instead of the comparison result.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_memzero_s": {
+        "legacy": "memset",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_memory.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_memzero_s(void *dest, rsize_t dmax)",
+        "legacySignature": "void *memset(void *dest, int value, size_t n)",
+        "reason": "Additive zeroing API with explicit dmax and errno_t; no legacy counterpart.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_fread_s": {
+        "legacy": "fread",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_io.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "size_t cplus_fread_s(void *buf, size_t bmax, size_t size, size_t count, FILE *stream)",
+        "legacySignature": "size_t fread(void *buf, size_t size, size_t count, FILE *stream)",
+        "reason": "Adds a bmax capacity argument before size/count.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_fwrite_s": {
+        "legacy": "fwrite",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_io.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "size_t cplus_fwrite_s(const void *buf, size_t bmax, size_t size, size_t count, FILE *stream)",
+        "legacySignature": "size_t fwrite(const void *buf, size_t size, size_t count, FILE *stream)",
+        "reason": "Adds a bmax capacity argument before size/count.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_fgets_s": {
+        "legacy": "fgets",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_io.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "char *cplus_fgets_s(char *buf, size_t bmax, int n, FILE *stream)",
+        "legacySignature": "char *fgets(char *buf, int n, FILE *stream)",
+        "reason": "Adds a size_t bmax argument and changes the parameter order.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_getenv_s": {
+        "legacy": "getenv",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_io.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_getenv_s(size_t *len, char *value, size_t valuesz, const char *name)",
+        "legacySignature": "char *getenv(const char *name)",
+        "reason": "Out-parameters plus int status replace the returned char *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_sprintf_s": {
+        "legacy": "sprintf",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_sprintf_s(char *dest, size_t dmax, const char *fmt, ...)",
+        "legacySignature": "int sprintf(char *dest, const char *fmt, ...)",
+        "reason": "Adds the destination capacity dmax.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_vsprintf_s": {
+        "legacy": "vsprintf",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_format.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "int cplus_vsprintf_s(char *dest, size_t dmax, const char *fmt, va_list ap)",
+        "legacySignature": "int vsprintf(char *dest, const char *fmt, va_list ap)",
+        "reason": "Adds the destination capacity dmax.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_strcpy_s": {
+        "legacy": "strcpy",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_strcpy_s(char *dest, rsize_t dmax, const char *src)",
+        "legacySignature": "char *strcpy(char *dest, const char *src)",
+        "reason": "Adds rsize_t dmax and returns errno_t instead of char *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_strncpy_s": {
+        "legacy": "strncpy",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_strncpy_s(char *dest, rsize_t dmax, const char *src, rsize_t slen)",
+        "legacySignature": "char *strncpy(char *dest, const char *src, size_t n)",
+        "reason": "Adds rsize_t dmax and returns errno_t instead of char *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_strcat_s": {
+        "legacy": "strcat",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_strcat_s(char *dest, rsize_t dmax, const char *src)",
+        "legacySignature": "char *strcat(char *dest, const char *src)",
+        "reason": "Adds rsize_t dmax and returns errno_t instead of char *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_strncat_s": {
+        "legacy": "strncat",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_strncat_s(char *dest, rsize_t dmax, const char *src, rsize_t slen)",
+        "legacySignature": "char *strncat(char *dest, const char *src, size_t n)",
+        "reason": "Adds rsize_t dmax and returns errno_t instead of char *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_strcmp_s": {
+        "legacy": "strcmp",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *indicator)",
+        "legacySignature": "int strcmp(const char *s1, const char *s2)",
+        "reason": "Adds dmax and an out-parameter; returns errno_t instead of the comparison result.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_strtok_s": {
+        "legacy": "strtok",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "char *cplus_strtok_s(char *dest, rsize_t *dmax, const char *delim, char **ptr)",
+        "legacySignature": "char *strtok(char *dest, const char *delim)",
+        "reason": "Adds rsize_t *dmax and an explicit save pointer.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_strerror_s": {
+        "legacy": "strerror",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "stdlib/safe/safe_string.h",
+        "archive": "build/safe/libcplus_safecrt.a",
+        "signature": "errno_t cplus_strerror_s(char *dest, rsize_t dmax, int errnum)",
+        "legacySignature": "char *strerror(int errnum)",
+        "reason": "Adds an output buffer/capacity and returns errno_t instead of char *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_v_memchr_s": {
+        "legacy": "memchr",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "libc/install-include/cplus_vendor_mem.h",
+        "archive": "build/libc/libcplus_hardened.a",
+        "signature": "errno_t cplus_v_memchr_s(const void *dest, rsize_t dmax, int ch, void **resultp)",
+        "legacySignature": "void *memchr(const void *s, int c, size_t n)",
+        "reason": "Adds dmax and an out-parameter; returns errno_t instead of void *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_v_memccpy_s": {
+        "legacy": "memccpy",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "libc/install-include/cplus_vendor_mem.h",
+        "archive": "build/libc/libcplus_hardened.a",
+        "signature": "errno_t cplus_v_memccpy_s(void *dest, rsize_t dmax, const void *src, int c, rsize_t n)",
+        "legacySignature": "void *memccpy(void *dest, const void *src, int c, size_t n)",
+        "reason": "Adds dmax and returns errno_t instead of void *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_sc_upstream_bsearch_s": {
+        "legacy": "bsearch",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "libc/install-include/cplus_safecrt_upstream.h",
+        "archive": "build/libc/libcplus_hardened.a",
+        "signature": "void *cplus_sc_upstream_bsearch_s(const void *key, const void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *, void *), void *context)",
+        "legacySignature": "void *bsearch(const void *key, const void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *))",
+        "reason": "Adds the Annex K context argument and changes the comparator type; the 5-argument legacy shape is not exported under this name.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      },
+      "cplus_sc_upstream_memrchr_s": {
+        "legacy": "memrchr",
+        "abi": "changing",
+        "mechanism": "annex-k-symbol",
+        "header": "libc/install-include/cplus_safecrt_upstream.h",
+        "archive": "build/libc/libcplus_hardened.a",
+        "signature": "int cplus_sc_upstream_memrchr_s(const void *dest, size_t dmax, int ch, void **resultp)",
+        "legacySignature": "void *memrchr(const void *s, int c, size_t n)",
+        "reason": "Adds an explicit dmax/out-parameter and returns int status instead of void *.",
+        "preconditions": "Keep the legacy symbol at a public ABI boundary; call this checked adapter only in code you control."
+      }
+    },
+    "suggestions": {
+      "strcpy": {
+        "family": "string",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_strcpy_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_strcpy_s_auto(dst, src, sizeof(dst))",
+            "fixItKnownExtent": "cplus_strcpy_s_auto(dst, src, sizeof(dst))"
+          },
+          {
+            "symbol": "cplus_strcpy_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_strcpy_s(dst, sizeof(dst), src)",
+            "fixItKnownExtent": "cplus_strcpy_s(dst, sizeof(dst), src)"
+          }
+        ],
+        "note": "source-macro option keeps the ordinary C call shape at compile time; the Annex K spelling adds rsize_t dmax and returns errno_t."
+      },
+      "strncpy": {
+        "family": "string",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_strncpy_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_strncpy_s_auto(dst, src, n, sizeof(dst))",
+            "fixItKnownExtent": "cplus_strncpy_s_auto(dst, src, n, sizeof(dst))"
+          },
+          {
+            "symbol": "cplus_strncpy_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_strncpy_s(dst, sizeof(dst), src, n)",
+            "fixItKnownExtent": "cplus_strncpy_s(dst, sizeof(dst), src, n)"
+          }
+        ],
+        "note": "source-macro option keeps the ordinary C call shape at compile time; the Annex K spelling adds rsize_t dmax and returns errno_t."
+      },
+      "strcat": {
+        "family": "string",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_strcat_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_strcat_s_auto(dst, src, sizeof(dst))",
+            "fixItKnownExtent": "cplus_strcat_s_auto(dst, src, sizeof(dst))"
+          },
+          {
+            "symbol": "cplus_strcat_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_strcat_s(dst, sizeof(dst), src)",
+            "fixItKnownExtent": "cplus_strcat_s(dst, sizeof(dst), src)"
+          }
+        ],
+        "note": "source-macro option keeps the ordinary C call shape at compile time; the Annex K spelling adds rsize_t dmax and returns errno_t."
+      },
+      "strncat": {
+        "family": "string",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_strncat_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_strncat_s_auto(dst, src, n, sizeof(dst))",
+            "fixItKnownExtent": "cplus_strncat_s_auto(dst, src, n, sizeof(dst))"
+          },
+          {
+            "symbol": "cplus_strncat_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_strncat_s(dst, sizeof(dst), src, n)",
+            "fixItKnownExtent": "cplus_strncat_s(dst, sizeof(dst), src, n)"
+          }
+        ],
+        "note": "source-macro option keeps the ordinary C call shape at compile time; the Annex K spelling adds rsize_t dmax and returns errno_t."
+      },
+      "memcpy": {
+        "family": "memory",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_memcpy_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_memcpy_s_auto(dst, src, n, sizeof(dst))",
+            "fixItKnownExtent": "cplus_memcpy_s_auto(dst, src, n, sizeof(dst))"
+          },
+          {
+            "symbol": "cplus_memcpy_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_memcpy_s(dst, sizeof(dst), src, n)",
+            "fixItKnownExtent": "cplus_memcpy_s(dst, sizeof(dst), src, n)"
+          }
+        ],
+        "note": "sizeof(dst) is only offered when the destination extent is statically known; otherwise use tracked-capacity metadata."
+      },
+      "memmove": {
+        "family": "memory",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_memmove_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_memmove_s_auto(dst, src, n, sizeof(dst))",
+            "fixItKnownExtent": "cplus_memmove_s_auto(dst, src, n, sizeof(dst))"
+          },
+          {
+            "symbol": "cplus_memmove_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_memmove_s(dst, sizeof(dst), src, n)",
+            "fixItKnownExtent": "cplus_memmove_s(dst, sizeof(dst), src, n)"
+          }
+        ],
+        "note": "sizeof(dst) is only offered when the destination extent is statically known; otherwise use tracked-capacity metadata."
+      },
+      "memset": {
+        "family": "memory",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_memset_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_memset_s_auto(dst, value, n, sizeof(dst))",
+            "fixItKnownExtent": "cplus_memset_s_auto(dst, value, n, sizeof(dst))"
+          },
+          {
+            "symbol": "cplus_memset_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_memset_s(dst, sizeof(dst), value, n)",
+            "fixItKnownExtent": "cplus_memset_s(dst, sizeof(dst), value, n)"
+          }
+        ],
+        "note": "sizeof(dst) is only offered when the destination extent is statically known; otherwise use tracked-capacity metadata."
+      },
+      "memcmp": {
+        "family": "memory",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_memcmp_s_auto",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_memcmp_s_auto(a, b, n, sizeof(a), sizeof(b))",
+            "fixItKnownExtent": "cplus_memcmp_s_auto(a, b, n, sizeof(a), sizeof(b))"
+          },
+          {
+            "symbol": "cplus_memcmp_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_memcmp_s(a, sizeof(a), b, sizeof(b), &diff)",
+            "fixItKnownExtent": "cplus_memcmp_s(a, sizeof(a), b, sizeof(b), &diff)"
+          }
+        ],
+        "note": "The Annex K shape replaces the comparison return with an out-parameter and errno_t."
+      },
+      "sprintf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_sprintf_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_sprintf_s(dst, sizeof(dst), fmt, ...)",
+            "fixItKnownExtent": "cplus_sprintf_s(dst, sizeof(dst), fmt, ...)"
+          }
+        ],
+        "note": "No source-macro preserving option is shipped for sprintf because the extra capacity cannot be hidden safely at an exported boundary."
+      },
+      "vsprintf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_vsprintf_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_vsprintf_s(dst, sizeof(dst), fmt, ap)",
+            "fixItKnownExtent": "cplus_vsprintf_s(dst, sizeof(dst), fmt, ap)"
+          }
+        ],
+        "note": "Adds dmax; use vsnprintf/cplus_vsnprintf_s at a public boundary."
+      },
+      "snprintf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_snprintf_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_snprintf_s(dst, sizeof(dst), fmt, ...)",
+            "fixItKnownExtent": "cplus_snprintf_s(dst, sizeof(dst), fmt, ...)"
+          }
+        ],
+        "note": "Type-for-type compatible with snprintf on supported hosts; format constraints are tighter."
+      },
+      "vsnprintf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_vsnprintf_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_vsnprintf_s(dst, sizeof(dst), fmt, ap)",
+            "fixItKnownExtent": "cplus_vsnprintf_s(dst, sizeof(dst), fmt, ap)"
+          }
+        ],
+        "note": "Type-for-type compatible with vsnprintf on supported hosts."
+      },
+      "printf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_printf_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_printf_s(fmt, ...)"
+          }
+        ],
+        "note": "The shipped adapter has the legacy symbol signature; Annex K printf_s/fprintf_s are not shipped and are not drop-ins."
+      },
+      "fprintf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_fprintf_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_fprintf_s(stream, fmt, ...)"
+          }
+        ],
+        "note": "The shipped adapter has the legacy symbol signature; Annex K printf_s/fprintf_s are not shipped and are not drop-ins."
+      },
+      "scanf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_scanf_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_scanf_s(fmt, ...)"
+          }
+        ],
+        "note": "Symbol signature matches the legacy call; the Annex K spelling adds size arguments for %s/%c and is not shipped."
+      },
+      "fscanf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_fscanf_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_fscanf_s(stream, fmt, ...)"
+          }
+        ],
+        "note": "Symbol signature matches the legacy call; the Annex K spelling adds size arguments for %s/%c and is not shipped."
+      },
+      "sscanf": {
+        "family": "format",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_sscanf_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_sscanf_s(str, fmt, ...)"
+          }
+        ],
+        "note": "Symbol signature matches the legacy call; the Annex K spelling adds size arguments for %s/%c and is not shipped."
+      },
+      "fopen": {
+        "family": "stdio",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_fopen_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_fopen_s(name, mode)"
+          }
+        ],
+        "note": "FILE * return and two const char * arguments match fopen; Annex K fopen_s (FILE ** + errno_t) is not shipped."
+      },
+      "fclose": {
+        "family": "stdio",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_fclose_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "cplus_fclose_s(stream)"
+          }
+        ],
+        "note": "int(FILE *) matches fclose exactly."
+      },
+      "fread": {
+        "family": "stdio",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_fread",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_fread(buf, size, count, stream)"
+          },
+          {
+            "symbol": "cplus_fread_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_fread_s(buf, sizeof(buf), size, count, stream)",
+            "fixItKnownExtent": "cplus_fread_s(buf, sizeof(buf), size, count, stream)"
+          }
+        ],
+        "note": "safe_c.h hides the capacity argument; the compiled _s helper exposes it."
+      },
+      "fwrite": {
+        "family": "stdio",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "cplus_fwrite",
+            "abi": "preserving",
+            "mechanism": "source-macro",
+            "fixIt": "cplus_fwrite(buf, size, count, stream)"
+          },
+          {
+            "symbol": "cplus_fwrite_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_fwrite_s(buf, sizeof(buf), size, count, stream)",
+            "fixItKnownExtent": "cplus_fwrite_s(buf, sizeof(buf), size, count, stream)"
+          }
+        ],
+        "note": "safe_c.h hides the capacity argument; the compiled _s helper exposes it."
+      },
+      "fgets": {
+        "family": "stdio",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_fgets_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_fgets_s(buf, sizeof(buf), n, stream)",
+            "fixItKnownExtent": "cplus_fgets_s(buf, sizeof(buf), n, stream)"
+          }
+        ],
+        "note": "Adds bmax before n; do not rename an exported fgets call."
+      },
+      "strtok": {
+        "family": "string",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_strtok_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_strtok_s(buf, &cap, delim, &saveptr)"
+          }
+        ],
+        "note": "Adds rsize_t *dmax and an explicit save pointer."
+      },
+      "strerror": {
+        "family": "string",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_strerror_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_strerror_s(dst, sizeof(dst), errnum)",
+            "fixItKnownExtent": "cplus_strerror_s(dst, sizeof(dst), errnum)"
+          }
+        ],
+        "note": "Adds output buffer/capacity and returns errno_t."
+      },
+      "getenv": {
+        "family": "stdlib",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_getenv_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_getenv_s(&len, dst, sizeof(dst), name)",
+            "fixItKnownExtent": "cplus_getenv_s(&len, dst, sizeof(dst), name)"
+          }
+        ],
+        "note": "Out-parameters replace the returned char *."
+      },
+      "gmtime": {
+        "family": "stdlib",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "gmtime_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol-not-shipped",
+            "fixIt": "gmtime_s(/* revised arguments */)"
+          }
+        ],
+        "note": "No shipped ABI-preserving `_s` replacement; keep the legacy call at a public boundary and use the checked pattern internally. The Annex K spelling is not exported by build/safe or build/libc."
+      },
+      "localtime": {
+        "family": "stdlib",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "localtime_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol-not-shipped",
+            "fixIt": "localtime_s(/* revised arguments */)"
+          }
+        ],
+        "note": "No shipped ABI-preserving `_s` replacement; keep the legacy call at a public boundary and use the checked pattern internally. The Annex K spelling is not exported by build/safe or build/libc."
+      },
+      "qsort": {
+        "family": "stdlib",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "qsort_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol-not-shipped",
+            "fixIt": "qsort_s(/* revised arguments */)"
+          }
+        ],
+        "note": "No shipped ABI-preserving `_s` replacement; keep the legacy call at a public boundary and use the checked pattern internally. The Annex K spelling is not exported by build/safe or build/libc."
+      },
+      "mbrtowc": {
+        "family": "stdlib",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "mbrtowc_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol-not-shipped",
+            "fixIt": "mbrtowc_s(/* revised arguments */)"
+          }
+        ],
+        "note": "No shipped ABI-preserving `_s` replacement; keep the legacy call at a public boundary and use the checked pattern internally. The Annex K spelling is not exported by build/safe or build/libc."
+      },
+      "bsearch": {
+        "family": "stdlib",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_sc_upstream_bsearch_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_sc_upstream_bsearch_s(key, base, nmemb, size, compar, context)"
+          }
+        ],
+        "note": "Shipped adapter takes the Annex K context argument and a 3-argument comparator; bsearch_s macro adds a BOS guard."
+      },
+      "malloc": {
+        "family": "allocator",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "malloc_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "malloc_s(size)"
+          }
+        ],
+        "note": "Identical C signature; safe_c.h maps the ordinary spelling at compile time."
+      },
+      "calloc": {
+        "family": "allocator",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "calloc_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "calloc_s(count, size)"
+          }
+        ],
+        "note": "Identical C signature; safe_c.h maps the ordinary spelling at compile time."
+      },
+      "realloc": {
+        "family": "allocator",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "realloc_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "realloc_s(ptr, size)"
+          }
+        ],
+        "note": "Identical C signature; safe_c.h maps the ordinary spelling at compile time."
+      },
+      "free": {
+        "family": "allocator",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "free_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "free_s(ptr)"
+          }
+        ],
+        "note": "Identical C signature; safe_c.h maps the ordinary spelling at compile time."
+      },
+      "aligned_alloc": {
+        "family": "allocator",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_PRESERVING_DROP_IN",
+        "options": [
+          {
+            "symbol": "aligned_alloc_s",
+            "abi": "preserving",
+            "mechanism": "direct-symbol",
+            "fixIt": "aligned_alloc_s(alignment, size)"
+          }
+        ],
+        "note": "Identical C signature; safe_c.h maps the ordinary spelling at compile time."
+      },
+      "memchr": {
+        "family": "memory",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_v_memchr_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_v_memchr_s(buf, sizeof(buf), ch, &result)",
+            "fixItKnownExtent": "cplus_v_memchr_s(buf, sizeof(buf), ch, &result)"
+          }
+        ],
+        "note": "Adds dmax and an out-parameter; no source-macro preserving option is shipped."
+      },
+      "memccpy": {
+        "family": "memory",
+        "diagnosticId": "CPLUS-SUGGEST-SAFE-S",
+        "abiTag": "ABI_CHANGING_ANNEX_K",
+        "options": [
+          {
+            "symbol": "cplus_v_memccpy_s",
+            "abi": "changing",
+            "mechanism": "annex-k-symbol",
+            "fixIt": "cplus_v_memccpy_s(dst, sizeof(dst), src, c, n)",
+            "fixItKnownExtent": "cplus_v_memccpy_s(dst, sizeof(dst), src, c, n)"
+          }
+        ],
+        "note": "Adds dmax and returns errno_t."
+      }
+    },
+    "annexKNotShipped": {
+      "printf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Annex K adds runtime constraints; the shipped type-compatible adapter is cplus_printf_s."
+      },
+      "fprintf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Annex K adds runtime constraints; the shipped type-compatible adapter is cplus_fprintf_s."
+      },
+      "sprintf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds rsize_t dmax and errno_t; not exported under this spelling."
+      },
+      "snprintf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Annex K spelling is not exported; cplus_snprintf_s has type parity but stricter format checks."
+      },
+      "vsprintf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds dmax; not exported under this spelling."
+      },
+      "scanf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds size arguments for %s/%c; not exported under this spelling."
+      },
+      "fscanf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds size arguments for %s/%c; not exported under this spelling."
+      },
+      "sscanf_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds size arguments for %s/%c; not exported under this spelling."
+      },
+      "fopen_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Returns errno_t and writes through FILE **; not exported under this spelling."
+      },
+      "fread_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds bmax; not exported under this spelling."
+      },
+      "fwrite_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds bmax; not exported under this spelling."
+      },
+      "gmtime_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds a caller-supplied struct tm *; not shipped."
+      },
+      "localtime_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds a caller-supplied struct tm *; not shipped."
+      },
+      "qsort_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds a context argument and errno_t; not shipped."
+      },
+      "bsearch_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Macro maps to cplus_sc_upstream_bsearch_s with context; no 5-argument bsearch_s symbol exists."
+      },
+      "mbrtowc_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Adds dmax/out-parameters; not shipped."
+      },
+      "getenv_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Out-parameters + errno_t; shipped spelling is cplus_getenv_s."
+      },
+      "strtok_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Shipped spelling is cplus_strtok_s with rsize_t *dmax and a save pointer."
+      },
+      "strerror_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "Shipped spelling is cplus_strerror_s with dmax and errno_t."
+      },
+      "memchr_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "No compiled symbol; cplus_v_memchr_s is the checked vendor API."
+      },
+      "memccpy_s": {
+        "abi": "changing",
+        "shipped": false,
+        "reason": "No compiled symbol; cplus_v_memccpy_s is the checked vendor API."
+      }
+    },
+    "sourceHelpers": {
+      "cplus_fread": {
+        "header": "libc/install-include/cplus_libc.h",
+        "archive": "build/libc/libcplus_hardened.a",
+        "signature": "size_t cplus_fread(void *buf, size_t size, size_t count, FILE *stream)",
+        "reason": "Source-macro option used by safe_c.h for fread; identical parameter list and return type."
+      },
+      "cplus_fwrite": {
+        "header": "libc/install-include/cplus_libc.h",
+        "archive": "build/libc/libcplus_hardened.a",
+        "signature": "size_t cplus_fwrite(const void *buf, size_t size, size_t count, FILE *stream)",
+        "reason": "Source-macro option used by safe_c.h for fwrite; identical parameter list and return type."
+      }
+    }
+  }
+}

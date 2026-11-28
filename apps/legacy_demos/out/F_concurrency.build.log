@@ -1,0 +1,7 @@
+/tmp/resolve2/apps/legacy_demos/F_concurrency.c:69:5: warning: [CPLUS-BORROW] stack borrow passed to thread: 'mutex'
+      return 0;
+      ^~~~~~
+/tmp/resolve2/apps/legacy_demos/F_concurrency.c:70:5: warning: [CPLUS-BORROW] stack borrow passed to thread: 'mutex'
+  }
+/tmp/resolve2/apps/legacy_demos/F_concurrency.c:71:5: warning: [CPLUS-BORROW] stack borrow passed to thread: 'mutex'
+/tmp/resolve2/apps/legacy_demos/F_concurrency.c:71:5: warning: [CPLUS-FFI] multiple threads mutate shared global 'shared_counter' without synchronization
