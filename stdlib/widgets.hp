@@ -565,9 +565,9 @@ static inline int stdlib_window_serialize(const stdlib_window *win, char *out,
                    STDLIB_FAIL;
         memcpy(out + used, w->label, label_len);
         used += label_len;
-        out[used++] = '\n';
+        *(out + used++) = '\n';
     }
-    out[used] = '\0';
+    *(out + used) = '\0';
     return STDLIB_OK;
 }
 
