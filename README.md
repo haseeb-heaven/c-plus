@@ -411,6 +411,35 @@ Goose `2.061`, C+ release `2.743`, Zig `3.121`, Rust `3.744` ns/iter -
 different workload, different winner. C3/Fil-C binaries absent, so
 `NOT_TESTED` rather than a made-up number.
 
+
+### Long-running complex workload (`benchmarks/complex_workload.c`, scale 100)
+
+Six phases, all checksum-verified, compiled with `c+ --legacy-c`. Total
+**103.0 s** on this host. Two independent scale-5 runs produced identical
+checksums for every phase, so no work was optimised away.
+
+| Phase | Work | Time | Checksum |
+|---|---|---:|---|
+| matrix | 96x96 dense multiply, 12,000 rounds | **100.496 s** | 9182497956244640287 |
+| hash | 70,000 small allocations in bucket chains | 0.041 s | 1462320784612613700 |
+| sort | 32,000-element qsort + order check | 0.006 s | 14626053084213574870 |
+| arena | 1 MiB bump block, 6,000 reset cycles | 1.772 s | 8206083925863864734 |
+| primes | 120,000 candidates, nested O(N sqrt N) division; 11,301 primes | 0.006 s | 1928916027802753781 |
+| bubble | 9,000-element O(N^2) bubble sort | 0.698 s | 3054727528784959324 |
+| **TOTAL** | | **103.019 s** | six checksums above |
+
+### Memory model - winner: datastack (no heap)
+
+| Model | Language | Allocation | Release | Gate |
+|---|---|---:|---|---|
+| datastack bump | C+ | **30 ns/op** | one store | `MEMORY_MODEL_TEST 3 3 0` |
+| dynamic heap | C/Rust/Zig | 328 ns/op | `free`/drop | - |
+| datastack/arena | Goose | 61 ns/op | one store | `GOOSE_ARENA_OK` |
+| dynamic heap | Goose | 163 ns/op | GC/free | - |
+
+C+ has no general heap on the hot path: scoped arenas and one-store
+release replace per-object malloc. Run `sh tests/memory_model/run.sh` for
+the end-to-end datastack proof (C+ scoped memory + Goose arena checksum).
 ### Evidence gates (correctness, not speed)
 
 - `crt unit tests: 106 passed, 0 failed`; `deep stdlib tests: 87 passed, 0 failed`.
