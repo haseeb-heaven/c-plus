@@ -428,8 +428,18 @@ static int validate_c17(json_view data) {
         need_keys(fn, req_fn, 9, where);
 
         name_view = fn.member("name");
-        if (name_view.get_string(&name, &e) != STDLIB_OK || name == NULL ||
-            strncmp(name, "cplus_", 6) != 0 || name[6] == '\0')
+        if (name_view.get_string(&name, &e) != STDLIB_OK)
+            failf("%s: name must be a non-empty cplus_* symbol", where);
+        /* Keep the NULL guard separate and explicitly terminating: the STRICT
+         * null-state analysis only clears a provably-NULL local across a
+         * `p == NULL` guard whose failing arm returns.  `failf` exits the
+         * process, but the analyser cannot see through the helper, so the
+         * unreachable return makes that termination explicit. */
+        if (name == NULL) {
+            failf("%s: name must be a non-empty cplus_* symbol", where);
+            return 0;
+        }
+        if (strncmp(name, "cplus_", 6) != 0 || name[6] == '\0')
             failf("%s: name must be a non-empty cplus_* symbol", where);
         for (k = 0; k < seen_count; k++) {
             if (strcmp(seen[k], name) == 0)
