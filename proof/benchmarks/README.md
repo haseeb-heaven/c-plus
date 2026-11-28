@@ -111,3 +111,29 @@ Fil-C/TrapC remain NOT_TESTED.
 `trapc` and `fil-c`/`filc` binaries are **NOT INSTALLED** on this host, so those
 comparisons are explicitly `NOT_TESTED` here — no fabricated numbers. Only the
 Fil-C-style *technique* (side-table liveness queries) is adapted in C+.
+
+## Fresh post-release run (2026-11-28, C+ 0.2.0-alpha)
+
+Re-run after the `v0.2.0-alpha` release with the same 2M-iteration workload
+and the same fixed checksum `16776346274400` as `language_rounds`.
+Host: macOS arm64, Apple clang 16.0.0, rustc 1.100.0, Zig 0.13.0,
+Goose v2026.4-57-g9412b80f, C+ 0.2.0. Compile time is one cold wall-clock
+build of each binary; runtime is the median of 5 executions. **All five
+binaries returned the identical checksum**, so no workload was optimized away.
+
+| Toolchain | Compile (ms) | Runtime (ns, 2M iter) | ns/iter | Checksum |
+|---|---:|---:|---:|---|
+| C+ `--default --sanitize=none` | 1017 | 18,780,000 | 9.390 | OK |
+| C+ `--release --sanitize=none` | 1364 | 3,604,000 | 1.802 | OK |
+| Rust `-O` | 796 | 2,208,084 | 1.104 | OK |
+| Zig `ReleaseFast` | 6710 | 2,530,000 | 1.265 | OK |
+| Goose (native binary via `goose build`) | 220 | 2,486,000 | 1.243 | OK |
+
+Honest reading: C+ default carries its runtime guards (~8.1x slower than
+C+ release here); C+ release is ~1.6x slower than Rust on this integer mix.
+Zig pays the highest one-off build cost. These are single-host numbers for
+one workload, not a general speed claim. Sources:
+[bench.cp](../../benchmarks/language_rounds/bench.cp),
+[bench.rs](../../benchmarks/language_rounds/bench.rs),
+[bench.zig](../../benchmarks/language_rounds/bench.zig),
+[bench.goose](../../benchmarks/language_rounds/bench.goose).
