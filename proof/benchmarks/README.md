@@ -62,13 +62,22 @@ runners: `language_rounds/{run.sh,run_zig.sh,run_goose.sh}`; raw data:
 
 | Language | Build | 5 rounds (ms) | Median (ms) | Evidence |
 |---|---|---:|---:|---|
-| Rust | `rustc -O` | 2.244, 2.384, 2.384, 2.458, 2.517 | 2.384 | `language_rounds.txt`, Rust won 5/5 |
-| Zig | `zig build-exe -O ReleaseFast` | 2.431, 2.492, 2.492, 2.505, 2.555 | 2.492 | `bench.zig`, `run_zig.sh` |
-| C+ release | `c+ --release --sanitize=none` | 2.613, 2.613, 3.274, 3.569, 4.566 | 3.274 | local release probe, same source |
+| Rust | `rustc -O` | 2.261, 2.266, 2.267, 2.285, 3.041 | 2.267 | `language_rounds.txt`, Rust won 5/5 |
+| Zig | `zig build-exe -O ReleaseFast` | 3.482, 3.617, 3.659, 3.812, 4.054 | 3.659 | `zig_rounds.txt`, `bench.zig`, `run_zig.sh` |
+| C+ release | `c+ --release --sanitize=none` | 2.613, 2.613, 3.274, 3.569, 4.566 | 3.274 | uncommitted local probe; no raw file — see note below |
 | Goose-lang | `goose run` | 3.395, 3.503, 3.609, 4.383, 5.313 | 3.609 | `goose_rounds.txt` |
-| C+ default | `c+ --default --sanitize=none` | 20.080, 20.254, 20.404, 21.934, 22.766 | 20.804 | `language_rounds.txt` |
+| C+ default | `c+ --default --sanitize=none` | 19.419, 19.778, 21.166, 22.856, 28.790 | 21.166 | `language_rounds.txt` |
 | Fil-C | toolchain absent | — | — | **NOT_TESTED**: no `fil-c`/`filc` binary; only a liveness-query technique is adapted in C+ |
 | TrapC | compiler unreleased | — | — | **NOT_TESTED**: no published compiler/source; design-stage per `docs/security/RUNTIME_SAFETY_TRAPC.md` |
+
+
+**Light-matrix provenance note:** the Rust, Zig, Goose and C+ default figures
+above are taken verbatim from the committed raw files
+`language_rounds.txt` / `zig_rounds.txt` / `goose_rounds.txt` (5 rounds each,
+same 2M-iteration workload and checksum `16776346274400`). The C+ release row
+came from a local probe whose raw file was not committed, so it cannot be
+independently reproduced here; the committed, reproducible C+ release numbers
+are in the heavy table below. No light-matrix figure is fabricated.
 
 Do not read this as a general speed ranking: C+ default has sanitizer/lowering
 overhead, the Goose runner includes its own compile path, and the two absent
