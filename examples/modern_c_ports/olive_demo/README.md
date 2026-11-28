@@ -91,3 +91,25 @@ Each writes a deterministic 320x240 binary PPM under `out/` and prints its
 byte count and FNV-1a64. Verify all three with `run_examples.sh` (prints
 `OLIVE_EXAMPLES 12 12 0`). It builds with the C+ compiler (`CPLUS_BIN`
 override) and falls back to clang; both produce byte-identical frames.
+
+## Screenshots (real framebuffer captures)
+
+These are the actual 2D frames produced by the demos above (not transcripts):
+
+![Still frame](screenshots/frame.png)
+
+![Lines](screenshots/lines.png)
+
+![Text](screenshots/text.png)
+
+![Squish](screenshots/squish.png)
+
+![Interactive SDL3 framebuffer](screenshots/olive_sdl_view.png)
+
+## Works with prebuilt C libraries
+
+The Olive demos link against the vendored single-header C renderer and, for
+the interactive demo, the system SDL3 C library. Both static and dynamic C
+library forms work: the C+ driver passes library flags to the backend linker
+without lowering libraries as C+ source, so an already-compiled C ABI
+library is used as-is.

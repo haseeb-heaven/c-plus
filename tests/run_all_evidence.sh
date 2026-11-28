@@ -64,6 +64,7 @@ run contract-alignment    "$ALIGN_TOOL"
 run olive-still-frame    sh examples/modern_c_ports/olive_demo/run.sh
 run olive-sdl-frame      sh examples/modern_c_ports/olive_demo/run_sdl.sh
 run olive-examples      sh examples/modern_c_ports/olive_demo/run_examples.sh
+run raylib-demos        sh examples/raylib_demos/run.sh
 run issue199              sh tests/compiler/agent1/regression_issue199.sh
 run issue214              sh tests/stdlib/issue214/run.sh
 run issue215              sh tests/stdlib/issue215/run.sh
