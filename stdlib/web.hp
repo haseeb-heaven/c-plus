@@ -220,8 +220,10 @@ static int web_server_init(web_server *s, const char *host, int port) {
 /* Malloc convenience wrapper; prefer web_server_init() for a stack server. */
 static web_server *web_server_start(const char *host, int port) {
     web_server *s = (web_server *)malloc(sizeof(web_server));
-    if (s == (web_server *)0)
+    if (s == (web_server *)0) {
+        free(s);
         return (web_server *)0;
+    }
     if (web_server_init(s, host, port) != 0) {
         free(s);
         return (web_server *)0;
