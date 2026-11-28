@@ -69,6 +69,7 @@ struct DeclId {
 };
 
 struct Scope {
+  size_t openTok = kNPos;
   size_t closeOffset = 0;
   unsigned closeLine = 0;
   std::vector<OwnedVar> vars;
@@ -577,7 +578,12 @@ private:
     if (!inFunction_ || scopes_.empty() || lbl >= toks_.size() ||
         toks_[lbl].kind != TokKind::Identifier)
       return kNPos;
-    const size_t functionEnd = scopes_.front().closeOffset;
+    size_t functionEnd = scopes_.front().closeOffset;
+    if (scopes_.front().openTok != kNPos) {
+      size_t close = matchingBrace(scopes_.front().openTok);
+      if (close != kNPos && close < toks_.size())
+        functionEnd = toks_[close].offset;
+    }
     for (size_t k = lbl; k < toks_.size(); ++k) {
       if (toks_[k].offset > functionEnd)
         return kNPos;
@@ -602,20 +608,23 @@ private:
     const size_t labelOffset = toks_[label].offset;
     size_t from = scopes_.size();
     for (size_t p = scopes_.size(); p > 0; --p) {
-      // A scope still open at the goto has no closeOffset yet (kNPos); treat
-      // it as crossed when the label lies outside the current statement.
-      if (scopes_[p - 1].closeOffset == kNPos) {
-        from = p - 1;
-        continue;
+      // An open scope's recorded offset is its opening brace. Resolve the
+      // matching closing brace so a same-block or backward goto is not
+      // mistaken for leaving every live scope.
+      size_t closeOff = scopes_[p - 1].closeOffset;
+      if (scopes_[p - 1].openTok != kNPos) {
+        size_t close = matchingBrace(scopes_[p - 1].openTok);
+        if (close != kNPos && close < toks_.size())
+          closeOff = toks_[close].offset;
       }
-      if (labelOffset > scopes_[p - 1].closeOffset)
+      if (labelOffset > closeOff)
         from = p - 1;
       else
         break;
     }
     if (from >= scopes_.size())
       return std::string();
-    return dropsFor(from, scopes_.size(), DeclId{});
+    return dropsFor(from, scopes_.size(), DeclId{}, /*zeroJumpDrops=*/true);
   }
 
   /// Find the compound statement controlled by the `if`/`switch`/`while`
@@ -1070,6 +1079,7 @@ private:
     }
 
     Scope s;
+    s.openTok = i;
     s.closeOffset = t.offset;
     s.closeLine = t.line;
     s.functionBody = isFunction;
@@ -1115,6 +1125,10 @@ private:
     if (!regions_.empty() && regions_.back().scope == scopes_.size() - 1)
       regions_.pop_back();
     Scope &s = scopes_.back();
+    // The opening brace was recorded at openScope(); now that the matching
+    // closing brace is known, record its real offset for goto scope tests.
+    s.closeOffset = t.offset;
+    s.closeLine = t.line;
     std::string drops = dropsFor(scopes_.size() - 1, scopes_.size(), DeclId{});
     if (!drops.empty())
       insertBefore(t, drops);
@@ -1522,8 +1536,6 @@ private:
       // fails closed on the construct, but the emitted C no longer skips the
       // destructor even when the diagnostic is only a warning.
       std::string exitDrops = gotoExitDrops(i);
-      if (exitDrops.empty() && hasLiveOwners())
-        exitDrops = dropsFor(0, scopes_.size(), DeclId{});
       if (!exitDrops.empty())
         insertStatementCleanup(i, exitDrops);
       // STRICT fails closed when a managed/resource owner is live at the jump,
@@ -1922,7 +1934,8 @@ private:
   /// zeroing guard emitted at the call site (issue #229), not by suppressing
   /// this drop from a forward scan.  The only remaining suppression is for a
   /// drop embedded in `defer`, whose text is itself the scope-exit cleanup.
-  std::string dropsFor(size_t from, size_t to, DeclId exclude) {
+  std::string dropsFor(size_t from, size_t to, DeclId exclude,
+                       bool zeroJumpDrops = false) {
     std::string out;
     for (size_t p = to; p > from; --p) {
       const auto &vars = scopes_[p - 1].vars;
@@ -1956,8 +1969,15 @@ private:
           out += shadowed ? "cplus_release(" + alias + "); "
                           : "cplus_release(" + v.name + "); " + v.name +
                                 " = NULL; ";
-        else
+        else {
           out += v.drop + "(" + (shadowed ? alias : "&" + v.name) + "); ";
+          // A goto-injected drop can still be followed by the normal
+          // scope-exit drop on another path. Zero the handle so a
+          // non-idempotent destructor is not invoked twice.
+          if (zeroJumpDrops && !shadowed)
+            out += "cplus_zero(&" + v.name + ", sizeof(" + v.name +
+                   ")); ";
+        }
       }
     }
     return out;

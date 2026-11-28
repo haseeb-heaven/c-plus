@@ -113,7 +113,19 @@ static int store(int *p){ *p = 7; printf("%d\\n", *p); return 0; }
 int main(void){ region r { return store((int *)cplus_region_alloc(r, sizeof(int))); } }
 """
 
+# Non-idempotent destructor: it prints on every call.  This makes a duplicate
+# scope-exit drop observable, unlike the idempotent R_drop above.
+NONIDEM_PRELUDE = """#include <stdio.h>
+resource struct N { int id; };
+void N_drop(N *n){ printf("D%d\\n", n->id); }
+static N N_new(int id){ N n = { id }; return n; }
+"""
+
 CASES = [
+    dict(name="raii_goto_same_block", expect="A\nB\nD1\n", no_werror=True,
+         source=NONIDEM_PRELUDE + "int main(void){ N n=N_new(1); printf(\"A\\n\"); goto L; L: printf(\"B\\n\"); return 0; }\n"),
+    dict(name="raii_goto_leaves_block", expect="A\nD2\nB\n", no_werror=True,
+         source=NONIDEM_PRELUDE + "int main(void){ { N n=N_new(2); printf(\"A\\n\"); goto L; } L: printf(\"B\\n\"); return 0; }\n"),
     dict(name="issue228_inner_while_break", expect="D2\nuse 1\nD1\n",
          source=ISSUE228_INNER_WHILE),
     dict(name="issue228_nested_do_break", expect="D3\nmid 2\nD2\nout 1\nD1\n",
@@ -175,8 +187,11 @@ def main():
         lowered = os.path.join(OUT, name + ".c")
         steps = []
 
-        build = run([BIN, "build", "--default", "--sanitize=none", path,
-                     "--emit-c", lowered, "-o", exe], BUILD_TIMEOUT)
+        build_args = [BIN, "build", "--default", "--sanitize=none", path,
+                      "--emit-c", lowered, "-o", exe]
+        if case.get("no_werror"):
+            build_args.insert(2, "--no-werror")
+        build = run(build_args, BUILD_TIMEOUT)
         steps.append(build)
         ok = build["rc"] == 0 and not build["timed_out"] and os.path.exists(exe)
 

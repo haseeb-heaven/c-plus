@@ -36,7 +36,7 @@ NEG = [
      "goto' bypasses C+ cleanup"),
     ("neg_goto_into_scope",
      PRE + "int main(void){ int c=1; if(c) goto L; { R x={1}; L: printf(\"IN\\n\"); } return 0; }\n",
-     "goto' bypasses C+ cleanup"),
+     "jumps over the declaration of a C+ owner"),
     ("neg_setjmp_assignment",
      PRE + "#include <setjmp.h>\nstatic jmp_buf jb;\n"
      "int main(void){ int j=setjmp(jb); if(j==0){ R x={1}; longjmp(jb,1); } "
