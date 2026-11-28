@@ -928,9 +928,29 @@ static bool extraArgsChangeParse(const std::vector<std::string> &extra) {
         a.starts_with("-idirafter") || a.starts_with("-iprefix") ||
         a.starts_with("-iwithprefix"))
       return true;
+    // `--language[=]` is Clang's long spelling of `-x <lang>`: it changes
+    // what the backend parses but, unlike `-std=`, is not forwarded to the
+    // in-memory safety AST. Decide on the raw token here -- normalizeFlag()
+    // would turn `--language=c++` into `-language=c++`, which matches neither
+    // `-x` nor the -l library pass-through that previously accepted it.
+    if (raw == "--language" || raw.starts_with("--language="))
+      return true;
     if (a == "-x" ||
         (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
          std::isalpha(static_cast<unsigned char>(a[2]))))
+      return true;
+  }
+  return false;
+}
+
+/// Clang's `--ld-path=` selects the linker used by the build. STRICT verifies
+/// the compiled program, so a swapped linker is outside what the safety AST
+/// can witness. Match the raw token: normalizeFlag() would rewrite it into
+/// `-ld-path=`, which otherwise rides the ordinary `-l<lib>` allow-list.
+static bool extraArgsChangeLinker(const std::vector<std::string> &extra) {
+  for (const auto &raw : extra) {
+    llvm::StringRef a = raw;
+    if (a == "--ld-path" || a.starts_with("--ld-path="))
       return true;
   }
   return false;
@@ -1093,12 +1113,35 @@ static bool isSafeOptimizationFlag(llvm::StringRef s) {
 
 static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) {
   for (size_t i = 0; i < extra.size(); ++i) {
-    llvm::StringRef s = normalizeFlag(extra[i]);
+    llvm::StringRef raw = extra[i];
+    llvm::StringRef s = normalizeFlag(raw);
     // Clang expands @response files itself, after the driver's gates, so a
     // token like `@rsp` can hide `-include evil.h` from every flag check.
     // Never allow the @ spelling in STRICT.
-    if (extra[i].starts_with("@"))
+    if (raw.starts_with("@"))
       return false;
+    // A double-dash token is NOT merely a spelling variant of its single-dash
+    // form: Clang reserves `--foo` for its own options, several of which change
+    // behaviour (--ld-path=, --language=, --include=, --target=). Deciding on
+    // normalized tokens let --ld-path= and --language= masquerade as ordinary
+    // `-l<lib>` flags. Accept only this explicit, reviewable set of long-form
+    // spellings whose single-dash equivalents are already safe here.
+    // --sysroot selects an SDK just like the allowed -isysroot and is not used
+    // by the safety analysis. --std= is excluded on purpose: unlike -std= it
+    // is not forwarded to the in-memory safety ASTs, so allowing it would
+    // analyse one language standard while compiling another.
+    const bool longForm =
+        raw.size() > 2 && raw.starts_with("--") && raw[2] != '-';
+    if (longForm) {
+      if (raw == "--sysroot") {
+        if (++i >= extra.size())
+          return false; // dangling value: fail closed
+        continue;
+      }
+      if (raw.starts_with("--sysroot="))
+        continue;
+      return false;
+    }
     // Two-token forms produced by Main.cpp (`-I dir`, `-D NAME`, ...) and by
     // `-- -isysroot dir`. Consume the value so a path is not mistaken for a
     // bare/injected token.
@@ -1549,8 +1592,14 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   if (strictSafe && extraArgsChangeParse(opts.extraArgs)) {
     errs << "error: pass-through flags change how the C+ safety AST parses "
             "the program but are not forwarded to it (-include, -imacros, "
-            "-isystem, -x, -include-pch); STRICT would analyse a different "
-            "program than it compiles\n";
+            "-isystem, -x/--language, -include-pch); STRICT would analyse a "
+            "different program than it compiles\n";
+    return 1;
+  }
+  if (strictSafe && extraArgsChangeLinker(opts.extraArgs)) {
+    errs << "error: pass-through flags change the linker used by the build "
+            "(--ld-path=); STRICT cannot verify a program linked by a "
+            "replaced linker\n";
     return 1;
   }
   if (strictSafe && extraArgsWeakenSanitizerAbort(opts.extraArgs)) {
@@ -1583,8 +1632,9 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     errs << "error: pass-through flag outside the STRICT Safe allow-list "
             "(-I/-D/-std=/-isysroot/-O[0-3szg]/-W/-L/-l/-g/-pthread/...); "
             "flags such as -Xclang, @response, -include/-imacros/-isystem, "
-            "-U, -x, -Ofast and -Wno-* are rejected because they can change "
-            "the analysed program or downgrade a gate\n";
+            "-U, -x, -Ofast, -Wno-* and long-form clang options (--ld-path=, "
+            "--language=, --target=) are rejected because they can change "
+            "the analysed program, the linker, or downgrade a gate\n";
     return 1;
   }
   // Capability probing compiles and runs a defect program. `check` must stay
