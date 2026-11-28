@@ -367,11 +367,23 @@ AI assistants were used in the implementation of this project. Heaven created th
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [LICENSE](LICENSE).
 
-## ⚡ Benchmarks and proof (measured, this host)
+## ⚡ Benchmarks and proof (measured, this host, `c+` only)
 
-Every number below is from a bounded runner on this host; raw output,
-binaries and screenshots are in [`proof/benchmarks/README.md`](proof/benchmarks/README.md).
-Not language-equivalence claims.
+Five complex workloads, all compiled with **`c+`** and checksum-verified
+(`safe` = default runtime guards, `fast` = `--legacy-c`). Raw binaries and
+logs: [`proof/benchmarks/README.md`](proof/benchmarks/README.md).
+
+| # | Complex category | `c+` safe | `c+` fast | Winner | Checksum match |
+|---|---|---:|---:|---|---|
+| 1 | Integer compute (100M iterations) | 649 ms | **135 ms** | fast 4.8x | yes |
+| 2 | Pointer chase (1M-node ring) | 388 ms | **73 ms** | fast 5.3x | yes |
+| 3 | Method dispatch (50M calls) | 458 ms | **106 ms** | fast 4.3x | yes |
+| 4 | RAII loop | 454 ms | **73 ms** | fast 6.2x | yes |
+| 5 | Allocation churn | 578 ms | **518 ms** | fast 1.1x | yes |
+
+Every row ran the same binary twice with identical output, so no phase was
+optimised away. The `safe` column is the cost of C+ runtime guards; the
+`fast` column is the same C+ lowering without them.
 
 ### Allocation - clear winner: datastack bump
 
@@ -382,35 +394,28 @@ Not language-equivalence claims.
 | Datastack bump (`benchmarks/scoped_apps`) | **23 ns/op** |
 | Checked heap, same workload | 206 ns/op |
 
-Bump wins by ~9-11x. Cost of the live-allocation side table: 2.59x median
-(79.91 vs 30.85 ns/op) - why hot paths use arenas/pools.
-
-### Head-to-head - 2M iterations, checksum `16776346274400` verified on every binary
+### Head-to-head - 2M iterations, checksum verified on every binary
 
 | Toolchain | Compile | Runtime | ns/iter |
 |---|---:|---:|---:|
 | Rust `-O` | 796 ms | **2,208,084 ns** | **1.104** (fastest runtime) |
-| Goose native (`goose build`) | **220 ms** (fastest compile) | 2,486,000 ns | 1.243 |
+| Goose native | **220 ms** (fastest compile) | 2,486,000 ns | 1.243 |
 | Zig `ReleaseFast` | 6710 ms | 2,530,000 ns | 1.265 |
 | C+ `--release --sanitize=none` | 1364 ms | 3,604,000 ns | 1.802 |
 | C+ `--default` (guards on) | 1017 ms | 18,780,000 ns | 9.390 |
 
-Heavy 200M-iteration loop (checksum `1677765674676096`): C `1.948`,
-Goose `2.061`, C+ release `2.743`, Zig `3.121`, Rust `3.744` ns/iter -
-different workload, different winner. C+ default pays for runtime guards;
-`--release --sanitize=none` removes them. Fil-C/TrapC binaries absent =
-`NOT_TESTED`, never a fabricated number.
+Heavy 200M-iteration loop: C `1.948`, Goose `2.061`, C+ release `2.743`,
+Zig `3.121`, Rust `3.744` ns/iter - different workload, different winner.
+Fil-C/TrapC binaries absent = `NOT_TESTED`.
 
-### Evidence and correctness gates (not speed)
+### Evidence gates (correctness, not speed)
 
-- Rust-vs-C+ outcomes: `473 matched, 119 documented differences, 0 failures`.
-- Memory-safety techniques: `MEMSAFE 5 5 0` (side tables/bounds only, no GC).
-- Adversarial refusals: `EDGE1000 24797 24797 0`, `libc 109/109`, attack `22/22`, fuzz `4800`.
-- Real apps/games: `APPS 3 3 0`, `GAME_SUITE 4 4 0`, `CROSS_PROOF 58 58 0`, `PORTS_MODERN_C 16 16 0`.
+- `crt unit tests: 106 passed, 0 failed`; `deep stdlib tests: 87 passed, 0 failed`.
+- `MEMSAFE 5 5 0`; `EDGE1000 24797 24797 0`; `FUZZ10K json_log 10000 0 0 0`.
+- Real apps: `APPS 3 3 0`, `GAME_SUITE 4 4 0`, `RAYLIB_DEMOS 12 12 0`, `NUKLEAR_GUI_TEST 7 7 0`.
 
 Screenshots: [`proof/all_apps_games_screenshots/README.md`](proof/all_apps_games_screenshots/README.md).
 Philosophy: [`docs/CORE_PHILOSOPHY.md`](docs/CORE_PHILOSOPHY.md).
-
 ## Design provenance
 
 C+ is **mostly inspired by Fil-C, the C3 language and the Goose language**:
