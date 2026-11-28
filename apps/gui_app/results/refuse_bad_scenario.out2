@@ -1,0 +1,2 @@
+GUI_REFUSED tag=bad-scenario category=2 code=101 message=scenario: id out of range
+GUI_RESULT refuse bad-scenario REFUSED 101

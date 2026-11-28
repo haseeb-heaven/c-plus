@@ -2,14 +2,14 @@
 #include "stdlib/vector.hp"
 
 int main(void) {
-    String title = String("C+ testing");
-    IntVec values = IntVec();
+    string title = string("C+ testing");
+    vector values = vector();
 
-    values.push(2);
-    values.push(3);
-    values.push(5);
-    values.push(7);
+    values.push_back(2);
+    values.push_back(3);
+    values.push_back(5);
+    values.push_back(7);
 
-    print("STDLIB", title.len(), values.len(), values.at(3));
+    print("STDLIB", title.size(), values.size(), values.at(3));
     return 0;
 }

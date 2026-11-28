@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug1_oob.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug1_oob.c:5:12: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'numbers'

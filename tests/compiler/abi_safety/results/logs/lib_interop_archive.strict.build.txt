@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.c --strict --sanitize=none -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases -labi_lib_helper_strict -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+clang: warning: -labi_lib_helper_strict: 'linker' input unused [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases' [-Wunused-command-line-argument]
+

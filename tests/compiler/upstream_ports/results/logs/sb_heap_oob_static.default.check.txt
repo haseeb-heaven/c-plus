@@ -1,0 +1,13 @@
+case: sb_heap_oob_static
+mode: default
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_oob_static.c
+rc: 1
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:7:5: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 16 bytes
+      p[9] = 42;
+      ^
+

@@ -1,0 +1,38 @@
+C+ runtime memory-safety regression suite
+================================================================
+binary        : /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+version       : C+ 0.1.0
+generated     : 2026-11-23T12:33:13
+primary       : c+ build --strict --sanitize=none
+supplementary : c+ build --strict --sanitize=address (ASan, live runtime snapshotted per run)
+timeout       : 60s per subprocess
+
+SUMMARY
+----------------------------------------------------------------
+cases             : 28
+cases passed      : 28
+cases failed      : 0
+mode checks       : 56 (2 per case)
+failure entries   : 0
+by kind           : asan_only=8, runtime_abort=3, safe=11, static_reject=6
+
+BY FAMILY
+----------------------------------------------------------------
+  alloc_free_consistency     cases= 5 passed= 5 failed= 0
+  allocation_consistency     cases= 2 passed= 2 failed= 0
+  array_decay                cases= 2 passed= 2 failed= 0
+  casts                      cases= 2 passed= 2 failed= 0
+  function_params_returns    cases= 3 passed= 3 failed= 0
+  global_bounds              cases= 2 passed= 2 failed= 0
+  heap_bounds                cases= 2 passed= 2 failed= 0
+  interior_pointers          cases= 2 passed= 2 failed= 0
+  pointer_arithmetic         cases= 2 passed= 2 failed= 0
+  pointer_to_pointer         cases= 2 passed= 2 failed= 0
+  stack_bounds               cases= 2 passed= 2 failed= 0
+  struct_pointer_fields      cases= 2 passed= 2 failed= 0
+
+FAILURES (exact case names, modes and reasons)
+----------------------------------------------------------------
+  none
+
+Full records: results/summary.json ; logs: results/logs/

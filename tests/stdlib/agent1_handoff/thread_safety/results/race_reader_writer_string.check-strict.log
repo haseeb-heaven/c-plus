@@ -1,0 +1,3 @@
+COMMAND: ./build/c+ check --strict tests/stdlib/agent1_handoff/thread_safety/race_reader_writer_string.cp
+check: tests/stdlib/agent1_handoff/thread_safety/race_reader_writer_string.cp ok
+EXIT: 0

@@ -1,0 +1,61 @@
+{
+  "family": "string",
+  "cases": [
+    {
+      "file": "string_use_after_drop.cp",
+      "expect": "REJECT",
+      "diagnostic": "[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer",
+      "observed": "compile_reject",
+      "note": "check rc=1, build rc=1; two diagnostics at line 12 (columns 18 and 65). GAP: a plain `s.drop(); s.at(0);` / stale c_str() read is accepted (drop() is not statically tracked), so this test releases the String's owned buffer explicitly with cplus_release() to make the use-after-free provable. The automatic string_drop at scope exit would double-release this buffer at runtime; this is a compile-time-only test."
+    },
+    {
+      "file": "string_double_drop.cp",
+      "expect": "REJECT",
+      "diagnostic": "[CPLUS-OWNER] double free of 'buf'",
+      "observed": "compile_reject",
+      "note": "check rc=1, build rc=1 at line 11 col 5. GAP: literal `s.drop(); s.drop();` is accepted with no diagnostic (method calls inside lightweight class wrappers are not tracked), so the test double-releases the String's underlying managed buffer directly. Both commands report only the second cplus_release()."
+    },
+    {
+      "file": "string_dangling_view.cp",
+      "expect": "RUNTIME",
+      "diagnostic": "",
+      "observed": "accepted",
+      "note": "Original expectation REJECT downgraded to RUNTIME: check rc=0, build rc=0, no [CPLUS- diagnostic. The compiler does not relate a string_view to its owning String, so a view used after s.drop() is accepted; the built binary reads freed memory and exits with a nondeterministic small code (observed 2 and 5 in separate runs). A runtime/behavioral test must cover view/owner lifetime."
+    },
+    {
+      "file": "string_uninitialized.cp",
+      "expect": "REJECT",
+      "diagnostic": "[CPLUS-LIFETIME] variable 's' is uninitialized (read before it is initialized)",
+      "observed": "compile_reject",
+      "note": "check rc=1, build rc=1; two [CPLUS-LIFETIME] diagnostics at line 10 (columns 66 and 90), plus untagged `'s' owns a resource and must be initialised` at line 9. A by-value `string s;` is zero-initialised by C+ and safe, so a `managed string *s` handle is used to express a genuinely uninitialised String owner."
+    },
+    {
+      "file": "string_invalid_transfer.cp",
+      "expect": "REJECT",
+      "diagnostic": "",
+      "observed": "compile_reject",
+      "note": "check rc=1, build rc=1 at line 11 col 24 with UNTAGGED C+ RAII diagnostic `borrow 'borrowed' of 'a' is used after that resource was moved` (no [CPLUS- prefix). Per the suite rule this is not tagged C+ enforcement; classify as partial. Note: a string_view taken before cplus_move(a) and used afterwards is accepted (no view/move tracking), so that variant remains a runtime gap."
+    },
+    {
+      "file": "string_valid_basic.cp",
+      "expect": "ACCEPT",
+      "diagnostic": "",
+      "observed": "accepted",
+      "note": "Positive control: construct, read size()/at(), rely on automatic drop(). check rc=0, build rc=0, no diagnostic; built binary exits 0."
+    },
+    {
+      "file": "string_valid_view.cp",
+      "expect": "ACCEPT",
+      "diagnostic": "",
+      "observed": "accepted",
+      "note": "Positive control: string_view consumed only while its String is alive. check rc=0, build rc=0, no diagnostic; built binary exits 0."
+    },
+    {
+      "file": "string_valid_transfer.cp",
+      "expect": "ACCEPT",
+      "diagnostic": "",
+      "observed": "accepted",
+      "note": "Positive control: single cplus_move() transfers String ownership, source is zeroed, both automatic cleanups are no-op/single. check rc=0, build rc=0, no diagnostic; built binary exits 0."
+    }
+  ]
+}

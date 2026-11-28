@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ptr_reassign_unverified.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:1:52: warning: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe
+  static void wr(int *p){ int dummy[8]={0}; p=dummy; p[7]=1; }
+                                                     ^

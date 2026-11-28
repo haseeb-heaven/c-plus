@@ -1,0 +1,2 @@
+GUI_REFUSED tag=null-hit-output category=1 code=102 message=widgets: NULL hit-test output
+GUI_RESULT refuse null-hit-output REFUSED 102

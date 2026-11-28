@@ -1,0 +1,184 @@
+=== BUILD gui_app ===
+=== describe_0 (OK) ===
+GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90
+GUI_LAYOUT cell=80x45 origin=0,0
+WIDGETS 6
+W 1 4 1 1 78 43 3 root
+W 2 2 81 1 78 43 3 user
+W 3 3 161 1 78 43 3 name
+W 4 2 1 46 78 43 3 pass
+W 5 3 81 46 78 43 3 secret
+W 6 1 161 46 78 43 3 OK
+GUI_SERIAL bytes=157 crc32=a52b03af
+GUI_HIT p=5,5 index=0 id=1 label=root
+GUI_HIT p=85,5 index=1 id=2 label=user
+GUI_RESULT describe:0,0,0 OK
+=== describe_1 (OK) ===
+GUI_WIDGETS scenario=1 title=toolbar count=8 columns=4 grid=320x80
+GUI_LAYOUT cell=80x40 origin=0,0
+WIDGETS 8
+W 10 4 1 1 78 38 3 tools
+W 11 1 81 1 78 38 3 NEW
+W 12 1 161 1 78 38 3 OPEN
+W 13 1 241 1 78 38 3 SAVE
+W 14 2 1 41 78 38 3 sep
+W 15 1 81 41 78 38 3 CUT
+W 16 1 161 41 78 38 3 COPY
+W 17 1 241 41 78 38 3 PASTE
+GUI_SERIAL bytes=215 crc32=18eaae2f
+GUI_HIT p=5,5 index=0 id=10 label=tools
+GUI_HIT p=245,45 index=7 id=17 label=PASTE
+GUI_RESULT describe:1,0,0 OK
+=== describe_2 (OK) ===
+GUI_WIDGETS scenario=2 title=dialog count=4 columns=2 grid=200x80
+GUI_LAYOUT cell=100x40 origin=0,0
+WIDGETS 4
+W 20 4 1 1 98 38 3 dlg
+W 21 2 101 1 98 38 3 sure
+W 22 1 1 41 98 38 2 YES
+W 23 1 101 41 98 38 3 NO
+GUI_SERIAL bytes=108 crc32=2c0b4ec2
+GUI_HIT p=5,5 index=0 id=20 label=dlg
+GUI_HIT p=5,45 miss=1
+GUI_RESULT describe:2,0,0 OK
+=== render_0 (OK) ===
+GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90
+GUI_LAYOUT cell=80x45 origin=0,0
+WIDGETS 6
+W 1 4 1 1 78 43 3 root
+W 2 2 81 1 78 43 3 user
+W 3 3 161 1 78 43 3 name
+W 4 2 1 46 78 43 3 pass
+W 5 3 81 46 78 43 3 secret
+W 6 1 161 46 78 43 3 OK
+GUI_SERIAL bytes=157 crc32=a52b03af
+GUI_HIT p=5,5 index=0 id=1 label=root
+GUI_HIT p=85,5 index=1 id=2 label=user
+GUI_SDL window=640x480 hidden=1 frame=1 widgets=6 driver=dummy
+GUI_RESULT render:640,480,0 OK
+=== render_2 (OK) ===
+GUI_WIDGETS scenario=2 title=dialog count=4 columns=2 grid=200x80
+GUI_LAYOUT cell=100x40 origin=0,0
+WIDGETS 4
+W 20 4 1 1 98 38 3 dlg
+W 21 2 101 1 98 38 3 sure
+W 22 1 1 41 98 38 2 YES
+W 23 1 101 41 98 38 3 NO
+GUI_SERIAL bytes=108 crc32=2c0b4ec2
+GUI_HIT p=5,5 index=0 id=20 label=dlg
+GUI_HIT p=5,45 miss=1
+GUI_SDL window=320x240 hidden=1 frame=1 widgets=4 driver=dummy
+GUI_RESULT render:320,240,2 OK
+=== refuse_bad_scenario (REFUSED) ===
+GUI_REFUSED tag=bad-scenario category=2 code=101 message=scenario: id out of range
+GUI_RESULT refuse bad-scenario REFUSED 101
+=== refuse_bad_window_geometry (REFUSED) ===
+GUI_REFUSED tag=bad-window-geometry category=1 code=108 message=widgets: invalid window geometry/columns
+GUI_RESULT refuse bad-window-geometry REFUSED 108
+=== refuse_null_window (REFUSED) ===
+GUI_REFUSED tag=null-window category=1 code=102 message=widgets: NULL window
+GUI_RESULT refuse null-window REFUSED 102
+=== refuse_small_grid (REFUSED) ===
+GUI_REFUSED tag=small-grid category=2 code=101 message=widgets: grid cell too small
+GUI_RESULT refuse small-grid REFUSED 101
+=== refuse_bad_widget_bounds (REFUSED) ===
+GUI_REFUSED tag=bad-widget-bounds category=1 code=108 message=widgets: invalid widget bounds
+GUI_RESULT refuse bad-widget-bounds REFUSED 108
+=== refuse_duplicate_id (REFUSED) ===
+GUI_REFUSED tag=duplicate-id category=1 code=108 message=widgets: duplicate id
+GUI_RESULT refuse duplicate-id REFUSED 108
+=== refuse_long_label (REFUSED) ===
+GUI_REFUSED tag=long-label category=1 code=108 message=widgets: NULL, oversized or control-character label
+GUI_RESULT refuse long-label REFUSED 108
+=== refuse_newline_label (REFUSED) ===
+GUI_REFUSED tag=newline-label category=1 code=108 message=widgets: NULL, oversized or control-character label
+GUI_RESULT refuse newline-label REFUSED 108
+=== refuse_null_label (REFUSED) ===
+GUI_REFUSED tag=null-label category=1 code=108 message=widgets: NULL, oversized or control-character label
+GUI_RESULT refuse null-label REFUSED 108
+=== refuse_bad_index (REFUSED) ===
+GUI_REFUSED tag=bad-index category=5 code=101 message=widgets: index out of range
+GUI_RESULT refuse bad-index REFUSED 101
+=== refuse_null_hit_output (REFUSED) ===
+GUI_REFUSED tag=null-hit-output category=1 code=102 message=widgets: NULL hit-test output
+GUI_RESULT refuse null-hit-output REFUSED 102
+=== refuse_null_serialize_buffer (REFUSED) ===
+GUI_REFUSED tag=null-serialize-buffer category=1 code=102 message=widgets: NULL serialization buffer
+GUI_RESULT refuse null-serialize-buffer REFUSED 102
+=== refuse_small_serialize_buffer (REFUSED) ===
+GUI_REFUSED tag=small-serialize-buffer category=5 code=101 message=widgets: serialization buffer too small
+GUI_RESULT refuse small-serialize-buffer REFUSED 101
+=== refuse_bad_render_zero (REFUSED) ===
+GUI_REFUSED tag=bad-render-zero category=1 code=108 message=gui_app: window dimensions must be positive
+GUI_RESULT refuse bad-render-zero REFUSED 108
+=== refuse_bad_render_huge (REFUSED) ===
+GUI_REFUSED tag=bad-render-huge category=2 code=101 message=gui_app: window dimensions exceed GUI_MAX_DIM
+GUI_RESULT refuse bad-render-huge REFUSED 101
+=== refuse_null_serial_size_output (REFUSED) ===
+GUI_REFUSED tag=null-serial-size-output category=1 code=102 message=widgets: NULL serialization output
+GUI_RESULT refuse null-serial-size-output REFUSED 102
+=== refuse_bad_hit_test_window (REFUSED) ===
+GUI_REFUSED tag=bad-hit-test-window category=1 code=102 message=widgets: NULL window
+GUI_RESULT refuse bad-hit-test-window REFUSED 102
+=== refuse_mystery (REFUSED) ===
+GUI_REFUSED tag=mystery category=1 code=108 message=refuse: unknown case
+GUI_RESULT refuse mystery REFUSED 108
+=== cmd_bogus (REFUSED) ===
+GUI_REFUSED tag=command category=1 code=108 message=gui_app: unknown command
+GUI_RESULT command REFUSED 108
+=== cmd_describe_missing (REFUSED) ===
+GUI_REFUSED tag=describe:0,0,0 category=1 code=108 message=describe: missing or invalid arguments
+GUI_RESULT describe:0,0,0 REFUSED 108
+=== cmd_render_missing (REFUSED) ===
+GUI_REFUSED tag=render:0,0,0 category=1 code=108 message=render: missing or invalid arguments
+GUI_RESULT render:0,0,0 REFUSED 108
+=== cmd_describe_bad_id (REFUSED) ===
+GUI_REFUSED tag=describe:99,0,0 category=2 code=101 message=scenario: id out of range
+GUI_RESULT describe:99,0,0 REFUSED 101
+=== cmd_render_zero (REFUSED) ===
+GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90
+GUI_LAYOUT cell=80x45 origin=0,0
+WIDGETS 6
+W 1 4 1 1 78 43 3 root
+W 2 2 81 1 78 43 3 user
+W 3 3 161 1 78 43 3 name
+W 4 2 1 46 78 43 3 pass
+W 5 3 81 46 78 43 3 secret
+W 6 1 161 46 78 43 3 OK
+GUI_SERIAL bytes=157 crc32=a52b03af
+GUI_HIT p=5,5 index=0 id=1 label=root
+GUI_HIT p=85,5 index=1 id=2 label=user
+GUI_REFUSED tag=render:0,480,0 category=1 code=108 message=gui_app: window dimensions must be positive
+GUI_RESULT render:0,480,0 REFUSED 108
+=== cmd_render_huge (REFUSED) ===
+GUI_WIDGETS scenario=0 title=login count=6 columns=3 grid=240x90
+GUI_LAYOUT cell=80x45 origin=0,0
+WIDGETS 6
+W 1 4 1 1 78 43 3 root
+W 2 2 81 1 78 43 3 user
+W 3 3 161 1 78 43 3 name
+W 4 2 1 46 78 43 3 pass
+W 5 3 81 46 78 43 3 secret
+W 6 1 161 46 78 43 3 OK
+GUI_SERIAL bytes=157 crc32=a52b03af
+GUI_HIT p=5,5 index=0 id=1 label=root
+GUI_HIT p=85,5 index=1 id=2 label=user
+GUI_REFUSED tag=render:100000,100000,0 category=2 code=101 message=gui_app: window dimensions exceed GUI_MAX_DIM
+GUI_RESULT render:100000,100000,0 REFUSED 101
+=== nodesc_describe (OK, SDL_VIDEODRIVER unset) ===
+GUI_WIDGETS scenario=2 title=dialog count=4 columns=2 grid=200x80
+GUI_LAYOUT cell=100x40 origin=0,0
+WIDGETS 4
+W 20 4 1 1 98 38 3 dlg
+W 21 2 101 1 98 38 3 sure
+W 22 1 1 41 98 38 2 YES
+W 23 1 101 41 98 38 3 NO
+GUI_SERIAL bytes=108 crc32=2c0b4ec2
+GUI_HIT p=5,5 index=0 id=20 label=dlg
+GUI_HIT p=5,45 miss=1
+GUI_RESULT describe:2,0,0 OK
+=== Windows PE compile-only check ===
+WIN_PROBE bytes=157 crc32=a52b03af OK
+WIN_CROSS_COFF Intel amd64 COFF object file, no line number info, not stripped, 10 sections, symbol offset=0x6e6, 33 symbols, 1st section name ".text"
+GUI_APP_WINDOWS_COFF compile_only=1 native_probe=PASS object=PASS runtime=BLOCKED
+GUI_APP 30 6 0 24

@@ -1,0 +1,2 @@
+C2GUI_UI id=0 title=convert-hello widgets=input:field,convert:button,output:field,status:label,build:label,run:label input=tools/c2modern_gui/fixtures/hello.c output=tools/c2modern_gui/results/hello.cpp status=PENDING build=NOT_RUN run=NOT_RUN source_lines=2 source_bytes=61
+C2GUI_RESULT describe:0 OK 0

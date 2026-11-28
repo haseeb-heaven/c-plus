@@ -1,0 +1,5 @@
+command: rustc --edition 2021 -C overflow-checks=on /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__rust.rs -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/oob_index__rust.bin
+returncode: 0
+timed_out: False
+
+

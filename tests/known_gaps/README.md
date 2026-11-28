@@ -31,3 +31,16 @@ They are kept here as evidence of the limitation, not as verified safety tests.
   bypass deterministic cleanup. They now produce a warning, not an error, so
   real C programs (e.g. Lua) still compile; RAII is not guaranteed across
   non-local jumps.
+- `allocator_reuse.c` — stale alias after allocator address reuse is not
+  reliably detected without capability/generation metadata (issue #1).
+
+## bugcat8 — VLA with a side effect in its extent (verified known gap, 2026-11-25)
+
+`tests/compile_fail/bugcat8.c` used to be a hard compile-time rejection. The
+combined compiler now lowers the VLA safely rather than rejecting the program,
+so `c+ check` exits 0. `tests/run_tests.sh` treats this as a **verified known
+gap**: it compiles the source with `--no-werror` and runs the resulting binary
+under `timeout 10`; the case passes only when the lowered program executes
+successfully (`tests/out/bugcat8.runlog`). This is not a silent skip and does
+not weaken any other negative fixture. Evidence: `CPlusRewriter.cpp` VLA
+lowering section and the runner branch above.

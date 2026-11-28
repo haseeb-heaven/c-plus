@@ -1,0 +1,31 @@
+# Exported plain-C symbol names that must remain present and UNMANGLED.
+# Format: <library-key> <bare-symbol-name>   (Mach-O nm prints a leading '_').
+# library-key: safecrt -> build/safe/libcplus_safecrt.a
+#              libc    -> build/libc/libcplus_hardened.a
+#
+# These are the exact unmangled entry points that the ordinary C spellings in
+# original_c.c map to when the checked layer is force-included.  A failure here
+# means an ABI-visible rename/mangle, not merely a behaviour difference.
+
+safecrt malloc_s
+safecrt calloc_s
+safecrt realloc_s
+safecrt free_s
+safecrt cplus_memcpy_s_auto
+safecrt cplus_memmove_s_auto
+safecrt cplus_memset_s_auto
+safecrt cplus_memcmp_s_auto
+safecrt cplus_strcpy_s_auto
+safecrt cplus_strncpy_s_auto
+safecrt cplus_strcat_s_auto
+safecrt cplus_strncat_s_auto
+
+libc cplus_malloc
+libc cplus_calloc
+libc cplus_realloc
+libc cplus_free
+libc cplus_fread
+libc cplus_fwrite
+libc cplus_printf
+libc cplus_memcpy
+libc cplus_strcpy

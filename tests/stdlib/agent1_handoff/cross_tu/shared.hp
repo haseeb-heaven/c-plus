@@ -1,0 +1,14 @@
+#ifndef CPLUS_CROSS_TU_SHARED_HP
+#define CPLUS_CROSS_TU_SHARED_HP
+
+/* P1 cross-TU reproducer, case B.
+ *
+ * A heap resource is allocated and released in dropper.cp and then read in
+ * user.cp through this extern pointer.  The release and the use are in
+ * different translation units, so no single-TU ownership analysis can see
+ * both events.
+ */
+extern void *shared_resource;
+void release_shared_resource(void);
+
+#endif

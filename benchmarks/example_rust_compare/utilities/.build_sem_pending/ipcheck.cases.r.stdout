@@ -1,0 +1,16 @@
+IP v_max VALID 255 255 255 255
+IP v_zero VALID 0 0 0 0
+IP v_loopback VALID 127 0 0 1
+IP h_256 REFUSED 101 bounds octet-overflow
+IP h_3fields REFUSED 108 invalid wrong-field-count
+IP h_5fields REFUSED 108 invalid wrong-field-count
+IP h_empty_oct REFUSED 108 invalid empty-octet
+IP h_leading_zero REFUSED 108 invalid leading-zero
+IP h_999 REFUSED 101 bounds octet-overflow
+IP h_long REFUSED 101 bounds too-long
+IP h_alpha REFUSED 108 invalid non-digit
+IP h_negative REFUSED 108 invalid non-digit
+IP h_empty REFUSED 108 invalid empty
+IP argv VALID 192 168 0 1
+IP argv REFUSED 101 bounds octet-overflow
+IP_SUMMARY 15 4 11 0

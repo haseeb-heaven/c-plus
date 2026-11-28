@@ -1,0 +1,164 @@
+{
+  "handoff": "P0 pointer arithmetic and bounds verification",
+  "branch": "agent/modern-stdlib",
+  "directory": "tests/stdlib/agent1_handoff/pointer_bounds",
+  "scope": "Minimal reproducers only. No compiler/runtime/header edits; no git add/commit.",
+  "compiler_binary": "./build/c+",
+  "command": "./build/c+ check --strict <file>",
+  "cwd": "repository root",
+  "classification_rule": "Only diagnostics containing a literal '[CPLUS-' token count as tagged enforcement. tagged REJECT = nonzero exit with [CPLUS-; untagged REJECT = nonzero exit with no [CPLUS-; ACCEPT = exit 0 with no diagnostic.",
+  "control_note": "The control is the fixed local int[3] literal OOB, which the current compiler already rejects with tagged [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS]. All other cases are class-owned/stdlib buffer accesses that are currently accepted.",
+  "summary": {
+    "total": 7,
+    "tagged_reject": 1,
+    "untagged_reject": 0,
+    "accept": 6
+  },
+  "metadata_requirements_for_agent1": {
+    "purpose": "Metadata Agent 1 must attach to stdlib class buffers so pointer-arithmetic/index OOB is rejected with a tagged [CPLUS-BOUNDS] diagnostic.",
+    "items": [
+      {
+        "id": "M1",
+        "name": "Pointer-field to extent-field binding",
+        "detail": "Bind vector::items (int*) to vector::used (logical length) and vector::space (capacity), stride sizeof(int). Bind slice::items to slice::count, with generation_ref/generation_at as staleness metadata. Apply the same pattern to string::chars / string_view::chars and their length fields."
+      },
+      {
+        "id": "M2",
+        "name": "Allocation-site capacity",
+        "detail": "Record the element count from stdlib_alloc(sizeof(int) * n) assignments to bound pointer fields (vector::reserve, copy_from, shrink_to_fit) and propagate it into items/space."
+      },
+      {
+        "id": "M3",
+        "name": "Method-call receiver and index exposure",
+        "detail": "Expose receiver, method and index argument to the bounds pass so v.at_checked(9,&out), v.at(9) and s.at_checked(3,&out) are checked against the receiver extent; keep runtime -1 semantics."
+      },
+      {
+        "id": "M4",
+        "name": "Interprocedural propagation",
+        "detail": "Follow writes to bound fields in free helpers (vector_reserve(this,want)) and in vector::view(), which copies items/used into a returned slice so the borrowed value inherits the owner extent."
+      },
+      {
+        "id": "M5",
+        "name": "Pointer arithmetic with signed offsets and view construction",
+        "detail": "Check p+k, p[k], *(p+k) and p-k against [0,extent) with signed offsets (constants, provable constants, negative offsets). For slice(base+off,count) require off>=0 and off+count<=source_extent; reject one-past-end bases and inflated counts."
+      },
+      {
+        "id": "M6",
+        "name": "Negative / unsigned index handling",
+        "detail": "Range-constrain index parameters: flag (size_t)-1 and negative pointer offsets instead of allowing unsigned wrap."
+      },
+      {
+        "id": "M7",
+        "name": "Stable tag",
+        "detail": "Emit exactly [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] (tag pair of the int[3] control) with buffer/index/extent in the message. Untagged rejection counts only as PARTIAL, not REJECT."
+      }
+    ]
+  },
+  "cases": [
+    {
+      "file": "const_ptr_arith_oob.cp",
+      "scenario": "Constant OOB on a stdlib-owned buffer via pointer arithmetic",
+      "expression": "*(p + 9) where p = v.items and vector.used == 2",
+      "requested": "REJECT",
+      "observed": {
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/pointer_bounds/const_ptr_arith_oob.cp ok\n",
+        "stderr": "",
+        "tagged_cplus": false,
+        "has_cplus_token": false
+      },
+      "classification": "ACCEPT",
+      "metadata_needed": ["M1", "M2", "M5", "M7"]
+    },
+    {
+      "file": "variable_index_oob.cp",
+      "scenario": "Variable-index OOB where the index is provably too large",
+      "expression": "const size_t idx = 9; *(p + idx) with vector.used == 2",
+      "requested": "REJECT",
+      "observed": {
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/pointer_bounds/variable_index_oob.cp ok\n",
+        "stderr": "",
+        "tagged_cplus": false,
+        "has_cplus_token": false
+      },
+      "classification": "ACCEPT",
+      "metadata_needed": ["M1", "M2", "M5", "M7"]
+    },
+    {
+      "file": "past_end_in_checked_api.cp",
+      "scenario": "Pointer past end used in an at_checked-like API",
+      "expression": "slice(v.items + v.size(), 1).at_checked(0, &out); base is one-past-end",
+      "requested": "REJECT",
+      "observed": {
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/pointer_bounds/past_end_in_checked_api.cp ok\n",
+        "stderr": "",
+        "tagged_cplus": false,
+        "has_cplus_token": false
+      },
+      "classification": "ACCEPT",
+      "metadata_needed": ["M1", "M4", "M5", "M7"]
+    },
+    {
+      "file": "interior_pointer_wrong_extent.cp",
+      "scenario": "Interior pointer with wrong extent",
+      "expression": "slice(v.items + 1, 4).at_checked(3, &out); only 1 int remains from base",
+      "requested": "REJECT",
+      "observed": {
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/pointer_bounds/interior_pointer_wrong_extent.cp ok\n",
+        "stderr": "",
+        "tagged_cplus": false,
+        "has_cplus_token": false
+      },
+      "classification": "ACCEPT",
+      "metadata_needed": ["M1", "M4", "M5", "M7"]
+    },
+    {
+      "file": "negative_index.cp",
+      "scenario": "Negative index into a stdlib-owned buffer",
+      "expression": "*(p - 1) where p = v.items",
+      "requested": "REJECT",
+      "observed": {
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/pointer_bounds/negative_index.cp ok\n",
+        "stderr": "",
+        "tagged_cplus": false,
+        "has_cplus_token": false
+      },
+      "classification": "ACCEPT",
+      "metadata_needed": ["M1", "M2", "M5", "M6", "M7"]
+    },
+    {
+      "file": "class_at_checked_const_oob.cp",
+      "scenario": "Canonical class-owned constant OOB (gap doc capability 5)",
+      "expression": "v.at_checked(9, &out) with vector.used == 2",
+      "requested": "REJECT",
+      "observed": {
+        "exit": 0,
+        "stdout": "check: tests/stdlib/agent1_handoff/pointer_bounds/class_at_checked_const_oob.cp ok\n",
+        "stderr": "",
+        "tagged_cplus": false,
+        "has_cplus_token": false
+      },
+      "classification": "ACCEPT",
+      "metadata_needed": ["M1", "M3", "M7"]
+    },
+    {
+      "file": "control_fixed_array_rejected.cp",
+      "scenario": "CONTROL: fixed local int[3] with literal subscript a[9]",
+      "expression": "a[9] on int a[3]",
+      "requested": "REJECT",
+      "observed": {
+        "exit": 1,
+        "stdout": "",
+        "stderr": "tests/stdlib/agent1_handoff/pointer_bounds/control_fixed_array_rejected.cp:16:12: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds length 3\n      return a[9];   /* tagged [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] */\n             ^\n",
+        "tagged_cplus": true,
+        "has_cplus_token": true
+      },
+      "classification": "tagged REJECT",
+      "note": "Control only: this case is already enforced and must stay green."
+    }
+  ]
+}

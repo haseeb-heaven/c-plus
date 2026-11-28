@@ -1,0 +1,7 @@
+tests/c_standards/c11/source.c:14:1: error: '_Static_assert' is a C11 extension [-Werror,-Wc11-extensions]
+   14 | _Static_assert(sizeof(int) >= 4, "int must be at least 32 bits");
+      | ^
+tests/c_standards/c11/source.c:18:12: error: '_Generic' is a C11 extension [-Werror,-Wc11-extensions]
+   18 |     return _Generic(x,
+      |            ^
+2 errors generated.

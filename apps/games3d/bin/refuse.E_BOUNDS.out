@@ -1,0 +1,2 @@
+REFUSE code=E_BOUNDS reason=scene child index out of range
+SCENE_DONE status=REFUSED code=E_BOUNDS

@@ -1,0 +1,27 @@
+ADV_EXPANDED game2048 oversized_direction REFUSED 2
+ADV_EXPANDED game2048 invalid_command REFUSED 2
+ADV_EXPANDED game2048 empty_arg REFUSED 2
+ADV_EXPANDED game2048 size_max_number REFUSED 2
+ADV_EXPANDED game2048 whitespace_arg REFUSED 2
+ADV_EXPANDED game2048 stdin_dash_with_extra REFUSED 2
+ADV_EXPANDED maze oversized_direction REFUSED 2
+ADV_EXPANDED maze invalid_command REFUSED 2
+ADV_EXPANDED maze empty_arg REFUSED 2
+ADV_EXPANDED maze size_max_number REFUSED 2
+ADV_EXPANDED maze whitespace_arg REFUSED 2
+ADV_EXPANDED maze stdin_dash_with_extra REFUSED 2
+ADV_EXPANDED tictactoe oversized_move REFUSED 2
+ADV_EXPANDED tictactoe invalid_command REFUSED 2
+ADV_EXPANDED tictactoe size_max_number REFUSED 2
+ADV_EXPANDED tictactoe empty_arg REFUSED 2
+ADV_EXPANDED tictactoe whitespace_arg REFUSED 2
+ADV_EXPANDED tictactoe self_collision REFUSED 2
+ADV_EXPANDED tictactoe oversized_stdin REFUSED 2
+ADV_EXPANDED snake_core hostile_argv_self_collision REFUSED 0
+ADV_EXPANDED snake_core size_max_argv REFUSED 0
+ADV_EXPANDED snake_cli oversized_scenario REFUSED 2
+ADV_EXPANDED snake_cli invalid_command REFUSED 2
+ADV_EXPANDED snake_cli empty_scenario REFUSED 2
+ADV_EXPANDED snake_cli size_max_scenario REFUSED 2
+ADV_EXPANDED snake_cli self_collision_stream REFUSED 1
+ADV_EXPANDED_SUBTOTAL games cases=26 refused=26 crashed=0 unexpected_ok=0 blocked=0

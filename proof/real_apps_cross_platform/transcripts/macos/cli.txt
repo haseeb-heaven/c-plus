@@ -1,0 +1,47 @@
+# COMMAND: env -u SDKROOT -u CPLUS_CLANG PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin timeout 30 ./cli
+# EXIT: 0
+# --- STDOUT ---
+CLI_TEST begin
+CHECK init PASS
+CHECK add_cmd PASS
+CHECK add_opt PASS
+CHECK dup_cmd PASS
+CHECK dup_opt PASS
+CHECK long_name PASS
+CHECK long_help PASS
+CHECK null_args PASS
+CHECK bad_option_name PASS
+CHECK uninit PASS
+CHECK registry_full PASS
+CHECK parse_ok PASS
+PARSE command=add id=1 found=1 options=2 args=2
+OPT 0 --verbose has_value=0 value=
+OPT 1 --count has_value=1 value=3
+ARG 0 10
+ARG 1 20
+CHECK dispatch PASS
+CHECK dispatch_refusal PASS
+CHECK help_exact PASS
+HELP_BEGIN
+Commands:
+  add - add two numbers (id=1)
+  greet - greet a name (id=2)
+Options:
+  --count=value
+  --verbose
+
+HELP_END
+CHECK help_bounds PASS
+CHECK unknown_option PASS
+CHECK unknown_command PASS
+CHECK no_command PASS
+CHECK too_many_args PASS
+CHECK bare_dash PASS
+CHECK flag_value PASS
+CHECK value_missing PASS
+CHECK oversized_token PASS
+CHECK null_token PASS
+CHECK negative_argc PASS
+CHECK error_strings PASS
+CLI_TEST 27 27 0
+# --- STDERR ---

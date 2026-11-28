@@ -1,0 +1,2 @@
+BUILD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/deep_file_task2.cp --strict --sanitize=none -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent2/results/run/deep_file_task2
+RUN: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent2/results/run/deep_file_task2

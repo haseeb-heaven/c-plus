@@ -1,0 +1,5 @@
+clang: warning: -Wl,-rpath,/opt/homebrew/lib: 'linker' input unused [-Wunused-command-line-argument]
+clang: warning: -lSDL3: 'linker' input unused [-Wunused-command-line-argument]
+clang: warning: -lnuklear: 'linker' input unused [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-L/opt/homebrew/lib' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/ext' [-Wunused-command-line-argument]

@@ -1,0 +1,5 @@
+FCAT 0 hello world
+FCAT 1 foo bar baz
+FCAT 2 one
+FCAT 3 two three
+FCAT size 38 lines 4

@@ -1,0 +1,68 @@
+{
+  "suite": "C standard matrix for c+ LEGACY C mode",
+  "description": "Compile and run deterministic C89 fixtures under seven -std values, comparing c+ against /usr/bin/clang and an optional Homebrew clang, and proving --emit-c preserves source bytes apart from the leading #line directive.",
+  "standards": [
+    "c89",
+    "gnu89",
+    "c99",
+    "c11",
+    "c17",
+    "c2x",
+    "c23"
+  ],
+  "cplus_template": "<CPLUS_BIN> build --legacy-c --sanitize=none --emit-c <generated.c> <fixture.c> -o <binary> -- -std=<std>",
+  "reference_template": "<REF_CC> -std=<std> -O2 [-isysroot <sdk>] <fixture.c> -o <binary>",
+  "primary_reference": "/usr/bin/clang",
+  "optional_reference": "/opt/homebrew/opt/llvm/bin/clang",
+  "fixtures": [
+    {
+      "name": "arithmetic",
+      "file": "fixtures/arithmetic.c",
+      "feature": "integer arithmetic, promotions, shifts, unsigned wrap",
+      "reference_scope": "all"
+    },
+    {
+      "name": "control_flow",
+      "file": "fixtures/control_flow.c",
+      "feature": "for/while loops, continue, switch with default",
+      "reference_scope": "all"
+    },
+    {
+      "name": "structs_arrays",
+      "file": "fixtures/structs_arrays.c",
+      "feature": "struct assignment, nested aggregates, arrays, sizeof",
+      "reference_scope": "all"
+    },
+    {
+      "name": "strings",
+      "file": "fixtures/strings.c",
+      "feature": "strcpy/strcat/strlen/strcmp and char access",
+      "reference_scope": "all"
+    },
+    {
+      "name": "preprocessor",
+      "file": "fixtures/preprocessor.c",
+      "feature": "object/function macros, stringification, token pasting, #if",
+      "reference_scope": "all"
+    },
+    {
+      "name": "io_formatting",
+      "file": "fixtures/io_formatting.c",
+      "feature": "printf integer/hex/octal/float/char formats",
+      "reference_scope": "all"
+    },
+    {
+      "name": "exit_status",
+      "file": "fixtures/exit_status.c",
+      "feature": "non-zero process exit code with stdout flush",
+      "reference_scope": "all"
+    },
+    {
+      "name": "std_version",
+      "file": "fixtures/std_version.c",
+      "feature": "backend -std forwarding probe (__STDC_VERSION__)",
+      "reference_scope": "primary",
+      "scope_reason": "The numeric __STDC_VERSION__ for c2x differs between Apple clang 16 and Homebrew clang; this probe is compared only against /usr/bin/clang, the backend c+ uses by default."
+    }
+  ]
+}

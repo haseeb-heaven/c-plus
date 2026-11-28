@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/arith_addmul.o0.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+arith=11,33,22
+
+--- stderr ---
+

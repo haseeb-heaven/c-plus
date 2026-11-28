@@ -1,0 +1,2 @@
+GUI_REFUSED tag=small-serialize-buffer category=5 code=101 message=widgets: serialization buffer too small
+GUI_RESULT refuse small-serialize-buffer REFUSED 101

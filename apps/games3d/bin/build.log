@@ -1,0 +1,46 @@
+./stdlib/error.hp:452:13: warning: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      fresh = cplus_realloc(ptr, actual);
+              ^~~~~~~~~~~~~
+./stdlib/scene3d.hp:151:13: warning: [CPLUS-FFI] pointer parameter 'name' has unverifiable extent; subscript cannot be proven safe
+          if (name[i] == '\0')
+              ^~~~
+apps/games3d/scene3d_demo.cp:100:9: warning: [CPLUS-FFI] format string in vsnprintf is not a string literal (CWE-134; attacker-controlled format)
+      n = vsnprintf(buf, sizeof(buf), fmt, ap);
+          ^~~~~~~~~
+apps/games3d/scene3d_demo.cp:141:21: warning: [CPLUS-FFI] pointer parameter 'arg' has unverifiable extent; subscript cannot be proven safe
+      if (arg == 0 || arg[0] == '\0')
+                      ^~~
+apps/games3d/scene3d_demo.cp:175:9: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'mesh3d_init'
+      if (mesh3d_init(m, (const stdlib_allocator *)0, err) != STDLIB_OK)
+          ^~~~~~~~~~~
+apps/games3d/scene3d_demo.cp:183:13: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 2 passed to 'mesh3d_add_vertex'
+          if (mesh3d_add_vertex(m, &v, (size_t *)0, err) != STDLIB_OK)
+              ^~~~~~~~~~~~~~~~~
+apps/games3d/scene3d_demo.cp:221:9: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'scene3d_init'
+      if (scene3d_init(s, (const stdlib_allocator *)0, err) != STDLIB_OK)
+          ^~~~~~~~~~~~
+apps/games3d/scene3d_demo.cp:350:17: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'mesh3d_init'
+              if (mesh3d_init(&inst, (const stdlib_allocator *)0, &err) != STDLIB_OK)
+                  ^~~~~~~~~~~
+apps/games3d/scene3d_demo.cp:358:21: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 2 passed to 'mesh3d_add_vertex'
+                  if (mesh3d_add_vertex(&inst, &mv, (size_t *)0, &err) != STDLIB_OK)
+                      ^~~~~~~~~~~~~~~~~
+apps/games3d/scene3d_demo.cp:545:9: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 1 passed to 'mesh3d_init'
+      if (mesh3d_init(&m, (const stdlib_allocator *)0, &e) != STDLIB_OK)
+          ^~~~~~~~~~~
+apps/games3d/scene3d_demo.cp:552:13: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 2 passed to 'mesh3d_add_vertex'
+          if (mesh3d_add_vertex(&m, &v, (size_t *)0, &e) != STDLIB_OK) {
+              ^~~~~~~~~~~~~~~~~
+apps/games3d/scene3d_demo.cp:571:11: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+      cmd = argv[1];
+            ^~~~
+apps/games3d/scene3d_demo.cp:585:24: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+          pr = parse_int(argv[2], &value);
+                         ^~~~
+apps/games3d/scene3d_demo.cp:594:24: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+          pr = parse_int(argv[2], &value);
+                         ^~~~
+apps/games3d/scene3d_demo.cp:603:24: warning: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+          pr = parse_int(argv[2], &value);
+                         ^~~~
+clang: warning: build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

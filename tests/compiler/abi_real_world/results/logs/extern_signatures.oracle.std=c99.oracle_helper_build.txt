@@ -1,0 +1,8 @@
+command: /usr/bin/clang -std=c99 -c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.oracle_std=c99.helper.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.oracle_std=c99.helper.o
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+

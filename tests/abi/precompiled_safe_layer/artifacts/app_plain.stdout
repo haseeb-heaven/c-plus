@@ -1,0 +1,5 @@
+app: version=3
+app: mul=440
+app: checksum=36
+app: label=precompiled-ok
+app: END

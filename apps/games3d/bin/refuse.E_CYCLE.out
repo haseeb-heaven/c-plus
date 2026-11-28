@@ -1,0 +1,2 @@
+REFUSE code=E_CYCLE reason=reparent under a descendant is a cycle
+SCENE_DONE status=REFUSED code=E_CYCLE

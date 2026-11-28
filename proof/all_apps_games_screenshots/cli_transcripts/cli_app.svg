@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420"><rect width='100%' height='100%' fill='#0d1117'/><text x='16' y='30' fill='#58a6ff' font-size='18'>C+ proof: cli_app</text>
+<text x='16' y='56' fill='#c9d1d9' font-family='monospace' font-size='12'>== build: examples/cli_app/cli_calc.cp (--default --no-werror --sanitize=none) ==</text>
+<text x='16' y='72' fill='#c9d1d9' font-family='monospace' font-size='12'>BUILD ok</text>
+<text x='16' y='88' fill='#c9d1d9' font-family='monospace' font-size='12'>== deterministic argv cases (timeout 30s each) ==</text>
+<text x='16' y='104' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS empty            rc=2 out=CLI no-command|</text>
+<text x='16' y='120' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS add              rc=0 out=CLI add 2 3 5|</text>
+<text x='16' y='136' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS mul              rc=0 out=CLI mul 6 7 42|</text>
+<text x='16' y='152' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS help             rc=0 out=Commands:|  add - add two integers (id=1)|  mul - multiply two integers (id=2)|</text>
+<text x='16' y='168' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS unknown_cmd      rc=2 out=CLI refuse unknown command 7|</text>
+<text x='16' y='184' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS unknown_opt      rc=2 out=CLI refuse unknown option 6|</text>
+<text x='16' y='200' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS too_many_args    rc=2 out=CLI refuse too many arguments 8|</text>
+<text x='16' y='216' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS too_long         rc=2 out=CLI refuse name or token too long 3|</text>
+<text x='16' y='232' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS empty_token      rc=2 out=CLI refuse invalid argument 2|</text>
+<text x='16' y='248' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS tag_no_value     rc=2 out=CLI refuse invalid argument 2|</text>
+<text x='16' y='264' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS verbose_eq       rc=2 out=CLI refuse invalid argument 2|</text>
+<text x='16' y='280' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS negative_token   rc=2 out=CLI refuse unknown option 6|</text>
+<text x='16' y='296' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS bad_int          rc=1 out=CLI bad-int|</text>
+<text x='16' y='312' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS few_args         rc=1 out=CLI args 1|</text>
+<text x='16' y='328' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS overflow         rc=1 out=CLI overflow|</text>
+<text x='16' y='344' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS verbose          rc=0 out=CLI add 4 5 9|CLI verbose 1|</text>
+<text x='16' y='360' fill='#c9d1d9' font-family='monospace' font-size='12'>PASS tag              rc=0 out=CLI mul 3 4 12|CLI tag hello|</text>
+<text x='16' y='376' fill='#c9d1d9' font-family='monospace' font-size='12'>== Windows PE cross-compile (compile-only, no runtime claim) ==</text>
+<text x='16' y='392' fill='#c9d1d9' font-family='monospace' font-size='12'>MINGW compile ok: examples/cli_app/out/cli_calc.win.o</text>
+</svg>

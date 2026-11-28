@@ -1,0 +1,385 @@
+deep stdlib harness: build<=60s, run<=30s, kill-after=5s, compiler=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+
+BUILD-FAIL deep_collections_alloc (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+tests/stdlib/run_deep_tests.sh: line 122: 64627 Abort trap: 6           timeout -k "$KILL_AFTER" "$RUN_TIMEOUT" "$_bin" < "$_stdin" > "$_out" 2> "$_err"
+TIMEOUT  deep_collections_alloc (strict-none): run exceeded 30s (rc=134)
+BUILD-FAIL deep_collections_alloc (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_collections_boundary (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_collections_boundary (strict-none): DIGEST 141365270 2760897655
+BUILD-FAIL deep_collections_boundary (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_collections_collisions (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_collections_collisions (strict-none): RESULT 23 0
+BUILD-FAIL deep_collections_collisions (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_collections_growth (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_collections_growth (strict-none): RESULT 32 0
+BUILD-FAIL deep_collections_growth (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_cross_family (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_cross_family (strict-none): CROSS_FAMILY 89 0
+BUILD-FAIL deep_cross_family (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_error_task5 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_error_task5 (strict-none): ERROR_TASK5 22 0
+BUILD-FAIL deep_error_task5 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_error_vector (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_error_vector (strict-none): DEEP_ERROR_VECTOR 1 F
+BUILD-FAIL deep_error_vector (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_file_lifecycle (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_file_lifecycle (strict-none): deep-file-lifecycle PASS 0
+BUILD-FAIL deep_file_lifecycle (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_file_lines (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_file_lines (strict-none): deep-file-lines PASS 0
+BUILD-FAIL deep_file_lines (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_file_task2 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_file_task2 (strict-none): FILE_TASK2 38 0
+BUILD-FAIL deep_file_task2 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_fs_task5 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_fs_task5 (strict-none): FS_TASK5 35 0
+BUILD-FAIL deep_fs_task5 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_fs_time (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_fs_time (strict-none): deep_fs_time: 54 checks, 0 failures
+BUILD-FAIL deep_fs_time (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_io_1byte (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_io_1byte (strict-none): ALL_OK 1
+BUILD-FAIL deep_io_1byte (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_io_task2 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_io_task2 (strict-none): IO_TASK2 22 0
+BUILD-FAIL deep_io_task2 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_io_token (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_io_token (strict-none): ALL_OK 1
+BUILD-FAIL deep_io_token (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_json_stress (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_json_stress (strict-none): RESULT 20 0
+BUILD-FAIL deep_json_stress (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_json_task5 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_json_task5 (strict-none): JSON_TASK5 23 0
+BUILD-FAIL deep_json_task5 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_json_types (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_json_types (strict-none): RESULT 65 0
+BUILD-FAIL deep_json_types (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_log_task5 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_log_task5 (strict-none): LOG_TASK5 49 0
+BUILD-FAIL deep_log_task5 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_memory_bounds (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_memory_bounds (strict-none): MEMORY_BOUNDS 61 0
+BUILD-FAIL deep_memory_bounds (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_net (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_net (strict-none): SUMMARY 8 6 0 0
+BUILD-FAIL deep_net (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_net_task5 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_net_task5 (strict-none): NET_TASK5 9 0
+BUILD-FAIL deep_net_task5 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_string_append (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_string_append (strict-none): append-failures 0
+BUILD-FAIL deep_string_append (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_string_task4 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_string_task4 (strict-none): STRING_TASK4 86 0
+BUILD-FAIL deep_string_task4 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_string_view (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_string_view (strict-none): view-failures 0
+BUILD-FAIL deep_string_view (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_thread_guard (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_thread_guard (strict-none): SELF_CHECK_OK
+BUILD-FAIL deep_thread_guard (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_thread_nested (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_thread_nested (strict-none): SELF_CHECK_OK
+BUILD-FAIL deep_thread_nested (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_thread_task5 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_thread_task5 (strict-none): THREAD_TASK5 22 0
+BUILD-FAIL deep_thread_task5 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+BUILD-FAIL deep_vector_task4 (default): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+ok       deep_vector_task4 (strict-none): VECTOR_TASK4 16 0
+BUILD-FAIL deep_vector_task4 (ubsan): compiler exit 1
+           /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/runtime/cplus_runtime.c:360:23: error: use of undeclared identifier 'CPLUS_EXIT_ARITHMETIC'
+             360 |     cplus_print_fatal(CPLUS_EXIT_ARITHMETIC, "allocation size overflow", NULL,
+                 |                       ^
+           5 errors generated.
+           error: failed to compile instrumented C+ runtime
+
+MODE           PASSED   FAILED  SKIPPED  BUILD-FAIL  RUN-FAIL  OUT-FAIL
+default             0       29        0          29         0         0
+strict-none        28        0        1           0         0         0
+ubsan               0       29        0          29         0         0
+deep stdlib tests: 28 passed, 58 failed, 1 skipped (29 file(s) x 3 modes)

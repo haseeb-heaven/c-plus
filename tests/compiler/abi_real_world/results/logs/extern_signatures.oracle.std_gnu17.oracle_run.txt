@@ -1,0 +1,9 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/extern_signatures.oracle_std_gnu17.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+x=42,6,6.0,5,7,2.5,h=7
+
+--- stderr ---
+

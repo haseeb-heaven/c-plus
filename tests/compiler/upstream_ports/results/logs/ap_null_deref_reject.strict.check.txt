@@ -1,0 +1,13 @@
+case: ap_null_deref_reject
+mode: strict
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_null_deref_reject.c
+rc: 1
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:4:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference
+      *p = 1;
+      ^
+

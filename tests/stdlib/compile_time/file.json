@@ -1,0 +1,68 @@
+{
+  "suite": "file",
+  "header": "stdlib/file.hp",
+  "commands": [
+    "c+ check --strict <case>",
+    "c+ build --strict --sanitize=none <case> -o <exe>"
+  ],
+  "summary": {
+    "total": 8,
+    "reject_expected": 2,
+    "accept_expected": 3,
+    "runtime_expected": 3,
+    "observed_reject": 1,
+    "observed_partial": 1,
+    "observed_accept": 6,
+    "key_gap": "The RAII borrow checker rejects use-after-move but emits an untagged 'error:' diagnostic, so the harness classifies it as PARTIAL rather than REJECT. A NULL file* borrow is rejected with a tagged [CPLUS-LIFETIME] diagnostic (REJECT). Read-after-close, write-after-close and double-close are not proven at all and are covered by checked recoverable failures in file.hp at run time."
+  },
+  "cases": [
+    {
+      "file": "file_read_after_close.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "check rc=0, build rc=0, 0 [CPLUS- diagnostics. file::read() returns STDLIB_FAIL on the cleared handle at run time (binary exits 0); compiler capability gap."
+    },
+    {
+      "file": "file_write_after_close.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "check rc=0, build rc=0, 0 [CPLUS- diagnostics. file::write()/write_bytes() fail safely at run time (binary exits 0); compiler capability gap."
+    },
+    {
+      "file": "file_double_close.cp",
+      "expect": "RUNTIME",
+      "observed": "ACCEPT",
+      "note": "check rc=0, build rc=0, 0 [CPLUS- diagnostics. Second close() returns STDLIB_FAIL with STDLIB_CATEGORY_LIFECYCLE at run time (binary exits 0); compiler capability gap."
+    },
+    {
+      "file": "file_use_after_move.cp",
+      "expect": "REJECT",
+      "observed": "PARTIAL",
+      "note": "check rc=1, build rc=1. Compiler emits 'error: use-after-move: use of moved-from resource a', but it is untagged (0 [CPLUS- diagnostics), so the strict harness reports PARTIAL. Genuine compile-time rejection; diagnostic-tagging gap only."
+    },
+    {
+      "file": "file_invalid_borrow.cp",
+      "expect": "REJECT",
+      "observed": "REJECT",
+      "note": "check rc=1, build rc=1 with '[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference' on borrowed->stream. A NULL file* borrow is rejected at compile time with a tagged diagnostic. Residual gap: borrowing a live local file via 'file *p = &f; return p;' is rejected only with an untagged 'borrow cannot escape the function' error (PARTIAL)."
+    },
+    {
+      "file": "file_valid.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "check rc=0, build rc=0, binary exits 0. Owned file lifecycle is accepted."
+    },
+    {
+      "file": "file_valid_borrow.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "check rc=0, build rc=0, binary exits 0. file_borrow(stdout) and a pointer borrow of a live local file are accepted."
+    },
+    {
+      "file": "file_valid_move.cp",
+      "expect": "ACCEPT",
+      "observed": "ACCEPT",
+      "note": "check rc=0, build rc=0, binary exits 0. Single cplus_move ownership transfer is accepted."
+    }
+  ]
+}

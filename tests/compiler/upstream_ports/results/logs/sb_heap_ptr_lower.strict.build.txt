@@ -1,0 +1,10 @@
+case: sb_heap_ptr_lower
+mode: strict
+step: build
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sb_heap_ptr_lower.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sb_heap_ptr_lower.strict
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

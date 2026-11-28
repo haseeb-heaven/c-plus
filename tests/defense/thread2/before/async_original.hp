@@ -1,0 +1,226 @@
+/* C+ standard library: event loop, timers and file I/O via libuv (MIT, linked).
+ *
+ * C++-flavoured RAII: `loop l = loop(&err); timer t = timer(l.native(),
+ * &err);` and both release in drop().  libuv stays the event engine.
+ * Link with pkg-config libuv.
+ */
+#ifndef CPLUS_STD_ASYNC_HP
+#define CPLUS_STD_ASYNC_HP
+
+#include <fcntl.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <uv.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+
+class loop {
+    uv_loop_t native_loop;
+    int initialized;
+
+    loop(error *err) {
+        do {
+            error_reset(err);
+            this->initialized = 0;
+            if (uv_loop_init(&this->native_loop) != 0) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "loop: uv_loop_init failed");
+                break;
+            }
+            this->initialized = 1;
+        } while (0);
+    }
+
+    int valid(void) {
+        return this->initialized != 0;
+    }
+
+    /* Borrowed native loop for APIs that need the libuv type. */
+    uv_loop_t *native(void) {
+        return &this->native_loop;
+    }
+
+    int run(int mode, error *err) {
+        error_reset(err);
+        if (!this->valid()) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "loop::run: invalid loop");
+            return STDLIB_FAIL;
+        }
+        if (uv_run(&this->native_loop, (uv_run_mode)mode) != 0)
+            cplus_log(CPLUS_LOG_DEBUG, "loop::run: active handles remain");
+        return STDLIB_OK;
+    }
+
+    void stop(void) {
+        if (this->valid())
+            uv_stop(&this->native_loop);
+    }
+
+    unsigned long long now_ms(void) {
+        if (!this->valid())
+            return 0;
+        return (unsigned long long)uv_now(&this->native_loop);
+    }
+
+    /* Drains pending closes (bounded) before releasing the loop memory: a
+     * handle whose uv_close() has not completed would otherwise point at freed
+     * memory. */
+    void drop(void) {
+        int guard = 0;
+        if (!this->initialized)
+            return;
+        while (uv_loop_alive(&this->native_loop) && guard < 1000) {
+            uv_run(&this->native_loop, UV_RUN_NOWAIT);
+            guard++;
+        }
+        if (uv_loop_close(&this->native_loop) != 0)
+            cplus_log(CPLUS_LOG_WARN, "loop::drop: libuv loop still busy");
+        this->initialized = 0;
+    }
+};
+
+/* uv_close() is asynchronous: the handle memory must outlive the close. */
+static inline void stdlib_timer_release_handle(uv_handle_t *handle) {
+    stdlib_release(handle);
+}
+
+class timer {
+    uv_timer_t *handle;
+    uv_loop_t *owner_loop;
+    int initialized;
+
+    /* Takes the native loop: a constructor must not use `->`. */
+    timer(uv_loop_t *owner_loop, error *err) {
+        error_reset(err);
+        this->handle = NULL;
+        this->owner_loop = NULL;
+        this->initialized = 0;
+        if (owner_loop == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "timer: invalid loop");
+        } else {
+            this->handle = (uv_timer_t *)stdlib_alloc(sizeof(uv_timer_t));
+            if (this->handle == NULL) {
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "timer: out of memory");
+            } else if (uv_timer_init(owner_loop, this->handle) != 0) {
+                stdlib_release(this->handle);
+                this->handle = NULL;
+                error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                               "timer: uv_timer_init failed");
+            } else {
+                this->owner_loop = owner_loop;
+                this->initialized = 1;
+            }
+        }
+    }
+
+    int valid(void) {
+        return this->initialized != 0 && this->handle != NULL;
+    }
+
+    /* repeat_ms of 0 fires once; user is reachable as handle->data. */
+    int start(uv_timer_cb callback, unsigned long long timeout_ms,
+              unsigned long long repeat_ms, void *user, error *err) {
+        error_reset(err);
+        if (!this->valid() || callback == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer::start: invalid timer");
+            return STDLIB_FAIL;
+        }
+        this->handle->data = user;
+        if (uv_timer_start(this->handle, callback, timeout_ms, repeat_ms) != 0) {
+            error_fail(err, CPLUS_EXIT_IO, "timer::start: uv_timer_start failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int stop(error *err) {
+        error_reset(err);
+        if (!this->valid()) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "timer::stop: invalid timer");
+            return STDLIB_FAIL;
+        }
+        if (uv_timer_stop(this->handle) != 0) {
+            error_fail(err, CPLUS_EXIT_IO, "timer::stop: uv_timer_stop failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int is_active(void) {
+        if (!this->valid())
+            return 0;
+        return uv_is_active((const uv_handle_t *)this->handle) ? 1 : 0;
+    }
+
+    /* The handle lives on the heap and is released by the close callback, so
+     * dropping the timer can never free memory libuv still references.  The
+     * loop is drained (bounded) until the close completes. */
+    void drop(void) {
+        if (!this->initialized)
+            return;
+        if (this->handle != NULL) {
+            uv_timer_stop(this->handle);
+            this->handle->data = NULL;
+            uv_close((uv_handle_t *)this->handle, stdlib_timer_release_handle);
+            this->handle = NULL;
+            if (this->owner_loop != NULL) {
+                int guard = 0;
+                while (uv_loop_alive(this->owner_loop) && guard < 1000) {
+                    uv_run(this->owner_loop, UV_RUN_NOWAIT);
+                    guard++;
+                }
+            }
+        }
+        this->owner_loop = NULL;
+        this->initialized = 0;
+    }
+};
+
+/* Reads at most size bytes of path into the caller's buffer; byte count or -1. */
+static inline long long read_file(loop *owner, const char *path, char *buf,
+                                  size_t size, error *err) {
+    uv_fs_t req;
+    uv_buf_t chunk;
+    uv_file fd;
+    long long read = -1;
+    error_reset(err);
+    if (owner == NULL || !owner->valid() || path == NULL || buf == NULL ||
+        size == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "read_file: invalid argument");
+        return -1;
+    }
+    if (size > (size_t)UINT_MAX) {
+        error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                       "read_file: buffer size exceeds UINT_MAX");
+        return -1;
+    }
+    fd = uv_fs_open(&owner->native_loop, &req, path, O_RDONLY, 0, NULL);
+    if (fd < 0) {
+        error_fail(err, CPLUS_EXIT_IO, uv_strerror((int)fd));
+        uv_fs_req_cleanup(&req);
+        return -1;
+    }
+    uv_fs_req_cleanup(&req);
+    chunk = uv_buf_init(buf, (unsigned int)size);
+    read = (long long)uv_fs_read(&owner->native_loop, &req, fd, &chunk, 1, -1, NULL);
+    if (read < 0) {
+        error_fail(err, CPLUS_EXIT_IO, uv_strerror((int)read));
+        read = -1;
+    }
+    uv_fs_req_cleanup(&req);
+    uv_fs_close(&owner->native_loop, &req, fd, NULL);
+    uv_fs_req_cleanup(&req);
+    return read;
+}
+
+static inline void sleep_ms(unsigned ms) {
+    uv_sleep(ms);
+}
+
+static inline const char *uv_error_text(int status) {
+    return uv_strerror(status);
+}
+
+#endif

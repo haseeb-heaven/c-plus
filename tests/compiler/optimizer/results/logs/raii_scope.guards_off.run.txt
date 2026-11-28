@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/raii_scope.guards_off.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+drop=7
+rs=done
+
+--- stderr ---
+

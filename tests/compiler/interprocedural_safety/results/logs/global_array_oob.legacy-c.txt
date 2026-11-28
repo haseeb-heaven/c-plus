@@ -1,0 +1,12 @@
+command: c+ check --legacy-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/global_array_oob.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:2:23: warning: array index 7 is past the end of the array (that has type 'int[4]') [-Warray-bounds]
+    2 | static void wr(void){ g[7]=3; }
+      |                       ^ ~
+<SRC>:1:1: note: array 'g' declared here
+    1 | int g[4];
+      | ^
+1 warning generated.

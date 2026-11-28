@@ -31,6 +31,25 @@
 
 **Do not reinvent mature implementations.** Use [LLVM/Clang](https://github.com/llvm/llvm-project) AST/CFG/dataflow infrastructure; study [Cake](https://github.com/thradams/cake), [CORAL](https://github.com/tiagodusilva/coral), [Checked C](https://github.com/checkedc/checkedc-clang), [Apple Bounds Safety](https://clang.llvm.org/docs/BoundsSafety/BoundsSafety.html) and [Xr0](https://xr0.dev/learn) for analysis. Use licensed implementation files from [LLVM libc](https://github.com/llvm/llvm-project/tree/main/libc), [musl](https://git.musl-libc.org/cgit/musl) and [Intel safestringlib](https://github.com/intel/safestringlib) as appropriate; verify per-file license, upstream SHA, dependencies and attribution first. **Cake has GPLv3 plus additional restrictions; do not copy its implementation without verified permission.**
 
+### Agent 1 progress already implemented in PR #16
+
+- [~] Use-after-free: ASan remains broken on this host; an opt-in bounded
+      quarantine (`CPLUS_QUARANTINE=1`) delays managed frees so stale aliases
+      after address reuse are detected. Not enabled by default; raw C pointer
+      dereferences remain unchecked.
+- [~] Borrow checking covers locals, escapes, moves, stack-to-thread args,
+      field conflicts and null out-parameters; containers/general function
+      argument lifetimes remain open.
+- [~] `goto`/`longjmp` produce documented warnings in the safe subset;
+      rejecting them outright would break real C programs and is not enabled.
+- [~] Adversarial fuzzing: deterministic checker fuzz (120 inputs, 0 crashes)
+      and allocator churn test added; libFuzzer target still planned.
+- [ ] Concurrency safety: data-race detection or a checked lock discipline;
+      currently mutex RAII is only a primitive, marked experimental.
+- [ ] Verify Linux x86-64 and ARM64 targets in CI; add Windows x86-64 later.
+
+**Agent 2 — bundled libc/verification:** Build and ship actual compiled implementations, checked APIs, contract definitions, opt-in logging, installable headers and SDK components for the **same** libc APIs (`malloc/calloc/realloc/free`, `memcpy/memmove`, `strcpy/strcat/strlen`, formatting, `FILE*` I/O). Use existing Apple/Microsoft/glibc/musl libc and supported fortification; preserve C ABI, error semantics and existing function names. Write `tests/crt/**` positive and adversarial negative fixtures covering aliases, UAF, double-free, unknown sizes, realloc errors, thread ownership and FFI lifetime. Do not add compiler changes or copy whole libc. Freeze new modern-library features.
+
 **Platform scope:** libc+ is the portable, selectively linked hardened library layer; glibc is GNU/Linux-specific. Use explicit glibc integration on Linux and platform-native Darwin libc/UCRT integration on macOS/Windows. Do not overwrite system CRTs or mix allocators. An existing `strcpy(dst, src)` call lacks capacity in its signature; provide a compiler proof, a sound check or strict-mode rejection rather than pretend the libc alone makes it safe.
 
 ## Definition of done per feature

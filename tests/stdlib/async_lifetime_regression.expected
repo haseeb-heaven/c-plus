@@ -1,0 +1,4 @@
+lifetime-no-dispatch 1 1 1
+lifetime-loop-first 1 1 1
+lifetime-fail-closed 1 1 1
+lifetime-drop-after-loop 1 1

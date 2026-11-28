@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_file_alias_write_uaf.c:18:5: error: use of closed FILE* 'mirror'
+      (void)meta.tag;
+      ^
+help: the stream was already closed

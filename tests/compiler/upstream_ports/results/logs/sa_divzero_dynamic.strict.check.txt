@@ -1,0 +1,13 @@
+case: sa_divzero_dynamic
+mode: strict
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/sa_divzero_dynamic.c
+rc: 1
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:6:13: error: [CPLUS-ARITH] division by zero cannot be excluded
+      int x = 10 / z;
+              ^~
+

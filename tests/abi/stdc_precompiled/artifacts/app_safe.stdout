@@ -1,0 +1,6 @@
+caller: version=11
+caller: mul=440
+caller: sum=36
+caller: copy_equal=1
+caller: label=stdc-legacy-ok
+caller: END

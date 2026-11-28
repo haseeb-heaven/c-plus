@@ -1,0 +1,13 @@
+E1_truncation 1 S
+E2_reset_set 1 S
+E3_null_handle 1 R
+E4_categories 1 S
+E5_status_map 1 S
+V1_growth 1 S
+V2_empty_slices 1 S
+V3_stale_slices 1 S
+V4_oom_recovery 1 R
+V5_empty_get_pop 1 R
+V6_overflow_shapes 1 R
+V7_alloc_balance 1 R
+DEEP_ERROR_VECTOR 1 F

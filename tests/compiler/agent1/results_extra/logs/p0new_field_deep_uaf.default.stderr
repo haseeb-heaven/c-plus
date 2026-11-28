@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_field_deep_uaf.c:17:5: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: subscript of released pointer
+      o.m.in.buf[0] = 'z';
+      ^~~~~~~~~~
+help: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()

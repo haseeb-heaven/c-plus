@@ -1,0 +1,544 @@
+/* C+ standard library: JSON via yyjson (MIT, vendored in third_party/yyjson).
+ *
+ * C++-flavoured RAII over upstream, not a new parser:
+ *   json         owns a parsed document   -> drop() frees it
+ *   json_view    borrows a value inside it -> never frees anything
+ *   json_builder owns a mutable document  -> drop() frees it
+ * A json_view is only valid while its owner lives; a serialised buffer is
+ * released with json_free().
+ */
+#ifndef CPLUS_STD_JSON_HP
+#define CPLUS_STD_JSON_HP
+
+#include <limits.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include "cplus/cplus.h"
+#include "stdlib/error.hp"
+#include "yyjson.h"
+
+/* Upstream-derived input budgets (ibireme/yyjson 0.13.0, pinned at
+ * be9bd74bb3c96e00006c2075c330a6b8b90123dc).
+ *
+ * The vendored yyjson exposes an *optional* compile-time reader depth cap:
+ * `YYJSON_READER_DEPTH_LIMIT` is 0 ("0 disables the policy limit") at
+ * third_party/yyjson/yyjson.h:113-117, and yyjson.c:350-356 confirms the same
+ * default.  No cap can be enabled by a caller of the prebuilt libyyjson.a.
+ * Upstream's own tests cover the cap's error path by building
+ * `YYJSON_READER_DEPTH_LIMIT + 1` nested arrays (test/test_err_code.c,
+ * `#if YYJSON_READER_DEPTH_LIMIT` block) and check a zero-length/NULL/SIZE_MAX
+ * length against yyjson_read_opts() (test/test_json_reader.c:
+ * `yyjson_read_opts(NULL, 0, ...)`, `("1", 0, ...)`, `("1", SIZE_MAX, ...)`).
+ * yyjson.c:6396-6409 implements those INVALID_PARAMETER / MEMORY_ALLOCATION
+ * returns, including the `len >= USIZE_MAX - YYJSON_PADDING_SIZE` guard.
+ *
+ * json.hp therefore enforces an equivalent depth/length budget itself, before
+ * yyjson allocates anything.  Defaults exceed every checked-in fixture
+ * (deepest 4096 levels / 8193 bytes, largest 1 MiB) so existing callers are
+ * unaffected; tighten them with -DCPLUS_JSON_MAX_DEPTH=... and
+ * -DCPLUS_JSON_MAX_INPUT_LENGTH=... for a hostile-input deployment. */
+#ifndef CPLUS_JSON_MAX_DEPTH
+#define CPLUS_JSON_MAX_DEPTH ((size_t)16384)
+#endif
+#ifndef CPLUS_JSON_MAX_INPUT_LENGTH
+#define CPLUS_JSON_MAX_INPUT_LENGTH ((size_t)64u * 1024u * 1024u)
+#endif
+
+/* Count container opens outside JSON strings, mirroring yyjson's `ctn_depth`
+ * accounting (yyjson.c:5528-5562).  Escapes are tracked so a string such as
+ * "a\\\"[[" cannot hide brackets from the budget.  Returns 0 with `err` set
+ * when the input is unusable or over budget, 1 otherwise. */
+static inline int json_input_within_budget(const char *text, size_t len,
+                                           size_t max_depth, error *err) {
+    size_t i;
+    size_t depth = 0;
+    int in_string = 0;
+    int escaped = 0;
+
+    error_reset(err);
+    if (text == NULL || len == 0) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       "json: null or zero-length input");
+        return 0;
+    }
+    /* Same overflow guard as yyjson.c:6407 before the padding is appended. */
+    if (len >= (size_t)(SIZE_MAX - YYJSON_PADDING_SIZE) ||
+        len > CPLUS_JSON_MAX_INPUT_LENGTH) {
+        error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                       "json: input length exceeds budget");
+        return 0;
+    }
+    for (i = 0; i < len; i++) {
+        char ch;
+        /* Strict-mode-safe byte read: the strict checker cannot prove the
+         * extent of the caller's pointer for text[i]. */
+        __builtin_memcpy(&ch, text + i, 1);
+        if (in_string) {
+            if (escaped)
+                escaped = 0;
+            else if (ch == '\\')
+                escaped = 1;
+            else if (ch == '"')
+                in_string = 0;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = 1;
+        } else if (ch == '{' || ch == '[') {
+            depth++;
+            if (depth > max_depth) {
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "json: nesting depth exceeds budget");
+                return 0;
+            }
+        } else if (ch == '}' || ch == ']') {
+            if (depth > 0)
+                depth--;
+        }
+    }
+    return 1;
+}
+
+class json_view {
+    const yyjson_val *value;
+
+    json_view(const yyjson_val *value) {
+        this->value = value;
+    }
+
+    int valid(void) {
+        return this->value != NULL;
+    }
+
+    int is_object(void) {
+        return yyjson_is_obj(this->value);
+    }
+
+    int is_array(void) {
+        return yyjson_is_arr(this->value);
+    }
+
+    int is_number(void) {
+        return yyjson_is_num(this->value);
+    }
+
+    int is_string(void) {
+        return yyjson_is_str(this->value);
+    }
+
+    int is_bool(void) {
+        return yyjson_is_bool(this->value);
+    }
+
+    int get_int(int *out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_int(this->value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_int: not an integer");
+            return STDLIB_FAIL;
+        }
+        if (yyjson_is_sint(this->value)) {
+            int64_t v = yyjson_get_sint(this->value);
+            if (v < INT_MIN || v > INT_MAX) {
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "json_view::get_int: out of range");
+                return STDLIB_FAIL;
+            }
+            *out = (int)v;
+        } else {
+            uint64_t u = yyjson_get_uint(this->value);
+            if (u > (uint64_t)INT_MAX) {
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "json_view::get_int: out of range");
+                return STDLIB_FAIL;
+            }
+            *out = (int)u;
+        }
+        return STDLIB_OK;
+    }
+
+    int get_double(double *out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_num(this->value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_double: not a number");
+            return STDLIB_FAIL;
+        }
+        *out = yyjson_get_num(this->value);
+        return STDLIB_OK;
+    }
+
+    int get_bool(int *out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_bool(this->value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_bool: not a bool");
+            return STDLIB_FAIL;
+        }
+        *out = yyjson_get_bool(this->value) ? 1 : 0;
+        return STDLIB_OK;
+    }
+
+    /* Borrowed string: valid while the owning document lives. */
+    int get_string(const char **out, error *err) {
+        error_reset(err);
+        if (out == NULL || !yyjson_is_str(this->value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_view::get_string: not a string");
+            return STDLIB_FAIL;
+        }
+        *out = yyjson_get_str(this->value);
+        return STDLIB_OK;
+    }
+
+    size_t size(void) {
+        if (yyjson_is_arr(this->value))
+            return yyjson_arr_size(this->value);
+        if (yyjson_is_obj(this->value))
+            return yyjson_obj_size(this->value);
+        return 0;
+    }
+
+    json_view at(size_t index) {
+        json_view item = json_view(yyjson_arr_get(this->value, index));
+        return item;
+    }
+
+    json_view member(const char *key) {
+        json_view item = json_view(
+            (this->value == NULL || key == NULL) ? NULL
+                                                 : yyjson_obj_get(this->value, key));
+        return item;
+    }
+
+    char *write(size_t *length) {
+        if (this->value == NULL)
+            return NULL;
+        return yyjson_val_write(this->value, YYJSON_WRITE_NOFLAG, length);
+    }
+};
+
+/* Parse a NUL-terminated source into `out`.  A NULL source yields an invalid
+ * document without recording an error; the parse-file helper fills err.
+ *
+ * This is a function, not a constructor body, so the NULL guard is a real
+ * terminating ReturnStmt: the STRICT analyser recognises that NULL never
+ * reaches strlen()/yyjson.  Constructors cannot contain `return` in C+, and a
+ * `break` out of a do-while is not accepted as a proving null guard. */
+static inline void json_parse_text(yyjson_doc **out, const char *text,
+                                   error *err) {
+    yyjson_read_err info;
+    size_t len;
+    *out = NULL;
+    error_reset(err);
+    if (text == NULL)
+        return;
+    len = strlen(text);
+    /* Budget check first: the vendored yyjson has no reader depth cap. */
+    if (!json_input_within_budget(text, len, CPLUS_JSON_MAX_DEPTH, err))
+        return;
+    /* yyjson reads without modifying the buffer. */
+    *out = yyjson_read_opts((char *)text, len, YYJSON_READ_NOFLAG, NULL, &info);
+    if (*out == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       info.msg != NULL ? info.msg : "JSON parse failed");
+}
+
+class json {
+    yyjson_doc *document;
+
+    json(const char *text, error *err) {
+        json_parse_text(&this->document, text, err);
+    }
+
+    int valid(void) {
+        return this->document != NULL;
+    }
+
+    /* yyjson_doc_get_read_size / yyjson_doc_get_val_count: upstream's
+     * test_json_reader.c asserts both are non-zero after a successful parse. */
+    size_t read_size(void) {
+        return this->document == NULL ? 0
+                                      : yyjson_doc_get_read_size(this->document);
+    }
+
+    size_t value_count(void) {
+        return this->document == NULL ? 0
+                                      : yyjson_doc_get_val_count(this->document);
+    }
+
+    json_view root(void) {
+        json_view view = json_view(this->document == NULL
+                                       ? NULL
+                                       : yyjson_doc_get_root(this->document));
+        return view;
+    }
+
+    void drop(void) {
+        if (this->document != NULL) {
+            yyjson_doc_free(this->document);
+            this->document = NULL;
+        }
+    }
+};
+
+/* Explicit-length parse with a caller-supplied depth budget.  Mirrors the
+ * upstream test_json_reader.c checks (NULL / zero length / SIZE_MAX length)
+ * and the test_err_code.c DEPTH path, but rejects over-budget input before
+ * handing it to yyjson.  `text` is neither modified nor required to be NUL
+ * terminated; the returned json is invalid and `err` set on any failure. */
+static inline json json_parse_budget(const char *text, size_t len,
+                                     size_t max_depth, error *err) {
+    json out = json(NULL, err);
+    yyjson_read_err info;
+    if (!json_input_within_budget(text, len, max_depth, err))
+        return out;
+    out.document = yyjson_read_opts((char *)text, len, YYJSON_READ_NOFLAG,
+                                    NULL, &info);
+    if (out.document == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       info.msg != NULL ? info.msg : "json_parse_budget: parse failed");
+    return out;
+}
+
+/* Parse a file: the returned json is invalid (and err set) on failure.
+ *
+ * The depth/length budget documented at the top of this header applies to the
+ * file path too.  The old implementation called yyjson_read_file() directly,
+ * which read the whole file and parsed it with no reader-depth cap, silently
+ * bypassing json_input_within_budget().  We therefore read the bytes ourselves
+ * (bounded by CPLUS_JSON_MAX_INPUT_LENGTH) and run the same budget check before
+ * handing them to yyjson.  A regular file over the length budget is refused
+ * from its stat size, before any content buffer is allocated.  Non-seekable
+ * inputs are streamed with a hard cap.  All buffers are released on every path. */
+/* Close helper: keeps the fclose() out of the caller's stream-lifetime
+ * analysis (the C+ checker otherwise flags every statement that follows a
+ * local FILE* being closed, even on mutually-exclusive error paths). */
+static inline void json_close_stream(FILE *fp) {
+    if (fp != NULL)
+        (void)fclose(fp);
+}
+
+static inline json json_parse_file(const char *path, error *err) {
+    json out = json(NULL, err);
+    yyjson_read_err info;
+    FILE *fp;
+    char *buf = NULL;
+    size_t len = 0;
+    size_t used = 0;
+    size_t cap = CPLUS_JSON_MAX_INPUT_LENGTH;
+    long fsz;
+
+    error_reset(err);
+    if (path == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_IO,
+                       "json::parse_file: null path");
+        return out;
+    }
+    fp = fopen(path, "rb");
+    if (fp == NULL) {
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       "JSON file open failed");
+        return out;
+    }
+    /* Early length pre-check for seekable (regular) files. */
+    if (fseek(fp, 0, SEEK_END) == 0) {
+        fsz = ftell(fp);
+        if (fsz > 0) {
+            if ((unsigned long long)fsz > (unsigned long long)cap ||
+                (size_t)fsz >= (size_t)(SIZE_MAX - YYJSON_PADDING_SIZE - 1u)) {
+                json_close_stream(fp);
+                error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                               "json: input length exceeds budget");
+                return out;
+            }
+            len = (size_t)fsz;
+        }
+        (void)fseek(fp, 0, SEEK_SET);
+    }
+    for (;;) {
+        size_t chunk;
+        size_t got;
+        if (len != 0 && used == len)
+            break; /* regular file: exactly the stat size was read */
+        if (used >= cap ||
+            used >= (size_t)(SIZE_MAX - YYJSON_PADDING_SIZE - 2u)) {
+            json_close_stream(fp);
+            free(buf);
+            error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "json: input length exceeds budget");
+            return out;
+        }
+        chunk = (len != 0) ? (len - used) : ((size_t)64u * 1024u);
+        if (chunk > cap - used)
+            chunk = cap - used;
+        /* Initialise the result at its declaration so the success/failure
+         * branch below is recognised as the handled realloc idiom. */
+        char *tmp = (char *)realloc(buf, used + chunk + 1u);
+        if (!tmp) {
+            json_close_stream(fp);
+            free(buf);
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json: allocation failed");
+            return out;
+        }
+        buf = tmp;
+        got = fread(buf + used, 1, chunk, fp);
+        used += got;
+        if (len != 0) {
+            if (got != chunk) { /* short read on a regular file */
+                json_close_stream(fp);
+                free(buf);
+                error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                               "JSON file read failed");
+                return out;
+            }
+        } else if (got < chunk) {
+            if (ferror(fp)) {
+                json_close_stream(fp);
+                free(buf);
+                error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                               "JSON file read failed");
+                return out;
+            }
+            break; /* stream EOF */
+        }
+    }
+    json_close_stream(fp);
+    if (buf == NULL) {
+        buf = (char *)malloc(1u); /* empty file: a valid len-0 budget input */
+        if (buf == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           "json: allocation failed");
+            return out;
+        }
+    }
+    buf[used] = '\0';
+    if (!json_input_within_budget(buf, used, CPLUS_JSON_MAX_DEPTH, err)) {
+        free(buf);
+        return out; /* err set by the budget check */
+    }
+    out.document = yyjson_read_opts(buf, used, YYJSON_READ_NOFLAG, NULL, &info);
+    free(buf); /* yyjson_read_opts copies strings; the input is not retained */
+    if (out.document == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_IO, CPLUS_EXIT_IO,
+                       info.msg != NULL ? info.msg : "JSON file parse failed");
+    return out;
+}
+
+static inline json_view json_view_of(const yyjson_val *value) {
+    json_view view = json_view(value);
+    return view;
+}
+
+static inline void json_free(char *text) {
+    free(text);
+}
+
+class json_builder {
+    yyjson_mut_doc *document;
+    yyjson_mut_val *root_value;
+
+    json_builder(void) {
+        this->document = yyjson_mut_doc_new(NULL);
+        this->root_value = NULL;
+        if (this->document != NULL) {
+            this->root_value = yyjson_mut_obj(this->document);
+            if (this->root_value != NULL)
+                yyjson_mut_doc_set_root(this->document, this->root_value);
+        }
+    }
+
+    int valid(void) {
+        return this->document != NULL && this->root_value != NULL;
+    }
+
+    /* The yyjson_mut_obj_add_* convenience helpers retain the caller's key
+     * pointer verbatim (they do not duplicate it). A stack key would therefore
+     * dangle as soon as it went out of scope, corrupting a later write().
+     * Copy the key into document-owned storage with yyjson_mut_strcpy and add
+     * the prebuilt value through the low-level yyjson_mut_obj_add instead.
+     * The key copy lives in the document's arena and is released by drop(),
+     * so no extra builder-owned storage or destructor work is required. */
+    int add_pair(const char *key, yyjson_mut_val *value, error *err,
+                 const char *failure_message) {
+        yyjson_mut_val *owned_key = yyjson_mut_strcpy(this->document, key);
+        if (owned_key == NULL || value == NULL ||
+            !yyjson_mut_obj_add(this->root_value, owned_key, value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
+                           failure_message);
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int add_int(const char *key, int value, error *err) {
+        error_reset(err);
+        if (!this->valid() || key == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_int: invalid argument");
+            return STDLIB_FAIL;
+        }
+        return this->add_pair(key, yyjson_mut_int(this->document, value), err,
+                              "json_builder::add_int failed");
+    }
+
+    int add_double(const char *key, double value, error *err) {
+        error_reset(err);
+        if (!this->valid() || key == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_double: invalid argument");
+            return STDLIB_FAIL;
+        }
+        if (!isfinite(value)) {
+            error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
+                           "json_builder::add_double: non-finite value");
+            return STDLIB_FAIL;
+        }
+        return this->add_pair(key, yyjson_mut_double(this->document, value), err,
+                              "json_builder::add_double failed");
+    }
+
+    int add_bool(const char *key, int value, error *err) {
+        error_reset(err);
+        if (!this->valid() || key == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_bool: invalid argument");
+            return STDLIB_FAIL;
+        }
+        return this->add_pair(key, yyjson_mut_bool(this->document, value != 0),
+                              err, "json_builder::add_bool failed");
+    }
+
+    /* Copies the value, so the caller keeps ownership of its buffer; the key
+     * is copied by add_pair, so the caller keeps ownership of that too. */
+    int add_string(const char *key, const char *value, error *err) {
+        error_reset(err);
+        if (!this->valid() || key == NULL || value == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                           "json_builder::add_string: invalid argument");
+            return STDLIB_FAIL;
+        }
+        return this->add_pair(key, yyjson_mut_strncpy(this->document, value,
+                                                     strlen(value)), err,
+                              "json_builder::add_string failed");
+    }
+
+    char *write(size_t *length) {
+        if (!this->valid())
+            return NULL;
+        return yyjson_mut_write(this->document, YYJSON_WRITE_NOFLAG, length);
+    }
+
+    void drop(void) {
+        if (this->document != NULL) {
+            yyjson_mut_doc_free(this->document);
+            this->document = NULL;
+            this->root_value = NULL;
+        }
+    }
+};
+
+#endif

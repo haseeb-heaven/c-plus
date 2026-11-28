@@ -7,17 +7,17 @@
 #include "stdlib/net.hp"
 
 int main(void) {
-    String s = String("hello");
-    print("s", s.len(), s.at(1));
+    string s = string("hello");
+    print("s", s.size(), s.at(1));
 
-    IntVec v = IntVec();
-    v.push(3);
-    v.push(5);
-    print("v", v.len(), v.at(1));
+    vector v = vector();
+    v.push_back(3);
+    v.push_back(5);
+    print("v", v.size(), v.at(1));
 
-    Mutex m = Mutex_new();
+    mutex m = mutex();
     {
-        Guard g = Guard_lock(&m);
+        guard g = guard(&m);
         println();
     }
     return 0;

@@ -1,0 +1,9 @@
+command: c+ check --legacy-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/param_bounds_size_ok.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok
+<SRC>:3:37: warning: GCC does not allow variable declarations in for loop initializers before C99 [-Wgcc-compat]
+    3 | static void fill(int *p,int n){ for(int i=0;i<n;i++) p[i]=i; }
+      |                                     ^
+1 warning generated.

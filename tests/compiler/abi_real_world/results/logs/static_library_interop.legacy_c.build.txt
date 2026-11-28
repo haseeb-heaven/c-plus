@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.legacy_c.c --legacy-c --sanitize=none -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases -lstatic_library_interop_legacy_c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/static_library_interop.legacy_c.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+clang: warning: -lstatic_library_interop_legacy_c: 'linker' input unused [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]
+

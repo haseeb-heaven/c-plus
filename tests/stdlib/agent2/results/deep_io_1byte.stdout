@@ -1,0 +1,16 @@
+s1_nonempty 1
+s1_empty 1
+s1_null 1
+s1_zero 1
+s2_reject 1
+s2_aligned 1
+s4_exact 1
+s4_after_exact 1
+s4_over 1
+s4_after_over 1
+s4_crlf 1
+s4_after_crlf 1
+s4_last 1
+s4_eof 1
+s1_eof 1
+ALL_OK 1

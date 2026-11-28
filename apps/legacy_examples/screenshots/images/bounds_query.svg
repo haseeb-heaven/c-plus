@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="254" viewBox="0 0 1060 254">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">bounds_demo  |  memory span / query bounds refusal</text>
+  <text class="sub" x="84" y="48">./build/c+ build bounds_demo.cp --strict --sanitize=none -I.  |  timeout 30 ./bounds_demo</text>
+  <text class="sub" x="84" y="68">toolchain: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin</text>
+  <rect y="84" width="100%" height="112" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">bounds exact_fit <tspan class="ok">OK</tspan> cap=16 span_full=1 span_interior=1 query_full=1 query_interior=1</text>
+  <text class="body" xml:space="preserve" x="20" y="134">bounds one_over <tspan class="refused">REFUSED</tspan> span_1over=0 span_tail=0 query=-1 bounds_cat=1</text>
+  <text class="body" xml:space="preserve" x="20" y="156">bounds interior_pointer <tspan class="ok">OK</tspan> interior_has_metadata=0 contains_24=1 contains_25=0</text>
+  <text class="body" xml:space="preserve" x="20" y="178">bounds stale_generation <tspan class="refused">REFUSED</tspan> moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1 fresh_query=1</text>
+  <rect y="196" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="218">stdlib_mem_span_ok / stdlib_mem_query refuse a one-over span and a stale-generation key (bounds + lifecycle categories).</text>
+  <text class="disclaimer" x="20" y="238">captured real output — evidence, not proof</text>
+  <desc>Verbatim captured output:
+    bounds exact_fit OK cap=16 span_full=1 span_interior=1 query_full=1 query_interior=1
+    bounds one_over REFUSED span_1over=0 span_tail=0 query=-1 bounds_cat=1
+    bounds interior_pointer OK interior_has_metadata=0 contains_24=1 contains_25=0
+    bounds stale_generation REFUSED moved=1 old_key_current=0 old_query=-1 lifecycle_cat=1 fresh_query=1
+  </desc>
+</svg>

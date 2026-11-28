@@ -1,0 +1,6 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/alias_extent.c:2:73: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds heap allocation 'q' of 32 bytes
+  int main(void){ int *p=malloc(8*sizeof(int)); if(!p)return 1; int *q=p; q[8]=1; return q[8]; }
+                                                                          ^
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/bounds_cases/alias_extent.c:2:88: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 8 exceeds heap allocation 'q' of 32 bytes
+  int main(void){ int *p=malloc(8*sizeof(int)); if(!p)return 1; int *q=p; q[8]=1; return q[8]; }
+                                                                                         ^

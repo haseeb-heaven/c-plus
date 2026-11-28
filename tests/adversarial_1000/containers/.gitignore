@@ -1,0 +1,3 @@
+# Generated evidence — rebuild with ./run.sh (gitignored on purpose).
+results/
+adv1000_containers

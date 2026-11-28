@@ -1,0 +1,8 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_zero.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/alloc_zero.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+returncode: 1
+timed_out: False
+
+<SRC>:4:24: error: [CPLUS-OWNER] zero-size allocation is implementation-defined; use cplus_alloc
+  int main(void){ int *p=malloc(0); printf("z=%p\n",(void*)p); free(p); return 0; }
+                         ^~~~~~
+help: use C+ managed allocations and cplus_* helpers

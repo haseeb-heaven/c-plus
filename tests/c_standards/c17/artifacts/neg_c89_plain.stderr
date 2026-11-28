@@ -1,0 +1,52 @@
+tests/c_standards/c17/source.c:24:1: error: '_Static_assert' is a C11 extension [-Werror,-Wc11-extensions]
+   24 | _Static_assert(sizeof(int) >= 4, "int must be at least 32 bits");
+      | ^
+tests/c_standards/c17/source.c:25:1: error: '_Static_assert' is a C11 extension [-Werror,-Wc11-extensions]
+   25 | _Static_assert(alignof(char) == 1, "char must have alignment 1");
+      | ^
+tests/c_standards/c17/source.c:25:16: error: implicit declaration of function 'alignof' [-Werror,-Wimplicit-function-declaration]
+   25 | _Static_assert(alignof(char) == 1, "char must have alignment 1");
+      |                ^
+tests/c_standards/c17/source.c:25:24: error: expected expression
+   25 | _Static_assert(alignof(char) == 1, "char must have alignment 1");
+      |                        ^
+tests/c_standards/c17/source.c:26:1: error: '_Static_assert' is a C11 extension [-Werror,-Wc11-extensions]
+   26 | _Static_assert(_Alignof(max_align_t) >= 8, "max_align_t alignment too small");
+      | ^
+tests/c_standards/c17/source.c:26:16: error: '_Alignof' is a C11 extension [-Werror,-Wc11-extensions]
+   26 | _Static_assert(_Alignof(max_align_t) >= 8, "max_align_t alignment too small");
+      |                ^
+tests/c_standards/c17/source.c:26:25: error: use of undeclared identifier 'max_align_t'
+   26 | _Static_assert(_Alignof(max_align_t) >= 8, "max_align_t alignment too small");
+      |                         ^
+tests/c_standards/c17/source.c:26:16: error: '_Alignof' applied to an expression is a GNU extension [-Werror,-Wgnu-alignof-expression]
+   26 | _Static_assert(_Alignof(max_align_t) >= 8, "max_align_t alignment too small");
+      |                ^
+tests/c_standards/c17/source.c:29:16: error: expected parameter declarator
+   29 | static alignas(16) unsigned char aligned_bytes[32];
+      |                ^
+tests/c_standards/c17/source.c:29:16: error: expected ')'
+tests/c_standards/c17/source.c:29:15: note: to match this '('
+   29 | static alignas(16) unsigned char aligned_bytes[32];
+      |               ^
+tests/c_standards/c17/source.c:29:15: error: a function declaration without a prototype is deprecated in all versions of C [-Werror,-Wstrict-prototypes]
+   29 | static alignas(16) unsigned char aligned_bytes[32];
+      |               ^  
+      |                  void
+tests/c_standards/c17/source.c:29:19: error: expected ';' after top level declarator
+   29 | static alignas(16) unsigned char aligned_bytes[32];
+      |                   ^
+      |                   ;
+tests/c_standards/c17/source.c:33:1: error: '_Noreturn' is a C11 extension [-Werror,-Wc11-extensions]
+   33 | _Noreturn static void fatal_unexpected(const char *what)
+      | ^
+tests/c_standards/c17/source.c:43:12: error: '_Generic' is a C11 extension [-Werror,-Wc11-extensions]
+   43 |     return _Generic(value,
+      |            ^
+tests/c_standards/c17/source.c:60:20: error: expected expression
+   60 |            alignof(int), classify(7), atomic_load(&counter));
+      |                    ^
+tests/c_standards/c17/source.c:55:26: error: mixing declarations and code is a C99 extension [-Werror,-Wdeclaration-after-statement]
+   55 |     const unsigned char *bytes = aligned_bytes;
+      |                          ^
+16 errors generated.

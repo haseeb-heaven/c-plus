@@ -1,0 +1,12 @@
+JSON root object
+JSON {
+JSON   "b": 2,
+JSON   "a": [
+JSON     1,
+JSON     true,
+JSON     null
+JSON   ],
+JSON   "s": "x"
+JSON }
+JSON error parse
+JSON error empty

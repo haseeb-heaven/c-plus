@@ -1,0 +1,2 @@
+GUI_REFUSED tag=bad-render-zero category=1 code=108 message=gui_app: window dimensions must be positive
+GUI_RESULT refuse bad-render-zero REFUSED 108

@@ -1,0 +1,1824 @@
+{
+  "suite": "abi_safety",
+  "generated_at": "2026-11-23T14:06:46",
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "binary_version": [
+    "C+ 0.1.0"
+  ],
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "symbol_prefix": "_",
+    "abi_expectations": {
+      "char": 1,
+      "short": 2,
+      "int": 4,
+      "long": 8,
+      "llong": 8,
+      "float": 4,
+      "double": 8,
+      "ptr": 8,
+      "fp": 8,
+      "uintptr": 8,
+      "mixed_size": 24,
+      "mixed_a": 0,
+      "mixed_b": 4,
+      "mixed_c": 8,
+      "mixed_d": 16,
+      "packed_size": 13,
+      "packed_a": 0,
+      "packed_b": 1,
+      "packed_c": 5,
+      "outer_size": 16,
+      "outer_a": 0,
+      "outer_in": 4,
+      "outer_b": 12,
+      "outer_in_x": 4,
+      "outer_in_y": 8,
+      "arr_size": 24,
+      "arr_c": 0,
+      "arr_v": 4,
+      "arr_d": 16,
+      "union_size": 8,
+      "enum_size": 4,
+      "big_size": 32
+    }
+  },
+  "modes": [
+    "--legacy-c",
+    "--default",
+    "--strict"
+  ],
+  "sanitize": "--sanitize=none",
+  "timeout_seconds": 90,
+  "run_timeout_seconds": 30,
+  "workers": 4,
+  "tools": {
+    "nm": "/usr/bin/nm",
+    "ar": "/usr/bin/ar"
+  },
+  "totals": {
+    "cases": 11,
+    "checks": 33,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 0
+  },
+  "by_family": {
+    "calling_convention": {
+      "checks": 3,
+      "pass": 3,
+      "fail": 0,
+      "skip": 0
+    },
+    "function_pointer": {
+      "checks": 3,
+      "pass": 3,
+      "fail": 0,
+      "skip": 0
+    },
+    "library_interop": {
+      "checks": 6,
+      "pass": 6,
+      "fail": 0,
+      "skip": 0
+    },
+    "pointer_size": {
+      "checks": 6,
+      "pass": 6,
+      "fail": 0,
+      "skip": 0
+    },
+    "signature": {
+      "checks": 6,
+      "pass": 6,
+      "fail": 0,
+      "skip": 0
+    },
+    "struct_layout": {
+      "checks": 6,
+      "pass": 6,
+      "fail": 0,
+      "skip": 0
+    },
+    "symbol_names": {
+      "checks": 3,
+      "pass": 3,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "by_mode": {
+    "--legacy-c": {
+      "checks": 11,
+      "pass": 11,
+      "fail": 0,
+      "skip": 0
+    },
+    "--default": {
+      "checks": 11,
+      "pass": 11,
+      "fail": 0,
+      "skip": 0
+    },
+    "--strict": {
+      "checks": 11,
+      "pass": 11,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "failures": [],
+  "skips": [],
+  "records": [
+    {
+      "case": "callback_conventions",
+      "family": "calling_convention",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "typed callbacks plus a qsort comparison callback",
+      "expected_stdout": "call2=42 calld=6.0 pair=7,2.5 qsort=654321\n",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstruct Pair { long x; double y; };\nstatic int cb_add(int a,int b){ int t=a+b; return t; }\nstatic double cb_mul(double a,double b){ double t=a*b; return t; }\nstatic struct Pair cb_pair(long x,double y){ struct Pair p; p.x=x; p.y=y; return p; }\nstatic int cmp_desc(const void *a,const void *b){\n  int x=*(const int*)a; int y=*(const int*)b;\n  if(x>y)return -1; if(x<y)return 1; return 0;\n}\nstatic int invoke2(int (*f)(int,int),int a,int b){ int t=f(a,b); return t; }\nstatic double invoke_dbl(double (*f)(double,double),double a,double b){\n  double t=f(a,b); return t;\n}\nstatic struct Pair invoke_pair(struct Pair (*f)(long,double),long a,double b){\n  struct Pair p=f(a,b); return p;\n}\nint main(void){\n  struct Pair p=invoke_pair(cb_pair,7,2.5);\n  int arr[6]; arr[0]=3;arr[1]=1;arr[2]=5;arr[3]=2;arr[4]=6;arr[5]=4;\n  qsort(arr,6,sizeof(int),cmp_desc);\n  printf(\"call2=%d calld=%.1f pair=%ld,%.1f qsort=%d%d%d%d%d%d\\n\",\n         invoke2(cb_add,20,22), invoke_dbl(cb_mul,1.5,4.0), p.x, p.y,\n         arr[0],arr[1],arr[2],arr[3],arr[4],arr[5]);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "call2=42 calld=6.0 pair=7,2.5 qsort=654321\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "callback_conventions",
+      "family": "calling_convention",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "typed callbacks plus a qsort comparison callback",
+      "expected_stdout": "call2=42 calld=6.0 pair=7,2.5 qsort=654321\n",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstruct Pair { long x; double y; };\nstatic int cb_add(int a,int b){ int t=a+b; return t; }\nstatic double cb_mul(double a,double b){ double t=a*b; return t; }\nstatic struct Pair cb_pair(long x,double y){ struct Pair p; p.x=x; p.y=y; return p; }\nstatic int cmp_desc(const void *a,const void *b){\n  int x=*(const int*)a; int y=*(const int*)b;\n  if(x>y)return -1; if(x<y)return 1; return 0;\n}\nstatic int invoke2(int (*f)(int,int),int a,int b){ int t=f(a,b); return t; }\nstatic double invoke_dbl(double (*f)(double,double),double a,double b){\n  double t=f(a,b); return t;\n}\nstatic struct Pair invoke_pair(struct Pair (*f)(long,double),long a,double b){\n  struct Pair p=f(a,b); return p;\n}\nint main(void){\n  struct Pair p=invoke_pair(cb_pair,7,2.5);\n  int arr[6]; arr[0]=3;arr[1]=1;arr[2]=5;arr[3]=2;arr[4]=6;arr[5]=4;\n  qsort(arr,6,sizeof(int),cmp_desc);\n  printf(\"call2=%d calld=%.1f pair=%ld,%.1f qsort=%d%d%d%d%d%d\\n\",\n         invoke2(cb_add,20,22), invoke_dbl(cb_mul,1.5,4.0), p.x, p.y,\n         arr[0],arr[1],arr[2],arr[3],arr[4],arr[5]);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "call2=42 calld=6.0 pair=7,2.5 qsort=654321\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "callback_conventions",
+      "family": "calling_convention",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "typed callbacks plus a qsort comparison callback",
+      "expected_stdout": "call2=42 calld=6.0 pair=7,2.5 qsort=654321\n",
+      "source": "#include <stdio.h>\n#include <stdlib.h>\n\nstruct Pair { long x; double y; };\nstatic int cb_add(int a,int b){ int t=a+b; return t; }\nstatic double cb_mul(double a,double b){ double t=a*b; return t; }\nstatic struct Pair cb_pair(long x,double y){ struct Pair p; p.x=x; p.y=y; return p; }\nstatic int cmp_desc(const void *a,const void *b){\n  int x=*(const int*)a; int y=*(const int*)b;\n  if(x>y)return -1; if(x<y)return 1; return 0;\n}\nstatic int invoke2(int (*f)(int,int),int a,int b){ int t=f(a,b); return t; }\nstatic double invoke_dbl(double (*f)(double,double),double a,double b){\n  double t=f(a,b); return t;\n}\nstatic struct Pair invoke_pair(struct Pair (*f)(long,double),long a,double b){\n  struct Pair p=f(a,b); return p;\n}\nint main(void){\n  struct Pair p=invoke_pair(cb_pair,7,2.5);\n  int arr[6]; arr[0]=3;arr[1]=1;arr[2]=5;arr[3]=2;arr[4]=6;arr[5]=4;\n  qsort(arr,6,sizeof(int),cmp_desc);\n  printf(\"call2=%d calld=%.1f pair=%ld,%.1f qsort=%d%d%d%d%d%d\\n\",\n         invoke2(cb_add,20,22), invoke_dbl(cb_mul,1.5,4.0), p.x, p.y,\n         arr[0],arr[1],arr[2],arr[3],arr[4],arr[5]);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "call2=42 calld=6.0 pair=7,2.5 qsort=654321\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/callback_conventions.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "fnptr_representation",
+      "family": "function_pointer",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "function pointer equality and byte representation via uintptr_t",
+      "expected_stdout": "sz=8 ptr=8 ua=8 eq=1 same=1 diff=1 cross=1 call=42 rt=53\n",
+      "source": "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n\ntypedef int (*F2)(int,int);\ntypedef long (*F1)(long);\nstruct Holder { F2 f; long tag; };\nstatic int target(int a,int b){ int t=a*10; int u=t+b; return u; }\nstatic int other(int a,int b){ int t=a-b; return t; }\nstatic F2 roundtrip(F2 f){ struct Holder h; h.f=f; h.tag=9; return h.f; }\nint main(void){\n  F2 a=target; F2 b=&target; F2 c=other; F1 g=(F1)target;\n  uintptr_t ua=0; uintptr_t ub=0; uintptr_t uc=0; uintptr_t ug=0;\n  memcpy(&ua,&a,sizeof a); memcpy(&ub,&b,sizeof b);\n  memcpy(&uc,&c,sizeof c); memcpy(&ug,&g,sizeof g);\n  printf(\"sz=%zu ptr=%zu ua=%zu eq=%d same=%d diff=%d cross=%d call=%d rt=%d\\n\",\n         sizeof(F2), sizeof(void*), sizeof(uintptr_t), a==b?1:0,\n         ua==ub?1:0, ua!=uc?1:0, ua==ug?1:0, a(4,2), roundtrip(a)(5,3));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "sz=8 ptr=8 ua=8 eq=1 same=1 diff=1 cross=1 call=42 rt=53\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "fnptr_representation",
+      "family": "function_pointer",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "function pointer equality and byte representation via uintptr_t",
+      "expected_stdout": "sz=8 ptr=8 ua=8 eq=1 same=1 diff=1 cross=1 call=42 rt=53\n",
+      "source": "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n\ntypedef int (*F2)(int,int);\ntypedef long (*F1)(long);\nstruct Holder { F2 f; long tag; };\nstatic int target(int a,int b){ int t=a*10; int u=t+b; return u; }\nstatic int other(int a,int b){ int t=a-b; return t; }\nstatic F2 roundtrip(F2 f){ struct Holder h; h.f=f; h.tag=9; return h.f; }\nint main(void){\n  F2 a=target; F2 b=&target; F2 c=other; F1 g=(F1)target;\n  uintptr_t ua=0; uintptr_t ub=0; uintptr_t uc=0; uintptr_t ug=0;\n  memcpy(&ua,&a,sizeof a); memcpy(&ub,&b,sizeof b);\n  memcpy(&uc,&c,sizeof c); memcpy(&ug,&g,sizeof g);\n  printf(\"sz=%zu ptr=%zu ua=%zu eq=%d same=%d diff=%d cross=%d call=%d rt=%d\\n\",\n         sizeof(F2), sizeof(void*), sizeof(uintptr_t), a==b?1:0,\n         ua==ub?1:0, ua!=uc?1:0, ua==ug?1:0, a(4,2), roundtrip(a)(5,3));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "sz=8 ptr=8 ua=8 eq=1 same=1 diff=1 cross=1 call=42 rt=53\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "fnptr_representation",
+      "family": "function_pointer",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "function pointer equality and byte representation via uintptr_t",
+      "expected_stdout": "sz=8 ptr=8 ua=8 eq=1 same=1 diff=1 cross=1 call=42 rt=53\n",
+      "source": "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n\ntypedef int (*F2)(int,int);\ntypedef long (*F1)(long);\nstruct Holder { F2 f; long tag; };\nstatic int target(int a,int b){ int t=a*10; int u=t+b; return u; }\nstatic int other(int a,int b){ int t=a-b; return t; }\nstatic F2 roundtrip(F2 f){ struct Holder h; h.f=f; h.tag=9; return h.f; }\nint main(void){\n  F2 a=target; F2 b=&target; F2 c=other; F1 g=(F1)target;\n  uintptr_t ua=0; uintptr_t ub=0; uintptr_t uc=0; uintptr_t ug=0;\n  memcpy(&ua,&a,sizeof a); memcpy(&ub,&b,sizeof b);\n  memcpy(&uc,&c,sizeof c); memcpy(&ug,&g,sizeof g);\n  printf(\"sz=%zu ptr=%zu ua=%zu eq=%d same=%d diff=%d cross=%d call=%d rt=%d\\n\",\n         sizeof(F2), sizeof(void*), sizeof(uintptr_t), a==b?1:0,\n         ua==ub?1:0, ua!=uc?1:0, ua==ug?1:0, a(4,2), roundtrip(a)(5,3));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "sz=8 ptr=8 ua=8 eq=1 same=1 diff=1 cross=1 call=42 rt=53\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/fnptr_representation.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "lib_interop_archive",
+      "family": "library_interop",
+      "kind": "lib",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "separately compiled static archive linked into a C+ program",
+      "expected_stdout": "lib=42,2.5,6,7\n",
+      "source": "#include <stdio.h>\n\nint abi_lib_mul(int,int);\ndouble abi_lib_scale(double);\nstruct LibPair { long a; long b; };\nstruct LibPair abi_lib_pair(long,long);\nint main(void){\n  struct LibPair p=abi_lib_pair(6,7);\n  printf(\"lib=%d,%.1f,%ld,%ld\\n\", abi_lib_mul(6,7), abi_lib_scale(1.25), p.a, p.b);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "clang: warning: -labi_lib_helper_legacy_c: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases' [-Wunused-command-line-argument]\n",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases",
+          "-labi_lib_helper_legacy_c",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "lib=42,2.5,6,7\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": {
+        "helper_build": {
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false,
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.legacy_c.helper.c",
+            "--legacy-c",
+            "--sanitize=none",
+            "-c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.legacy_c.helper.o"
+          ]
+        },
+        "ar": {
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false,
+          "command": [
+            "/usr/bin/ar",
+            "rcs",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_legacy_c.a",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.legacy_c.helper.o"
+          ]
+        },
+        "helper_nm": {
+          "result": {
+            "rc": 0,
+            "stdout": "\nlib_interop_archive.legacy_c.helper.o:\n0000000000000000 T _abi_lib_mul\n000000000000004c T _abi_lib_pair\n0000000000000028 T _abi_lib_scale\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-g",
+              "--defined-only",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_legacy_c.a"
+            ]
+          },
+          "raw": [
+            "_abi_lib_mul",
+            "_abi_lib_pair",
+            "_abi_lib_scale"
+          ],
+          "logical": [
+            "abi_lib_mul",
+            "abi_lib_pair",
+            "abi_lib_scale"
+          ]
+        }
+      },
+      "reasons": []
+    },
+    {
+      "case": "lib_interop_archive",
+      "family": "library_interop",
+      "kind": "lib",
+      "mode": "--default",
+      "status": "pass",
+      "note": "separately compiled static archive linked into a C+ program",
+      "expected_stdout": "lib=42,2.5,6,7\n",
+      "source": "#include <stdio.h>\n\nint abi_lib_mul(int,int);\ndouble abi_lib_scale(double);\nstruct LibPair { long a; long b; };\nstruct LibPair abi_lib_pair(long,long);\nint main(void){\n  struct LibPair p=abi_lib_pair(6,7);\n  printf(\"lib=%d,%.1f,%ld,%ld\\n\", abi_lib_mul(6,7), abi_lib_scale(1.25), p.a, p.b);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "clang: warning: -labi_lib_helper_default: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases' [-Wunused-command-line-argument]\n",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.c",
+          "--default",
+          "--sanitize=none",
+          "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases",
+          "-labi_lib_helper_default",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "lib=42,2.5,6,7\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": {
+        "helper_build": {
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false,
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.helper.c",
+            "--default",
+            "--sanitize=none",
+            "-c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.helper.o"
+          ]
+        },
+        "ar": {
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false,
+          "command": [
+            "/usr/bin/ar",
+            "rcs",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_default.a",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.default.helper.o"
+          ]
+        },
+        "helper_nm": {
+          "result": {
+            "rc": 0,
+            "stdout": "\nlib_interop_archive.default.helper.o:\n0000000000000000 T _abi_lib_mul\n0000000000000194 T _abi_lib_pair\n0000000000000170 T _abi_lib_scale\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-g",
+              "--defined-only",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_default.a"
+            ]
+          },
+          "raw": [
+            "_abi_lib_mul",
+            "_abi_lib_pair",
+            "_abi_lib_scale"
+          ],
+          "logical": [
+            "abi_lib_mul",
+            "abi_lib_pair",
+            "abi_lib_scale"
+          ]
+        }
+      },
+      "reasons": []
+    },
+    {
+      "case": "lib_interop_archive",
+      "family": "library_interop",
+      "kind": "lib",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "separately compiled static archive linked into a C+ program",
+      "expected_stdout": "lib=42,2.5,6,7\n",
+      "source": "#include <stdio.h>\n\nint abi_lib_mul(int,int);\ndouble abi_lib_scale(double);\nstruct LibPair { long a; long b; };\nstruct LibPair abi_lib_pair(long,long);\nint main(void){\n  struct LibPair p=abi_lib_pair(6,7);\n  printf(\"lib=%d,%.1f,%ld,%ld\\n\", abi_lib_mul(6,7), abi_lib_scale(1.25), p.a, p.b);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "clang: warning: -labi_lib_helper_strict: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases' [-Wunused-command-line-argument]\n",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases",
+          "-labi_lib_helper_strict",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "lib=42,2.5,6,7\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": {
+        "helper_build": {
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false,
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.helper.c",
+            "--strict",
+            "--sanitize=none",
+            "-c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.helper.o"
+          ]
+        },
+        "ar": {
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false,
+          "command": [
+            "/usr/bin/ar",
+            "rcs",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_strict.a",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.helper.o"
+          ]
+        },
+        "helper_nm": {
+          "result": {
+            "rc": 0,
+            "stdout": "\nlib_interop_archive.strict.helper.o:\n0000000000000000 T _abi_lib_mul\n0000000000000194 T _abi_lib_pair\n0000000000000170 T _abi_lib_scale\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-g",
+              "--defined-only",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/libabi_lib_helper_strict.a"
+            ]
+          },
+          "raw": [
+            "_abi_lib_mul",
+            "_abi_lib_pair",
+            "_abi_lib_scale"
+          ],
+          "logical": [
+            "abi_lib_mul",
+            "abi_lib_pair",
+            "abi_lib_scale"
+          ]
+        }
+      },
+      "reasons": []
+    },
+    {
+      "case": "lib_interop_shipped_runtime",
+      "family": "library_interop",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "call into the compiler's precompiled libcplus_runtime.a",
+      "expected_stdout": "rlib=3\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\nvoid cplus_check_bounds(const void *base, size_t count, size_t index,\n                        const char *file, int line, const char *expr);\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "rlib=3\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "lib_interop_shipped_runtime",
+      "family": "library_interop",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "call into the compiler's precompiled libcplus_runtime.a",
+      "expected_stdout": "rlib=3\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\nvoid cplus_check_bounds(const void *base, size_t count, size_t index,\n                        const char *file, int line, const char *expr);\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "rlib=3\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "lib_interop_shipped_runtime",
+      "family": "library_interop",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "call into the compiler's precompiled libcplus_runtime.a",
+      "expected_stdout": "rlib=3\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\nvoid cplus_check_bounds(const void *base, size_t count, size_t index,\n                        const char *file, int line, const char *expr);\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "rlib=3\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "pointer_size",
+      "family": "pointer_size",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "sizeof(void*), function/data pointers and fundamental widths",
+      "expected_stdout": "ptr=8 fnptr=8 iptr=8 uintptr=8 int=4 long=8 llong=8\nnull=1\n",
+      "source": "#include <stdio.h>\n#include <stdint.h>\n\ntypedef int (*fnptr)(int);\nint abi_probe_fn(int x){ return x; }\nint main(void){\n  fnptr f = abi_probe_fn;\n  int *ip = 0;\n  void *vp = 0;\n  printf(\"ptr=%zu fnptr=%zu iptr=%zu uintptr=%zu int=%zu long=%zu llong=%zu\\n\",\n         sizeof(void*), sizeof(fnptr), sizeof(int*), sizeof(uintptr_t),\n         sizeof(int), sizeof(long), sizeof(long long));\n  printf(\"null=%d\\n\", (f == abi_probe_fn) && (ip == 0) && (vp == 0));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "ptr=8 fnptr=8 iptr=8 uintptr=8 int=4 long=8 llong=8\nnull=1\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "pointer_size",
+      "family": "pointer_size",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "sizeof(void*), function/data pointers and fundamental widths",
+      "expected_stdout": "ptr=8 fnptr=8 iptr=8 uintptr=8 int=4 long=8 llong=8\nnull=1\n",
+      "source": "#include <stdio.h>\n#include <stdint.h>\n\ntypedef int (*fnptr)(int);\nint abi_probe_fn(int x){ return x; }\nint main(void){\n  fnptr f = abi_probe_fn;\n  int *ip = 0;\n  void *vp = 0;\n  printf(\"ptr=%zu fnptr=%zu iptr=%zu uintptr=%zu int=%zu long=%zu llong=%zu\\n\",\n         sizeof(void*), sizeof(fnptr), sizeof(int*), sizeof(uintptr_t),\n         sizeof(int), sizeof(long), sizeof(long long));\n  printf(\"null=%d\\n\", (f == abi_probe_fn) && (ip == 0) && (vp == 0));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "ptr=8 fnptr=8 iptr=8 uintptr=8 int=4 long=8 llong=8\nnull=1\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "pointer_size",
+      "family": "pointer_size",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "sizeof(void*), function/data pointers and fundamental widths",
+      "expected_stdout": "ptr=8 fnptr=8 iptr=8 uintptr=8 int=4 long=8 llong=8\nnull=1\n",
+      "source": "#include <stdio.h>\n#include <stdint.h>\n\ntypedef int (*fnptr)(int);\nint abi_probe_fn(int x){ return x; }\nint main(void){\n  fnptr f = abi_probe_fn;\n  int *ip = 0;\n  void *vp = 0;\n  printf(\"ptr=%zu fnptr=%zu iptr=%zu uintptr=%zu int=%zu long=%zu llong=%zu\\n\",\n         sizeof(void*), sizeof(fnptr), sizeof(int*), sizeof(uintptr_t),\n         sizeof(int), sizeof(long), sizeof(long long));\n  printf(\"null=%d\\n\", (f == abi_probe_fn) && (ip == 0) && (vp == 0));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "ptr=8 fnptr=8 iptr=8 uintptr=8 int=4 long=8 llong=8\nnull=1\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "scalar_layout",
+      "family": "pointer_size",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "",
+      "expected_stdout": "c=1 s=2 i=4 l=8 ll=8 f=4 d=8\nunion=8 enum=4\n",
+      "source": "#include <stdio.h>\n\nunion Uni { long l; double d; char c[8]; };\nenum En { EN_ZERO = 0, EN_SEVEN = 7, EN_NINE = 9 };\nint main(void){\n  printf(\"c=%zu s=%zu i=%zu l=%zu ll=%zu f=%zu d=%zu\\n\",\n         sizeof(char), sizeof(short), sizeof(int), sizeof(long),\n         sizeof(long long), sizeof(float), sizeof(double));\n  printf(\"union=%zu enum=%zu\\n\",\n         sizeof(union Uni), sizeof(enum En));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "c=1 s=2 i=4 l=8 ll=8 f=4 d=8\nunion=8 enum=4\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "scalar_layout",
+      "family": "pointer_size",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "",
+      "expected_stdout": "c=1 s=2 i=4 l=8 ll=8 f=4 d=8\nunion=8 enum=4\n",
+      "source": "#include <stdio.h>\n\nunion Uni { long l; double d; char c[8]; };\nenum En { EN_ZERO = 0, EN_SEVEN = 7, EN_NINE = 9 };\nint main(void){\n  printf(\"c=%zu s=%zu i=%zu l=%zu ll=%zu f=%zu d=%zu\\n\",\n         sizeof(char), sizeof(short), sizeof(int), sizeof(long),\n         sizeof(long long), sizeof(float), sizeof(double));\n  printf(\"union=%zu enum=%zu\\n\",\n         sizeof(union Uni), sizeof(enum En));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "c=1 s=2 i=4 l=8 ll=8 f=4 d=8\nunion=8 enum=4\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "scalar_layout",
+      "family": "pointer_size",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "",
+      "expected_stdout": "c=1 s=2 i=4 l=8 ll=8 f=4 d=8\nunion=8 enum=4\n",
+      "source": "#include <stdio.h>\n\nunion Uni { long l; double d; char c[8]; };\nenum En { EN_ZERO = 0, EN_SEVEN = 7, EN_NINE = 9 };\nint main(void){\n  printf(\"c=%zu s=%zu i=%zu l=%zu ll=%zu f=%zu d=%zu\\n\",\n         sizeof(char), sizeof(short), sizeof(int), sizeof(long),\n         sizeof(long long), sizeof(float), sizeof(double));\n  printf(\"union=%zu enum=%zu\\n\",\n         sizeof(union Uni), sizeof(enum En));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "c=1 s=2 i=4 l=8 ll=8 f=4 d=8\nunion=8 enum=4\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/scalar_layout.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "signatures_scalar",
+      "family": "signature",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "int/long/double/pointer parameter and return passing",
+      "expected_stdout": "i=42 l=6 d=6.0 p=5 set=5\n",
+      "source": "#include <stdio.h>\n\nstatic int add_i(int a,int b){ int t=a+b; return t; }\nstatic long add_l(long a,long b,long c){ long t=a+b; long u=t+c; return u; }\nstatic double mul_d(double a,double b){ double t=a*b; return t; }\nstatic int pass_ptr(const int *p){ return *p; }\nstatic void set_ptr(int *p,int v){ *p=v; }\nint main(void){\n  int slot=5; set_ptr(&slot,5);\n  printf(\"i=%d l=%ld d=%.1f p=%d set=%d\\n\",\n         add_i(20,22), add_l(1,2,3), mul_d(1.5,4.0),\n         pass_ptr(&slot), slot);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "i=42 l=6 d=6.0 p=5 set=5\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "signatures_scalar",
+      "family": "signature",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "int/long/double/pointer parameter and return passing",
+      "expected_stdout": "i=42 l=6 d=6.0 p=5 set=5\n",
+      "source": "#include <stdio.h>\n\nstatic int add_i(int a,int b){ int t=a+b; return t; }\nstatic long add_l(long a,long b,long c){ long t=a+b; long u=t+c; return u; }\nstatic double mul_d(double a,double b){ double t=a*b; return t; }\nstatic int pass_ptr(const int *p){ return *p; }\nstatic void set_ptr(int *p,int v){ *p=v; }\nint main(void){\n  int slot=5; set_ptr(&slot,5);\n  printf(\"i=%d l=%ld d=%.1f p=%d set=%d\\n\",\n         add_i(20,22), add_l(1,2,3), mul_d(1.5,4.0),\n         pass_ptr(&slot), slot);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "i=42 l=6 d=6.0 p=5 set=5\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "signatures_scalar",
+      "family": "signature",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "int/long/double/pointer parameter and return passing",
+      "expected_stdout": "i=42 l=6 d=6.0 p=5 set=5\n",
+      "source": "#include <stdio.h>\n\nstatic int add_i(int a,int b){ int t=a+b; return t; }\nstatic long add_l(long a,long b,long c){ long t=a+b; long u=t+c; return u; }\nstatic double mul_d(double a,double b){ double t=a*b; return t; }\nstatic int pass_ptr(const int *p){ return *p; }\nstatic void set_ptr(int *p,int v){ *p=v; }\nint main(void){\n  int slot=5; set_ptr(&slot,5);\n  printf(\"i=%d l=%ld d=%.1f p=%d set=%d\\n\",\n         add_i(20,22), add_l(1,2,3), mul_d(1.5,4.0),\n         pass_ptr(&slot), slot);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "i=42 l=6 d=6.0 p=5 set=5\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_scalar.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "signatures_struct",
+      "family": "signature",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "small and large struct passed and returned by value",
+      "expected_stdout": "p=7,2.5 big=11,22,33,44 sz=32 sum=110\n",
+      "source": "#include <stdio.h>\n\nstruct Pair { long x; double y; };\nstruct Big { long a,b,c,d; };\nstatic struct Pair mk_pair(long x,double y){ struct Pair p; p.x=x; p.y=y; return p; }\nstatic struct Big mk_big(long a,long b,long c,long d){\n  struct Big s; s.a=a; s.b=b; s.c=c; s.d=d; return s;\n}\nstatic long sum_big(struct Big s){ long t=s.a+s.b; long u=s.c+s.d; long v=t+u; return v; }\nint main(void){\n  struct Pair p=mk_pair(7,2.5);\n  struct Big g=mk_big(11,22,33,44);\n  printf(\"p=%ld,%.1f big=%ld,%ld,%ld,%ld sz=%zu sum=%ld\\n\",\n         p.x, p.y, g.a, g.b, g.c, g.d, sizeof(struct Big), sum_big(g));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "p=7,2.5 big=11,22,33,44 sz=32 sum=110\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "signatures_struct",
+      "family": "signature",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "small and large struct passed and returned by value",
+      "expected_stdout": "p=7,2.5 big=11,22,33,44 sz=32 sum=110\n",
+      "source": "#include <stdio.h>\n\nstruct Pair { long x; double y; };\nstruct Big { long a,b,c,d; };\nstatic struct Pair mk_pair(long x,double y){ struct Pair p; p.x=x; p.y=y; return p; }\nstatic struct Big mk_big(long a,long b,long c,long d){\n  struct Big s; s.a=a; s.b=b; s.c=c; s.d=d; return s;\n}\nstatic long sum_big(struct Big s){ long t=s.a+s.b; long u=s.c+s.d; long v=t+u; return v; }\nint main(void){\n  struct Pair p=mk_pair(7,2.5);\n  struct Big g=mk_big(11,22,33,44);\n  printf(\"p=%ld,%.1f big=%ld,%ld,%ld,%ld sz=%zu sum=%ld\\n\",\n         p.x, p.y, g.a, g.b, g.c, g.d, sizeof(struct Big), sum_big(g));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "p=7,2.5 big=11,22,33,44 sz=32 sum=110\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "signatures_struct",
+      "family": "signature",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "small and large struct passed and returned by value",
+      "expected_stdout": "p=7,2.5 big=11,22,33,44 sz=32 sum=110\n",
+      "source": "#include <stdio.h>\n\nstruct Pair { long x; double y; };\nstruct Big { long a,b,c,d; };\nstatic struct Pair mk_pair(long x,double y){ struct Pair p; p.x=x; p.y=y; return p; }\nstatic struct Big mk_big(long a,long b,long c,long d){\n  struct Big s; s.a=a; s.b=b; s.c=c; s.d=d; return s;\n}\nstatic long sum_big(struct Big s){ long t=s.a+s.b; long u=s.c+s.d; long v=t+u; return v; }\nint main(void){\n  struct Pair p=mk_pair(7,2.5);\n  struct Big g=mk_big(11,22,33,44);\n  printf(\"p=%ld,%.1f big=%ld,%ld,%ld,%ld sz=%zu sum=%ld\\n\",\n         p.x, p.y, g.a, g.b, g.c, g.d, sizeof(struct Big), sum_big(g));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "p=7,2.5 big=11,22,33,44 sz=32 sum=110\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/signatures_struct.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "struct_layout",
+      "family": "struct_layout",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "sizeof and offsetof for a representative mixed struct",
+      "expected_stdout": "size=24 a=0 b=4 c=8 d=16\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\nstruct Mixed { char a; int b; double c; short d; };\nint main(void){\n  printf(\"size=%zu a=%zu b=%zu c=%zu d=%zu\\n\",\n         sizeof(struct Mixed), offsetof(struct Mixed, a),\n         offsetof(struct Mixed, b), offsetof(struct Mixed, c),\n         offsetof(struct Mixed, d));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "size=24 a=0 b=4 c=8 d=16\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "struct_layout",
+      "family": "struct_layout",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "sizeof and offsetof for a representative mixed struct",
+      "expected_stdout": "size=24 a=0 b=4 c=8 d=16\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\nstruct Mixed { char a; int b; double c; short d; };\nint main(void){\n  printf(\"size=%zu a=%zu b=%zu c=%zu d=%zu\\n\",\n         sizeof(struct Mixed), offsetof(struct Mixed, a),\n         offsetof(struct Mixed, b), offsetof(struct Mixed, c),\n         offsetof(struct Mixed, d));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "size=24 a=0 b=4 c=8 d=16\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "struct_layout",
+      "family": "struct_layout",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "sizeof and offsetof for a representative mixed struct",
+      "expected_stdout": "size=24 a=0 b=4 c=8 d=16\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\nstruct Mixed { char a; int b; double c; short d; };\nint main(void){\n  printf(\"size=%zu a=%zu b=%zu c=%zu d=%zu\\n\",\n         sizeof(struct Mixed), offsetof(struct Mixed, a),\n         offsetof(struct Mixed, b), offsetof(struct Mixed, c),\n         offsetof(struct Mixed, d));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "size=24 a=0 b=4 c=8 d=16\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_layout.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "struct_packed_nested",
+      "family": "struct_layout",
+      "kind": "run",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "packed, nested and array-containing struct layouts",
+      "expected_stdout": "packed=13,0,1,5\nouter=16,0,4,12,4,8\narr=24,0,4,16\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\n#pragma pack(push, 1)\nstruct Packed { char a; int b; double c; };\n#pragma pack(pop)\nstruct Inner { char x; int y; };\nstruct Outer { char a; struct Inner in; short b; };\nstruct Arr { char c; int v[3]; double d; };\nint main(void){\n  printf(\"packed=%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Packed), offsetof(struct Packed, a),\n         offsetof(struct Packed, b), offsetof(struct Packed, c));\n  printf(\"outer=%zu,%zu,%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Outer), offsetof(struct Outer, a),\n         offsetof(struct Outer, in), offsetof(struct Outer, b),\n         offsetof(struct Outer, in.x), offsetof(struct Outer, in.y));\n  printf(\"arr=%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Arr), offsetof(struct Arr, c),\n         offsetof(struct Arr, v), offsetof(struct Arr, d));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "packed=13,0,1,5\nouter=16,0,4,12,4,8\narr=24,0,4,16\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.legacy_c.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "struct_packed_nested",
+      "family": "struct_layout",
+      "kind": "run",
+      "mode": "--default",
+      "status": "pass",
+      "note": "packed, nested and array-containing struct layouts",
+      "expected_stdout": "packed=13,0,1,5\nouter=16,0,4,12,4,8\narr=24,0,4,16\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\n#pragma pack(push, 1)\nstruct Packed { char a; int b; double c; };\n#pragma pack(pop)\nstruct Inner { char x; int y; };\nstruct Outer { char a; struct Inner in; short b; };\nstruct Arr { char c; int v[3]; double d; };\nint main(void){\n  printf(\"packed=%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Packed), offsetof(struct Packed, a),\n         offsetof(struct Packed, b), offsetof(struct Packed, c));\n  printf(\"outer=%zu,%zu,%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Outer), offsetof(struct Outer, a),\n         offsetof(struct Outer, in), offsetof(struct Outer, b),\n         offsetof(struct Outer, in.x), offsetof(struct Outer, in.y));\n  printf(\"arr=%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Arr), offsetof(struct Arr, c),\n         offsetof(struct Arr, v), offsetof(struct Arr, d));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "packed=13,0,1,5\nouter=16,0,4,12,4,8\narr=24,0,4,16\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.default.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "struct_packed_nested",
+      "family": "struct_layout",
+      "kind": "run",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "packed, nested and array-containing struct layouts",
+      "expected_stdout": "packed=13,0,1,5\nouter=16,0,4,12,4,8\narr=24,0,4,16\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\n#pragma pack(push, 1)\nstruct Packed { char a; int b; double c; };\n#pragma pack(pop)\nstruct Inner { char x; int y; };\nstruct Outer { char a; struct Inner in; short b; };\nstruct Arr { char c; int v[3]; double d; };\nint main(void){\n  printf(\"packed=%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Packed), offsetof(struct Packed, a),\n         offsetof(struct Packed, b), offsetof(struct Packed, c));\n  printf(\"outer=%zu,%zu,%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Outer), offsetof(struct Outer, a),\n         offsetof(struct Outer, in), offsetof(struct Outer, b),\n         offsetof(struct Outer, in.x), offsetof(struct Outer, in.y));\n  printf(\"arr=%zu,%zu,%zu,%zu\\n\",\n         sizeof(struct Arr), offsetof(struct Arr, c),\n         offsetof(struct Arr, v), offsetof(struct Arr, d));\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "packed=13,0,1,5\nouter=16,0,4,12,4,8\narr=24,0,4,16\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/struct_packed_nested.strict.bin"
+        ]
+      },
+      "symbols": null,
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "symbol_names",
+      "family": "symbol_names",
+      "kind": "symbols",
+      "mode": "--legacy-c",
+      "status": "pass",
+      "note": "exact C symbol names on generated object and executable",
+      "expected_stdout": "sym=7,7,42\n",
+      "source": "#include <stdio.h>\n\nint abi_glob_counter = 41;\nint abi_add_exported(int a,int b){ int t=a+b; return t; }\nstatic int abi_add_hidden(int a,int b){ int t=a-b; return t; }\nint main(void){\n  abi_glob_counter = 42;\n  printf(\"sym=%d,%d,%d\\n\",\n         abi_add_exported(3,4), abi_add_hidden(9,2), abi_glob_counter);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.c",
+          "--legacy-c",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "sym=7,7,42\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.bin"
+        ]
+      },
+      "symbols": {
+        "object": {
+          "result": {
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.c",
+              "--legacy-c",
+              "--sanitize=none",
+              "-c",
+              "-o",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.o"
+            ]
+          },
+          "nm": {
+            "result": {
+              "rc": 0,
+              "stdout": "0000000000000000 T _abi_add_exported\n00000000000000d8 D _abi_glob_counter\n0000000000000028 T _main\n",
+              "stderr": "",
+              "timed_out": false,
+              "command": [
+                "/usr/bin/nm",
+                "-g",
+                "--defined-only",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.o"
+              ]
+            },
+            "raw": [
+              "_abi_add_exported",
+              "_abi_glob_counter",
+              "_main"
+            ],
+            "logical": [
+              "abi_add_exported",
+              "abi_glob_counter",
+              "main"
+            ]
+          }
+        },
+        "binary": {
+          "result": {
+            "rc": 0,
+            "stdout": "0000000100000000 T __mh_execute_header\n0000000100003eac T _abi_add_exported\n0000000100008000 D _abi_glob_counter\n0000000100003ed4 T _main\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-g",
+              "--defined-only",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.bin"
+            ]
+          },
+          "raw_own": [
+            "_abi_add_exported",
+            "_abi_glob_counter"
+          ],
+          "logical_own": [
+            "abi_add_exported",
+            "abi_glob_counter"
+          ]
+        },
+        "undefined": {
+          "result": {
+            "rc": 0,
+            "stdout": "_printf\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-u",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.legacy_c.bin"
+            ]
+          },
+          "raw": [
+            "_printf"
+          ]
+        }
+      },
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "symbol_names",
+      "family": "symbol_names",
+      "kind": "symbols",
+      "mode": "--default",
+      "status": "pass",
+      "note": "exact C symbol names on generated object and executable",
+      "expected_stdout": "sym=7,7,42\n",
+      "source": "#include <stdio.h>\n\nint abi_glob_counter = 41;\nint abi_add_exported(int a,int b){ int t=a+b; return t; }\nstatic int abi_add_hidden(int a,int b){ int t=a-b; return t; }\nint main(void){\n  abi_glob_counter = 42;\n  printf(\"sym=%d,%d,%d\\n\",\n         abi_add_exported(3,4), abi_add_hidden(9,2), abi_glob_counter);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.c",
+          "--default",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "sym=7,7,42\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.bin"
+        ]
+      },
+      "symbols": {
+        "object": {
+          "result": {
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.c",
+              "--default",
+              "--sanitize=none",
+              "-c",
+              "-o",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.o"
+            ]
+          },
+          "nm": {
+            "result": {
+              "rc": 0,
+              "stdout": "0000000000000000 T _abi_add_exported\n0000000000000320 D _abi_glob_counter\n000000000000014c T _main\n",
+              "stderr": "",
+              "timed_out": false,
+              "command": [
+                "/usr/bin/nm",
+                "-g",
+                "--defined-only",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.o"
+              ]
+            },
+            "raw": [
+              "_abi_add_exported",
+              "_abi_glob_counter",
+              "_main"
+            ],
+            "logical": [
+              "abi_add_exported",
+              "abi_glob_counter",
+              "main"
+            ]
+          }
+        },
+        "binary": {
+          "result": {
+            "rc": 0,
+            "stdout": "00000001000040a4 T ___cplus_bounds_check\n0000000100004630 T ___cplus_checked_add_i64\n0000000100004a4c T ___cplus_checked_div_i64\n00000001000049e8 T ___cplus_checked_mul_i64\n0000000100004f38 T ___cplus_checked_narrow_i64\n0000000100004c18 T ___cplus_checked_rem_i64\n0000000100004c58 T ___cplus_checked_shl_i64\n0000000100004ef8 T ___cplus_checked_shr_i64\n0000000100004988 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100003d84 T _abi_add_exported\n000000010000c000 D _abi_glob_counter\n0000000100005b0c T _cplus_alloc\n0000000100005c60 T _cplus_alloc_array\n000000010000632c T _cplus_alloc_bytes\n0000000100006438 T _cplus_alloc_count\n0000000100004324 T _cplus_check_bounds\n00000001000064d8 T _cplus_check_index\n0000000100006244 T _cplus_check_live\n0000000100004538 T _cplus_check_nonnull\n0000000100004448 T _cplus_check_ptr_formation\n000000010000415c T _cplus_fatal\n000000010000c050 S _cplus_fatal_hook\n00000001000059c8 T _cplus_free_registered\n0000000100006a18 T _cplus_mutex_free\n0000000100006928 T _cplus_mutex_lock\n0000000100006880 T _cplus_mutex_new\n00000001000069a0 T _cplus_mutex_unlock\n0000000100006fd8 T _cplus_print_end\n0000000100006c40 T _cplus_print_value\n0000000100005e20 T _cplus_realloc\n0000000100005860 T _cplus_realloc_registered\n0000000100005320 T _cplus_register_allocation\n0000000100005f6c T _cplus_release\n0000000100005228 T _cplus_resource_check_borrow\n000000010000c008 D _cplus_runtime_log_level\n0000000100006ffc T _cplus_scan_value\n000000010000675c T _cplus_scope_cleanup\n000000010000664c T _cplus_scope_push\n0000000100006bec T _cplus_tls_free\n0000000100006b10 T _cplus_tls_get\n0000000100006a68 T _cplus_tls_new\n0000000100006b68 T _cplus_tls_set\n0000000100005bec T _cplus_zalloc\n0000000100006180 T _cplus_zero\n0000000100003ed0 T _main\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-g",
+              "--defined-only",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.bin"
+            ]
+          },
+          "raw_own": [
+            "_abi_add_exported",
+            "_abi_glob_counter"
+          ],
+          "logical_own": [
+            "abi_add_exported",
+            "abi_glob_counter"
+          ]
+        },
+        "undefined": {
+          "result": {
+            "rc": 0,
+            "stdout": "__Exit\n___chkstk_darwin\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_malloc\n_printf\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_vfprintf\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-u",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.default.bin"
+            ]
+          },
+          "raw": [
+            "__Exit",
+            "___chkstk_darwin",
+            "___memcpy_chk",
+            "___memset_chk",
+            "___snprintf_chk",
+            "___stack_chk_fail",
+            "___stack_chk_guard",
+            "___stderrp",
+            "___stdoutp",
+            "_abort",
+            "_calloc",
+            "_fflush",
+            "_fprintf",
+            "_fputc",
+            "_fputs",
+            "_free",
+            "_getenv",
+            "_malloc",
+            "_printf",
+            "_pthread_getspecific",
+            "_pthread_key_create",
+            "_pthread_key_delete",
+            "_pthread_mutex_destroy",
+            "_pthread_mutex_init",
+            "_pthread_mutex_lock",
+            "_pthread_mutex_unlock",
+            "_pthread_setspecific",
+            "_putchar",
+            "_scanf",
+            "_strlen",
+            "_vfprintf"
+          ]
+        }
+      },
+      "lib": null,
+      "reasons": []
+    },
+    {
+      "case": "symbol_names",
+      "family": "symbol_names",
+      "kind": "symbols",
+      "mode": "--strict",
+      "status": "pass",
+      "note": "exact C symbol names on generated object and executable",
+      "expected_stdout": "sym=7,7,42\n",
+      "source": "#include <stdio.h>\n\nint abi_glob_counter = 41;\nint abi_add_exported(int a,int b){ int t=a+b; return t; }\nstatic int abi_add_hidden(int a,int b){ int t=a-b; return t; }\nint main(void){\n  abi_glob_counter = 42;\n  printf(\"sym=%d,%d,%d\\n\",\n         abi_add_exported(3,4), abi_add_hidden(9,2), abi_glob_counter);\n  return 0;\n}\n",
+      "build": {
+        "rc": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.c",
+          "--strict",
+          "--sanitize=none",
+          "-o",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.bin"
+        ]
+      },
+      "run": {
+        "rc": 0,
+        "stdout": "sym=7,7,42\n",
+        "stderr": "",
+        "timed_out": false,
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.bin"
+        ]
+      },
+      "symbols": {
+        "object": {
+          "result": {
+            "rc": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+              "build",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.c",
+              "--strict",
+              "--sanitize=none",
+              "-c",
+              "-o",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.o"
+            ]
+          },
+          "nm": {
+            "result": {
+              "rc": 0,
+              "stdout": "0000000000000000 T _abi_add_exported\n0000000000000320 D _abi_glob_counter\n000000000000014c T _main\n",
+              "stderr": "",
+              "timed_out": false,
+              "command": [
+                "/usr/bin/nm",
+                "-g",
+                "--defined-only",
+                "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.o"
+              ]
+            },
+            "raw": [
+              "_abi_add_exported",
+              "_abi_glob_counter",
+              "_main"
+            ],
+            "logical": [
+              "abi_add_exported",
+              "abi_glob_counter",
+              "main"
+            ]
+          }
+        },
+        "binary": {
+          "result": {
+            "rc": 0,
+            "stdout": "00000001000040a4 T ___cplus_bounds_check\n0000000100004630 T ___cplus_checked_add_i64\n0000000100004a4c T ___cplus_checked_div_i64\n00000001000049e8 T ___cplus_checked_mul_i64\n0000000100004f38 T ___cplus_checked_narrow_i64\n0000000100004c18 T ___cplus_checked_rem_i64\n0000000100004c58 T ___cplus_checked_shl_i64\n0000000100004ef8 T ___cplus_checked_shr_i64\n0000000100004988 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100003d84 T _abi_add_exported\n000000010000c000 D _abi_glob_counter\n0000000100005b0c T _cplus_alloc\n0000000100005c60 T _cplus_alloc_array\n000000010000632c T _cplus_alloc_bytes\n0000000100006438 T _cplus_alloc_count\n0000000100004324 T _cplus_check_bounds\n00000001000064d8 T _cplus_check_index\n0000000100006244 T _cplus_check_live\n0000000100004538 T _cplus_check_nonnull\n0000000100004448 T _cplus_check_ptr_formation\n000000010000415c T _cplus_fatal\n000000010000c050 S _cplus_fatal_hook\n00000001000059c8 T _cplus_free_registered\n0000000100006a18 T _cplus_mutex_free\n0000000100006928 T _cplus_mutex_lock\n0000000100006880 T _cplus_mutex_new\n00000001000069a0 T _cplus_mutex_unlock\n0000000100006fd8 T _cplus_print_end\n0000000100006c40 T _cplus_print_value\n0000000100005e20 T _cplus_realloc\n0000000100005860 T _cplus_realloc_registered\n0000000100005320 T _cplus_register_allocation\n0000000100005f6c T _cplus_release\n0000000100005228 T _cplus_resource_check_borrow\n000000010000c008 D _cplus_runtime_log_level\n0000000100006ffc T _cplus_scan_value\n000000010000675c T _cplus_scope_cleanup\n000000010000664c T _cplus_scope_push\n0000000100006bec T _cplus_tls_free\n0000000100006b10 T _cplus_tls_get\n0000000100006a68 T _cplus_tls_new\n0000000100006b68 T _cplus_tls_set\n0000000100005bec T _cplus_zalloc\n0000000100006180 T _cplus_zero\n0000000100003ed0 T _main\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-g",
+              "--defined-only",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.bin"
+            ]
+          },
+          "raw_own": [
+            "_abi_add_exported",
+            "_abi_glob_counter"
+          ],
+          "logical_own": [
+            "abi_add_exported",
+            "abi_glob_counter"
+          ]
+        },
+        "undefined": {
+          "result": {
+            "rc": 0,
+            "stdout": "__Exit\n___chkstk_darwin\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_malloc\n_printf\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_vfprintf\n",
+            "stderr": "",
+            "timed_out": false,
+            "command": [
+              "/usr/bin/nm",
+              "-u",
+              "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/symbol_names.strict.bin"
+            ]
+          },
+          "raw": [
+            "__Exit",
+            "___chkstk_darwin",
+            "___memcpy_chk",
+            "___memset_chk",
+            "___snprintf_chk",
+            "___stack_chk_fail",
+            "___stack_chk_guard",
+            "___stderrp",
+            "___stdoutp",
+            "_abort",
+            "_calloc",
+            "_fflush",
+            "_fprintf",
+            "_fputc",
+            "_fputs",
+            "_free",
+            "_getenv",
+            "_malloc",
+            "_printf",
+            "_pthread_getspecific",
+            "_pthread_key_create",
+            "_pthread_key_delete",
+            "_pthread_mutex_destroy",
+            "_pthread_mutex_init",
+            "_pthread_mutex_lock",
+            "_pthread_mutex_unlock",
+            "_pthread_setspecific",
+            "_putchar",
+            "_scanf",
+            "_strlen",
+            "_vfprintf"
+          ]
+        }
+      },
+      "lib": null,
+      "reasons": []
+    }
+  ]
+}

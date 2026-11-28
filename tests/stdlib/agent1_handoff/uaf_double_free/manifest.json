@@ -1,0 +1,47 @@
+{
+  "suite": "agent1_handoff/uaf_double_free",
+  "p0_item": "Complete UAF and double-free analysis",
+  "command_template": "./build/c+ check --strict <file>",
+  "cwd": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib",
+  "compiler": "./build/c+",
+  "classification_rule": "Only 'REJECT' with a '[CPLUS-' token counts as tagged enforcement; exit 0 with no diagnostic is ACCEPT. These are compiler-responsibility gaps, not stdlib bugs.",
+  "cases": [
+    {
+      "file": "uaf_after_drop.cp",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "exit": 0,
+      "diagnostic": "[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: use of dropped owner 's'",
+      "diagnostic_site": "print(s.at(0)) after s.drop()",
+      "stdout": "check: tests/stdlib/agent1_handoff/uaf_double_free/uaf_after_drop.cp ok\n",
+      "stderr": ""
+    },
+    {
+      "file": "double_drop.cp",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "exit": 0,
+      "diagnostic": "[CPLUS-OWNER] double free of 's'",
+      "diagnostic_site": "second s.drop()",
+      "stdout": "check: tests/stdlib/agent1_handoff/uaf_double_free/double_drop.cp ok\n",
+      "stderr": ""
+    },
+    {
+      "file": "stale_alias.cp",
+      "expect": "REJECT",
+      "observed": "ACCEPT",
+      "exit": 0,
+      "diagnostic": "[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'p'",
+      "diagnostic_site": "cplus_check_live((void *)p) after s.drop()",
+      "stdout": "check: tests/stdlib/agent1_handoff/uaf_double_free/stale_alias.cp ok\n",
+      "stderr": ""
+    }
+  ],
+  "control": {
+    "description": "Same checked-use pattern on a directly cplus_alloc-ated pointer is already a tagged REJECT, proving the gap is class-owned-resource/alias tracking, not diagnostic vocabulary.",
+    "expect": "REJECT",
+    "observed": "tagged REJECT",
+    "exit": 1,
+    "diagnostic": "[CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'p'"
+  }
+}

@@ -1,0 +1,8 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_while_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:47: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 from while-loop induction is out of bounds of 'p' of length 4
+  static void wr(int *p){ int i=0; while(i<7){ p[i]=i; i++; } }
+                                                ^
+help: use C+ managed allocations and cplus_* helpers

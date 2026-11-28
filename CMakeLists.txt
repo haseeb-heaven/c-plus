@@ -82,11 +82,26 @@ endif()
 message(STATUS "Using LLVM ${LLVM_PACKAGE_VERSION} from ${LLVM_DIR}")
 message(STATUS "Using Clang from ${Clang_DIR}")
 
+# The in-process AST checker needs Clang's builtin headers (stdarg.h,
+# stddef.h, ...). Tooling cannot infer the resource dir from the c+ binary
+# path, so resolve it from the Clang installation we link against.
+execute_process(
+  COMMAND "${LLVM_TOOLS_BINARY_DIR}/clang" -print-resource-dir
+  OUTPUT_VARIABLE CPLUS_CLANG_RESOURCE_DIR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET)
+if(NOT CPLUS_CLANG_RESOURCE_DIR)
+  set(CPLUS_CLANG_RESOURCE_DIR
+      "${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR}")
+endif()
+message(STATUS "Clang resource dir: ${CPLUS_CLANG_RESOURCE_DIR}")
+
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 
 add_library(cplus_core STATIC
   compiler/Diagnostics.cpp
   compiler/SourceManager.cpp
+  compiler/Analysis/OwnershipAnalysis.cpp
   compiler/Sema/SemaCPlus.cpp
   compiler/Sema/CPlusLexer.cpp
   compiler/Sema/CPlusRewriter.cpp
@@ -251,8 +266,10 @@ message(STATUS "C+ backend C compiler: ${CPLUS_CLANG_BIN}")
 
 target_compile_definitions(cplus_core PRIVATE
   CPLUS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  CPLUS_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/compiler/Analysis/libc_contracts.json"
   CPLUS_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/runtime/include"
   CPLUS_CLANG_BIN="${CPLUS_CLANG_BIN}"
+  CPLUS_CLANG_RESOURCE_DIR="${CPLUS_CLANG_RESOURCE_DIR}"
   CPLUS_RUNTIME_LIB="$<TARGET_FILE:cplus_runtime>")
 add_dependencies(c+ cplus_runtime)
 
@@ -260,6 +277,7 @@ install(TARGETS c+ cplus_runtime
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION lib)
 install(FILES runtime/include/cplus/cplus.h DESTINATION include/cplus)
+install(FILES compiler/Analysis/libc_contracts.json DESTINATION share/cplus)
 
 # ---------------------------------------------------------------------------
 # CTest wrappers around the executable test and demo suites
@@ -270,4 +288,4 @@ add_test(NAME cplus_tests
           /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.sh)
 add_test(NAME cplus_demos
   COMMAND ${CMAKE_COMMAND} -E env CPLUS_BIN=$<TARGET_FILE:c+>
-          /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/demos/run_demos.sh)
+          /bin/sh ${CMAKE_CURRENT_SOURCE_DIR}/apps/legacy_demos/run_demos.sh)

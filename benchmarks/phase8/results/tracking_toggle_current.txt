@@ -1,0 +1,14 @@
+bin=tracking_off pass=1 tracking=OFF ops=200000 runs=11 min=0.003704000 median=0.006785000 max=0.019033000 ns_per_op=33.92
+bin=tracking_off pass=2 tracking=OFF ops=200000 runs=11 min=0.003662000 median=0.004959000 max=0.011617000 ns_per_op=24.80
+bin=tracking_off pass=3 tracking=OFF ops=200000 runs=11 min=0.003623000 median=0.006512000 max=0.008787000 ns_per_op=32.56
+bin=tracking_off pass=4 tracking=OFF ops=200000 runs=11 min=0.003626000 median=0.003723000 max=0.010091000 ns_per_op=18.62
+bin=tracking_off pass=5 tracking=OFF ops=200000 runs=11 min=0.003650000 median=0.006506000 max=0.011478000 ns_per_op=32.53
+bin=tracking_off pass=6 tracking=OFF ops=200000 runs=11 min=0.004521000 median=0.006169000 max=0.013467000 ns_per_op=30.85
+bin=tracking_off pass=7 tracking=OFF ops=200000 runs=11 min=0.003625000 median=0.003706000 max=0.008651000 ns_per_op=18.53
+bin=tracking_on pass=1 tracking=ON ops=200000 runs=11 min=0.010546000 median=0.011699000 max=0.021144000 ns_per_op=58.50
+bin=tracking_on pass=2 tracking=ON ops=200000 runs=11 min=0.013289000 median=0.019097000 max=0.024482000 ns_per_op=95.48
+bin=tracking_on pass=3 tracking=ON ops=200000 runs=11 min=0.011178000 median=0.015556000 max=0.028227000 ns_per_op=77.78
+bin=tracking_on pass=4 tracking=ON ops=200000 runs=11 min=0.010641000 median=0.019754000 max=0.036054000 ns_per_op=98.77
+bin=tracking_on pass=5 tracking=ON ops=200000 runs=11 min=0.010578000 median=0.015746000 max=0.035069000 ns_per_op=78.73
+bin=tracking_on pass=6 tracking=ON ops=200000 runs=11 min=0.010562000 median=0.015983000 max=0.020431000 ns_per_op=79.91
+bin=tracking_on pass=7 tracking=ON ops=200000 runs=11 min=0.010919000 median=0.018734000 max=0.022498000 ns_per_op=93.67

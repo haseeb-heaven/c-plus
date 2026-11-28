@@ -1,0 +1,11 @@
+Compile-time OOB expression suite (runtime traps not accepted)
+cast_negative.c        PASS
+derived_negative.c     PASS
+helper_negative.c      PASS
+literal_negative.c     PASS
+ternary_both_oob.c     PASS
+ternary_large.c        PASS
+ternary_negative.c     PASS
+ternary_offset.c       PASS
+
+failures: 0

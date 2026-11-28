@@ -1,0 +1,18 @@
+case: cc_const_index_reject
+mode: default
+step: check
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/cc_const_index_reject.c
+rc: 1
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+<SRC>:4:5: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'
+      a[9] = 1;
+      ^
+help: array contains 4 elements; valid indices are 0..3
+<SRC>:5:12: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'
+      return a[9];
+             ^
+help: array contains 4 elements; valid indices are 0..3
+

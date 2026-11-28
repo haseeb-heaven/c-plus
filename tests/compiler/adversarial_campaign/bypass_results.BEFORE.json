@@ -1,0 +1,176 @@
+{
+  "generated": "2026-11-23T09:01:28.078523+00:00",
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "mode": "c+ check --strict --sanitize=none",
+  "note": "accepted_by_strict=True means the bypass is PRESENT in this binary",
+  "results": [
+    {
+      "case": "S2_relay_free",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_relay_free.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_relay_free.c"
+    },
+    {
+      "case": "S2_fnptr_free",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_fnptr_free.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S2_fnptr_free.c"
+    },
+    {
+      "case": "S3_return_chain",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S3_return_chain.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S3_return_chain.c"
+    },
+    {
+      "case": "S4_null_wrapper",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S4_null_wrapper.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S4_null_wrapper.c"
+    },
+    {
+      "case": "S6_global_alias_uaf",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S6_global_alias_uaf.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S6_global_alias_uaf.c"
+    },
+    {
+      "case": "S8_self_recursion_oob",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S8_self_recursion_oob.c"
+    },
+    {
+      "case": "S1_flag_divergence",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S1_flag_divergence.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none -DDANGER /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_S1_flag_divergence.c"
+    },
+    {
+      "case": "P1_int_launder_uaf",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_int_launder_uaf.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_int_launder_uaf.c"
+    },
+    {
+      "case": "P1_memcpy_alias_uaf",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_memcpy_alias_uaf.c:4:66: error: [CPLUS-FFI] sizeof(p) is the pointer size, not the buffer size; pass the element count instead\n  int main(void){ int *p=malloc(sizeof(int)); int *q; memcpy(&q,&p,sizeof p); free(p); return *q; }\n                                                                   ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_memcpy_alias_uaf.c"
+    },
+    {
+      "case": "P1_union_pun_uaf",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_union_pun_uaf.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_union_pun_uaf.c"
+    },
+    {
+      "case": "P1_cast_alias_uaf",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_cast_alias_uaf.c:3:84: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'q'\n  int main(void){ int *p=malloc(sizeof(int)); int *q=(int*)(void*)p; free(p); return *q; }\n                                                                                     ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campai",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_P1_cast_alias_uaf.c"
+    },
+    {
+      "case": "T1_fnptr_double_free",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_fnptr_double_free.c"
+    },
+    {
+      "case": "T1_indirect_realloc",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_indirect_realloc.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_T1_indirect_realloc.c"
+    },
+    {
+      "case": "A1_stale_nonzero",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_stale_nonzero.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_stale_nonzero.c"
+    },
+    {
+      "case": "A1_compound_assign",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_compound_assign.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_compound_assign.c"
+    },
+    {
+      "case": "A1_incdec",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_incdec.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_incdec.c"
+    },
+    {
+      "case": "A1_implicit_narrow",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_implicit_narrow.c"
+    },
+    {
+      "case": "A1_float_to_int",
+      "rc": 0,
+      "accepted_by_strict": true,
+      "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c ok",
+      "stderr": "",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_A1_float_to_int.c"
+    },
+    {
+      "case": "CTRL_direct_double_free",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c:3:54: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p=malloc(sizeof(int)); free(p); free(p); return 0; }\n                                                       ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_double_free.c"
+    },
+    {
+      "case": "CTRL_direct_null",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c:4:17: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void){ deref(NULL); return 0; }\n                  ^~~~~",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_null.c"
+    },
+    {
+      "case": "CTRL_direct_overflow",
+      "rc": 1,
+      "accepted_by_strict": false,
+      "stdout": "",
+      "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c:3:48: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void){ volatile int x=INT_MAX; return x+1; }\n                                                 ^",
+      "command": "c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/adversarial_campaign/case_CTRL_direct_overflow.c"
+    }
+  ]
+}

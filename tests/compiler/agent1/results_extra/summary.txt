@@ -1,0 +1,119 @@
+EXTRA ORPHANED-FIXTURE RUNNER  (c+ = /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+, timeout = 30s)
+Columns: STATUS NAME [CATEGORY] EXACT-REASON
+Discovery: 11 top-level + 100 subdirectory fixtures = 111 expected; 111 processed this run.
+
+PASS          p0new_arena_cursor_wrap                    [p0new]        expect=reject; diag='outside the bounds' found; strict_rc=1 default_rc=1
+PASS          p0new_arena_cursor_wrap_ok                 [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_arena_span_wrap                      [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_arena_span_wrap_ok                   [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_field_bundle_ok                      [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_field_bundle_uaf                     [p0new]        expect=reject; diag='released pointer' found; strict_rc=1 default_rc=1
+PASS          p0new_field_deep_ok                        [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_field_deep_uaf                       [p0new]        expect=reject; diag='released pointer' found; strict_rc=1 default_rc=1
+PASS          p0new_file_alias_flush_uaf                 [p0new]        expect=reject; diag='use of closed FILE*' found; strict_rc=1 default_rc=1
+PASS          p0new_file_alias_write_uaf                 [p0new]        expect=reject; diag='use of closed FILE*' found; strict_rc=1 default_rc=1
+PASS          p0new_file_field_alias_ok                  [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_file_reopen_ok                       [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_jump_enum_table                      [p0new]        expect=reject; diag='constant array index' found; strict_rc=1 default_rc=1
+PASS          p0new_jump_enum_table_ok                   [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_jump_flat_table                      [p0new]        expect=reject; diag='constant array index' found; strict_rc=1 default_rc=1
+PASS          p0new_jump_flat_table_ok                   [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_out_checked_ptr_ok                   [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_out_len_set_ok                       [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_out_uninit_len                       [p0new]        expect=reject; diag='uninitialized' found; strict_rc=1 default_rc=1
+PASS          p0new_out_uninit_ptr                       [p0new]        expect=reject; diag='uninitialized' found; strict_rc=1 default_rc=1
+PASS          p0new_pkt_copy_underflow                   [p0new]        expect=reject; diag='copy of' found; strict_rc=1 default_rc=1
+PASS          p0new_pkt_copy_underflow_ok                [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_pkt_payload_underflow                [p0new]        expect=reject; diag='negative array index' found; strict_rc=1 default_rc=1
+PASS          p0new_pkt_payload_underflow_ok             [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_realloc_checked_ok                   [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_realloc_lost_result                  [p0new]        expect=reject; diag='raw realloc return value is ignored' found; strict_rc=1 default_rc=1
+PASS          p0new_realloc_null_seed_ok                 [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_realloc_old_after_grow               [p0new]        expect=reject; diag='realloc result and original pointer' found; strict_rc=1 default_rc=0
+PASS          p0new_ring_cursor_wrap                     [p0new]        expect=reject; diag='constant array index' found; strict_rc=1 default_rc=1
+PASS          p0new_ring_cursor_wrap_ok                  [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_ring_signed_wrap                     [p0new]        expect=reject; diag='constant array index' found; strict_rc=1 default_rc=1
+PASS          p0new_ring_signed_wrap_ok                  [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_s2u_capacity_trick                   [p0new]        expect=reject; diag='negative array index' found; strict_rc=1 default_rc=1
+PASS          p0new_s2u_capacity_trick_ok                [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_s2u_guard_bypass                     [p0new]        expect=reject; diag='negative array index' found; strict_rc=1 default_rc=1
+PASS          p0new_s2u_guard_bypass_ok                  [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_trunc_loop_byte                      [p0new]        expect=reject; diag='constant array index' found; strict_rc=1 default_rc=1
+PASS          p0new_trunc_loop_byte_ok                   [p0new]        expect=accept; strict_rc=0 default_rc=0
+PASS          p0new_trunc_loop_wide                      [p0new]        expect=reject; diag='constant array index' found; strict_rc=1 default_rc=1
+PASS          p0new_trunc_loop_wide_ok                   [p0new]        expect=accept; strict_rc=0 default_rc=0
+
+BLOCKED LIST (no expected diagnostic; kept visible, never PASS):
+BLOCKED       borrow_conflict                            [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       format_string_nonliteral                   [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       format_string_s_nonliteral                 [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       interproc_double_free                      [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       libc_double_free                           [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       libc_memcpy_overflow                       [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       libc_strcpy_overflow                       [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       realloc_failure_alias_live                 [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       uaf_alias                                  [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       uninit_addr_non_output                     [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       uninit_compound_assign                     [top11]        no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; top-level metric-only fixture listed in test_inventory.md
+BLOCKED       const_oob_3                                [fnptr_bounds] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; function-pointer bounds corpus with no pinned expected diagnostic
+BLOCKED       const_oob_5556                             [fnptr_bounds] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; function-pointer bounds corpus with no pinned expected diagnostic
+BLOCKED       dynamic_oob                                [fnptr_bounds] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; function-pointer bounds corpus with no pinned expected diagnostic
+BLOCKED       safe_indices                               [fnptr_bounds] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; function-pointer bounds corpus with no pinned expected diagnostic
+BLOCKED       int_helper                                 [integration]  no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; multi-TU fixture (int_main.c links int_helper.c) with no standalone expectation
+BLOCKED       int_main                                   [integration]  no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; multi-TU fixture (int_main.c links int_helper.c) with no standalone expectation
+BLOCKED       rc01                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc02                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc03                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc04                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc05                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc06                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc07                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc08                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc09                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc10                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc11                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc12                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc13                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc14                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       rc15                                       [runtime_crashes] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; interactive stdin-driven crash corpus with no pinned exit code
+BLOCKED       clean                                      [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       clean_thread                               [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       cplus_alloc_overflow                       [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       double_free                                [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       flex_array_overflow                        [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       global_overflow                            [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       heap_overflow                              [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       invalid_indirect_call                      [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       invalid_shift                              [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       leak                                       [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       misaligned                                 [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       null_deref                                 [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       race                                       [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       runtime_dependent_heap_overflow            [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       stack_overflow                             [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       static_reject                              [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       ubsan_overflow                             [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       unsigned_overflow                          [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       use_after_free                             [sanitizer]    no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; sanitizer corpus with no pinned expected diagnostic
+BLOCKED       bad_format                                 [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       const_oob                                  [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       dangling_stack                             [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       data_race                                  [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       double_free                                [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       dyn_oob                                    [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       field_uaf                                  [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       format_arg_mismatch                        [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       int_to_ptr                                 [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       leak_on_return                             [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       mutable_alias                              [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       null_deref                                 [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       ptr_oob                                    [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       realloc_lost                               [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       signed_overflow                            [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       strcpy_overflow                            [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       uaf                                        [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       uninit                                     [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       unsigned_overflow                          [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+BLOCKED       vla_unbounded                              [rust_compare] no embedded // EXPECT:/DIAG marker and no .err/.exit expectation file; Rust-comparison corpus with no pinned expected diagnostic
+
+TOTAL 111  PASS 40  FAIL 0  BLOCKED 71  SKIP 0

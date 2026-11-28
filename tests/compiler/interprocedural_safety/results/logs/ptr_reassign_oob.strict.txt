@@ -1,0 +1,11 @@
+command: c+ check --strict /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/ptr_reassign_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:53: error: [CPLUS-BOUNDS] out-of-bounds access: index 5 reaches past array 'dummy' via pointer 'p'
+  static void wr(int *p){ int dummy[2]={0}; p=dummy; p[5]=1; }
+                                                      ^
+help: array contains 2 elements; valid indices are 0..1
+<SRC>:1:52: error: [CPLUS-FFI] pointer parameter 'p' has unverifiable extent; subscript cannot be proven safe
+  static void wr(int *p){ int dummy[2]={0}; p=dummy; p[5]=1; }
+                                                     ^

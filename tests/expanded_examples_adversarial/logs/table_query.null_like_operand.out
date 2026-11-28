@@ -1,0 +1,4 @@
+TQ row REFUSED 108 row needs id grp amt integers
+TQ 1 REFUSED 108 unknown command
+TQ 10 REFUSED 108 unknown command
+TQ_SUMMARY 3 0 3 0

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stub: ignore the Rust model, emit a binary that always prints a wrong line.
+out=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then out=$2; shift 2; else shift; fi
+done
+printf '#include <stdio.h>\nint main(void){puts("WRONG");return 0;}\n' > "$HERE_STUB/stub.c"
+cc "$HERE_STUB/stub.c" -o "$out"

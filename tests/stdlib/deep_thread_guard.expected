@@ -1,0 +1,15 @@
+valid 1
+acquire_holds 1
+after_unlock 0
+relock_after_drop 1
+repeat_unlock_drop 0
+relock_after_repeat 1
+holds_after_unlock 0
+holds_after_drop 0
+zero_holds 0
+zero_after 0
+null_holds 0
+null_after 0
+explicit_drop 0
+trap_rc 107
+SELF_CHECK_OK

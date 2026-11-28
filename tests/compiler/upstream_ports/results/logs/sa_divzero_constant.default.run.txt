@@ -1,0 +1,10 @@
+case: sa_divzero_constant
+mode: default
+step: run
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/sa_divzero_constant.default
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

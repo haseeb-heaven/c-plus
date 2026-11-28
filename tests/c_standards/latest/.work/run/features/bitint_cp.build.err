@@ -1,0 +1,4 @@
+tests/c_standards/latest/.work/run/features/bitint.c:4:3: error: [CPLUS-FFI] _BitInt has no safe C+ lowering; use int64_t or cplus_checked arithmetic
+    _BitInt(9) b = 3; printf("b=%d\n", (int)b);
+    ^~~~~~~
+help: use C+ managed allocations and cplus_* helpers

@@ -1,0 +1,7 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/loop_for_oob.c
+returncode: 1
+timed_out: False
+
+<SRC>:1:46: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 5 exceeds stack array 'p' of 16 bytes
+  static void wr(int *p){ for(int i=0;i<6;i++) p[i]=i; }
+                                               ^

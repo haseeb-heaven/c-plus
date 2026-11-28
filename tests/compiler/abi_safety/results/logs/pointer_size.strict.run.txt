@@ -1,0 +1,10 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/pointer_size.strict.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+ptr=8 fnptr=8 iptr=8 uintptr=8 int=4 long=8 llong=8
+null=1
+
+--- stderr ---
+

@@ -1,0 +1,1 @@
+[CPLUS-BOUNDS] dereference of pointer 'p' advanced by an unproven offset is not bounds-checked

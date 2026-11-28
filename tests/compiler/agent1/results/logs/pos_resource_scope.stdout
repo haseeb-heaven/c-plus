@@ -1,0 +1,6 @@
+drop b
+drop c
+drop a
+drop early
+early=1
+done

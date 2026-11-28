@@ -1,0 +1,4 @@
+strings_len 1
+strings_cat 1
+strings scoped-c-ports
+STRINGS PASS

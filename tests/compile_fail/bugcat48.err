@@ -1,0 +1,1 @@
+[CPLUS-BOUNDS] sizeof on a VLA evaluates the expression at run time

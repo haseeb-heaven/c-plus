@@ -1,0 +1,5 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ check producer.cp consumer.cp
+check: producer.cp ok
+check: consumer.cp ok
+
+[exit code: 0]

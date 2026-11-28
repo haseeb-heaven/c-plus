@@ -1,0 +1,17 @@
+ok write-file 1
+ok read-file 0 roundtrip
+ok remove-temp 1
+ok null-constructors 1
+ok null-handle-ops 1
+ok file-temp 1
+ok invalid-args 1
+ok partial-eof 1
+ok seek-failure 1
+ok close-double-drop 1
+ok borrow-close 1
+ok borrow-drop 1
+ok move-double-drop 1
+ok fd-during 4 7
+ok fd-leak 4 4
+ok alloc-injection 1
+deep-file-lifecycle PASS 0

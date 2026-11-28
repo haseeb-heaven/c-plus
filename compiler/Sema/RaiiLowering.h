@@ -44,7 +44,7 @@ struct LoweredSource {
 LoweredSource lowerRaii(const std::string &source,
                         std::vector<std::string> resourceTypes,
                         DiagnosticEngine &diags, const std::string &filename,
-                        Mode mode);
+                        Mode mode, bool strict = false);
 
 } // namespace cplus
 

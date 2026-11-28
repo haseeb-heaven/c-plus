@@ -1,0 +1,5 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/call_recursive_ok.c
+returncode: 0
+timed_out: False
+
+check: <SRC> ok

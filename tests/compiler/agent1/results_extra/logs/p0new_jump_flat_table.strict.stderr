@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_jump_flat_table.c:14:12: error: [CPLUS-SAFE-BOUNDS] constant array index 4 is outside the bounds of 'table'
+      return table[4](3);
+             ^~~~~
+help: array contains 2 elements; valid indices are 0..1

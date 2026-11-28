@@ -1,0 +1,12 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='720' height='260' viewBox='0 0 720 260'>
+<rect width='100%' height='100%' fill='#0d1117'/>
+<text x='16' y='28' fill='#58a6ff' font-size='17'>Benchmark evidence: scoped_fast</text>
+<text x='16' y=56 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH bump_ms_bucket fast</text>
+<text x='16' y=72 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH release_ms_bucket one_store</text>
+<text x='16' y=88 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH heap_ms_bucket slow</text>
+<text x='16' y=104 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH ratio_ge_2 yes</text>
+<text x='16' y=120 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH bump_ns_per_op 30</text>
+<text x='16' y=136 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH heap_ns_per_op 328</text>
+<text x='16' y=152 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH scope_release_ns 1000</text>
+<text x='16' y=168 fill='#c9d1d9' font-family='monospace' font-size='12'>BENCH_OK</text>
+</svg>

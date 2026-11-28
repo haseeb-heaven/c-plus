@@ -1,0 +1,92 @@
+# Public-callable manifest for the net/http + additive-adaptation method tests.
+# Format: <header> <method> <header-source-line> <status> <test-file>
+# Enumeration source: every class method, free function and static inline
+# helper defined in the four headers (verified against the on-disk headers on
+# branch agent/modern-stdlib).  Constructors are counted as methods.  A method
+# is marked PASS only when its case CALLS it and VERIFIES the result at runtime.
+# No method in these headers needs an unavailable facility, so SKIPPED=0.
+
+net.hp connection.connection 24 PASS methods_net.cp
+net.hp connection.is_valid 31 PASS methods_net.cp
+net.hp connection.descriptor 35 PASS methods_net.cp
+net.hp connection.read 41 PASS methods_net.cp
+net.hp connection.write 64 PASS methods_net.cp
+net.hp connection.drop 93 PASS methods_net.cp
+net.hp listener.listener 106 PASS methods_net.cp
+net.hp listener.is_valid 132 PASS methods_net.cp
+net.hp listener.descriptor 136 PASS methods_net.cp
+net.hp listener.bound_port 140 PASS methods_net.cp
+net.hp listener.accept 150 PASS methods_net.cp
+net.hp listener.drop 161 PASS methods_net.cp
+net.hp listener_borrow 170 PASS methods_net.cp
+net.hp connection_borrow 177 PASS methods_net.cp
+
+http.hp http.http 20 PASS methods_http.cp
+http.hp http.valid 32 PASS methods_http.cp
+http.hp http.drop 36 PASS methods_http.cp
+http.hp http_version 44 PASS methods_http.cp
+http.hp http_headers.http_headers 51 PASS methods_http.cp
+http.hp http_headers.valid 55 PASS methods_http.cp
+http.hp http_headers.native 60 PASS methods_http.cp
+http.hp http_headers.add 65 PASS methods_http.cp
+http.hp http_headers.drop 81 PASS methods_http.cp
+http.hp http_sink_write 97 PASS methods_http.cp
+http.hp http_client.http_client 136 PASS methods_http.cp
+http.hp http_client.valid 144 PASS methods_http.cp
+http.hp http_client.set_timeout 148 PASS methods_http.cp
+http.hp http_client.follow_redirects 163 PASS methods_http.cp
+http.hp http_client.set_headers 177 PASS methods_http.cp
+http.hp http_client.header_lines 208 PASS methods_http.cp
+http.hp http_client.request 217 PASS methods_http.cp
+http.hp http_client.get 261 PASS methods_http.cp
+http.hp http_client.post 265 PASS methods_http.cp
+http.hp http_client.status 270 PASS methods_http.cp
+http.hp http_client.bytes 278 PASS methods_http.cp
+http.hp http_client.drop 286 PASS methods_http.cp
+
+gsl_adapt.hp gsl_adapt_refuse_null 100 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_adapt_refuse_range 106 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_adapt_refuse_bounds 112 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_i8 122 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_u8 135 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_i16 148 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_u16 161 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_i32 174 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_u32 187 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_i64 200 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_i64_u64 212 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_u64_i64 225 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_u64_u8 239 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_narrow_u64_u32 253 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_not_null_i32_make 278 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_not_null_i32_get 285 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_not_null_i32_swap 294 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_not_null_void_make 303 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_not_null_void_get 310 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_view 331 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_make 352 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_size 367 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_size_bytes 371 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_empty 375 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_data 379 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_at 386 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_first 402 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_last 411 PASS methods_gsl_adapt.cp
+gsl_adapt.hp gsl_span_i32_subspan 422 PASS methods_gsl_adapt.cp
+
+lifetime_adapt.hp lifetime_check 95 PASS methods_lifetime_adapt.cp
+lifetime_adapt.hp lifetime_owner_init 118 PASS methods_lifetime_adapt.cp
+lifetime_adapt.hp lifetime_owner_release 151 PASS methods_lifetime_adapt.cp
+lifetime_adapt.hp lifetime_transfer 177 PASS methods_lifetime_adapt.cp
+lifetime_adapt.hp lifetime_borrow_from 202 PASS methods_lifetime_adapt.cp
+lifetime_adapt.hp lifetime_borrow_is_live 217 PASS methods_lifetime_adapt.cp
+lifetime_adapt.hp lifetime_read 226 PASS methods_lifetime_adapt.cp
+lifetime_adapt.hp lifetime_write 248 PASS methods_lifetime_adapt.cp
+
+# Totals: net.hp 14, http.hp 22, gsl_adapt.hp 29, lifetime_adapt.hp 8 => 73.
+# Note on the task-brief counts: docs/stdlib/REGRESSION_INVENTORY.md reports
+# net.hp=15 (its 15th entry, `listener.listen`, is a lexical false match on the
+# listen(2) call inside the listener ctor; net.hp defines no such method) and
+# http.hp=19 (it omits http_sink_write, http_client.request and http_client.post).
+# This manifest enumerates the actual header source, so those three real http
+# methods are included and the phantom net entry is not.

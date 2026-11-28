@@ -1,0 +1,23 @@
+RB cap 4
+RB PUSH n= 4 used= 0
+RB push_bytes used= 4 head= 0
+RB POP n= 2 used= 4
+RB popped 0 1
+RB popped 1 2
+RB pop_bytes used= 2 head= 2
+RB PUSH n= 2 used= 2
+RB push_bytes used= 4 head= 2
+RB dump used= 4 cap= 4 head= 2
+RB byte 0 3
+RB byte 1 4
+RB byte 2 5
+RB byte 3 6
+RB oplog n= 3
+RB op 0 4
+RB op 1 -2
+RB op 2 2
+RB expect OK n= 4
+RB PEEK n= 2 used= 4
+RB peeked 0 3
+RB peeked 1 4
+RB_SUMMARY 7 7 0 0

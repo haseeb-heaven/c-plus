@@ -1,0 +1,19 @@
+# Curated list of existing non-deep stdlib tests used by tests/stdlib/agent2/run_all.sh.
+# Tests requiring unavailable external development files (SDL3, libcurl, libuv, ffmpeg)
+# are deliberately excluded here and documented in FINAL_AUDIT.md.
+# Excluded: adversarial.cp is a compile-time NEGATIVE test (strict mode correctly
+# rejects its use-after-move); it is evidence in the compile-time suite, not a
+# runtime regression case.
+# Excluded: safety_regressions.cp includes stdlib/async.hp -> <uv.h> is absent on
+# this host, so it is BLOCKED on a libuv development dependency.
+collections_test
+containers_safety_test
+core_extras_test
+eof
+foundation
+io_edge_cases
+json_test
+log_test
+negative
+net_test
+stdlib_hardening_test

@@ -1,0 +1,30 @@
+{
+  "tool": "deterministic C+ legacy differential fuzzer",
+  "seed": 1592594996,
+  "seed_hex": "0x5EED1234",
+  "cases_requested": 200,
+  "cases_compared": 200,
+  "opt": "O2",
+  "cplus_bin": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "reference_compiler": "/opt/homebrew/opt/llvm/bin/clang",
+  "reference_name": "clang",
+  "reference_isysroot": "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+  "workers": 8,
+  "timeout_seconds": 30.0,
+  "seed_policy": "case_seed = base_seed + index; reproducible with FUZZ_SEED=<case_seed> FUZZ_CASES=1",
+  "elapsed_seconds": 19.66,
+  "counts": {
+    "both_compiled": 200,
+    "compile_outcome_divergences": 0,
+    "run_divergences": 0,
+    "total_mismatches": 0,
+    "by_classification": {
+      "parser": 0,
+      "sema": 0,
+      "codegen": 0,
+      "runtime": 0,
+      "optimizer": 0
+    }
+  },
+  "failures": []
+}

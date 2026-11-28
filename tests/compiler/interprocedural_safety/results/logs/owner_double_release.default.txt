@@ -1,0 +1,8 @@
+command: c+ check --default /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/interprocedural_safety/cases/owner_double_release.c
+returncode: 1
+timed_out: False
+
+<SRC>:4:59: error: [CPLUS-OWNER] double free of 'a'
+  int main(void){ int *a=malloc(4); if(!a)return 2; rel(a); free(a); return 0; }
+                                                            ^~~~
+help: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership

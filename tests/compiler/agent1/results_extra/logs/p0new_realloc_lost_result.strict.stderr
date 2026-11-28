@@ -1,0 +1,7 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_realloc_lost_result.c:12:5: error: [CPLUS-REALLOC] raw realloc return value is ignored
+      realloc(block, 256);
+      ^~~~~~~
+help: use C+ managed allocations and cplus_* helpers
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_realloc_lost_result.c:12:5: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown
+      realloc(block, 256);
+      ^~~~~~~

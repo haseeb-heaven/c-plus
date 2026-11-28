@@ -1,0 +1,34 @@
+Wave-3 real-world C: c+ (all modes x standards) vs /usr/bin/clang
+generated: 2026-11-23T14:20:53.760080+00:00
+compiler: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+reference: /usr/bin/clang -O2
+modes: legacy-c, default, strict
+standards: c89, c99, c11, c17, c2x
+
+counts: projects=12 repos=6 modes=3 standards=5 cells=180 pass=175 mode_rejected=5 hard_fail=0
+status_breakdown: {"MODE_REJECTED": 5, "PASS": 175}
+source preservation: exact=60 structural=115
+
+per-project:
+  a_binsearch  cells=15 pass=15 rejected=0 hard_fail=0
+  a_euclid     cells=15 pass=15 rejected=0 hard_fail=0
+  ap_hello     cells=15 pass=15 rejected=0 hard_fail=0
+  ap_max       cells=15 pass=15 rejected=0 hard_fail=0
+  dp_d         cells=15 pass=15 rejected=0 hard_fail=0
+  dp_s         cells=15 pass=15 rejected=0 hard_fail=0
+  g_bs         cells=15 pass=15 rejected=0 hard_fail=0
+  g_fib        cells=15 pass=15 rejected=0 hard_fail=0
+  n_03         cells=15 pass=15 rejected=0 hard_fail=0
+  n_07         cells=15 pass=15 rejected=0 hard_fail=0
+  pc_avg       cells=15 pass=10 rejected=5 hard_fail=0
+  pc_bubble    cells=15 pass=15 rejected=0 hard_fail=0
+
+hard failures (0):
+  none
+
+mode rejections (5):
+  [pc_avg c11 strict] safety_gate
+  [pc_avg c17 strict] safety_gate
+  [pc_avg c2x strict] safety_gate
+  [pc_avg c89 strict] safety_gate
+  [pc_avg c99 strict] safety_gate

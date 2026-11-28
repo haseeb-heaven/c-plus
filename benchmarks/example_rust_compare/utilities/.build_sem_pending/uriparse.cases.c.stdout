@@ -1,0 +1,13 @@
+URI scheme https
+URI host example.com
+URI port 8443
+URI path /a/b
+URI scheme http
+URI host example.com
+URI port -1
+URI path -
+URI scheme ftp
+URI host host
+URI port -1
+URI path /path
+URI error unsupported

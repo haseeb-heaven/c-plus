@@ -1,0 +1,3 @@
+COMMAND: ./build/c+ build --strict --sanitize=thread <file> -o /dev/null  (compile only; never run)
+error: sanitizer 'thread' is not supported by the selected backend (/usr/bin/clang); detected by a compile-and-run probe
+EXIT: 1

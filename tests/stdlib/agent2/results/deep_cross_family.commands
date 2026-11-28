@@ -1,0 +1,2 @@
+BUILD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/deep_cross_family.cp --strict --sanitize=none -I/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/third_party/yyjson -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/ext -lyyjson -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent2/results/run/deep_cross_family
+RUN: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent2/results/run/deep_cross_family

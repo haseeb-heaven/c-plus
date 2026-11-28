@@ -1,0 +1,16 @@
+HTTP v_get VALID GET /index.html HTTP/1.1
+HTTP v_post VALID POST /submit HTTP/1.0
+HTTP v_head VALID HEAD / HTTP/1.1
+HTTP h_bad_method REFUSED 108 invalid bad-method
+HTTP h_bad_ver REFUSED 108 invalid bad-version
+HTTP h_two_fields REFUSED 108 invalid wrong-field-count
+HTTP h_four_fields REFUSED 108 invalid wrong-field-count
+HTTP h_double_space REFUSED 108 invalid wrong-field-count
+HTTP h_missing_path REFUSED 108 invalid empty-field
+HTTP h_relative REFUSED 108 invalid path-not-absolute
+HTTP h_traversal REFUSED 108 invalid dot-dot-path
+HTTP h_trailing_space REFUSED 108 invalid wrong-field-count
+HTTP h_oversized REFUSED 101 bounds too-long
+HTTP argv VALID GET / HTTP/1.1
+HTTP argv REFUSED 108 invalid bad-method
+HTTP_SUMMARY 15 4 11 0

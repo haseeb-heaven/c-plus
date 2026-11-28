@@ -1,0 +1,18 @@
+#ifndef CPLUS_CROSS_TU_OWNER_HP
+#define CPLUS_CROSS_TU_OWNER_HP
+
+/* P1 cross-TU reproducer, case A.
+ *
+ * Declares a function whose return type is a borrowed view.  The definition
+ * lives in producer.cp; the use lives in consumer.cp.  The owner behind the
+ * view is a local of producer.cp and is destroyed when that function returns,
+ * so the view consumed in consumer.cp dangles.
+ *
+ * A correct cross-TU analysis would reject either the escape in producer.cp
+ * or the use in consumer.cp with a [CPLUS-BORROW]/[CPLUS-LIFETIME] diagnostic.
+ */
+#include "stdlib/string.hp"
+
+string_view produce_view(void);
+
+#endif

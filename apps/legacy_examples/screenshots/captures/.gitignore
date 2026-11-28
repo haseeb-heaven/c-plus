@@ -1,0 +1,3 @@
+# Intermediate artifacts produced by ../capture.sh (recreated on every run).
+# The captured *.txt transcripts themselves are intentionally tracked.
+tmp/

@@ -1,0 +1,39 @@
+Cross-TU/ABI link regression suite
+macOS-27.2.1-arm64-arm-64bit
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+CC=/usr/bin/clang
+
+static_archive_link            PASS
+  cmd: /usr/bin/clang -std=c11 -c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.o
+  rc=0 out='' err=''
+  cmd: ar rcs /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/libabi_helper.a /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.o
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases -labi_helper -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_default.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_default.bin
+  rc=0 out='mul=42\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases -labi_helper -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_strict.bin
+  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'abi_mul' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_strict.bin
+  rc=0 out='mul=42\n' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --legacy-c --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases -labi_helper -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_legacy-c.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/static_legacy-c.bin
+  rc=0 out='mul=42\n' err=''
+shared_library_link            PASS
+  cmd: /usr/bin/clang -shared -fPIC /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_helper.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/libabi_helper.dylib
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases -labi_helper -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/shared.bin
+  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'abi_mul' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/results/shared.bin
+  rc=0 out='mul=42\n' err=''
+check_with_link_flags          PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c -L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases -labi_helper
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c ok\n' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/abi_main.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'abi_mul' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n"
+cross_tu_allocator_boundary    PASS
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp
+  rc=1 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c ok\n' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: cross-TU control/data flow is not safety-checked here\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp:4:38: error: [CPLUS-FFI] pointer 'p' from an unresolved call has unverifiable extent; subscript cannot be proven safe\n  int main(void){ int *p=abi_create(); p[0]=1; abi_destroy(p); return 0; "
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --legacy-c --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_b.cp
+  rc=0 out='check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/alloc_a.c ok\ncheck: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_link_flags/cases/all' err=''
+
+cases=4 passed=4 failed=0

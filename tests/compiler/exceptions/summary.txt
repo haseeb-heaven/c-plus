@@ -1,0 +1,6 @@
+C+ exception handling evidence
+throw_catch    PASS
+nested         PASS
+demo           PASS
+
+failures: 0

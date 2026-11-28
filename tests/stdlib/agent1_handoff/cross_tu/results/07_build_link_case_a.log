@@ -1,0 +1,3 @@
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/build/c+ build producer.cp consumer.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/tests/stdlib/agent1_handoff/cross_tu/results/case_a
+
+[exit code: 0]

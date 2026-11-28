@@ -1,0 +1,11 @@
+KV insert OK alpha
+KV insert OK beta
+KV insert REFUSED 108 invalid duplicate key
+KV get alpha one
+KV get REFUSED 108 invalid no such key
+KV update OK alpha
+KV delete beta OK
+KV item 0 alpha ALPHA
+KV list 1
+KV expect_size 1 OK
+KV_SUMMARY 9 7 2 0

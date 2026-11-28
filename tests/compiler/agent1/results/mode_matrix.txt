@@ -1,0 +1,7 @@
+MODE MATRIX
+- compile_fail: DEFAULT, expect compile rejection with exact diagnostic.
+- runtime_fail: DEFAULT with sanitizers enabled (fixtures rely on runtime traps); expect exact stderr + exit code.
+- positive: DEFAULT, build+run+stdout match (compat fixtures).
+- strict_positive: STRICT --sanitize=none, build+run (safe subset only; multi-TU linked; uaf_conditional excluded as documented possible-UAF).
+- native/strict40: STRICT + build --strict --sanitize=none via native harnesses.
+- stress: project breaker suites.

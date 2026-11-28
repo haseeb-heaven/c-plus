@@ -1,0 +1,41 @@
+# file_io method manifest
+# Format: <header> <method> <test source> <result>
+# Every entry below was invoked and its result verified at runtime.
+
+stdlib/file.hp file                 test_file.cp PASS   # constructor file(path, mode)
+stdlib/file.hp is_open              test_file.cp PASS
+stdlib/file.hp native               test_file.cp PASS
+stdlib/file.hp read                 test_file.cp PASS
+stdlib/file.hp read_line            test_file.cp PASS
+stdlib/file.hp write                test_file.cp PASS
+stdlib/file.hp write_bytes          test_file.cp PASS
+stdlib/file.hp seek                 test_file.cp PASS
+stdlib/file.hp flush                test_file.cp PASS
+stdlib/file.hp close                test_file.cp PASS
+stdlib/file.hp drop                 test_file.cp PASS
+stdlib/file.hp file_borrow          test_file.cp PASS
+stdlib/file.hp file_temp            test_file.cp PASS
+
+stdlib/io.hp   println              test_io.cp   PASS   # void; output verified (single newline)
+stdlib/io.hp   stdlib_io_token      test_io.cp   PASS   # public static inline; internal "stdlib_" prefix
+stdlib/io.hp   read_line            test_io.cp   PASS
+stdlib/io.hp   read_int             test_io.cp   PASS
+stdlib/io.hp   read_long            test_io.cp   PASS
+stdlib/io.hp   read_float           test_io.cp   PASS
+stdlib/io.hp   read_double          test_io.cp   PASS
+
+stdlib/fs.hp   fs_exists            test_fs.cp   PASS
+stdlib/fs.hp   fs_is_file           test_fs.cp   PASS
+stdlib/fs.hp   fs_is_dir            test_fs.cp   PASS
+stdlib/fs.hp   fs_size              test_fs.cp   PASS
+stdlib/fs.hp   fs_remove            test_fs.cp   PASS
+stdlib/fs.hp   fs_rename            test_fs.cp   PASS
+stdlib/fs.hp   fs_mkdir             test_fs.cp   PASS
+stdlib/fs.hp   fs_mkdtemp           test_fs.cp   PASS
+
+# Counts by header: file.hp = 13, io.hp = 7, fs.hp = 8. Total = 28.
+# The parent task's (13, 6, 8) breakdown sums to 27 because io.hp's
+# stdlib_io_token is a public static inline helper with an internal "stdlib_"
+# prefix and is presumably excluded there. It is public, callable, and fully
+# exercised/verified here, so it is counted and reported.
+# total=28 passed=28 failed=0 skipped=0

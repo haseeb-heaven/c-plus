@@ -1,0 +1,14 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/cases/arith_divrem.c --default --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/emitted/arith_divrem.guards_on.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/results/bin/arith_divrem.guards_on.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+--- stderr ---
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/cases/arith_divrem.c:6:7: warning: [CPLUS-ARITH] division by zero cannot be excluded
+    q = 1000 / d;
+        ^~~~
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/optimizer/cases/arith_divrem.c:7:7: warning: [CPLUS-ARITH] remainder by zero cannot be excluded
+    r = 1000 % d;
+        ^~~~
+

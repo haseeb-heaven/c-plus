@@ -1,0 +1,3 @@
+COMMAND: ./build/c+ check --strict tests/stdlib/agent1_handoff/thread_safety/race_shared_file_write.cp
+check: tests/stdlib/agent1_handoff/thread_safety/race_shared_file_write.cp ok
+EXIT: 0

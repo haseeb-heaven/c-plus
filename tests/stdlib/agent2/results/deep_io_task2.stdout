@@ -1,0 +1,23 @@
+c1_exact_eof_ok 1
+c1_exact_eof_next 1
+c2_newline_ok 1
+c2_newline_next_eof 1
+c3_cr_boundary 1
+c3_next_aligned 1
+c4_i_malformed 1
+c4_i_overflow 1
+c5_i_valid_after 1
+c4_l_malformed 1
+c4_l_overflow 1
+c5_l_valid_after 1
+c4_f_malformed 1
+c4_f_overflow 1
+c5_f_valid_after 1
+c4_d_malformed 1
+c4_d_overflow 1
+c5_d_valid_after 1
+c6_i_eof 1
+c6_l_eof 1
+c6_f_eof 1
+c6_d_eof 1
+IO_TASK2 22 0

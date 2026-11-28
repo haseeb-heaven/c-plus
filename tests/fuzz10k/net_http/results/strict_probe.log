@@ -1,0 +1,5 @@
+./stdlib/http.hp:106:30: error: [CPLUS-ARITH] division by zero cannot be excluded
+      }
+./stdlib/http.hp:230:9: error: [CPLUS-FFI] pointer parameter 'buf' has unverifiable extent; subscript cannot be proven safe
+          buf[0] = '\0';
+          ^~~

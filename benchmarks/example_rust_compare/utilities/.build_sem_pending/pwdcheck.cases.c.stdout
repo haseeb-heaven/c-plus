@@ -1,0 +1,5 @@
+PWCHECK selfcheck OK fixed-dummy-rules-ok
+PWCHECK strong OK len=11 score=4 upper=1 lower=1 digit=1 symbol=1
+PWCHECK done
+PWCHECK selfcheck OK fixed-dummy-rules-ok
+PWCHECK too_short REFUSED code=101 cat=2 reason=input-too-short

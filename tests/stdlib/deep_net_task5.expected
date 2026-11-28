@@ -1,0 +1,11 @@
+net_conn_refused_closed_port 1
+net_peer_reset_recoverable 1
+net_invalid_address 1
+SKIP_REASON net_invalid_address stdlib/net.hp listener(port) takes only an integer port and always binds INADDR_LOOPBACK; connection has no address argument either. Strings such as "not.an.address" or "" cannot be passed to any net.hp API, so no INVALID_ADDRESS case exists.
+net_repeated_drop 1
+net_repeated_drop_no_leak 1
+net_read_eintr_signal 1
+net_accept_eintr_signal 1
+net_partial_read 1
+net_task5_no_fd_leak 1
+NET_TASK5 9 0

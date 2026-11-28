@@ -1,0 +1,48 @@
+/* Deterministic open-file-descriptor snapshot via opendir("/dev/fd").
+ *
+ * opendir() itself holds one descriptor for the duration of the scan, but
+ * every snapshot includes exactly that one, so before/after deltas stay
+ * meaningful.  Returns -1 when /dev/fd is unavailable (some hosts/containers).
+ *
+ * Strict C+ cannot prove the extent of a pointer parameter used as p[i]; the
+ * single-byte read of dirent::d_name therefore goes through __builtin_memcpy,
+ * which is the verified pattern used elsewhere in this test tree.
+ */
+#ifndef CPLUS_SYS_SAFETY_FD_COUNT_HP
+#define CPLUS_SYS_SAFETY_FD_COUNT_HP
+
+#include <dirent.h>
+
+static inline int ss_fd_count(void) {
+    DIR *scan_dir;
+    struct dirent *scan_entry;
+    int scan_count;
+    char scan_first;
+
+    scan_dir = opendir("/dev/fd");
+    if (scan_dir == (DIR *)0)
+        return -1;
+
+    scan_count = 0;
+    while ((scan_entry = readdir(scan_dir)) != (struct dirent *)0) {
+        __builtin_memcpy(&scan_first, scan_entry->d_name, sizeof(scan_first));
+        if (scan_first >= '0' && scan_first <= '9')
+            scan_count++;
+    }
+    closedir(scan_dir);
+    return scan_count;
+}
+
+/* Alias that reads naturally at snapshot call sites. */
+static inline int ss_fd_snapshot(void) {
+    return ss_fd_count();
+}
+
+/* Delta of two snapshots; -1 if either snapshot was unavailable. */
+static inline int ss_fd_delta(int baseline, int observed) {
+    if (baseline < 0 || observed < 0)
+        return -1;
+    return observed - baseline;
+}
+
+#endif /* CPLUS_SYS_SAFETY_FD_COUNT_HP */

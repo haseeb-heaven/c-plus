@@ -1,0 +1,7 @@
+# Generated evidence — rebuild with ./run.sh (gitignored on purpose).
+results/
+fuzz10k_containers
+_fork_probe*
+_io_probe*
+_parse_probe*
+_getenv_probe*

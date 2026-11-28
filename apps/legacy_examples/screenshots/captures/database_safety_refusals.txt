@@ -1,0 +1,39 @@
+# CAPTURED TERMINAL TRANSCRIPT: database_safety_refusals.txt
+# TITLE: Database demo: oversized key, null value, overflowing sum, duplicate key and delete-missing are all refused; canary and store stay intact
+# CAPTURED_AT_UTC: 2026-11-23T06:29:41Z
+# TOOLCHAIN: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin
+# CWD: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib
+# NOTE: everything between BEGIN/END markers is verbatim stdout+stderr
+#       of a real binary executed under /usr/bin/timeout 30.
+# BUILD CMD: ./build/c+ build examples/expanded/database/safety_demo.cp --strict --sanitize=none -I. -o "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/database_safety_demo"
+# RUN CMD: /usr/bin/timeout 30 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-stdlib/examples/screenshots/captures/tmp/database_safety_demo
+# --- BEGIN VERBATIM OUTPUT ---
+SAFETY oversized_key REFUSED 101
+SAFETY oversized_key DETAIL range key length out of bounds
+SAFETY oversized_key CANARY ok
+SAFETY null_value REFUSED 108
+SAFETY null_value DETAIL invalid null value
+SAFETY null_value CANARY ok
+SAFETY overflowing_sum REFUSED 101
+SAFETY overflowing_sum DETAIL range sum overflow
+SAFETY overflowing_sum CANARY ok
+SAFETY duplicate_key REFUSED 108
+SAFETY duplicate_key DETAIL invalid duplicate key
+SAFETY duplicate_key CANARY ok
+SAFETY delete_missing REFUSED 108
+SAFETY delete_missing DETAIL invalid no such key
+SAFETY delete_missing CANARY ok
+SAFETY FINAL_VALUE dup one
+SAFETY FINAL_CANARY ok
+SAFETY FINAL_STORE 1
+SAFETY_SUMMARY 5 5 5 0
+# --- END VERBATIM OUTPUT ---
+# EXIT_CODE=0
+# TOKEN_OK: SAFETY oversized_key REFUSED 101
+# TOKEN_OK: SAFETY null_value REFUSED 108
+# TOKEN_OK: SAFETY overflowing_sum REFUSED 101
+# TOKEN_OK: SAFETY duplicate_key REFUSED 108
+# TOKEN_OK: SAFETY delete_missing REFUSED 108
+# TOKEN_OK: SAFETY FINAL_CANARY ok
+# TOKEN_OK: SAFETY_SUMMARY 5 5 5 0
+# VERDICT: PASS -- every expected refusal token was found in real captured output

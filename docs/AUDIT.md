@@ -32,7 +32,7 @@ found, so all 54 supplied bugs are covered.
 | [Checked C](https://github.com/checkedc/checkedc-clang) | LLVM-style Apache-2.0 (fork tree) | **Not integrated.** Checked pointers require a forked Clang frontend and source annotations; the host Clang 16 has no checked-pointer support. Copying a fork would duplicate the compiler we already reuse. |
 | [Clang Bounds Safety](https://github.com/swiftlang/llvm-project) | Apache-2.0 with LLVM exceptions | **Blocked by toolchain.** `-fbounds-safety` is not accepted by `/usr/bin/clang` (Apple clang 16), and the locally installed LLVM 23 `clang` fails at startup because `libLLVM.23.1.dylib` is missing. Our token-level bounds pass + UBSan are the justified alternative. |
 | [SafeC](https://github.com/safec-org/SafeC) | MIT | **Not integrated.** License is compatible, but its ownership/region analyzer is a separate whole-program analysis; integrating it would duplicate the existing lowering/RAII pipeline rather than extend it. Ideas such as explicit ownership contracts are already implemented in C+ form. |
-| [Rust](https://github.com/rust-lang/rust) | MIT / Apache-2.0 | **No code copied.** Its borrow-checking *ideas* informed the small C+ borrow subset (escape and use-after-move), but Rust's type system is explicitly out of scope. |
+| [Rust](https://github.com/rust-lang/rust) | MIT / Apache-2.0 | **No code copied.** Its borrow-checking *ideas* informed the small C+ borrow subset (escape and use-after-move), but Rust's type system is explicitly out of scope. The paired comparison in `docs/RUST_COMPARISON.md` covers only the overlapping subset and makes no parity claim. |
 | [Cake](https://github.com/thradams/cake) | GPLv3 + addendum forbidding AI training/reference use | **Rejected.** Copying or using it as implementation reference is legally incompatible with this MIT project and with the addendum. |
 
 ## What is actually reused
@@ -44,7 +44,13 @@ found, so all 54 supplied bugs are covered.
   `sizeof` decay, format security, stack-address returns, uninitialised
   reads, array bounds and more;
 - **UBSan** (`undefined,bounds,null,alignment`) with
-  `-fno-sanitize-recover=all` for run-time failures;
+  `-fno-sanitize-recover=all` for run-time failures, plus configurable
+  `address`/`thread`/`leak`/`cfi`/`integer` sanitizers with backend capability
+  probing (`docs/CAPABILITIES.md`);
+- **C+ inserted `__cplus_bounds_check`** for dynamic indices into fixed-size
+  arrays, including arrays of function pointers, in safe-mode builds — a
+  C+-generated check, independent of the sanitizer backend
+  (`tests/core/fnptr_bounds_suite.py`);
 - **LLVM Support** libraries in the `c+` driver itself;
 - **libc and POSIX** underneath the `.hp` standard-library wrappers.
 
@@ -62,11 +68,22 @@ allocator as the C+-specific layer.
 
 ## Remaining blockers (verified, not assumed)
 
-- **Use-after-free:** AddressSanitizer aborts inside its own runtime on this
-  host (`sanitizer_malloc_mac.inc:189`). TSan also fails with "Interceptors
-  are not working". No automatic stale-dereference detection is possible
-  here. `cplus_check_live()` provides an explicit check.
+- **Use-after-free with the default backend:** Apple clang 16's
+  AddressSanitizer aborts inside its own runtime on this host
+  (`sanitizer_malloc_mac.inc:189`), and its TSan interceptors also fail. With
+  Homebrew clang 23 (plus `-isysroot`), `--sanitize=address` detects UAF,
+  double free, heap/stack/global overflow and flexible-array overflow, and
+  `--sanitize=thread` detects data races; the driver now probes actual
+  detection before accepting an explicit sanitizer request. See
+  `docs/CAPABILITIES.md` for the full matrix and `tests/core/sanitizer_suite.py`
+  for the diagnostic assertions. `cplus_check_live()` remains available as an
+  explicit check in unsanitized builds.
 - **Clang bounds safety:** unsupported by the available clang binary.
 - **Full data-race prevention:** only direct global writes in thread entry
   functions are diagnosed; atomics, aliases and helper-thread patterns are
   not fully analysed.
+
+Resolved since the earlier audit: STRICT mode now rejects `goto`/`longjmp`
+that bypass cleanup of a live allocation (`tests/core/p0_correctness_suite.py`);
+plain no-resource jumps still warn and non-local jumps still do not guarantee
+RAII. See `docs/SAFE_SUBSET.md` for the current policy.

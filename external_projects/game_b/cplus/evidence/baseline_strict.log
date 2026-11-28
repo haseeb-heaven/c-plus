@@ -1,0 +1,63 @@
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:72:23: error: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+  				uint32_t number = 1 << board[x][y];
+                        ^
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:152:16: error: [CPLUS-FFI] shift count cannot be proven within the left operand's width
+  					*score += 1 << array[t];
+                 ^
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:301:7: error: [CPLUS-ARITH] remainder by zero
+  		r = rand() % len;
+        ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:433:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+  	printf("         TERMINATED         \n");
+   ^~~~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:436:2: error: [CPLUS-FFI] 'printf' is not async-signal-safe
+  	printf("\033[?25h\033[m");
+   ^~~~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:451:14: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
+               ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:451:44: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
+                                             ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:463:19: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0)
+                    ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:463:49: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0)
+                                                  ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:468:19: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "blackwhite") == 0)
+                    ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:472:19: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "bluered") == 0)
+                    ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:476:19: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "whiteblack") == 0)
+                    ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:480:19: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  		else if (strcmp(argv[1], "test") == 0)
+                    ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:486:72: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  			printf("Invalid option: %s\n\nTry '%s --help' for more options.\n", argv[1], argv[0]);
+                                                                         ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:486:81: error: [CPLUS-FFI] pointer parameter 'argv' has unverifiable extent; subscript cannot be proven safe
+  			printf("Invalid option: %s\n\nTry '%s --help' for more options.\n", argv[1], argv[0]);
+                                                                                  ^~~~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:61:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:61:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:69:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:69:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:86:36: error: [CPLUS-LIFETIME] variable 'fg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                     ^~
+/private/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/opencode/game_b_ref/2048_baseline.cp:86:40: error: [CPLUS-LIFETIME] variable 'bg' is uninitialized (read before it is initialized)
+  			printf("\033[38;5;%u;48;5;%um", fg, bg); // set color
+                                         ^~

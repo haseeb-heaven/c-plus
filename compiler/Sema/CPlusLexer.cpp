@@ -63,11 +63,30 @@ std::vector<Token> lexCPlus(const std::string &src) {
       continue;
     }
 
-    // Comments.
+    // Comments. ISO C phase 2 splices a backslash immediately before a
+    // newline, so a `//` comment continues onto the next physical line. The
+    // rewriter must see that whole span as one comment, or it would lower C+
+    // constructs that Clang still treats as commented out (issue #204).
     if (c == '/' && i + 1 < n && src[i + 1] == '/') {
       size_t start = i;
-      while (i < n && src[i] != '\n')
+      while (i < n) {
+        if (src[i] == '\\' && i + 1 < n) {
+          if (src[i + 1] == '\n') {
+            advance(2);
+            continue;
+          }
+          if (src[i + 1] == '\r') {
+            if (i + 2 < n && src[i + 2] == '\n')
+              advance(3);
+            else
+              advance(2);
+            continue;
+          }
+        }
+        if (src[i] == '\n' || src[i] == '\r')
+          break;
         advance(1);
+      }
       t.kind = TokKind::Comment;
       t.text = src.substr(start, i - start);
       toks.push_back(std::move(t));
@@ -107,12 +126,28 @@ std::vector<Token> lexCPlus(const std::string &src) {
         quote = src[i];
         advance(1);
       }
+      // An unescaped newline terminates the literal even when the matching
+      // quote never appears. Without this, one apostrophe in `#if 0` prose
+      // swallows every token up to the next quote in the translation unit
+      // (issue #204), hiding real C+ constructs from the rewriter. An
+      // escaped newline is a phase-2 splice and stays inside the literal.
       while (i < n && src[i] != quote) {
-        if (src[i] == '\\' && i + 1 < n)
-          advance(1);
+        if (src[i] == '\n' || src[i] == '\r')
+          break;
+        if (src[i] == '\\' && i + 1 < n) {
+          if (src[i + 1] == '\n' || src[i + 1] == '\r') {
+            if (src[i + 1] == '\r' && i + 2 < n && src[i + 2] == '\n')
+              advance(3);
+            else
+              advance(2);
+          } else {
+            advance(2);
+          }
+          continue;
+        }
         advance(1);
       }
-      if (i < n)
+      if (i < n && src[i] == quote)
         advance(1); // closing quote
       t.kind = (quote == '"') ? TokKind::StringLit : TokKind::CharLit;
       t.text = src.substr(start, i - start);

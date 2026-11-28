@@ -1,0 +1,9 @@
+LOG match 0 2024-01-02T03:04:05Z INFO started
+LOG count INFO 1
+LOG match 0 2024-01-02T03:04:05Z INFO started
+LOG match 1 2024-01-02T03:04:06Z WARN slow
+LOG match 2 2024-01-02T03:04:07Z ERROR failed
+LOG match 3 2024-01-02T03:04:08Z DEBUG detail
+LOG count all 4
+LOG count TRACE 0
+LOG error bad-level

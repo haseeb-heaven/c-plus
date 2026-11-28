@@ -1,0 +1,1 @@
+'strtok' keeps static state; a second call invalidates earli

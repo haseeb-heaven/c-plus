@@ -1,0 +1,7 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/invalid_free_interior.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_memory_safety/cases/invalid_free_interior.supplementary.bin -- -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+returncode: 1
+timed_out: False
+
+<SRC>:3:52: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free
+  int main(void){ int *p=malloc(64); if(!p)return 2; free(p+2); return 0; }
+                                                     ^~~~

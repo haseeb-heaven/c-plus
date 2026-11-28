@@ -1,0 +1,7 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/integer_overflow__cplus.c
+returncode: 1
+timed_out: False
+
+<SRC>:2:13: error: [CPLUS-ARITH] signed integer overflow in addition
+      int x = 2147483647 + 1;
+              ^~~~~~~~~~

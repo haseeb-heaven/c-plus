@@ -1,0 +1,1 @@
+check: tests/stdlib/agent1_handoff/cross_function_lifetime/cfl_string_view_from_local.cp ok

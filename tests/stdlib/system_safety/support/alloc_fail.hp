@@ -1,0 +1,72 @@
+/* Deterministic allocation-failure scoping wrapper for C+ system tests.
+ *
+ * Thin RAII layer over the test aids in stdlib/error.hp:
+ *   stdlib_alloc_fail_at(n)    - n-th allocation from now fails once
+ *   stdlib_alloc_fail_after(n) - n allocations succeed, the rest fail
+ *   stdlib_alloc_fail_reset()  - disarm all injection
+ *
+ * Construct an `alloc_fail_scope`, call fail_at() or fail_after() once, and
+ * let the scope end.  The auto-generated drop() calls reset() so the injection
+ * can never leak into a later test step.
+ *
+ * IMPORTANT (C+ RAII lowering): give every instance a UNIQUE variable name.
+ * The lowering deduplicates owned locals by name inside one function; reusing
+ * a name in a sibling scope silently omits the drop() call.
+ */
+#ifndef CPLUS_SYS_SAFETY_ALLOC_FAIL_HP
+#define CPLUS_SYS_SAFETY_ALLOC_FAIL_HP
+
+#include "../../../../stdlib/error.hp"
+
+class alloc_fail_scope {
+    int armed;
+
+    alloc_fail_scope(void) {
+        this->armed = 0;
+    }
+
+    void fail_at(long n) {
+        stdlib_alloc_fail_at(n);
+        this->armed = 1;
+    }
+
+    void fail_after(long n) {
+        stdlib_alloc_fail_after(n);
+        this->armed = 1;
+    }
+
+    int is_armed(void) {
+        return this->armed;
+    }
+
+    /* Explicit early reset; idempotent. */
+    void disarm(void) {
+        if (this->armed) {
+            stdlib_alloc_fail_reset();
+            this->armed = 0;
+        }
+    }
+
+    void drop(void) {
+        if (this->armed) {
+            stdlib_alloc_fail_reset();
+            this->armed = 0;
+        }
+    }
+};
+
+/* Manual (non-RAII) entry points for forked children / bespoke scopes where
+ * a C+ class instance is inconvenient.  Pair ss_fail_reset() on every path. */
+static inline void ss_fail_at(long n) {
+    stdlib_alloc_fail_at(n);
+}
+
+static inline void ss_fail_after(long n) {
+    stdlib_alloc_fail_after(n);
+}
+
+static inline void ss_fail_reset(void) {
+    stdlib_alloc_fail_reset();
+}
+
+#endif /* CPLUS_SYS_SAFETY_ALLOC_FAIL_HP */

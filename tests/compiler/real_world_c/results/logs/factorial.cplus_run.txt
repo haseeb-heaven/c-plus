@@ -1,0 +1,8 @@
+case: factorial
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/real_world_c/results/bin/factorial.cplus
+rc: 0
+timed_out: False
+--- stdout ---
+Enter a whole number to Find its Factorial: 3628800
+--- stderr ---
+

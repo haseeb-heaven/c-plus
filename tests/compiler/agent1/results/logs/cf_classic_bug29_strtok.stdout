@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug29_strtok.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug29_strtok.c:6:15: error: [CPLUS-FFI] 'strtok' keeps static state; a second call invalidates earlier results

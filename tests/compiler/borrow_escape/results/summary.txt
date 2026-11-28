@@ -1,0 +1,131 @@
+Borrow-escape regression suite (issue #26)
+macOS-27.2.1-arm64-arm-64bit
+c+ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+neg_direct                 PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_direct.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_direct.cp:6:142: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_direct.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_direct.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_direct.cp:6:142: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_cast_single            PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_single.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_single.cp:6:164: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_single.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_cast_single.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_single.cp:6:164: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_cast_void              PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_void.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_void.cp:6:164: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_void.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_cast_void.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_void.cp:6:164: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_cast_nested            PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_nested.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_nested.cp:6:220: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_nested.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_cast_nested.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_nested.cp:6:220: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_cast_cv                PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_cv.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_cv.cp:6:256: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_cv.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_cast_cv.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_cast_cv.cp:6:256: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_parens                 PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_parens.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_parens.cp:6:150: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_parens.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_parens.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_parens.cp:6:150: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_typedef                PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_typedef.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_typedef.cp:7:156: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_typedef.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_typedef.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_typedef.cp:7:156: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_conditional            PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_conditional.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_conditional.cp:6:176: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_conditional.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_conditional.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_conditional.cp:6:176: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_nested_conditional     PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_nested_conditional.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_nested_conditional.cp:6:195: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_nested_conditional.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_nested_conditional.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_nested_conditional.cp:6:195: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_comma                  PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_comma.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_comma.cp:6:173: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_comma.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_comma.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_comma.cp:6:173: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_helper                 PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper.cp:7:162: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_helper.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper.cp:7:162: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_helper_cast            PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper_cast.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper_cast.cp:7:228: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper_cast.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_helper_cast.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_helper_cast.cp:7:228: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_branch                 PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_branch.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_branch.cp:6:211: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_branch.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_branch.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_branch.cp:6:211: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_alias_chain            PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_alias_chain.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_alias_chain.cp:6:180: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_alias_chain.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_alias_chain.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_alias_chain.cp:6:180: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+pos_owned_resource         PASS  build_rc=0 expected_stdout=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/pos_owned_resource.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_owned_resource.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_owned_resource.bin
+  rc=0 out='' err=''
+pos_heap_pointer           PASS  build_rc=0 expected_stdout=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/pos_heap_pointer.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_heap_pointer.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_heap_pointer.bin
+  rc=0 out='' err=''
+pos_parameter_cast         PASS  build_rc=0 expected_stdout=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/pos_parameter_cast.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_parameter_cast.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_parameter_cast.bin
+  rc=0 out='' err=''
+pos_global_pointer         PASS  build_rc=0 expected_stdout=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/pos_global_pointer.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_global_pointer.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_global_pointer.bin
+  rc=0 out='' err=''
+pos_field_of_heap          PASS  build_rc=0 expected_stdout=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/pos_field_of_heap.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_field_of_heap.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_field_of_heap.bin
+  rc=0 out='' err=''
+pos_borrow_used_locally    PASS  build_rc=0 expected_stdout='ok\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/pos_borrow_used_locally.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_borrow_used_locally.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/pos_borrow_used_locally.bin
+  rc=0 out='ok\n' err=''
+compat_legacy_cast         PASS  build_rc=0 expected_stdout=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --legacy-c --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/compat_legacy_cast.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/compat_legacy_cast.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/compat_legacy_cast.bin
+  rc=0 out='' err=''
+neg_release_o2             PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --release --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_release_o2.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_release_o2.cp:6:186: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --release --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_release_o2.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_release_o2.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_release_o2.cp:6:186: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_debug                  PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --debug --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_debug.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_debug.cp:6:186: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --debug --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_debug.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_debug.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_debug.cp:6:186: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_ubsan                  PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=undefined /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_ubsan.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_ubsan.cp:6:186: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=undefined /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_ubsan.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_ubsan.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_ubsan.cp:6:186: error: [CPLUS-BORROW] borrow 'b' of local 'f' cannot escape the function\n  int main(void){ (void)bad(); return 0; }\nhelp: return the owner instead, or copy the borrowed data\n"
+neg_address_of_local       PASS  check_rc=1 build_rc=1 diag=True
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_address_of_local.cp
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_address_of_local.cp:2:38: error: address of stack memory associated with local variable 'local' returned [-Werror,-Wreturn-stack-address]\n    2 | int *bad(void){ int local=1; return &local; }\n      |                                      ^~~~~\n1 error generated.\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_address_of_local.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/results/neg_address_of_local.bin
+  rc=1 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/borrow_escape/cases/neg_address_of_local.cp:2:38: error: address of stack memory associated with local variable 'local' returned [-Werror,-Wreturn-stack-address]\n    2 | int *bad(void){ int local=1; return &local; }\n      |                                      ^~~~~\n1 error generated.\n"
+
+cases=25 passed=25 failed=0

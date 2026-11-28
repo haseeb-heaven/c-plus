@@ -1,0 +1,7 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__cplus.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/memory_safety_compare/cases/invalid_shift__cplus.bin
+returncode: 1
+timed_out: False
+
+<SRC>:2:13: error: [CPLUS-FFI] shift count 32 is not less than the width 32 of the left operand
+      int x = 1 << 32;
+              ^

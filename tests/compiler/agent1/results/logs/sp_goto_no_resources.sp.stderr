@@ -1,0 +1,2 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/core/positive/goto_no_resources.c:2:26: warning: 'goto' bypasses C+ cleanup; destructors may not run
+help: use structured control flow or an explicit cleanup call

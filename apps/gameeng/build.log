@@ -1,0 +1,1 @@
+clang: warning: /tmp/resolve2/build/libc/libcplus_hardened.a: 'linker' input unused [-Wunused-command-line-argument]

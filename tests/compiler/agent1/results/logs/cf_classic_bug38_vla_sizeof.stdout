@@ -1,0 +1,1 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/out/agent1/cf_classic_bug38_vla_sizeof.stderr:/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compile_fail/classic_bug38_vla_sizeof.c:3:40: error: [CPLUS-BOUNDS] sizeof on a VLA evaluates the expression at run time

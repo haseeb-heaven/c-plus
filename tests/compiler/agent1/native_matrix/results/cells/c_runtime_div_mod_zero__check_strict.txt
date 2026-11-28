@@ -1,0 +1,25 @@
+CASE=c_runtime_div_mod_zero
+CONFIG=check_strict
+STATUS=PASS
+REASON=PASS: rejected with asserted diagnostic []; zero divisor/op must trap for both / and % (native 110 or UBSan 134), never return 0/dividend
+EXPECT_COMPILE=reject
+EXPECT_DIAG=
+EXPECT_REJECT_DIAG=zero
+EXPECT_GEN_SUBSTR=
+EXPECT_RUN=
+EXPECT_RUN_RC=
+EXPECT_RUN_DIAG=
+EXPECT_RUN2_RC=
+EXPECT_RUN2_DIAG=
+COMPILE_CMD=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none --emit-c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/c_runtime_div_mod_zero__check_strict.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/cases/c_runtime_div_mod_zero.c
+COMPILE_RC=1
+COMPILE_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__check_strict__compile.stdout
+COMPILE_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__check_strict__compile.stderr
+GENERATED_C=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/generated/c_runtime_div_mod_zero__check_strict.c.NOT_EMITTED
+NATIVE_GUARD_WRAPPER_COUNT=0
+RUN1_RC=NA
+RUN1_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__check_strict__run1.stdout
+RUN1_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__check_strict__run1.stderr
+RUN2_RC=NA
+RUN2_STDOUT=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__check_strict__run2.stdout
+RUN2_STDERR=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/agent1/native_matrix/results/logs/c_runtime_div_mod_zero__check_strict__run2.stderr

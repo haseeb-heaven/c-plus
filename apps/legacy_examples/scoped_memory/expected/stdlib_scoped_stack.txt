@@ -1,0 +1,18 @@
+SCOPED_STACK enter_offset 0
+SCOPED_STACK anchor_offset 0
+SCOPED_STACK anchor_value 4242
+SCOPED_STACK vector_size 40
+SCOPED_STACK vector_cap 64
+SCOPED_STACK log_size 672
+SCOPED_STACK log_cap 960
+SCOPED_STACK log_buffer_moved 1
+SCOPED_STACK log_offset_before 4
+SCOPED_STACK log_offset_after 1457
+SCOPED_STACK stable_anchor_offset 0
+SCOPED_STACK stable_anchor_value 4242
+SCOPED_STACK empty_scope_top_ok 1
+SCOPED_STACK nested_grew 1
+SCOPED_STACK nested_drop_restored 1
+SCOPED_STACK frame_top_before 2417
+SCOPED_STACK frame_top_after 0
+SCOPED_STACK SUMMARY 10 10 0

@@ -1,0 +1,4 @@
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/safety/p0new/p0new_trunc_loop_wide.c:12:42: error: [CPLUS-SAFE-BOUNDS] constant array index 4 is outside the bounds of 'slots'
+      for (unsigned i = 0; i < count; ++i) slots[i] = 0;
+                                           ^~~~~
+help: array contains 4 elements; valid indices are 0..3

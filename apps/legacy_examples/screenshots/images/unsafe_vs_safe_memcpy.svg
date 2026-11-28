@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1370" height="298" viewBox="0 0 1370 298">
+  <style>
+    .body { fill: #d0d7de; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+    .refused { fill: #7ee787; font-weight: 700; }
+    .ok { fill: #56d364; font-weight: 700; }
+    .ttl { fill: #f0f6fc; font-family: Consolas, Menlo, monospace; font-size: 15px; font-weight: 700; }
+    .sub { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .foot { fill: #8b949e; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+    .disclaimer { fill: #d29922; font-family: Consolas, Menlo, monospace; font-size: 11px; }
+  </style>
+  <rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+  <rect width="100%" height="84" rx="8" fill="#161b22"/>
+  <rect y="76" width="100%" height="8" fill="#161b22"/>
+  <circle cx="22" cy="21" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="21" r="6" fill="#ffbd2e"/>
+  <circle cx="62" cy="21" r="6" fill="#27c93f"/>
+  <text class="ttl" x="84" y="26">memcpy_s_demo  |  checked memcpy one-over refusal</text>
+  <text class="sub" x="84" y="48">./build/c+ build memcpy_s_demo.cp --strict --sanitize=none -I. -- build/safe/libcplus_safecrt.a build/libc/libcplus_hardened.a  |  timeout 30 ./memcpy_s_demo</text>
+  <text class="sub" x="84" y="68">toolchain: C+ 0.1.0 ; Apple clang version 16.0.0 (clang-1600.0.26.6) ; arm64-Darwin</text>
+  <rect y="84" width="100%" height="156" fill="#010409"/>
+  <text class="body" xml:space="preserve" x="20" y="112">memcpy_s ordinary_one_over <tspan class="ok">OK</tspan> canary=0x2a corrupted=1 (unguarded subprocess)</text>
+  <text class="body" xml:space="preserve" x="20" y="134">memcpy_s child_exit <tspan class="ok">OK</tspan> child_exit=9</text>
+  <text class="body" xml:space="preserve" x="20" y="156">IGNORE CONSTRAINT HANDLER: (406) memcpy_s: slen exceeds max</text>
+  <text class="body" xml:space="preserve" x="20" y="178">memcpy_s checked_one_over <tspan class="refused">REFUSED</tspan> rc=406 canary=0xa5 intact=1</text>
+  <text class="body" xml:space="preserve" x="20" y="200">memcpy_s checked_exact_fit <tspan class="ok">OK</tspan> rc=0 canary=0xa5 buf7=8</text>
+  <text class="body" xml:space="preserve" x="20" y="222">memcpy_s parent_canary <tspan class="ok">OK</tspan> canary=0xa5</text>
+  <rect y="240" width="100%" height="58" fill="#161b22"/>
+  <text class="body" x="20" y="262">Refuses a one-over cplus_memcpy_s (rc=406) with canary intact; exact fit still copies all 8 bytes.</text>
+  <text class="disclaimer" x="20" y="282">captured real output — evidence, not proof</text>
+  <desc>Verbatim captured output:
+    memcpy_s ordinary_one_over OK canary=0x2a corrupted=1 (unguarded subprocess)
+    memcpy_s child_exit OK child_exit=9
+    IGNORE CONSTRAINT HANDLER: (406) memcpy_s: slen exceeds max
+    memcpy_s checked_one_over REFUSED rc=406 canary=0xa5 intact=1
+    memcpy_s checked_exact_fit OK rc=0 canary=0xa5 buf7=8
+    memcpy_s parent_canary OK canary=0xa5
+  </desc>
+</svg>

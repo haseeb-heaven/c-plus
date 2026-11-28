@@ -1,0 +1,10 @@
+case: ap_inbounds_control
+mode: default
+step: build
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/cases/ap_inbounds_control.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/upstream_ports/results/bin/ap_inbounds_control.default
+rc: 0
+timed_out: False
+--- stdout ---
+
+--- stderr ---
+

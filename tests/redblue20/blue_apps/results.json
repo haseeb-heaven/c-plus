@@ -1,0 +1,450 @@
+{
+  "apps": 106,
+  "counts": {
+    "clean": 106000,
+    "corrupt": 0,
+    "nonzero": 0,
+    "signal": 0,
+    "timeout": 0
+  },
+  "detail_counts": {
+    "clean:exit0_exact_output": 106000
+  },
+  "elapsed_seconds": 308.84,
+  "failed": 0,
+  "findings": [],
+  "invocations": 106000,
+  "passed": 106000,
+  "per_app": {
+    "cross_platform/app_0": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_1": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_10": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_11": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_12": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_13": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_14": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_15": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_16": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_17": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_18": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_19": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_2": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_20": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_21": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_22": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_23": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_24": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_25": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_26": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_27": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_28": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_29": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_3": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_30": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_31": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_32": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_33": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_34": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_35": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_36": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_37": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_38": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_39": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_4": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_40": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_41": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_42": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_43": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_44": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_45": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_46": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_47": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_48": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_49": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_5": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_50": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_51": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_52": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_53": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_54": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_55": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_56": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_57": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_58": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_59": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_6": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_60": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_61": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_62": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_63": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_64": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_65": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_66": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_67": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_68": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_69": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_7": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_70": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_71": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_72": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_73": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_74": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_75": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_76": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_77": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_78": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_79": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_8": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_80": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_81": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_82": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_83": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_84": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_85": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_86": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_87": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_88": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_89": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_9": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_90": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_91": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_92": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_93": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_94": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_95": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_96": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_97": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_98": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "cross_platform/app_99": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "real_world/database_engine": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "real_world/desktop_app": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "real_world/game_engine": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "real_world/server_app": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "real_world/snake_game": {
+      "failed": 0,
+      "passed": 1000
+    },
+    "real_world/web_app": {
+      "failed": 0,
+      "passed": 1000
+    }
+  },
+  "refusal_verified_apps": 106,
+  "scenarios_per_app": 1000,
+  "seed": 11644448,
+  "summary": "BLUE20 apps 106000 106000 0",
+  "timeout_seconds": 10,
+  "workers": 8
+}

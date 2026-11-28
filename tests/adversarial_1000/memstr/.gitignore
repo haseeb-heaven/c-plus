@@ -1,0 +1,10 @@
+# Generated artifacts for the ADV1000 memstr evidence suite (never commit).
+results/
+*.o
+adv1000_memstr
+probe_discover
+probe2
+probe3
+*.out
+run_output.txt
+*.dSYM/

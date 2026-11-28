@@ -1,0 +1,6 @@
+audio-heap-stable 1
+audio-heap-decode 1 1
+audio-heap-device 1
+audio-heap-play 1
+audio-heap-dropped 1
+audio-heap-accounting 1

@@ -1,0 +1,11 @@
+command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/bitfield_layout.oracle_std_gnu17.bin
+returncode: 0
+timed_out: False
+
+--- stdout ---
+flags=4:8da53412
+sparse=4:01000700
+reg=8:8d00000001fb0000,5,17,257,-3
+
+--- stderr ---
+

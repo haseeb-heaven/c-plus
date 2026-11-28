@@ -1,34 +1,255 @@
-/* C+ standard library: RAII file handle over stdio FILE. */
+/* C+ standard library: RAII file handle over stdio FILE.
+ *
+ * C++-flavoured: `file f = file("path", "r");` opens, `f.read(...)` reads and
+ * the destructor closes.  Ownership is explicit: a file either owns its FILE*
+ * (drop/close closes it) or borrows one (drop leaves it alone), so wrapping
+ * stdout is safe and a zero-initialised file closes nothing.
+ */
 #ifndef CPLUS_STD_FILE_HP
 #define CPLUS_STD_FILE_HP
 
+#include <limits.h>
 #include <stdio.h>
 #include "cplus/cplus.h"
+#include "stdlib/error.hp"
 
-resource struct File {
-    FILE *handle;
+class file {
+    FILE *stream;
+    int owns;
+
+    file(const char *path, const char *mode) {
+        this->stream = (path != NULL && mode != NULL) ? fopen(path, mode) : NULL;
+        this->owns = this->stream != NULL ? 1 : 0;
+    }
+
+    int is_open(void) {
+        return this->stream != NULL;
+    }
+
+    FILE *native(void) {
+        return this->stream;
+    }
+
+    int read(char *buf, size_t size, error *err) {
+        size_t n;
+        error_reset(err);
+        if (buf == NULL || size == 0) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "file::read: null buffer or zero length");
+            return STDLIB_FAIL;
+        }
+        if (this->stream == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "file::read: null handle");
+            return STDLIB_FAIL;
+        }
+        n = fread(buf, 1, size, this->stream);
+        if (n == 0) {
+            if (ferror(this->stream)) {
+                error_fail(err, CPLUS_EXIT_IO, "file::read: stream error");
+                return STDLIB_FAIL;
+            }
+            return STDLIB_EOF;
+        }
+        return STDLIB_OK;
+    }
+
+    int read_line(char *buf, size_t size, error *err) {
+        size_t n = 0;
+        error_reset(err);
+        if (buf == NULL || size == 0) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED,
+                       "file::read_line: invalid buffer or length");
+            return STDLIB_FAIL;
+        }
+        if (size > (size_t)INT_MAX) {
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "file::read_line: buffer size exceeds INT_MAX");
+            return STDLIB_FAIL;
+        }
+        if (this->stream == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "file::read_line: null handle");
+            return STDLIB_FAIL;
+        }
+        /* fgets(buf, 1, ...) writes only the NUL and consumes no input.  Read
+         * a byte at a time instead so every successful call makes progress and
+         * an overlong line is reported instead of silently deferred. */
+        if (size == 1) {
+            int c = fgetc(this->stream);
+            if (c == EOF) {
+                if (feof(this->stream))
+                    return STDLIB_EOF;
+                error_fail(err, CPLUS_EXIT_IO, "file::read_line: stream error");
+                return STDLIB_FAIL;
+            }
+            {
+                char nul = '\0';
+                __builtin_memcpy(buf, &nul, sizeof(nul));
+            }
+            if (c == '\n')
+                return STDLIB_OK;
+            if (c == '\r') {
+                int next = fgetc(this->stream);
+                if (next != '\n' && next != EOF)
+                    ungetc(next, this->stream);
+                return STDLIB_OK;
+            }
+            while (c != EOF && c != '\n')
+                c = fgetc(this->stream);
+            error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                           "file::read_line: line longer than the buffer");
+            return STDLIB_FAIL;
+        }
+        if (fgets(buf, (int)size, this->stream) == NULL) {
+            if (feof(this->stream))
+                return STDLIB_EOF;
+            error_fail(err, CPLUS_EXIT_IO, "file::read_line: stream error");
+            return STDLIB_FAIL;
+        }
+        for (;;) {
+            char cur;
+            __builtin_memcpy(&cur, buf + n, sizeof(cur));
+            if (cur == '\0')
+                break;
+            n++;
+        }
+        /* fgets() stops at size-1 bytes without consuming the delimiter and
+         * without necessarily setting feof(), so a full buffer alone does not
+         * prove truncation.  Mirror io.hp::read_line: peek at the next byte.
+         * A line ending (with CRLF consumed) or EOF means the line fitted
+         * exactly; any other byte means it did not fit.  The remainder is
+         * always drained so the stream stays aligned. */
+        if (n > 0 && n == size - 1) {
+            char last;
+            __builtin_memcpy(&last, buf + n - 1, sizeof(last));
+            if (last != '\n' && !feof(this->stream)) {
+                int c = fgetc(this->stream);
+                if (c == '\r') {
+                    int next = fgetc(this->stream);
+                    if (next != '\n' && next != EOF)
+                        ungetc(next, this->stream);
+                } else if (c != '\n' && c != EOF) {
+                    while (c != EOF && c != '\n')
+                        c = fgetc(this->stream);
+                    error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
+                                   "file::read_line: line longer than the buffer");
+                    {
+                        char nul = '\0';
+                        __builtin_memcpy(buf, &nul, sizeof(nul));
+                    }
+                    return STDLIB_FAIL;
+                }
+            }
+        }
+        while (n > 0) {
+            char last;
+            __builtin_memcpy(&last, buf + n - 1, sizeof(last));
+            if (last != '\n' && last != '\r')
+                break;
+            --n;
+            {
+                char nul = '\0';
+                __builtin_memcpy(buf + n, &nul, sizeof(nul));
+            }
+        }
+        return STDLIB_OK;
+    }
+
+    int write(const char *text) {
+        if (this->stream == NULL || text == NULL)
+            return 0;
+        return fputs(text, this->stream) != EOF;
+    }
+
+    int write_bytes(const char *data, size_t size, error *err) {
+        error_reset(err);
+        if (size > 0 && data == NULL) {
+            error_fail(err, CPLUS_EXIT_UNSUPPORTED, "file::write_bytes: null buffer");
+            return STDLIB_FAIL;
+        }
+        if (this->stream == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "file::write_bytes: null handle");
+            return STDLIB_FAIL;
+        }
+        if (fwrite(data, 1, size, this->stream) != size) {
+            error_fail(err, CPLUS_EXIT_IO, "file::write_bytes: short write");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int seek(long offset, int whence, error *err) {
+        error_reset(err);
+        if (this->stream == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "file::seek: null handle");
+            return STDLIB_FAIL;
+        }
+        if (fseek(this->stream, offset, whence) != 0) {
+            error_fail(err, CPLUS_EXIT_IO, "file::seek: cannot seek");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    int flush(error *err) {
+        error_reset(err);
+        if (this->stream == NULL) {
+            error_fail(err, CPLUS_EXIT_IO, "file::flush: null handle");
+            return STDLIB_FAIL;
+        }
+        if (fflush(this->stream) != 0) {
+            error_fail(err, CPLUS_EXIT_IO, "file::flush: cannot flush");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    /* Explicit checked close; safe against double-close and borrowed handles. */
+    int close(error *err) {
+        int rc = 0;
+        error_reset(err);
+        if (this->stream == NULL) {
+            error_fail_cat(err, STDLIB_CATEGORY_LIFECYCLE, CPLUS_EXIT_IO,
+                           "file::close: handle already closed");
+            return STDLIB_FAIL;
+        }
+        if (this->owns)
+            rc = fclose(this->stream);
+        this->stream = NULL;
+        this->owns = 0;
+        if (rc != 0) {
+            error_fail(err, CPLUS_EXIT_IO, "file::close: fclose failed");
+            return STDLIB_FAIL;
+        }
+        return STDLIB_OK;
+    }
+
+    void drop(void) {
+        if (this->stream != NULL && this->owns)
+            fclose(this->stream);
+        this->stream = NULL;
+        this->owns = 0;
+    }
 };
 
-void File_drop(File *self) {
-    cplus_log(CPLUS_LOG_DEBUG, "File_drop handle=%p", (void *)self->handle);
-    if (self->handle != NULL) {
-        fclose(self->handle);
-        self->handle = NULL;
+/* Wrap an existing stream (stdin/stdout/stderr) without taking ownership. */
+static inline file file_borrow(FILE *handle) {
+    file borrowed;
+    borrowed.stream = handle;
+    borrowed.owns = 0;
+    return borrowed;
+}
+
+/* Secure anonymous temporary file (unlinked on close/drop by tmpfile). */
+static inline file file_temp(error *err) {
+    file temp = file(NULL, NULL);
+    error_reset(err);
+    temp.stream = tmpfile();
+    if (temp.stream == NULL) {
+        error_fail(err, CPLUS_EXIT_IO, "file_temp: tmpfile failed");
+        temp.owns = 0;
+    } else {
+        temp.owns = 1;
     }
-}
-
-File File_open(const char *path, const char *mode) {
-    cplus_log(CPLUS_LOG_DEBUG, "File_open %s %s", path, mode);
-    File f;
-    f.handle = fopen(path, mode);
-    return f;
-}
-
-int File_write(File *self, const char *text) {
-    cplus_log(CPLUS_LOG_TRACE, "File_write handle=%p", (void *)self->handle);
-    if (self->handle == NULL)
-        return 0;
-    return fputs(text, self->handle) != EOF;
+    return temp;
 }
 
 #endif

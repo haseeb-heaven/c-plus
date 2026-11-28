@@ -1,0 +1,13 @@
+BUILD mo_alloc_edges strict_none
+RUN   mo_alloc_edges strict_none
+PASS mo_alloc_edges strict_none rc=0
+BUILD mo_ownership_lifetime strict_none
+RUN   mo_ownership_lifetime strict_none
+PASS mo_ownership_lifetime strict_none rc=0
+BUILD mo_alloc_edges ubsan
+RUN   mo_alloc_edges ubsan
+PASS mo_alloc_edges ubsan rc=0
+BUILD mo_ownership_lifetime ubsan
+RUN   mo_ownership_lifetime ubsan
+PASS mo_ownership_lifetime ubsan rc=0
+MEMORY_OWNERSHIP SUITE PASS

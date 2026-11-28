@@ -1,0 +1,22 @@
+SCOPED_POOL init_capacity 4
+SCOPED_POOL slot_size 12
+SCOPED_POOL spawn index 0 gen 1
+SCOPED_POOL spawn index 1 gen 1
+SCOPED_POOL spawn index 2 gen 1
+SCOPED_POOL spawn index 3 gen 1
+SCOPED_POOL freed_index 0 free_count 1
+SCOPED_POOL reuse index 0 gen 3
+SCOPED_POOL reuse id 201 hp 77
+SCOPED_POOL reuse old_value_changed 1
+SCOPED_POOL stale_get_refused code 103
+SCOPED_POOL stale_get_refused ptr_null 1
+SCOPED_POOL stale_free_refused code 104
+SCOPED_POOL stale_free_refused free_count 0
+SCOPED_POOL stale_index_value id 201 hp 77
+SCOPED_POOL growth capacity 16 count 16
+SCOPED_POOL stable_ref id 102 hp 90 index 1
+SCOPED_POOL release_once free_count 1
+SCOPED_POOL second_release code 104 free_count 1
+SCOPED_POOL all_released free_count 16
+SCOPED_POOL raii_destroy items_null 1
+SCOPED_POOL SUMMARY 13 13 0

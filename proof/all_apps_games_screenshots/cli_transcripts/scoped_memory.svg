@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420"><rect width='100%' height='100%' fill='#0d1117'/><text x='16' y='30' fill='#58a6ff' font-size='18'>C+ proof: scoped_memory</text>
+<text x='16' y='56' fill='#c9d1d9' font-family='monospace' font-size='12'>=== BUILD scoped_stack ===</text>
+<text x='16' y='72' fill='#c9d1d9' font-family='monospace' font-size='12'>=== RUN scoped_stack ===</text>
+<text x='16' y='88' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK enter_offset 0</text>
+<text x='16' y='104' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK anchor_offset 0</text>
+<text x='16' y='120' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK anchor_value 4242</text>
+<text x='16' y='136' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK vector_size 40</text>
+<text x='16' y='152' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK vector_cap 64</text>
+<text x='16' y='168' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK log_size 672</text>
+<text x='16' y='184' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK log_cap 960</text>
+<text x='16' y='200' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK log_buffer_moved 1</text>
+<text x='16' y='216' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK log_offset_before 4</text>
+<text x='16' y='232' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK log_offset_after 1457</text>
+<text x='16' y='248' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK stable_anchor_offset 0</text>
+<text x='16' y='264' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK stable_anchor_value 4242</text>
+<text x='16' y='280' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK empty_scope_top_ok 1</text>
+<text x='16' y='296' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK nested_grew 1</text>
+<text x='16' y='312' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK nested_drop_restored 1</text>
+<text x='16' y='328' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK frame_top_before 2417</text>
+<text x='16' y='344' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK frame_top_after 0</text>
+<text x='16' y='360' fill='#c9d1d9' font-family='monospace' font-size='12'>SCOPED_STACK SUMMARY 10 10 0</text>
+<text x='16' y='376' fill='#c9d1d9' font-family='monospace' font-size='12'>=== BUILD stable_pool ===</text>
+<text x='16' y='392' fill='#c9d1d9' font-family='monospace' font-size='12'>=== RUN stable_pool ===</text>
+</svg>

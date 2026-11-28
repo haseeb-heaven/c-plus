@@ -1,0 +1,20 @@
+SCH capacity 3
+SCH arrive net prio= 0 burst= 2
+SCH arrive disk prio= 1 burst= 1
+SCH arrive ui prio= 0 burst= 1
+SCH expect net OK 2
+SCH expect disk OK 1
+SCH run disk prio= 1 remain= 0
+SCH done disk
+SCH run net prio= 0 remain= 1
+SCH run ui prio= 0 remain= 0
+SCH done ui
+SCH run net prio= 0 remain= 0
+SCH done net
+SCH queue high n= 0
+SCH queue norm n= 0
+SCH completed 3
+SCH did disk
+SCH did ui
+SCH did net
+SCH_SUMMARY 8 8 0 0

@@ -1,0 +1,8 @@
+SAFETOKEN token 0 len=5 text=alpha
+SAFETOKEN token 1 len=4 text=beta
+SAFETOKEN token 2 len=5 text=gamma
+SAFETOKEN token 3 len=5 text=delta
+SAFETOKEN valid OK n=4 remaining=43
+SAFETOKEN done
+SAFETOKEN long_token REFUSED code=101 cat=5 reason=token-too-long
+SAFETOKEN many_tokens REFUSED code=101 cat=5 reason=too-many-tokens

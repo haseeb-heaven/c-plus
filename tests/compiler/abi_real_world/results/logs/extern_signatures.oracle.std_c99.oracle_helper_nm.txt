@@ -1,0 +1,15 @@
+command: /usr/bin/nm -g --defined-only /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases/libextern_signatures_oracle_std_c99.a
+returncode: 0
+timed_out: False
+
+--- stdout ---
+
+extern_signatures.oracle_std_c99.helper.o:
+0000000000000000 T _ext_add
+0000000000000064 T _ext_double
+0000000000000028 T _ext_long
+00000000000000a4 T _ext_pair
+000000000000008c T _ext_ptr
+
+--- stderr ---
+
