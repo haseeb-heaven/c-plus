@@ -9,6 +9,7 @@ set -u
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$ROOT" || exit 2
 GOOSE_PATH=$PATH
+command -v goose >/dev/null 2>&1 || GOOSE_PATH="$GOOSE_PATH:$HOME/.local/bin"
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin
 unset SDKROOT
 unset CPLUS_CLANG
