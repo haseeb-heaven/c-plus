@@ -215,7 +215,11 @@ static int stdlib_dyn_arena_open(stdlib_dyn_arena *a, size_t initial, error *err
  * handed out here stays valid until it is released (or its scope drops), and a
  * rewind refuses to alias it. */
 static void *stdlib_dyn_arena_take(stdlib_dyn_arena *a, size_t bytes, error *err) {
-    return stdlib_arena_take_checked(a, bytes, 16u, (unsigned long long *)0, err);
+    unsigned long long token = 0;
+    /* The checked take writes through token_out, so hand it a real slot.
+     * Release recovers the token from the pointer, so discarding this local
+     * does not change the tracked-lifetime semantics of the facade. */
+    return stdlib_arena_take_checked(a, bytes, 16u, &token, err);
 }
 
 static int stdlib_dyn_arena_release(stdlib_dyn_arena *a, void *ptr, error *err) {
