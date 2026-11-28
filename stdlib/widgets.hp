@@ -103,7 +103,7 @@ static inline long stdlib_widgets_label_len(const char *label) {
     if (label == (const char *)0)
         return -1;
     for (n = 0; n < (long)STDLIB_WIDGET_LABEL_MAX; n++) {
-        unsigned char c = (unsigned char)label[n];
+        unsigned char c = (unsigned char)*(label + n);
         if (c == '\0')
             return n;
         if (c == '\n' || c == '\r' || c < 0x20u || c == 0x7fu)
@@ -386,8 +386,15 @@ static inline int stdlib_window_layout(stdlib_window *win, error *err) {
     if (stdlib_widgets_usable(win, err) != STDLIB_OK)
         return STDLIB_FAIL;
     cols = win->columns;
-    if (cols <= 0 || !stdlib_widgets_rect_valid(win->x, win->y,
-                                                win->w, win->h))
+    /* Prove the divisor non-zero before any grid arithmetic: a bare
+     * `cols <= 0` refusal does not give the analyser that fact. */
+    if (cols == 0)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: invalid layout geometry/columns"),
+               STDLIB_FAIL;
+    if (cols < 0 || !stdlib_widgets_rect_valid(win->x, win->y,
+                                               win->w, win->h))
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED,
                               "widgets: invalid layout geometry/columns"),
