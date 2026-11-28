@@ -1,0 +1,76 @@
+name: release-alpha-assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing alpha tag to attach compiler binaries to
+        required: true
+        default: v0.2.0-alpha
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: macos-arm64, runner: macos-15, os: macos }
+          - { target: macos-x86_64, runner: macos-15-intel, os: macos }
+          - { target: linux-x86_64, runner: ubuntu-24.04, os: linux }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, os: linux }
+          - { target: windows-x86_64, runner: windows-2022, os: windows }
+          - { target: windows-arm64, runner: windows-11-arm, os: windows }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools (macOS)
+        if: matrix.os == 'macos'
+        run: brew install llvm cmake ninja
+      - name: Install tools (Linux)
+        if: matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y clang llvm-dev libclang-dev cmake ninja-build
+      - name: Install tools (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: choco install llvm cmake ninja -y
+      - name: Build
+        shell: bash
+        run: |
+          set -eu
+          cmake -S . -B build -G Ninja
+          cmake --build build --parallel
+      - name: Package binary
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p stage/bin
+          if [ -f build/c+.exe ]; then cp build/c+.exe stage/bin/; else cp build/c+ stage/bin/; fi
+          cp LICENSE stage/
+          if [ "${{ matrix.os }}" = windows ]; then
+            (cd stage && 7z a "../cplus-${{ inputs.tag }}-${{ matrix.target }}.zip" .)
+          else
+            tar -czf "cplus-${{ inputs.tag }}-${{ matrix.target }}.tar.gz" -C stage .
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cplus-${{ matrix.target }}
+          path: cplus-${{ inputs.tag }}-${{ matrix.target }}.*
+
+  attach:
+    name: attach
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Upload to existing pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "$TAG" release-assets/* --clobber
