@@ -114,6 +114,10 @@ static size_t http_sink_write(char *ptr, size_t size, size_t nmemb,
     size_t bytes;
     if (sink == NULL || sink->buf == NULL || sink->size == 0)
         return 0;
+    /* Prove the divisor non-zero on the fall-through path before the
+     * overflow division below; `sink->size` is not the local `size`. */
+    if (size == 0)
+        return 0;
     if (size != 0 && nmemb > SIZE_MAX / size) {
         sink->overflow = 1;
         return 0;
@@ -301,7 +305,7 @@ class http_client {
         sink.size = size;
         sink.used = 0;
         sink.overflow = 0;
-        buf[0] = '\0';
+        *buf = '\0';
 
         /* CURLOPT_POSTFIELDS does NOT copy: libcurl keeps the caller's pointer
          * past perform().  Own a copy so a stack/heap body can disappear as
