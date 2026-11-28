@@ -172,6 +172,68 @@ haseeb-mir@Haseebs-MacBook-Pro scratch %
 > [!WARNING]
 > **Experimental software — not a blanket memory-safety guarantee.** General use-after-free detection, complete pointer-arithmetic checking, full borrow checking, and complete ISO C coverage are not implemented. Raw C pointers and legacy C operations can still be unsafe. AddressSanitizer is not enabled in the documented macOS environment because its runtime fails during initialization. See [limitations](docs/LIMITATIONS.md).
 
+## Why C+ is not just strict C
+
+Strict C catches syntax and type errors. C+ adds **compile-time proof**,
+**runtime guards**, and a **no-heap datastack model inspired by GooseLang**:
+scoped arenas with one-store release, so most code never calls malloc.
+
+| # | Example | Caught by | Result |
+|---|---|---|---|
+| 1 | `arr[20]` on `int arr[4]` | compile-time | `[CPLUS-BOUNDS]` error, no binary |
+| 2 | `str[0xFFFFF]` on a string literal | compile-time | bounds error (proven extent) |
+| 3 | `p = malloc(8); free(p); *p` | compile+runtime | `[CPLUS-FREE]` refusal, trap 104 |
+| 4 | datastack frame overflow | runtime | chained block, never overflows |
+| 5 | view after arena `reset()` | runtime | stale token -> lifetime refusal |
+
+**1. Compile-time bounds**
+
+```c
+int a[4];
+a[20] = 1;   // error: [CPLUS-BOUNDS] index 20 outside bounds of a
+```
+
+**2. String-literal extent**
+
+```c
+const char *s = "Heaven";
+printf("%c", s[0xFFFFF]); // error: index outside string literal extent
+```
+
+**3. Use after free**
+
+```c
+int *p = cplus_new(int);
+cplus_free(p);
+*p = 3;  // [CPLUS-FREE] pointer already released (exit 104)
+```
+
+**4. Datastack arena (no heap, GooseLang-style)**
+
+```c
+#include "stdlib/scoped_mem.hp"
+stdlib_datastack ds;
+stdlib_datastack_init(&ds, 4096, &err);
+stdlib_scratch_scope s = stdlib_scratch_scope(&ds);
+void *p = stdlib_datastack_alloc(&ds, 64, 16, &err); // bump, no malloc
+s.drop();  // one-store rewind + 0xDD poison in debug
+```
+
+**5. Stale view after reset**
+
+```c
+stdlib_arena_reset(&a, &err);
+if (v.is_live()) ... // false: token retired at reset
+```
+
+## 📚 Examples index
+
+- [CLI + web + SQL apps](apps/README.md) and [games/GUI](proof/games_apps/README.md)
+- [raylib 2D + real GPU 3D](examples/raylib_demos/README.md)
+- [Nuklear GUI](examples/nuklear_gui/README.md) and [microui calculator + notes](examples/microui/README.md)
+- [olive.c 2D software renderer](examples/modern_c_ports/olive_demo/README.md)
+- [All proof evidence](proof/README.md) - real SDL3 framebuffer PNGs, not CLI transcripts
+
 ## 🚀 Quick start
 
 **Requirements:** CMake, a C++20 compiler, and LLVM/Clang development packages.
