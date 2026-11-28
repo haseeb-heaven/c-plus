@@ -232,6 +232,18 @@ if matches "issue228"; then
   fi
 fi
 
+# --- issue #246: clog readiness published after mutex setup ----------------
+if matches "issue246"; then
+  if /bin/sh "$ROOT/tests/runtime/clog_init_order.sh" \
+      >"$OUT/issue246.suite.log" 2>&1; then
+    pass "issue246_clog_init_publish_order"
+  else
+    cat "$OUT/issue246.suite.log" >&2
+    fail "issue246_clog_init_publish_order" \
+      "see tests/out/issue246.suite.log"
+  fi
+fi
+
 # --- vendored third-party header FFI diagnostics --------------------------
 
 if matches "vendored_header_ffi"; then

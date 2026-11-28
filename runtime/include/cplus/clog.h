@@ -84,7 +84,10 @@ extern "C" {
 /* Thread safety - platform-specific implementations */
 #if CLOG_WINDOWS
 typedef CRITICAL_SECTION clog_mutex_t;
+/* Overridable so tests can observe the initialization-order invariant. */
+#ifndef CLOG_MUTEX_INIT
 #define CLOG_MUTEX_INIT(mutex) InitializeCriticalSection(mutex)
+#endif
 #define CLOG_MUTEX_LOCK(mutex) EnterCriticalSection(mutex)
 #define CLOG_MUTEX_UNLOCK(mutex) LeaveCriticalSection(mutex)
 #define CLOG_MUTEX_DESTROY(mutex) DeleteCriticalSection(mutex)
@@ -93,7 +96,9 @@ typedef CRITICAL_SECTION clog_mutex_t;
     !defined(__STDC_NO_ATOMICS__)
 #include <stdatomic.h>
 typedef atomic_flag clog_mutex_t;
+#ifndef CLOG_MUTEX_INIT
 #define CLOG_MUTEX_INIT(mutex) atomic_flag_clear(mutex)
+#endif
 #define CLOG_MUTEX_LOCK(mutex)                                                 \
   while (atomic_flag_test_and_set(mutex)) {                                    \
   }
@@ -163,6 +168,9 @@ typedef enum {
 /* Global state */
 static clog_mutex_t clog_mutex;
 static atomic_bool clog_is_initialized = false;
+/* Claim is separate from readiness: publishing readiness at claim time lets
+   another thread lock a half-initialized mutex (issue #246). */
+static atomic_bool clog_init_claimed = false;
 static clog_level_t clog_min_level = CLOG_TRACE;
 static clog_color_mode_t clog_color_mode = CLOG_COLOR_AUTO;
 static FILE *clog_output = NULL; /* NULL means stdout */
@@ -260,13 +268,16 @@ static void clog_init(void) {
     return;
   }
   bool expected = false;
-  if (atomic_compare_exchange_strong(&clog_is_initialized, &expected, true)) {
+  if (atomic_compare_exchange_strong(&clog_init_claimed, &expected, true)) {
     CLOG_MUTEX_INIT(&clog_mutex);
 #if CLOG_WINDOWS
     clog_init_console();
 #endif
     atexit(clog_cleanup);
+    /* Publish readiness only after the mutex and console are usable. */
+    atomic_store(&clog_is_initialized, true);
   } else {
+    /* Another thread owns setup; wait for the published flag, not the claim. */
     while (!atomic_load(&clog_is_initialized)) {
       // Busy wait
     }
@@ -286,6 +297,7 @@ static void clog_cleanup(void) {
 
   CLOG_MUTEX_DESTROY(&clog_mutex);
   atomic_store(&clog_is_initialized, false);
+  atomic_store(&clog_init_claimed, false);
 }
 
 static void clog_set_level(clog_level_t level) { clog_min_level = level; }
