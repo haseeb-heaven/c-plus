@@ -4770,7 +4770,15 @@ public:
       }
     // A pointer forged from an arbitrary integer has no provenance that the
     // checker can verify. Reject in STRICT, warn in DEFAULT.
-    warnAt(cast->getBeginLoc(),
+    // System headers (Apple SDK OSByteOrder.h, pulled in by libuv, etc.)
+    // legitimately forge pointers from integer offsets. C+ does not own their
+    // bodies, so a cast located there is not user code and must not produce a
+    // C+ diagnostic. Keep the filter local to this check: warnAt() still
+    // reports the same cast when the user writes it in their own source.
+    SourceLocation loc = cast->getBeginLoc();
+    if (loc.isValid() && ctx_.getSourceManager().isInSystemHeader(loc))
+      return true;
+    warnAt(loc,
            "pointer created from integer value has unverifiable provenance");
     return true;
   }
