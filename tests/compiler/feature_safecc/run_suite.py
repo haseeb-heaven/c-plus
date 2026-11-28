@@ -20,6 +20,12 @@ CASES_DIR = os.path.join(HERE, "cases")
 
 NULL_DIAG = "[CPLUS-SAFECC] definite null dereference of 'p'"
 LEAK_DIAG = "[CPLUS-SAFECC] definite memory leak: allocation held by 'p'"
+CFG_LEAK_DIAG = ("[CPLUS-CFG] conditional memory leak: allocation held by 'p'")
+CFG_ESCAPE_DIAG = (
+    "[CPLUS-CFG] address of stack memory associated with local variable 'x' "
+    "escapes through pointer 'p'")
+CFG_LOCK_DIAG = ("[CPLUS-CFG] conditional lock leak: mutex 'm' is held on "
+                 "some exit path")
 
 # (case file, should_reject, required diagnostic fragment)
 CASES = [
@@ -41,6 +47,11 @@ CASES = [
     ("pos_leak_conditional_free.c", False, ""),
     ("pos_leak_return_transfer.c", False, ""),
     ("pos_leak_goto_cleanup.c", False, ""),
+    # Issue #180 — clang::CFG forward/backward dataflow in AstSafetyCheck.cpp.
+    ("pos_double_free_exclusive_goto.c", False, ""),
+    ("neg_leak_conditional.c", True, CFG_LEAK_DIAG),
+    ("neg_escape_inner_block.c", True, CFG_ESCAPE_DIAG),
+    ("neg_lock_conditional_leak.c", True, CFG_LOCK_DIAG),
 ]
 
 

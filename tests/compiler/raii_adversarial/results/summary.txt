@@ -1,0 +1,83 @@
+RAII adversarial cleanup-order suite
+macOS-27.2.1-arm64-arm-64bit
+c+ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+
+sanitizer address  UNTESTED_ON_HOST
+  probe cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=address /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/_probe_address.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/_probe_address.bin
+  rc=1 out='' err="error: sanitizer 'address' is not supported by the selected backend (/usr/bin/clang); detected by a compile-and-run probe\n"
+sanitizer leak     UNTESTED_ON_HOST
+  probe cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=leak /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/_probe_leak.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/_probe_leak.bin
+  rc=1 out='' err="error: sanitizer 'leak' is not supported by the selected backend (/usr/bin/clang); detected by a compile-and-run probe\n"
+
+nested_if_return           plain    PASS  build_rc=0 expected_stdout='A\nD3\nD2\nD1\nrc=7 live=0\n' stdout='A\nD3\nD2\nD1\nrc=7 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/nested_if_return.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/nested_if_return_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/nested_if_return_plain.bin
+  rc=0 out='A\nD3\nD2\nD1\nrc=7 live=0\n' err=''
+nested_else_return         plain    PASS  build_rc=0 expected_stdout='F\nD4\nD3\nD1\nrc=9 live=0\n' stdout='F\nD4\nD3\nD1\nrc=9 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/nested_else_return.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/nested_else_return_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/nested_else_return_plain.bin
+  rc=0 out='F\nD4\nD3\nD1\nrc=9 live=0\n' err=''
+nested_if_false            plain    PASS  build_rc=0 expected_stdout='F\nD4\nAFTER\nD3\nEND\nD1\nrc=0 live=0\n' stdout='F\nD4\nAFTER\nD3\nEND\nD1\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/nested_if_false.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/nested_if_false_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/nested_if_false_plain.bin
+  rc=0 out='F\nD4\nAFTER\nD3\nEND\nD1\nrc=0 live=0\n' err=''
+for_break                  plain    PASS  build_rc=0 expected_stdout='I1\nD11\nX1\nD10\nB2\nD21\nD20\nEND\nrc=0 live=0\n' stdout='I1\nD11\nX1\nD10\nB2\nD21\nD20\nEND\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/for_break.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/for_break_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/for_break_plain.bin
+  rc=0 out='I1\nD11\nX1\nD10\nB2\nD21\nD20\nEND\nrc=0 live=0\n' err=''
+for_continue               plain    PASS  build_rc=0 expected_stdout='I1\nD11\nX1\nD10\nC2\nD21\nD20\nI3\nD31\nX3\nD30\nEND\nrc=0 live=0\n' stdout='I1\nD11\nX1\nD10\nC2\nD21\nD20\nI3\nD31\nX3\nD30\nEND\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/for_continue.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/for_continue_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/for_continue_plain.bin
+  rc=0 out='I1\nD11\nX1\nD10\nC2\nD21\nD20\nI3\nD31\nX3\nD30\nEND\nrc=0 live=0\n' err=''
+return_inside_for          plain    PASS  build_rc=0 expected_stdout='D11\nX1\nD10\nRET\nD21\nD20\nD1\nrc=5 live=0\n' stdout='D11\nX1\nD10\nRET\nD21\nD20\nD1\nrc=5 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/return_inside_for.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/return_inside_for_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/return_inside_for_plain.bin
+  rc=0 out='D11\nX1\nD10\nRET\nD21\nD20\nD1\nrc=5 live=0\n' err=''
+while_break                plain    PASS  build_rc=0 expected_stdout='I1\nD11\nX1\nD10\nB\nD21\nD20\nEND\nrc=0 live=0\n' stdout='I1\nD11\nX1\nD10\nB\nD21\nD20\nEND\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/while_break.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/while_break_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/while_break_plain.bin
+  rc=0 out='I1\nD11\nX1\nD10\nB\nD21\nD20\nEND\nrc=0 live=0\n' err=''
+while_continue             plain    PASS  build_rc=0 expected_stdout='I1\nD11\nX1\nD10\nC\nD21\nD20\nI3\nD31\nX3\nD30\nEND\nrc=0 live=0\n' stdout='I1\nD11\nX1\nD10\nC\nD21\nD20\nI3\nD31\nX3\nD30\nEND\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/while_continue.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/while_continue_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/while_continue_plain.bin
+  rc=0 out='I1\nD11\nX1\nD10\nC\nD21\nD20\nI3\nD31\nX3\nD30\nEND\nrc=0 live=0\n' err=''
+switch_break               plain    PASS  build_rc=0 expected_stdout='TWO\nD4\nD3\nEND\nD1\nrc=0 live=0\n' stdout='TWO\nD4\nD3\nEND\nD1\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/switch_break.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/switch_break_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/switch_break_plain.bin
+  rc=0 out='TWO\nD4\nD3\nEND\nD1\nrc=0 live=0\n' err=''
+switch_in_loop_break       plain    PASS  build_rc=0 expected_stdout='TWO1\nD16\nD15\nI1\nD10\nTWO2\nD26\nD25\nI2\nD20\nEND\nD1\nrc=0 live=0\n' stdout='TWO1\nD16\nD15\nI1\nD10\nTWO2\nD26\nD25\nI2\nD20\nEND\nD1\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/switch_in_loop_break.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/switch_in_loop_break_plain.bin
+  rc=0 out='' err=''
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/switch_in_loop_break_plain.bin
+  rc=0 out='TWO1\nD16\nD15\nI1\nD10\nTWO2\nD26\nD25\nI2\nD20\nEND\nD1\nrc=0 live=0\n' err=''
+goto_cleanup               plain    PASS  build_rc=0 expected_stdout='G\nD3\nD2\nOUT\nD1\nrc=0 live=0\n' stdout='G\nD3\nD2\nOUT\nD1\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none --no-werror /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_cleanup.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_cleanup_plain.bin
+  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_cleanup.cp:15:38: warning: 'goto' bypasses C+ cleanup; destructors may not run\n  }\nhelp: use structured control flow or an explicit cleanup call\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_cleanup_plain.bin
+  rc=0 out='G\nD3\nD2\nOUT\nD1\nrc=0 live=0\n' err=''
+goto_same_block            plain    PASS  build_rc=0 expected_stdout='A\nB\nD1\nrc=0 live=0\n' stdout='A\nB\nD1\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none --no-werror /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_same_block.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_same_block_plain.bin
+  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_same_block.cp:15:3: warning: 'goto' bypasses C+ cleanup; destructors may not run\nhelp: use structured control flow or an explicit cleanup call\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_same_block_plain.bin
+  rc=0 out='A\nB\nD1\nrc=0 live=0\n' err=''
+goto_from_loop             plain    PASS  build_rc=0 expected_stdout='X1\nD10\nG2\nD20\nOUT\nD1\nrc=0 live=0\n' stdout='X1\nD10\nG2\nD20\nOUT\nD1\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none --no-werror /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_from_loop.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_from_loop_plain.bin
+  rc=0 out='' err="/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_from_loop.cp:16:39: warning: 'goto' bypasses C+ cleanup; destructors may not run\n  }\nhelp: use structured control flow or an explicit cleanup call\n"
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_from_loop_plain.bin
+  rc=0 out='X1\nD10\nG2\nD20\nOUT\nD1\nrc=0 live=0\n' err=''
+goto_cleanup_chain         plain    PASS  build_rc=0 expected_stdout='D2\nINNER\nD3\nOUT\nD1\nrc=0 live=0\n' stdout='D2\nINNER\nD3\nOUT\nD1\nrc=0 live=0\n'
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --default --sanitize=none --no-werror /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_cleanup_chain.cp -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_cleanup_chain_plain.bin
+  rc=0 out='' err='/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_cleanup_chain.cp:16:5: warning: \'goto\' bypasses C+ cleanup; destructors may not run\n      printf("INNER\\n");\n      ^~~~~~\nhelp: use structured control flow or an explicit cleanup call\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/cases/goto_cleanup_chain.cp:21:5: warning: '
+  cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/raii_adversarial/results/bin/goto_cleanup_chain_plain.bin
+  rc=0 out='D2\nINNER\nD3\nOUT\nD1\nrc=0 live=0\n' err=''
+
+entries=14 passed=14 failed=0; cases=14; variants=plain

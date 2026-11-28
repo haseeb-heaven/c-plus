@@ -67,7 +67,8 @@ struct RewrittenSource {
 /// arrays. Constant indices are left to the static bounds checker.
 std::string instrumentDynamicArrayBounds(
     const std::string &source,
-    const std::map<std::string, size_t> &arrayLengths);
+    const std::map<std::string, size_t> &arrayLengths,
+    bool sideTable = true);
 
 /// One signed add/sub/mul expression whose operands are not compile-time
 /// constants and therefore needs a native checked-arithmetic call.  Offsets

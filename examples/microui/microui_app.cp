@@ -1,6 +1,6 @@
 /* Modern C+ app driving real microui through a plain-C ABI wrapper. */
 #include "cplus/cplus.h"
-#include "microui_api.h"
+#include "stdlib/gfx_microui.hp"
 #include <stdlib.h>
 
 class MicroUIApp {

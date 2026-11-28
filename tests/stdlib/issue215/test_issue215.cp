@@ -1,4 +1,4 @@
-/* Issue 215 regression: initial protocol restriction + header-list lifetime.
+/* Issue 215 regression: initial-URL protocol restriction + header lifetime.
  *
  *  - CURLOPT_PROTOCOLS_STR must reject file:// (and other non-HTTP schemes)
  *    on the initial request, not just on redirects.

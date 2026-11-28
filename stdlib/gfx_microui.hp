@@ -1,0 +1,51 @@
+/* C+ standard library: immediate-mode 2D GUI via microui (MIT).
+ *
+ * This is the C+ language binding for the vendored microui library in
+ * `stdlib/microui/` with its SDL3 renderer backend. Only the plain-C ABI
+ * header is included here; SDL3 and microui headers stay in the backend
+ * translation unit, so the C+ analyser never parses third-party UI headers.
+ *
+ * Build once: stdlib/microui/microui.c and microui_sdl3_backend.c, then
+ * link with SDL3. See examples/microui for a complete working demo.
+ */
+#ifndef CPLUS_STD_GFX_MICROUI_HP
+#define CPLUS_STD_GFX_MICROUI_HP
+
+#include "cplus/cplus.h"
+#include "microui_sdl3_backend.h"
+
+/* C+ RAII facade over the microui SDL3 backend. */
+class microui_gui {
+    void *backend;
+    int frames;
+
+    microui_gui(void) {
+        this->backend = (void *)0;
+        this->frames = 0;
+    }
+
+    int open(void) {
+        this->backend = mi_init();
+        return this->backend != (void *)0;
+    }
+
+    int poll(int *quit) { return mi_poll(this->backend, quit); }
+
+    void frame(int proof) {
+        mi_frame(this->backend, proof);
+        this->frames++;
+    }
+
+    int frame_count(void) { return this->frames; }
+    int event_count(void) { return mi_events(this->backend); }
+    const char *calculator(void) { return mi_calc_display(); }
+
+    void capture(const char *path) { mi_shot(this->backend, path); }
+
+    void drop(void) {
+        mi_drop(this->backend);
+        this->backend = (void *)0;
+    }
+};
+
+#endif /* CPLUS_STD_GFX_MICROUI_HP */

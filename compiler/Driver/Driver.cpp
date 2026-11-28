@@ -1,7 +1,6 @@
 //===- Driver.cpp - C+ compile pipeline -------------------------*- C++ -*-===//
 
 #include "Driver/Driver.h"
-#include "Driver/TempSupport.h"
 
 #include "Analysis/OwnershipAnalysis.h"
 #include "Sema/CPlusRewriter.h"
@@ -35,26 +34,106 @@
 #include <set>
 #include <sstream>
 #include <system_error>
-#include <sys/stat.h>
 #include <unistd.h>
-
-// Needed to pass an explicitly constructed environment to ExecuteAndWait.
-// The sanitizer probe overrides ASAN_OPTIONS/UBSAN_OPTIONS without a shell.
-// Must be at global scope: the POSIX symbol has external linkage.
-extern char **environ;
 
 namespace cplus {
 
+// Issue #181 — implemented in Sema/AstSafetyCheck.cpp.  Declared here rather
+// than in a header because the opt-in flag is the only new public surface.
+bool instrumentDisjointBounds(const std::string &loweredC,
+                              const std::vector<std::string> &backendArgs,
+                              std::string &out, std::string &error);
+
 namespace {
+
+// `-fcplus-disjoint-bounds` is consumed by the driver: it is never forwarded
+// to the C backend (Clang does not know it) and is stripped before every
+// pass-through/STRICT parity check.  Later tokens win, so -fno-... disables.
+static bool takeDisjointBoundsFlag(std::vector<std::string> &args,
+                                   bool &enabled) {
+  bool seen = false;
+  enabled = false;
+  for (auto it = args.begin(); it != args.end();) {
+    if (*it == "-fcplus-disjoint-bounds") {
+      enabled = true;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    if (*it == "-fno-cplus-disjoint-bounds") {
+      enabled = false;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    ++it;
+  }
+  return seen;
+}
+
+// Issue #184 — `-fcplus-safe-gc` is consumed by the driver exactly like
+// `-fcplus-disjoint-bounds`: Clang never sees it, and it is removed before the
+// STRICT pass-through allow-list.  It turns on the additive epoch/conservative
+// reclamation mode from a constructor in each lowered TU.  The runtime call is
+// an opt-in override; the default (CPLUS_RECLAIM_MODE unset) stays unchanged.
+static bool takeSafeGcFlag(std::vector<std::string> &args, bool &enabled) {
+  bool seen = false;
+  enabled = false;
+  for (auto it = args.begin(); it != args.end();) {
+    if (*it == "-fcplus-safe-gc") {
+      enabled = true;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    if (*it == "-fno-cplus-safe-gc") {
+      enabled = false;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    ++it;
+  }
+  return seen;
+}
+
+static const char *const kSafeGcPreamble =
+    "\n/* issue #184: opt-in epoch/conservative reclamation */\n"
+    "extern void cplus_set_reclaim_mode(int);\n"
+    "#if defined(__GNUC__) || defined(__clang__)\n"
+    "__attribute__((constructor)) static void cplus_driver_safe_gc_init(void) "
+    "{\n"
+    "  cplus_set_reclaim_mode(1);\n"
+    "}\n"
+    "#endif\n";
+
+// Prototypes for the generated instrumentation calls, prepended only when the
+// opt-in flag is used.  The lowered C already gets the runtime include dir
+// from backendArgs(); these declarations keep the injected AST independent of
+// whether source code included cplus/cplus.h itself.
+static const char *const kDisjointBoundsPreamble =
+    "\n/* issue #181: opt-in disjoint-bounds instrumentation */\n"
+    "#include <stddef.h>\n"
+    "#include <stdint.h>\n"
+    "extern uint64_t cplus_shadow_frame_enter(void);\n"
+    "extern void cplus_shadow_frame_leave(uint64_t *);\n"
+    "extern void cplus_shadow_slot_seed(void *, const void *);\n"
+    "extern void cplus_shadow_slot_define(void *, const void *, size_t, "
+    "uint64_t *, uint64_t);\n"
+    "extern void cplus_shadow_slot_copy(void *, const void *);\n"
+    "extern void cplus_shadow_slot_clear(void *);\n"
+    "extern int cplus_shadow_slot_check(const void *, const void *, size_t, "
+    "const char *, int);\n"
+    "extern int cplus_shadow_frame_register(void *, uint64_t *, const void *, "
+    "size_t);\n";
 
 static bool g_logEnabled = false;
 static int g_logLevel = 3; // CLOG_WARN
 
-/// Set for the lifetime of a STRICT Safe run. Every security-critical path
-/// lookup (runtime library, clang backend, shipped include dir and .hp header
-/// resolution) then ignores CPLUS_ROOT/CPLUS_INCLUDE/CPLUS_CLANG: an untrusted
-/// environment could otherwise substitute a pass-through runtime, a no-op
-/// header or a stub backend while `check` still saw a well-formed safety AST.
+/// Set for the lifetime of a STRICT Safe run. Security-critical path lookups
+/// (runtime library, shipped include dir) must then ignore CPLUS_ROOT: an
+/// untrusted source root could otherwise substitute a pass-through runtime or
+/// a no-op header while `check` still saw a well-formed safety AST.
 static bool g_strictSafePaths = false;
 
 static int logLevelFromString(const std::string &name) {
@@ -135,7 +214,32 @@ int runProgram(const std::string &program,
   return rc;
 }
 
-using driver_detail::TempFile;
+struct TempFile {
+  std::string path;
+  bool keep = false;
+  TempFile() = default;
+  TempFile(const TempFile &) = delete;
+  TempFile &operator=(const TempFile &) = delete;
+  TempFile(TempFile &&other) noexcept : path(std::move(other.path)), keep(other.keep) {
+    other.path.clear();
+  }
+  TempFile &operator=(TempFile &&other) noexcept {
+    if (this != &other) {
+      // Overwriting a live temp file must not strand it on disk: the old path
+      // will no longer appear in any destructor once `path` is replaced.
+      if (!keep && !path.empty())
+        llvm::sys::fs::remove(path);
+      path = std::move(other.path);
+      keep = other.keep;
+      other.path.clear();
+    }
+    return *this;
+  }
+  ~TempFile() {
+    if (!keep && !path.empty())
+      llvm::sys::fs::remove(path);
+  }
+};
 
 /// A lowered compilation unit plus the temp file that holds it.
 struct LoweredUnit {
@@ -144,29 +248,77 @@ struct LoweredUnit {
   bool ok = false;
 };
 
-using driver_detail::writeFile;
-
-/// Write through the descriptor returned by createTemporaryFile /
-/// createUniqueFile.  Reopening a temp file by name after creating it is a
-/// symlink/TOCTOU race on shared systems; keeping the descriptor closed the
-/// gap.  Issue #74.
-bool writeFd(int fd, const std::string &text, std::string *err) {
-  if (fd < 0) {
-    *err = "invalid temporary file descriptor";
+bool writeFile(const std::string &path, const std::string &text,
+               std::string *err) {
+  std::error_code ec;
+  llvm::raw_fd_ostream os(path, ec, llvm::sys::fs::OF_Text);
+  if (ec) {
+    *err = ec.message();
     return false;
   }
-  // createUniqueFile/createTemporaryFile already use exclusive creation;
-  // keep the contents private too (mkstemp-style 0600, not umask-dependent
-  // 0644) on every path that goes through this helper.  Issue #108.
-  if (::fchmod(fd, S_IRUSR | S_IWUSR) != 0) {
-    *err = "cannot restrict temporary file permissions";
-    return false;
-  }
-  llvm::raw_fd_ostream os(fd, true, llvm::sys::fs::OF_Text);
   os << text;
-  os.close();
+  os.flush();
   if (os.has_error()) {
-    *err = "failed to write temporary file";
+    // A failed write (ENOSPC/EIO/...) would otherwise hand a truncated C
+    // translation unit to clang while the driver reported success.
+    std::error_code writeEc = os.error();
+    os.clear_error();
+    *err = writeEc.message();
+    return false;
+  }
+  os.close();
+  return true;
+}
+
+/// Atomically create a unique file with O_CREAT | O_EXCL and mode 0600,
+/// writing `text` directly to the opened descriptor so shared temp directories
+/// cannot be hijacked via predictable PID filenames or symlink races.
+bool writeUniqueTempFile(llvm::StringRef dir, llvm::StringRef prefix,
+                         llvm::StringRef suffix, const std::string &text,
+                         std::string &outPath, std::string *err) {
+  int fd = -1;
+  llvm::SmallString<256> resultPath;
+  std::error_code ec;
+  if (!dir.empty()) {
+    llvm::SmallString<256> model(dir);
+    std::string tail = (prefix + "-%%%%%%").str();
+    if (!suffix.empty())
+      tail += "." + suffix.str();
+    llvm::sys::path::append(model, tail);
+    ec = llvm::sys::fs::createUniqueFile(model, fd, resultPath,
+                                         llvm::sys::fs::OF_Text, 0600);
+  } else {
+    // createTemporaryFile() uses the umask-derived default mode (often 0644).
+    // Build the same unique-name model inside the system temp directory so the
+    // descriptor is created with an explicit private 0600 mode instead.
+    llvm::SmallString<256> tmpDir;
+    llvm::sys::path::system_temp_directory(/*ErasedOnRecycle=*/false, tmpDir);
+    {
+      llvm::SmallString<256> model(tmpDir);
+      std::string tail = (prefix + "-%%%%%%").str();
+      if (!suffix.empty())
+        tail += "." + suffix.str();
+      llvm::sys::path::append(model, tail);
+      ec = llvm::sys::fs::createUniqueFile(model, fd, resultPath,
+                                           llvm::sys::fs::OF_Text, 0600);
+    }
+  }
+  if (ec) {
+    if (err)
+      *err = ec.message();
+    return false;
+  }
+  outPath = resultPath.str().str();
+  llvm::raw_fd_ostream os(fd, /*shouldClose=*/true);
+  os << text;
+  os.flush();
+  if (os.has_error()) {
+    std::error_code writeEc = os.error();
+    os.clear_error();
+    llvm::sys::fs::remove(outPath);
+    outPath.clear();
+    if (err)
+      *err = writeEc.message();
     return false;
   }
   return true;
@@ -236,10 +388,8 @@ std::string runtimeLibArg(bool trustEnvOverride) {
 
 } // namespace
 
-std::string findSourceRoot(bool trustEnvRoot) {
-  // CPLUS_ROOT is an untrusted environment override. In STRICT Safe mode it
-  // must not be able to supply headers, .hp sources or runtime artifacts.
-  std::string env = trustEnvRoot ? envOr("CPLUS_ROOT") : std::string();
+std::string findSourceRoot() {
+  std::string env = envOr("CPLUS_ROOT");
   if (!env.empty() && llvm::sys::fs::exists(joinPath(env, "CMakeLists.txt")))
     return env;
 #ifdef CPLUS_SOURCE_DIR
@@ -259,9 +409,8 @@ std::string findSourceRoot(bool trustEnvRoot) {
 }
 
 std::string findClangBinary() {
-  // STRICT is a soundness contract: an env-supplied backend could be a stub
-  // that skips the flags or headers C+ analysis assumes. Only the compiled-in
-  // and system/bundled compilers are trusted there (issue #202).
+  // STRICT Safe mode is a soundness contract: an env-supplied backend cannot
+  // be verified, so it must not replace the system/bundled compiler.
   std::string env = g_strictSafePaths ? std::string() : envOr("CPLUS_CLANG");
   if (!env.empty() && fileExists(env))
     return env;
@@ -269,8 +418,8 @@ std::string findClangBinary() {
   // Apple's system clang resolves the installed SDK (MacOSX.sdk) correctly.
   // Homebrew's clang loads arm64-apple-darwin27.cfg, which selects a
   // MacOSX27.sdk that is not installed on this host. Prefer the system
-  // compiler instead of relying on PATH order. In DEFAULT/LEGACY an explicit
-  // CPLUS_CLANG above still wins.
+  // compiler instead of relying on PATH order. CPLUS_CLANG above still wins
+  // outside STRICT Safe mode.
   if (fileExists("/usr/bin/clang"))
     return "/usr/bin/clang";
 #endif
@@ -293,14 +442,13 @@ std::string findClangBinary() {
 }
 
 std::string findCPlusIncludeDir() {
-  // STRICT must not take headers from the environment: a spoofed
-  // cplus/cplus.h can disable the safety ABI while analysis still succeeds.
-  std::string env =
-      g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
+  // As with CPLUS_ROOT below, a CPLUS_INCLUDE override can inject spoofed
+  // safety headers while `check` still sees a well-formed AST. STRICT only
+  // trusts the compiled-in / installed include directory.
+  std::string env = g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
   if (!env.empty() && llvm::sys::fs::exists(joinPath(env, "cplus/cplus.h")))
     return env;
-  // In STRICT, neither CPLUS_ROOT nor CPLUS_INCLUDE may redirect the shipped
-  // runtime headers.
+  // In STRICT, CPLUS_ROOT must not redirect the shipped runtime headers.
   std::string found = findByLayout("runtime/include", !g_strictSafePaths);
   if (!found.empty() && llvm::sys::fs::exists(joinPath(found, "cplus/cplus.h")))
     return found;
@@ -460,9 +608,8 @@ std::string lowerUnit(const std::string &text, const std::string &name,
                 strict);
   // Exception lowering runs after RAII so cleanup inserted into a `try`
   // block is preserved. It is Safe-mode only: LEGACY keeps original bytes.
-  lowered.text = mode == Mode::Safe
-                     ? lowerExceptions(lowered.text, &diags, name)
-                     : lowered.text;
+  lowered.text = mode == Mode::Safe ? lowerExceptions(lowered.text)
+                                    : lowered.text;
   if (outRewritten)
     *outRewritten = rewritten;
   *ok = !diags.hasErrors();
@@ -479,11 +626,10 @@ std::string resolveInclude(const std::string &name,
   if (!parent.empty())
     dirs.push_back(parent.str());
   dirs.push_back(".");
-  // STRICT resolves .hp headers only from the input's directory and the
-  // shipped include tree; env-supplied CPLUS_INCLUDE/CPLUS_ROOT paths would
-  // otherwise inject unanalysed C+ code into the build (issue #202).
-  std::string envInc =
-      g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
+  // `.hp` resolution must follow the same trust rule as the shipped runtime
+  // headers: in STRICT an untrusted CPLUS_INCLUDE / CPLUS_ROOT must not be
+  // able to substitute the modern C+ standard headers.
+  std::string envInc = g_strictSafePaths ? std::string() : envOr("CPLUS_INCLUDE");
   if (!envInc.empty())
     dirs.push_back(envInc);
   std::string autoInc = findCPlusIncludeDir();
@@ -503,257 +649,218 @@ std::string resolveInclude(const std::string &name,
   return std::string();
 }
 
-/// Return `line` with every byte belonging to a C comment replaced by a
-/// space.  String/char literals are deliberately left intact: their quotes
-/// are still visible so the header name of a real `#include "x.hp"` can be
-/// read from the original line.  Block-comment state crosses line boundaries
-/// via `inBlockComment`.  Issue #203.
-static std::string maskComments(const std::string &line,
-                                bool &inBlockComment) {
-  std::string masked = line;
-  char quote = '\0';
-  size_t i = 0;
-  while (i < line.size()) {
-    if (inBlockComment) {
-      masked[i] = ' ';
-      if (line[i] == '*' && i + 1 < line.size() && line[i + 1] == '/') {
-        masked[++i] = ' ';
-        inBlockComment = false;
+/// True when `line` contains a real `#include` directive rather than a
+/// mention inside a comment or string literal. The scanner mirrors C lexical
+/// rules just far enough for this rewrite: whitespace may separate `#` and
+/// `include`, a `//` or `/*...*/` comment (or a string/char literal) before the
+/// directive disqualifies the line, and the directive must be the first token
+/// after leading whitespace. Only `include` directives are recognized here;
+/// other preprocessor directives are detected by the caller's `directiveName`.
+static bool isDirective(const std::string &line, size_t &hashOut) {
+  enum class State { Code, BlockComment, String, Char };
+  State state = State::Code;
+  bool escaped = false;
+  bool onlyWhitespace = true;
+  for (size_t i = 0; i < line.size(); ++i) {
+    char c = line[i];
+    switch (state) {
+    case State::BlockComment:
+      if (c == '*' && i + 1 < line.size() && line[i + 1] == '/') {
+        state = State::Code;
+        ++i;
       }
-      ++i;
       continue;
-    }
-    if (quote) {
-      if (line[i] == '\\' && i + 1 < line.size()) {
-        i += 2;
-        continue;
+    case State::String:
+    case State::Char:
+      if (escaped) {
+        escaped = false;
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (state == State::String && c == '"') {
+        state = State::Code;
+      } else if (state == State::Char && c == '\'') {
+        state = State::Code;
       }
-      if (line[i] == quote)
-        quote = '\0';
-      ++i;
       continue;
-    }
-    if (line[i] == '/' && i + 1 < line.size() && line[i + 1] == '/') {
-      while (i < line.size())
-        masked[i++] = ' ';
+    case State::Code:
       break;
     }
-    if (line[i] == '/' && i + 1 < line.size() && line[i + 1] == '*') {
-      masked[i] = masked[i + 1] = ' ';
-      i += 2;
-      inBlockComment = true;
+    if (c == '/' && i + 1 < line.size()) {
+      if (line[i + 1] == '/')
+        return false; // remainder is a line comment
+      if (line[i + 1] == '*') {
+        state = State::BlockComment;
+        ++i;
+        continue;
+      }
+    }
+    if (c == '"' || c == '\'') {
+      if (!onlyWhitespace)
+        return false; // literal in the middle of a statement, not a directive
+      state = c == '"' ? State::String : State::Char;
+      onlyWhitespace = false;
       continue;
     }
-    if (line[i] == '"' || line[i] == '\'') {
-      quote = line[i];
-      ++i;
-      continue;
+    if (c == '#') {
+      if (!onlyWhitespace)
+        return false; // `#` not at the start of a directive
+      size_t j = i + 1;
+      while (j < line.size() && std::isspace(static_cast<unsigned char>(line[j])))
+        ++j;
+      hashOut = i;
+      return true;
     }
+    if (!std::isspace(static_cast<unsigned char>(c)))
+      onlyWhitespace = false;
+  }
+  return false;
+}
+
+/// Track `#if`/`#ifdef`/`#ifndef`...`#endif` nesting so includes in disabled
+/// branches (notably `#if 0`) are never rewritten. #else/#elif flip the active
+/// state of the current branch; an unbalanced `#endif` ends the innermost
+/// condition. Directives inside block comments and strings are ignored.
+struct PreprocessorBranch {
+  bool parentActive;
+  bool branchActive;
+};
+
+static std::string directiveName(const std::string &line, size_t hash) {
+  size_t i = hash + 1;
+  while (i < line.size() && std::isspace(static_cast<unsigned char>(line[i])))
     ++i;
-  }
-  return masked;
+  size_t start = i;
+  while (i < line.size() &&
+         (std::isalnum(static_cast<unsigned char>(line[i])) || line[i] == '_'))
+    ++i;
+  return line.substr(start, i - start);
 }
-
-/// Integer literal after a #if/#elif: only 0 (false) and a nonzero decimal
-/// literal are known; everything else stays unknown so includes in that
-/// branch keep being rewritten instead of being silently dropped.
-static std::optional<bool> literalBool(const std::string &s, size_t pos) {
-  while (pos < s.size() && (s[pos] == ' ' || s[pos] == '\t'))
-    ++pos;
-  size_t start = pos;
-  bool nonzero = false;
-  while (pos < s.size() && std::isdigit(static_cast<unsigned char>(s[pos]))) {
-    if (s[pos] != '0')
-      nonzero = true;
-    ++pos;
-  }
-  if (pos == start) return std::nullopt;
-  if (pos < s.size() &&
-      (std::isalnum(static_cast<unsigned char>(s[pos])) || s[pos] == '_' ||
-       s[pos] == '.'))
-    return std::nullopt;
-  return nonzero;
-}
-
-struct If0Frame {
-  bool parentSkip;
-  bool condKnown;
-  bool condValue;
-  bool inElse;
-};
-
-/// State carried across recursive .hp expansion. A header is registered in
-/// `processed` before its body is expanded, so a guarded cycle (`a.hp` ->
-/// `b.hp` -> `a.hp`) reuses the reserved lowered path instead of recursing
-/// forever. `pendingFds` holds the still-open descriptor of each header
-/// awaiting its lowered bytes. Issue #203.
-struct HeaderPreprocessState {
-  std::map<std::string, int> pendingFds;
-};
 
 /// Replace `#include "x.hp"` with an absolute path to a lowered `.h` copy.
 /// This lets modern C+ headers use the same syntax as `.cp` sources while
-/// ordinary `.h` headers keep working unchanged. Only real preprocessing
-/// directives outside comments/strings and outside definitely-disabled
-/// `#if 0` branches are rewritten.
+/// ordinary `.h` headers keep working unchanged.
 std::string preprocessModernHeaders(
     const std::string &source, const std::string &currentPath,
     DiagnosticEngine &diags, Mode mode, std::vector<TempFile> &guards,
     std::map<std::string, std::string> &processed,
-    HeaderPreprocessState &state) {
+    std::set<std::string> &visiting, unsigned &counter) {
   std::string result;
   std::istringstream in(source);
   std::string line;
   bool first = true;
-  bool inBlockComment = false;
-  std::vector<If0Frame> conditions;
-  auto currentSkip = [&]() {
-    if (conditions.empty())
-      return false;
-    const If0Frame &f = conditions.back();
-    return f.parentSkip ||
-           (f.condKnown && (f.inElse ? f.condValue : !f.condValue));
-  };
-  auto wordAt = [](const std::string &s, size_t pos, const char *word) {
-    size_t len = std::strlen(word);
-    if (s.compare(pos, len, word) != 0)
-      return false;
-    char next = pos + len < s.size() ? s[pos + len] : '\0';
-    return !std::isalnum(static_cast<unsigned char>(next)) && next != '_';
-  };
-  bool skipIncludes = false;
-
+  std::vector<PreprocessorBranch> branches;
+  bool active = true;
   while (std::getline(in, line)) {
     if (!first)
       result += "\n";
     first = false;
 
-    const std::string masked = maskComments(line, inBlockComment);
-    size_t hash = masked.find_first_not_of(" \t\r");
-    const bool isDirective = hash != std::string::npos && masked[hash] == '#';
-    size_t p = isDirective ? hash + 1 : std::string::npos;
-    if (isDirective) {
-      while (p < masked.size() && (masked[p] == ' ' || masked[p] == '\t'))
-        ++p;
-      if (wordAt(masked, p, "if")) {
-        auto v = literalBool(masked, p + 2);
-        conditions.push_back(
-            {skipIncludes, v.has_value(), v.value_or(true), false});
-        skipIncludes = currentSkip();
-      } else if (wordAt(masked, p, "ifdef") ||
-                 wordAt(masked, p, "ifndef")) {
-        // Unknown condition: keep rewriting includes conservatively.
-        conditions.push_back({skipIncludes, false, true, false});
-        skipIncludes = currentSkip();
-      } else if (wordAt(masked, p, "elif")) {
-        if (!conditions.empty()) {
-          auto v = literalBool(masked, p + 4);
-          conditions.back().condKnown = v.has_value();
-          conditions.back().condValue = v.value_or(true);
-          conditions.back().inElse = false;
-          skipIncludes = currentSkip();
+    size_t hash = std::string::npos;
+    bool directive = isDirective(line, hash);
+    std::string name = directive ? directiveName(line, hash) : std::string();
+    if (name == "if" || name == "ifdef" || name == "ifndef") {
+      // Evaluate only the trivially decidable `#if 0`/`#if 1` forms; a real
+      // expression is conservatively treated as active so a header the
+      // backend would see is still rewritten.
+      bool taken = true;
+      if (name == "if") {
+        size_t expr = hash + name.size() + 1;
+        while (expr < line.size() &&
+               std::isspace(static_cast<unsigned char>(line[expr])))
+          ++expr;
+        if (line.compare(expr, 1, "0") == 0 &&
+            (expr + 1 == line.size() ||
+             !std::isalnum(static_cast<unsigned char>(line[expr + 1]))))
+          taken = false;
+      }
+      branches.push_back({active, taken});
+      active = active && taken;
+    } else if (name == "else" || name == "elif") {
+      if (!branches.empty()) {
+        PreprocessorBranch &b = branches.back();
+        bool taken = true;
+        if (name == "elif") {
+          size_t expr = hash + name.size() + 1;
+          while (expr < line.size() &&
+                 std::isspace(static_cast<unsigned char>(line[expr])))
+            ++expr;
+          if (line.compare(expr, 1, "0") == 0 &&
+              (expr + 1 == line.size() ||
+               !std::isalnum(static_cast<unsigned char>(line[expr + 1]))))
+            taken = false;
         }
-      } else if (wordAt(masked, p, "else")) {
-        if (!conditions.empty()) {
-          conditions.back().inElse = true;
-          skipIncludes = currentSkip();
-        }
-      } else if (wordAt(masked, p, "endif")) {
-        if (!conditions.empty())
-          conditions.pop_back();
-        skipIncludes = currentSkip();
+        b.branchActive = taken;
+        active = b.parentActive && b.branchActive;
+      }
+    } else if (name == "endif") {
+      if (!branches.empty()) {
+        active = branches.back().parentActive;
+        branches.pop_back();
       }
     }
 
-    if (!skipIncludes && isDirective && wordAt(masked, p, "include")) {
-      size_t after = p + 7; // strlen("include")
-      if (after == masked.size() || masked[after] == '"' ||
-          masked[after] == '<' || masked[after] == ' ' ||
-          masked[after] == '\t') {
-        size_t q1 = line.find('"', after);
-        size_t q2 = q1 == std::string::npos ? std::string::npos
-                                            : line.find('"', q1 + 1);
-        // Verify both quotes came from source text, not from a comment.
-        if (q1 != std::string::npos && q2 != std::string::npos &&
-            masked[q1] == '"' && masked[q2] == '"') {
-          std::string inc = line.substr(q1 + 1, q2 - q1 - 1);
-          if (llvm::StringRef(inc).ends_with(".hp")) {
-            std::string path = resolveInclude(inc, currentPath);
-            if (path.empty()) {
-              Diag d;
-              d.level = DiagLevel::Error;
-              d.message = "cannot find C+ header '" + inc + "'";
-              d.file = currentPath;
-              diags.report(std::move(d));
-            } else {
-              std::string tempPath;
-              auto known = processed.find(path);
-              if (known != processed.end())
-                tempPath = known->second;
-              if (tempPath.empty()) {
-                std::string err;
-                // createTemporaryFile uses O_CREAT|O_EXCL with a random
-                // suffix: unlike a pid/counter name it cannot be predicted
-                // and raced through a symlink in a shared /tmp.  Write via
-                // the returned descriptor, never by reopening the name.
-                int headerFd = -1;
-                size_t guardIndex = guards.size();
-                bool guardAdded = false;
-                llvm::SmallString<256> tmp;
-                if (llvm::sys::fs::createTemporaryFile("cplus-hp", ".h",
-                                                        headerFd, tmp)) {
-                  err = "cannot create a unique temporary header";
-                } else {
-                  tempPath = tmp.str().str();
-                  // Reserve the path *before* recursion: this is the cycle
-                  // guard. A nested include of this header reuses tempPath,
-                  // and the C include guard in the lowered header terminates
-                  // the include at compile time. Unguarded cycles still fail
-                  // loudly in the backend ("include nesting too deep").
-                  processed[path] = tempPath;
-                  state.pendingFds[path] = headerFd;
-                  guards.emplace_back();
-                  guards[guardIndex].path = tempPath;
-                  guards[guardIndex].keep = false;
-                  guardAdded = true;
-
-                  std::string header = readFile(path, &err);
-                  if (err.empty()) {
-                    header = preprocessModernHeaders(header, path, diags, mode,
-                                                     guards, processed, state);
-                    bool ok = false;
-                    RewrittenSource headerInfo;
-                    std::string lowered =
-                        lowerUnit(header, path, diags, mode, &ok, &headerInfo,
-                                  true);
-                    for (const auto &cls : headerInfo.classTypes)
-                      registerExternalClass(
-                          cls,
-                          lowered.find(cls + "_ctor(") != std::string::npos);
-                    for (const auto &res : headerInfo.resourceTypes)
-                      registerExternalResource(res);
-                    if (!writeFd(headerFd, lowered, &err))
-                      llvm::sys::fs::remove(tempPath);
-                  }
-                  state.pendingFds.erase(path);
-                }
-                if (!err.empty()) {
+    if (active && directive && name == "include") {
+      size_t q1 = line.find('"', hash + name.size());
+      size_t q2 = q1 == std::string::npos ? std::string::npos
+                                          : line.find('"', q1 + 1);
+      if (q1 != std::string::npos && q2 != std::string::npos) {
+        std::string inc = line.substr(q1 + 1, q2 - q1 - 1);
+        if (llvm::StringRef(inc).ends_with(".hp")) {
+          std::string path = resolveInclude(inc, currentPath);
+          if (path.empty()) {
+            Diag d;
+            d.level = DiagLevel::Error;
+            d.message = "cannot find C+ header '" + inc + "'";
+            d.file = currentPath;
+            diags.report(std::move(d));
+          } else if (visiting.count(path)) {
+            // Guarded cyclic includes are legal C: lowering the same header a
+            // second time would recurse forever. Leave the directive untouched
+            // and let the backend's include guard resolve the cycle.
+          } else {
+            auto known = processed.find(path);
+            std::string tempPath =
+                known == processed.end() ? std::string() : known->second;
+            if (tempPath.empty()) {
+              std::string err;
+              std::string header = readFile(path, &err);
+              if (!err.empty()) {
+                Diag d;
+                d.level = DiagLevel::Error;
+                d.message = "cannot read '" + path + "': " + err;
+                diags.report(std::move(d));
+              } else {
+                visiting.insert(path);
+                header = preprocessModernHeaders(header, path, diags, mode,
+                                                 guards, processed, visiting,
+                                                 counter);
+                visiting.erase(path);
+                bool ok = false;
+                RewrittenSource headerInfo;
+                std::string lowered = lowerUnit(header, path, diags, mode, &ok,
+                                                &headerInfo, true);
+                for (const auto &cls : headerInfo.classTypes)
+                  registerExternalClass(
+                      cls, lowered.find(cls + "_ctor(") != std::string::npos);
+                for (const auto &res : headerInfo.resourceTypes)
+                  registerExternalResource(res);
+                if (!writeUniqueTempFile("", "cplus-hp", "h", lowered, tempPath,
+                                         &err)) {
                   Diag d;
                   d.level = DiagLevel::Error;
-                  d.message = "cannot read/write lowered header '" + path +
-                              "': " + err;
-                  d.file = currentPath;
+                  d.message = "cannot write lowered header: " + err;
                   diags.report(std::move(d));
-                  processed.erase(path);
-                  llvm::sys::fs::remove(tempPath);
-                  if (guardAdded)
-                    guards[guardIndex].path.clear();
                   tempPath.clear();
+                } else {
+                  guards.emplace_back();
+                  guards.back().path = tempPath;
+                  guards.back().keep = false;
+                  processed[path] = tempPath;
                 }
               }
-              if (!tempPath.empty())
-                line.replace(q1, q2 - q1 + 1, "\"" + tempPath + "\"");
             }
+            if (!tempPath.empty())
+              line.replace(q1, q2 - q1 + 1, "\"" + tempPath + "\"");
           }
         }
       }
@@ -886,6 +993,24 @@ static llvm::StringRef normalizeFlag(llvm::StringRef a) {
   return a;
 }
 
+/// Short options (-I, -D, -L, -l) are single-dash spellings. normalizeFlag()
+/// folds `--foo` into `-foo` so *long* options keep their double-dash spelling,
+/// but a short-option prefix test must always inspect the RAW token: issue
+/// #235's `--ld-path=...` and `--language=c++` otherwise pose as `-l...` and
+/// pass every STRICT gate.
+static bool isSingleDashOption(llvm::StringRef raw, char letter) {
+  return raw.size() >= 2 && raw[0] == '-' && raw[1] == letter;
+}
+
+/// Clang spells the language selector two ways: `-x <lang>` / `-xc++` and
+/// `--language=<lang>` / `--language <lang>`. Both change what the backend
+/// parses. `a` must already be passed through normalizeFlag().
+static bool isLanguageOption(llvm::StringRef a) {
+  return a == "-x" || a == "-language" || a.starts_with("-language=") ||
+         (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
+          std::isalpha(static_cast<unsigned char>(a[2])));
+}
+
 static std::vector<llvm::StringRef> splitFlagList(llvm::StringRef list);
 static bool sanitizerNameIs(llvm::StringRef token, llvm::StringRef canonical);
 
@@ -908,6 +1033,23 @@ static bool extraArgsDisableSignedOverflow(const std::vector<std::string> &extra
   return false;
 }
 
+static std::vector<std::string>
+stripLanguageFlags(const std::vector<std::string> &extra) {
+  std::vector<std::string> out;
+  out.reserve(extra.size());
+  for (size_t i = 0; i < extra.size(); ++i) {
+    llvm::StringRef a = normalizeFlag(extra[i]);
+    if (isLanguageOption(a)) {
+      // `-x` / `--language` take a separate value in their two-token form.
+      if ((a == "-x" || a == "-language") && i + 1 < extra.size())
+        ++i;
+      continue;
+    }
+    out.push_back(extra[i]);
+  }
+  return out;
+}
+
 /// Pass-through flags that change what the *real* clang compile parses but
 /// are discarded before the in-memory safety AST (both checkAstSafety and
 /// probeSafetyAst keep only -I/-D/-std). Accepting them in STRICT would let
@@ -928,29 +1070,10 @@ static bool extraArgsChangeParse(const std::vector<std::string> &extra) {
         a.starts_with("-idirafter") || a.starts_with("-iprefix") ||
         a.starts_with("-iwithprefix"))
       return true;
-    // `--language[=]` is Clang's long spelling of `-x <lang>`: it changes
-    // what the backend parses but, unlike `-std=`, is not forwarded to the
-    // in-memory safety AST. Decide on the raw token here -- normalizeFlag()
-    // would turn `--language=c++` into `-language=c++`, which matches neither
-    // `-x` nor the -l library pass-through that previously accepted it.
-    if (raw == "--language" || raw.starts_with("--language="))
-      return true;
-    if (a == "-x" ||
-        (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
-         std::isalpha(static_cast<unsigned char>(a[2]))))
-      return true;
-  }
-  return false;
-}
-
-/// Clang's `--ld-path=` selects the linker used by the build. STRICT verifies
-/// the compiled program, so a swapped linker is outside what the safety AST
-/// can witness. Match the raw token: normalizeFlag() would rewrite it into
-/// `-ld-path=`, which otherwise rides the ordinary `-l<lib>` allow-list.
-static bool extraArgsChangeLinker(const std::vector<std::string> &extra) {
-  for (const auto &raw : extra) {
-    llvm::StringRef a = raw;
-    if (a == "--ld-path" || a.starts_with("--ld-path="))
+    // `-x`/`--language` change the backend's language selection. The safety
+    // AST always parses the lowered C as C, so accepting either spelling in
+    // STRICT would analyse one program and compile another (issue #235).
+    if (isLanguageOption(a))
       return true;
   }
   return false;
@@ -1099,18 +1222,6 @@ static bool extraArgsWeakenSafetyWarnings(
 /// Only -I/-D/-std= are forwarded to the in-memory safety ASTs; the other
 /// accepted flags either do not affect parsing or are link/codegen only, so
 /// check and build keep identical safety-AST inputs.
-/// Only optimization levels that keep IEEE-754 semantics are allowed in
-/// STRICT.  `-Ofast` implies `-ffast-math` / `-ffinite-math-only`, which lets
-/// the backend delete the `isnan()` guards that C+'s numeric traps rely on.
-static bool isSafeOptimizationFlag(llvm::StringRef s) {
-  static const llvm::StringRef kSafe[] = {"-O",  "-O0", "-O1", "-O2",
-                                          "-O3", "-Os", "-Oz", "-Og"};
-  for (llvm::StringRef allowed : kSafe)
-    if (s == allowed)
-      return true;
-  return false;
-}
-
 static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) {
   for (size_t i = 0; i < extra.size(); ++i) {
     llvm::StringRef raw = extra[i];
@@ -1120,39 +1231,25 @@ static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) 
     // Never allow the @ spelling in STRICT.
     if (raw.starts_with("@"))
       return false;
-    // A double-dash token is NOT merely a spelling variant of its single-dash
-    // form: Clang reserves `--foo` for its own options, several of which change
-    // behaviour (--ld-path=, --language=, --include=, --target=). Deciding on
-    // normalized tokens let --ld-path= and --language= masquerade as ordinary
-    // `-l<lib>` flags. Accept only this explicit, reviewable set of long-form
-    // spellings whose single-dash equivalents are already safe here.
-    // --sysroot selects an SDK just like the allowed -isysroot and is not used
-    // by the safety analysis. --std= is excluded on purpose: unlike -std= it
-    // is not forwarded to the in-memory safety ASTs, so allowing it would
-    // analyse one language standard while compiling another.
-    const bool longForm =
-        raw.size() > 2 && raw.starts_with("--") && raw[2] != '-';
-    if (longForm) {
-      if (raw == "--sysroot") {
-        if (++i >= extra.size())
-          return false; // dangling value: fail closed
-        continue;
-      }
-      if (raw.starts_with("--sysroot="))
-        continue;
-      return false;
-    }
     // Two-token forms produced by Main.cpp (`-I dir`, `-D NAME`, ...) and by
     // `-- -isysroot dir`. Consume the value so a path is not mistaken for a
-    // bare/injected token.
-    if (s == "-I" || s == "-D" || s == "-L" || s == "-l" || s == "-isysroot") {
+    // bare/injected token. Short-option forms are matched on the RAW token:
+    // `normalizeFlag()` would turn `--ld-path` into a fake `-l` (issue #235).
+    if (raw == "-I" || raw == "-D" || raw == "-L" || raw == "-l" ||
+        s == "-isysroot") {
       if (++i >= extra.size())
         return false; // dangling value: fail closed
       continue;
     }
-    if (s.starts_with("-I") || s.starts_with("-D") || s.starts_with("-L") ||
-        s.starts_with("-l") || s.starts_with("-std=") ||
-        s.starts_with("-isysroot") || isSafeOptimizationFlag(s))
+    // Same rule for joined short options: -lfoo is a library, --ld-path=...
+    // is a clang long option that can select an arbitrary linker. Likewise
+    // --std= is rejected: safetyParseArgs() only forwards the single-dash
+    // -std= spelling, so allowing it would create a check/build divergence.
+    if (isSingleDashOption(raw, 'I') || isSingleDashOption(raw, 'D') ||
+        isSingleDashOption(raw, 'L') || isSingleDashOption(raw, 'l') ||
+        raw.starts_with("-std=") || s.starts_with("-isysroot") ||
+        s == "-O" || s == "-O0" || s == "-O1" || s == "-O2" || s == "-O3" ||
+        s == "-Os" || s == "-Oz" || s == "-Og")
       continue;
     // -U is deliberately excluded: it is parse-affecting but is NOT forwarded
     // to the safety AST, so allowing it would break check/build parity.
@@ -1198,20 +1295,12 @@ static bool redefinesReservedCPlusMacro(const std::vector<std::string> &extra) {
     } else {
       continue;
     }
-    // Clang trims leading whitespace in `-D " CPLUS_STRICT=0"` and still
-    // defines the macro.  Trim it here too, then require a well-formed
-    // identifier: an empty/malformed name must fail closed, not sail past
-    // the reserved-name checks (issue #109).
-    def = def.ltrim(" \t");
-    if (def.empty() ||
-        !(std::isalpha(static_cast<unsigned char>(def[0])) || def[0] == '_'))
+    def = def.ltrim(" \t\r\n");
+    llvm::StringRef name = def.take_while([](char c) {
+      return c != '=' && c != '(' && c != ' ' && c != '\t';
+    });
+    if (name.empty())
       return true;
-    size_t len = 0;
-    while (len < def.size() &&
-           (std::isalnum(static_cast<unsigned char>(def[len])) ||
-            def[len] == '_'))
-      ++len;
-    llvm::StringRef name = def.take_front(len);
     // The whole CPLUS/CPLUS_/CPLUS<Name> gate family and the implementation
     // namespace (__cplus_*, reserved to the implementation) are closed sets;
     // reserve the prefix so a future gate macro cannot be redefined by a
@@ -1302,94 +1391,102 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   SanProbe probe = probeFor(bit);
   if (!probe.source || !*probe.source)
     return cache[key] = false;
-  llvm::SmallString<256> srcPath, exePath;
-  int probeFd = -1;
-  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".c", probeFd, srcPath))
+
+  // Issue #235: every file is created with O_CREAT|O_EXCL (0600) by
+  // writeUniqueTempFile, so a symlink pre-created in a shared temp directory
+  // cannot redirect the compiler's or probe's diagnostics onto a user file.
+  // argv goes straight to ExecuteAndWait: no shell, no quoting, no
+  // `<temp>.log` names derived from another file's path. TempFile removes all
+  // four files on every exit path, including a failed compile.
+  std::string err;
+  std::string srcPath, exePath, compileLog, runLog;
+  TempFile src, exe, compileLogGuard, runLogGuard;
+  // Install each guard as soon as its file exists, so a later creation
+  // failure still removes the files already created on this exit path.
+  if (!writeUniqueTempFile("", "cplus_san", "c", probe.source, srcPath, &err))
     return cache[key] = false;
-  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath)) {
-    llvm::sys::fs::remove(srcPath);
+  src.path = srcPath;
+  if (!writeUniqueTempFile("", "cplus_san", "out", "", exePath, &err))
     return cache[key] = false;
-  }
-  (void)::chmod(exePath.c_str(), S_IRUSR | S_IWUSR);
-  // Write through the descriptor: reopening the name would reintroduce a
-  // symlink/TOCTOU window after the exclusive create.  Issue #108.
-  std::string writeErr;
-  if (!writeFd(probeFd, probe.source, &writeErr)) {
-    llvm::sys::fs::remove(srcPath);
-    llvm::sys::fs::remove(exePath);
+  exe.path = exePath;
+  if (!writeUniqueTempFile("", "cplus_san", "log", "", compileLog, &err))
     return cache[key] = false;
-  }
-  // Every argument is passed as an individual argv element.  Quoting a
-  // path/flag with `'...'` into a shell string let a single quote in a
-  // user-supplied -D/-I (or in a path) escape and run arbitrary commands.
-  // ExecuteAndWait never invokes /bin/sh.  Issue #74.
-  const std::string src = std::string(srcPath.str());
-  const std::string exe = std::string(exePath.str());
-  const std::string compileLog = exe + ".compile.log";
-  const std::string runLog = exe + ".log";
+  compileLogGuard.path = compileLog;
+  if (!writeUniqueTempFile("", "cplus_san", "log", "", runLog, &err))
+    return cache[key] = false;
+  runLogGuard.path = runLog;
 
   std::vector<std::string> flags;
   addSanitizerFlags(flags, bit);
-  std::vector<std::string> compileArgs;
-  compileArgs.push_back(clang); // argv[0]
-  compileArgs.push_back("-std=gnu17");
-  compileArgs.push_back("-g");
-  for (const auto &a : extra)
-    compileArgs.push_back(a);
+  std::vector<std::string> compileArgStrings;
+  compileArgStrings.push_back(clang);
+  compileArgStrings.push_back("-std=gnu17");
+  // No -g: on Darwin it makes clang emit <exe>.dSYM/ next to the probe
+  // binary, which TempFile (a single-file guard) cannot remove. This probe
+  // only checks a runtime marker, so debug info is unnecessary.
+  for (const auto &a : extra) {
+    // Pass-through debug flags would make clang emit <exe>.dSYM/ next to the
+    // probe binary on Darwin. The probe has no use for debug info, and a
+    // single-file TempFile guard cannot clean up that directory. Keep the
+    // unrelated -gcc-toolchain=... selection flag.
+    if (a.starts_with("-g") && !a.starts_with("-gcc-toolchain"))
+      continue;
+    compileArgStrings.push_back(a);
+  }
   for (const auto &f : flags)
     if (f.rfind("-fsanitize=", 0) == 0 || f == "-fno-sanitize-trap=cfi" ||
         f == "-flto" || f == "-fvisibility=hidden")
-      compileArgs.push_back(f);
-  compileArgs.push_back("-o");
-  compileArgs.push_back(exe);
-  compileArgs.push_back(src);
+      compileArgStrings.push_back(f);
+  compileArgStrings.push_back("-o");
+  compileArgStrings.push_back(exePath);
+  compileArgStrings.push_back(srcPath);
 
-  std::vector<llvm::StringRef> compileArgv;
-  for (const auto &a : compileArgs)
-    compileArgv.push_back(a);
-  // stdin inherited, stdout discarded, stderr captured.  Two redirects to
-  // the same file would use independent file offsets, so only stderr is
-  // captured here (that is where the sanitizer diagnostic is emitted).
-  std::optional<llvm::StringRef> compileRedirects[3] = {
-      std::nullopt, llvm::StringRef(), llvm::StringRef(compileLog)};
-  int rc = llvm::sys::ExecuteAndWait(
-      clang, compileArgv, std::nullopt,
-      llvm::ArrayRef<std::optional<llvm::StringRef>>(compileRedirects), 0, 0);
-  if (rc != 0) {
-    llvm::sys::fs::remove(srcPath);
-    llvm::sys::fs::remove(exePath);
-    llvm::sys::fs::remove(compileLog);
+  std::vector<llvm::StringRef> argv;
+  argv.reserve(compileArgStrings.size());
+  for (const auto &a : compileArgStrings)
+    argv.push_back(a);
+  // stdin: inherit; stdout: /dev/null; stderr: private 0600 log.
+  std::vector<std::optional<llvm::StringRef>> redirects(3);
+  redirects[0] = std::nullopt;
+  redirects[1] = llvm::StringRef("");
+  redirects[2] = llvm::StringRef(compileLog);
+  std::string execErr;
+  int rc = llvm::sys::ExecuteAndWait(clang, argv, std::nullopt, redirects,
+                                     0, 0, &execErr);
+  if (rc != 0)
     return cache[key] = false;
-  }
 
-  std::vector<std::string> envStrings;
-  for (char **e = environ; e && *e; ++e) {
-    llvm::StringRef entry(*e);
-    if (entry.starts_with("ASAN_OPTIONS=") || entry.starts_with("UBSAN_OPTIONS="))
-      continue;
-    envStrings.emplace_back(*e);
-  }
-  envStrings.emplace_back("ASAN_OPTIONS=detect_leaks=0");
-  envStrings.emplace_back("UBSAN_OPTIONS=halt_on_error=1");
-  std::vector<llvm::StringRef> env;
-  for (const auto &e : envStrings)
-    env.push_back(e);
+  // Same runtime options as the old shell command, restored on scope exit so
+  // the rest of the driver (and the caller's environment) is unaffected.
+  struct EnvOverride {
+    std::string name;
+    std::string old;
+    bool had;
+    EnvOverride(const char *n, const char *v)
+        : name(n), had(std::getenv(n) != nullptr) {
+      if (had)
+        old = std::getenv(n);
+      ::setenv(n, v, 1);
+    }
+    ~EnvOverride() {
+      if (had)
+        ::setenv(name.c_str(), old.c_str(), 1);
+      else
+        ::unsetenv(name.c_str());
+    }
+  };
+  EnvOverride asan("ASAN_OPTIONS", "detect_leaks=0");
+  EnvOverride ubsan("UBSAN_OPTIONS", "halt_on_error=1");
 
   std::vector<llvm::StringRef> runArgv;
-  runArgv.push_back(exe);
-  std::optional<llvm::StringRef> runRedirects[3] = {
-      std::nullopt, llvm::StringRef(), llvm::StringRef(runLog)};
-  (void)llvm::sys::ExecuteAndWait(
-      exe, runArgv, llvm::ArrayRef<llvm::StringRef>(env),
-      llvm::ArrayRef<std::optional<llvm::StringRef>>(runRedirects), 0, 0);
-  std::ifstream log(runLog);
-  std::stringstream buf;
-  buf << log.rdbuf();
-  std::string output = buf.str();
-  llvm::sys::fs::remove(srcPath);
-  llvm::sys::fs::remove(exePath);
-  llvm::sys::fs::remove(compileLog);
-  llvm::sys::fs::remove(runLog);
+  runArgv.push_back(exePath);
+  redirects[2] = llvm::StringRef(runLog);
+  (void)llvm::sys::ExecuteAndWait(exePath, runArgv, std::nullopt, redirects,
+                                  0, 0, &execErr);
+  std::string ierr;
+  std::string output = readFile(runLog, &ierr);
+  if (!ierr.empty())
+    output.clear();
   return cache[key] = (output.find(probe.needle) != std::string::npos &&
                        output.find("CHECK failed") == std::string::npos);
 }
@@ -1412,31 +1509,18 @@ withoutLinkerFlags(const std::vector<std::string> &args) {
   std::vector<std::string> out;
   for (size_t i = 0; i < args.size(); ++i) {
     llvm::StringRef a = args[i];
-    if (a == "-L" || a == "-l" || a == "-framework" ||
-        a == "-weak_framework" || a == "-isystem" || a == "-include" ||
-        a == "-imacros") {
+    if (a == "-L" || a == "-l") {
       if (i + 1 < args.size())
         ++i;
       continue;
     }
-    // Linker inputs passed as plain file paths (static archives, shared
-    // objects and object files) must not reach a -c compile step. Otherwise
-    // a c+ build invocation hands a multi-megabyte archive to Clang as C
-    // source, which parses it for minutes.
-    auto isLinkInput = [](llvm::StringRef s) {
-      return s.ends_with(".a") || s.ends_with(".so") || s.ends_with(".dylib") ||
-             s.ends_with(".lib") || s.ends_with(".o") || s.ends_with(".obj") ||
-             s.ends_with(".tbd");
-    };
-    // -fuse-ld=* and -static-lib* are equally link-only: Clang rejects them
-    // with -Wunused-command-line-argument on a -c invocation. -pthread and
-    // -static are deliberately kept: the former defines _REENTRANT while
-    // parsing, and the latter is silently accepted by -c.
     if (a.starts_with("-L") || a.starts_with("-l") ||
-        a.starts_with("-Wl,") || a == "-shared" ||
-        a.starts_with("-fuse-ld") || a.starts_with("-static-lib") ||
-        a.starts_with("-framework") || a.starts_with("-weak_framework") ||
-        isLinkInput(a))
+        a.starts_with("-Wl,") || a == "-shared")
+      continue;
+    // Explicit archive/shared-library operands are linker inputs too; the
+    // integration driver passes absolute .a paths after `--`.
+    if (a.ends_with(".a") || a.ends_with(".so") || a.ends_with(".dylib") ||
+        a.ends_with(".lib"))
       continue;
     out.push_back(args[i]);
   }
@@ -1514,6 +1598,41 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   g_logLevel = logLevelFromString(opts.logLevel);
   DRIVER_LOG(CLOG_INFO, "c+ driver start: command=%s files=%zu",
              opts.command.c_str(), opts.inputs.size());
+  // Establish the STRICT path policy before the first lookup. findClangBinary()
+  // is called below, and a substitution there would run before any later gate
+  // could reject it.
+  const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
+  g_strictSafePaths = strictSafe;
+
+  // Issue #181: opt-in disjoint-bounds instrumentation.  Main.cpp forwards
+  // every -f* token as a pass-through argument, so consume it here before the
+  // STRICT allow-list and the backend command lines are assembled.
+  std::vector<std::string> userArgs = opts.extraArgs;
+  bool disjointBounds = false;
+  const bool sawDisjointBounds = takeDisjointBoundsFlag(userArgs, disjointBounds);
+  if (disjointBounds && opts.mode != Mode::Safe) {
+    errs << "error: -fcplus-disjoint-bounds requires Safe mode; --legacy-c "
+            "preserves plain-C source and ABI\n";
+    return 1;
+  }
+  if (sawDisjointBounds && opts.verbose)
+    errs << "note: -fcplus-disjoint-bounds " << (disjointBounds ? "enabled" : "disabled")
+         << "\n";
+
+  // Issue #184: opt-in epoch/conservative reclamation.  Consumed here, before
+  // the STRICT allow-list, so it cannot reach the C backend as an unknown -f
+  // flag.  The flag only enables a runtime mode; no pointer ABI changes.
+  bool safeGc = false;
+  const bool sawSafeGc = takeSafeGcFlag(userArgs, safeGc);
+  if (safeGc && opts.mode != Mode::Safe) {
+    errs << "error: -fcplus-safe-gc requires Safe mode; --legacy-c preserves "
+            "plain-C source and ABI\n";
+    return 1;
+  }
+  if (sawSafeGc && opts.verbose)
+    errs << "note: -fcplus-safe-gc " << (safeGc ? "enabled" : "disabled")
+         << "\n";
+
   std::vector<std::string> inputs = opts.inputs.empty()
                                         ? std::vector<std::string>{opts.input}
                                         : opts.inputs;
@@ -1521,16 +1640,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     errs << "error: no input files\n";
     return 1;
   }
-
-  // STRICT is a soundness contract: it must fail closed on any pass-through
-  // flag that can make the analysed program differ from the compiled one,
-  // downgrade a safety gate, or hide a runtime check. Set the global BEFORE
-  // resolving the backend: findClangBinary() must not pick CPLUS_CLANG on a
-  // STRICT run (issue #202). DEFAULT keeps the documented env overrides, and
-  // --legacy-c --strict only gets its documented no-effect disclosure so
-  // plain-C ABI/source stays untouched.
-  const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
-  g_strictSafePaths = strictSafe;
 
   const std::string clang = findClangBinary();
   // Validate the sanitizer selection before doing any work. Conflicts are
@@ -1547,12 +1656,17 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // the driver-selected Undefined sanitizer. A pass-through -fno-sanitize=
   // flag could silently disable that backend check, so reject the pair.
   if (wants(san, Sanitizer::Undefined) &&
-      extraArgsDisableSignedOverflow(opts.extraArgs)) {
+      extraArgsDisableSignedOverflow(userArgs)) {
     errs << "error: pass-through flags disable the signed-integer-overflow "
             "sanitizer that C+ relies on to suppress native guards; remove "
             "'-fno-sanitize=undefined' or use --sanitize=none\n";
     return 1;
   }
+  // STRICT is a soundness contract: it must fail closed on any pass-through
+  // flag that can make the analysed program differ from the compiled one,
+  // downgrade a safety gate, or hide a runtime check. DEFAULT keeps accepting
+  // these (no soundness claim), and --legacy-c --strict only gets its
+  // documented no-effect disclosure so plain-C ABI/source stays untouched.
   // STRICT never trusts an environment-supplied runtime library: a pass-through
   // runtime would strip every trap while `check` still reported a clean result.
   // runtimeLibArg(false) already ignores it; drop it here as well so no other
@@ -1593,7 +1707,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       }
       return false;
     };
-    for (const auto &a : opts.extraArgs)
+    for (const auto &a : userArgs)
       if (rejectResponseFile(a))
         return 1;
     // Clang expands any argv token beginning with '@', not just pass-through
@@ -1602,36 +1716,30 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (rejectResponseFile(opts.output))
       return 1;
   }
-  if (strictSafe && extraArgsChangeParse(opts.extraArgs)) {
+  if (strictSafe && extraArgsChangeParse(userArgs)) {
     errs << "error: pass-through flags change how the C+ safety AST parses "
             "the program but are not forwarded to it (-include, -imacros, "
             "-isystem, -x/--language, -include-pch); STRICT would analyse a "
             "different program than it compiles\n";
     return 1;
   }
-  if (strictSafe && extraArgsChangeLinker(opts.extraArgs)) {
-    errs << "error: pass-through flags change the linker used by the build "
-            "(--ld-path=); STRICT cannot verify a program linked by a "
-            "replaced linker\n";
-    return 1;
-  }
-  if (strictSafe && extraArgsWeakenSanitizerAbort(opts.extraArgs)) {
+  if (strictSafe && extraArgsWeakenSanitizerAbort(userArgs)) {
     errs << "error: pass-through flags weaken sanitizer abort behaviour "
             "(-fsanitize-recover / -fno-sanitize-trap) that C+ relies on; "
             "remove them or use --sanitize=none\n";
     return 1;
   }
-  if (strictSafe && extraArgsDisablePointerSanitizers(opts.extraArgs)) {
+  if (strictSafe && extraArgsDisablePointerSanitizers(userArgs)) {
     errs << "error: pass-through flags disable bounds/null/alignment "
             "sanitizers that witness the C+ runtime checks\n";
     return 1;
   }
-  if (strictSafe && extraArgsWeakenSafetyWarnings(opts.extraArgs)) {
+  if (strictSafe && extraArgsWeakenSafetyWarnings(userArgs)) {
     errs << "error: pass-through flags downgrade a STRICT safety warning "
             "promoted to error (-Wno-error=<safety> / -Wno-<safety>)\n";
     return 1;
   }
-  if (strictSafe && redefinesReservedCPlusMacro(opts.extraArgs)) {
+  if (strictSafe && redefinesReservedCPlusMacro(userArgs)) {
     errs << "error: pass-through -D/-U redefines a reserved C+ gate macro "
             "(CPLUS*) or a compiler/runtime instrumentation helper; STRICT "
             "cannot verify a program whose safety helpers are replaced\n";
@@ -1641,13 +1749,12 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // is what stops unseen spellings (-Xclang injection, @response files,
   // -include variants, -- ordering tricks, stray bare inputs) rather than a
   // never-complete deny-list.
-  if (strictSafe && !strictSafePassthroughAllowed(opts.extraArgs)) {
+  if (strictSafe && !strictSafePassthroughAllowed(userArgs)) {
     errs << "error: pass-through flag outside the STRICT Safe allow-list "
-            "(-I/-D/-std=/-isysroot/-O[0-3szg]/-W/-L/-l/-g/-pthread/...); "
-            "flags such as -Xclang, @response, -include/-imacros/-isystem, "
-            "-U, -x, -Ofast, -Wno-* and long-form clang options (--ld-path=, "
-            "--language=, --target=) are rejected because they can change "
-            "the analysed program, the linker, or downgrade a gate\n";
+            "(-I/-D/-std=/-isysroot/-O/-W/-L/-l/-g/-pthread/...); flags such "
+            "as -Xclang, @response, -include/-imacros/-isystem, -U, -x and "
+            "-Wno-* are rejected because they can change the analysed program "
+            "or downgrade a gate\n";
     return 1;
   }
   // Capability probing compiles and runs a defect program. `check` must stay
@@ -1657,7 +1764,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     for (const auto &entry : kSanitizerEntries) {
       if (!wants(san, entry.bit))
         continue;
-      if (!sanitizerSupported(entry.bit, clang, opts.extraArgs)) {
+      if (!sanitizerSupported(entry.bit, clang,
+                              stripLanguageFlags(userArgs))) {
         errs << "error: sanitizer '" << entry.name
              << "' is not supported by the selected backend (" << clang
              << "); detected by a compile-and-run probe\n";
@@ -1703,37 +1811,39 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   bool strictDisclosureEmitted = false;
   // Recompiling the C+ runtime with sanitizer flags is part of building an
   // instrumented executable. `check` never produces an executable, so skip it.
+  std::vector<TempFile> guards;
   if (san != Sanitizer::None && !isCheckCommand(opts)) {
     std::string runtimeSrc = runtimeSourcePath();
     if (runtimeSrc.empty()) {
       errs << "warning: C+ runtime source not found; runtime library will "
               "not be instrumented by the selected sanitizers\n";
     } else {
+      int rtObjFd = -1;
       llvm::SmallString<256> objPath;
-      if (llvm::sys::fs::createTemporaryFile("cplus_runtime_san", ".o",
+      if (llvm::sys::fs::createTemporaryFile("cplus_runtime_san", "o", rtObjFd,
                                              objPath)) {
         errs << "error: cannot create temporary object for runtime "
                 "instrumentation\n";
         return 1;
       }
-      (void)::chmod(objPath.c_str(), S_IRUSR | S_IWUSR);
+      ::close(rtObjFd);
+      guards.emplace_back();
+      guards.back().path = objPath.str().str();
+      guards.back().keep = false;
       std::vector<std::string> rtArgs = base;
       rtArgs.push_back("-c");
       rtArgs.push_back("-o");
       rtArgs.push_back(std::string(objPath.str()));
       rtArgs.push_back(runtimeSrc);
-      // This is a compile-only (-c) invocation of the runtime, so app build
-      // flags such as -lminiaudio/-luv must not be forwarded: under the
-      // default warnings-as-errors policy Clang turns their "linker input
-      // unused" warning into a hard error. The shared filter keeps the
-      // compilation-affecting flags (-D/-I/-fsanitize=*) intact, and the
-      // final link step still receives every original extraArgs verbatim.
-      for (const auto &a : withoutLinkerFlags(opts.extraArgs))
+      /* This is a `-c` compile: linker-only operands (-l, -L, -Wl,...) are
+       * unused here and Clang's -Werror rejects them (e.g. -luv from the
+       * async stdlib tests). */
+      for (const auto &a :
+           withoutLinkerFlags(stripLanguageFlags(userArgs)))
         rtArgs.push_back(a);
       appendSafetyTail(rtArgs);
       if (runProgram(clang, rtArgs) != 0) {
         errs << "error: failed to compile instrumented C+ runtime\n";
-        llvm::sys::fs::remove(objPath);
         return 1;
       }
       objects.push_back(std::string(objPath.str()));
@@ -1742,7 +1852,6 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
                  runtimeSrc.c_str());
     }
   }
-  std::vector<TempFile> guards;
 
   for (size_t fileIndex = 0; fileIndex < inputs.size(); ++fileIndex) {
     const std::string &input = inputs[fileIndex];
@@ -1757,10 +1866,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     std::vector<TempFile> headerGuards;
     std::map<std::string, std::string> processedHeaders;
-    HeaderPreprocessState headerState;
+    std::set<std::string> visitingHeaders;
+    unsigned headerCounter = 0;
     source = preprocessModernHeaders(source, input, diags, opts.mode,
                                      headerGuards, processedHeaders,
-                                     headerState);
+                                     visitingHeaders, headerCounter);
 
     DRIVER_LOG(CLOG_DEBUG, "lowering %s", input.c_str());
     bool ok = false;
@@ -1782,8 +1892,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (astInputDir.empty())
       astInputDir = ".";
     astArgs.push_back("-I" + std::string(astInputDir));
-    for (size_t i = 0; i < opts.extraArgs.size(); ++i) {
-      const std::string &a = opts.extraArgs[i];
+    for (size_t i = 0; i < userArgs.size(); ++i) {
+      const std::string &a = userArgs[i];
       if (a.rfind("-fsanitize=", 0) == 0 || a.rfind("-fno-sanitize=", 0) == 0)
         continue;
       llvm::StringRef na = normalizeFlag(a);
@@ -1792,8 +1902,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       // the value), making the safety AST fail to parse -- the compiled TU
       // parses it fine. Fold the pair into one token so check and build feed
       // the analyser the same definition the backend compiles.
-      if ((na == "-I" || na == "-D") && i + 1 < opts.extraArgs.size()) {
-        astArgs.push_back(na.str() + opts.extraArgs[++i]);
+      if ((na == "-I" || na == "-D") && i + 1 < userArgs.size()) {
+        astArgs.push_back(na.str() + userArgs[++i]);
         continue;
       }
       astArgs.push_back(a);
@@ -1938,8 +2048,26 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (opts.mode == Mode::Safe && opts.command != "check") {
       // Runtime checks are inserted only after all static analysis, so an
       // instrumented index expression cannot mask a provable bounds error.
-      loweredText = instrumentDynamicArrayBounds(loweredText,
-                                                 rewritten.arrayLengths);
+      loweredText = instrumentDynamicArrayBounds(
+          loweredText, rewritten.arrayLengths, /*sideTable=*/!opts.fastSafety);
+    }
+    if (disjointBounds) {
+      // Additive opt-in: instrument the final lowered text and parse it back
+      // once to place the check statements.  Failure is an error rather than
+      // a silently unprotected build.
+      std::string instrumented;
+      std::string ierr;
+      if (!instrumentDisjointBounds(loweredText, astArgs, instrumented, ierr)) {
+        errs << "error: " << ierr << "\n";
+        return 1;
+      }
+      loweredText = std::string(kDisjointBoundsPreamble) + instrumented;
+    }
+    if (safeGc) {
+      // Additive opt-in: a constructor in the lowered TU enables the runtime
+      // epoch reclamation mode before main().  Default builds do not see this
+      // declaration, symbol call or constructor at all.
+      loweredText = std::string(kSafeGcPreamble) + loweredText;
     }
 
     if (fileIndex == 0 && !opts.emitC.empty()) {
@@ -1951,36 +2079,20 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
         os << "lowered C written to " << opts.emitC << "\n";
     }
 
-    llvm::SmallString<256> tempPath;
     llvm::StringRef inputDir = llvm::sys::path::parent_path(input);
     if (inputDir.empty())
       inputDir = ".";
-    // createUniqueFile(mkstemp) is atomic: a predictable pid/index name in a
-    // shared source directory could be pre-created as a symlink and raced.
-    // Keep the lowered C next to the input so relative includes still resolve.
-    int tempFd = -1;
-    const std::string tempModel =
-        joinPath(inputDir.str(), ".cplus-tmp-%%%%%%%%.c");
-    if (llvm::sys::fs::createUniqueFile(tempModel, tempFd, tempPath))
-      err = "cannot create a unique temporary source file";
-    else
-      err.clear();
-    if (!err.empty() || !writeFd(tempFd, loweredText, &err)) {
-      if (!tempPath.empty())
-        llvm::sys::fs::remove(tempPath);
-      tempPath.clear();
-      tempFd = -1;
-      if (llvm::sys::fs::createTemporaryFile("cplus", ".c", tempFd, tempPath))
-        err = "cannot create a unique temporary source file";
-      else
-        err.clear();
-      if (!err.empty() || !writeFd(tempFd, loweredText, &err)) {
+    std::string tempPathStr;
+    if (!writeUniqueTempFile(inputDir, ".cplus-tmp", "c", loweredText,
+                             tempPathStr, &err)) {
+      if (!writeUniqueTempFile("", "cplus-tu", "c", loweredText, tempPathStr,
+                               &err)) {
         errs << "error: cannot write temporary file: " << err << "\n";
         return 1;
       }
     }
     TempFile guard;
-    guard.path = tempPath.str().str();
+    guard.path = tempPathStr;
     guard.keep = opts.keepTemp || !envOr("CPLUS_KEEP_TEMP").empty();
     if (guard.keep)
       os << "note: lowered C kept at " << guard.path << "\n";
@@ -1988,7 +2100,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
 
     std::vector<std::string> args = withoutLinkerFlags(base);
     args.push_back("-I" + std::string(inputDir));
-    for (const auto &a : withoutLinkerFlags(opts.extraArgs))
+    for (const auto &a :
+         withoutLinkerFlags(stripLanguageFlags(userArgs)))
       args.push_back(a);
     appendSafetyTail(args);
     if (opts.command == "check") {
@@ -2008,17 +2121,23 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       args.push_back("-o");
       args.push_back(output);
     } else {
+      int objFd = -1;
       llvm::SmallString<256> objPath;
-      if (llvm::sys::fs::createTemporaryFile("cplus", ".o", objPath)) {
-        errs << "error: cannot create a unique temporary object file\n";
+      if (llvm::sys::fs::createTemporaryFile("cplus-obj", "o", objFd,
+                                             objPath)) {
+        errs << "error: cannot create temporary object file\n";
         return 1;
       }
+      ::close(objFd);
+      guards.emplace_back();
+      guards.back().path = objPath.str().str();
+      guards.back().keep = false;
       args.push_back("-c");
       args.push_back("-o");
       args.push_back(objPath.str().str());
       objects.push_back(objPath.str().str());
     }
-    args.push_back(tempPath.str().str());
+    args.push_back(tempPathStr);
 
     if (opts.verbose) {
       os << "backend: " << clang << "\n";
@@ -2047,7 +2166,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (!runtime.empty())
       linkArgs.push_back(runtime);
   }
-  for (const auto &a : opts.extraArgs)
+  for (const auto &a : stripLanguageFlags(userArgs))
     linkArgs.push_back(a);
   appendSafetyTail(linkArgs);
   linkArgs.push_back("-o");

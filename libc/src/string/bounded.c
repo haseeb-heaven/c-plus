@@ -23,28 +23,12 @@
 #define RSIZE_MAX_MEM ((size_t)(SIZE_MAX >> 1))
 #endif
 
-/* Best-effort compile-time source-size proof. The public bounded signatures
- * carry a `known` argument for the DESTINATION only, so inside this callee a
- * stack/global source is normally BOS_UNKNOWN; tracked allocations are still
- * resolved by cplus_alloc_remaining_capacity() below (the libc counterpart of
- * cplus_safe_remaining_capacity()). */
-#if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_BOUNDED_OBJ_SIZE(p) __builtin_object_size((p), 1)
-#else
-#define CPLUS_BOUNDED_OBJ_SIZE(p) ((size_t)-1)
-#endif
-
-/* Process-wide and intentionally race-free: one thread may toggle the mode
- * while another is inside a bounded operation.  Mirrors the atomic discipline
- * of stdlib/safe/src/safe_memory.c without changing the public API. */
+/* Set/read concurrently by callers; use atomics to avoid a C11 data race
+ * (mirrors safe_memory.c's g_unknown_capacity_strict). */
 static int g_unknown_strict = 0;
 
 void cplus_libc_set_unknown_capacity_mode(int strict) {
     __atomic_store_n(&g_unknown_strict, strict ? 1 : 0, __ATOMIC_RELEASE);
-}
-
-static int unknown_capacity_is_strict(void) {
-    return __atomic_load_n(&g_unknown_strict, __ATOMIC_ACQUIRE) != 0;
 }
 
 static size_t resolve_capacity(const void *p, size_t known) {
@@ -60,7 +44,7 @@ static int check_capacity(const char *api, const void *p, size_t need,
                           size_t known, size_t *cap_out) {
     size_t cap = resolve_capacity(p, known);
     if (cap == (size_t)-1) {
-        if (unknown_capacity_is_strict()) {
+        if (__atomic_load_n(&g_unknown_strict, __ATOMIC_ACQUIRE)) {
             cplus_libc_log(api, "unknown capacity - refused");
             errno = EINVAL;
             return 1;
@@ -77,67 +61,6 @@ static int check_capacity(const char *api, const void *p, size_t need,
     return 0;
 }
 
-/* Source-side counterpart of check_capacity(). The public signature has no
- * `known_s` parameter, so an UNKNOWN source capacity cannot be a refusal
- * condition without breaking ordinary C calls with literals/stack sources.
- * Refuse ONLY when a capacity is provable (tracked allocation or BOS) and n
- * exceeds it: that is a heap/source over-read, which must never reach the raw
- * cplus_memcpy/cplus_memmove loop. Both checks run before any write, so the
- * destination is left intact on refusal. A resolved zero (BOS 0 or a genuine
- * one-past-the-end address) means no provable size, not an empty object, and
- * is normalized to UNKNOWN exactly as source_capacity() does below. */
-static int check_source_capacity(const char *api, const void *s, size_t n) {
-    size_t cap = resolve_capacity(s, (size_t)CPLUS_BOUNDED_OBJ_SIZE(s));
-    if (cap == 0u) cap = (size_t)-1; /* BOS 0 == no object known, not empty */
-    if (cap == (size_t)-1 || n <= cap) return 0;
-    cplus_libc_log(api, "source over-read refused");
-    errno = ERANGE;
-    return 1;
-}
-
-/* Scan at most limit bytes for a terminator. Returns the number of bytes
- * before the first NUL, or limit when no NUL exists inside the bound. Never
- * touches byte[limit] or beyond. */
-static size_t bounded_strlen(const char *s, size_t limit) {
-    size_t k = 0;
-    while (k < limit && s[k] != '\0') ++k;
-    return k;
-}
-
-/* Best-effort source capacity. BOS_UNKNOWN/zero means the source has no
- * provable size in this callee; tracked heap sources still resolve exactly. */
-static size_t source_capacity(const char *s) {
-    size_t cap = resolve_capacity(s, (size_t)CPLUS_BOUNDED_OBJ_SIZE(s));
-    if (cap == 0u) return (size_t)-1; /* BOS 0 == no object known, not empty */
-    return cap;
-}
-
-/* Smallest of the available bounds; (size_t)-1 means unbounded/unknown. */
-static size_t min_bound(size_t a, size_t b) {
-    if (a == (size_t)-1) return b;
-    if (b == (size_t)-1) return a;
-    return a < b ? a : b;
-}
-
-/* Resolve the destination before any scan of d or s. A strict-mode refusal
- * for unknown capacity happens here; the final check_capacity() below still
- * enforces the resolved byte requirement. */
-static int dest_capacity_or_refuse(const char *api, const void *d, size_t known,
-                                   size_t *cap_out) {
-    size_t cap = resolve_capacity(d, known);
-    if (cap == (size_t)-1) {
-        if (unknown_capacity_is_strict()) {
-            cplus_libc_log(api, "unknown capacity - refused");
-            errno = EINVAL;
-            return 1;
-        }
-        cplus_libc_log(api, "unknown capacity - unchecked");
-        return 0;
-    }
-    *cap_out = cap;
-    return 0;
-}
-
 /* Guard (#2, AUDIT_memory_string.md): unknown capacity in default mode leaves
  * n unchecked above check_capacity(), so still reject absurd lengths here -
  * SIZE_MAX must never reach the raw copy/fill/compare loops. Known-capacity
@@ -146,6 +69,19 @@ static int dest_capacity_or_refuse(const char *api, const void *d, size_t known,
 static int cplus_refuse_absurd_length(size_t n) {
     if (n > RSIZE_MAX_MEM) { errno = EOVERFLOW; return 1; }
     return 0;
+}
+
+/* Source-side twin of check_capacity(): the public signatures have no source
+ * capacity parameter, but heap sources from cplus_malloc/calloc/realloc are
+ * tracked.  Refuse only when a capacity is provably known AND n exceeds it;
+ * unknown capacity keeps the pre-existing permissive policy.  Closing this
+ * asymmetry prevents a heap over-read / memory disclosure in memcpy/memmove. */
+static int check_src_capacity(const char *api, const void *s, size_t n) {
+    size_t cap = cplus_alloc_remaining_capacity(s);
+    if (cap == (size_t)-1 || n <= cap) return 0;
+    cplus_libc_log(api, "source over-read refused");
+    errno = ERANGE;
+    return 1;
 }
 
 void *cplus_memset_bounded(void *d, int v, size_t n, size_t known) {
@@ -160,7 +96,7 @@ void *cplus_memcpy_bounded(void *d, const void *s, size_t n, size_t known) {
     size_t cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (check_capacity("memcpy", d, n, known, &cap)) return NULL;
-    if (check_source_capacity("memcpy(source)", s, n)) return NULL;
+    if (check_src_capacity("memcpy(src)", s, n)) return NULL;
     if (cplus_refuse_absurd_length(n)) return NULL;
     return cplus_memcpy(d, s, n);
 }
@@ -169,7 +105,7 @@ void *cplus_memmove_bounded(void *d, const void *s, size_t n, size_t known) {
     size_t cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (check_capacity("memmove", d, n, known, &cap)) return NULL;
-    if (check_source_capacity("memmove(source)", s, n)) return NULL;
+    if (check_src_capacity("memmove(src)", s, n)) return NULL;
     if (cplus_refuse_absurd_length(n)) return NULL;
     return cplus_memmove(d, s, n);
 }
@@ -184,25 +120,42 @@ int cplus_memcmp_bounded(const void *a, const void *b, size_t n,
     return cplus_memcmp(a, b, n);
 }
 
+/* Resolve the destination capacity BEFORE scanning any string. A strict-mode
+ * unknown capacity is therefore refused before an unbounded read can happen.
+ * When capacity is unknown in default mode, scans still use a finite ceiling
+ * instead of raw strlen(). */
+static int resolve_scan_ceiling(const char *api, const void *d, size_t known,
+                                size_t *out)
+{
+    size_t cap = (size_t)-1;
+    if (check_capacity(api, d, 1u, known, &cap)) return 1;
+    *out = (cap == (size_t)-1) ? RSIZE_MAX_MEM : cap;
+    return 0;
+}
+
+/* A tracked heap source cannot be scanned past its own allocation either. */
+static size_t source_scan_ceiling(const char *s, size_t ceiling)
+{
+    size_t tracked = cplus_alloc_remaining_capacity(s);
+    if (tracked != (size_t)-1 && tracked < ceiling) return tracked;
+    return ceiling;
+}
+
+/* Bounded strlen: refuses when no NUL exists within ceiling bytes. */
+static int bounded_strlen(const char *s, size_t ceiling, size_t *out)
+{
+    size_t n = cplus_strnlen(s, ceiling);
+    if (n >= ceiling) { errno = ERANGE; return 1; }
+    *out = n;
+    return 0;
+}
+
 char *cplus_strcpy_bounded(char *d, const char *s, size_t known) {
-    size_t dcap = (size_t)-1, scap, scan, slen, need, cap = 0;
+    size_t need, slen, ceiling, cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    /* Capacity first: the old cplus_strlen(s) ran before any bound was known
-     * and read past unterminated heap sources. */
-    if (dest_capacity_or_refuse("strcpy", d, known, &dcap)) return NULL;
-    scap = source_capacity(s);
-    scan = min_bound(dcap, scap);
-    if (scan != (size_t)-1) {
-        slen = bounded_strlen(s, scan);
-        if (slen == scan) { /* no terminator inside a proven bound */
-            cplus_libc_log("strcpy", "source over-read refused");
-            errno = ERANGE;
-            return NULL;
-        }
-    } else {
-        /* Neither side has a provable bound: preserve raw-C behaviour. */
-        slen = cplus_strlen(s);
-    }
+    if (resolve_scan_ceiling("strcpy", d, known, &ceiling)) return NULL;
+    /* The NUL must fit in the resolved destination capacity. */
+    if (bounded_strlen(s, source_scan_ceiling(s, ceiling), &slen)) return NULL;
     if (slen == SIZE_MAX) { errno = EOVERFLOW; return NULL; }
     need = slen + 1u;
     if (check_capacity("strcpy", d, need, known, &cap)) return NULL;
@@ -226,119 +179,55 @@ char *cplus_strncpy_bounded(char *d, const char *s, size_t n, size_t known) {
 }
 
 char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
-    size_t dcap = (size_t)-1, scap, scan, dlen, slen, need, cap = 0;
+    size_t need, dlen, slen, ceiling, cap = 0;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    /* Destination capacity is resolved BEFORE cplus_strlen(d): an uninitialised
-     * cplus_malloc buffer must be bounded by its allocation, not scanned past. */
-    if (dest_capacity_or_refuse("strcat", d, known, &dcap)) return NULL;
-    if (dcap == 0u) { errno = ERANGE; return NULL; }
-    if (dcap != (size_t)-1) {
-        dlen = bounded_strlen(d, dcap);
-        if (dlen == dcap) { /* d has no terminator in its own block */
-            cplus_libc_log("strcat", "destination over-read refused");
-            errno = ERANGE;
-            return NULL;
-        }
-        scan = dcap - dlen - 1u; /* room for s's terminator */
-    } else {
-        dlen = cplus_strlen(d); /* no provable bound: legacy behaviour */
-        scan = (size_t)-1;
-    }
-    scap = source_capacity(s);
-    {
-        size_t room = scan;
-        /* `scap == room` ends exactly at the source allocation edge: treat it
-         * as limited too, otherwise the lookahead below reads s[scan] one byte
-         * past a proven-capacity source. */
-        int src_limited = (scap != (size_t)-1 && scap <= room);
-        scan = min_bound(scan, scap);
-        if (scan == 0u) {
-            if (src_limited) { /* nothing provably readable in the source */
-                errno = ERANGE;
-                return NULL;
-            }
-            /* Only the source's first byte matters: an empty source is a
-             * valid no-op, while any character would overflow the dest. */
-            slen = (s[0] == '\0') ? 0u : 1u;
-        } else if (scan != (size_t)-1) {
-            slen = bounded_strlen(s, scan);
-            if (slen == scan) {
-                /* One-byte lookahead is only legal when the source capacity
-                 * did not limit the scan.  A source-limited scan ending at
-                 * the allocation edge must refuse without reading past it. */
-                if (src_limited || s[scan] != '\0') {
-                    cplus_libc_log("strcat", "source over-read refused");
-                    errno = ERANGE;
-                    return NULL;
-                }
-            }
-        } else {
-            slen = cplus_strlen(s);
-        }
-    }
-    /* With a proven destination bound the addition cannot overflow; without
-     * one, guard both the exact wrap and the dlen == SIZE_MAX case. */
+    if (resolve_scan_ceiling("strcat", d, known, &ceiling)) return NULL;
+    /* Scan d only inside its own resolved capacity: an unterminated heap
+     * buffer used to be read straight past the block by cplus_strlen(d). */
+    if (bounded_strlen(d, ceiling, &dlen)) return NULL;
+    if (ceiling <= dlen) { errno = ERANGE; return NULL; }
+    if (bounded_strlen(s, source_scan_ceiling(s, ceiling - dlen), &slen)) return NULL;
     if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
     need = dlen + slen + 1u;
     if (check_capacity("strcat", d, need, known, &cap)) return NULL;
     return cplus_strcat(d, s);
 }
 
-/* strncat may receive a source that is not NUL-terminated within n bytes:
- * scan at most n bytes, never the whole string like cplus_strlen(s). */
 char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
-    size_t dcap = (size_t)-1, scap, scan, dlen, slen, need, cap = 0;
-    size_t room = (size_t)-1; /* payload bytes that fit after d's terminator */
+    size_t need, ceiling, cap = 0;
+    size_t dlen, slen, scan_n, room = (size_t)-1;
     if (!d || !s) { errno = EINVAL; return NULL; }
-    if (dest_capacity_or_refuse("strncat", d, known, &dcap)) return NULL;
-    if (dcap == 0u) { errno = ERANGE; return NULL; }
-    if (dcap != (size_t)-1) {
-        dlen = bounded_strlen(d, dcap);
-        if (dlen == dcap) {
-            cplus_libc_log("strncat", "destination over-read refused");
-            errno = ERANGE;
-            return NULL;
-        }
-        room = dcap - dlen - 1u;
-        /* Scan one byte BEYOND the room, never just up to it. Clamping the
-         * scan to `room` made need = dlen + slen + 1 <= dcap unconditional,
-         * so check_capacity() always passed while the delegated call still
-         * received the original (unclamped) n and wrote past the buffer. The
-         * extra byte is enough to detect an append that cannot fit: a source
-         * with a NUL inside the room still scans to that NUL, while a longer
-         * (or unterminated) source yields slen > room and is refused below. */
-        scan = min_bound(n, room + 1u);
+    if (resolve_scan_ceiling("strncat", d, known, &ceiling)) return NULL;
+    if (bounded_strlen(d, ceiling, &dlen)) return NULL;
+    if (ceiling <= dlen) { errno = ERANGE; return NULL; }
+    if (ceiling != (size_t)-1) {
+        /* Payload bytes that still fit after d's terminator. Scan one byte
+         * BEYOND the room, never just up to it: clamping the scan to `room`
+         * made need = dlen + slen + 1 <= ceiling unconditional, so
+         * check_capacity() always passed while the raw call below still got
+         * the original n and wrote past d. A NUL inside the room still scans
+         * to that NUL; a longer (or unterminated) source yields slen > room
+         * and is refused before any write. */
+        room = ceiling - dlen - 1u;
+        scan_n = (n > room) ? room + 1u : n;
     } else {
-        dlen = cplus_strlen(d); /* no provable bound: legacy behaviour */
-        scan = n;
+        scan_n = n; /* no provable bound: legacy behaviour */
     }
-    scap = source_capacity(s);
-    scan = min_bound(scan, scap);
-    /* With no destination room, only the presence of a first source byte
-     * decides whether this append would overflow. n == 0 is always a no-op,
-     * even when the destination is exactly full. */
-    slen = (n == 0u) ? 0u
-                        : ((scan == 0u) ? ((s[0] == '\0') ? 0u : 1u)
-                                        : bounded_strlen(s, scan)); /* SIZE_MAX = legacy */
-    /* Refuse before any write when the proven destination cannot hold the
-     * bytes the raw strncat would append plus its terminator. This is the
-     * actual bounds check; check_capacity() below remains the final gate
-     * (and the strict-mode/unknown-capacity refusal path). */
-    if (dcap != (size_t)-1 && slen > room) {
+    {
+        size_t src_cap = source_scan_ceiling(s, scan_n);
+        if (src_cap < scan_n) scan_n = src_cap;
+    }
+    slen = cplus_strnlen(s, scan_n);
+    if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
+    if (room != (size_t)-1 && slen > room) {
         cplus_libc_log("strncat", "overflow refused");
         errno = ERANGE;
         return NULL;
     }
-    /* need = dlen + slen + 1 must not wrap SIZE_MAX into a small value that
-     * would bypass check_capacity(). slen >= SIZE_MAX - dlen covers both the
-     * exact wrap (dlen + slen == SIZE_MAX) and dlen == SIZE_MAX. */
-    if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
     need = dlen + slen + 1u;
     if (check_capacity("strncat", d, need, known, &cap)) return NULL;
-    /* Delegate only the bytes that were actually accepted. bounded_strlen()
-     * counts exactly what the raw loop appends (it stops at the source NUL),
-     * so passing `slen` preserves every valid result while preventing the raw
-     * loop from re-reading past a clamped destination room or a proven source
-     * capacity when the caller supplied a larger n. */
-    return cplus_strncat(d, s, slen);
+    /* Delegate only the prefix proven readable: a tracked source whose
+     * capacity limited the scan must never make the raw loop read past it. */
+    if (scan_n < n) n = scan_n;
+    return cplus_strncat(d, s, n);
 }

@@ -1,110 +1,133 @@
-/* Issue 216 regression: serialized size must count '-' signs, and the
- * serializer must bound label/newline/NUL writes.
+/* Issue #216 regression: negative widget IDs/coordinates must be counted in
+ * the serialized size (the '-' sign is a byte too), and the direct label/newline
+ * writes in stdlib_window_serialize() must stay inside the caller's buffer.
  *
- * A window with negative ids/coordinates used to get an exact-sized buffer
- * from stdlib_window_serialized_size() that was too small; the label and
- * trailing bytes were then written past the end.  Canary bytes after the
- * reported size make that overflow observable without depending on ASan.
+ * Headless, deterministic C+ program. Every check prints only on failure and
+ * the last line is "ISSUE216 <checks> <failures>".
  */
-#include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
+#include "stdlib/alloc_iface.hp"
 #include "stdlib/widgets.hp"
 
-static int failures = 0;
+static int checks = 0;
+static int failed = 0;
 
-static void check(const char *label, int ok) {
-    print("issue216", label, ok ? "PASS" : "FAIL");
-    if (!ok)
-        failures++;
+static void ck(int cond, const char *tag) {
+    checks++;
+    if (!cond) {
+        failed++;
+        printf("FAIL %s\n", tag);
+    }
 }
 
-static int canary_intact(const char *buf, size_t from, size_t total) {
+static int all_bytes(const unsigned char *p, size_t n, unsigned char value) {
     size_t i;
-    for (i = from; i < total; ++i)
-        if ((unsigned char)buf[i] != 0xA5u)
-            return 0;
-    return 1;
-}
-
-static int make_window(stdlib_window *win, int with_more, error *err) {
-    if (stdlib_window_init(win, (const stdlib_allocator *)0,
-                           0, 0, 100, 100, 2, err) != STDLIB_OK)
-        return 0;
-    if (stdlib_widget_add(win, -1, 1, "hello", -10, -20, 50, 50, err) < 0)
-        return 0;
-    if (with_more) {
-        if (stdlib_widget_add(win, -2, -3, "x", -4, -5, 6, 7, err) < 0)
-            return 0;
-        if (stdlib_widget_add(win, 7, 1, "", 0, 0, 1, 1, err) < 0)
+    for (i = 0u; i < n; i++) {
+        if (p[i] != value)
             return 0;
     }
     return 1;
+}
+
+/* Exact reported size, byte-exact text and an intact tail canary. */
+static void check_serialization(stdlib_window *w, const char *expected,
+                                const char *tag, error *err) {
+    size_t need = 0u;
+    char serial[256];
+    size_t text_len = strlen(expected);
+
+    ck(stdlib_window_serialized_size(w, &need, err) == STDLIB_OK &&
+           need == text_len + 1u,
+       tag);
+    if (need == 0u || need > sizeof(serial))
+        return;
+
+    memset(serial, 0x5A, sizeof(serial));
+    ck(stdlib_window_serialize(w, serial, need, err) == STDLIB_OK,
+       "serialize_exact_fit");
+    ck(strcmp(serial, expected) == 0, "serialize_text");
+    ck(serial[need - 1u] == '\0', "serialize_nul");
+    ck(all_bytes((const unsigned char *)serial + need,
+                 sizeof(serial) - need, 0x5Au),
+       "serialize_tail_canary");
+
+    /* One byte short is still refused, with the destination untouched. */
+    memset(serial, 0x3C, sizeof(serial));
+    ck(stdlib_window_serialize(w, serial, need - 1u, err) == STDLIB_FAIL &&
+           err->code() == CPLUS_EXIT_BOUNDS,
+       "serialize_short_refused");
+    ck(all_bytes((const unsigned char *)serial, sizeof(serial), 0x3Cu),
+       "serialize_short_untouched");
 }
 
 int main(void) {
-    error err = error();
-    stdlib_window win;
-    stdlib_window more;
-    char buf[128];
+    error e = error();
+    stdlib_window w;
     size_t need = 0u;
-    size_t need_more = 0u;
-    size_t i;
-    int rc;
+    char serial[256];
+    const char *one =
+        "WIDGETS 1\n"
+        "W -1 1 -10 -20 50 50 3 hello\n";
+    const char *four =
+        "WIDGETS 4\n"
+        "W -1 1 -10 -20 50 50 3 a\n"
+        "W -22 2 -333 -4 7 8 3 bb\n"
+        "W -4000 3 -5 -66 9 10 3 ccc\n"
+        "W -7 4 -80000 -9 11 12 3 dddd\n";
 
-    check("digits-zero", stdlib_widgets_dec_digits(0LL) == 1u);
-    check("digits-pos", stdlib_widgets_dec_digits(12345LL) == 5u);
-    check("digits-neg", stdlib_widgets_dec_digits(-1LL) == 2u);
-    check("digits-neg5", stdlib_widgets_dec_digits(-12345LL) == 6u);
-    check("digits-min", stdlib_widgets_dec_digits(LLONG_MIN) == 20u);
+    stdlib_set_error_callback((stdlib_error_callback)0);
 
-    check("make", make_window(&win, 0, &err));
-    check("make-more", make_window(&more, 1, &err));
+    /* ---- 1. digit accounting includes the sign ----------------------- */
+    ck(stdlib_widgets_dec_digits(0) == 1u, "digits_zero");
+    ck(stdlib_widgets_dec_digits(9) == 1u, "digits_positive_1");
+    ck(stdlib_widgets_dec_digits(10) == 2u, "digits_positive_2");
+    ck(stdlib_widgets_dec_digits(-1) == 2u, "digits_minus_one");
+    ck(stdlib_widgets_dec_digits(-9) == 2u, "digits_minus_one_digit");
+    ck(stdlib_widgets_dec_digits(-10) == 3u, "digits_minus_two");
+    ck(stdlib_widgets_dec_digits(-999) == 4u, "digits_minus_three");
+    ck(stdlib_widgets_dec_digits(LLONG_MAX) == 19u, "digits_llong_max");
+    ck(stdlib_widgets_dec_digits(-LLONG_MAX) == 20u, "digits_negative_llong");
+    ck(stdlib_widgets_dec_digits(LLONG_MIN) == 20u, "digits_llong_min");
 
-    error_reset(&err);
-    rc = stdlib_window_serialized_size(&win, &need, &err);
-    check("size", rc == STDLIB_OK && err.ok() && need == 40u);
-    error_reset(&err);
-    rc = stdlib_window_serialized_size(&more, &need_more, &err);
-    check("size-more", rc == STDLIB_OK && err.ok() && need_more == 79u);
+    /* ---- 2. issue reproducer: 3 negative fields, exact-size buffer --- */
+    ck(stdlib_window_init(&w, (const stdlib_allocator *)0, 0, 0, 120, 80, 2,
+                          &e) == STDLIB_OK,
+       "init_one");
+    ck(stdlib_widget_add(&w, -1, STDLIB_WIDGET_BUTTON, "hello", -10, -20,
+                         50, 50, &e) == 0,
+       "add_one");
+    ck(stdlib_window_serialized_size(&w, &need, &e) == STDLIB_OK &&
+           need == strlen(one) + 1u,
+       "issue_repro_size");
+    memset(serial, 0x5A, sizeof(serial));
+    ck(stdlib_window_serialize(&w, serial, need, &e) == STDLIB_OK,
+       "issue_repro_serialize");
+    ck(strcmp(serial, one) == 0, "issue_repro_text");
+    ck(serial[need - 1u] == '\0', "issue_repro_nul");
+    ck(all_bytes((const unsigned char *)serial + need,
+                 sizeof(serial) - need, 0x5Au),
+       "issue_repro_no_overflow");
+    stdlib_window_drop(&w, &e);
 
-    memset(buf, 0xA5, sizeof(buf));
-    error_reset(&err);
-    rc = stdlib_window_serialize(&win, buf, need, &err);
-    check("serialize", rc == STDLIB_OK && err.ok());
-    check("exact-output",
-          strcmp(buf, "WIDGETS 1\nW -1 1 -10 -20 50 50 3 hello\n") == 0 &&
-          strlen(buf) + 1u == need);
-    check("canary", canary_intact(buf, need, sizeof(buf)));
+    /* ---- 3. size error scales with the number of negative widgets ---- */
+    ck(stdlib_window_init(&w, (const stdlib_allocator *)0, 0, 0, 120, 80, 2,
+                          &e) == STDLIB_OK,
+       "init_four");
+    ck(stdlib_widget_add(&w, -1, 1, "a", -10, -20, 50, 50, &e) == 0,
+       "add_a");
+    ck(stdlib_widget_add(&w, -22, 2, "bb", -333, -4, 7, 8, &e) == 1,
+       "add_bb");
+    ck(stdlib_widget_add(&w, -4000, 3, "ccc", -5, -66, 9, 10, &e) == 2,
+       "add_ccc");
+    ck(stdlib_widget_add(&w, -7, 4, "dddd", -80000, -9, 11, 12, &e) == 3,
+       "add_dddd");
+    check_serialization(&w, four, "four_negative_size", &e);
+    stdlib_window_drop(&w, &e);
 
-    memset(buf, 0xA5, sizeof(buf));
-    error_reset(&err);
-    rc = stdlib_window_serialize(&more, buf, need_more, &err);
-    check("serialize-more", rc == STDLIB_OK && err.ok());
-    check("exact-output-more",
-          strcmp(buf, "WIDGETS 3\n"
-                      "W -1 1 -10 -20 50 50 3 hello\n"
-                      "W -2 -3 -4 -5 6 7 3 x\n"
-                      "W 7 1 0 0 1 1 3 \n") == 0 &&
-          strlen(buf) + 1u == need_more);
-    check("canary-more", canary_intact(buf, need_more, sizeof(buf)));
-
-    /* Too-small buffer: fail with BOUNDS and leave the destination alone. */
-    memset(buf, 0xA5, sizeof(buf));
-    error_reset(&err);
-    rc = stdlib_window_serialize(&win, buf, need - 1u, &err);
-    check("too-small", rc == STDLIB_FAIL && err.failed_now() &&
-                       err.category() == STDLIB_CATEGORY_BOUNDS);
-    for (i = 0u; i < sizeof(buf); ++i) {
-        if ((unsigned char)buf[i] != 0xA5u)
-            break;
-    }
-    check("untouched", i == sizeof(buf));
-
-    stdlib_window_drop(&win, &err);
-    stdlib_window_drop(&more, &err);
-    print("issue216-summary", failures == 0 ? "PASS" : "FAIL", failures);
-    return failures == 0 ? 0 : 1;
+    printf("ISSUE216 %d %d\n", checks, failed);
+    return failed == 0 ? 0 : 1;
 }

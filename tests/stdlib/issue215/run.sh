@@ -1,5 +1,5 @@
 #!/bin/sh
-# Issue 215 regression suite: initial URL protocol policy and set_headers()
+# Issue 215 regression suite: initial-URL protocol policy and set_headers()
 # ownership ordering.  Fully offline (loopback echo server).
 #
 # --no-werror is used because stdlib/http.hp carries a pre-existing analyzer
