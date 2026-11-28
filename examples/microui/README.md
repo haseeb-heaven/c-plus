@@ -26,7 +26,7 @@ are linked as-is through a C ABI boundary; no C ABI layout is changed.
 
 ```sh
 sh examples/microui/run.sh
-# MICROUI_TEST 7 7 0
+# MICROUI_TEST 6 6 0
 ```
 
 Without `UI_PROOF`, a real 800x600 desktop window opens with all three panels.
