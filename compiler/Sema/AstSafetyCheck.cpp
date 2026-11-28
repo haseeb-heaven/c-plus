@@ -14,6 +14,7 @@
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/PrettyPrinter.h>
+#include <clang/Analysis/CFG.h> // issue #180: forward/backward CFG dataflow
 #include <clang/Basic/SourceManager.h>
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Frontend/PCHContainerOperations.h>
@@ -31,6 +32,8 @@
 #include <cstdint>
 #include <cmath>
 #include <cmath>
+#include <deque>
+#include <functional>
 #include <iterator>
 #include <map>
 #include <set>
@@ -3750,6 +3753,48 @@ public:
       }
   }
 
+  // Issue #223: branch and loop visitors fork the release state before
+  // walking an arm (so a free inside the arm is visible to a later deref or
+  // double free in that same arm) and join it at the merge point. A release
+  // is definite only when every continuing arm released the owner; a release
+  // on any arm makes it a possible release afterwards.
+  struct ReleaseSnapshot {
+    std::set<std::string> releasedVars, maybeReleasedVars, releasedFields;
+  };
+
+  ReleaseSnapshot snapshotReleaseState() const {
+    return {releasedVars_, maybeReleasedVars_, releasedFields_};
+  }
+
+  void restoreReleaseState(const ReleaseSnapshot &s) {
+    releasedVars_ = s.releasedVars;
+    maybeReleasedVars_ = s.maybeReleasedVars;
+    releasedFields_ = s.releasedFields;
+  }
+
+  void joinReleaseStates(const ReleaseSnapshot &before,
+                         const std::vector<ReleaseSnapshot> &arms) {
+    restoreReleaseState(before);
+    for (const auto &arm : arms) {
+      for (auto it = releasedVars_.begin(); it != releasedVars_.end();)
+        if (!arm.releasedVars.count(*it))
+          it = releasedVars_.erase(it);
+        else
+          ++it;
+      for (auto it = releasedFields_.begin(); it != releasedFields_.end();)
+        if (!arm.releasedFields.count(*it))
+          it = releasedFields_.erase(it);
+        else
+          ++it;
+    }
+    for (const auto &arm : arms) {
+      maybeReleasedVars_.insert(arm.maybeReleasedVars.begin(),
+                                arm.maybeReleasedVars.end());
+      maybeReleasedVars_.insert(arm.releasedVars.begin(),
+                                arm.releasedVars.end());
+    }
+  }
+
   /// Canonical key for a struct field / array-element lvalue, used for
   /// exact field-sensitive release tracking (e.g. `s.p`, `a[0].p`).
   std::string lvalueKey(const Expr *expr) const {
@@ -4242,6 +4287,20 @@ public:
     // `if (!p) p = &x;` — the assignment in the then arm makes p non-null
     bool keepErase = false;
     // on both paths after the statement. Also handles `if (p == NULL) p = &x;`.
+    // Issue #224: only `==` against a null constant proves non-nullness. An
+    // `!=` comparison (or a comparison of two non-null values) proves no such
+    // fact, so it must not erase the null state of the named variable.
+    auto nullEqualityVar = [&](const Expr *cond) -> std::string {
+      const auto *bo = dyn_cast_or_null<BinaryOperator>(
+          cond ? cond->IgnoreParenImpCasts() : nullptr);
+      if (!bo || bo->getOpcode() != BO_EQ)
+        return std::string();
+      if (isNullConstant(bo->getRHS()))
+        return varNameOf(bo->getLHS());
+      if (isNullConstant(bo->getLHS()))
+        return varNameOf(bo->getRHS());
+      return std::string();
+    };
     if (report_ && s->getThen()) {
       std::string n;
       if (negatedGuard)
@@ -4249,20 +4308,16 @@ public:
             cast<UnaryOperator>(s->getCond()->IgnoreParenImpCasts())
                 ->getSubExpr());
       if (n.empty())
-        if (const auto *bo = dyn_cast_or_null<BinaryOperator>(
-                s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
-          if (bo->isEqualityOp()) {
-            n = varNameOf(bo->getLHS());
-            if (n.empty() && isNullConstant(bo->getLHS()))
-              n = varNameOf(bo->getRHS());
-          }
+        n = nullEqualityVar(s->getCond());
       if (!n.empty()) {
         bool assigns = false;
         std::function<void(const Stmt *)> scan = [&](const Stmt *node) {
           if (!node || assigns)
             return;
           if (const auto *bo = dyn_cast<BinaryOperator>(node))
-            if (bo->isAssignmentOp() && varNameOf(bo->getLHS()) == n)
+            // `p = NULL` does not make p non-null; only a fresh value does.
+            if (bo->isAssignmentOp() && varNameOf(bo->getLHS()) == n &&
+                !isNullConstant(bo->getRHS()->IgnoreParenCasts()))
               assigns = true;
           for (const Stmt *c : node->children())
             scan(c);
@@ -4348,22 +4403,21 @@ public:
         if (uo->getOpcode() == UO_LNot) {
           condVar = varNameOf(uo->getSubExpr());
           // `if (!p) return;` proves p non-null after the statement.
-          keepErase = containsReturn(s->getThen());
-        }
-      if (const auto *bo = dyn_cast_or_null<BinaryOperator>(
-              s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
-        if (bo->isEqualityOp() && containsReturn(s->getThen())) {
-          std::string n = varNameOf(bo->getLHS());
-          if (n.empty() && isNullConstant(bo->getLHS()))
-            n = varNameOf(bo->getRHS());
-          if (!n.empty()) {
-            guardedFromConst_.insert(n);
-            // `if (p == 0) return;` proves p is non-null afterwards.
-            condVar = n;
+          if (containsReturn(s->getThen())) {
             keepErase = true;
-            keepEraseVar = n;
+            keepEraseVar = condVar;
           }
         }
+      if (containsReturn(s->getThen())) {
+        std::string n = nullEqualityVar(s->getCond());
+        if (!n.empty()) {
+          guardedFromConst_.insert(n);
+          // `if (p == 0) return;` proves p is non-null afterwards.
+          condVar = n;
+          keepErase = true;
+          keepEraseVar = n;
+        }
+      }
       if (!condVar.empty())
         nullVars_.erase(condVar);
     }
@@ -4405,7 +4459,9 @@ public:
       auto fromZeroEquality = [&](const Expr *e) -> const VarDecl * {
         const auto *bo = dyn_cast_or_null<BinaryOperator>(
             e ? e->IgnoreParenCasts() : nullptr);
-        if (!bo || !bo->isEqualityOp()) return nullptr;
+        // Issue #224: `x != 0` means x IS zero on the continuing path, so it
+        // must never place x in nonZeroVars_ (which would mask 1/x).
+        if (!bo || bo->getOpcode() != BO_EQ) return nullptr;
         if (!isNullConstant(bo->getRHS()->IgnoreParenCasts())) return nullptr;
         const auto *ref = dyn_cast<DeclRefExpr>(
             bo->getLHS()->IgnoreParenCasts());
@@ -4446,21 +4502,51 @@ public:
     // an unlock or return inside one arm must not be applied to code after
     // the if. A return inside an arm is still diagnosed while it holds a lock.
     std::map<std::string, unsigned> savedLocks = heldLocks_;
-    bool r = RecursiveASTVisitor::TraverseIfStmt(s);
+    // Issue #223: walk each arm with release updates enabled (so a free in
+    // one arm is visible to a deref/second free in that same arm), then join
+    // the arm states at the merge point instead of dropping the update.
+    bool r = true;
+    if (s->getInit())
+      r = TraverseStmt(s->getInit());
+    if (s->getCond())
+      r &= TraverseStmt(s->getCond());
+    ReleaseSnapshot beforeRelease = snapshotReleaseState();
+    if (s->getThen())
+      r &= TraverseStmt(s->getThen());
+    ReleaseSnapshot thenRelease = snapshotReleaseState();
+    std::set<std::string> thenNullVars = nullVars_;
+    restoreReleaseState(beforeRelease);
+    if (s->getElse())
+      r &= TraverseStmt(s->getElse());
+    ReleaseSnapshot elseRelease = snapshotReleaseState();
+    std::set<std::string> elseNullVars = nullVars_;
+    std::vector<ReleaseSnapshot> releaseArms;
+    if (s->getThen())
+      releaseArms.push_back(thenRelease);
+    if (s->getElse())
+      releaseArms.push_back(elseRelease);
+    else
+      releaseArms.push_back(beforeRelease); // implicit "condition false" path
+    joinReleaseStates(beforeRelease, releaseArms);
     heldLocks_ = savedLocks;
     if (ifGuardVar && !containsReturn(s->getThen()))
       nonZeroVars_.erase(ifGuardVar);
     guardedSnprintf_ = savedGuarded;
-    if (keepErase) {
-      // The branch we kept may itself assign `p = NULL` (RAII lowering does
-      // this on failure paths). The continuing path is still non-null.
-      for (const auto &kv : savedNulls)
-        nullVars_.erase(kv);
-      if (!keepEraseVar.empty())
-        nullVars_.erase(keepEraseVar);
-    } else {
-      nullVars_ = savedNulls;
-    }
+    // Issue #224: restore every null fact saved before the branch. Only the
+    // variable actually proved non-null on the continuing path may lose its
+    // null state; the kept arm may itself assign `p = NULL` (RAII lowering),
+    // so the erase happens after the restore.
+    nullVars_ = savedNulls;
+    // A branch-local free followed by p = NULL makes a later free a safe
+    // free(NULL) on that path; do not report it as a double free at the join.
+    for (const auto &n : thenNullVars)
+      if (!savedNulls.count(n))
+        branchNullifiedVars_.insert(n);
+    for (const auto &n : elseNullVars)
+      if (!savedNulls.count(n))
+        branchNullifiedVars_.insert(n);
+    if (keepErase && !keepEraseVar.empty())
+      nullVars_.erase(keepEraseVar);
     --conditionalDepth_;
     return r;
   }
@@ -4510,7 +4596,13 @@ public:
     long long saved = hadOld ? oldIt->second : 0;
     if (haveBound)
       loopIndexOverride_[induction] = worstIndex;
+    // Issue #223: release updates in the loop body are visible to a later
+    // deref/second free in that body; at the loop exit the release is only
+    // possible (the body may run zero times).
+    ReleaseSnapshot beforeRelease = snapshotReleaseState();
     bool r = RecursiveASTVisitor::TraverseForStmt(s);
+    joinReleaseStates(beforeRelease,
+                      {beforeRelease, snapshotReleaseState()});
     if (report_) {
       if (haveCountBound) {
         if (hadOldCount)
@@ -4568,7 +4660,12 @@ public:
     long long saved = hadOld ? oldIt->second : 0;
     if (haveBound)
       loopIndexOverride_[induction] = worstIndex;
+    // Issue #223: see TraverseForStmt — body-local release updates stay
+    // visible in the body, and become only possible releases after the loop.
+    ReleaseSnapshot beforeRelease = snapshotReleaseState();
     bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
+    joinReleaseStates(beforeRelease,
+                      {beforeRelease, snapshotReleaseState()});
     if (haveBound) {
       if (hadOld)
         loopIndexOverride_[induction] = saved;
@@ -4586,13 +4683,21 @@ public:
     ++conditionalDepth_;
     if (!report_)
       collectMayRelease(s->getBody());
+    ReleaseSnapshot beforeRelease = snapshotReleaseState();
     bool r = RecursiveASTVisitor::TraverseDoStmt(s);
+    joinReleaseStates(beforeRelease,
+                      {beforeRelease, snapshotReleaseState()});
     --conditionalDepth_;
     return r;
   }
   bool TraverseSwitchStmt(SwitchStmt *s) {
     ++conditionalDepth_;
+    ReleaseSnapshot beforeRelease = snapshotReleaseState();
     bool r = RecursiveASTVisitor::TraverseSwitchStmt(s);
+    // A case may release an owner; without proof that every case does, the
+    // release is only possible after the switch.
+    joinReleaseStates(beforeRelease,
+                      {beforeRelease, snapshotReleaseState()});
     --conditionalDepth_;
     return r;
   }
@@ -4678,6 +4783,604 @@ public:
     }
   }
 
+  // ---- Issue #180 — clang::CFG forward/backward dataflow -----------------
+  //
+  // The recursive AST walk above keeps one "current" lock/release state and
+  // restores it at branch joins (see TraverseIfStmt).  That is sound for
+  // straight-line code but loses facts for conditional acquisitions and can
+  // mistake two frees on mutually exclusive arms for a double free.  This
+  // additive pass runs a must/may lattice over Clang's CFG and a backward
+  // liveness pass over the same graph.  It only *refines* the existing
+  // diagnostics: it never removes a diagnostic the linear walk would emit
+  // except a provably-spurious may-release double free, and new findings use
+  // their own [CPLUS-CFG] category so existing output stays byte-compatible.
+  struct CfgFlowState {
+    // Mutex -> held count: must = minimum over all incoming paths,
+    // may = maximum over all incoming paths.
+    std::map<std::string, unsigned> mustLocks, mayLocks;
+    // Heap ownership: must = live on every path, may = live on some path.
+    std::set<std::string> mustOwned, mayOwned;
+    // Release state: must = freed on every path, may = freed on some path.
+    std::set<std::string> mustFreed, mayFreed;
+  };
+
+  static bool cfgSame(const CfgFlowState &a, const CfgFlowState &b) {
+    return a.mustLocks == b.mustLocks && a.mayLocks == b.mayLocks &&
+           a.mustOwned == b.mustOwned && a.mayOwned == b.mayOwned &&
+           a.mustFreed == b.mustFreed && a.mayFreed == b.mayFreed;
+  }
+
+  static CfgFlowState cfgJoin(const CfgFlowState &a, const CfgFlowState &b) {
+    CfgFlowState r;
+    for (const auto &kv : a.mustLocks) {
+      auto it = b.mustLocks.find(kv.first);
+      r.mustLocks[kv.first] =
+          std::min(kv.second, it == b.mustLocks.end() ? 0u : it->second);
+    }
+    for (const auto &kv : b.mustLocks)
+      if (!a.mustLocks.count(kv.first))
+        r.mustLocks[kv.first] = 0;
+    for (const auto &kv : a.mayLocks)
+      r.mayLocks[kv.first] = kv.second;
+    for (const auto &kv : b.mayLocks)
+      r.mayLocks[kv.first] = std::max(r.mayLocks[kv.first], kv.second);
+    std::set_intersection(a.mustOwned.begin(), a.mustOwned.end(),
+                          b.mustOwned.begin(), b.mustOwned.end(),
+                          std::inserter(r.mustOwned, r.mustOwned.begin()));
+    std::set_union(a.mayOwned.begin(), a.mayOwned.end(), b.mayOwned.begin(),
+                   b.mayOwned.end(),
+                   std::inserter(r.mayOwned, r.mayOwned.begin()));
+    std::set_intersection(a.mustFreed.begin(), a.mustFreed.end(),
+                          b.mustFreed.begin(), b.mustFreed.end(),
+                          std::inserter(r.mustFreed, r.mustFreed.begin()));
+    std::set_union(a.mayFreed.begin(), a.mayFreed.end(), b.mayFreed.begin(),
+                   b.mayFreed.end(),
+                   std::inserter(r.mayFreed, r.mayFreed.begin()));
+    return r;
+  }
+
+  void runCfgSafetyDataflow(const FunctionDecl *fd) {
+    if (!report_ || !fd || !fd->doesThisDeclarationHaveABody() || !fd->getBody())
+      return;
+    SourceManager &sm = ctx_.getSourceManager();
+    SourceLocation floc = sm.getExpansionLoc(fd->getBeginLoc());
+    if (floc.isValid() && !sm.isWrittenInMainFile(floc))
+      return; // header/inline bodies are not C+ source we own
+
+    CFG::BuildOptions opts;
+    std::unique_ptr<CFG> cfg = CFG::buildCFG(fd, fd->getBody(), &ctx_, opts);
+    if (!cfg)
+      return;
+    const size_t n = cfg->size();
+    if (n == 0)
+      return;
+    std::vector<const CFGBlock *> blocks(n, nullptr);
+    for (const CFGBlock *b : *cfg)
+      if (b && b->getBlockID() < n)
+        blocks[b->getBlockID()] = b;
+
+    // Statement -> CFG block, so a scope-end statement can be located.
+    // Map whole subtrees: `return p` is a block terminator whose value `p`
+    // may also be a CFGStmt element, and both must resolve to the same block.
+    std::map<const Stmt *, size_t> stmtBlock;
+    for (size_t i = 0; i < n; ++i) {
+      const CFGBlock *b = blocks[i];
+      if (!b)
+        continue;
+      auto mapTree = [&](const Stmt *root) {
+        std::function<void(const Stmt *)> rec = [&](const Stmt *st) {
+          if (!st)
+            return;
+          stmtBlock.emplace(st, i);
+          for (const Stmt *c : st->children())
+            rec(c);
+        };
+        rec(root);
+      };
+      for (const CFGElement &e : *b)
+        if (auto se = e.getAs<CFGStmt>())
+          mapTree(se->getStmt());
+      if (const Stmt *t = b->getTerminatorStmt())
+        mapTree(t);
+    }
+
+    // Parent-chain helpers.  They use the typed AST, never token spelling.
+    auto enclosingCompound = [&](const VarDecl *vd) -> const CompoundStmt * {
+      if (!vd)
+        return nullptr;
+      DynTypedNode cur = DynTypedNode::create(*vd);
+      for (unsigned d = 0; d < 16; ++d) {
+        DynTypedNodeList ps = ctx_.getParents(cur);
+        if (ps.empty())
+          return nullptr;
+        const DynTypedNode &p = *ps.begin();
+        if (const CompoundStmt *cs = p.get<CompoundStmt>())
+          return cs;
+        if (const Stmt *st = p.get<Stmt>())
+          cur = DynTypedNode::create(*st);
+        else if (const Decl *dn = p.get<Decl>())
+          cur = DynTypedNode::create(*dn);
+        else
+          return nullptr;
+      }
+      return nullptr;
+    };
+    auto insideConditional = [&](const Stmt *s) {
+      if (!s)
+        return false;
+      DynTypedNode cur = DynTypedNode::create(*s);
+      for (unsigned d = 0; d < 32; ++d) {
+        DynTypedNodeList ps = ctx_.getParents(cur);
+        if (ps.empty())
+          return false;
+        const DynTypedNode &p = *ps.begin();
+        if (p.get<IfStmt>() || p.get<SwitchStmt>() ||
+            p.get<ConditionalOperator>())
+          return true;
+        if (const Stmt *st = p.get<Stmt>())
+          cur = DynTypedNode::create(*st);
+        else if (const Decl *dn = p.get<Decl>())
+          cur = DynTypedNode::create(*dn);
+        else
+          return false;
+      }
+      return false;
+    };
+    auto allocatedVarOf = [&](const CallExpr *call) -> std::string {
+      if (!call)
+        return std::string();
+      DynTypedNode cur = DynTypedNode::create(*call);
+      for (unsigned d = 0; d < 8; ++d) {
+        DynTypedNodeList ps = ctx_.getParents(cur);
+        if (ps.empty())
+          break;
+        const DynTypedNode &p = *ps.begin();
+        if (const auto *bo = p.get<BinaryOperator>())
+          if (bo->isAssignmentOp() && bo->getRHS() &&
+              bo->getRHS()->IgnoreParenImpCasts() == call)
+            return varNameOf(bo->getLHS());
+        if (const auto *vd = p.get<VarDecl>())
+          return vd->getNameAsString();
+        if (const Stmt *st = p.get<Stmt>())
+          cur = DynTypedNode::create(*st);
+        else if (const Decl *dn = p.get<Decl>())
+          cur = DynTypedNode::create(*dn);
+        else
+          break;
+      }
+      return std::string();
+    };
+    auto callNameOf = [&](const CallExpr *call) {
+      return call && call->getDirectCallee()
+                 ? normalizeFortifyName(
+                       call->getDirectCallee()->getNameAsString())
+                 : std::string();
+    };
+    auto scopeEndBlock = [&](const CompoundStmt *cs) -> size_t {
+      if (!cs)
+        return cfg->getExit().getBlockID();
+      DynTypedNode cur = DynTypedNode::create(*cs);
+      for (unsigned d = 0; d < 16; ++d) {
+        DynTypedNodeList ps = ctx_.getParents(cur);
+        if (ps.empty())
+          break;
+        const DynTypedNode &p = *ps.begin();
+        if (const CompoundStmt *parent = p.get<CompoundStmt>()) {
+          bool found = false;
+          for (const Stmt *child : parent->body()) {
+            if (!child)
+              continue;
+            if (found) {
+              auto it = stmtBlock.find(child);
+              if (it != stmtBlock.end())
+                return it->second;
+              continue;
+            }
+            if (child == cs)
+              found = true;
+          }
+          cur = DynTypedNode::create(*parent);
+          continue;
+        }
+        if (const Stmt *st = p.get<Stmt>()) {
+          cur = DynTypedNode::create(*st);
+          continue;
+        }
+        break;
+      }
+      return cfg->getExit().getBlockID();
+    };
+
+    // Facts gathered once from the typed AST before the dataflow runs.
+    // The visitor's aliasGroups_ is filled by the linear walk that runs
+    // later, so build a local alias map here instead.
+    std::map<std::string, std::set<std::string>> cfgAliases;
+    std::set<std::string> conditionalAllocs, allFreedNames, allUnlockLocks,
+        conditionalLocks, returnedNames;
+    struct EscapeCandidate {
+      std::string ptr;
+      const VarDecl *local;
+      const CompoundStmt *scope;
+      SourceLocation loc;
+    };
+    std::vector<EscapeCandidate> escapes;
+    // An address stored in an outer pointer is only a dangling escape if the
+    // pointer is actually used after the owner's block closes. A diagnostic
+    // probe that records &local solely to inspect it inside the same block
+    // must not be rejected.
+    auto usedAfterScope = [&](const std::string &name, const CompoundStmt *cs) {
+      bool used = false;
+      std::function<void(const Stmt *)> scan = [&](const Stmt *n) {
+        if (!n || used)
+          return;
+        if (const auto *ref = dyn_cast<DeclRefExpr>(n))
+          if (varNameOf(ref) == name &&
+              ref->getBeginLoc().getRawEncoding() >
+                  cs->getEndLoc().getRawEncoding())
+            used = true;
+        for (const Stmt *c : n->children())
+          scan(c);
+      };
+      scan(fd->getBody());
+      return used;
+    };
+    std::function<void(const Stmt *)> gather = [&](const Stmt *s) {
+      if (!s)
+        return;
+      if (const auto *ds = dyn_cast<DeclStmt>(s))
+        for (const Decl *d : ds->decls())
+          if (const auto *vd = dyn_cast<VarDecl>(d))
+            if (vd->getType()->isPointerType() && vd->getInit()) {
+              std::string rhsName = varNameOf(vd->getInit());
+              std::string lhsName = vd->getNameAsString();
+              if (!rhsName.empty() && lhsName != rhsName) {
+                cfgAliases[lhsName].insert(rhsName);
+                cfgAliases[rhsName].insert(lhsName);
+              }
+            }
+      if (const auto *ret = dyn_cast<ReturnStmt>(s)) {
+        std::string rn = varNameOf(ret->getRetValue());
+        if (!rn.empty())
+          returnedNames.insert(rn);
+      }
+      if (const auto *call = dyn_cast<CallExpr>(s)) {
+        std::string cn = callNameOf(call);
+        if ((cn == "free" || cn == "cplus_release") && call->getNumArgs())
+          allFreedNames.insert(castedVarName(call->getArg(0)));
+        else if (isMutexUnlockCall(cn) && call->getNumArgs())
+          allUnlockLocks.insert(lockNameOf(call->getArg(0)));
+        else if (isMutexLockCall(cn) && call->getNumArgs()) {
+          std::string m = lockNameOf(call->getArg(0));
+          if (!m.empty() && insideConditional(s))
+            conditionalLocks.insert(m);
+        } else if ((cn == "malloc" || cn == "calloc") &&
+                   insideConditional(s)) {
+          std::string lhs = allocatedVarOf(call);
+          if (!lhs.empty())
+            conditionalAllocs.insert(lhs);
+        }
+      }
+      if (const auto *bo = dyn_cast<BinaryOperator>(s))
+        if (bo->isAssignmentOp()) {
+          std::string lhs = varNameOf(bo->getLHS());
+          // `q = p` (through casts) makes q another view of p's allocation.
+          std::string rhsName = varNameOf(bo->getRHS());
+          const Expr *rhs = bo->getRHS() ? bo->getRHS()->IgnoreParenImpCasts()
+                                        : nullptr;
+          if (!lhs.empty() && !rhsName.empty() && lhs != rhsName && rhs &&
+              rhs->getType()->isPointerType()) {
+            cfgAliases[lhs].insert(rhsName);
+            cfgAliases[rhsName].insert(lhs);
+          }
+          const auto *lref = dyn_cast_or_null<DeclRefExpr>(
+              bo->getLHS() ? bo->getLHS()->IgnoreParenImpCasts() : nullptr);
+          const VarDecl *pvd =
+              lref ? dyn_cast<VarDecl>(lref->getDecl()) : nullptr;
+          const VarDecl *owner = localStackOwner(bo->getRHS());
+          if (!lhs.empty() && pvd && pvd->getType()->isPointerType() &&
+              owner && owner->hasLocalStorage()) {
+            const CompoundStmt *cs = enclosingCompound(owner);
+            // An address taken inside a nested block and stored in a pointer
+            // that outlives it is the classic dangling-escape shape.
+            if (cs && cs != fd->getBody() && usedAfterScope(lhs, cs))
+              escapes.push_back({lhs, owner, cs, bo->getBeginLoc()});
+          }
+        }
+      for (const Stmt *c : s->children())
+        gather(c);
+    };
+    gather(fd->getBody());
+
+    // Local alias closure so `free(q); free(p);` with `q = p` is not
+    // mistaken for two exclusive frees.  It is built from this function's
+    // AST above; the visitor's aliasGroups_ is only ready after the linear
+    // walk, which runs later.
+    auto cfgRelatedNames = [&](const std::string &name) {
+      std::set<std::string> names{name};
+      if (name.empty())
+        return names;
+      auto it = cfgAliases.find(name);
+      if (it != cfgAliases.end())
+        names.insert(it->second.begin(), it->second.end());
+      return names;
+    };
+    auto cfgMarkFreed = [&](CfgFlowState &st, const std::string &name) {
+      for (const auto &n : cfgRelatedNames(name)) {
+        st.mustFreed.insert(n);
+        st.mayFreed.insert(n);
+        st.mustOwned.erase(n);
+        st.mayOwned.erase(n);
+      }
+    };
+    auto cfgIsFreed = [&](const CfgFlowState &st, const std::string &name) {
+      for (const auto &n : cfgRelatedNames(name))
+        if (st.mustFreed.count(n) || st.mayFreed.count(n))
+          return true;
+      return false;
+    };
+
+    // Forward transfer.  `record` is false in the fixpoint worklist (where a
+    // site may look exclusive before every predecessor has been merged) and
+    // true in the final pass over the converged states.
+    cfgExclusiveFreeSites_.clear();
+    std::function<void(const Stmt *, CfgFlowState &, bool,
+                       std::set<const Stmt *> &)>
+        apply = [&](const Stmt *s, CfgFlowState &st, bool record,
+                    std::set<const Stmt *> &processed) {
+          if (!s || !processed.insert(s).second)
+            return;
+          if (const auto *call = dyn_cast<CallExpr>(s)) {
+            std::string cn = callNameOf(call);
+            if (cn == "malloc" || cn == "calloc") {
+              std::string lhs = allocatedVarOf(call);
+              if (!lhs.empty())
+                for (const auto &n : cfgRelatedNames(lhs)) {
+                  st.mustOwned.insert(n);
+                  st.mayOwned.insert(n);
+                  st.mustFreed.erase(n);
+                  st.mayFreed.erase(n);
+                }
+            } else if (cn == "free" || cn == "cplus_release") {
+              if (call->getNumArgs()) {
+                std::string name = castedVarName(call->getArg(0));
+                if (!name.empty()) {
+                  if (record && !cfgIsFreed(st, name))
+                    cfgExclusiveFreeSites_[name].insert(
+                        call->getBeginLoc().getRawEncoding());
+                  cfgMarkFreed(st, name);
+                }
+              }
+            } else if (isMutexLockCall(cn) && call->getNumArgs()) {
+              std::string m = lockNameOf(call->getArg(0));
+              if (!m.empty()) {
+                ++st.mustLocks[m];
+                ++st.mayLocks[m];
+              }
+            } else if (isMutexUnlockCall(cn) && call->getNumArgs()) {
+              std::string m = lockNameOf(call->getArg(0));
+              if (!m.empty()) {
+                if (st.mustLocks[m] > 0)
+                  --st.mustLocks[m];
+                if (st.mayLocks[m] > 0)
+                  --st.mayLocks[m];
+              }
+            }
+          }
+          // A CFG block models control flow with terminators and separate
+          // blocks.  Recursing into a nested branch here would apply both
+          // arms in the predecessor (a conditional lock/alloc would then
+          // look definite, and two exclusive frees would look sequential).
+          // The ternary condition is the only straight-line part of a
+          // ConditionalOperator.
+          if (const auto *co = dyn_cast<ConditionalOperator>(s)) {
+            apply(co->getCond(), st, record, processed);
+            return;
+          }
+          for (const Stmt *c : s->children()) {
+            if (isa<IfStmt>(c) || isa<WhileStmt>(c) || isa<ForStmt>(c) ||
+                isa<DoStmt>(c) || isa<SwitchStmt>(c) ||
+                isa<ConditionalOperator>(c))
+              continue;
+            apply(c, st, record, processed);
+          }
+        };
+
+    // Terminator transfer: an If/loop/Switch terminator owns entire branch
+    // subtrees as children, so apply() must not be called on it directly.
+    // Only its condition executes straight-line in this block; the arms are
+    // modelled by their own CFG blocks.  Return/goto/break/continue carry no
+    // branch bodies to merge (a return value is straight-line).
+    std::function<void(const Stmt *, CfgFlowState &, bool,
+                       std::set<const Stmt *> &)>
+        applyTerm = [&](const Stmt *t, CfgFlowState &st, bool record,
+                        std::set<const Stmt *> &processed) {
+          if (!t)
+            return;
+          if (const auto *ifs = dyn_cast<IfStmt>(t)) {
+            apply(ifs->getCond(), st, record, processed);
+            return;
+          }
+          if (const auto *ws = dyn_cast<WhileStmt>(t)) {
+            apply(ws->getCond(), st, record, processed);
+            return;
+          }
+          if (const auto *fs = dyn_cast<ForStmt>(t)) {
+            apply(fs->getCond(), st, record, processed);
+            return;
+          }
+          if (const auto *ds = dyn_cast<DoStmt>(t)) {
+            apply(ds->getCond(), st, record, processed);
+            return;
+          }
+          if (const auto *ss = dyn_cast<SwitchStmt>(t)) {
+            apply(ss->getCond(), st, record, processed);
+            return;
+          }
+          if (isa<GotoStmt>(t) || isa<BreakStmt>(t) || isa<ContinueStmt>(t))
+            return;
+          apply(t, st, record, processed);
+        };
+
+    std::vector<CfgFlowState> inState(n);
+    std::vector<bool> reached(n, false);
+    std::deque<size_t> work;
+    size_t entry = cfg->getEntry().getBlockID();
+    if (entry < n) {
+      reached[entry] = true;
+      work.push_back(entry);
+    }
+    while (!work.empty()) {
+      size_t id = work.front();
+      work.pop_front();
+      const CFGBlock *b = id < n ? blocks[id] : nullptr;
+      if (!b)
+        continue;
+      CfgFlowState cur = inState[id];
+      std::set<const Stmt *> processed;
+      for (const CFGElement &e : *b)
+        if (auto se = e.getAs<CFGStmt>())
+          apply(se->getStmt(), cur, false, processed);
+      if (const Stmt *t = b->getTerminatorStmt())
+        applyTerm(t, cur, false, processed);
+      for (const CFGBlock *succ : b->succs()) {
+        if (!succ || succ->getBlockID() >= n)
+          continue;
+        size_t sid = succ->getBlockID();
+        CfgFlowState merged =
+            reached[sid] ? cfgJoin(inState[sid], cur) : cur;
+        if (!reached[sid] || !cfgSame(merged, inState[sid])) {
+          inState[sid] = merged;
+          reached[sid] = true;
+          work.push_back(sid);
+        }
+      }
+    }
+
+    // Converged forward states: record provably-exclusive free sites and
+    // check ownership/locks at the single CFG exit block.
+    for (size_t i = 0; i < n; ++i) {
+      if (!reached[i] || !blocks[i] || blocks[i] == &cfg->getExit())
+        continue;
+      CfgFlowState st = inState[i];
+      std::set<const Stmt *> processed;
+      for (const CFGElement &e : *blocks[i])
+        if (auto se = e.getAs<CFGStmt>())
+          apply(se->getStmt(), st, true, processed);
+      if (const Stmt *t = blocks[i]->getTerminatorStmt())
+        applyTerm(t, st, true, processed);
+    }
+
+    std::set<std::string> cfgReported_;
+    size_t exitId = cfg->getExit().getBlockID();
+    if (exitId < n && reached[exitId]) {
+      const CfgFlowState &st = inState[exitId];
+      for (const auto &kv : st.mayLocks) {
+        const std::string &m = kv.first;
+        auto mit = st.mustLocks.find(m);
+        unsigned must = mit == st.mustLocks.end() ? 0 : mit->second;
+        if (!kv.second || must || !conditionalLocks.count(m) ||
+            allUnlockLocks.count(m))
+          continue;
+        if (!cfgReported_.insert("lock|" + m).second)
+          continue;
+        reportNamed(fd->getEndLoc(), "CPLUS-CFG",
+                    "conditional lock leak: mutex '" + m +
+                        "' is held on some exit path; unlock it on every path",
+                    "unlock the mutex on every path that acquires it", true);
+      }
+      for (const auto &name : st.mayOwned) {
+        if (st.mustOwned.count(name) || !conditionalAllocs.count(name) ||
+            allFreedNames.count(name) || returnedNames.count(name))
+          continue;
+        if (!cfgReported_.insert("leak|" + name).second)
+          continue;
+        reportNamed(fd->getEndLoc(), "CPLUS-CFG",
+                    "conditional memory leak: allocation held by '" + name +
+                        "' on some exit path; release it on every path",
+                    "free the allocation on the path that owns it", true);
+      }
+    }
+
+    // Backward liveness: a pointer assigned the address of an inner-block
+    // local is an escape only when that value is read after the block ends.
+    std::vector<std::set<std::string>> liveIn(n), liveOut(n), uses(n), defs(n);
+    for (size_t i = 0; i < n; ++i) {
+      const CFGBlock *b = i < n ? blocks[i] : nullptr;
+      if (!b)
+        continue;
+      std::function<void(const Stmt *)> collect = [&](const Stmt *s) {
+        if (!s)
+          return;
+        if (const auto *ref = dyn_cast<DeclRefExpr>(s)) {
+          const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+          if (vd && vd->getType()->isPointerType() &&
+              !vd->hasGlobalStorage()) {
+            bool lhsOfAssign = false;
+            DynTypedNode cur = DynTypedNode::create(*ref);
+            DynTypedNodeList ps = ctx_.getParents(cur);
+            if (!ps.empty())
+              if (const auto *bo = ps.begin()->get<BinaryOperator>())
+                if (bo->isAssignmentOp() && bo->getLHS() &&
+                    bo->getLHS()->IgnoreParenImpCasts() == ref)
+                  lhsOfAssign = true;
+            if (!lhsOfAssign)
+              uses[i].insert(vd->getNameAsString());
+          }
+        }
+        if (const auto *bo = dyn_cast<BinaryOperator>(s))
+          if (bo->isAssignmentOp()) {
+            std::string lhs = varNameOf(bo->getLHS());
+            if (!lhs.empty())
+              defs[i].insert(lhs);
+          }
+        for (const Stmt *c : s->children())
+          collect(c);
+      };
+      for (const CFGElement &e : *b)
+        if (auto se = e.getAs<CFGStmt>())
+          collect(se->getStmt());
+      if (const Stmt *t = b->getTerminatorStmt())
+        collect(t);
+    }
+    bool liveChanged = true;
+    for (int iter = 0; liveChanged && iter < 64; ++iter) {
+      liveChanged = false;
+      for (size_t k = n; k-- > 0;) {
+        if (!blocks[k])
+          continue;
+        std::set<std::string> out;
+        for (const CFGBlock *succ : blocks[k]->succs())
+          if (succ && succ->getBlockID() < n)
+            out.insert(liveIn[succ->getBlockID()].begin(),
+                       liveIn[succ->getBlockID()].end());
+        std::set<std::string> in = uses[k];
+        for (const auto &nm : out)
+          if (!defs[k].count(nm))
+            in.insert(nm);
+        if (in != liveIn[k] || out != liveOut[k]) {
+          liveIn[k] = in;
+          liveOut[k] = out;
+          liveChanged = true;
+        }
+      }
+    }
+    for (const EscapeCandidate &cand : escapes) {
+      size_t endBlock = scopeEndBlock(cand.scope);
+      if (endBlock >= n || !liveIn[endBlock].count(cand.ptr))
+        continue;
+      const std::string escKey =
+          "esc|" + std::to_string(cand.loc.getRawEncoding()) + "|" + cand.ptr;
+      if (!cfgReported_.insert(escKey).second)
+        continue;
+      reportNamed(cand.loc, "CPLUS-CFG",
+                  "address of stack memory associated with local variable '" +
+                      cand.local->getNameAsString() +
+                      "' escapes through pointer '" + cand.ptr + "'",
+                  "copy the data or heap-allocate it before leaving the block",
+                  true);
+    }
+  }
+
   bool TraverseFunctionDecl(FunctionDecl *fd) {
     std::string previousFunction = currentFunction_;
     std::set<std::string> previousNulls = nullVars_;
@@ -4695,6 +5398,7 @@ public:
     if (report_) {
       nullVars_.clear();
       releasedVars_.clear();
+      branchNullifiedVars_.clear();
       releasedFields_.clear();
       aliasGroups_.clear();
       borrowOwner_.clear();
@@ -4709,6 +5413,9 @@ public:
       reallocResultVars_.clear();
 
     }
+    // Issue #180: run the clang::CFG dataflow passes before the linear AST
+    // walk so the may-release double-free guard is seeded for this function.
+    runCfgSafetyDataflow(fd);
     // Parameter extents inferred at call sites apply in both passes so
     // nested calls can propagate them further.
     auto pit = callParamExtents_.find(currentFunction_);
@@ -5864,18 +6571,29 @@ public:
     if (!report_ ||
         (op->getOpcode() != BO_LAnd && op->getOpcode() != BO_LOr))
       return RecursiveASTVisitor::TraverseBinaryOperator(op);
-    // `p && *p` and `!p || *p` short-circuit: the deref is reachable only
-    // when p is non-null, so suppress the null fact in that operand.
+    // Issue #225: suppression depends on both the operator and whether the
+    // condition is negated. The RHS is reachable with the tested pointer
+    // non-null only for `p && ...` and `!p || ...`. For `!p && ...` and
+    // `p || ...` the RHS runs precisely when p is NULL, so the null fact must
+    // stay visible there (a dereference is a guaranteed null dereference).
+    const BinaryOperator::Opcode opc = op->getOpcode();
     std::string condVar = varNameOf(op->getLHS());
+    bool isNegated = false;
     if (const auto *uo = dyn_cast<UnaryOperator>(
             op->getLHS()->IgnoreParenImpCasts()))
-      if (uo->getOpcode() == UO_LNot)
+      if (uo->getOpcode() == UO_LNot) {
+        isNegated = true;
         condVar = varNameOf(uo->getSubExpr());
+      }
+    bool rhsNonNull = !condVar.empty() &&
+                      ((isNegated && opc == BO_LOr) ||
+                       (!isNegated && opc == BO_LAnd));
+    // The condition itself is always traversed with the original facts.
+    bool r = TraverseStmt(op->getLHS());
     std::string saved = nonNullBranch_;
-    bool removed = !condVar.empty() && nullVars_.erase(condVar) > 0;
+    bool removed = rhsNonNull && nullVars_.erase(condVar) > 0;
     if (removed)
       nonNullBranch_ = condVar;
-    bool r = TraverseStmt(op->getLHS());
     r &= TraverseStmt(op->getRHS());
     nonNullBranch_ = saved;
     if (removed)
@@ -5886,15 +6604,14 @@ public:
   bool TraverseConditionalOperator(ConditionalOperator *op) {
     if (!report_)
       return RecursiveASTVisitor::TraverseConditionalOperator(op);
-    // `p ? *p : 0` tests p for non-null. Suppress the proven-null fact in the
-    // true arm, then restore it for the false arm and the following code.
+    // `p ? *p : 0` tests p for non-null, so suppress only the proven-null
+    // fact in the true arm. Issue #225: a null test does NOT revive a freed
+    // pointer — free(p) leaves a non-null dangling value — so the release
+    // state must remain visible in both arms.
     std::string condVar = varNameOf(op->getCond());
     std::string saved = nonNullBranch_;
     bool removed = !condVar.empty() && nullVars_.erase(condVar) > 0;
-    // A null test also means the release fact must not apply in the true arm
-    // (a released pointer is often reset to null and then guarded).
-    bool wasReleased = !condVar.empty() && releasedVars_.erase(condVar) > 0;
-    if (removed || wasReleased)
+    if (removed)
       nonNullBranch_ = condVar;
     bool r = TraverseStmt(op->getCond());
     r &= TraverseStmt(op->getTrueExpr());
@@ -5903,8 +6620,6 @@ public:
     nonNullBranch_ = saved;
     if (removed)
       nullVars_.insert(condVar);
-    if (wasReleased)
-      releasedVars_.insert(condVar);
     return r;
   }
 
@@ -6598,6 +7313,8 @@ public:
       const VarDecl *lhsVar = nullptr;
       if (const auto *ref = dyn_cast<DeclRefExpr>(op->getLHS()))
         lhsVar = dyn_cast<VarDecl>(ref->getDecl());
+      if (lhsVar && lhsVar->getType()->isPointerType())
+        branchNullifiedVars_.erase(lhsVar->getNameAsString());
       if (isNullConstant(op->getRHS())) {
         // `p = NULL` (including casts such as `(int *)NULL`) makes p provably
         // null until it is reassigned or guarded.
@@ -6756,7 +7473,7 @@ public:
                   "dereference of released pointer '" +
                       (varNameOf(sub).empty() ? lvalueKey(sub) : varNameOf(sub)) +
                       "'");
-      else if (isMaybeReleased(sub, op->getBeginLoc()) && conditionalDepth_ == 0)
+      else if (isMaybeReleased(sub, op->getBeginLoc()))
         warnAt(op->getBeginLoc(),
                "possible use-after-free: '" + varNameOf(sub) +
                    "' may have been released on a branch path");
@@ -7155,7 +7872,7 @@ public:
           report(call->getBeginLoc(), "double free of '" + an +
                                          "' through indirect call to '" +
                                          target + "'");
-        else if (conditionalDepth_ == 0) {
+        else {
           releaseLocs_[an] = call->getBeginLoc();
           markReleased(an);
         }
@@ -7185,11 +7902,11 @@ public:
           for (const auto &a : affected)
             if (releasedVars_.count(a))
               dangling = true;
-          if (dangling && conditionalDepth_ == 0)
+          if (dangling)
             report(call->getBeginLoc(),
                    "double free of global handle '" + g + "' via '" + t +
                        "'");
-          else if (conditionalDepth_ == 0)
+          else
             for (const auto &a : affected)
               markReleased(a);
         }
@@ -7212,7 +7929,7 @@ public:
               report(call->getBeginLoc(),
                      "double free after indirect call to '" + target +
                          "' which frees its argument");
-            else if (conditionalDepth_ == 0)
+            else
               markReleased(an);
           }
         }
@@ -7353,12 +8070,17 @@ public:
         auto fit = userFrees_.find(target);
         if (fit != userFrees_.end())
           for (int slot : fit->second) {
+            // Issue #226: a summary slot belongs to the callee's declared
+            // parameter list. A cast/variadic call can supply fewer arguments
+            // than that slot, so never index past this call site's arguments.
+            if (slot < 0 || static_cast<unsigned>(slot) >= call->getNumArgs())
+              continue;
             int ps = paramIndexOf(call->getArg((unsigned)slot));
             if (ps >= 0)
               addFrees.insert(ps);
           }
         for (const auto &pr : derefParams_)
-          if (pr.first == target) {
+          if (pr.first == target && pr.second < call->getNumArgs()) {
             int ps = paramIndexOf(call->getArg(pr.second));
             if (ps >= 0)
               addDerefs.insert({currentFunction_, (unsigned)ps});
@@ -7957,7 +8679,7 @@ public:
         // Exact field lvalue: record its release even when the argument is
         // not a plain variable reference (free(s.p), free(a[0].p)).
         std::string fkey = lvalueKey(call->getArg(0));
-        if (!fkey.empty() && conditionalDepth_ == 0) {
+        if (!fkey.empty()) {
           if (releasedFields_.count(fkey))
             report(call->getBeginLoc(), "double free of '" + fkey + "'");
           releasedFields_.insert(fkey);
@@ -7971,9 +8693,26 @@ public:
         // create a dangling owner.
         if (isAllocatorFree && nullVars_.count(pname))
           return true;
-        if (isAllocatorFree && releasedVars_.count(pname))
+        // Issue #180: the clang::CFG forward pass proves whether another
+        // free of this owner can reach this site.  A free on a mutually
+        // exclusive arm (typically followed by `goto cleanup`) is not a
+        // double free; the linear may-release heuristic cannot see that.
+        const unsigned freeSite = call->getBeginLoc().getRawEncoding();
+        // A single CFG free site proves no exclusivity: it must not hide a
+        // release established by an interprocedural summary (`rel(a);
+        // free(a);` where rel frees its parameter). Only the
+        // mutually-exclusive-arms pattern has two distinct sites.
+        auto eit = cfgExclusiveFreeSites_.find(pname);
+        bool exclusiveFree = eit != cfgExclusiveFreeSites_.end() &&
+                             eit->second.size() > 1 &&
+                             eit->second.count(freeSite) != 0;
+        // A branch arm may have freed p and then set p = NULL; the later
+        // free is free(NULL) on that path, not a double free.
+        bool maybeNullOnBranch = branchNullifiedVars_.count(pname) != 0;
+        if (isAllocatorFree && releasedVars_.count(pname) &&
+            !exclusiveFree && !maybeNullOnBranch)
           report(call->getBeginLoc(), "double free of '" + pname + "'");
-        else if (isAllocatorFree && conditionalDepth_ == 0 &&
+        else if (isAllocatorFree && !exclusiveFree && !maybeNullOnBranch &&
                  maybeReleasedVars_.count(pname) &&
                  !releasedVars_.count(pname) && [&] {
                    auto lit = maybeReleaseLines_.find(pname);
@@ -7983,7 +8722,7 @@ public:
                  }())
           report(call->getBeginLoc(),
                  "double free of '" + pname + "' on some branch path");
-        else if (conditionalDepth_ == 0) {
+        else {
           std::string fkey = lvalueKey(call->getArg(0));
           if (!fkey.empty())
             releasedFields_.insert(fkey);
@@ -8053,7 +8792,7 @@ public:
             report(call->getBeginLoc(), "double free: '" + baseName +
                                             "' frees argument " +
                                             std::to_string(idx));
-          else if (conditionalDepth_ == 0)
+          else
             markReleased(an);
         }
         for (int idx : contract.ownershipTransferArgs) {
@@ -8067,7 +8806,7 @@ public:
               (unsigned)idx >= call->getNumArgs())
             continue;
           std::string an = castedVarName(call->getArg(idx));
-          if (!an.empty() && conditionalDepth_ == 0)
+          if (!an.empty())
             markReleased(an); // caller relinquishes the owned pointer
         }
         for (int idx : contract.writeArgs)
@@ -8548,7 +9287,7 @@ public:
           if (releasedVars_.count(an))
             report(call->getBeginLoc(), "double free after call to '" + target +
                                             "' which frees its argument");
-          else if (conditionalDepth_ == 0)
+          else
             markReleased(an);
         }
       }
@@ -8580,7 +9319,7 @@ public:
             report(call->getBeginLoc(),
                    "double free after call to '" + target +
                        "' which frees the pointee of its argument");
-          else if (conditionalDepth_ == 0)
+          else
             markReleased(pn);
         }
       }
@@ -9139,6 +9878,10 @@ private:
   /// Rust-style exclusive mutable borrow checks at call sites.
   std::set<std::pair<std::string, unsigned>> paramWriteSlots_;
   std::set<std::string> maybeReleasedVars_;
+  // Names assigned NULL on at least one arm of a branch. A later free of such
+  // a name can be free(NULL) on that path, so a branch-local release must not
+  // be reported as a definite/possible double free at the merge point.
+  std::set<std::string> branchNullifiedVars_;
   std::map<std::string, unsigned> maybeReleaseLines_;
   std::set<std::string> guardedFromConst_;
   std::string nonNullBranch_;
@@ -9217,6 +9960,14 @@ public:
   std::set<std::string> reallocResultVars_;
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
+  // Issue #180: free() source locations the CFG proves cannot be a double
+  // free (all other frees of the same owner are on mutually exclusive paths).
+  // Guards the linear visitor's may-release heuristic; never suppresses a
+  // definite release-state double free.
+  // Issue #180/#223: free sites proven mutually exclusive by the CFG pass,
+  // keyed by owner. A single site proves no exclusivity and must not hide a
+  // release established by an interprocedural summary.
+  std::map<std::string, std::set<unsigned>> cfgExclusiveFreeSites_;
   std::map<std::string, std::set<int>> userFrees_;
   // Realloc results assigned to an already-declared variable (`q = realloc(...)`).
   std::map<const VarDecl *, const CallExpr *> reallocAssignCalls_;

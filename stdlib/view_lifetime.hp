@@ -92,11 +92,14 @@ static inline unsigned long long stdlib_view_register(const void *ptr,
                 s->live = 1;
                 break;
             }
-            /* Issue #100: a retired slot keeps its key as a tombstone so
-             * probe chains stay intact, but it is reusable.  Remember the
+            /* Issues #100/#217: a retired slot keeps its key as a tombstone
+             * so probe chains stay intact, but it is reusable.  Remember the
              * first tombstone (or never-used slot) while continuing to probe
-             * so an existing key is still updated in place.  Lookups likewise
-             * continue past retired slots and only stop at a never-used one. */
+             * so an existing key is still updated in place.  Reusing tombstones
+             * is what prevents permanent registry exhaustion (and the resulting
+             * dead string/vector/arena views) after 4096 distinct addresses.
+             * Lookups likewise continue past retired slots and only stop at a
+             * never-used one. */
             if (empty == STDLIB_VIEW_TABLE_SIZE && (!s->live ||
                                                     s->ptr == (const void *)0))
                 empty = i;

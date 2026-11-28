@@ -195,22 +195,39 @@ char *cplus_strcat_bounded(char *d, const char *s, size_t known) {
 
 char *cplus_strncat_bounded(char *d, const char *s, size_t n, size_t known) {
     size_t need, ceiling, cap = 0;
-    size_t dlen, slen, scan_n;
+    size_t dlen, slen, scan_n, room = (size_t)-1;
     if (!d || !s) { errno = EINVAL; return NULL; }
     if (resolve_scan_ceiling("strncat", d, known, &ceiling)) return NULL;
     if (bounded_strlen(d, ceiling, &dlen)) return NULL;
     if (ceiling <= dlen) { errno = ERANGE; return NULL; }
-    /* scan_n never exceeds the space that could possibly fit; a longer
-     * unterminated source is refused by check_capacity() below. */
-    scan_n = n;
-    if (scan_n > ceiling - dlen - 1u) scan_n = ceiling - dlen - 1u;
+    if (ceiling != (size_t)-1) {
+        /* Payload bytes that still fit after d's terminator. Scan one byte
+         * BEYOND the room, never just up to it: clamping the scan to `room`
+         * made need = dlen + slen + 1 <= ceiling unconditional, so
+         * check_capacity() always passed while the raw call below still got
+         * the original n and wrote past d. A NUL inside the room still scans
+         * to that NUL; a longer (or unterminated) source yields slen > room
+         * and is refused before any write. */
+        room = ceiling - dlen - 1u;
+        scan_n = (n > room) ? room + 1u : n;
+    } else {
+        scan_n = n; /* no provable bound: legacy behaviour */
+    }
     {
         size_t src_cap = source_scan_ceiling(s, scan_n);
         if (src_cap < scan_n) scan_n = src_cap;
     }
     slen = cplus_strnlen(s, scan_n);
     if (slen >= SIZE_MAX - dlen) { errno = EOVERFLOW; return NULL; }
+    if (room != (size_t)-1 && slen > room) {
+        cplus_libc_log("strncat", "overflow refused");
+        errno = ERANGE;
+        return NULL;
+    }
     need = dlen + slen + 1u;
     if (check_capacity("strncat", d, need, known, &cap)) return NULL;
+    /* Delegate only the prefix proven readable: a tracked source whose
+     * capacity limited the scan must never make the raw loop read past it. */
+    if (scan_n < n) n = scan_n;
     return cplus_strncat(d, s, n);
 }

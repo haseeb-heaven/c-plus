@@ -124,9 +124,10 @@ static inline int stdlib_widgets_usable(const stdlib_window *win, error *err) {
 static inline size_t stdlib_widgets_dec_digits(long long value) {
     unsigned long long u;
     size_t n = 1u;
-    if (value < 0)
+    if (value < 0) {
         u = (unsigned long long)(-(value + 1)) + 1u;
-    else
+        n++; /* the leading '-' is printed too */
+    } else
         u = (unsigned long long)value;
     while (u >= 10u) {
         u /= 10u;
@@ -545,6 +546,13 @@ static inline int stdlib_window_serialize(const stdlib_window *win, char *out,
                                   "widgets: serialization write failed"),
                    STDLIB_FAIL;
         used += (size_t)n;
+        /* snprintf reserved a byte for its NUL but the label, newline and
+         * final NUL are written directly: keep those writes in bounds. */
+        if (label_len + 2u > out_size - used)
+            return error_fail_cat(err, STDLIB_CATEGORY_BOUNDS,
+                                  CPLUS_EXIT_BOUNDS,
+                                  "widgets: serialization label overflow"),
+                   STDLIB_FAIL;
         memcpy(out + used, w->label, label_len);
         used += label_len;
         out[used++] = '\n';

@@ -30,6 +30,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <system_error>
@@ -287,8 +288,20 @@ bool writeUniqueTempFile(llvm::StringRef dir, llvm::StringRef prefix,
     ec = llvm::sys::fs::createUniqueFile(model, fd, resultPath,
                                          llvm::sys::fs::OF_Text, 0600);
   } else {
-    ec = llvm::sys::fs::createTemporaryFile(prefix, suffix, fd, resultPath,
-                                            llvm::sys::fs::OF_Text);
+    // createTemporaryFile() uses the umask-derived default mode (often 0644).
+    // Build the same unique-name model inside the system temp directory so the
+    // descriptor is created with an explicit private 0600 mode instead.
+    llvm::SmallString<256> tmpDir;
+    llvm::sys::path::system_temp_directory(/*ErasedOnRecycle=*/false, tmpDir);
+    {
+      llvm::SmallString<256> model(tmpDir);
+      std::string tail = (prefix + "-%%%%%%").str();
+      if (!suffix.empty())
+        tail += "." + suffix.str();
+      llvm::sys::path::append(model, tail);
+      ec = llvm::sys::fs::createUniqueFile(model, fd, resultPath,
+                                           llvm::sys::fs::OF_Text, 0600);
+    }
   }
   if (ec) {
     if (err)
@@ -980,6 +993,24 @@ static llvm::StringRef normalizeFlag(llvm::StringRef a) {
   return a;
 }
 
+/// Short options (-I, -D, -L, -l) are single-dash spellings. normalizeFlag()
+/// folds `--foo` into `-foo` so *long* options keep their double-dash spelling,
+/// but a short-option prefix test must always inspect the RAW token: issue
+/// #235's `--ld-path=...` and `--language=c++` otherwise pose as `-l...` and
+/// pass every STRICT gate.
+static bool isSingleDashOption(llvm::StringRef raw, char letter) {
+  return raw.size() >= 2 && raw[0] == '-' && raw[1] == letter;
+}
+
+/// Clang spells the language selector two ways: `-x <lang>` / `-xc++` and
+/// `--language=<lang>` / `--language <lang>`. Both change what the backend
+/// parses. `a` must already be passed through normalizeFlag().
+static bool isLanguageOption(llvm::StringRef a) {
+  return a == "-x" || a == "-language" || a.starts_with("-language=") ||
+         (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
+          std::isalpha(static_cast<unsigned char>(a[2])));
+}
+
 static std::vector<llvm::StringRef> splitFlagList(llvm::StringRef list);
 static bool sanitizerNameIs(llvm::StringRef token, llvm::StringRef canonical);
 
@@ -1008,14 +1039,12 @@ stripLanguageFlags(const std::vector<std::string> &extra) {
   out.reserve(extra.size());
   for (size_t i = 0; i < extra.size(); ++i) {
     llvm::StringRef a = normalizeFlag(extra[i]);
-    if (a == "-x") {
-      if (i + 1 < extra.size())
+    if (isLanguageOption(a)) {
+      // `-x` / `--language` take a separate value in their two-token form.
+      if ((a == "-x" || a == "-language") && i + 1 < extra.size())
         ++i;
       continue;
     }
-    if (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
-        std::isalpha(static_cast<unsigned char>(a[2])))
-      continue;
     out.push_back(extra[i]);
   }
   return out;
@@ -1041,9 +1070,10 @@ static bool extraArgsChangeParse(const std::vector<std::string> &extra) {
         a.starts_with("-idirafter") || a.starts_with("-iprefix") ||
         a.starts_with("-iwithprefix"))
       return true;
-    if (a == "-x" ||
-        (a.size() > 2 && a[0] == '-' && a[1] == 'x' &&
-         std::isalpha(static_cast<unsigned char>(a[2]))))
+    // `-x`/`--language` change the backend's language selection. The safety
+    // AST always parses the lowered C as C, so accepting either spelling in
+    // STRICT would analyse one program and compile another (issue #235).
+    if (isLanguageOption(a))
       return true;
   }
   return false;
@@ -1194,23 +1224,30 @@ static bool extraArgsWeakenSafetyWarnings(
 /// check and build keep identical safety-AST inputs.
 static bool strictSafePassthroughAllowed(const std::vector<std::string> &extra) {
   for (size_t i = 0; i < extra.size(); ++i) {
-    llvm::StringRef s = normalizeFlag(extra[i]);
+    llvm::StringRef raw = extra[i];
+    llvm::StringRef s = normalizeFlag(raw);
     // Clang expands @response files itself, after the driver's gates, so a
     // token like `@rsp` can hide `-include evil.h` from every flag check.
     // Never allow the @ spelling in STRICT.
-    if (extra[i].starts_with("@"))
+    if (raw.starts_with("@"))
       return false;
     // Two-token forms produced by Main.cpp (`-I dir`, `-D NAME`, ...) and by
     // `-- -isysroot dir`. Consume the value so a path is not mistaken for a
-    // bare/injected token.
-    if (s == "-I" || s == "-D" || s == "-L" || s == "-l" || s == "-isysroot") {
+    // bare/injected token. Short-option forms are matched on the RAW token:
+    // `normalizeFlag()` would turn `--ld-path` into a fake `-l` (issue #235).
+    if (raw == "-I" || raw == "-D" || raw == "-L" || raw == "-l" ||
+        s == "-isysroot") {
       if (++i >= extra.size())
         return false; // dangling value: fail closed
       continue;
     }
-    if (s.starts_with("-I") || s.starts_with("-D") || s.starts_with("-L") ||
-        s.starts_with("-l") || s.starts_with("-std=") ||
-        s.starts_with("-isysroot") ||
+    // Same rule for joined short options: -lfoo is a library, --ld-path=...
+    // is a clang long option that can select an arbitrary linker. Likewise
+    // --std= is rejected: safetyParseArgs() only forwards the single-dash
+    // -std= spelling, so allowing it would create a check/build divergence.
+    if (isSingleDashOption(raw, 'I') || isSingleDashOption(raw, 'D') ||
+        isSingleDashOption(raw, 'L') || isSingleDashOption(raw, 'l') ||
+        raw.starts_with("-std=") || s.starts_with("-isysroot") ||
         s == "-O" || s == "-O0" || s == "-O1" || s == "-O2" || s == "-O3" ||
         s == "-Os" || s == "-Oz" || s == "-Og")
       continue;
@@ -1354,57 +1391,102 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   SanProbe probe = probeFor(bit);
   if (!probe.source || !*probe.source)
     return cache[key] = false;
-  llvm::SmallString<256> srcPath, exePath;
-  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".c", srcPath))
+
+  // Issue #235: every file is created with O_CREAT|O_EXCL (0600) by
+  // writeUniqueTempFile, so a symlink pre-created in a shared temp directory
+  // cannot redirect the compiler's or probe's diagnostics onto a user file.
+  // argv goes straight to ExecuteAndWait: no shell, no quoting, no
+  // `<temp>.log` names derived from another file's path. TempFile removes all
+  // four files on every exit path, including a failed compile.
+  std::string err;
+  std::string srcPath, exePath, compileLog, runLog;
+  TempFile src, exe, compileLogGuard, runLogGuard;
+  // Install each guard as soon as its file exists, so a later creation
+  // failure still removes the files already created on this exit path.
+  if (!writeUniqueTempFile("", "cplus_san", "c", probe.source, srcPath, &err))
     return cache[key] = false;
-  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath))
+  src.path = srcPath;
+  if (!writeUniqueTempFile("", "cplus_san", "out", "", exePath, &err))
     return cache[key] = false;
-  {
-    std::ofstream os(srcPath.c_str());
-    os << probe.source;
-  }
+  exe.path = exePath;
+  if (!writeUniqueTempFile("", "cplus_san", "log", "", compileLog, &err))
+    return cache[key] = false;
+  compileLogGuard.path = compileLog;
+  if (!writeUniqueTempFile("", "cplus_san", "log", "", runLog, &err))
+    return cache[key] = false;
+  runLogGuard.path = runLog;
+
   std::vector<std::string> flags;
   addSanitizerFlags(flags, bit);
-  auto sq = [](const std::string &s) {
-    std::string out = "'";
-    for (char c : s) {
-      if (c == '\'')
-        out += "'\\''";
-      else
-        out += c;
-    }
-    return out + "'";
-  };
-  std::string cmd = sq(clang) + " -std=gnu17 -g";
-  for (const auto &a : extra)
-    cmd += " " + sq(a);
+  std::vector<std::string> compileArgStrings;
+  compileArgStrings.push_back(clang);
+  compileArgStrings.push_back("-std=gnu17");
+  // No -g: on Darwin it makes clang emit <exe>.dSYM/ next to the probe
+  // binary, which TempFile (a single-file guard) cannot remove. This probe
+  // only checks a runtime marker, so debug info is unnecessary.
+  for (const auto &a : extra) {
+    // Pass-through debug flags would make clang emit <exe>.dSYM/ next to the
+    // probe binary on Darwin. The probe has no use for debug info, and a
+    // single-file TempFile guard cannot clean up that directory. Keep the
+    // unrelated -gcc-toolchain=... selection flag.
+    if (a.starts_with("-g") && !a.starts_with("-gcc-toolchain"))
+      continue;
+    compileArgStrings.push_back(a);
+  }
   for (const auto &f : flags)
     if (f.rfind("-fsanitize=", 0) == 0 || f == "-fno-sanitize-trap=cfi" ||
         f == "-flto" || f == "-fvisibility=hidden")
-      cmd += " " + sq(f);
-  std::string compileLog = std::string(srcPath.str()) + ".compile.log";
-  cmd += " -o " + sq(std::string(exePath.str())) + " " +
-         sq(std::string(srcPath.str())) + " > " + sq(compileLog) + " 2>&1";
-  int rc = system(cmd.c_str());
-  if (rc != 0) {
-    llvm::sys::fs::remove(srcPath);
-    llvm::sys::fs::remove(compileLog);
+      compileArgStrings.push_back(f);
+  compileArgStrings.push_back("-o");
+  compileArgStrings.push_back(exePath);
+  compileArgStrings.push_back(srcPath);
+
+  std::vector<llvm::StringRef> argv;
+  argv.reserve(compileArgStrings.size());
+  for (const auto &a : compileArgStrings)
+    argv.push_back(a);
+  // stdin: inherit; stdout: /dev/null; stderr: private 0600 log.
+  std::vector<std::optional<llvm::StringRef>> redirects(3);
+  redirects[0] = std::nullopt;
+  redirects[1] = llvm::StringRef("");
+  redirects[2] = llvm::StringRef(compileLog);
+  std::string execErr;
+  int rc = llvm::sys::ExecuteAndWait(clang, argv, std::nullopt, redirects,
+                                     0, 0, &execErr);
+  if (rc != 0)
     return cache[key] = false;
-  }
-  std::string runLog = std::string(exePath.str()) + ".log";
-  std::string runCmd = "exec 2>/dev/null; "
-                       "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 " +
-                       sq(std::string(exePath.str())) + " > /dev/null 2> " +
-                       sq(runLog);
-  (void)system(runCmd.c_str());
-  std::ifstream log(runLog);
-  std::stringstream buf;
-  buf << log.rdbuf();
-  std::string output = buf.str();
-  llvm::sys::fs::remove(srcPath);
-  llvm::sys::fs::remove(exePath);
-  llvm::sys::fs::remove(compileLog);
-  llvm::sys::fs::remove(runLog);
+
+  // Same runtime options as the old shell command, restored on scope exit so
+  // the rest of the driver (and the caller's environment) is unaffected.
+  struct EnvOverride {
+    std::string name;
+    std::string old;
+    bool had;
+    EnvOverride(const char *n, const char *v)
+        : name(n), had(std::getenv(n) != nullptr) {
+      if (had)
+        old = std::getenv(n);
+      ::setenv(n, v, 1);
+    }
+    ~EnvOverride() {
+      if (had)
+        ::setenv(name.c_str(), old.c_str(), 1);
+      else
+        ::unsetenv(name.c_str());
+    }
+  };
+  EnvOverride asan("ASAN_OPTIONS", "detect_leaks=0");
+  EnvOverride ubsan("UBSAN_OPTIONS", "halt_on_error=1");
+
+  std::vector<llvm::StringRef> runArgv;
+  runArgv.push_back(exePath);
+  redirects[2] = llvm::StringRef(runLog);
+  (void)llvm::sys::ExecuteAndWait(exePath, runArgv, std::nullopt, redirects,
+                                  0, 0, &execErr);
+  std::string ierr;
+  std::string output = readFile(runLog, &ierr);
+  if (!ierr.empty())
+    output.clear();
   return cache[key] = (output.find(probe.needle) != std::string::npos &&
                        output.find("CHECK failed") == std::string::npos);
 }
@@ -1637,8 +1719,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   if (strictSafe && extraArgsChangeParse(userArgs)) {
     errs << "error: pass-through flags change how the C+ safety AST parses "
             "the program but are not forwarded to it (-include, -imacros, "
-            "-isystem, -x, -include-pch); STRICT would analyse a different "
-            "program than it compiles\n";
+            "-isystem, -x/--language, -include-pch); STRICT would analyse a "
+            "different program than it compiles\n";
     return 1;
   }
   if (strictSafe && extraArgsWeakenSanitizerAbort(userArgs)) {

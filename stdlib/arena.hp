@@ -23,6 +23,10 @@
  *     scoped takes that retire their tokens before an automatic rewind.
  *     The raw stdlib_arena_alloc()/stdlib_arena_do_reset() pair stays as the
  *     documented unchecked low-level API.
+ *   - Issue #218: reset/destroy retire the tokens of every allocation owned by
+ *     the arena before rewinding or releasing its blocks.  realloc() bounds
+ *     `old_size` by the bytes actually backing `ptr` before any subtraction or
+ *     memcpy, so a forged size cannot underflow the cursor or over-read a block.
  *
  * All helpers are static inline: no exported symbols, no ABI change.
  */
@@ -222,48 +226,83 @@ static inline void *stdlib_arena_alloc(stdlib_arena *a, size_t n,
     }
 }
 
+/* Bytes from ptr to the end of the arena block that owns it.  Returns 0 for
+ * foreign/NULL pointers.  The block chain is walked backwards so allocations
+ * from earlier (spilled) blocks are handled too.  Never dereferences ptr. */
+static inline int stdlib_arena_ptr_avail(const stdlib_arena *a, const void *ptr,
+                                         size_t *avail_out) {
+    stdlib_arena_block *b;
+    uintptr_t p;
+    if (a == (const stdlib_arena *)0 || ptr == (const void *)0)
+        return 0;
+    p = (uintptr_t)ptr;
+    for (b = a->block; b != (stdlib_arena_block *)0; b = b->prev) {
+        uintptr_t base = (uintptr_t)b->base;
+        uintptr_t end = base + (uintptr_t)b->capacity;
+        if (p >= base && p < end) {
+            if (avail_out != (size_t *)0)
+                *avail_out = (size_t)(end - p);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* In-place growth when ptr is the current top; otherwise allocate+copy. */
 static inline void *stdlib_arena_realloc(stdlib_arena *a, void *ptr,
                                          size_t old_size, size_t new_size,
                                          size_t align, error *err) {
-    unsigned char *top;
     void *fresh;
+    size_t avail = 0;
+    int in_current_block;
     error_reset(err);
     if (a == 0 || a->block == 0 || new_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "arena: invalid realloc"),
                (void *)0;
-    /* Reject implausible old_size before subtracting it from the cursor: a
-     * forged size (RED-20 1/3/4) caused a huge memcpy or wrapped top math. */
-    if (old_size > a->block->capacity ||
-        ptr < (void *)a->block->base || ptr > (void *)a->cursor) {
+    /* Bound every copy by the bytes really backing ptr.  Checking capacity
+     * alone allowed a forged old_size to underflow `cursor - old_size` and to
+     * memcpy past the owning block (issue #218). */
+    if (stdlib_arena_ptr_avail(a, ptr, &avail) == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_BOUNDS, "arena: implausible realloc size/ptr"),
                (void *)0;
-    }
-    top = a->cursor - old_size;
-    if (ptr != (void *)top || old_size > (size_t)(a->cursor - a->block->base)) {
-        fresh = stdlib_arena_alloc(a, new_size, align, err);
-        if (fresh == (void *)0) return (void *)0;
-        if (ptr != (void *)0 && old_size != 0) memcpy(fresh, ptr, old_size);
-        return fresh;
-    }
-    /* Top of stack: consume additional bytes in place if available. */
-    if (new_size > old_size) {
-        size_t extra = new_size - old_size;
-        if (extra > a->remaining) {
-            fresh = stdlib_arena_alloc(a, new_size, align, err);
-            if (fresh == (void *)0) return (void *)0;
-            memcpy(fresh, ptr, old_size);
-            return fresh;
+    in_current_block = (uintptr_t)ptr >= (uintptr_t)a->block->base &&
+                       (uintptr_t)ptr <= (uintptr_t)a->cursor ? 1 : 0;
+    if (in_current_block)
+        avail = (size_t)((uintptr_t)a->cursor - (uintptr_t)ptr);
+    if (old_size > avail)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_BOUNDS, "arena: implausible realloc size/ptr"),
+               (void *)0;
+    /* Only the current block can be grown/shrunk in place.  `avail` above is
+     * now cursor - ptr, so this subtraction cannot underflow below base. */
+    if (in_current_block) {
+        unsigned char *top = a->cursor - old_size;
+        if (ptr == (void *)top) {
+            /* Top of stack: consume additional bytes in place if available. */
+            if (new_size > old_size) {
+                size_t extra = new_size - old_size;
+                if (extra > a->remaining) {
+                    fresh = stdlib_arena_alloc(a, new_size, align, err);
+                    if (fresh == (void *)0) return (void *)0;
+                    memcpy(fresh, ptr, old_size);
+                    return fresh;
+                }
+                a->cursor += extra;
+                a->remaining -= extra;
+            } else {
+                a->cursor -= (old_size - new_size);
+                a->remaining += (old_size - new_size);
+            }
+            return ptr;
         }
-        a->cursor += extra;
-        a->remaining -= extra;
-    } else {
-        a->cursor -= (old_size - new_size);
-        a->remaining += (old_size - new_size);
     }
-    return ptr;
+    /* Non-top allocation (possibly from an earlier block): allocate+copy. */
+    fresh = stdlib_arena_alloc(a, new_size, align, err);
+    if (fresh == (void *)0) return (void *)0;
+    if (old_size != 0) memcpy(fresh, ptr, old_size);
+    return fresh;
 }
 
 /* Monotonic free: no-op.  handle check is a diagnostic, never a deref. */
@@ -280,9 +319,44 @@ static inline size_t stdlib_arena_used(const stdlib_arena *a) {
     return (size_t)(a->cursor - a->first_base);
 }
 
+/* Retire every registry token whose pointer came from this arena.  Called
+ * before blocks are rewound/released: a token that outlives its storage
+ * would keep ctl_span / stdlib_view_validate reporting freed memory as live
+ * (issue #218).  The registry stores pointers for identity only, so the locked
+ * scan never dereferences them. */
+static inline void stdlib_arena_retire_checked(stdlib_arena *a) {
+    size_t i;
+    if (a == (stdlib_arena *)0) return;
+    stdlib_view_lock();
+    {
+        for (i = 0; i < STDLIB_VIEW_TABLE_SIZE; ++i) {
+            stdlib_view_slot *s = &stdlib_view_registry_state.slots[i];
+            if (s->live && s->ptr != (const void *)0) {
+                uintptr_t p = (uintptr_t)s->ptr;
+                stdlib_arena_block *b;
+                int owned = 0;
+                for (b = a->block; b != (stdlib_arena_block *)0 && !owned;
+                     b = b->prev) {
+                    uintptr_t base = (uintptr_t)b->base;
+                    if (p >= base && p < base + (uintptr_t)b->capacity)
+                        owned = 1;
+                }
+                if (owned) {
+                    s->live = 0;
+                    s->token = 0;
+                    s->generation = 0;
+                }
+            }
+        }
+    }
+    stdlib_view_unlock();
+    a->checked_outstanding = 0;
+}
+
 static inline void stdlib_arena_do_reset(stdlib_arena *a, error *err) {
     error_reset(err);
     if (a == 0) return;
+    stdlib_arena_retire_checked(a); /* before rewinding: tokens must die */
     a->block = a->first_block;
     a->cursor = a->first_base;
     a->remaining = a->first_capacity;
@@ -293,6 +367,7 @@ static inline void stdlib_arena_destroy(stdlib_arena *a, error *err) {
     stdlib_arena_block *b, *prev;
     error_reset(err);
     if (a == 0 || a->block == 0) return;
+    stdlib_arena_retire_checked(a); /* before cplus_release() frees the storage */
     b = a->block;
     /* The first buffer may be caller-owned; stop before it when !owns_first
      * and it is a caller-embedded header.  Heap headers are always managed. */

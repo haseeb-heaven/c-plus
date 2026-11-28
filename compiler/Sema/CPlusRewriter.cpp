@@ -2115,17 +2115,23 @@ private:
                    filename_, ts[i].line, ts[i].column);
     }
 
+    // Issue #231: evaluate the index ONCE.  Emitting the token range twice
+    // (once for the check, once for the subscript) made a side-effecting index
+    // such as `p[i++]` advance twice: the check saw n-1 (in bounds) while the
+    // subscript used n (out of bounds).  A statement expression stores the
+    // index in a temporary first; both the check and the subscript then read
+    // that temporary.  `size_t` matches the cast the old lowering applied to
+    // both uses, so accepted programs keep their exact subscript semantics.
+    const std::string idx =
+        "__cplus_gs_idx_" + std::to_string(subscriptCounter_++);
     emitPlainToken(i);
-    emit("[(cplus_check_bounds(" + name + ", (size_t)(" + count +
-         "), (size_t)(");
+    emit("[({ size_t " + idx + " = (size_t)(");
     for (size_t k = lb + 1; k < rb; ++k)
       emitPlainToken(k);
-    emit("), \"" + annQuote(filename_) + "\", " +
+    emit("); cplus_check_bounds(" + name + ", (size_t)(" + count +
+         "), " + idx + ", \"" + annQuote(filename_) + "\", " +
          std::to_string(ts[i].line) + ", \"" + name + "[" + index +
-         "\"), (size_t)(");
-    for (size_t k = lb + 1; k < rb; ++k)
-      emitPlainToken(k);
-    emit("))]");
+         "\"); " + idx + "; })]");
     suppressUntil_ = rb;
     changed_ = true;
     return true;
@@ -2171,10 +2177,12 @@ private:
     if (prev == kNPos || !isUnaryPrefix(ts[prev]))
       return false;
     const std::string name = ts[nameIdx].text;
-    emit("(cplus_check_nonnull(" + name + ", \"" + annQuote(filename_) +
-         "\", " + std::to_string(ts[i].line) + ", \"" + name + "\"), *");
-    emitPlainToken(nameIdx);
-    emit(")");
+    // Issue #231: `*` must stay OUTSIDE the comma expression.  In C the
+    // result of `(check, *p)` is an rvalue and cannot be assigned to, while
+    // `*(check, p)` is an lvalue, so `*p = v` keeps working.  Reuse the same
+    // guard form as tryEmitNotNullArrow().
+    emit("*");
+    emitNotNullGuard(name, ts[i]);
     suppressUntil_ = nameIdx;
     changed_ = true;
     return true;
@@ -3264,6 +3272,8 @@ private:
   std::set<std::string> zeroTermPtrs_;
   size_t suppressUntil_ = kNPos;
   unsigned guardCounter_ = 0;
+  // Issue #231: unique temporary names for single-evaluation @numelts indexes.
+  unsigned subscriptCounter_ = 0;
 
   // Issue #183: monomorphised generics.  `instantiations_` is a set so the
   // emitted order is deterministic; declaration order comes from generics_.
@@ -4455,7 +4465,28 @@ collectTokenArithmeticSites(const std::string &source) {
       else if (op == "%=") kind = CheckedArithmeticSite::Op::Rem;
       else if (op == "<<=") kind = CheckedArithmeticSite::Op::Shl;
       else if (op == ">>=") kind = CheckedArithmeticSite::Op::Shr;
-      const size_t stop = findStmtEnd(toks, nextSigTok(toks, i));
+      // Bound the RHS scan at the first `)` that is not nested inside a
+      // call/cast.  findStmtEnd() starts at depth zero and therefore runs past
+      // a `for (...; ...; i += K)` header into the loop body, giving this
+      // token site a different `end` from the AST site and defeating dedup.
+      size_t stop = kNPos;
+      int par = 0, brk = 0, brc = 0;
+      for (size_t k = nextSigTok(toks, i); k < toks.size(); ++k) {
+        if (toks[k].kind != TokKind::Punct)
+          continue;
+        const std::string &p = toks[k].text;
+        if (p == "(") ++par;
+        else if (p == "[") ++brk;
+        else if (p == "{") ++brc;
+        else if (p == ")") {
+          if (par > 0) --par;
+          else { stop = k; break; } // closes the enclosing for-header
+        } else if (p == "]") { if (brk > 0) --brk; }
+        else if (p == "}") { if (brc > 0) --brc; }
+        else if (p == ";" || p == ",") {
+          if (par == 0 && brk == 0 && brc == 0) { stop = k; break; }
+        }
+      }
       if (stop == kNPos || stop <= i)
         continue;
       const size_t last = prevSigTok(toks, stop);
@@ -5272,7 +5303,10 @@ static bool lowerVariableLengthArrays(
   std::vector<LoopFrame> loops;
   int pendingLoop = 0; // 1 = loop, 2 = switch
   size_t pendingLoopParen = 0;
-  bool doAwaitingWhile = false;
+  // Stack of outer brace depths for `do` bodies awaiting their trailing
+  // `while`. A nested `while` inside the body must push its own loop frame
+  // instead of consuming the outer `do`'s trailing condition.
+  std::vector<size_t> doAwaitingWhile;
   std::set<std::string> loweredNames;
   std::vector<SafetyInsertion> edits;
   std::vector<SafetyInsertion> sizeofEdits;
@@ -5328,13 +5362,17 @@ static bool lowerVariableLengthArrays(
     }
     if (brace > 0 && (ts.isIdent(i, "for") || ts.isIdent(i, "while") ||
                       ts.isIdent(i, "switch") || ts.isIdent(i, "do"))) {
-      if (ts.isIdent(i, "while") && doAwaitingWhile) {
-        doAwaitingWhile = false;
-      } else {
+      bool consumedDoWhile = false;
+      if (ts.isIdent(i, "while") && !doAwaitingWhile.empty() &&
+          brace == doAwaitingWhile.back()) {
+        doAwaitingWhile.pop_back();
+        consumedDoWhile = true;
+      }
+      if (!consumedDoWhile) {
         pendingLoop = ts.isIdent(i, "switch") ? 2 : 1;
         pendingLoopParen = paren;
-        if (ts.isIdent(i, "do"))
-          doAwaitingWhile = true;
+        if (ts.isIdent(i, "do") && brace > 0)
+          doAwaitingWhile.push_back(brace - 1);
       }
       continue;
     }
@@ -6120,7 +6158,20 @@ std::string instrumentDynamicArrayBounds(
   std::set<std::tuple<size_t, size_t, size_t, size_t>> seenArith;
   for (const CheckedArithmeticSite &s : arith)
     seenArith.insert(std::make_tuple(s.begin, s.op, s.opLength, s.end));
+  // Issue #232: compound assignments are recorded by both the AST pass and
+  // the token fallback.  A disagreement in their `end` offsets used to defeat
+  // the full-tuple dedup above (the token scan ran past a for-header into the
+  // loop body) and emit two CPLUS_CMPD_BIN wrappers around one operator.
+  // Keep one site per compound operator, preferring the AST-registered site.
+  std::set<std::tuple<size_t, size_t, size_t>> seenCompoundArith;
+  for (const CheckedArithmeticSite &s : arith)
+    if (s.compound)
+      seenCompoundArith.insert(std::make_tuple(s.begin, s.op, s.opLength));
   for (CheckedArithmeticSite &s : collectTokenArithmeticSites(source)) {
+    if (s.compound &&
+        !seenCompoundArith.insert(
+             std::make_tuple(s.begin, s.op, s.opLength)).second)
+      continue;
     if (seenArith.insert(std::make_tuple(s.begin, s.op, s.opLength, s.end))
             .second)
       arith.push_back(std::move(s));
@@ -6577,17 +6628,10 @@ std::string instrumentDynamicArrayBounds(
 
     // --- compound assignment: preserve the lvalue update ---
     if (compound) {
-      // An integer literal RHS cannot overflow the destination type when the
-      // static checker has accepted the expression, and the lowering is
-      // injected twice for nested for-loop increments. Leave it as plain C.
-      std::string rhs = sourceSlice(source, site.op + site.opLength, site.end);
-      size_t first = rhs.find_first_not_of(" \t\r\n");
-      if (first != std::string::npos)
-        rhs = rhs.substr(first);
-      if (!rhs.empty() && ((rhs[0] >= '0' && rhs[0] <= '9') ||
-                           (rhs.size() > 1 && rhs[0] == '-' &&
-                            rhs[1] >= '0' && rhs[1] <= '9')))
-        continue;
+      // Issue #232: every compound assignment is instrumented.  The old
+      // leading-digit skip suppressed traps for `x += 1`, `x /= 0`,
+      // `x <<= 32` and `x += 1 + y`; duplicate sites are now removed when
+      // sites are collected above, so no skip is needed here.
       insertions.push_back({site.begin, span, 0,
                             "CPLUS_CMPD_BIN(" + std::string(checkedOpName(kind)) +
                                 ", ", 0});

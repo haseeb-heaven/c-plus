@@ -3,6 +3,7 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Type.h>
 #include <clang/Analysis/CFG.h>
 // Reuse Clang's upstream uninitialized-value dataflow analysis instead of a
 // C+-specific reimplementation.  Licensed Apache-2.0 WITH LLVM-exception;
@@ -250,20 +251,51 @@ static bool isCompilerHelperEffectName(llvm::StringRef name) {
   return kEmitted.count(name) != 0;
 }
 
-/// True when a function declaration can carry safety-relevant pointer effects.
-/// Any pointer parameter (including a callback/function pointer) or a pointer
-/// return makes the callee's behaviour unverifiable without a body or a
-/// declared contract; scalar-only externs (e.g. `int ext_add(int,int)`) are
-/// pure by construction and must stay accepted in STRICT.
-static bool hasPointerEffectSignature(const clang::FunctionDecl *fd) {
-  auto isPtr = [](clang::QualType t) {
-    return t->isPointerType() || t->isFunctionPointerType() ||
-           t->isMemberPointerType();
-  };
-  if (isPtr(fd->getReturnType()))
+/// True when `t` can carry pointers a bodiless callee could exercise without a
+/// contract: a pointer (including function/member pointers), an array of such,
+/// or a by-value record whose fields contain one. Canonicalisation strips
+/// typedefs; `visited` keeps recursive record graphs finite. An opaque record
+/// has no fields to inspect (and cannot be passed by value at a real call
+/// site); unprototyped declarations are rejected separately below.
+static bool typeHasPointerEffect(QualType t,
+                                 std::set<const TagDecl *> &visited) {
+  if (t.isNull())
+    return false;
+  t = t.getCanonicalType();
+  if (t->isPointerType() || t->isFunctionPointerType() ||
+      t->isMemberPointerType())
     return true;
-  for (const clang::ParmVarDecl *p : fd->parameters())
-    if (isPtr(p->getType()))
+  if (const auto *at = t->getAsArrayTypeUnsafe())
+    return typeHasPointerEffect(at->getElementType(), visited);
+  const auto *rt = t->getAs<RecordType>();
+  if (!rt)
+    return false;
+  const RecordDecl *rd = rt->getDecl();
+  if (!rd || !visited.insert(rd->getCanonicalDecl()).second)
+    return false;
+  const RecordDecl *def = rd->getDefinition();
+  return def && std::any_of(def->field_begin(), def->field_end(),
+                            [&visited](const FieldDecl *field) {
+                              return typeHasPointerEffect(field->getType(),
+                                                          visited);
+                            });
+}
+
+/// True when a function declaration can carry safety-relevant pointer effects.
+/// Any pointer parameter/return -- including pointers nested in a by-value
+/// struct or union -- makes the callee's behaviour unverifiable without a body
+/// or a declared contract. A variadic tail is untyped and an unprototyped (K&R)
+/// declaration states no parameter types at all, so neither can be certified
+/// pointer-free from the declaration alone. Scalar-only externs (e.g.
+/// `int ext_add(int,int)`) are pure by construction and must stay accepted.
+static bool hasPointerEffectSignature(const clang::FunctionDecl *fd) {
+  if (fd->isVariadic() || !fd->hasPrototype())
+    return true;
+  std::set<const TagDecl *> visited;
+  if (typeHasPointerEffect(fd->getReturnType(), visited))
+    return true;
+  for (const ParmVarDecl *p : fd->parameters())
+    if (typeHasPointerEffect(p->getType(), visited))
       return true;
   return false;
 }
@@ -1927,6 +1959,27 @@ bool isReservedHelperName(llvm::StringRef name) {
   return kReserved.count(name) != 0;
 }
 
+  /// True for declarations coming from a real system header or from this
+  /// compiler's own runtime include tree (which may be added with -I rather
+  /// than -isystem). Both are trusted; user headers are not.
+  static bool isCompilerRuntimeLocation(clang::SourceManager &sm,
+                                        clang::SourceLocation loc) {
+    if (sm.isInSystemHeader(loc))
+      return true;
+    // Use the real file entry, not the presumed location: #line directives in
+    // user source can spoof the presumed filename to look like a runtime
+    // header. The actual FileEntry is independent of #line.
+    const clang::FileEntry *entry = sm.getFileEntryForID(sm.getFileID(loc));
+    if (!entry)
+      return false;
+    llvm::StringRef file = entry->tryGetRealPathName();
+    if (file.empty())
+      return false;
+    return file.contains("/runtime/include/") ||
+           file.contains("/include/cplus/") ||
+           file.ends_with("/cplus/cplus.h");
+  }
+
 std::set<std::string>
 findUserDeclaredHelperSymbols(const std::string &source,
                               const std::vector<std::string> &args,
@@ -1959,7 +2012,11 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (fd->isImplicit() || !isReservedHelperName(fd->getName()))
         return true;
       clang::SourceLocation loc = fd->getLocation();
-      if (loc.isValid() && sm.isInMainFile(loc))
+      // A user header can interpose a runtime guard just as effectively as a
+      // definition in the main file. Declarations from this compiler's own
+      // runtime headers are trusted even when those headers are supplied with
+      // -I (which Clang does not classify as a system header).
+      if (loc.isValid() && !isCompilerRuntimeLocation(sm, loc))
         out.insert(fd->getNameAsString());
       return true;
     }
@@ -1967,7 +2024,7 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (vd->isImplicit() || !isReservedHelperName(vd->getName()))
         return true;
       clang::SourceLocation loc = vd->getLocation();
-      if (loc.isValid() && sm.isInMainFile(loc))
+      if (loc.isValid() && !isCompilerRuntimeLocation(sm, loc))
         out.insert(vd->getNameAsString());
       return true;
     }

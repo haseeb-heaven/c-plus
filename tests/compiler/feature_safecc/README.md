@@ -32,6 +32,24 @@ diagnostic, so a case that only trips the lifetime pass fails the suite.
 `pos_*` cases must compile cleanly. The suite uses `c+ check --sanitize=none`
 only — no build, network, game assets or live injection.
 
+A second, additive implementation of issue #180 lives in
+`compiler/Sema/AstSafetyCheck.cpp` (`SafetyVisitor::runCfgSafetyDataflow`).
+It builds a real `clang::CFG` for each function body and runs:
+
+- a forward must/may lattice over lock and ownership state (join = intersection
+  for must facts, union for may facts, iterated to a fixpoint over the CFG),
+  used to suppress false double-free diagnostics on mutually exclusive arms and
+  to report `[CPLUS-CFG] conditional ... leak` findings; and
+- a backward liveness pass over the same CFG, used to prove that a pointer
+  assigned the address of an inner-block local is still live after the block
+  ends (`[CPLUS-CFG] ... escapes through pointer ...`).
+
+New findings use the distinct `[CPLUS-CFG]` category so the existing
+`[CPLUS-SAFECC]` diagnostics and their wording stay byte-compatible. Cases
+`pos_double_free_exclusive_goto.c`, `neg_leak_conditional.c`,
+`neg_lock_conditional_leak.c` and `neg_escape_inner_block.c` exercise these
+paths.
+
 Coverage notes:
 
 - `neg_null_deref_arrow.c` and `neg_null_deref_arrow_join.c` exercise the `->`

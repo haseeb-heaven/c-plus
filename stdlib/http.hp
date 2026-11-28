@@ -13,6 +13,13 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 
+/* Protocol policy for the initial URL and every redirect.  libcurl copies
+ * these strings, so literals are safe here; the hop cap stops redirect loops.
+ * Non-HTTP schemes (file://, gopher://, dict://, ...) must never reach
+ * curl_easy_perform. */
+#define HTTP_REDIRECT_PROTOCOLS "http,https"
+#define HTTP_MAX_REDIRECTS 5L
+
 /* Process-wide libcurl lifetime; clients must be dropped before it. */
 class http {
     int initialized;
@@ -145,10 +152,42 @@ class http_client {
 
     http_client(error *err) {
         error_reset(err);
-        this->handle = curl_easy_init();
-        this->header_copy = NULL;
-        if (this->handle == NULL)
-            error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
+        do {
+            this->handle = curl_easy_init();
+            this->header_copy = NULL;
+            if (this->handle == NULL) {
+                error_fail(err, CPLUS_EXIT_RESOURCE, "http_client: curl_easy_init failed");
+                break;
+            }
+            /* Fail closed: the initial URL and every redirect are restricted
+             * to http/https.  REDIR_PROTOCOLS_STR alone only guards the hop;
+             * without PROTOCOLS_STR a caller could pass file://, gopher://,
+             * dict://, ... straight to perform().  Bound the chain too. */
+            int policy_ok;
+#if defined(LIBCURL_VERSION_NUM) && LIBCURL_VERSION_NUM >= 0x075500
+            policy_ok =
+                curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS_STR,
+                                 HTTP_REDIRECT_PROTOCOLS) == CURLE_OK &&
+                curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS_STR,
+                                 HTTP_REDIRECT_PROTOCOLS) == CURLE_OK;
+#else
+            {
+                long mask = (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS);
+                policy_ok =
+                    curl_easy_setopt(this->handle, CURLOPT_PROTOCOLS, mask) == CURLE_OK &&
+                    curl_easy_setopt(this->handle, CURLOPT_REDIR_PROTOCOLS, mask) == CURLE_OK;
+            }
+#endif
+            if (!policy_ok ||
+                curl_easy_setopt(this->handle, CURLOPT_MAXREDIRS,
+                                 HTTP_MAX_REDIRECTS) != CURLE_OK) {
+                error_fail(err, CPLUS_EXIT_UNSUPPORTED,
+                           "http_client: protocol policy setopt failed");
+                curl_easy_cleanup(this->handle);
+                this->handle = NULL;
+                break;
+            }
+        } while (0);
     }
 
     int valid(void) {
@@ -202,14 +241,20 @@ class http_client {
             }
             copy = fresh;
         }
-        if (this->header_copy != NULL)
-            curl_slist_free_all(this->header_copy);
-        this->header_copy = copy;
-        if (curl_easy_setopt(this->handle, CURLOPT_HTTPHEADER,
-                             this->header_copy) != CURLE_OK) {
+        /* Install the new list BEFORE releasing the old one.  libcurl keeps
+         * the CURLOPT_HTTPHEADER pointer until the next setopt or cleanup;
+         * freeing the previous list first leaves a dangling pointer on the
+         * handle if this setopt fails.  On failure the caller's previous
+         * headers stay installed and the unused copy is released. */
+        if (curl_easy_setopt(this->handle, CURLOPT_HTTPHEADER, copy) != CURLE_OK) {
+            if (copy != NULL)
+                curl_slist_free_all(copy);
             error_fail(err, CPLUS_EXIT_UNSUPPORTED, "http_client::set_headers failed");
             return STDLIB_FAIL;
         }
+        if (this->header_copy != NULL)
+            curl_slist_free_all(this->header_copy);
+        this->header_copy = copy;
         return STDLIB_OK;
     }
 

@@ -91,6 +91,12 @@ struct LoopInfo {
   /// A `switch` is tracked in the same stack as loops, but `continue` must
   /// target the innermost real loop rather than the switch frame.
   bool isSwitch = false;
+  /// Issue #228: a `do` frame stays alive after its body closes so the
+  /// trailing `while` can be matched to *this* frame.  A single function-wide
+  /// "awaiting while" flag let a nested `while`/`do` steal that match and
+  /// leave `break` targeting the wrong loop.
+  bool isDo = false;
+  bool bodyClosed = false;
 };
 
 struct Edit {
@@ -302,6 +308,15 @@ public:
 
     LoweredSource result;
     result.text = std::move(output_);
+    // By-value transfer cleanup emits cplus_zero in the lowered C. The
+    // rewriter's declaration is keyed off the ORIGINAL source, which never
+    // mentions it, so declare it here to keep the STRICT safety AST parseable.
+    if (result.text.find("cplus_zero(") != std::string::npos &&
+        result.text.find("extern void cplus_zero(") == std::string::npos)
+      result.text = "#line 1 \"<cplus-raii-prelude>\"\n"
+                    "#include <stddef.h>\n"
+                    "extern void cplus_zero(void *, size_t);\n"
+                    "#line 1 \"" + quoteFile(filename_) + "\"\n" + result.text;
     result.changed = !edits_.empty() || removedMarkers_ > 0;
     result.obligations = obligations_;
     return result;
@@ -1008,6 +1023,7 @@ private:
 
   void openScope(size_t i, const Token &t) {
     bool isFunction = false;
+    std::vector<OwnedVar> byValueRootVars;
     if (!inFunction_) {
       size_t p = prevSig(i);
       if (p != kNPos && isPunct(p, ")")) {
@@ -1019,9 +1035,28 @@ private:
             fnameIdx != kNPos && toks_[fnameIdx].kind == TokKind::Identifier
                 ? toks_[fnameIdx].text
                 : std::string();
-        // All ownership state is now scoped, so entering a function needs no
-        // reset: a sibling function's bindings can no longer be observed.
-        doAwaitingWhile_ = false;
+        // Issue #229: a by-value resource parameter is owned by the callee on
+        // *every* exit path, including an early `return`.  analyzePlainC()
+        // records the parameter bindings before scan(), so install them in the
+        // function's root scope here; dropsFor() then sees them like any other
+        // local.  The old closing-brace-only edit leaked on early returns.
+        auto bvit = byValueParamsByOpen_.find(i);
+        if (bvit != byValueParamsByOpen_.end())
+          byValueRootVars = bvit->second;
+        currentFunctionReturnsVoid_ = false;
+        for (size_t k = fnameIdx; k != kNPos && k > 0;) {
+          size_t prev = prevSig(k);
+          if (prev == kNPos || isPunct(prev, ";") || isPunct(prev, "{") ||
+              isPunct(prev, "}"))
+            break;
+          if (isIdent(prev, "void")) {
+            currentFunctionReturnsVoid_ = true;
+            break;
+          }
+          if (isPunct(prev, "*")) // `void *f()` is not a void return
+            break;
+          k = prev;
+        }
         // Parameters are out-param escape targets: storing a live owner into
         // one hands its lifetime to the caller.
         currentParams_.clear();
@@ -1040,6 +1075,8 @@ private:
     s.functionBody = isFunction;
     s.exceptionBlock = isFunction ? false : isExceptionBlockOpen(i);
     scopes_.push_back(std::move(s));
+    for (const OwnedVar &v : byValueRootVars)
+      registerOwned(v);
 
     // Issue #185: a lexical region's release belongs to the block this brace
     // opens.  handleRegion() cannot register it because the `region` keyword is
@@ -1061,7 +1098,10 @@ private:
       registerOwned(v);
     }
 
-    if (loops_.size() > 0 && loops_.back().bodyPos < 0)
+    // Issue #228: braces inside a loop *header* (`for (struct S s = {1}; ...)`)
+    // are not the loop body.  Binding bodyPos to them retired the loop frame
+    // before the real body, so break/continue dropped nothing.
+    if (parenDepth_ == 0 && loops_.size() > 0 && loops_.back().bodyPos < 0)
       loops_.back().bodyPos = static_cast<int>(scopes_.size()) - 1;
 
     ++functionDepth_;
@@ -1080,12 +1120,19 @@ private:
       insertBefore(t, drops);
 
     int closedIndex = static_cast<int>(scopes_.size()) - 1;
-    if (!loops_.empty() && loops_.back().bodyPos == closedIndex)
-      loops_.pop_back();
+    if (!loops_.empty() && loops_.back().bodyPos == closedIndex) {
+      if (loops_.back().isDo)
+        // Keep the do frame until its trailing `while` is seen.  Marking the
+        // body closed makes that `while` match this frame and no inner loop.
+        loops_.back().bodyClosed = true;
+      else
+        loops_.pop_back();
+    }
     // A loop whose body is a compound statement owned by a nested construct
     // (e.g. `while (c) switch (x) { ... }`) never got a bodyPos of its own.
     // Retire that frame here too so it cannot shadow a real enclosing loop.
-    if (!loops_.empty() && loops_.back().bodyPos < 0 &&
+    // Header braces live at parenDepth_ > 0 and must never retire the frame.
+    if (parenDepth_ == 0 && !loops_.empty() && loops_.back().bodyPos < 0 &&
         loops_.back().stackSizeAtKeyword == static_cast<size_t>(closedIndex))
       loops_.pop_back();
 
@@ -1549,8 +1596,12 @@ private:
       atStmtStart_ = false;
       return;
     }
-    // Passing an owned local by value transfers it to the callee, which emits
-    // the destructor; suppress the caller's drop to avoid a double release.
+    // Issue #229: passing an owned local by value transfers the handle to the
+    // callee.  Zero the caller's handle *at this call site* so its own
+    // scope-exit drop becomes a no-op even when the call sits on a branch that
+    // is not taken.  The old forward scan from the declaration suppressed the
+    // drop across unrelated functions and conditional branches, leaking the
+    // owner on every path that did not make the call.
     auto bvit = byValueParamIndices_.find(t.text);
     if (bvit != byValueParamIndices_.end() && isPunct(nextSig(i), "(")) {
       size_t lp = nextSig(i), rp = matchingParen(lp);
@@ -1558,6 +1609,7 @@ private:
         size_t start = lp + 1;
         unsigned argIndex = 0;
         int argDepth = 0;
+        std::set<std::string> transferred;
         for (size_t k = lp + 1; k <= rp; ++k) {
           bool end = k == rp;
           if (!end && isPunct(k, "(")) ++argDepth;
@@ -1565,12 +1617,30 @@ private:
           if (!end && !(isPunct(k, ",") && argDepth == 0))
             continue;
           if (bvit->second.count(argIndex)) {
-            size_t arg = nextSig(start);
-            if (arg < rp && toks_[arg].kind == TokKind::Identifier) {
-            }
+            // `start` already names the first token after `(` or `,`.
+            // nextSig() advances before skipping trivia, so calling it on a
+            // significant `start` would step over a single-token argument
+            // (`f(x)`) and test the closing `)` instead.  That silently
+            // dropped every transfer guard for the common `f(x)` spelling.
+            size_t arg = isTrivia(start) ? nextSig(start) : start;
+            if (arg < rp && toks_[arg].kind == TokKind::Identifier &&
+                hasLiveOwner(toks_[arg].text))
+              transferred.insert(toks_[arg].text);
           }
           ++argIndex;
           start = k + 1;
+        }
+        if (!transferred.empty()) {
+          // Wrap the whole call so the comma stays inside a primary
+          // expression: this is valid as a statement, in a condition, as a
+          // macro argument and as an operand of a larger expression.
+          std::string tail;
+          for (const std::string &name : transferred)
+            tail += ", (void)cplus_zero(&" + name + ", sizeof(" + name + "))";
+          tail += ")";
+          edits_.push_back(Edit{toks_[i].offset, 0, "(", seq_++});
+          edits_.push_back(
+              Edit{toks_[rp].offset + toks_[rp].text.size(), 0, tail, seq_++});
         }
       }
     }
@@ -1608,17 +1678,19 @@ private:
     }
     if (t.text == "for" || t.text == "while" || t.text == "do" ||
         t.text == "switch") {
-      // The `while` in `do { ... } while (c);` closes the `do` frame; pushing a
-      // fresh frame for it left a stale LoopInfo that later breaks targeted.
-      if (t.text == "while" && doAwaitingWhile_) {
-        doAwaitingWhile_ = false;
+      // Issue #228: only the *innermost, body-closed* `do` frame owns the
+      // trailing `while`.  A nested `while` or `do` now gets its own frame, so
+      // break/continue always target the loop syntactically around them.
+      bool closesDo = t.text == "while" && !loops_.empty() &&
+                      loops_.back().isDo && loops_.back().bodyClosed;
+      if (closesDo) {
+        loops_.pop_back();
       } else {
         LoopInfo l;
         l.stackSizeAtKeyword = scopes_.size();
         l.isSwitch = t.text == "switch";
+        l.isDo = t.text == "do";
         loops_.push_back(l);
-        if (t.text == "do")
-          doAwaitingWhile_ = true;
       }
       atStmtStart_ = false;
       return;
@@ -1644,6 +1716,12 @@ private:
   /// injecting cleanup cannot change how an enclosing `if`/`else` binds.
   /// Evaluate the return expression before running cleanup: cleanup may null
   /// owning locals, so `return xs[0];` must read xs first.
+  ///
+  /// Issue #230: only the `return` keyword is replaced.  The expression is
+  /// left in the source verbatim so edits discovered later while scanning its
+  /// tokens (explicit-drop zero guards, cplus_region_alloc lowering, ...) are
+  /// not overwritten by a whole-span replacement.  `__auto_type` avoids
+  /// spelling the type twice and decays arrays, so `return buf;` is valid C.
   void insertReturnCleanup(size_t keywordIdx, const std::string &drops) {
     size_t semi = statementEnd(keywordIdx);
     if (semi == kNPos) {
@@ -1656,13 +1734,21 @@ private:
       insertStatementCleanup(keywordIdx, drops);
       return;
     }
-    std::string expr = joinTokens(exprStart, semi);
-    std::string replacement = "{ __typeof__(" + expr +
-                              ") __cplus_ret = (" + expr + "); " + drops +
-                              " return __cplus_ret;";
-    edits_.push_back(Edit{toks_[keywordIdx].offset,
-                          toks_[semi].offset - toks_[keywordIdx].offset,
-                          replacement, seq_++});
+    const size_t keywordOffset = toks_[keywordIdx].offset;
+    const size_t keywordLength = toks_[keywordIdx].text.size();
+    std::string before, middle;
+    if (currentFunctionReturnsVoid_) {
+      // `return void_expr;` is legal in a void function; `__auto_type` cannot
+      // hold void, so evaluate and discard the expression instead.
+      before = "{ (void)(";
+      middle = "); " + drops + "return";
+    } else {
+      before = "{ __auto_type __cplus_ret = (";
+      middle = "); " + drops + "return __cplus_ret";
+    }
+    edits_.push_back(
+        Edit{keywordOffset, keywordLength, before, seq_++});
+    edits_.push_back(Edit{toks_[semi].offset, 0, middle, seq_++});
     edits_.push_back(
         Edit{toks_[semi].offset + toks_[semi].text.size(), 0, " }", seq_++});
   }
@@ -1823,50 +1909,10 @@ private:
   /// Explicit drops no longer suppress the automatic drop: a drop on only one
   /// branch must not leak on the other.  Instead the explicit drop is guarded
   /// with `cplus_zero`, so the automatic destructor sees an empty handle and
-  /// becomes a no-op.  The only remaining suppression is for a drop embedded
-  /// in `defer`, whose text is itself the scope-exit cleanup.
-  bool passedByValueFrom(size_t from, const std::string &name) const {
-    if (name.empty() || toks_.empty())
-      return false;
-    /* v.declOffset is a byte offset used for edits; convert to token index. */
-    size_t start = 0;
-    while (start < toks_.size() && toks_[start].offset < from)
-      ++start;
-    size_t limit = start + 4000 < toks_.size() ? start + 4000 : toks_.size();
-    for (size_t k = start; k < limit; ++k) {
-      if (toks_[k].kind != TokKind::Identifier)
-        continue;
-      auto bit = byValueParamIndices_.find(toks_[k].text);
-      if (bit == byValueParamIndices_.end() || bit->second.empty())
-        continue;
-      size_t lp = nextSig(k);
-      if (!isPunct(lp, "("))
-        continue;
-      size_t rp = matchingParen(lp);
-      if (rp == kNPos)
-        continue;
-      size_t ast = lp + 1;
-      unsigned ai = 0;
-      int ad = 0;
-      for (size_t j = lp + 1; j <= rp; ++j) {
-        bool end = j == rp;
-        if (!end && isPunct(j, "(")) ++ad;
-        if (!end && isPunct(j, ")")) --ad;
-        if (!end && !(isPunct(j, ",") && ad == 0))
-          continue;
-        if (bit->second.count(ai)) {
-          size_t arg = isTrivia(ast) ? nextSig(ast) : ast;
-          if (arg < rp && toks_[arg].kind == TokKind::Identifier &&
-              toks_[arg].text == name)
-            return true;
-        }
-        ++ai;
-        ast = j + 1;
-      }
-    }
-    return false;
-  }
-
+  /// becomes a no-op.  A by-value transfer is likewise made idempotent by a
+  /// zeroing guard emitted at the call site (issue #229), not by suppressing
+  /// this drop from a forward scan.  The only remaining suppression is for a
+  /// drop embedded in `defer`, whose text is itself the scope-exit cleanup.
   std::string dropsFor(size_t from, size_t to, DeclId exclude) {
     std::string out;
     for (size_t p = to; p > from; --p) {
@@ -1876,8 +1922,7 @@ private:
         const OwnedVar &v = vars[k - 1];
         if ((exclude.valid() && exclude.scope == p - 1 &&
              exclude.var == k - 1) ||
-            v.deferDropped ||
-            passedByValueFrom(v.declOffset, v.name) || v.name == "NULL")
+            v.deferDropped || v.name == "NULL")
           continue;
         // At a scope exit the name may already denote an inner shadow, so the
         // drop has to go through the saved address instead.  This only matters
@@ -2811,13 +2856,10 @@ private:
             v.declOffset = typeIdx;
             v.line = toks_[typeIdx].line;
             v.column = toks_[typeIdx].column;
-            // analyzePlainC() runs before scan() and has no owner scope yet;
-            // emit the callee-side destructor directly at the function's
-            // closing brace. scan() does not track by-value parameters.
-            if (closeIdx < toks_.size())
-              edits_.push_back(Edit{toks_[closeIdx].offset, 0,
-                                    "  " + v.drop + "(&" + v.name + "); ",
-                                    seq_++});
+            // Issue #229: the binding is installed in the function's root
+            // scope by openScope(), so its destructor runs on early returns
+            // as well as on fallthrough.  No closing-brace-only edit here.
+            byValueParamsByOpen_[openIdx].push_back(v);
             if (!funcName.empty())
               byValueParamIndices_[funcName].insert(paramIndex);
           }
@@ -3350,9 +3392,14 @@ private:
   std::set<std::string> terminationAliases_;
   std::set<std::string> throwAliases_;
   // Functions taking resource owners by value: call sites transfer those
-  // arguments to the callee (the callee emits the destructor).
+  // arguments to the callee (the callee owns every exit path).
   std::map<std::string, std::set<unsigned>> byValueParamIndices_;
+  // Parameter bindings keyed by the function body's opening brace token, so
+  // openScope() can install them in the root scope before scan() reaches any
+  // return statement.
+  std::map<size_t, std::vector<OwnedVar>> byValueParamsByOpen_;
   std::string currentFunctionName_;
+  bool currentFunctionReturnsVoid_ = false;
   /// Macro name -> function-like?  Macros hiding a terminator in their body.
   std::map<std::string, bool> terminationMacros_;
   std::vector<DeferInfo> defers_;
@@ -3371,9 +3418,6 @@ private:
   bool inFunction_ = false;
   int functionDepth_ = 0;
   int parenDepth_ = 0;
-  /// The `while` token that closes a `do { ... } while (c);` belongs to that
-  /// `do`, not to a new loop frame.
-  bool doAwaitingWhile_ = false;
   bool atStmtStart_ = true;
   unsigned obligations_ = 0;
   unsigned deferCounter_ = 0;

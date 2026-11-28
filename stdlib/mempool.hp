@@ -65,9 +65,16 @@ static inline int stdlib_mem_pool_init(stdlib_mem_pool *p, size_t slot_size,
     if (p == 0 || slot_size == 0 || per_slab == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "pool: invalid config"), STDLIB_FAIL;
-    if (slot_size > (size_t)-1 - STDLIB_POOL_HEADER_SIZE)
+    if (slot_size > (size_t)-1 - STDLIB_POOL_HEADER_SIZE -
+                    (STDLIB_ALIGN_DEFAULT - 1u))
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "pool: slot size overflow"), STDLIB_FAIL;
+    /* Round the usable slot size up to the allocator alignment so the stride
+     * shared by add_slab/alloc/release is a multiple of STDLIB_ALIGN_DEFAULT.
+     * Without this, slot headers and user pointers past slot 0 are misaligned
+     * for any slot_size that is not already a multiple of 16. */
+    slot_size = (slot_size + STDLIB_ALIGN_DEFAULT - 1u) &
+                ~(STDLIB_ALIGN_DEFAULT - 1u);
     p->slabs = (stdlib_pool_slab *)0;
     p->free_head = (void *)0;
     p->slot_size = slot_size;
@@ -359,7 +366,9 @@ static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
     if (slot_size == 0)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_NULL_POINTER, "slot_pool: zero slot size"), STDLIB_FAIL;
-    if (ncap > (size_t)-1 / slot_size)
+    if (ncap > (size_t)-1 / slot_size ||
+        ncap > (size_t)-1 / sizeof(size_t) ||
+        ncap > (size_t)-1 / sizeof(uint64_t))
         return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
                               CPLUS_EXIT_BOUNDS, "slot_pool: capacity overflow"), STDLIB_FAIL;
     items = (unsigned char *)cplus_alloc(p->slot_size * ncap);
@@ -371,6 +380,10 @@ static inline int stdlib_slot_pool_grow(stdlib_slot_pool *p, error *err) {
     memcpy(items, p->items, p->slot_size * p->count);
     memcpy(fl, p->free_list, sizeof(size_t) * p->free_count);
     memcpy(gen, p->generations, sizeof(uint64_t) * p->count);
+    /* Slots beyond the old high-water mark were never handed out.  Zero their
+     * generation tags: reading the uninitialized tail in alloc_ref is UB and
+     * otherwise produces unpredictable stale-handle tags. */
+    memset(gen + p->count, 0, sizeof(uint64_t) * (ncap - p->count));
     cplus_release(p->items); cplus_release(p->free_list); cplus_release(p->generations);
     p->items = items; p->free_list = fl; p->generations = gen;
     p->capacity = ncap;

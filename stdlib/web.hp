@@ -15,6 +15,7 @@
 #ifndef CPLUS_STD_WEB_HP
 #define CPLUS_STD_WEB_HP
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +47,45 @@ typedef struct {
     web_request req;
 } web_conn;
 
+/* --- SIGPIPE suppression -------------------------------------------------
+ * SIGPIPE's default disposition kills the process.  A remote peer that
+ * disconnects before a reply is finished must instead be a normal I/O error.
+ * macOS/BSD expose SO_NOSIGPIPE (set on every socket we create or accept);
+ * Linux has no such option, so send() carries MSG_NOSIGNAL there. */
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
+static void web_no_sigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    int set = 1;
+    if (fd >= 0)
+        (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+#else
+    (void)fd;
+#endif
+}
+
+/* Send every byte, retrying EINTR.  Returns 0 on success and -1 on a closed,
+ * reset or stalled peer; the caller reports that as a normal reply failure,
+ * never as a fatal signal. */
+static int web_send_all(int fd, const char *buf, size_t len) {
+    size_t sent = 0;
+    if (fd < 0 || (buf == (const char *)0 && len > 0))
+        return -1;
+    while (sent < len) {
+        ssize_t n = send(fd, buf + sent, len - sent, MSG_NOSIGNAL);
+        if (n > 0) {
+            sent += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        return -1;
+    }
+    return 0;
+}
+
 /* Initialize a caller-owned web_server (stack or static storage) on host:port.
  * Returns 0 on success, -1 on failure. No heap allocation: this is the
  * heap-free path used by the app; the *_start wrapper below is the malloc
@@ -62,6 +102,7 @@ static int web_server_init(web_server *s, const char *host, int port) {
     if (fd < 0)
         return -1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    web_no_sigpipe(fd);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons((uint16_t)port);
@@ -109,6 +150,7 @@ static int web_accept(web_server *s, web_conn *c) {
     if (fd < 0)
         return 0;
     c->fd = fd;
+    web_no_sigpipe(fd);
     c->req.method[0] = 0;
     c->req.path[0] = 0;
     /* Request line. */
@@ -153,9 +195,9 @@ static void web_reply(web_conn *c, int status, const char *body) {
         int hlen = snprintf(head, sizeof(head),
                             "HTTP/1.1 %d %s\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
                             status, text, len);
-        send(c->fd, head, (size_t)hlen, 0);
+        (void)web_send_all(c->fd, head, (size_t)hlen);
     }
-    send(c->fd, body, len, 0);
+    (void)web_send_all(c->fd, body, len);
 }
 
 /* Close a connection: write-shutdown, settle briefly so the reply reaches

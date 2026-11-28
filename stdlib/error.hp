@@ -256,7 +256,12 @@ static inline long stdlib_alloc_seq(void) {
     return __atomic_load_n(&stdlib_state.seq, __ATOMIC_RELAXED);
 }
 
-static const char stdlib_meta_tomb_sentinel = 0;
+/* One tombstone address shared by every translation unit.  A `static`
+ * sentinel gave each TU a different address while stdlib_state/meta_tab are
+ * shared (weak), so a TU that did not recognise another TU's tombstones
+ * copied them as live entries during rehash.  A weak definition coalesces to
+ * one address across all TUs, matching stdlib_state's own weak definition. */
+__attribute__((weak)) const char stdlib_meta_tomb_sentinel = 0;
 #define STDLIB_META_TOMB ((const void *)&stdlib_meta_tomb_sentinel)
 
 static inline void stdlib_meta_acquire(void) {

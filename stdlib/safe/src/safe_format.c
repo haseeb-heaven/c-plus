@@ -353,11 +353,14 @@ static int scan_call_host(int mode, FILE *stream, const char *str,
 
 /* mode: 0 = vscanf, 1 = vfscanf, 2 = vsscanf.  Unbounded %s/%[/%S and %n were
  * already refused by fmt_check_scanf_spec(), so only sized bounded conversions
- * reach here. */
+ * reach here.  Annex K capacities are dropped by inspecting the va_list once;
+ * the original format is forwarded unchanged, so there is no temporary format
+ * buffer to overflow (issue #212). */
 static int scan_dispatch(const char *api, int mode, FILE *stream, const char *str,
                          const char *fmt, va_list ap) {
     const unsigned char *p = (const unsigned char *)fmt;
     int bounded[CPLUS_SCAN_MAX_ARGS];
+    unsigned char convop[CPLUS_SCAN_MAX_ARGS];
     size_t width[CPLUS_SCAN_MAX_ARGS];
     void *args[CPLUS_SCAN_MAX_ARGS];
     size_t nconv = 0, i;
@@ -394,8 +397,12 @@ static int scan_dispatch(const char *api, int mode, FILE *stream, const char *st
         if (!suppressed && conv) {
             if (nconv == CPLUS_SCAN_MAX_ARGS)
                 return fmt_violation(api, "too many scanf conversions");
+            /* Annex K supplies an rsize_t capacity after each of these
+             * conversions, %c included (issue #212).  Keeping %c out here
+             * desynchronises every following va_arg. */
             bounded[nconv] = (conv == 's' || conv == 'c' || conv == '[' ||
                               conv == 'S' || conv == 'C');
+            convop[nconv] = conv;
             width[nconv] = w;
             ++nconv;
         }
@@ -413,14 +420,27 @@ static int scan_dispatch(const char *api, int mode, FILE *stream, const char *st
         if (bounded[i] && i + 1u < nconv) {
             void *next = va_arg(peek, void *);
             uintptr_t v = (uintptr_t)next;
-            if (v != 0u && v <= CPLUS_SCAN_CAP_MAX) {
-                annexk = 1;
-                /* Annex K would clamp to capacity-1; the host honours only
-                 * the explicit width.  Refuse a capacity too small for the
-                 * declared field rather than overrun the destination. */
-                if (width[i] != 0u && (size_t)v <= width[i]) {
+            if (v <= CPLUS_SCAN_CAP_MAX) {
+                /* A zero word after a bounded conversion is not a usable
+                 * Annex K capacity (nor a valid destination pointer); never
+                 * let it become a host argument (issue #212 hardening). */
+                if (v == 0u) {
                     va_end(peek);
-                    return fmt_violation(api, "scanf capacity smaller than field width");
+                    return fmt_violation(api, "zero scanf capacity");
+                }
+                annexk = 1;
+                /* The host honours only the explicit width.  Annex K clamps
+                 * to capacity-1, so refuse a capacity too small for the
+                 * declared field, and refuse an unbounded string conversion
+                 * whose capacity cannot be expressed in the host format. */
+                if (width[i] != 0u) {
+                    if ((size_t)v <= width[i]) {
+                        va_end(peek);
+                        return fmt_violation(api, "scanf capacity smaller than field width");
+                    }
+                } else if (convop[i] == 's' || convop[i] == '[' || convop[i] == 'S') {
+                    va_end(peek);
+                    return fmt_violation(api, "unbounded %s or %[ specifier in scanf without field width");
                 }
             } else {
                 pending = next;

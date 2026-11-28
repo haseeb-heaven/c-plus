@@ -77,6 +77,20 @@ errno_t cplus_strcmp_s(const char *dest, rsize_t dmax, const char *src, int *ind
         if (indicator) *indicator = 0;
         return 400;
     }
+    /* dmax describes dest, not src (issue #213).  A valid short source in a
+     * smaller tracked allocation must not force a read past that allocation,
+     * so bound the comparison by src's own proven capacity when known. */
+    {
+        size_t srccap = cplus_safe_remaining_capacity(src);
+        if (srccap == 0u) { /* one-past-the-end: no byte may be read */
+            if (indicator) *indicator = 0;
+            errno = ERANGE;
+            cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcmp_s", "source capacity zero");
+            cplus_safe_stat_record("strcmp_s", 0);
+            return 403; /* ESLEMAX: requested scan exceeds proven capacity */
+        }
+        if (srccap != (size_t)-1 && (size_t)dmax > srccap) dmax = (rsize_t)srccap;
+    }
     errno_t r = cplus_sc_strcmp_s(dest, dmax, src, indicator);
     if (r != 0) cplus_safe_log(CPLUS_SAFE_LOG_ERROR, "strcmp_s", "constraint/error");
     cplus_safe_stat_record("strcmp_s", r == 0);
@@ -129,6 +143,14 @@ static int cplus_safe_resolve_str_dmax(const char *dest, size_t fallback,
     return 1;
 }
 
+/* The checked backend enforces safeclib's RSIZE_MAX_STR (4UL << 10, see
+ * third_party/safeclib/include/safe_types.h), while this library's public
+ * RSIZE_MAX_STR follows C11 (SIZE_MAX >> 1).  Passing the public value as a
+ * scan ceiling is refused by the backend (ESLEMAX 403), making strnlen_s
+ * return 0; a wrapper that mistakes that for a valid empty string copies
+ * nothing.  Bound wrapper scans by what the backend actually accepts. */
+#define CPLUS_SAFE_BOUNDED_SCAN_MAX ((size_t)(4UL << 10))
+
 /* Defense-in-depth for the standard-C-signature (auto) wrappers.
  *
  * The checked safeclib primitives already bound every read they perform by
@@ -155,14 +177,23 @@ static size_t cplus_safe_str_scan_ceiling(const char *dest, size_t known_dmax) {
     if (tracked != (size_t)-1) cap = tracked;
     if (known_dmax != (size_t)-1 && (cap == (size_t)-1 || known_dmax < cap))
         cap = known_dmax;
-    if (cap == (size_t)-1 || cap > RSIZE_MAX_STR) cap = RSIZE_MAX_STR;
+    if (cap == (size_t)-1 || cap > CPLUS_SAFE_BOUNDED_SCAN_MAX)
+        cap = CPLUS_SAFE_BOUNDED_SCAN_MAX;
     return cap;
 }
 
 static int cplus_safe_bounded_strlen(const char *s, size_t ceiling, size_t *out) {
     size_t n;
+    size_t srccap;
     if (!s || !out || ceiling == 0) return 0;
-    if (ceiling > RSIZE_MAX_STR) ceiling = RSIZE_MAX_STR;
+    if (ceiling > CPLUS_SAFE_BOUNDED_SCAN_MAX) ceiling = CPLUS_SAFE_BOUNDED_SCAN_MAX;
+    /* The ceiling passed in is derived from the DESTINATION.  A valid short
+     * source in a smaller tracked allocation must not be refused (or read
+     * beyond its own block) merely because dest is larger (issue #213).
+     * Clamp to the source's own proven capacity before the bounded query. */
+    srccap = cplus_safe_remaining_capacity(s);
+    if (srccap != (size_t)-1 && ceiling > srccap) ceiling = srccap;
+    if (ceiling == 0) return 0; /* no proven byte may be read */
     n = cplus_strnlen_s(s, ceiling); /* bounded read, never strlen() */
     if (n >= ceiling) return 0;      /* no NUL within the bound */
     *out = n;

@@ -711,6 +711,16 @@ void cplus_scan_value(void *dest, size_t size, cplus_scan_kind kind);
 void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
                          const char *expr, const char *file, int line);
 
+/* Issue #233: read the pointer value stored in an object slot without type
+ * punning.  cplus_scan_one() uses this for char * destinations so the scanned
+ * bytes land in the caller's buffer instead of overwriting the pointer
+ * variable itself.  Callers only reach this branch for pointer-sized slots. */
+static inline void *cplus_scan_pointer_value(const void *slot) {
+  void *p;
+  memcpy(&p, slot, sizeof(p));
+  return p;
+}
+
 #define cplus_print_arg(x)                                                    \
   cplus_print_value(                                                          \
       (__builtin_types_compatible_p(__typeof__(x), char)                      \
@@ -732,25 +742,45 @@ void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
       (x))
 
 #define cplus_scan_one(x)                                                     \
-  cplus_scan_value_at((void *)&(x),                                           \
-                      __builtin_types_compatible_p(__typeof__(x), char *)     \
-                          ? 256u                                              \
-                          : sizeof(x),                                        \
-                      (__builtin_types_compatible_p(__typeof__(x), char)      \
-                           ? CPLUS_SCAN_CHAR                                  \
-                           : _Generic((x) + 0,                                \
-                               char *: CPLUS_SCAN_STR,                        \
-                               const char *: CPLUS_SCAN_STR,                  \
-                               int: CPLUS_SCAN_INT,                           \
-                               unsigned int: CPLUS_SCAN_UINT,                 \
-                               long: CPLUS_SCAN_LONG,                         \
-                               unsigned long: CPLUS_SCAN_ULONG,               \
-                               long long: CPLUS_SCAN_LLONG,                   \
-                               unsigned long long: CPLUS_SCAN_ULLONG,         \
-                               float: CPLUS_SCAN_FLOAT,                       \
-                               double: CPLUS_SCAN_DOUBLE,                     \
-                               default: CPLUS_SCAN_INT)),                     \
-                      #x, __FILE__, __LINE__)
+  ({                                                                          \
+    /* Issue #233: a const destination is never writable; never let it        \
+     * fall through to the scalar default. */                                 \
+    _Static_assert(!__builtin_types_compatible_p(__typeof__((x) + 0),          \
+                                                  const char *),               \
+                   "scan() requires a writable char buffer, not const char*"); \
+    __typeof__(&(x)) _cplus_scan_slot = &(x);                                 \
+    cplus_scan_value_at(                                                      \
+        /* For char * the slot holds the buffer address: pass the pointer     \
+         * value and the allocator's recorded size, not &slot and 256u. */    \
+        __builtin_types_compatible_p(__typeof__(x), char *)                   \
+            ? cplus_scan_pointer_value(_cplus_scan_slot)                      \
+            : (void *)_cplus_scan_slot,                                       \
+        __builtin_types_compatible_p(__typeof__(x), char *)                   \
+            ? cplus_alloc_bytes(cplus_scan_pointer_value(_cplus_scan_slot))   \
+            : sizeof(x),                                                      \
+        /* unsigned char/short promote to int in _Generic and would be        \
+         * dispatched as signed: select them before the promotion. */        \
+        (__builtin_types_compatible_p(__typeof__(x), char)                    \
+             ? CPLUS_SCAN_CHAR                                                 \
+             : __builtin_types_compatible_p(__typeof__(x), unsigned char)      \
+             ? CPLUS_SCAN_UINT                                                 \
+             : __builtin_types_compatible_p(__typeof__(x), unsigned short)     \
+             ? CPLUS_SCAN_UINT                                                 \
+             : __builtin_types_compatible_p(__typeof__(x), char *)             \
+             ? CPLUS_SCAN_STR                                                  \
+             : _Generic((x) + 0,                                               \
+                 char *: CPLUS_SCAN_STR,                                       \
+                 int: CPLUS_SCAN_INT,                                          \
+                 unsigned int: CPLUS_SCAN_UINT,                                \
+                 long: CPLUS_SCAN_LONG,                                        \
+                 unsigned long: CPLUS_SCAN_ULONG,                              \
+                 long long: CPLUS_SCAN_LLONG,                                  \
+                 unsigned long long: CPLUS_SCAN_ULLONG,                        \
+                 float: CPLUS_SCAN_FLOAT,                                      \
+                 double: CPLUS_SCAN_DOUBLE,                                    \
+                 default: CPLUS_SCAN_INT)),                                    \
+        #x, __FILE__, __LINE__);                                              \
+  })
 
 /* Fixed-width argument dispatch (up to 16 values). */
 #define CPLUS_PICK16(_1, _2, _3, _4, _5, _6, _7, _8,                          \

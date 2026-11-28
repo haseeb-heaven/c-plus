@@ -196,6 +196,18 @@ static size_t cplus_malloc_capacity(const void *p) {
 #define CPLUS_HAVE_MALLOC_CAPACITY 0
 #endif
 
+/* Issue #234: glibc's malloc_usable_size() is only defined for a live block;
+ * probing a freed pointer reads its chunk header (non-zero for tcache/fastbin
+ * chunks, SIGSEGV for mmap chunks, an ASan UAF under sanitizers).  Only Apple's
+ * malloc_size() is used as the "address currently live in malloc?" probe in
+ * cplus_retired_address_stale().  The test suite can force this conservative
+ * path on any host with CPLUS_NO_RETIRED_CAPACITY_PROBE. */
+#if defined(__APPLE__) && !defined(CPLUS_NO_RETIRED_CAPACITY_PROBE)
+#define CPLUS_HAVE_RETIRED_CAPACITY_PROBE 1
+#else
+#define CPLUS_HAVE_RETIRED_CAPACITY_PROBE 0
+#endif
+
 /* Never let a caller-supplied size exceed the block the allocator actually
  * handed out.  A smaller declared size is kept verbatim. */
 static size_t cplus_clamp_registered_size(const void *p, size_t bytes) {
@@ -408,7 +420,10 @@ static int64_t cplus_checked_shift(int64_t a, int64_t b, unsigned bits,
     /* Check the real shifted value BEFORE masking it to the source width:
      * masking first discards exactly the bits whose loss must be rejected. */
     uint64_t shifted = ua << count;
-    if ((shifted & ~valueBits) || (isSigned && (shifted & signBit)))
+    /* Round-trip check catches bits lost past bit 63 when bits == 64: in that
+     * case ~valueBits is 0, so the mask check alone sees nothing (issue #234). */
+    if ((shifted & ~valueBits) || (shifted >> count) != ua ||
+        (isSigned && (shifted & signBit)))
       cplus_arith_fatal("invalid shift",
                         "left shift loses bits above the source width");
     return (int64_t)(shifted & valueBits);
@@ -786,12 +801,12 @@ static void cplus_gc_tick_locked(void);
 static void cplus_reclaim_collect_locked(void);
 
 /* Called with the allocator lock held.  A retired address is a stale alias
- * unless the allocator proves a *new* block currently lives there.  macOS
- * malloc_size()/glibc malloc_usable_size() return 0 for a freed block and a
- * positive size for a live one, which distinguishes S1/S9 (stale alias)
- * from a legitimate fresh malloc that reuses an address.  A block still held
- * in our quarantine has not been returned to malloc yet and is always stale.
- * Without a platform query we reject conservatively. */
+ * unless the allocator proves a *new* block currently lives there.  Only
+ * Apple's malloc_size() may be used for that liveness probe: glibc's
+ * malloc_usable_size() is undefined on a freed pointer (issue #234), so other
+ * platforms reject conservatively instead of querying.  A block still held in
+ * quarantine or by the epoch collector has not been returned to malloc yet and
+ * is always stale. */
 static int cplus_retired_address_stale(const void *p) {
   if (cplus_retired_generation(p) == 0u)
     return 0;
@@ -802,7 +817,7 @@ static int cplus_retired_address_stale(const void *p) {
    * retained by the collector as stale until it is actually reclaimed. */
   if (cplus_gc_contains_retired_locked(p))
     return 1;
-#if CPLUS_HAVE_MALLOC_CAPACITY
+#if CPLUS_HAVE_RETIRED_CAPACITY_PROBE
   return cplus_malloc_capacity(p) == 0u;
 #else
   return 1;

@@ -17,6 +17,21 @@
 #include "cplus/cplus.h"
 #include "stdlib/error.hp"
 
+/* SIGPIPE has a fatal default disposition: a peer that disconnects mid-write
+ * may otherwise kill the whole process.  macOS/BSD expose SO_NOSIGPIPE, set
+ * here on every socket a connection owns or borrows (including accepted
+ * ones), so write() surfaces EPIPE.  Linux has no SO_NOSIGPIPE; there
+ * connection::write() uses send() with MSG_NOSIGNAL below. */
+static inline void net_no_sigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    int set = 1;
+    if (fd >= 0)
+        (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+#else
+    (void)fd;
+#endif
+}
+
 class connection {
     int fd;
     int owns;
@@ -24,6 +39,7 @@ class connection {
     connection(int descriptor) {
         this->fd = descriptor;
         this->owns = descriptor >= 0 ? 1 : 0;
+        net_no_sigpipe(this->fd);
     }
 
     /* Descriptors 0-2 belong to the process: a zero-initialised handle (fd 0,
@@ -72,7 +88,15 @@ class connection {
         /* A short write is not a failure: keep sending until every byte is out
          * (retrying EINTR) or the peer reports an error. */
         while (sent < length) {
-            ssize_t n = write(this->fd, data + sent, length - sent);
+            ssize_t n;
+#if defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+            /* Linux: no per-socket SO_NOSIGPIPE, so suppress the signal on
+             * this send.  macOS/BSD keep write() because the option above
+             * already makes it safe. */
+            n = send(this->fd, data + sent, length - sent, MSG_NOSIGNAL);
+#else
+            n = write(this->fd, data + sent, length - sent);
+#endif
             if (n < 0) {
                 if (errno == EINTR)
                     continue;
@@ -175,8 +199,9 @@ static inline listener listener_borrow(int fd) {
 }
 
 static inline connection connection_borrow(int fd) {
-    connection borrowed = connection(-1);
-    borrowed.fd = fd;
+    /* Use the fd-taking constructor so SO_NOSIGPIPE is applied to borrowed
+     * descriptors too; only ownership is cleared afterwards. */
+    connection borrowed = connection(fd);
     borrowed.owns = 0;
     return borrowed;
 }
