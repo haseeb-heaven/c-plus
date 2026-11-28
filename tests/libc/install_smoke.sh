@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+# Surface redirected tool logs on failure instead of exiting silently.
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then for f in /tmp/libc_cmake.log /tmp/libc_build.log /tmp/libc_install.log /tmp/libc_contracts_check.log; do if [ -f "$f" ]; then echo "=== $f ===" >&2; tail -30 "$f" >&2; fi; done; fi' EXIT
 BLD="$ROOT/build/libc-cmake"
 INST="$ROOT/build/libc-install"
 CC=${CPLUS_CLANG:-clang}
