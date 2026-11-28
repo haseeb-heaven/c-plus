@@ -151,7 +151,7 @@ run_source() {
     run_timed "$TIMEOUT" "$OUT/$name.bin" >"$out.run" 2>"$err.run"
     rcode=$?
     rdiag=$(grep -E 'error:|warning:|runtime error' "$err.run" "$out.run" 2>/dev/null | head -1)
-    if [ "$rcode" -eq "$wantcode" ] && { [ -z "$expected" ] || printf '%s' "$rdiag" | grep -q -- "$expected"; }; then
+    if [ "$rcode" -eq "$wantcode" ] && { [ -z "$expected" ] || printf '%s' "$rdiag" | grep -Fq -- "$expected"; }; then
       record "$name" PASS "$cmd && $OUT/$name.bin" "$rdiag" "" "$rcode"
     else
       record "$name" RUNTIME_FAILURE "$cmd && $OUT/$name.bin" "rc=$rcode want=$wantcode diag=$rdiag want_diag=$expected" "" "$rcode"
@@ -160,7 +160,7 @@ run_source() {
   fi
   # rejection tests
   if [ "$code" -ne 0 ]; then
-    if [ -n "$expected" ] && ! printf '%s' "$diag" | grep -q -- "$expected"; then
+    if [ -n "$expected" ] && ! printf '%s' "$diag" | grep -Fq -- "$expected"; then
       record "$name" DIAGNOSTIC_MISMATCH "$cmd" "$diag" "expected=$expected" "$code"
     else
       record "$name" PASS "$cmd" "$diag" "" "$code"
