@@ -52,7 +52,9 @@ jobs:
               -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
               -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang"
           else
-            LLVM_DIR="$(llvm-config --cmakedir)"
+            LLVM_CONFIG="/c/Program Files/LLVM/bin/llvm-config.exe"
+            [ -x "$LLVM_CONFIG" ] || LLVM_CONFIG="/c/Program Files (x86)/LLVM/bin/llvm-config.exe"
+            LLVM_DIR="$("$LLVM_CONFIG" --cmakedir)"
             CLANG_DIR="$(dirname "$LLVM_DIR")/clang"
             cmake -S . -B build -G Ninja \
               -DCMAKE_C_COMPILER=clang-cl \
