@@ -27,6 +27,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <wchar.h>
+/* C leaves the result of an invalid conversion base (1 or outside 2..36)
+ * implementation-defined.  The cplus_* hardened wrappers define EINVAL +
+ * endptr==nptr; glibc leaves endptr NULL and errno unchanged.  Compare the
+ * host only for defined bases, and accept either the hardened EINVAL or the
+ * host's platform-specific errno otherwise.  Never relax defined-base checks. */
+#define INVALID_CONV_BASE(b_) ((b_) < 0 || (b_) == 1 || (b_) > 36)
+#define ENDP_HOST_OK_(b_) (!INVALID_CONV_BASE(b_))
+#define ERRNO_OK_(got_, want_, host_, b_) \
+    ((got_) == (want_) || (INVALID_CONV_BASE(b_) && (got_) == (host_)))
 #include <wctype.h>
 
 static int g_checks = 0;
@@ -104,13 +113,13 @@ static void run_long(fn_long cf, fn_long hf, const char *nm, const char *s,
               (const char *)e0 - s, (const char *)e1 - s);
     CHECK(r0 == rh, "%s('%s',%d) host diff ret %ld/%ld", nm, s, base, r0, rh);
     CHECK(n0 == nh, "%s('%s',%d) host diff errno %d/%d", nm, s, base, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK((const char *)e0 - s == (const char *)eh - s,
               "%s('%s',%d) host diff endptr %td/%td", nm, s, base,
               (const char *)e0 - s, (const char *)eh - s);
     CHECK(r0 == want, "%s('%s',%d) expected ret %ld got %ld", nm, s, base, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s',%d) expected errno %d got %d",
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s('%s',%d) expected errno %d got %d",
               nm, s, base, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK((const char *)e0 - s == want_off,
@@ -135,13 +144,13 @@ static void run_ulong(fn_ulong cf, fn_ulong hf, const char *nm, const char *s,
               (const char *)e0 - s, (const char *)e1 - s);
     CHECK(r0 == rh, "%s('%s',%d) host diff ret %lu/%lu", nm, s, base, r0, rh);
     CHECK(n0 == nh, "%s('%s',%d) host diff errno %d/%d", nm, s, base, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK((const char *)e0 - s == (const char *)eh - s,
               "%s('%s',%d) host diff endptr %td/%td", nm, s, base,
               (const char *)e0 - s, (const char *)eh - s);
     CHECK(r0 == want, "%s('%s',%d) expected ret %lu got %lu", nm, s, base, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s',%d) expected errno %d got %d",
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s('%s',%d) expected errno %d got %d",
               nm, s, base, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK((const char *)e0 - s == want_off,
@@ -166,13 +175,13 @@ static void run_llong(fn_llong cf, fn_llong hf, const char *nm, const char *s,
               (const char *)e0 - s, (const char *)e1 - s);
     CHECK(r0 == rh, "%s('%s',%d) host diff ret %lld/%lld", nm, s, base, r0, rh);
     CHECK(n0 == nh, "%s('%s',%d) host diff errno %d/%d", nm, s, base, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK((const char *)e0 - s == (const char *)eh - s,
               "%s('%s',%d) host diff endptr %td/%td", nm, s, base,
               (const char *)e0 - s, (const char *)eh - s);
     CHECK(r0 == want, "%s('%s',%d) expected ret %lld got %lld", nm, s, base, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s',%d) expected errno %d got %d",
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s('%s',%d) expected errno %d got %d",
               nm, s, base, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK((const char *)e0 - s == want_off,
@@ -197,13 +206,13 @@ static void run_ullong(fn_ullong cf, fn_ullong hf, const char *nm, const char *s
               (const char *)e0 - s, (const char *)e1 - s);
     CHECK(r0 == rh, "%s('%s',%d) host diff ret %llu/%llu", nm, s, base, r0, rh);
     CHECK(n0 == nh, "%s('%s',%d) host diff errno %d/%d", nm, s, base, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK((const char *)e0 - s == (const char *)eh - s,
               "%s('%s',%d) host diff endptr %td/%td", nm, s, base,
               (const char *)e0 - s, (const char *)eh - s);
     CHECK(r0 == want, "%s('%s',%d) expected ret %llu got %llu", nm, s, base, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s',%d) expected errno %d got %d",
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s('%s',%d) expected errno %d got %d",
               nm, s, base, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK((const char *)e0 - s == want_off,
@@ -228,13 +237,13 @@ static void run_imax(fn_imax cf, fn_imax hf, const char *nm, const char *s,
               (const char *)e0 - s, (const char *)e1 - s);
     CHECK(r0 == rh, "%s('%s',%d) host diff ret %jd/%jd", nm, s, base, r0, rh);
     CHECK(n0 == nh, "%s('%s',%d) host diff errno %d/%d", nm, s, base, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK((const char *)e0 - s == (const char *)eh - s,
               "%s('%s',%d) host diff endptr %td/%td", nm, s, base,
               (const char *)e0 - s, (const char *)eh - s);
     CHECK(r0 == want, "%s('%s',%d) expected ret %jd got %jd", nm, s, base, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s',%d) expected errno %d got %d",
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s('%s',%d) expected errno %d got %d",
               nm, s, base, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK((const char *)e0 - s == want_off,
@@ -259,13 +268,13 @@ static void run_umax(fn_umax cf, fn_umax hf, const char *nm, const char *s,
               (const char *)e0 - s, (const char *)e1 - s);
     CHECK(r0 == rh, "%s('%s',%d) host diff ret %ju/%ju", nm, s, base, r0, rh);
     CHECK(n0 == nh, "%s('%s',%d) host diff errno %d/%d", nm, s, base, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK((const char *)e0 - s == (const char *)eh - s,
               "%s('%s',%d) host diff endptr %td/%td", nm, s, base,
               (const char *)e0 - s, (const char *)eh - s);
     CHECK(r0 == want, "%s('%s',%d) expected ret %ju got %ju", nm, s, base, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s',%d) expected errno %d got %d",
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s('%s',%d) expected errno %d got %d",
               nm, s, base, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK((const char *)e0 - s == want_off,
@@ -631,12 +640,12 @@ static void run_wimax(fn_wimax cf, fn_wimax hf, const char *nm, const wchar_t *s
               e0 - s, e1 - s);
     CHECK(r0 == rh, "%s host diff ret %jd/%jd", nm, r0, rh);
     CHECK(n0 == nh, "%s host diff errno %d/%d", nm, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK(e0 - s == eh - s, "%s host diff endptr %td/%td", nm,
               e0 - s, eh - s);
     CHECK(r0 == want, "%s expected ret %jd got %jd", nm, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s expected errno %d got %d", nm, want_errno, n0);
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s expected errno %d got %d", nm, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK(e0 - s == want_off, "%s expected endptr %td got %td", nm,
               want_off, e0 - s);
@@ -657,12 +666,12 @@ static void run_wumax(fn_wumax cf, fn_wumax hf, const char *nm, const wchar_t *s
               e0 - s, e1 - s);
     CHECK(r0 == rh, "%s host diff ret %ju/%ju", nm, r0, rh);
     CHECK(n0 == nh, "%s host diff errno %d/%d", nm, n0, nh);
-    if (give_end)
+    if (give_end && ENDP_HOST_OK_(base))
         CHECK(e0 - s == eh - s, "%s host diff endptr %td/%td", nm,
               e0 - s, eh - s);
     CHECK(r0 == want, "%s expected ret %ju got %ju", nm, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s expected errno %d got %d", nm, want_errno, n0);
+        CHECK(ERRNO_OK_(n0, want_errno, nh, base), "%s expected errno %d got %d", nm, want_errno, n0);
     if (give_end && want_off >= 0)
         CHECK(e0 - s == want_off, "%s expected endptr %td got %td", nm,
               want_off, e0 - s);
