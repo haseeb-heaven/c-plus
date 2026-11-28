@@ -51,7 +51,7 @@ jobs:
         # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
         # tests/abi/precompiled, plus the safe-s catalog/doc sync.
         # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
-        run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+        run: CPLUS_BIN="$PWD/build/c+" bash tests/compiler/abi_gate/run.sh
       - name: SafeCRT/libc hard gates (issue #81)
         # The CRT unit runner compiles and executes the fclose_s collision
         # sub-case on glibc (there is no Linux early-return skip here), and
@@ -191,7 +191,7 @@ jobs:
         # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
         # tests/abi/precompiled, plus the safe-s catalog/doc sync.
         # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
-        run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+        run: CPLUS_BIN="$PWD/build/c+" bash tests/compiler/abi_gate/run.sh
       - name: SafeCRT/libc hard gates (issue #81)
         # The CRT unit runner compiles and executes the fclose_s collision
         # sub-case on glibc (there is no Linux early-return skip here), and
@@ -333,7 +333,7 @@ jobs:
         # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
         # tests/abi/precompiled, plus the safe-s catalog/doc sync.
         # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
-        run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+        run: CPLUS_BIN="$PWD/build/c+" bash tests/compiler/abi_gate/run.sh
       - name: SafeCRT/libc hard gates (issue #81)
         # The CRT unit runner compiles and executes the fclose_s collision
         # sub-case on glibc (there is no Linux early-return skip here), and
