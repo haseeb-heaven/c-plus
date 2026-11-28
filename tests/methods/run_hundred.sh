@@ -25,7 +25,10 @@ run_one() {
     inc="$INC"; libs="$SAFE $LIBC"
   fi
   bin="$OUT/${name}_${variant}_${san}"
-  if "$CC" -O1 -g -std=c99 -Wall -Wextra -pedantic $san $inc "$file" $libs -lm -pthread \
+  if "$CC" -O1 -g -std=c99 -Wall -Wextra -pedantic \
+      -fno-builtin-fmax -fno-builtin-fmin -fno-builtin-fmaxf -fno-builtin-fminf \
+      -fno-builtin-fmaxl -fno-builtin-fminl \
+      $san $inc "$file" $libs -lm -pthread \
       -o "$bin" >"$OUT/${name}_${variant}_${san}.build.log" 2>&1 \
      && timeout 60 "$bin" >"$OUT/${name}_${variant}_${san}.run.log" 2>&1; then
     log="$OUT/${name}_${variant}_${san}.run.log"

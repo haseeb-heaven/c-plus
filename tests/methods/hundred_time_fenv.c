@@ -23,6 +23,7 @@
  *
  * Standalone C11; links libcplus_hardened.a and host -lm.
  */
+#define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE 1
 #include <errno.h>
 #include <fenv.h>
