@@ -356,6 +356,7 @@ int main(int argc, char **argv) {
     if (a == "-I" || a == "-D" || a == "-U" || a == "-L" || a == "-l") {
       if (i + 1 >= argc) {
         errs() << "error: " << a << " requires a value\n";
+        return 1;
       }
       std::string value = argv[++i];
       opts.extraArgs.emplace_back(a);

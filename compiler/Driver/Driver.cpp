@@ -1308,31 +1308,44 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   SanProbe probe = probeFor(bit);
   if (!probe.source || !*probe.source)
     return cache[key] = false;
-  llvm::SmallString<256> srcPath, exePath;
+  // Every probe file is created under an unpredictable, O_EXCL name and
+  // owned by an RAII guard. Deriving log names from `exe`
+  // (exe + ".log") made them guessable after a /tmp listing and handed
+  // ExecuteAndWait a path an attacker could replace with a symlink between
+  // create and reopen. Issue #245. Writing the source through probeFd before
+  // any other create also closes that descriptor on every path, so a later
+  // failure cannot leak it. Issue #245 / #108.
+  llvm::SmallString<256> srcPath, exePath, compileLogPath, runLogPath;
   int probeFd = -1;
   if (llvm::sys::fs::createTemporaryFile("cplus_san", ".c", probeFd, srcPath))
     return cache[key] = false;
-  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath)) {
-    llvm::sys::fs::remove(srcPath);
-    return cache[key] = false;
-  }
-  (void)::chmod(exePath.c_str(), S_IRUSR | S_IWUSR);
-  // Write through the descriptor: reopening the name would reintroduce a
-  // symlink/TOCTOU window after the exclusive create.  Issue #108.
+  TempFile srcGuard;
+  srcGuard.path = srcPath.str().str();
   std::string writeErr;
-  if (!writeFd(probeFd, probe.source, &writeErr)) {
-    llvm::sys::fs::remove(srcPath);
-    llvm::sys::fs::remove(exePath);
+  if (!writeFd(probeFd, probe.source, &writeErr))
     return cache[key] = false;
-  }
+  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".out", exePath))
+    return cache[key] = false;
+  TempFile exeGuard;
+  exeGuard.path = exePath.str().str();
+  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".compile.log",
+                                         compileLogPath))
+    return cache[key] = false;
+  TempFile compileLogGuard;
+  compileLogGuard.path = compileLogPath.str().str();
+  if (llvm::sys::fs::createTemporaryFile("cplus_san", ".log", runLogPath))
+    return cache[key] = false;
+  TempFile runLogGuard;
+  runLogGuard.path = runLogPath.str().str();
+  (void)::chmod(exePath.c_str(), S_IRUSR | S_IWUSR);
   // Every argument is passed as an individual argv element.  Quoting a
   // path/flag with `'...'` into a shell string let a single quote in a
   // user-supplied -D/-I (or in a path) escape and run arbitrary commands.
   // ExecuteAndWait never invokes /bin/sh.  Issue #74.
   const std::string src = std::string(srcPath.str());
   const std::string exe = std::string(exePath.str());
-  const std::string compileLog = exe + ".compile.log";
-  const std::string runLog = exe + ".log";
+  const std::string compileLog = compileLogPath.str().str();
+  const std::string runLog = runLogPath.str().str();
 
   std::vector<std::string> flags;
   addSanitizerFlags(flags, bit);
@@ -1361,12 +1374,8 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   int rc = llvm::sys::ExecuteAndWait(
       clang, compileArgv, std::nullopt,
       llvm::ArrayRef<std::optional<llvm::StringRef>>(compileRedirects), 0, 0);
-  if (rc != 0) {
-    llvm::sys::fs::remove(srcPath);
-    llvm::sys::fs::remove(exePath);
-    llvm::sys::fs::remove(compileLog);
-    return cache[key] = false;
-  }
+  if (rc != 0)
+    return cache[key] = false; // guards remove all probe files
 
   std::vector<std::string> envStrings;
   for (char **e = environ; e && *e; ++e) {
@@ -1392,10 +1401,6 @@ static bool sanitizerSupported(Sanitizer bit, const std::string &clang,
   std::stringstream buf;
   buf << log.rdbuf();
   std::string output = buf.str();
-  llvm::sys::fs::remove(srcPath);
-  llvm::sys::fs::remove(exePath);
-  llvm::sys::fs::remove(compileLog);
-  llvm::sys::fs::remove(runLog);
   return cache[key] = (output.find(probe.needle) != std::string::npos &&
                        output.find("CHECK failed") == std::string::npos);
 }
@@ -1709,6 +1714,10 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       v.push_back("-fno-sanitize-recover=all");
   };
   std::vector<std::string> objects;
+  // RAII cleanup for every temporary object (issue #245). Declared before
+  // the runtime recompile so both the instrumented-runtime .o and each
+  // per-input .o are removed on success and on every early return.
+  std::vector<TempFile> guards;
   bool instrumentedRuntime = false;
   bool strictDisclosureEmitted = false;
   // Recompiling the C+ runtime with sanitizer flags is part of building an
@@ -1747,12 +1756,14 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
         return 1;
       }
       objects.push_back(std::string(objPath.str()));
+      TempFile rtGuard;
+      rtGuard.path = objPath.str().str();
+      guards.push_back(std::move(rtGuard));
       instrumentedRuntime = true;
       DRIVER_LOG(CLOG_INFO, "instrumented runtime: %s",
                  runtimeSrc.c_str());
     }
   }
-  std::vector<TempFile> guards;
 
   for (size_t fileIndex = 0; fileIndex < inputs.size(); ++fileIndex) {
     const std::string &input = inputs[fileIndex];
@@ -2027,6 +2038,9 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       args.push_back("-o");
       args.push_back(objPath.str().str());
       objects.push_back(objPath.str().str());
+      TempFile objGuard;
+      objGuard.path = objPath.str().str();
+      guards.push_back(std::move(objGuard));
     }
     args.push_back(tempPath.str().str());
 
