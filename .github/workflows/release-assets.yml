@@ -41,8 +41,22 @@ jobs:
         shell: bash
         run: |
           set -eu
-          cmake -S . -B build -G Ninja
-          cmake --build build --parallel
+          if [ "${{ matrix.os }}" = macos ]; then
+            PREFIX="$(brew --prefix llvm)"
+            cmake -S . -B build -G Ninja \
+              -DLLVM_DIR="$PREFIX/lib/cmake/llvm" \
+              -DClang_DIR="$PREFIX/lib/cmake/clang"
+          elif [ "${{ matrix.os }}" = linux ]; then
+            LLVM_VER="$(llvm-config --version | cut -d. -f1)"
+            cmake -S . -B build -G Ninja \
+              -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+              -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang"
+          else
+            cmake -S . -B build -G Ninja \
+              -DLLVM_DIR="/c/Program Files/LLVM/lib/cmake/llvm" \
+              -DClang_DIR="/c/Program Files/LLVM/lib/cmake/clang"
+          fi
+          cmake --build build --target c+ --parallel
       - name: Package binary
         shell: bash
         run: |
