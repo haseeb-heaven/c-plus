@@ -39,6 +39,8 @@
 #define ARENA_BLOCK_BYTES (1u << 20)
 #define ARENA_RECORD_BYTES 64u
 #define ARENA_ROUNDS_PER_SCALE 60u
+#define PRIME_ITEMS_PER_SCALE 1200u
+#define BUBBLE_ITEMS_PER_SCALE 90u
 
 static uint64_t seed = 0x9e3779b97f4a7c15ULL;
 
@@ -231,6 +233,51 @@ static uint64_t phase_arena(uint32_t scale) {
     return checksum;
 }
 
+/* Phase 5: nested-loop primality search. O(N * sqrt(N)); each divisor is
+ * visited, so no compiler can fold the count into a constant. */
+static uint64_t phase_primes(uint32_t scale) {
+    const uint32_t candidates = PRIME_ITEMS_PER_SCALE * scale;
+    uint64_t checksum = 0x94d049bb133111ebULL;
+    uint64_t found = 0;
+    for (uint32_t n = 2u; n <= candidates; ++n) {
+        int prime = 1;
+        for (uint32_t d = 2u; d * d <= n; ++d) {
+            if (n % d == 0u) { prime = 0; break; }
+        }
+        if (prime) { ++found; checksum = mix(checksum, (uint64_t)n); }
+    }
+    printf("PRIMES %u %" PRIu64 " %" PRIu64 "\n", candidates, found, checksum);
+    return checksum;
+}
+
+/* Phase 6: bubble sort. O(N^2), deliberately quadratic; the checksum is
+ * taken over the sorted array so the swaps cannot be optimised away. */
+static uint64_t phase_bubble(uint32_t scale) {
+    const size_t count = BUBBLE_ITEMS_PER_SCALE * (size_t)scale;
+    uint64_t *values = (uint64_t *)malloc(count * sizeof(*values));
+    if (!values) { fprintf(stderr, "bubble allocation failed\n"); exit(2); }
+    for (size_t i = 0; i < count; ++i)
+        values[checked(i, count, "values")] = next_random();
+    for (size_t end = count; end > 1u; --end) {
+        int swapped = 0;
+        for (size_t i = 1u; i < end; ++i) {
+            uint64_t a = values[checked(i - 1u, count, "prev")];
+            uint64_t b = values[checked(i, count, "cur")];
+            if (a > b) {
+                values[checked(i - 1u, count, "prev")] = b;
+                values[checked(i, count, "cur")] = a;
+                swapped = 1;
+            }
+        }
+        if (!swapped) break;
+    }
+    uint64_t checksum = 0x9e3779b97f4a7c15ULL;
+    for (size_t out_i = 0; out_i < count; ++out_i)
+        checksum = mix(checksum, values[checked(out_i, count, "sorted")]);
+    free(values);
+    return checksum;
+}
+
 #define REPORT_PHASE(name, scale, checksum, start)                             \
     do {                                                                       \
         uint64_t elapsed = now_ns() - (start);                                 \
@@ -264,7 +311,16 @@ int main(void) {
     uint64_t arena = phase_arena(scale);
     REPORT_PHASE("arena", scale, arena, phase_start);
 
+    phase_start = now_ns();
+    uint64_t primes = phase_primes(scale);
+    REPORT_PHASE("primes", scale, primes, phase_start);
+
+    phase_start = now_ns();
+    uint64_t bubble = phase_bubble(scale);
+    REPORT_PHASE("bubble", scale, bubble, phase_start);
+
     printf("TOTAL %u %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
-           "\n", scale, now_ns() - begin, matrix, hash, sort, arena);
+           " %" PRIu64 " %" PRIu64 "\n", scale, now_ns() - begin, matrix,
+           hash, sort, arena, primes, bubble);
     return 0;
 }
