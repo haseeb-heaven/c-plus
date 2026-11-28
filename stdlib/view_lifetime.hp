@@ -24,6 +24,15 @@
 #include <stdint.h>
 #include "cplus/cplus.h"
 
+/* stdlib_view_registry_state is a weak object merged across translation units,
+ * so every TU must agree on the table size.  A -D override in only one TU would
+ * silently give that TU a different slots[] layout than the merged object.
+ * Pin the value here: an inconsistent override is a hard compile error, and a
+ * matching one is replaced by this single source of truth. */
+#if defined(STDLIB_VIEW_TABLE_BITS) && (STDLIB_VIEW_TABLE_BITS != 12u)
+#error "STDLIB_VIEW_TABLE_BITS must be 12u: weak registry layout is shared across TUs"
+#endif
+#undef STDLIB_VIEW_TABLE_BITS
 #define STDLIB_VIEW_TABLE_BITS 12u
 #define STDLIB_VIEW_TABLE_SIZE ((size_t)1u << STDLIB_VIEW_TABLE_BITS)
 #define STDLIB_VIEW_TABLE_MASK (STDLIB_VIEW_TABLE_SIZE - 1u)
