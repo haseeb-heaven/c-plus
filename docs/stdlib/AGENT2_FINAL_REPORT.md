@@ -243,7 +243,7 @@ Source: `benchmarks/safety_compare/RESULTS.md` (driver artifacts generated
 2026-11-23T04:27:57Z). Protocol: 7 runs after 1 warmup, median of samples, p95
 by linear interpolation; matched checksums verify deterministic work, not
 correctness or safety. Host: macOS arm64 / Apple M3 Pro / Apple clang 16 /
-rustc 1.100.0 / the inspiration language v2026.4 / C+ `-O2 --release`.
+rustc 1.100.0 / Goose v2026.4 / C+ `-O2 --release`.
 
 **Driver headline:** `sh benchmarks/safety_compare/run_all.sh` →
 `counts = {"ok": 15, "blocked": 5, "fail": 0}`, required_failures 0, status PASS,
@@ -271,11 +271,11 @@ build attempts (`CPLUS_EXIT_ARITHMETIC`), not timings.
 Modern-stdlib workload, 7 interleaved runs (allocation-heavy `vector`/`string`,
 checksum `2200000200000` for every variant): C+ safe **0.0140 s**
 (min 0.0134, max 0.0188); C+ legacy **0.0061 s** (0.0052–0.0077); Rust
-**0.0060 s** (0.0048–0.0105); the inspiration language **0.0044 s** (0.0041–0.0090). Ratio of
-medians vs C+ legacy: safe **2.31×**, Rust 0.99×, the inspiration language 0.72×. Earlier integer
+**0.0060 s** (0.0048–0.0105); Goose **0.0044 s** (0.0041–0.0090). Ratio of
+medians vs C+ legacy: safe **2.31×**, Rust 0.99×, Goose 0.72×. Earlier integer
 workloads (`loop sum (2e8)`, `nested (4000²)`): plain C 0.0036/0.0023 s,
 C+ safe 0.1075/0.0090 s, C+ legacy 0.0038/0.0023 s, Rust 0.0042/0.0026 s,
-the inspiration language 0.0043/0.0024 s — the non-instrumented compilers folded the loops, so
+Goose 0.0043/0.0024 s — the non-instrumented compilers folded the loops, so
 those numbers are optimisation differences, not language-speed verdicts.
 
 Validator (fixed and verified): `BENCH_BLOCKED 5`, `BENCH_VALID 192 0`, exit 0

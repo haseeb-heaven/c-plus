@@ -1,6 +1,6 @@
 # Memory-model audit: safer + modern C+ libraries (2026-11-26)
 
-Goal reviewed: the inspiration language-inspired speed (VM data stacks, bump arenas, stable
+Goal reviewed: Goose-inspired speed (VM data stacks, bump arenas, stable
 pools, no per-object heap in hot paths) with additive checked safety.
 **Verdict: fast and safer within documented contracts, NOT 100% safe, NOT
 Rust-equivalent.**
@@ -73,7 +73,7 @@ not a soundness proof.
   documented in `docs/stdlib/SCOPE_ESCAPE_LIMITS.md`.
 - No Rust equivalence; Rust won 5/5 head-to-head compute rounds in
   `proof/benchmarks/language_rounds.txt`.
-- No the inspiration language compiler analysis (static root inference, checkfree, relative links).
+- No Goose compiler analysis (static root inference, checkfree, relative links).
 - Checked heap remains the backing allocator; "no heap" is opt-in for C+ source.
 
 ## GUI / GFX apps (real windowed SDL3, 2026-11-26)

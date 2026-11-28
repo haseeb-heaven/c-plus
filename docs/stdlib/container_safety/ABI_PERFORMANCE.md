@@ -157,20 +157,20 @@ that condition does not hold for any change present on this branch.
 
 I did not re-run these benchmarks. The source file records measurements dated
 2026-11-22 and 2026-11-23 on macOS arm64 / Apple M3 Pro, Apple clang 16,
-rustc 1.100.0, the inspiration language v2026.4; both C+ variants at `-O2` (`--release`). Safe mode
+rustc 1.100.0, Goose v2026.4; both C+ variants at `-O2` (`--release`). Safe mode
 adds `-fsanitize=undefined,bounds,null,alignment`,
 `-fno-sanitize-recover=all`, `-fno-omit-frame-pointer`; legacy is
 `-std=gnu89 -DCPLUS_LEGACY_C=1` with no sanitizers.
 
-| Workload | plain C `-O2` | C+ safe (median) | C+ legacy (median) | Rust `-O` | the inspiration language |
+| Workload | plain C `-O2` | C+ safe (median) | C+ legacy (median) | Rust `-O` | Goose |
 |---|---:|---:|---:|---:|---:|
 | loop sum (2e8) | 0.0036s | 0.1075s | 0.0038s | 0.0042s | 0.0043s |
 | nested (4000²) | 0.0023s | 0.0090s | 0.0023s | 0.0026s | 0.0024s |
 | modern stdlib (7 interleaved runs) | — | 0.0140s (min 0.0134, max 0.0188) | 0.0061s (min 0.0052, max 0.0077) | 0.0060s | 0.0044s |
 
 Recorded ratios vs plain C: safe 29.85x / 3.90x; legacy 1.05x / 1.02x;
-Rust 1.18x / 1.14x; the inspiration language 1.19x / 1.06x. For the modern stdlib workload the
-recorded ratio is safe **2.31×** vs C+ legacy (Rust 0.99×, the inspiration language 0.72×). All
+Rust 1.18x / 1.14x; Goose 1.19x / 1.06x. For the modern stdlib workload the
+recorded ratio is safe **2.31×** vs C+ legacy (Rust 0.99×, Goose 0.72×). All
 variants printed checksum `2200000200000`.
 
 The "modern" workload exercises `stdlib/string.hp` and `stdlib/vector.hp`:
@@ -181,7 +181,7 @@ are `benchmarks/safety_compare/modern.{cp,rs,scoped}`.
 C+ safe vs C+ legacy — same driver, same `-O2`, same source; the only
 difference is safe-mode UBSan instrumentation. The non-instrumented compilers
 folded the integer loops into closed forms, so the 0.002–0.004s loop/nested
-timings measure that optimisation, not loop execution. Rust/the inspiration language numbers are
+timings measure that optimisation, not loop execution. Rust/Goose numbers are
 cross-checks with different standard libraries, not language speed claims.
 Variance is material on this host (safe/legacy ratio ranged ~1.8×–3.1× across
 three non-interleaved passes). Fil-C was **not measured** (no toolchain

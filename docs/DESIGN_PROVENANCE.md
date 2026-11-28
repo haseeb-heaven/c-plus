@@ -1,8 +1,8 @@
 # Design provenance and acknowledgements
 
 C+ is an experimental C-compatible language. Its design is **mostly inspired
-by Fil-C, the C3 language, and the Goose language**, with additional
-inspiration from aardappel/scoped for arena/scoped allocation. This document
+by Fil-C, the C3 language, and GooseLang (aardappel/goose, Apache-2.0)**,
+which also supplied the arena/scoped-allocation ideas. This document
 records *what* was taken from each source. It is a statement of intellectual
 debt, not a claim of code reuse: no source from these projects was copied into
 this repository unless explicitly vendored with its own license.
@@ -56,10 +56,10 @@ Goose is an inspiration for the **ergonomics and evaluation** side:
 No Goose compiler or runtime code is vendored. Fil-C and TrapC toolchains are
 absent on this host and are reported as `NOT_TESTED`, never fabricated.
 
-## aardappel/scoped (arena and one-store release)
+## GooseLang / aardappel/goose (arena and one-store release)
 
 The scoped-memory architecture (`stdlib/datastack.hp`, `stdlib/arena.hp`,
-`stdlib/scoped_mem.hp`) is inspired by `aardappel/scoped` (Apache-2.0),
+`stdlib/scoped_mem.hp`) is inspired by GooseLang (`aardappel/goose`, Apache-2.0),
 read directly: arena-first allocation, one-store scope release and a
 stable-handle model. See `docs/CORE_PHILOSOPHY.md` and
 `docs/stdlib/SCOPED_MEMORY_PROVENANCE.md`. No upstream source was copied.

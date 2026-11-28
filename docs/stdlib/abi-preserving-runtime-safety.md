@@ -588,7 +588,7 @@ document.
 
 `benchmarks/safety_compare/RESULTS.md` contains real measurements from
 2026-11-22 and 2026-11-23 (macOS arm64, Apple M3 Pro, Apple clang 16, rustc
-1.100.0, the inspiration language v2026.4). Both C+ variants were built at `-O2` (`--release`);
+1.100.0, Goose v2026.4). Both C+ variants were built at `-O2` (`--release`);
 safe mode adds `-fsanitize=undefined,bounds,null,alignment`,
 `-fno-sanitize-recover=all`, `-fno-omit-frame-pointer`; legacy mode is
 `-std=gnu89 -DCPLUS_LEGACY_C=1` with no sanitizers
@@ -607,7 +607,7 @@ reads and 200,000 `append` calls; all variants printed checksum
 attributed in the source to safe-mode UBSan instrumentation applied to the
 lowered stdlib code, not to a separately measured metadata cost
 (`RESULTS.md:128-137`). The document explicitly warns that non-instrumented
-compilers folded the integer loops into closed forms, that Rust/the inspiration language numbers
+compilers folded the integer loops into closed forms, that Rust/Goose numbers
 are cross-checks rather than apples-to-apples comparisons, and that variance
 on this host is material (ratio ranged ~1.8x–3.1x across three
 non-interleaved passes) (`RESULTS.md:17-33,128-145`). Fil-C was **not measured**

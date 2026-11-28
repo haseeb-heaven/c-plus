@@ -388,7 +388,7 @@ isolated metadata measurement (`abi-preserving-runtime-safety.md:§7.1`).
 No isolated number exists for the side table, generation counters, allocation
 registry, recent-free cache, `meta_lock` contention, Windows x86, foreign-C
 boundaries, or the proposed arena/pool/custom allocators. Fil-C was not measured
-(no toolchain). Rust/the inspiration language figures in `RESULTS.md` are cross-checks from
+(no toolchain). Rust/Goose figures in `RESULTS.md` are cross-checks from
 different standard libraries, not apples-to-apples comparisons; variance on the
 host was material (~1.8x–3.1x across three passes). No number is invented here.
 
@@ -618,7 +618,7 @@ and the `-Werror` ABI-fingerprint probe build (source `-Wcomment` defect).
    word, no public struct layout changed, no symbol was renamed, and all new
    `.hp` helpers are `static inline` (§7). This is *host-only* evidence — it is
    **not** a Windows x86 or live-game ABI claim.
-3. **No Rust equivalence.** Rust/the inspiration language numbers in `benchmarks/safety_compare/RESULTS.md`
+3. **No Rust equivalence.** Rust/Goose numbers in `benchmarks/safety_compare/RESULTS.md`
    are cross-checks from different standard libraries; outcome equality in
    comparison cases is not safety equivalence. No "as safe as Rust" claim is made.
 4. **No 100% safety claim.** Passing fixtures are contract-conformance evidence,

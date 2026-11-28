@@ -68,7 +68,7 @@ That is **~3.0× lower allocation latency** for the VM-reserved data-stack bump
 path vs the checked heap on this run. `scope_release_ns 0` means the one-store
 scope rewind was below clock resolution. The deterministic gate checks only
 bucketed verdicts (`BENCH_SCOPED 4 4 0`); exact timings vary with host load and
-are **not** reproducible proof of a fixed speedup, nor the inspiration language equivalence.
+are **not** reproducible proof of a fixed speedup, nor Goose equivalence.
 
 ## Re-run
 
@@ -89,6 +89,6 @@ sh tests/edge1000/run_edge1000.sh
 - Measured on this host: allocation-only bump **64 ns/op** vs checked-heap
   **175 ns/op** (~2.7x); full modern workload (sqldb+game+bump) **591 ns/op**.
   Deterministic gate: `SCOPED_APPS_BENCH 3 3 0` (op count + OK marker only; the ratio is host/load-dependent evidence).
-- No the inspiration language code copied; the inspiration language's 2 GiB reservation/compile-time root inference
+- No Goose code copied; Goose's 2 GiB reservation/compile-time root inference
   is not replicated. "No heap" here means by construction in these apps and
   headers, not a runtime proof that the checked allocator is never called.

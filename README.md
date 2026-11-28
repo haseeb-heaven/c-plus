@@ -19,6 +19,8 @@
 
 ---
 
+C+ ships **Nuklear** and **microui** as standard immediate-mode GUI libraries (MIT-licensed, vendored with their licenses). See [docs/GFX_LIBRARIES.md](docs/GFX_LIBRARIES.md).
+
 ## ✨ What is C+?
 
 C+ keeps familiar C syntax and adds compiler-assisted safety checks, deterministic resource cleanup, managed allocation, and a growing standard-library layer.
@@ -241,8 +243,8 @@ measurement instead of equivalence claims.
 C+ is **mostly inspired by Fil-C, the C3 language and the Goose language**:
 Fil-C for out-of-band pointer validity with an unchanged C pointer ABI, C3 for
 modern C-compatible syntax and diagnostic style, and Goose for safe-systems
-ergonomics and the cross-language benchmark reference. The scoped/arena layer
-is additionally inspired by aardappel/scoped (Apache-2.0); TrapC and Rust are
+ergonomics and the cross-language benchmark reference. GooseLang lives at <https://github.com/aardappel/goose> (Apache-2.0) and
+supplied the scoped/arena ideas; TrapC and Rust are
 referenced as safety models, not as code sources.
 
 No source from those projects was copied unless vendored with its own license

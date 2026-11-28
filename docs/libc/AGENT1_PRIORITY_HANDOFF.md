@@ -21,7 +21,7 @@ work**; Agent 2 supplies reproducers, contracts, and regression fixtures only.
 | P1 | Thread-safety analysis | `thread.hp` runtime guards exist; no static data-race analysis | `tests/stdlib/agent1_handoff/thread_safety/` |
 | P2 | Fuzzing and compiler differential testing | stdlib fuzz 1200 cases, libc fuzz 4800, rust-vs-C+ 600; no compiler differential false-negative measurement | `tests/stdlib/agent1_handoff/fuzz_diff/` |
 | P2 | Linux, macOS, Windows verification | macOS local; Linux CI jobs exist (UNVERIFIED remotely); Windows x86 DLL script only | `tests/stdlib/agent1_handoff/portability/` |
-| P2 | Performance vs Clang and Fil-C | `benchmarks/safety_compare/RESULTS.md` has C+/Rust/the inspiration language medians; Fil-C toolchain absent | `tests/stdlib/agent1_handoff/performance/` |
+| P2 | Performance vs Clang and Fil-C | `benchmarks/safety_compare/RESULTS.md` has C+/Rust/Goose medians; Fil-C toolchain absent | `tests/stdlib/agent1_handoff/performance/` |
 
 ## Current measured baseline (Agent 2 side)
 

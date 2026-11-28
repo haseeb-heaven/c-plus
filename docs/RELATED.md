@@ -1,6 +1,6 @@
-# Related projects: Fil-C and the inspiration language
+# Related projects: Fil-C and Goose
 
-The user asked how Fil-C and the inspiration language approach memory safety. This page records
+The user asked how Fil-C and Goose approach memory safety. This page records
 what their public documentation says (checked 2026-11-21) and where C+ sits.
 C+ does **not** claim their guarantees.
 
@@ -23,11 +23,11 @@ That is a *new compiler + runtime + GC*, i.e. a full reimplementation of the
 C toolchain. C+ deliberately does not do this: it keeps the existing C
 compiler and adds a small source lowering plus targeted checks.
 
-## the inspiration language
+## Goose
 
 Site: <https://aardappel.github.io/scoped/> · samples: <https://aardappel.github.io/scoped/samples/>
 
-the inspiration language is a new memory-safe systems language with no heap allocator, no GC and
+Goose is a new memory-safe systems language with no heap allocator, no GC and
 no lifetime annotations. Its documented model:
 
 - Every dynamic value lives inline on compiler-managed **data stacks**;
@@ -42,14 +42,14 @@ no lifetime annotations. Its documented model:
   `extern fn`. Its benchmark page reports speedups over idiomatic C++ and
   safe Rust; those numbers come from the project's own suite.
 
-the inspiration language is a new language with its own compiler, type system and memory model.
+Goose is a new language with its own compiler, type system and memory model.
 It is **not** C. C+ shares one design idea with it — deterministic cleanup at
 scope exit — but keeps C pointers, C arrays and the ordinary C ABI, so it
-cannot offer the inspiration language's whole-program lifetime guarantees.
+cannot offer Goose's whole-program lifetime guarantees.
 
 ## Where C+ sits
 
-| | C+ | Fil-C | the inspiration language |
+| | C+ | Fil-C | Goose |
 | --- | --- | --- | --- |
 | C source compatibility | yes (C17 + small additions) | yes, C/C++ | no, new language |
 | Existing C compiler reused | yes, host Clang | no, Clang fork + runtime | emits C, but has its own compiler |

@@ -324,7 +324,7 @@ This audit and the underlying phase **do not** claim:
    pointers, dispatch indices and thread races were repaired caller-side.
 3. **No Rust-equivalence / no "language X is faster/safer" proof.** Matching
    checksums verify one deterministic integer result. Rust `Vec`/`String` and
-   the inspiration language arrays are different stdlib implementations. Residual machine-code
+   Goose arrays are different stdlib implementations. Residual machine-code
    bounds/overflow checks were not disassembled/counted.
 4. **No cross-platform proof.** Only macOS arm64 / Apple clang 16 / C+ 0.1.0
    was exercised; Linux, Windows and x86/x86-64 results are not predicted.
@@ -342,7 +342,7 @@ This audit and the underlying phase **do not** claim:
    evidence, not passes, failures, or timeouts. This includes: native
    `safety_matrix.cp` results/notes, `validate_results.cp` run output at
    synthesis time, p95 for the 5-variant `loop`/`nested` and 4-variant `modern`
-   speed rows, the inspiration language/plain-C/Fil-C peak RSS, and all Fil-C speed/safety results
+   speed rows, Goose/plain-C/Fil-C peak RSS, and all Fil-C speed/safety results
    (no toolchain installed).
 9. **No claim that blocked/skipped benchmark rows validate evidence.** They are
    exempted from checksum/run-count rules and counted separately, never as

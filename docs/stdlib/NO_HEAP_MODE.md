@@ -13,4 +13,4 @@ Proof: `tests/stdlib/no_heap/run.sh` -> `NO_HEAP_TEST 2 2 0`:
 Honest boundary: this is a policy for C+ source, **not** removal of the
 ordinary C allocator. Precompiled C libraries, legacy C mode and the C ABI must
 keep `malloc/free`; the checked heap remains the backing allocator inside the
-library internals. No claim of Rust/the inspiration language compiler-enforced no-heap model.
+library internals. No claim of Rust/Goose compiler-enforced no-heap model.

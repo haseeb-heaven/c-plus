@@ -58,7 +58,7 @@ upstream work is adapted design, not copied code.
 
 `benchmarks/safety_compare/` contains `run_bench.sh`, `run_all.sh`,
 `run_one.pl`, `validate_results.cp`, the `{loop,nested,modern,bench_modern,
-alloc_bench,safety_matrix}` sources for C+/C/Rust/the inspiration language, `METHODOLOGY.md`,
+alloc_bench,safety_matrix}` sources for C+/C/Rust/Goose, `METHODOLOGY.md`,
 `RESULTS.md`, `MEMORY_USAGE.md`, `PROOF.md`, `SAFETY_MATRIX_NOTES.md`, and the
 authoritative `results/{summary.json,table.txt,evidence.csv}` plus per-run logs.
 The allocator benchmark lives in `benchmarks/stdlib/allocator/` with its
@@ -263,11 +263,11 @@ is claimed from this driver**.
 
 - `RESULTS.md` 5-run medians for `loop`/`nested`: plain C 0.0036/0.0023 s,
   C+ safe (UBSan) 0.1075/0.0090 s, C+ legacy 0.0038/0.0023 s, Rust 0.0042/
-  0.0026 s, the inspiration language 0.0043/0.0024 s. Safe/legacy ratios ~30× / ~3.9× are
+  0.0026 s, Goose 0.0043/0.0024 s. Safe/legacy ratios ~30× / ~3.9× are
   **UBSan instrumentation cost**, not a safe-lowering cost; all non-instrumented
   compilers folded the loops into a closed form.
 - `modern` 7-run interleaved medians: C+ safe 0.0140 s, C+ legacy 0.0061 s,
-  Rust 0.0060 s, the inspiration language 0.0044 s (safe/legacy ~2.3×, with ~1.8×–3.1× pass
+  Rust 0.0060 s, Goose 0.0044 s (safe/legacy ~2.3×, with ~1.8×–3.1× pass
   spread). All printed `2200000200000`.
 - `PROOF.md` §3.5 (sanitizers off, n=31): safe C+ vs legacy C median ratios
   **1.020× (loop), 1.039× (nested)** — no measurable safe-mode overhead; p95
@@ -291,8 +291,8 @@ after 1 warmup (`MEMORY_USAGE.md`):
 
 `modern` C+ safe is variable (20,267,008–23,396,352 B across passes) and its
 ~20–21 MiB figure is approximate. `loop`/`nested` RSS is process baseline.
-Rust `Vec`/`String` and the inspiration language dynamic arrays are different standard-library
-implementations. Plain C, the inspiration language and Fil-C RSS are PENDING; no Fil-C toolchain
+Rust `Vec`/`String` and Goose dynamic arrays are different standard-library
+implementations. Plain C, Goose and Fil-C RSS are PENDING; no Fil-C toolchain
 is installed. **Comparable measured throughput on matched synthetic workloads
 is not Rust-equivalent guarantees and not proof of memory safety.**
 
@@ -343,7 +343,7 @@ is not Rust-equivalent guarantees and not proof of memory safety.**
    (exit 1); earlier snapshot recorded 100/0.
 6. **Four `--sanitize=integer` unsigned-overflow findings** in runtime hashing
    (`cplus_runtime.c:174:5`); outside the Agent-2 integration scope but real.
-7. **Coverage gaps** — p95 for some speed tables; the inspiration language/plain-C/Fil-C RSS;
+7. **Coverage gaps** — p95 for some speed tables; Goose/plain-C/Fil-C RSS;
    Fil-C speed and safety (no toolchain); 27 compile-time capability-gap cases;
    `PROOF.md` marks native safety-matrix results / `validate_results.cp` output
    PENDING even though `SAFETY_MATRIX_NOTES.md` holds detailed results (§11).

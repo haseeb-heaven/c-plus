@@ -2,8 +2,8 @@
 
 This is the normative design rule for C+ standard and safer libraries. It
 explains **how** the libraries are meant to be fast and safe, and what is
-explicitly out of scope. Architecture inspiration: `aardappel/scoped`
-(Apache-2.0), read directly; **no the inspiration language source was copied**.
+explicitly out of scope. Architecture inspiration: `aardappel/goose`
+(Apache-2.0), read directly; **no Goose source was copied**.
 
 ## The six rules
 
@@ -29,7 +29,7 @@ explicitly out of scope. Architecture inspiration: `aardappel/scoped`
 6. **Measure, don't assert.** Speed claims come from bounded benchmark verdicts
    (`BENCH_SCOPED 4 4 0`, `SCOPED_APPS_BENCH 3 3 0`); safety claims come from
    reproducible runner lines (`EDGE1000`, `PR31_LIBC`, `PR33_VERIFY`, `MEMSAFE`).
-   Exact timings and "equivalent to the inspiration language/Rust" claims are not made.
+   Exact timings and "equivalent to Goose/Rust" claims are not made.
 
 ## Facade
 
@@ -41,7 +41,7 @@ fixed slots or scoped scratch storage, no per-object malloc on the hot path.
 
 ## Non-claims
 
-- No the inspiration language compiler analysis (static stack counting, checkfree, small relative
+- No Goose compiler analysis (static stack counting, checkfree, small relative
   links) is replicated.
 - No 100% memory-safety proof; no Rust/Fil-C equivalence.
 - The checked heap remains legitimate for backing allocations and C ABI
