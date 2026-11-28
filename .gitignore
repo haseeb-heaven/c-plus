@@ -167,3 +167,14 @@ tests/**/results/
 /out/
 /.cache/
 /scratch/
+
+# Flat runner artifacts written directly into test directories (not results/).
+tests/stdlib/scoped_mem/*.log
+tests/stdlib/scoped_mem/*.out
+tests/stdlib/scoped_mem/*.err
+tests/stdlib/scoped_mem/test_chain
+tests/stdlib/scoped_mem/test_poison
+tests/stdlib/scoped_mem/test_release
+
+# OpenQodex local tool state (reports/config are tool-local, not source).
+/.openqodex/
