@@ -61,6 +61,8 @@ if [ ! -x "$ALIGN_TOOL" ]; then
     echo "blocker: native alignment tool build failed; see /tmp/evidence_align-tool-build.log" >&2
 fi
 run contract-alignment    "$ALIGN_TOOL"
+run olive-still-frame    sh examples/modern_c_ports/olive_demo/run.sh
+run olive-sdl-frame      sh examples/modern_c_ports/olive_demo/run_sdl.sh
 run issue199              sh tests/compiler/agent1/regression_issue199.sh
 run issue214              sh tests/stdlib/issue214/run.sh
 run issue215              sh tests/stdlib/issue215/run.sh
