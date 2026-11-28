@@ -109,68 +109,62 @@ The standard library and hardened libc are **in progress**, not a complete ISO C
 
 The following examples show the difference between a violation that can be proven before execution and one that is only known at runtime.
 
-**A. Compile-time rejection — known out-of-bounds loop**
+**A. Compile-time rejection - known out-of-bounds loop**
 
 ```c
 static int grid[4][4];
 
 int main(void) {
-    for (int i = 0; i < 20; i++)
-        grid[i / 4][i % 4] = i; /* i == 16 reaches grid[4][0] */
+    for (int cell_index = 0; cell_index < 20; cell_index++) {
+        grid[cell_index / 4][cell_index % 4] = cell_index;
+    }
     return 0;
 }
 ```
 
-The C+ static-bounds check can determine that the loop reaches row 4 in a four-row array and reports an out-of-bounds compile error. The executable is not produced.
+The C+ static-bounds check proves that the loop reaches row 4 in a four-row
+array and reports an out-of-bounds compile error. No executable is produced.
 
 **Compiler output**
 
 ```text
 c+ demo.cp -o demo
 demo.cp:5:13: error: [CPLUS-BOUNDS] out-of-bounds access: index 4 reaches past array 'grid' of length 4
-          grid[i / 4][i % 4] = i; /* i == 16 reaches grid[4][0] */
+          grid[cell_index / 4][cell_index % 4] = cell_index;
               ^
 help: use a bound of grid.len or a smaller index
-haseeb-mir@Haseebs-MacBook-Pro scratch %
 ```
 
-**B. Runtime rejection — index only known during execution**
+**B. Runtime rejection - index only known during execution**
 
 ```c
 #include <stdio.h>
 
-static volatile int index_from_runtime = 7;
+static volatile int runtime_index = 7;
 
 int main(void) {
-    int values[4] = {10, 20, 30, 40};
-    printf("valid: %d\\n", values[2]);
-    printf("invalid: %d\\n", values[index_from_runtime]);
+    int values[4] = { 10, 20, 30, 40 };
+
+    printf("valid: %d\n", values[2]);
+    printf("invalid: %d\n", values[runtime_index]);
     puts("This line must not be reached");
     return 0;
 }
 ```
 
-The `volatile` value prevents the compiler from treating the index as a known constant. The program can compile, but the instrumented runtime detects the invalid index and terminates with a diagnostic. The final line must not execute.
+The `volatile` value prevents the compiler from treating the index as a
+known constant. The program compiles, but the instrumented runtime detects
+the invalid index and terminates with a diagnostic; the final line never
+executes.
 
 **Runtime output**
 
 ```text
-demo.cp:8:30: runtime error: index 7 out of bounds for type 'int[4]'
-SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior demo.cp:8:30
-valid: 30\\nzsh: abort      ./demo
-haseeb-mir@Haseebs-MacBook-Pro scratch %
+demo.cp:10:30: runtime error: index 7 out of bounds for type 'int[4]'
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior demo.cp:10:30
+valid: 30
+Abort trap: 6
 ```
-
-### Safety path at a glance
-
-| Stage | Example | Expected result |
-|:--|:--|:--|
-| Compile time | Counted loop provably reaches `grid[4]` | Compilation rejected |
-| Runtime | Volatile index is `7` for a 4-element array | Runtime diagnostic and abort |
-| Library boundary | Checked API receives an invalid size | Rejected where that API implements the check |
-
-> [!WARNING]
-> **Experimental software — not a blanket memory-safety guarantee.** General use-after-free detection, complete pointer-arithmetic checking, full borrow checking, and complete ISO C coverage are not implemented. Raw C pointers and legacy C operations can still be unsafe. AddressSanitizer is not enabled in the documented macOS environment because its runtime fails during initialization. See [limitations](docs/LIMITATIONS.md).
 
 ## Why C+ is not just strict C
 
@@ -180,50 +174,81 @@ scoped arenas with one-store release, so most code never calls malloc.
 
 | # | Example | Caught by | Result |
 |---|---|---|---|
-| 1 | `arr[20]` on `int arr[4]` | compile-time | `[CPLUS-BOUNDS]` error, no binary |
-| 2 | `str[0xFFFFF]` on a string literal | compile-time | bounds error (proven extent) |
-| 3 | `p = malloc(8); free(p); *p` | compile+runtime | `[CPLUS-FREE]` refusal, trap 104 |
+| 1 | `values[20]` on `int values[4]` | compile-time | `[CPLUS-BOUNDS]` error, no binary |
+| 2 | `message[0xFFFFF]` on a string literal | compile-time | bounds error (proven extent) |
+| 3 | `item` used after `cplus_free(item)` | compile + runtime | `[CPLUS-FREE]` refusal, trap 104 |
 | 4 | datastack frame overflow | runtime | chained block, never overflows |
-| 5 | view after arena `reset()` | runtime | stale token -> lifetime refusal |
+| 5 | view after arena reset | runtime | stale token fails `stdlib_view_validate` |
 
 **1. Compile-time bounds**
 
 ```c
-int a[4];
-a[20] = 1;   // error: [CPLUS-BOUNDS] index 20 outside bounds of a
+int values[4] = { 0 };
+const int index = 20;
+
+values[index] = 1;
+/* error: [CPLUS-BOUNDS] index 20 outside bounds of 'values' */
 ```
 
 **2. String-literal extent**
 
 ```c
-const char *s = "Heaven";
-printf("%c", s[0xFFFFF]); // error: index outside string literal extent
+#include <stdio.h>
+
+const char *message = "Heaven";
+const int offset = 0xFFFFF;
+
+printf("%c\n", message[offset]);
+/* error: index outside the proven extent of the string literal */
 ```
 
 **3. Use after free**
 
 ```c
-int *p = cplus_new(int);
-cplus_free(p);
-*p = 3;  // [CPLUS-FREE] pointer already released (exit 104)
+#include "cplus/cplus.h"
+
+int *item = cplus_new(int);
+
+cplus_free(item);
+*item = 3;   /* [CPLUS-FREE] pointer already released (exit 104) */
 ```
 
 **4. Datastack arena (no heap, GooseLang-style)**
 
 ```c
+#include "stdlib/datastack.hp"
 #include "stdlib/scoped_mem.hp"
-stdlib_datastack ds;
-stdlib_datastack_init(&ds, 4096, &err);
-stdlib_scratch_scope s = stdlib_scratch_scope(&ds);
-void *p = stdlib_datastack_alloc(&ds, 64, 16, &err); // bump, no malloc
-s.drop();  // one-store rewind + 0xDD poison in debug
+
+error status = error();
+stdlib_datastack arena;
+
+stdlib_datastack_init(&arena, 4096u, &status);
+stdlib_scratch_scope scope = stdlib_scratch_scope(&arena);
+
+unsigned char *buffer =
+    (unsigned char *)stdlib_datastack_alloc(&arena, 64u, 16u, &status);
+
+scope.drop();   /* one-store rewind; 0xDD poison in debug */
 ```
 
 **5. Stale view after reset**
 
 ```c
-stdlib_arena_reset(&a, &err);
-if (v.is_live()) ... // false: token retired at reset
+#include "stdlib/arena.hp"
+#include "stdlib/view_lifetime.hp"
+
+error status = error();
+stdlib_arena arena;
+unsigned char *view;
+unsigned long long token = 0;
+
+stdlib_arena_init(&arena, 128u, &status);
+view = stdlib_arena_take_checked(&arena, 32u, 16u, &token, &status);
+
+stdlib_arena_destroy(&arena, &status);
+if (stdlib_view_validate(view, token) == 0) {
+    /* false: the reset retired the token */
+}
 ```
 
 ## Why choose C+
