@@ -3,6 +3,7 @@
 #
 # Usage: tests/conformance/run_conformance.sh
 #   (set CONFORMANCE_MANIFEST to use an alternate manifest path)
+#   (set CPLUS_RUSTC to select the Rust compiler explicitly)
 #
 # Reads tests/conformance/manifest.json (a JSON list, or an object with a
 # "cases" list). Every entry must provide:
@@ -11,9 +12,13 @@
 #
 # For each case the C source is compiled with the system clang against the
 # checked-in safe/hardened static libraries, and the Rust source with rustc.
-# The observed outcome (accepted / runtime_reject / compile_reject) is compared
-# with the manifest expectation. This runner reports what was *detected*; it
-# does not prove Rust-equivalent safety.
+# The observed outcome (accepted / not_proven / runtime_reject / compile_reject)
+# is compared with the manifest expectation. A clean C run is "accepted" unless
+# the manifest declares clean_run_outcome "not_proven": in those cases the unsafe
+# operation is silent, so exiting 0 proves nothing about safety. A sanitizer
+# diagnostic is concrete evidence and therefore counts as a rejection.
+# This runner reports what was *detected*; it does not prove Rust-equivalent
+# safety.
 #
 # Exit status is 0 unless the manifest is invalid or a case fails to compile
 # in either language when compilation was not the recorded expectation.
@@ -31,6 +36,22 @@ mkdir -p "$OUT" || exit 1
 
 if [ ! -f "$MANIFEST" ]; then
   echo "error: conformance manifest not found at $ROOT/$MANIFEST" >&2
+  exit 1
+fi
+
+# Resolve rustc without assuming ~/.cargo/bin is on the inherited PATH.
+# An explicit override always wins; otherwise search PATH, then rustup's
+# standard install location. Never report "not installed" when it is present.
+if [ -n "${CPLUS_RUSTC:-}" ]; then
+  RUSTC=$CPLUS_RUSTC
+else
+  RUSTC=$(command -v rustc 2>/dev/null || true)
+  if [ -z "$RUSTC" ] && [ -n "${HOME:-}" ] && [ -x "$HOME/.cargo/bin/rustc" ]; then
+    RUSTC="$HOME/.cargo/bin/rustc"
+  fi
+fi
+if [ -z "$RUSTC" ]; then
+  echo "error: rustc not found on PATH or \$HOME/.cargo/bin; set CPLUS_RUSTC to its path" >&2
   exit 1
 fi
 
@@ -80,6 +101,14 @@ for index, case in enumerate(cases):
         values[key] = value
     values["mechanism_c"] = clean(case.get("mechanism_c")) or "none"
     values["mechanism_rust"] = clean(case.get("mechanism_rust")) or "none"
+    # How to classify a C run that compiles and exits cleanly. "accepted" is
+    # the default; "not_proven" cases are intentionally unverifiable by this
+    # runner (silent OOB/lifetime/race/uninitialised reads).
+    values["clean_run_outcome"] = clean(case.get("clean_run_outcome")) or "accepted"
+    if values["clean_run_outcome"] not in ("accepted", "not_proven"):
+        sys.stderr.write("error: manifest case #%d has invalid clean_run_outcome '%s'\n"
+                         % (index, values["clean_run_outcome"]))
+        sys.exit(2)
     rows.append(values)
 
 if not rows:
@@ -90,7 +119,7 @@ for row in rows:
         row[key]
         for key in (
             "id", "c_file", "rust_file", "expected_c", "expected_rust",
-            "mechanism_c", "mechanism_rust",
+            "mechanism_c", "mechanism_rust", "clean_run_outcome",
         )
     ))
 PY
@@ -121,7 +150,7 @@ MISMATCHED=0
 HARD_FAIL=0
 GATES=0
 
-while IFS=$'\t' read -r id c_file rust_file expected_c expected_rust mechanism_c mechanism_rust; do
+while IFS=$'\t' read -r id c_file rust_file expected_c expected_rust mechanism_c mechanism_rust clean_run_outcome; do
   [ -n "$id" ] || continue
   GATES=$((GATES + 1))
 
@@ -158,16 +187,18 @@ while IFS=$'\t' read -r id c_file rust_file expected_c expected_rust mechanism_c
   if [ "$c_compile_rc" -eq 0 ]; then
     timeout 10 "$c_exe" >"$c_stdout" 2>"$c_stderr"
     c_run_rc=$?
-    if [ "$c_run_rc" -eq 0 ]; then
-      actual_c="accepted"
-    else
+    if grep -qE 'runtime error:|AddressSanitizer' "$c_stderr"; then
+      detected_c="UBSan/ASan"
+    fi
+    if [ "$c_run_rc" -ne 0 ] || [ -n "$detected_c" ]; then
       actual_c="runtime_reject"
+    elif [ "$clean_run_outcome" = "not_proven" ]; then
+      actual_c="not_proven"
+    else
+      actual_c="accepted"
     fi
     if [ "$c_run_rc" -eq 124 ]; then
       echo "warning: case $num C run timed out after 10s" >&2
-    fi
-    if grep -qE 'runtime error:|AddressSanitizer' "$c_stderr"; then
-      detected_c="UBSan/ASan"
     fi
   else
     actual_c="compile_reject"
@@ -175,7 +206,7 @@ while IFS=$'\t' read -r id c_file rust_file expected_c expected_rust mechanism_c
   fi
 
   # --- 2b. Rust case ------------------------------------------------------
-  rustc --edition 2021 "$rust_file" -o "$rs_exe" >"$rs_log" 2>&1
+  "$RUSTC" --edition 2021 "$rust_file" -o "$rs_exe" >"$rs_log" 2>&1
   rs_compile_rc=$?
   rs_run_rc="-"
   detected_rust=""

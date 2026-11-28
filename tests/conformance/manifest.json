@@ -19,6 +19,7 @@
       "rust_file": "case_02.rs",
       "expected_c": "not_proven",
       "expected_rust": "runtime_reject",
+      "clean_run_outcome": "not_proven",
       "mechanism_c": "UBSan",
       "mechanism_rust": "bounds check",
       "note": "The volatile OOB read is silent under plain clang; only UBSan reports it, and no checked API covers a raw stack subscript."
@@ -63,6 +64,7 @@
       "rust_file": "case_06.rs",
       "expected_c": "not_proven",
       "expected_rust": "compile_reject",
+      "clean_run_outcome": "not_proven",
       "mechanism_c": "none",
       "mechanism_rust": "borrow checker",
       "note": "Escaped stack addresses are a documented C+ compiler gap; the stale read prints a value and exits 0, so nothing proves safety here."
@@ -85,6 +87,7 @@
       "rust_file": "case_08.rs",
       "expected_c": "not_proven",
       "expected_rust": "compile_reject",
+      "clean_run_outcome": "not_proven",
       "mechanism_c": "none",
       "mechanism_rust": "borrow checker",
       "note": "The unsynchronised C increment silently loses updates; only ThreadSanitizer would detect it, and C+ metadata locking does not cover caller state."
@@ -107,6 +110,7 @@
       "rust_file": "case_10.rs",
       "expected_c": "not_proven",
       "expected_rust": "compile_reject",
+      "clean_run_outcome": "not_proven",
       "mechanism_c": "none",
       "mechanism_rust": "borrow checker",
       "note": "The uninitialized struct field reads an indeterminate value and exits 0; neither C+, -Wuninitialized nor UBSan diagnoses this shape."
