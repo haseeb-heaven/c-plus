@@ -174,9 +174,12 @@ static int cplus_fmt_has_percent_n(const char *fmt) {
     fmt_spec_t s;
     int r;
     if (!p) return 0;
-    /* C+ SECURITY PATCH: every '$' positional marker is refused.  libc accepts
-     * '$' in many positions, and any missed placement can turn a later 'n'
-     * into a real write.  Literal '$' in ordinary text is unaffected. */
+    /* C+ SECURITY PATCH: every '$' positional marker is refused. libc accepts
+     * '$' in many positions (even after modifiers), and one missed placement
+     * can turn a later 'n' into a real write. The checked APIs also refuse
+     * literal '$' text, which is acceptable for these boundaries. */
+    for (const unsigned char *q = p; *q; ++q)
+        if (*q == '$') return 1;
     while (*p) {
         r = fmt_parse_spec(&p, &s);
         if (r < 0) return 1;

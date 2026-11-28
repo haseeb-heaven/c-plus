@@ -229,28 +229,28 @@ static int io_check_buf(const char *api, const void *buf, size_t bmax) {
  * count clamp for a caller-chosen smaller bound), -1 on refusal. */
 static int io_check_request(const char *api, const void *buf, size_t bmax,
                             size_t size, size_t count, size_t known_bmax) {
-    size_t remaining;
-    if (bmax > RSIZE_MAX_MEM || size > RSIZE_MAX_MEM || count > RSIZE_MAX_MEM) {
-        errno = EINVAL;
-        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "bmax/size/count exceeds RSIZE_MAX_MEM");
-        cplus_safe_stat_record(api, 0);
-        return -1;
-    }
+    /* Overflow must be diagnosed before the RSIZE_MAX guard so callers see
+     * EOVERFLOW for size*count that wraps the address space. */
     if (count > SIZE_MAX / size) {
         errno = EOVERFLOW;
         cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "size * count overflow");
         cplus_safe_stat_record(api, 0);
         return -1;
     }
-    if (count <= bmax / size) return 0;
-    remaining = cplus_safe_remaining_capacity(buf);
-    if (remaining == (size_t)-1 || bmax < remaining) {
-        if (known_bmax == (size_t)-1 || bmax < known_bmax) return 0;
+    if (bmax > RSIZE_MAX_MEM || size > RSIZE_MAX_MEM || count > RSIZE_MAX_MEM) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "bmax/size/count exceeds RSIZE_MAX_MEM");
+        cplus_safe_stat_record(api, 0);
+        return -1;
     }
-    errno = EINVAL;
-    cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "requested byte count exceeds bmax");
-    cplus_safe_stat_record(api, 0);
-    return -1;
+    if (count > bmax / size) {
+        errno = EINVAL;
+        cplus_safe_log(CPLUS_SAFE_LOG_ERROR, api, "requested byte count exceeds bmax");
+        cplus_safe_stat_record(api, 0);
+        return -1;
+    }
+    (void)known_bmax;
+    return 0;
 }
 
 /* Refuse a stream that the checked layer already closed: fread/fwrite on it
