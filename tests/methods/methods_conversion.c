@@ -966,8 +966,11 @@ static void run_pred_byte(const char *nm, fn_pred cf, int (*hf)(int), int c,
     log_on();  r1 = cf(c);
     log_off(); rh = hf ? ((c == EOF) ? hf(EOF) : hf((unsigned char)c)) : want;
     CHECK(r0 == r1, "%s(%d) log parity %d/%d", nm, c, r0, r1);
-    if (hf) CHECK(r0 == rh, "%s(%d) host diff %d/%d", nm, c, r0, rh);
-    CHECK(r0 == want, "%s(%d) expected %d got %d", nm, c, want, r0);
+    /* C only promises nonzero for true predicates; glibc returns a bitmask
+     * (e.g. ispunct('@')==4, iscntrl('\t')==2) while cplus_* normalises to 1.
+     * Compare truthiness on both sides, matching the sc_isw contract fix. */
+    if (hf) CHECK(!!r0 == !!rh, "%s(%d) host diff %d/%d", nm, c, r0, rh);
+    CHECK(!!r0 == !!want, "%s(%d) expected %d got %d", nm, c, want, r0);
 }
 
 static void m_conv_20_ctype_predicates(void) {
