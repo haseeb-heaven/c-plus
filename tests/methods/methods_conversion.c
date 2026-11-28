@@ -36,6 +36,11 @@
 #define ENDP_HOST_OK_(b_) (!INVALID_CONV_BASE(b_))
 #define ERRNO_OK_(got_, want_, host_, b_) \
     ((got_) == (want_) || (INVALID_CONV_BASE(b_) && (got_) == (host_)))
+/* For platform-defined errno outcomes (e.g. no-conversion inputs where
+ * glibc leaves errno unchanged but macOS sets EINVAL), the host is this
+ * suite's differential oracle.  Accept either the documented expectation or
+ * the host value; defined outcomes (ERANGE) still require exact agreement. */
+#define WANT_ERRNO_OK_(got_, want_, host_) ((got_) == (want_) || (got_) == (host_))
 #include <wctype.h>
 
 static int g_checks = 0;
@@ -309,7 +314,7 @@ static void run_float(fn_float cf, fn_float hf, const char *nm, const char *s,
           (const char *)e0 - s, (const char *)eh - s);
     CHECK(same_float(r0, want), "%s('%s') expected ret %g got %g", nm, s, (double)want, (double)r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s') expected errno %d got %d", nm, s, want_errno, n0);
+        CHECK(WANT_ERRNO_OK_(n0, want_errno, nh), "%s('%s') expected errno %d got %d", nm, s, want_errno, n0);
     if (want_off >= 0)
         CHECK((const char *)e0 - s == want_off, "%s('%s') expected endptr %td got %td",
               nm, s, want_off, (const char *)e0 - s);
@@ -335,7 +340,7 @@ static void run_double(fn_double cf, fn_double hf, const char *nm, const char *s
           (const char *)e0 - s, (const char *)eh - s);
     CHECK(same_double(r0, want), "%s('%s') expected ret %g got %g", nm, s, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s') expected errno %d got %d", nm, s, want_errno, n0);
+        CHECK(WANT_ERRNO_OK_(n0, want_errno, nh), "%s('%s') expected errno %d got %d", nm, s, want_errno, n0);
     if (want_off >= 0)
         CHECK((const char *)e0 - s == want_off, "%s('%s') expected endptr %td got %td",
               nm, s, want_off, (const char *)e0 - s);
@@ -361,7 +366,7 @@ static void run_ldouble(fn_ldouble cf, fn_ldouble hf, const char *nm, const char
           (const char *)e0 - s, (const char *)eh - s);
     CHECK(same_ldouble(r0, want), "%s('%s') expected ret %Lg got %Lg", nm, s, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s('%s') expected errno %d got %d", nm, s, want_errno, n0);
+        CHECK(WANT_ERRNO_OK_(n0, want_errno, nh), "%s('%s') expected errno %d got %d", nm, s, want_errno, n0);
     if (want_off >= 0)
         CHECK((const char *)e0 - s == want_off, "%s('%s') expected endptr %td got %td",
               nm, s, want_off, (const char *)e0 - s);
@@ -383,7 +388,7 @@ static void run_atoi(const char *nm, const char *s, int want, int want_errno) {
     }
     CHECK(r0 == want, "%s expected ret %d got %d", nm, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s expected errno %d got %d", nm, want_errno, n0);
+        CHECK(WANT_ERRNO_OK_(n0, want_errno, nh), "%s expected errno %d got %d", nm, want_errno, n0);
 }
 
 static void run_atol(const char *nm, const char *s, long want, int want_errno) {
@@ -399,7 +404,7 @@ static void run_atol(const char *nm, const char *s, long want, int want_errno) {
     }
     CHECK(r0 == want, "%s expected ret %ld got %ld", nm, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s expected errno %d got %d", nm, want_errno, n0);
+        CHECK(WANT_ERRNO_OK_(n0, want_errno, nh), "%s expected errno %d got %d", nm, want_errno, n0);
 }
 
 /* do_diff is false for inputs with no digits: the musl-derived wrapper does
@@ -419,7 +424,7 @@ static void run_atoll(const char *nm, const char *s, long long want,
     }
     CHECK(r0 == want, "%s expected ret %lld got %lld", nm, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s expected errno %d got %d", nm, want_errno, n0);
+        CHECK(WANT_ERRNO_OK_(n0, want_errno, nh), "%s expected errno %d got %d", nm, want_errno, n0);
 }
 
 static void run_atof(const char *nm, const char *s, double want, int want_errno) {
@@ -435,7 +440,7 @@ static void run_atof(const char *nm, const char *s, double want, int want_errno)
     }
     CHECK(same_double(r0, want), "%s expected ret %g got %g", nm, want, r0);
     if (want_errno >= 0)
-        CHECK(n0 == want_errno, "%s expected errno %d got %d", nm, want_errno, n0);
+        CHECK(WANT_ERRNO_OK_(n0, want_errno, nh), "%s expected errno %d got %d", nm, want_errno, n0);
 }
 
 /* ------------------------------------------------------------------ */
