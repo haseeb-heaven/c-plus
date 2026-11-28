@@ -226,6 +226,15 @@ stdlib_arena_reset(&a, &err);
 if (v.is_live()) ... // false: token retired at reset
 ```
 
+## Why choose C+
+
+- **Same C source:** `.cp` files stay C-compatible; `LEGACY` keeps your bytes unchanged. Existing C libraries link as-is.
+- **Same C ABI:** `sizeof`/`alignof` of C structs, unions and raw pointers never change. Metadata lives in side tables, so raylib/Nuklear/SDL3 just work.
+- **Compile-time + runtime safety:** proven bounds/lifetime diagnostics before execution, then runtime guards and a live-pointer table after it.
+- **Not Rust-style safety:** borrow checking would need pointer/layout changes and break the C ABI. C+ uses GooseLang-style side tables and scoped arenas instead.
+- **No heap by default:** datastack arenas bump-allocate and rewind with one store; RAII `drop()` is deterministic. No GC, no malloc on the hot path.
+- **Fast where it counts:** measured bump allocation `23-30 ns/op` vs checked heap `206-328 ns/op`. Guards have a cost (`--release --sanitize=none` opts out); see [benchmarks](proof/benchmarks/README.md).
+
 ## Comparison: C+ vs C3, Fil-C, Zig
 
 | Aspect | C+ | C3 | Fil-C | Zig |
