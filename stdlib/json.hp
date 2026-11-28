@@ -220,31 +220,37 @@ class json_view {
     }
 };
 
+/* Parse a NUL-terminated source into `out`.  A NULL source yields an invalid
+ * document without recording an error; the parse-file helper fills err.
+ *
+ * This is a function, not a constructor body, so the NULL guard is a real
+ * terminating ReturnStmt: the STRICT analyser recognises that NULL never
+ * reaches strlen()/yyjson.  Constructors cannot contain `return` in C+, and a
+ * `break` out of a do-while is not accepted as a proving null guard. */
+static inline void json_parse_text(yyjson_doc **out, const char *text,
+                                   error *err) {
+    yyjson_read_err info;
+    size_t len;
+    *out = NULL;
+    error_reset(err);
+    if (text == NULL)
+        return;
+    len = strlen(text);
+    /* Budget check first: the vendored yyjson has no reader depth cap. */
+    if (!json_input_within_budget(text, len, CPLUS_JSON_MAX_DEPTH, err))
+        return;
+    /* yyjson reads without modifying the buffer. */
+    *out = yyjson_read_opts((char *)text, len, YYJSON_READ_NOFLAG, NULL, &info);
+    if (*out == NULL)
+        error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
+                       info.msg != NULL ? info.msg : "JSON parse failed");
+}
+
 class json {
     yyjson_doc *document;
 
-    /* A NULL source yields an invalid document without recording an error;
-     * the parse-file helper fills it in afterwards. */
     json(const char *text, error *err) {
-        do {
-            yyjson_read_err info;
-            size_t len;
-            error_reset(err);
-            this->document = NULL;
-            /* A NULL source stays a silent no-op (json_parse_file fills err). */
-            if (text == NULL)
-                break;
-            len = strlen(text);
-            /* Budget check first: the vendored yyjson has no reader depth cap. */
-            if (!json_input_within_budget(text, len, CPLUS_JSON_MAX_DEPTH, err))
-                break;
-            /* yyjson reads without modifying the buffer. */
-            this->document = yyjson_read_opts((char *)text, len,
-                                              YYJSON_READ_NOFLAG, NULL, &info);
-            if (this->document == NULL)
-                error_fail_cat(err, STDLIB_CATEGORY_INVALID, CPLUS_EXIT_UNSUPPORTED,
-                               info.msg != NULL ? info.msg : "JSON parse failed");
-        } while (0);
+        json_parse_text(&this->document, text, err);
     }
 
     int valid(void) {
@@ -355,7 +361,6 @@ static inline json json_parse_file(const char *path, error *err) {
     for (;;) {
         size_t chunk;
         size_t got;
-        char *tmp;
         if (len != 0 && used == len)
             break; /* regular file: exactly the stat size was read */
         if (used >= cap ||
@@ -369,8 +374,10 @@ static inline json json_parse_file(const char *path, error *err) {
         chunk = (len != 0) ? (len - used) : ((size_t)64u * 1024u);
         if (chunk > cap - used)
             chunk = cap - used;
-        tmp = (char *)realloc(buf, used + chunk + 1u);
-        if (tmp == NULL) {
+        /* Initialise the result at its declaration so the success/failure
+         * branch below is recognised as the handled realloc idiom. */
+        char *tmp = (char *)realloc(buf, used + chunk + 1u);
+        if (!tmp) {
             json_close_stream(fp);
             free(buf);
             error_fail_cat(err, STDLIB_CATEGORY_MEMORY, CPLUS_EXIT_RESOURCE,
