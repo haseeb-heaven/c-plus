@@ -7346,7 +7346,9 @@ public:
       if (!isReallocRebind && reallocResultVars_.count(varNameOf(rhsExpr)))
         isReallocRebind = true;
       if (isReallocRebind && !varNameOf(lhsExpr).empty()) {
-        clearReleased(varNameOf(lhsExpr));
+        // Revive only the rebound owner. Stale aliases of the old block
+        // must stay released: a realloc rebind can leave dangling views.
+        releasedVars_.erase(varNameOf(lhsExpr));
         maybeReleasedVars_.erase(varNameOf(lhsExpr));
         // free(p) also records a field-style release key; clear it too so
         // isReleased() does not re-derive a dangling state from that key.

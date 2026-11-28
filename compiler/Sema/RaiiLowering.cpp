@@ -1633,8 +1633,15 @@ private:
         // A trailing `(void)cplus_zero(...)` comma operand has type void, so
         // wrapping a call that is used as a value (`int r = f(o);`) would
         // emit invalid C. Only add the guard for a bare call statement.
+        // The token BEFORE the call decides whether its value is used. In
+        // `int r = f(o);` the token after `)` is also `;`, so checking only
+        // the following token would still emit a void-typed comma operand.
+        size_t before = prevSig(i);
         bool bareCallStatement =
-            isPunct(nextSig(rp), ";") || isPunct(nextSig(rp), "}");
+            (before == kNPos || isPunct(before, ";") ||
+             isPunct(before, "{") || isPunct(before, "}") ||
+             isPunct(before, ":")) &&
+            (isPunct(nextSig(rp), ";") || isPunct(nextSig(rp), "}"));
         if (!transferred.empty() && bareCallStatement) {
           std::string tail;
           for (const std::string &name : transferred)
