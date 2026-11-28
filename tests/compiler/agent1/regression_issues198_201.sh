@@ -3,7 +3,9 @@
 #
 # Builds issue198_201_unit.cpp against the freshly built cplus_core archive
 # (reusing the exact compile/link flags CMake generated) and runs it.  Also
-# verifies the STRICT effect gate through the c+ CLI.
+# verifies the STRICT effect gate through the c+ CLI: compiler-generated helper
+# use is accepted, user-declared reserved helpers and unverified pointer
+# externs are rejected, and builtin SafeCRT externs stay accepted.
 #
 # Usage: CPLUS_BUILD=/path/to/build-dir CPLUS_BIN=/path/to/c+ \
 #        sh tests/compiler/agent1/regression_issues198_201.sh
@@ -61,16 +63,53 @@ fi
 grep -qF "[CPLUS-FFI] function 'cplus_unverified_sink'" "$WORK/backdoor.log" ||
   fail "missing STRICT unverified-extern diagnostic"
 
-# #199: genuine runtime ABI helpers must stay trusted under STRICT. Use one
-# that the driver does not reserve for its own generated instrumentation
-# (declaring __cplus_bounds_check in user source is correctly rejected).
-cat > "$WORK/helper.c" <<'EOF'
+# #199: helpers EMITTED BY THE COMPILER must stay trusted under STRICT. The
+# source below contains no helper declarations; with --sanitize=none the
+# backend has no UBSan overflow check, so lowering emits its own guarded
+# checked-arithmetic helper calls. `check` still accepts the source, and a
+# STRICT build must both succeed and contain real generated call sites (not
+# just the extern declarations in the rewriter prelude).
+cat > "$WORK/generated.c" <<'EOF'
+int add_wrapped(int a, int b) { return a + b; }
+int mul_wrapped(int a, int b) { return a * b; }
+int main(void) {
+  return add_wrapped(2, 3) == 5 && mul_wrapped(4, 5) == 20 ? 0 : 1;
+}
+EOF
+"$CPLUS" check --strict "$WORK/generated.c" >"$WORK/generated-check.log" 2>&1 ||
+  { cat "$WORK/generated-check.log" >&2; fail "STRICT check rejected a compiler-helper source"; }
+"$CPLUS" build --strict --sanitize=none --emit-c "$WORK/generated-lowered.c" \
+  "$WORK/generated.c" -o "$WORK/generated.bin" >"$WORK/generated-build.log" 2>&1 ||
+  { cat "$WORK/generated-build.log" >&2; fail "STRICT build rejected compiler-generated helper use"; }
+grep -qF '__cplus_inline_add_i64((int64_t)(' "$WORK/generated-lowered.c" ||
+  fail "lowered C has no compiler-generated checked-add call"
+grep -qF '__cplus_inline_mul_i64((int64_t)(' "$WORK/generated-lowered.c" ||
+  fail "lowered C has no compiler-generated checked-mul call"
+"$WORK/generated.bin" || fail "generated-helper program failed at run time"
+
+# #199: the SAME helper names are an attack when written by the user. A
+# source-local extern can interpose the generated guard at link time, so
+# STRICT must reject both a runtime ABI helper and a generated arithmetic
+# helper, with the reserved-symbol diagnostic for each.
+cat > "$WORK/reserved.c" <<'EOF'
 extern void cplus_scan_value_at(void *dest, unsigned long size, int kind,
                                 const char *expr, const char *file, int line);
-void f(int *p) { cplus_scan_value_at(p, sizeof(int), 0, "p", "f", 1); }
+extern long __cplus_checked_add_i64(long a, long b, unsigned bits,
+                                    unsigned sgn);
+int f(int *p) {
+  cplus_scan_value_at(p, sizeof(int), 0, "p", "f", 1);
+  return (int)__cplus_checked_add_i64(1, 2, 32, 1);
+}
 EOF
-"$CPLUS" check --strict "$WORK/helper.c" >"$WORK/helper.log" 2>&1 ||
-  { cat "$WORK/helper.log" >&2; fail "STRICT rejected a genuine compiler helper"; }
+if "$CPLUS" check --strict "$WORK/reserved.c" >"$WORK/reserved.log" 2>&1; then
+  fail "STRICT accepted user declarations of reserved helpers"
+fi
+for sym in cplus_scan_value_at __cplus_checked_add_i64; do
+  grep -qF "user declaration of reserved C+ runtime helper '$sym'" "$WORK/reserved.log" ||
+    fail "missing reserved-helper declaration diagnostic for $sym"
+  grep -qF "symbol '$sym' is reserved for the C+ compiler/runtime" "$WORK/reserved.log" ||
+    fail "missing reserved-symbol diagnostic for $sym"
+done
 
 # #198: newly summarised SafeCRT names must be accepted as bodiless externs
 # by the STRICT gate (they have authoritative builtin effect summaries).
