@@ -595,12 +595,15 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
  *   size cannot authorize an overread.  On platforms without that query the
  *   caller's value is kept (portable fallback).
  *
- *   Re-registration of a stale retired address is rejected deterministically
- *   (105): accepting it would re-arm a genuine second free of an already
- *   released block.  A retired address is stale when it is still in quarantine
- *   or the platform allocator query reports no live block there; a proven
- *   fresh malloc of the same address is accepted.  Fresh managed reuse is
- *   unaffected because it goes through cplus_alloc / in-place realloc.
+ *   Re-registration of a retired address is rejected deterministically (105)
+ *   only while the block is still held in our quarantine or the platform
+ *   allocator query proves it dead (Apple malloc_size()).  Platforms without a
+ *   safe query (Linux/Windows, #234/#239) must accept re-registration: rejecting
+ *   every retired address aborts ordinary malloc/realloc reuse.  A stale alias
+ *   at a reused address is the F2 open limit above; the live-table-first double
+ *   free check still catches releases of addresses that are not live.  Fresh
+ *   managed reuse is unaffected because it goes through cplus_alloc / in-place
+ *   realloc.
  *
  *   Retired-ledger cap (CPLUS_RETIRED_MAX, 1048576): once full, a one-time
  *   stderr warning is printed, cplus_retired_wrapped becomes sticky and
@@ -715,11 +718,16 @@ static uint64_t cplus_retired_generation(const void *p); /* defined below */
  * #234: glibc's malloc_usable_size() must NOT be used here.  It dereferences
  * the chunk header of a pointer that may already have been freed (UAF / SIGSEGV)
  * and reports a stale nonzero size for freed chunks, so it cannot prove liveness
- * anyway.  The usable-size probe is therefore Apple-only; every other platform
- * rejects conservatively.  A block still held in our quarantine has not been
- * returned to malloc yet and is always stale.  cplus_malloc_capacity() itself
- * remains available for the *live* clamp path, where the pointer is known to be
- * allocated. */
+ * anyway.  The usable-size probe is therefore Apple-only.  A block still held
+ * in our quarantine has not been returned to malloc yet and is always stale.
+ *
+ * #239: the missing probe must not become a blanket rejection.  On Linux and
+ * Windows the very next malloc()/realloc() of the same size class normally
+ * hands back a retired address; rejecting it aborts valid reuse with 105.  No
+ * safe cross-platform liveness query exists, so those platforms accept the
+ * re-registration instead.  A stale alias at a reused address is the documented
+ * F2 open limit.  cplus_malloc_capacity() itself remains available for the
+ * *live* clamp path, where the pointer is known to be allocated. */
 static int cplus_retired_address_stale(const void *p) {
   if (cplus_retired_generation(p) == 0u)
     return 0;
@@ -728,7 +736,11 @@ static int cplus_retired_address_stale(const void *p) {
 #if defined(__APPLE__) && CPLUS_HAVE_MALLOC_CAPACITY
   return cplus_malloc_capacity(p) == 0u;
 #else
-  return 1;
+  /* #239: no usable-size query here can prove liveness without probing freed
+   * memory (#234).  Accept the address unless it is still in quarantine; the
+   * residual stale-alias risk is the F2 open limit, not a reason to abort
+   * ordinary malloc/realloc reuse (105). */
+  return 0;
 #endif
 }
 

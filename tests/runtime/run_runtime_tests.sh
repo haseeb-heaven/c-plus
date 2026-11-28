@@ -132,5 +132,21 @@ else
   tail -30 /tmp/rt9.log /tmp/rt9.out /tmp/rt9.err 2>/dev/null || true
 fi
 
+# 10) #239: a fresh malloc/realloc may reuse a retired address on non-Apple
+# platforms; registration must succeed instead of aborting with 105.  The
+# one-slot stub makes the reuse deterministic and the counting probe still
+# proves the stale check itself never dereferences the retired pointer (#234).
+if "$CC" -std=gnu17 -O0 -g -Wall -Wextra -U__APPLE__ -D__linux__ -D__unix__ \
+     -I"$FAKE_INC" -I"$ROOT" -I"$ROOT/runtime/include" \
+     "$ROOT/tests/runtime/test_retired_reuse_linux.c" -lm -pthread \
+     -o "$OUT/test_retired_reuse_linux" >/tmp/rt10.log 2>&1 \
+    && "$OUT/test_retired_reuse_linux" >/tmp/rt10.out 2>/tmp/rt10.err \
+    && grep -q "retired_reuse_linux: ok" /tmp/rt10.out; then
+  pass=$((pass+1)); echo "ok retired_reuse_linux"
+else
+  fail=$((fail+1)); echo "FAIL retired_reuse_linux"
+  tail -30 /tmp/rt10.log /tmp/rt10.out /tmp/rt10.err 2>/dev/null || true
+fi
+
 echo "runtime tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
