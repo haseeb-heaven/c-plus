@@ -112,9 +112,88 @@ struct DeferInfo {
   std::string ownerName;
 };
 
+/// Issue #185: one lexical `region r { ... }` frame.  The token is an ordinary
+/// stack struct; region pointers are thin `T *` values.  Nothing in this frame
+/// is part of an emitted struct or function signature, so the C ABI is intact.
+struct RegionFrame {
+  std::string name;
+  size_t scope = kNPos;
+  /// Token index of the block's `{`.  The release obligation is attached when
+  /// that brace opens its scope, not when the `region` keyword is scanned.
+  size_t openTok = kNPos;
+  /// Brace depth of the region body.  A binding declared at a smaller depth is
+  /// an enclosing local: it outlives the region and storing a region pointer
+  /// into it is an escape even though neither a global nor a parameter is
+  /// involved (issue #185).
+  size_t scopeDepth = kNPos;
+  unsigned line = 0;
+  unsigned column = 0;
+  std::set<std::string> pointers;
+};
+
+/// Self-contained region prelude.  It uses only the checked heap entry points
+/// already declared by "cplus/cplus.h"; the token itself has no heap node and
+/// teardown is a single cplus_release of the backing block.
+const char *const kRegionPrelude =
+    "#line 1 \"<cplus-region-prelude>\"\n"
+    "#ifndef CPLUS_REGION_PRELUDE_DEFINED\n"
+    "#define CPLUS_REGION_PRELUDE_DEFINED\n"
+    "#include <stddef.h>\n"
+    "#include <stdint.h>\n"
+    "extern void *cplus_alloc(size_t size);\n"
+    "extern void cplus_release(void *ptr);\n"
+    "#define CPLUS_REGION_DEFAULT_BYTES 4096u\n"
+    "typedef struct cplus_region_token {\n"
+    "  unsigned char *base;\n"
+    "  size_t used;\n"
+    "  size_t capacity;\n"
+    "  unsigned long long magic;\n"
+    "} cplus_region_token;\n"
+    "#define CPLUS_REGION_MAGIC 0x43504c555245474fULL\n"
+    "__attribute__((unused)) static inline void cplus_region_init("
+    "cplus_region_token *r, size_t bytes) {\n"
+    "  if (!r) return;\n"
+    "  r->base = 0; r->used = 0; r->capacity = 0; r->magic = 0;\n"
+    "  if (bytes == 0) bytes = CPLUS_REGION_DEFAULT_BYTES;\n"
+    "  r->base = (unsigned char *)cplus_alloc(bytes);\n"
+    "  if (r->base) { r->capacity = bytes; r->magic = CPLUS_REGION_MAGIC; }\n"
+    "}\n"
+    "__attribute__((unused)) static inline void *cplus_region_take("
+    "cplus_region_token *r, size_t bytes) {\n"
+    "  size_t pad;\n"
+    "  unsigned char *p;\n"
+    "  if (!r || r->magic != CPLUS_REGION_MAGIC || !r->base || bytes == 0)\n"
+    "    return (void *)0;\n"
+    "  pad = (16u - (r->used & 15u)) & 15u;\n"
+    "  if (pad > r->capacity - r->used || bytes > r->capacity - r->used - pad)\n"
+    "    return (void *)0;\n"
+    "  p = r->base + r->used + pad;\n"
+    "  r->used += pad + bytes;\n"
+    "  return (void *)p;\n"
+    "}\n"
+    "__attribute__((unused)) static inline void cplus_region_release("
+    "cplus_region_token *r) {\n"
+    "  if (!r || r->magic != CPLUS_REGION_MAGIC) return;\n"
+    "  r->magic = 0;\n"
+    "  if (r->base) cplus_release(r->base);\n"
+    "  r->base = 0; r->used = 0; r->capacity = 0;\n"
+    "}\n"
+    "#endif\n";
+
 bool startsWith(const std::string &s, const char *prefix) {
   size_t n = std::char_traits<char>::length(prefix);
   return s.size() >= n && s.compare(0, n, prefix) == 0;
+}
+
+/// Issue #179: Cake qualifiers are compile-time-only. They are normally
+/// already erased by CPlusRewriter.cpp, but lowerRaii() is also called
+/// directly (headers, tooling, tests), so treat them as ignorable trivia here
+/// as well. Defer bodies are re-emitted from the same token stream, so
+/// filtering them in joinTokens* keeps the LIFO cleanup text qualifier-free.
+bool isCakeQualifier(const Token &t) {
+  if (t.kind != TokKind::Identifier)
+    return false;
+  return t.text == "_Opt" || t.text == "_Owner" || t.text == "_View";
 }
 
 std::string quoteFile(const std::string &file) {
@@ -125,6 +204,69 @@ std::string quoteFile(const std::string &file) {
     out += c;
   }
   return out;
+}
+
+/// Return the logical source location that the C preprocessor sees at byte
+/// offset `at` in `text`. `quotedFile` comes back already escaped for use in a
+/// #line directive; `line` is the line of the physical line containing `at`.
+/// Earlier #line directives are honoured: a rewritten translation unit starts
+/// with `#line 1 "orig.cp"`, so the byte after it is orig.cp:1, not line 2.
+/// This is the location the region prelude temporarily displaces, and the one
+/// its trailing #line directive must restore.
+void logicalLocationAt(const std::string &text, size_t at,
+                       const std::string &fallbackFile,
+                       std::string &quotedFile, unsigned &line) {
+  quotedFile = quoteFile(fallbackFile);
+  line = 1;
+  size_t pos = 0;
+  for (;;) {
+    size_t eol = text.find('\n', pos);
+    if (eol == std::string::npos)
+      eol = text.size();
+    // Stop at the line containing `at`; its logical location is current.
+    if (eol >= at)
+      break;
+
+    std::string nextQuoted;
+    unsigned nextLine = 0;
+    size_t k = pos;
+    while (k < eol && (text[k] == ' ' || text[k] == '\t'))
+      ++k;
+    if (k < eol && text[k] == '#') {
+      ++k;
+      while (k < eol && (text[k] == ' ' || text[k] == '\t'))
+        ++k;
+      // Accept both `#line N "f"` and the GCC spelling `# N "f"`.
+      if (k + 5 <= eol && text.compare(k, 5, "line ") == 0)
+        k += 5;
+      size_t digits = k;
+      while (digits < eol && text[digits] >= '0' && text[digits] <= '9')
+        ++digits;
+      if (digits > k) {
+        nextLine = 0;
+        for (size_t j = k; j < digits; ++j)
+          nextLine = nextLine * 10 + static_cast<unsigned>(text[j] - '0');
+        size_t q = text.find('"', digits);
+        if (q != std::string::npos && q < eol) {
+          size_t qe = text.find('"', q + 1);
+          if (qe != std::string::npos && qe <= eol)
+            nextQuoted = text.substr(q, qe - q + 1); // keep the escaping
+        }
+      }
+    }
+    // A #line directive sets the *following* line's location; any other line
+    // advances the logical line number within the current file.
+    if (nextLine != 0) {
+      if (!nextQuoted.empty())
+        quotedFile = nextQuoted;
+      line = nextLine;
+    } else {
+      ++line;
+    }
+    if (eol == text.size())
+      break;
+    pos = eol + 1;
+  }
 }
 
 class Lowering {
@@ -147,10 +289,15 @@ public:
     // both the escape checks and the owner-aware jump checks below.  Computing
     // them once keeps the token-level scan single-pass and cheap.
     globalNames_ = collectGlobals();
+    // Issue #185: plain locals are not ownership obligations, so scopes_ does
+    // not know about them.  Record their declaration depths once so an
+    // assignment to an enclosing local can be recognised as a region escape.
+    collectLocalScopes();
     collectControlFlowHelpers();
     collectTerminationMacros();
     collectNoreturnDeclarations();
     scan();
+    stripCakeQualifiers();
     applyEdits();
 
     LoweredSource result;
@@ -221,7 +368,7 @@ private:
   std::string joinTokens(size_t from, size_t to) const {
     std::string out;
     for (size_t k = from; k < to; ++k) {
-      if (isTrivia(k))
+      if (isTrivia(k) || isCakeQualifier(toks_[k]))
         continue;
       if (!out.empty())
         out += " ";
@@ -237,7 +384,7 @@ private:
                                    const std::string &ins) const {
     std::string out;
     for (size_t k = from; k < to; ++k) {
-      if (isTrivia(k))
+      if (isTrivia(k) || isCakeQualifier(toks_[k]))
         continue;
       if (!out.empty())
         out += " ";
@@ -390,7 +537,7 @@ private:
     // enclosing function stops the search. Brace balance avoids matching a
     // label in a different function.
     int depth = 0;
-    for (size_t k = lbl + 1; k < toks_.size(); ++k) {
+    for (size_t k = lbl; k < toks_.size(); ++k) {
       if (isPunct(k, "{"))
         ++depth;
       else if (isPunct(k, "}")) {
@@ -403,6 +550,57 @@ private:
         return jumpSkipsOwnerInit(lbl + 1, k);
     }
     return false;
+  }
+
+  /// Resolve the token index of the label named by the `goto` at `i`.
+  /// Unlike gotoSkipsOwner(), this scan must keep going past the closing brace
+  /// of the goto's own block: a normal `goto done;` leaves that block and the
+  /// label sits after it.  The enclosing function's closing brace (the first
+  /// scope) bounds the search so a label in a sibling function cannot match.
+  size_t gotoLabelToken(size_t i) const {
+    size_t lbl = nextSig(i);
+    if (!inFunction_ || scopes_.empty() || lbl >= toks_.size() ||
+        toks_[lbl].kind != TokKind::Identifier)
+      return kNPos;
+    const size_t functionEnd = scopes_.front().closeOffset;
+    for (size_t k = lbl; k < toks_.size(); ++k) {
+      if (toks_[k].offset > functionEnd)
+        return kNPos;
+      if (toks_[k].kind == TokKind::Identifier &&
+          toks_[k].text == toks_[lbl].text && isPunct(nextSig(k), ":"))
+        return k;
+    }
+    return kNPos;
+  }
+
+  /// Issue #183: drops for owners whose scope the `goto` leaves.  A scope is
+  /// exited when the label lies after its closing brace; every scope deeper
+  /// than the innermost one still containing the label is therefore unwound.
+  /// When no scope is crossed (a local jump within the same block) the result
+  /// is empty and the existing diagnostics remain the only response.
+  std::string gotoExitDrops(size_t i) {
+    if (scopes_.empty())
+      return std::string();
+    const size_t label = gotoLabelToken(i);
+    if (label == kNPos)
+      return std::string();
+    const size_t labelOffset = toks_[label].offset;
+    size_t from = scopes_.size();
+    for (size_t p = scopes_.size(); p > 0; --p) {
+      // A scope still open at the goto has no closeOffset yet (kNPos); treat
+      // it as crossed when the label lies outside the current statement.
+      if (scopes_[p - 1].closeOffset == kNPos) {
+        from = p - 1;
+        continue;
+      }
+      if (labelOffset > scopes_[p - 1].closeOffset)
+        from = p - 1;
+      else
+        break;
+    }
+    if (from >= scopes_.size())
+      return std::string();
+    return dropsFor(from, scopes_.size(), DeclId{});
   }
 
   /// Find the compound statement controlled by the `if`/`switch`/`while`
@@ -843,6 +1041,26 @@ private:
     s.exceptionBlock = isFunction ? false : isExceptionBlockOpen(i);
     scopes_.push_back(std::move(s));
 
+    // Issue #185: a lexical region's release belongs to the block this brace
+    // opens.  handleRegion() cannot register it because the `region` keyword is
+    // scanned while the *enclosing* scope is current; doing it there emitted
+    // `cplus_region_release(&r)` at function exit, after `r` went out of scope.
+    // Registering on entry to the block scope keeps the release inside r's
+    // lifetime: scope exit emits it just before the closing brace, and an early
+    // return from the block still runs it via dropsFor().
+    if (!regions_.empty() && regions_.back().openTok == i &&
+        regions_.back().scope == kNPos) {
+      RegionFrame &frame = regions_.back();
+      frame.scope = scopes_.size() - 1;
+      OwnedVar v;
+      v.name = "__cplus_region_" + std::to_string(regionCounter_++);
+      v.isDefer = true;
+      v.deferText = "cplus_region_release(&" + frame.name + ");";
+      v.line = frame.line;
+      v.column = frame.column;
+      registerOwned(v);
+    }
+
     if (loops_.size() > 0 && loops_.back().bodyPos < 0)
       loops_.back().bodyPos = static_cast<int>(scopes_.size()) - 1;
 
@@ -853,6 +1071,9 @@ private:
   void closeScope(size_t i, const Token &t) {
     if (scopes_.empty())
       return;
+    // A region's pointers die with the scope that owns its token.
+    if (!regions_.empty() && regions_.back().scope == scopes_.size() - 1)
+      regions_.pop_back();
     Scope &s = scopes_.back();
     std::string drops = dropsFor(scopes_.size() - 1, scopes_.size(), DeclId{});
     if (!drops.empty())
@@ -887,6 +1108,212 @@ private:
       inFunction_ = false;
     }
     atStmtStart_ = true;
+  }
+
+  // --- issue #185: lexical regions -----------------------------------------
+
+  /// The region frame that owns `name`, if any.  Pointers recorded by
+  /// cplus_region_alloc are only valid until that frame's scope closes.
+  const RegionFrame *regionOwningPointer(const std::string &name) const {
+    for (auto it = regions_.rbegin(); it != regions_.rend(); ++it)
+      if (it->pointers.count(name))
+        return &*it;
+    return nullptr;
+  }
+
+  /// Find a region pointer anywhere in an expression, not just as its first
+  /// token: a cast (`(int *)p`), parentheses or arithmetic must hide neither
+  /// the pointer nor its owning frame.
+  const RegionFrame *regionPointerInExpr(size_t from, size_t to,
+                                         std::string *name) const {
+    for (size_t k = from; k < to; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      const RegionFrame *frame = regionOwningPointer(toks_[k].text);
+      if (frame) {
+        if (name)
+          *name = toks_[k].text;
+        return frame;
+      }
+    }
+    return nullptr;
+  }
+
+  /// True when the storage written by the assignment at `eq` outlives the
+  /// region.  Globals and parameters were already recognised; this adds
+  /// enclosing locals and struct fields through their base object (issue
+  /// #185).  A binding declared at the region's own depth (or deeper) dies
+  /// with the token and is therefore not an escape.
+  bool lhsOutlivesRegion(size_t eq, const RegionFrame &frame) const {
+    size_t start = eq;
+    while (start > 0 && !isPunct(start - 1, ";") &&
+           !isPunct(start - 1, "{") && !isPunct(start - 1, "}"))
+      --start;
+    for (size_t k = start; k < eq; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      const std::string &n = toks_[k].text;
+      if (globalNames_.count(n) || currentParams_.count(n))
+        return true;
+      auto it = localsByScope_.find(n);
+      if (it == localsByScope_.end())
+        continue;
+      for (size_t d : it->second)
+        if (d < frame.scopeDepth)
+          return true;
+    }
+    return false;
+  }
+
+  void handleRegion(size_t i) {
+    size_t nameIdx = nextSig(i);
+    if (nameIdx >= toks_.size() ||
+        toks_[nameIdx].kind != TokKind::Identifier) {
+      errorAt("region requires a token name: 'region r { ... }'", toks_[i]);
+      return;
+    }
+    size_t after = nextSig(nameIdx);
+    std::string capacity = std::to_string(4096u);
+    size_t open = after;
+    size_t capFrom = kNPos, capTo = kNPos;
+    size_t capEnd = after;
+    if (isPunct(after, "(")) {
+      size_t rp = matchingParen(after);
+      if (rp == kNPos || rp <= after + 1) {
+        errorAt("region capacity must be a non-empty expression", toks_[i]);
+        return;
+      }
+      capacity = joinTokens(after + 1, rp);
+      capFrom = after;
+      capTo = rp;
+      capEnd = rp;
+      open = nextSig(rp);
+    }
+    if (!isPunct(open, "{")) {
+      errorAt("region requires a compound block: 'region r { ... }'",
+              toks_[i]);
+      return;
+    }
+
+    const std::string name = toks_[nameIdx].text;
+    // Erase `region <name> (<capacity>)`; the `{` and the body stay verbatim.
+    size_t eraseEnd = capTo != kNPos ? capTo : nameIdx;
+    edits_.push_back(Edit{toks_[i].offset,
+                          toks_[eraseEnd].offset +
+                              toks_[eraseEnd].text.size() -
+                              toks_[i].offset,
+                          std::string(), seq_++});
+    edits_.push_back(Edit{toks_[open].offset + toks_[open].text.size(), 0,
+                          " cplus_region_token " + name +
+                              "; cplus_region_init(&" + name + ", " +
+                              capacity + ");",
+                          seq_++});
+
+    // The release becomes a defer obligation of the *block scope*, registered
+    // by openScope() when `open` is scanned.  Registering it here would attach
+    // it to the enclosing scope (usually the function body), so the release
+    // would be emitted at function exit where `name` is no longer in scope.
+    // Registering it first in the block keeps LIFO order: owners declared in
+    // the body are dropped before the backing region is released.
+    RegionFrame frame;
+    frame.name = name;
+    frame.openTok = open;
+    // Depth of the body scope: bindings declared at this depth (or deeper)
+    // die with the region; anything declared at a smaller depth outlives it.
+    size_t depth = 0;
+    for (size_t k = 0; k < open; ++k) {
+      if (isPunct(k, "{"))
+        ++depth;
+      else if (isPunct(k, "}") && depth > 0)
+        --depth;
+    }
+    frame.scopeDepth = depth + 1;
+    frame.line = toks_[i].line;
+    frame.column = toks_[i].column;
+    regions_.push_back(frame);
+    sawRegion_ = true;
+    (void)capEnd;
+  }
+
+  /// `cplus_region_alloc(r, bytes)` lowers to a bump take from the stack token
+  /// `r`.  The result stays a bare `T *`; no fat pointer crosses an ABI edge.
+  void handleRegionAlloc(size_t i) {
+    size_t lp = nextSig(i);
+    if (!isPunct(lp, "(")) {
+      errorAt("cplus_region_alloc requires a region token argument", toks_[i]);
+      return;
+    }
+    size_t arg = nextSig(lp);
+    size_t comma = arg;
+    int depth = 0;
+    while (comma < toks_.size() && !isPunct(comma, ")")) {
+      if (isPunct(comma, "("))
+        ++depth;
+      else if (isPunct(comma, ")"))
+        --depth;
+      if (depth == 0 && isPunct(comma, ","))
+        break;
+      ++comma;
+    }
+    if (arg >= toks_.size() || toks_[arg].kind != TokKind::Identifier ||
+        !isPunct(comma, ",")) {
+      errorAt("cplus_region_alloc(region, bytes) expects two arguments",
+              toks_[i]);
+      return;
+    }
+    const std::string regionName = toks_[arg].text;
+    RegionFrame *frame = nullptr;
+    for (auto it = regions_.rbegin(); it != regions_.rend(); ++it)
+      if (it->name == regionName) {
+        frame = &*it;
+        break;
+      }
+    if (!frame) {
+      errorAt("region '" + regionName + "' is not in scope", toks_[arg],
+              "declare the region with 'region " + regionName + " { ... }'");
+      return;
+    }
+
+    edits_.push_back(Edit{toks_[i].offset, toks_[i].text.size(),
+                          "cplus_region_take", seq_++});
+    edits_.push_back(
+        Edit{toks_[arg].offset, 0, "&", seq_++});
+
+    // Record the result binding so return/assignment escapes are diagnosed.
+    size_t eq = i;
+    while (eq > 0 && !isPunct(eq, ";") && !isPunct(eq, "{")) {
+      --eq;
+      if (isPunct(eq, "="))
+        break;
+    }
+    if (isPunct(eq, "=")) {
+      size_t lhs = prevSig(eq);
+      if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier)
+        frame->pointers.insert(toks_[lhs].text);
+    }
+  }
+
+  /// A pointer borrowed from a region may not leave that region's lexical
+  /// scope.  This is enforced statically (`CPLUS-LIFETIME`) before the token
+  /// release is emitted, because the backing block is reclaimed at close.
+  void checkRegionEscape(size_t i, const Token &t) {
+    if (regions_.empty())
+      return;
+    size_t end = statementEnd(i);
+    if (end == kNPos)
+      end = toks_.size();
+    for (size_t k = i + 1; k < end; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      const RegionFrame *frame = regionOwningPointer(toks_[k].text);
+      if (!frame)
+        continue;
+      errorAt("[CPLUS-LIFETIME] pointer '" + toks_[k].text +
+                  "' escapes region '" + frame->name + "'",
+              t, "copy the data before leaving the region, or widen the "
+                 "region scope");
+      return;
+    }
   }
 
   void handleExplicitDrop(size_t i, const Token &t) {
@@ -950,8 +1377,20 @@ private:
   }
 
   void handleIdentifier(size_t i, const Token &t) {
+    // Cake qualifiers carry no cleanup obligation; they are erased by
+    // stripCakeQualifiers() and must not be mistaken for a use of a binding.
+    if (isCakeQualifier(t))
+      return;
     if (t.text == "defer") {
       handleDefer(i);
+      return;
+    }
+    if (t.text == "region") {
+      handleRegion(i);
+      return;
+    }
+    if (t.text == "cplus_region_alloc") {
+      handleRegionAlloc(i);
       return;
     }
     // Track explicit destructors.  Historically `explicitlyDropped_` suppressed
@@ -1010,6 +1449,7 @@ private:
                 t, "re-borrow the new owner instead");
     }
     if (t.text == "return") {
+      checkRegionEscape(i, t);
       DeclId exclude;
       checkReturnValue(i, &exclude);
       std::string drops = dropsFor(0, scopes_.size(), exclude);
@@ -1028,6 +1468,17 @@ private:
       return;
     }
     if (t.text == "goto") {
+      // Issue #183: a jump that leaves a scope with live owners now runs their
+      // drops at the goto site, before the branch.  `insertStatementCleanup`
+      // wraps the jump in a block so an `if (c) goto L;` cannot capture the
+      // injected call.  Diagnostics are deliberately unchanged: STRICT still
+      // fails closed on the construct, but the emitted C no longer skips the
+      // destructor even when the diagnostic is only a warning.
+      std::string exitDrops = gotoExitDrops(i);
+      if (exitDrops.empty() && hasLiveOwners())
+        exitDrops = dropsFor(0, scopes_.size(), DeclId{});
+      if (!exitDrops.empty())
+        insertStatementCleanup(i, exitDrops);
       // STRICT fails closed when a managed/resource owner is live at the jump,
       // and also when the jump skips an owner declaration: the label is then
       // reached with an uninitialised handle that the scope-exit drop reads.
@@ -1550,6 +2001,25 @@ private:
     size_t lhs = prevSig(i);
     if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier)
       return;
+    {
+      // A region pointer may be cast, parenthesised or combined with other
+      // operands; scan the whole right-hand side.  The store escapes when its
+      // destination outlives the region: a global, an out-parameter, an
+      // enclosing local or a field of such an object (issue #185).
+      size_t rhsTok = nextSig(i);
+      size_t rhsEnd = statementEnd(i);
+      if (rhsEnd == kNPos)
+        rhsEnd = toks_.size();
+      std::string pointerName;
+      const RegionFrame *frame =
+          regionPointerInExpr(rhsTok, rhsEnd, &pointerName);
+      if (frame && (globalNames_.count(toks_[lhs].text) ||
+                    currentParams_.count(toks_[lhs].text) ||
+                    lhsOutlivesRegion(i, *frame)))
+        errorAt("[CPLUS-LIFETIME] pointer '" + pointerName +
+                    "' escapes region '" + frame->name + "'",
+                toks_[lhs], "copy the data before leaving the region");
+    }
     DeclId lhsId = findLiveOwner(toks_[lhs].text);
     OwnedVar *lhsOwner = ownerAt(lhsId);
     if (!lhsOwner) {
@@ -1964,7 +2434,24 @@ private:
     std::set<std::string> out;
     int depth = 0;
     bool atStart = true;
+    bool inDirective = false;
     for (size_t i = 0; i < toks_.size(); ++i) {
+      // The rewriter prepends a `#line` directive to every translation unit.
+      // Without skipping preprocessor lines, `atStart` is consumed by that
+      // directive and the first real declaration (typically a global such as
+      // `static int *g;`) is never recorded.  Region-escape checks rely on
+      // globalNames_, so a region pointer stored into such a global escaped
+      // detection entirely.
+      if (inDirective) {
+        if (toks_[i].kind == TokKind::Whitespace &&
+            toks_[i].text.find('\n') != std::string::npos)
+          inDirective = false;
+        continue;
+      }
+      if (isPunct(i, "#")) {
+        inDirective = true;
+        continue;
+      }
       if (isTrivia(i))
         continue;
       if (isPunct(i, "{")) {
@@ -1992,6 +2479,57 @@ private:
       atStart = false;
     }
     return out;
+  }
+
+  /// Issue #185: record every plain local declaration together with the brace
+  /// depth of the scope that owns it.  `globalNames_` covers file-scope stores
+  /// and `currentParams_` covers out-parameters, but neither covers the two
+  /// remaining ways a region pointer can outlive its token: an enclosing
+  /// local (`int *saved; region r { saved = p; }`) and a struct field
+  /// (`b.p = p;`).  Both need the declaration depth of the storage location.
+  void collectLocalScopes() {
+    size_t depth = 0;
+    bool inDirective = false;
+    bool atStmtStart = true;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (inDirective) {
+        if (toks_[i].kind == TokKind::Whitespace &&
+            toks_[i].text.find('\n') != std::string::npos)
+          inDirective = false;
+        continue;
+      }
+      if (isPunct(i, "#")) {
+        inDirective = true;
+        continue;
+      }
+      if (isTrivia(i))
+        continue;
+      if (isPunct(i, "{")) {
+        ++depth;
+        atStmtStart = true;
+        continue;
+      }
+      if (isPunct(i, "}")) {
+        if (depth > 0)
+          --depth;
+        atStmtStart = true;
+        continue;
+      }
+      if (isPunct(i, ";") || isPunct(i, ":")) {
+        atStmtStart = true;
+        continue;
+      }
+      if (atStmtStart && depth > 0) {
+        size_t end = statementEnd(i);
+        if (end != kNPos) {
+          std::map<std::string, LocalVar> found;
+          recordLocalDecl(i, end, found, nullptr, static_cast<int>(depth));
+          for (const auto &kv : found)
+            localsByScope_[kv.first].push_back(depth);
+        }
+      }
+      atStmtStart = false;
+    }
   }
 
   /// Collect the names of functions that contain `longjmp` or a process
@@ -2718,6 +3256,19 @@ private:
     }
   }
 
+  /// Remove any Cake qualifier token that survived into this pass. Erasing it
+  /// (rather than translating it to a helper call) leaves a bare `T *` in the
+  /// emitted C, so struct layout, offsets and calling conventions are exactly
+  /// those of plain C. Cleanup for `_Owner` bindings is still emitted by the
+  /// existing reverse-declaration-order dropsFor() walk, and defer bodies are
+  /// re-emitted in LIFO order from joinTokens(), which filters these tokens.
+  void stripCakeQualifiers() {
+    for (size_t i = 0; i < toks_.size(); ++i)
+      if (isCakeQualifier(toks_[i]))
+        edits_.push_back(Edit{toks_[i].offset, toks_[i].text.size(),
+                              std::string(), seq_++});
+  }
+
   // --- edit application -----------------------------------------------------
 
   void applyEdits() {
@@ -2728,6 +3279,9 @@ private:
                        return a.seq < b.seq;
                      });
 
+    for (const auto &e : edits_)
+      if (e.text.find("R_drop") != std::string::npos ||
+          (e.text.find("{ ") != std::string::npos && e.text.size() < 60))
     output_.reserve(source_.size() + 256);
     size_t cursor = 0;
     for (const auto &e : edits_) {
@@ -2738,6 +3292,28 @@ private:
       cursor = e.offset + e.length;
     }
     output_.append(source_, cursor, source_.size() - cursor);
+    if (sawRegion_ &&
+        output_.find("CPLUS_REGION_PRELUDE_DEFINED") == std::string::npos) {
+      // The driver prepends its own preamble after lowering, so an edit at
+      // offset 0 can be lost. Insert the self-contained prelude into the
+      // final text before the first include so declarations precede their
+      // uses; it is guarded and order-independent.
+      size_t at = output_.find("#include");
+      if (at == std::string::npos)
+        at = 0;
+      // kRegionPrelude switches both __FILE__ and __LINE__ to the synthetic
+      // "<cplus-region-prelude>" name. Without a trailing directive every
+      // later diagnostic, __LINE__ expansion and Cake qualifier lookup would
+      // be attributed to that prelude. Restore the location the preprocessor
+      // had at the insertion point (honouring any #line already in the text).
+      std::string restoreFile;
+      unsigned restoreLine = 0;
+      logicalLocationAt(output_, at, filename_, restoreFile, restoreLine);
+      std::string prelude(kRegionPrelude);
+      prelude += "#line " + std::to_string(restoreLine) + " " + restoreFile +
+                 "\n";
+      output_.insert(at, prelude);
+    }
   }
 
   // --- state ----------------------------------------------------------------
@@ -2760,6 +3336,9 @@ private:
   std::map<std::string, std::vector<DeclId>> liveByName_;
   unsigned shadowCounter_ = 0;
   std::set<std::string> globalNames_;
+  /// Issue #185: plain local name -> brace depths at which it is declared.
+  /// Used to decide whether an assignment target outlives a region frame.
+  std::map<std::string, std::vector<size_t>> localsByScope_;
   std::set<std::string> currentParams_;
   std::set<std::string> longjmpHelpers_;
   /// Functions whose definition contains `throw`; calling one is a non-local
@@ -2777,6 +3356,10 @@ private:
   /// Macro name -> function-like?  Macros hiding a terminator in their body.
   std::map<std::string, bool> terminationMacros_;
   std::vector<DeferInfo> defers_;
+  /// Issue #185: innermost-first stack of active lexical regions.
+  std::vector<RegionFrame> regions_;
+  bool sawRegion_ = false; // survives regions_ being cleared during scan
+  unsigned regionCounter_ = 0;
   size_t skipMoveArg_ = kNPos;
   size_t skipTo_ = kNPos;
 

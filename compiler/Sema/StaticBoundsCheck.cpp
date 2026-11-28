@@ -205,6 +205,9 @@ public:
           checkRawRealloc(i);
       }
     }
+    // SafeCC-style branch-sensitive dataflow.  Runs last so that all fact
+    // collectors (functions, globals, allocations) are already populated.
+    checkCfgDataflow();
   }
 
 private:
@@ -226,6 +229,10 @@ private:
   }
 
   bool isIdent(size_t i, const char *s) const {
+    return i < toks_.size() && toks_[i].kind == TokKind::Identifier &&
+           toks_[i].text == s;
+  }
+  bool isIdent(size_t i, const std::string &s) const {
     return i < toks_.size() && toks_[i].kind == TokKind::Identifier &&
            toks_[i].text == s;
   }
@@ -6402,6 +6409,803 @@ private:
                               std::to_string(value.offset) +
                               " is not a multiple of " +
                               std::to_string(align) + " for '" + type + "'");
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
+  // SafeCC-style CFG dataflow verification.
+  //
+  // A small, purely compile-time abstract interpretation over the C+ token
+  // stream.  The structured walker below is the CFG: compound statements are
+  // blocks, `if`/`else` are explicit forks with a join at the merge point, and
+  // `while`/`for` close a back-edge that is iterated to a fixed point.  Facts
+  // are must-facts, so a fact survives a join only when it holds on *every*
+  // incoming path.  That is what makes the two diagnostics below provable:
+  // a dereference is rejected only when the pointer is NULL on every path to
+  // it, and an allocation is a leak only when it is still live on every exit
+  // path.  Unknown shapes are always killed rather than guessed, so valid C
+  // (including `goto cleanup` and conditional cleanup) is never rejected.
+  //===--------------------------------------------------------------------===//
+
+  enum class FlowNull : uint8_t { Unknown, Null, NonNull };
+  enum class FlowOwn : uint8_t { None, Live, Freed, Conflict };
+
+  struct FlowFact {
+    FlowNull null = FlowNull::Unknown;
+    FlowOwn own = FlowOwn::None;
+    size_t allocPos = kNPos;
+  };
+  using FlowState = std::map<std::string, FlowFact>;
+
+  struct FlowBlockResult {
+    FlowState out;
+    bool fallsThrough = true;
+  };
+
+  std::set<std::pair<size_t, int>> flowReported_;
+
+  static FlowFact flowOf(const FlowState &s, const std::string &n) {
+    auto it = s.find(n);
+    return it == s.end() ? FlowFact{} : it->second;
+  }
+
+  static void flowKill(FlowFact &f) {
+    f.null = FlowNull::Unknown;
+    f.own = FlowOwn::None;
+    f.allocPos = kNPos;
+  }
+
+  static FlowFact flowJoinFact(const FlowFact &a, const FlowFact &b) {
+    FlowFact r;
+    r.null = (a.null == b.null) ? a.null : FlowNull::Unknown;
+    r.own = (a.own == b.own) ? a.own : FlowOwn::Conflict;
+    r.allocPos = (a.allocPos == b.allocPos) ? a.allocPos : kNPos;
+    return r;
+  }
+
+  static FlowState flowJoin(const FlowState &a, const FlowState &b) {
+    FlowState out = a;
+    for (const auto &kv : b) {
+      auto it = out.find(kv.first);
+      if (it == out.end())
+        out[kv.first] = kv.second;
+      else
+        it->second = flowJoinFact(it->second, kv.second);
+    }
+    return out;
+  }
+
+  static bool flowSame(const FlowState &a, const FlowState &b) {
+    if (a.size() != b.size())
+      return false;
+    for (const auto &kv : a) {
+      auto it = b.find(kv.first);
+      if (it == b.end())
+        return false;
+      if (it->second.null != kv.second.null ||
+          it->second.own != kv.second.own ||
+          it->second.allocPos != kv.second.allocPos)
+        return false;
+    }
+    return true;
+  }
+
+  bool flowTypeContext(size_t i) const {
+    if (i == kNPos || i >= toks_.size())
+      return false;
+    if (toks_[i].kind == TokKind::Identifier &&
+        (isTypeWord(toks_[i].text) || toks_[i].text == "static" ||
+         toks_[i].text == "restrict" || toks_[i].text == "__restrict" ||
+         toks_[i].text == "__restrict__" || toks_[i].text == "register" ||
+         toks_[i].text == "auto"))
+      return true;
+    // A tag name is not a type word, but `struct S *p`, `union U *p` and
+    // `enum E *p` still declare p.  Without this, flowDeclStar() mistakes the
+    // declarator star for a dereference, skips flowAssign() for
+    // `struct S *p = NULL`, and never records the must-NULL fact -- so a
+    // definite `p->field` defect escaped [CPLUS-SAFECC].
+    if (toks_[i].kind == TokKind::Identifier) {
+      size_t kw = prevSig(i);
+      if (kw != kNPos && kw < toks_.size() &&
+          (isIdent(kw, "struct") || isIdent(kw, "union") ||
+           isIdent(kw, "enum")))
+        return true;
+    }
+    return isPunct(i, "*");
+  }
+
+  /// A `*` to the left of an identifier is a declarator star (not a deref)
+  /// when a type word sits immediately to its left, including `T **p`.
+  bool flowDeclStar(size_t star) const {
+    size_t before = prevSig(star);
+    if (before == kNPos || before >= toks_.size())
+      return false;
+    if (flowTypeContext(before) && !isPunct(before, "*"))
+      return true;
+    if (isPunct(before, "*")) {
+      size_t before2 = prevSig(before);
+      return before2 != kNPos && before2 < toks_.size() &&
+             flowTypeContext(before2) && !isPunct(before2, "*");
+    }
+    return false;
+  }
+
+  size_t flowMatchBack(size_t close, const char *l, const char *r) const {
+    int depth = 0;
+    size_t i = close;
+    while (true) {
+      if (isPunct(i, r))
+        ++depth;
+      else if (isPunct(i, l) && --depth == 0)
+        return i;
+      if (i == 0)
+        break;
+      --i;
+    }
+    return kNPos;
+  }
+
+  /// `sizeof` does not evaluate its operand: `*p` inside it is not a deref.
+  bool flowInsideSizeof(size_t pos) const {
+    size_t i = pos;
+    while (i > 0) {
+      --i;
+      if (isPunct(i, ")")) {
+        size_t open = flowMatchBack(i, "(", ")");
+        if (open == kNPos)
+          return false;
+        size_t before = prevSig(open);
+        if (before != kNPos && before < toks_.size() &&
+            isIdent(before, "sizeof"))
+          return true;
+        i = open;
+      } else if (isIdent(i, "sizeof")) {
+        // Unparenthesized operand (`sizeof *p`, `sizeof p[0]`). sizeof does
+        // not evaluate it, so no null/leak diagnostic may be raised.
+        return true;
+      } else if (isPunct(i, "{") || isPunct(i, ";")) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /// A dereference inside the true or false arm of `p ? ... : ...` is guarded
+  /// by `p` (or `!p`), so the raw must-NULL fact must not be used there.
+  bool flowInsideTernary(size_t pos, const std::string &name) const {
+    size_t i = pos;
+    int depth = 0;
+    while (i > 0) {
+      --i;
+      if (isPunct(i, ")")) ++depth;
+      else if (isPunct(i, "(")) --depth;
+      else if (depth == 0 && isPunct(i, "?")) {
+        size_t c = prevSig(i);
+        if (c != kNPos && isIdent(c, name))
+          return true;
+        if (c != kNPos && isPunct(c, "!")) {
+          size_t d = prevSig(c);
+          if (d != kNPos && isIdent(d, name))
+            return true;
+        }
+        return false;
+      } else if (depth == 0 &&
+                 (isPunct(i, ";") || isPunct(i, "{") || isPunct(i, "}"))) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  size_t flowStatementEnd(size_t from, size_t end) const {
+    int paren = 0, bracket = 0, brace = 0;
+    for (size_t k = from; k < end; ++k) {
+      if (isPunct(k, "(")) ++paren;
+      else if (isPunct(k, ")")) --paren;
+      else if (isPunct(k, "[")) ++bracket;
+      else if (isPunct(k, "]")) --bracket;
+      else if (isPunct(k, "{")) ++brace;
+      else if (isPunct(k, "}")) --brace;
+      else if (isPunct(k, ";") && paren == 0 && bracket == 0 && brace == 0)
+        return k;
+    }
+    return end;
+  }
+
+  /// Interpret the null fact of a condition under `truth`.  Only shapes that
+  /// are unambiguous in the token stream are handled; everything else is
+  /// returned untouched so no path fact is ever guessed.
+  FlowState flowRefine(const FlowState &state, size_t from, size_t to,
+                       bool truth) const {
+    FlowState out = state;
+    std::vector<size_t> s;
+    for (size_t k = from; k < to; ++k)
+      if (!trivia(k))
+        s.push_back(k);
+    while (s.size() >= 3 && isPunct(s.front(), "(") &&
+           isPunct(s.back(), ")")) {
+      size_t close = kNPos;
+      for (size_t n = 0; n < s.size(); ++n) {
+        if (isPunct(s[n], "(")) {
+          size_t d = 0;
+          for (size_t m = n; m < s.size(); ++m) {
+            if (isPunct(s[m], "(")) ++d;
+            else if (isPunct(s[m], ")") && --d == 0) { close = m; break; }
+          }
+          break;
+        }
+      }
+      if (close != s.size() - 1)
+        break;
+      s.erase(s.begin());
+      s.pop_back();
+    }
+    // `a && b` gives facts about both operands only when it is true;
+    // `a || b` gives facts about both only when it is false.  Splitting here
+    // keeps guards such as `if (p && p->field)` from being false positives.
+    {
+      int depth = 0;
+      for (size_t n = 0; n < s.size(); ++n) {
+        if (isPunct(s[n], "(")) ++depth;
+        else if (isPunct(s[n], ")")) --depth;
+        else if (depth == 0 && (isPunct(s[n], "&&") || isPunct(s[n], "||")) &&
+                 n > 0 && n + 1 < s.size()) {
+          bool isAnd = isPunct(s[n], "&&");
+          if ((isAnd && truth) || (!isAnd && !truth)) {
+            out = flowRefine(out, s.front(), s[n], truth);
+            out = flowRefine(out, s[n] + 1, s.back() + 1, truth);
+          }
+          return out;
+        }
+      }
+    }
+    auto setNull = [&](const std::string &n, FlowNull f) {
+      auto it = out.find(n);
+      if (it == out.end())
+        return;
+      it->second.null = f;
+      // malloc may return NULL: on a path where the allocation is null there
+      // is no live block to leak, so drop the ownership fact on that path.
+      if (f == FlowNull::Null && it->second.own == FlowOwn::Live) {
+        it->second.own = FlowOwn::None;
+        it->second.allocPos = kNPos;
+      }
+    };
+    if (s.size() == 2 && isPunct(s[0], "!") &&
+        toks_[s[1]].kind == TokKind::Identifier) {
+      setNull(toks_[s[1]].text, truth ? FlowNull::Null : FlowNull::NonNull);
+      return out;
+    }
+    if (s.size() == 1 && toks_[s[0]].kind == TokKind::Identifier) {
+      setNull(toks_[s[0]].text, truth ? FlowNull::NonNull : FlowNull::Null);
+      return out;
+    }
+    size_t op = kNPos;
+    bool equal = false;
+    for (size_t n = 1; n + 1 < s.size(); ++n) {
+      if (isPunct(s[n], "==") || isPunct(s[n], "!=")) {
+        op = n;
+        equal = isPunct(s[n], "==");
+        break;
+      }
+    }
+    if (op == kNPos)
+      return out;
+    auto nullConst = [&](size_t a, size_t b) {
+      if (a >= b)
+        return false;
+      if (b - a != 1)
+        return false;
+      size_t t = s[a];
+      return isIdent(t, "NULL") ||
+             (toks_[t].kind == TokKind::Number && toks_[t].text == "0");
+    };
+    auto varName = [&](size_t a, size_t b, std::string *n) {
+      if (a >= b || b - a != 1)
+        return false;
+      if (toks_[s[a]].kind != TokKind::Identifier)
+        return false;
+      *n = toks_[s[a]].text;
+      return out.count(*n) != 0;
+    };
+    std::string name;
+    bool leftVar = varName(0, op, &name) && nullConst(op + 1, s.size());
+    if (!leftVar) {
+      name.clear();
+      leftVar = varName(op + 1, s.size(), &name) && nullConst(0, op);
+    }
+    if (!leftVar)
+      return out;
+    FlowNull whenTrue = equal ? FlowNull::Null : FlowNull::NonNull;
+    FlowNull whenFalse = equal ? FlowNull::NonNull : FlowNull::Null;
+    setNull(name, truth ? whenTrue : whenFalse);
+    return out;
+  }
+
+  /// Apply an assignment to the tracked fact for `name`.
+  void flowAssign(FlowState &state, const std::string &name, size_t eq) {
+    std::vector<size_t> r;
+    for (size_t k = nextSig(eq); k < toks_.size() && !isPunct(k, ";") &&
+                              !isPunct(k, ","); ++k)
+      if (!trivia(k))
+        r.push_back(k);
+    if (r.empty()) {
+      auto it = state.find(name);
+      if (it != state.end())
+        flowKill(it->second);
+      return;
+    }
+    const std::string alloc = allocatorName(r[0]);
+    if (alloc == "malloc" || alloc == "calloc" || alloc == "cplus_alloc" ||
+        alloc == "cplus_zalloc" || alloc == "cplus_new" ||
+        alloc == "cplus_new_array") {
+      FlowFact f;
+      f.null = FlowNull::Unknown; // allocation may fail; never assume non-null
+      f.own = FlowOwn::Live;
+      f.allocPos = r[0];
+      state[name] = f;
+      return;
+    }
+    bool nullConst = isIdent(r.back(), "NULL") ||
+                     (toks_[r.back()].kind == TokKind::Number &&
+                      toks_[r.back()].text == "0");
+    bool casted = isPunct(r[0], "(") && r.size() >= 3 &&
+                  isPunct(r[r.size() - 2], ")");
+    if (nullConst && (r.size() == 1 || casted)) {
+      FlowFact f;
+      f.null = FlowNull::Null; // reassigning drops any prior ownership
+      state[name] = f;
+      return;
+    }
+    if (r.size() == 1 && toks_[r[0]].kind == TokKind::Identifier) {
+      const std::string &src = toks_[r[0]].text;
+      auto it = state.find(src);
+      FlowFact f;
+      if (it != state.end()) {
+        f = it->second;
+        if (f.own == FlowOwn::Live) { // ownership moves to the destination
+          it->second.own = FlowOwn::None;
+          it->second.allocPos = kNPos;
+        }
+      }
+      state[name] = f;
+      return;
+    }
+    state[name] = FlowFact{}; // unknown shape: no fact survives
+  }
+
+  void reportFlowNull(size_t pos, const std::string &name) {
+    if (!flowReported_.insert({pos, 0}).second)
+      return;
+    errorAt(toks_[pos], "[CPLUS-SAFECC] definite null dereference of '" + name +
+                            "': null pointer dereference on every path to "
+                            "this access");
+  }
+
+  void reportFlowLeak(size_t pos, const std::string &name) {
+    if (!flowReported_.insert({pos, 1}).second)
+      return;
+    errorAt(toks_[pos], "[CPLUS-SAFECC] definite memory leak: allocation held "
+                            "by '" +
+                            name +
+                            "' reaches every function exit without being "
+                            "released");
+  }
+
+  /// Structured CFG walk of the token range [begin, end) (end is a `}` or a
+  /// statement terminator).  `exits` accumulates the state at every return
+  /// and at the end of the function body so the caller can prove leaks.
+  FlowBlockResult analyzeFlowRange(size_t begin, size_t end, FlowState state,
+                                   std::vector<FlowState> *exits) {
+    size_t i = begin;
+    bool returned = false;
+    while (i < end) {
+      if (trivia(i)) {
+        ++i;
+        continue;
+      }
+      if (isPunct(i, ";")) {
+        if (returned)
+          return {state, false};
+        ++i;
+        continue;
+      }
+
+      // Nested compound statement: a new basic-block region.
+      if (isPunct(i, "{")) {
+        size_t close = matchIn(i, end, "{", "}");
+        if (close == kNPos || close > end)
+          break;
+        FlowBlockResult r = analyzeFlowRange(i + 1, close, state, exits);
+        if (!r.fallsThrough)
+          return {state, false};
+        state = r.out;
+        i = close + 1;
+        continue;
+      }
+
+      // if / else: fork, walk both arms, join at the merge point.
+      if (isIdent(i, "if")) {
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "(")) { ++i; continue; }
+        size_t rp = matchIn(lp, end, "(", ")");
+        if (rp == kNPos || rp >= end) { ++i; continue; }
+        size_t thenPos = nextSig(rp);
+        if (thenPos >= end) { ++i; continue; }
+        FlowState thenIn = flowRefine(state, lp + 1, rp, true);
+        FlowState elseIn = flowRefine(state, lp + 1, rp, false);
+        size_t afterThen;
+        FlowBlockResult thenR;
+        if (isPunct(thenPos, "{")) {
+          size_t close = matchIn(thenPos, end, "{", "}");
+          if (close == kNPos || close > end) { ++i; continue; }
+          thenR = analyzeFlowRange(thenPos + 1, close, thenIn, exits);
+          afterThen = close + 1;
+        } else {
+          size_t stop = flowStatementEnd(thenPos, end);
+          thenR = analyzeFlowRange(thenPos, stop, thenIn, exits);
+          afterThen = stop < end ? nextSig(stop) : end;
+        }
+        bool fall = false;
+        FlowState merged;
+        size_t after = afterThen;
+        size_t es = afterThen < end ? nextSig(afterThen) : kNPos;
+        if (es != kNPos && es < end && isIdent(es, "else")) {
+          size_t elsePos = nextSig(es);
+          FlowBlockResult elseR;
+          if (elsePos < end && isPunct(elsePos, "{")) {
+            size_t close = matchIn(elsePos, end, "{", "}");
+            if (close == kNPos || close > end) { ++i; continue; }
+            elseR = analyzeFlowRange(elsePos + 1, close, elseIn, exits);
+            after = close + 1;
+          } else {
+            size_t stop = flowStatementEnd(elsePos, end);
+            elseR = analyzeFlowRange(elsePos, stop, elseIn, exits);
+            after = stop < end ? nextSig(stop) : end;
+          }
+          if (thenR.fallsThrough && elseR.fallsThrough) {
+            merged = flowJoin(thenR.out, elseR.out);
+            fall = true;
+          } else if (thenR.fallsThrough) {
+            merged = thenR.out;
+            fall = true;
+          } else if (elseR.fallsThrough) {
+            merged = elseR.out;
+            fall = true;
+          }
+        } else if (thenR.fallsThrough) {
+          merged = flowJoin(thenR.out, elseIn);
+          fall = true;
+        } else {
+          merged = elseIn; // the fall-through arm is the negated condition
+          fall = true;
+        }
+        if (!fall)
+          return {state, false};
+        state = merged;
+        i = after;
+        continue;
+      }
+
+      // while / for: close the back-edge and iterate to a fixed point.
+      if (isIdent(i, "while") || isIdent(i, "for")) {
+        bool isFor = isIdent(i, "for");
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "(")) { ++i; continue; }
+        size_t rp = matchIn(lp, end, "(", ")");
+        if (rp == kNPos || rp >= end) { ++i; continue; }
+        size_t bodyPos = nextSig(rp);
+        if (bodyPos >= end) { ++i; continue; }
+        size_t bodyOpen = kNPos, bodyClose = kNPos;
+        if (isPunct(bodyPos, "{")) {
+          bodyOpen = bodyPos;
+          bodyClose = matchIn(bodyOpen, end, "{", "}");
+        } else {
+          bodyClose = flowStatementEnd(bodyPos, end);
+        }
+        if (bodyClose == kNPos || bodyClose > end) { ++i; continue; }
+
+        size_t condFrom = lp + 1, condTo = rp;
+        if (isFor) {
+          size_t s1 = kNPos, s2 = kNPos;
+          int paren = 0;
+          for (size_t k = lp + 1; k < rp; ++k) {
+            if (isPunct(k, "(")) ++paren;
+            else if (isPunct(k, ")")) --paren;
+            else if (isPunct(k, ";") && paren == 0) {
+              if (s1 == kNPos) s1 = k;
+              else { s2 = k; break; }
+            }
+          }
+          if (s1 != kNPos && s2 != kNPos) {
+            FlowBlockResult init = analyzeFlowRange(lp + 1, s1, state, exits);
+            if (!init.fallsThrough)
+              return {state, false};
+            state = init.out;
+            condFrom = s1 + 1;
+            condTo = s2;
+          } else {
+            // Unparseable header: drop every fact rather than guess.
+            for (auto &kv : state)
+              flowKill(kv.second);
+            i = bodyClose + 1;
+            continue;
+          }
+        }
+
+        FlowState head = state;
+        for (int iter = 0; iter < 4; ++iter) {
+          FlowState in = flowRefine(head, condFrom, condTo, true);
+          FlowBlockResult body =
+              bodyOpen != kNPos
+                  ? analyzeFlowRange(bodyOpen + 1, bodyClose, in, exits)
+                  : analyzeFlowRange(bodyPos, bodyClose, in, exits);
+          FlowState candidate = body.fallsThrough ? body.out : FlowState{};
+          if (isFor) {
+            size_t s2 = kNPos;
+            int paren = 0;
+            for (size_t k = lp + 1; k < rp; ++k) {
+              if (isPunct(k, "(")) ++paren;
+              else if (isPunct(k, ")")) --paren;
+              else if (isPunct(k, ";") && paren == 0) {
+                if (s2 == kNPos) s2 = k;
+                else { s2 = k; break; }
+              }
+            }
+            if (s2 != kNPos && s2 + 1 < rp)
+              candidate = analyzeFlowRange(s2 + 1, rp, candidate, exits).out;
+          }
+          FlowState nextHead = flowJoin(head, candidate);
+          if (flowSame(nextHead, head)) {
+            head = nextHead;
+            break;
+          }
+          head = nextHead;
+        }
+        state = flowRefine(head, condFrom, condTo, false);
+        i = bodyClose + 1;
+        continue;
+      }
+
+      // `do { } while ();` runs its body once before the test.
+      if (isIdent(i, "do")) {
+        size_t body = nextSig(i);
+        size_t open = kNPos, close = kNPos;
+        if (body < end && isPunct(body, "{")) {
+          open = body;
+          close = matchIn(open, end, "{", "}");
+        }
+        if (close != kNPos && close <= end) {
+          FlowBlockResult first =
+              analyzeFlowRange(open + 1, close, state, exits);
+          if (!first.fallsThrough)
+            return {state, false};
+          state = flowJoin(state, first.out);
+          size_t w = nextSig(close);
+          size_t after = end;
+          if (w < end && isIdent(w, "while")) {
+            size_t lp = nextSig(w);
+            size_t rp = lp != kNPos && lp < end ? matchIn(lp, end, "(", ")")
+                                                : kNPos;
+            if (rp != kNPos && rp < end) {
+              state = flowRefine(state, lp + 1, rp, false);
+              after = nextSig(rp);
+              if (after < end && isPunct(after, ";"))
+                after = nextSig(after);
+            }
+          }
+          i = after;
+          continue;
+        }
+        ++i;
+        continue;
+      }
+
+      // switch / goto / break / continue: too many edges for a token-level
+      // proof.  Kill the path facts instead of risking a false positive.
+      if (isIdent(i, "switch") || isIdent(i, "goto") || isIdent(i, "break") ||
+          isIdent(i, "continue") || isIdent(i, "case") ||
+          isIdent(i, "default")) {
+        if (isIdent(i, "switch")) {
+          size_t lp = nextSig(i);
+          size_t rp = lp != kNPos && lp < end ? matchIn(lp, end, "(", ")")
+                                              : kNPos;
+          size_t body = rp != kNPos ? nextSig(rp) : kNPos;
+          if (body != kNPos && body < end && isPunct(body, "{")) {
+            size_t close = matchIn(body, end, "{", "}");
+            if (close != kNPos && close <= end) {
+              for (auto &kv : state)
+                flowKill(kv.second);
+              i = close + 1;
+              continue;
+            }
+          }
+        }
+        for (auto &kv : state)
+          flowKill(kv.second);
+        ++i;
+        continue;
+      }
+
+      if (isIdent(i, "return")) {
+        FlowState out = state;
+        size_t value = nextSig(i);
+        size_t stop = flowStatementEnd(i, end);
+        if (value < stop && toks_[value].kind == TokKind::Identifier) {
+          auto it = out.find(toks_[value].text);
+          if (it != out.end())
+            it->second.own = FlowOwn::None; // ownership transferred to caller
+        }
+        exits->push_back(std::move(out));
+        // Keep walking the expression so its dereferences are still checked;
+        // the terminating `;` ends this path below.
+        returned = true;
+      }
+
+      // free(p): an OwnedLive pointer becomes Freed.  No double-free report
+      // is emitted here (many valid programs free twice on disjoint paths).
+      if (isIdent(i, "free")) {
+        size_t lp = nextSig(i);
+        if (isPunct(lp, "(")) {
+          size_t rp = matchIn(lp, end, "(", ")");
+          if (rp != kNPos && rp < end) {
+            size_t arg = kNPos;
+            for (size_t k = lp + 1; k < rp; ++k) {
+              if (trivia(k)) continue;
+              if (arg != kNPos) { arg = kNPos; break; }
+              arg = k;
+            }
+            if (arg != kNPos && toks_[arg].kind == TokKind::Identifier) {
+              auto it = state.find(toks_[arg].text);
+              if (it != state.end() && it->second.own == FlowOwn::Live)
+                it->second.own = FlowOwn::Freed;
+            }
+          }
+        }
+      }
+
+      // Calls and realloc consume/kill facts for the names they mention.
+      // Control keywords and the ownership primitives themselves are exempt.
+      if (isPunct(i, "(") && i > 0) {
+        size_t callee = prevSig(i);
+        if (callee != kNPos && toks_[callee].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[callee].text) &&
+            toks_[callee].text != "sizeof" && toks_[callee].text != "free" &&
+            toks_[callee].text != "malloc" && toks_[callee].text != "calloc" &&
+            toks_[callee].text != "if" && toks_[callee].text != "while" &&
+            toks_[callee].text != "for" && toks_[callee].text != "switch" &&
+            toks_[callee].text != "return") {
+          size_t rp = matchIn(i, end, "(", ")");
+          if (rp != kNPos && rp < end) {
+            for (auto &kv : state) {
+              for (size_t k = i + 1; k < rp; ++k) {
+                if (!isIdent(k, kv.first))
+                  continue;
+                // A callee may release (or take) the block, so ownership is
+                // never assumed to survive a call.  The null fact, however,
+                // cannot change through a plain by-value argument; a real
+                // out-param write requires `&p` and is killed below.
+                kv.second.own = FlowOwn::None;
+                kv.second.allocPos = kNPos;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // `&p` lets the pointer be written from outside this path.
+      if (toks_[i].kind == TokKind::Identifier && isPunct(prevSig(i), "&")) {
+        auto it = state.find(toks_[i].text);
+        if (it != state.end())
+          flowKill(it->second);
+      }
+
+      // Plain assignment to a scalar local (never a field, array element or
+      // a write through another pointer).
+      if (isPunct(i, "=") && i > 0) {
+        size_t lhs = prevSig(i);
+        if (lhs != kNPos && lhs < toks_.size() &&
+            toks_[lhs].kind == TokKind::Identifier) {
+          size_t before = prevSig(lhs);
+          size_t after = nextSig(lhs);
+          bool field = before != kNPos && before < toks_.size() &&
+                       (isPunct(before, ".") || isPunct(before, "->"));
+          bool throughPtr = before != kNPos && before < toks_.size() &&
+                            isPunct(before, "*") && !flowDeclStar(before);
+          bool element = after < toks_.size() && isPunct(after, "[");
+          if (!field && !throughPtr && !element &&
+              !globals_.count(toks_[lhs].text))
+            flowAssign(state, toks_[lhs].text, i);
+        }
+      }
+
+      // A dereference of a must-NULL pointer is a provable defect.
+      if (toks_[i].kind == TokKind::Identifier && !flowInsideSizeof(i)) {
+        auto it = state.find(toks_[i].text);
+        if (it != state.end() && it->second.null == FlowNull::Null &&
+            !flowInsideTernary(i, toks_[i].text)) {
+          size_t prev = prevSig(i);
+          size_t next = nextSig(i);
+          bool starDeref = prev != kNPos && prev < toks_.size() &&
+                           isPunct(prev, "*") && !flowDeclStar(prev) &&
+                           prev > 0 &&
+                           (isPunct(prevSig(prev), ";") ||
+                            isPunct(prevSig(prev), "{") ||
+                            isPunct(prevSig(prev), "}") ||
+                            isPunct(prevSig(prev), "(") ||
+                            isPunct(prevSig(prev), "=") ||
+                            isPunct(prevSig(prev), ",") ||
+                            isPunct(prevSig(prev), "!") ||
+                            isPunct(prevSig(prev), "?") ||
+                            isPunct(prevSig(prev), ":") ||
+                            isIdent(prevSig(prev), "return"));
+          bool arrow = next < toks_.size() && isPunct(next, "->");
+          bool subscript = next < toks_.size() && isPunct(next, "[");
+          if (starDeref || arrow || subscript)
+            reportFlowNull(i, toks_[i].text);
+        }
+      }
+
+      ++i;
+    }
+    // A single-statement branch ends *at* its `;`, which the loop above does
+    // not visit, so honour a pending return here as well.
+    if (returned)
+      return {state, false};
+    return {state, true};
+  }
+
+  void checkCfgDataflow() {
+    flowReported_.clear();
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (sig.bodyClose == kNPos || sig.bodyClose >= toks_.size() ||
+          sig.bodyOpen >= sig.bodyClose)
+        continue;
+      std::vector<FlowState> exits;
+      FlowBlockResult body =
+          analyzeFlowRange(sig.bodyOpen + 1, sig.bodyClose, FlowState{},
+                           &exits);
+      if (body.fallsThrough)
+        exits.push_back(std::move(body.out));
+      if (exits.empty())
+        continue;
+      // Candidate names are the union across all exits: an allocation made
+      // after an early return has no entry in exits.front(), so iterating
+      // only that state silently missed real leaks.
+      std::set<std::string> candidates;
+      for (const auto &s : exits)
+        for (const auto &kv : s)
+          candidates.insert(kv.first);
+      for (const std::string &name : candidates) {
+        bool allocatedSomewhere = false;
+        bool liveOnEveryExit = true;
+        size_t allocPos = kNPos;
+        for (const auto &s : exits) {
+          FlowFact f = flowOf(s, name);
+          if (f.allocPos != kNPos)
+            allocatedSomewhere = true;
+          if (f.own == FlowOwn::Live && f.allocPos != kNPos)
+            allocPos = f.allocPos;
+          else
+            liveOnEveryExit = false;
+        }
+        if (!allocatedSomewhere || !liveOnEveryExit)
+          continue;
+        // A loop-scoped managed allocation is lowered with RAII cleanup; the
+        // token-level flow pass does not model that, so do not report it as a
+        // definite leak (avoids false positives on valid managed code).
+        bool inLoop = false;
+        for (size_t k = sig.bodyOpen; k < allocPos && k < toks_.size(); ++k)
+          if (isIdent(k, "for") || isIdent(k, "while") || isIdent(k, "do"))
+            inLoop = true;
+        if (inLoop)
+          continue;
+        if (allocPos == kNPos || allocPos >= toks_.size())
+          allocPos = sig.bodyClose;
+        reportFlowLeak(allocPos, name);
+      }
     }
   }
 

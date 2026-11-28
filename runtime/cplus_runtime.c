@@ -12,6 +12,13 @@
  *
  *===----------------------------------------------------------------------===*/
 
+/* Issue #184: pthread_getattr_np() is GNU-specific and must be declared
+ * before the first system header on Linux.  Define it here, ahead of
+ * cplus.h, which already pulls in libc headers. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+
 #include "cplus/cplus.h"
 #include <errno.h>
 #include <math.h>
@@ -151,8 +158,17 @@ static void cplus_log_impl(int level, const char *file, int line,
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <pthread.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #define CPLUS_POSIX 1
+#endif
+/* Issue #184: conservative global-word root scan.  The dyld image header is
+ * used rather than _mh_execute_header because modern macOS linkers split the
+ * data segment and the latter is not always the image the globals live in. */
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
+#include <mach-o/loader.h>
 #endif
 
 /* Usable size of a malloc block.  Used only to *clamp* a caller-supplied
@@ -608,10 +624,49 @@ void cplus_resource_check_borrow(const void *self, const char *file, int line,
 #define CPLUS_RETIRED_MAX 1048576u
 #define CPLUS_TOMBSTONE ((void *)(uintptr_t)-1)
 
+/* EffectiveSan-style segregated size classes (issue #182).  Pure arithmetic:
+ * no lock, no pointer-bit trick, no dependence on the allocator's internals.
+ * Small allocations get 16-byte granularity up to 256 bytes (classes 1..16);
+ * larger ones use power-of-two classes (17 == 512 bytes, 18 == 1024, ...).
+ * Class 0 is reserved for a zero-byte extent.  The class is recorded in every
+ * live slot by cplus_live_insert(), so all allocation paths that funnel
+ * through it (cplus_alloc/zalloc/alloc_array, register_allocation, both
+ * realloc paths) carry this out-of-band metadata without a changed ABI. */
+#define CPLUS_LOWFAT_SMALL_STEP 16u
+#define CPLUS_LOWFAT_SMALL_MAX 256u
+#define CPLUS_LOWFAT_SMALL_CLASSES                                            \
+  (CPLUS_LOWFAT_SMALL_MAX / CPLUS_LOWFAT_SMALL_STEP) /* 16 */
+
+int cplus_lowfat_size_class(size_t bytes) {
+  if (bytes == 0u)
+    return 0;
+  if (bytes <= CPLUS_LOWFAT_SMALL_MAX)
+    return (int)((bytes + CPLUS_LOWFAT_SMALL_STEP - 1u) /
+                CPLUS_LOWFAT_SMALL_STEP);
+  size_t extent = CPLUS_LOWFAT_SMALL_MAX * 2u; /* 512 */
+  int klass = CPLUS_LOWFAT_SMALL_CLASSES + 1;  /* 17 is the 512-byte class */
+  while (bytes > extent) {
+    ++klass;
+    /* The next power would not fit in size_t: every remaining value of
+     * `bytes` belongs to this top class. */
+    if (extent > SIZE_MAX / 2u)
+      return klass;
+    extent *= 2u;
+  }
+  return klass;
+}
+
 typedef struct cplus_live_slot {
   void *ptr;
   size_t size;
   uint64_t generation;
+  uint32_t size_class; /* additive: derived low-fat class, never user-visible */
+  uint64_t type_tag;   /* additive: out-of-band effective type (0 = untagged) */
+  /* Issue #181: CETS lock word for disjoint-bounds instrumentation.  Holds
+   * `generation` while the allocation is live and is zeroed on release/reuse
+   * so every stale alias fails its temporal check in O(1).  Additive field:
+   * no public struct or calling convention change. */
+  uint64_t shadow_key;
 } cplus_live_slot;
 
 typedef struct cplus_recent_slot {
@@ -723,6 +778,13 @@ static int cplus_quarantine_contains(const void *p) {
 
 static uint64_t cplus_retired_generation(const void *p); /* defined below */
 
+/* Issue #184 forward declarations.  The epoch collector is defined below the
+ * side-table helpers but is consulted by the retirement/registration paths. */
+static int cplus_gc_contains_retired_locked(const void *p);
+static int cplus_gc_retire_locked(void *p, size_t size);
+static void cplus_gc_tick_locked(void);
+static void cplus_reclaim_collect_locked(void);
+
 /* Called with the allocator lock held.  A retired address is a stale alias
  * unless the allocator proves a *new* block currently lives there.  macOS
  * malloc_size()/glibc malloc_usable_size() return 0 for a freed block and a
@@ -734,6 +796,11 @@ static int cplus_retired_address_stale(const void *p) {
   if (cplus_retired_generation(p) == 0u)
     return 0;
   if (cplus_quarantine_contains(p))
+    return 1;
+  /* Issue #184: in epoch mode a retired block has NOT been returned to
+   * malloc, so the capacity query below would call it live.  Treat a block
+   * retained by the collector as stale until it is actually reclaimed. */
+  if (cplus_gc_contains_retired_locked(p))
     return 1;
 #if CPLUS_HAVE_MALLOC_CAPACITY
   return cplus_malloc_capacity(p) == 0u;
@@ -807,6 +874,34 @@ static cplus_live_slot *cplus_find_live(const void *p) {
   return NULL;
 }
 
+/* Counts only the linear containment scans used by the introspection API.
+ * The `-fcplus-disjoint-bounds` check path never touches this counter; the
+ * regression test uses it as O(1)-detection evidence. */
+static uint64_t cplus_shadow_scan_count = 0u;
+
+/* Called with cplus_alloc_mutex held.  Find the live slot whose
+ * [base, base + size) covers p.  The live table is keyed on BASE only, so an
+ * interior pointer needs a containment scan; it is bounded by the live table
+ * capacity and used only by the additive introspection API, never by the
+ * allocation/dereference hot path.  A corrupt extent that would wrap is
+ * ignored rather than trusted. */
+static cplus_live_slot *cplus_shadow_find_locked(const void *p) {
+  ++cplus_shadow_scan_count;
+  if (!p || cplus_live_cap == 0u)
+    return NULL;
+  uintptr_t addr = (uintptr_t)p;
+  for (size_t k = 0; k < cplus_live_cap; ++k) {
+    cplus_live_slot *slot = &cplus_live[k];
+    void *base = slot->ptr;
+    if (!base || base == CPLUS_TOMBSTONE)
+      continue;
+    uintptr_t b = (uintptr_t)base;
+    if (addr >= b && slot->size <= UINTPTR_MAX - b && addr - b < slot->size)
+      return slot;
+  }
+  return NULL;
+}
+
 static void cplus_live_insert(const void *p, size_t size, uint64_t generation) {
   size_t mask = cplus_live_cap - 1;
   size_t i = cplus_hash(p) & mask;
@@ -817,7 +912,732 @@ static void cplus_live_insert(const void *p, size_t size, uint64_t generation) {
   cplus_live[i].ptr = (void *)p;
   cplus_live[i].size = size;
   cplus_live[i].generation = generation;
+  /* Additive disjoint metadata: the low-fat size class is derived once at
+   * registration from the (already clamped) extent.  Existing callers and
+   * slot semantics are untouched. */
+  {
+    int klass = cplus_lowfat_size_class(size);
+    cplus_live[i].size_class = (uint32_t)(klass >= 0 ? klass : 0);
+  }
+  cplus_live[i].type_tag = 0u; /* additive: never inherit a previous owner's tag */
+  /* Issue #181: (re)arm the CETS lock.  A released slot has shadow_key == 0,
+   * so a stale alias can never be mistaken for this new generation. */
+  cplus_live[i].shadow_key = generation;
   ++cplus_live_count;
+}
+
+/* -------------------------------------------------------------------------
+ * Issue #181: side table for `-fcplus-disjoint-bounds` instrumentation.
+ *
+ * SoftBound-style pointer-SLOT metadata.  The key is the address of the
+ * pointer variable (not its value), so a probe is one hash + a bounded
+ * linear probe chain: O(1) on average and independent of the number of live
+ * allocations.  The introspection containment scan above is never used here.
+ *
+ * Temporal metadata is a CETS (key, lock) pair.  A managed allocation's lock
+ * is its live-table shadow_key word, zeroed on release/reuse.  A stack frame's
+ * lock is the generated local frame-key word, zeroed by the cleanup attribute
+ * on every return path.  Both invalidations are O(1) for all aliases.
+ * ------------------------------------------------------------------------- */
+
+#define CPLUS_SHADOW_SLOT_CAP 4096u
+#define CPLUS_SHADOW_SLOT_TOMB ((void *)(uintptr_t)-1)
+
+typedef struct cplus_shadow_slot_entry {
+  void *addr;                 /* address of the instrumented pointer slot */
+  const void *base;           /* lowest valid byte */
+  const void *bound;          /* one past the last valid byte */
+  uint64_t *lock;             /* CETS lock word; never dereferenced by callers */
+  uint64_t key;               /* non-zero while the object is live */
+  const void *frame_lock;     /* non-NULL when tied to a stack frame */
+} cplus_shadow_slot_entry;
+
+static cplus_shadow_slot_entry cplus_shadow_slots[CPLUS_SHADOW_SLOT_CAP];
+
+static size_t cplus_shadow_slot_hash(const void *slot) {
+  return (size_t)(cplus_hash(slot) & (CPLUS_SHADOW_SLOT_CAP - 1u));
+}
+
+static cplus_shadow_slot_entry *
+cplus_shadow_slot_find_locked(const void *slot) {
+  if (!slot)
+    return NULL;
+  size_t mask = CPLUS_SHADOW_SLOT_CAP - 1u;
+  size_t i = cplus_shadow_slot_hash(slot);
+  for (size_t probe = 0; probe <= mask; ++probe) {
+    void *addr = cplus_shadow_slots[i].addr;
+    if (addr == slot)
+      return &cplus_shadow_slots[i];
+    if (addr == NULL)
+      return NULL;
+    i = (i + 1) & mask;
+  }
+  return NULL;
+}
+
+/* Called with cplus_alloc_mutex held.  The next free/tombstoned slot; returns
+ * NULL only for a completely full table (metadata is then dropped: the check
+ * degrades to plain C rather than trusting a wrong bound). */
+static cplus_shadow_slot_entry *cplus_shadow_slot_vacant_locked(void *slot) {
+  size_t mask = CPLUS_SHADOW_SLOT_CAP - 1u;
+  size_t i = cplus_shadow_slot_hash(slot);
+  cplus_shadow_slot_entry *tomb = NULL;
+  for (size_t probe = 0; probe <= mask; ++probe) {
+    void *addr = cplus_shadow_slots[i].addr;
+    if (addr == NULL)
+      return tomb ? tomb : &cplus_shadow_slots[i];
+    if (addr == CPLUS_SHADOW_SLOT_TOMB && !tomb)
+      tomb = &cplus_shadow_slots[i];
+    i = (i + 1) & mask;
+  }
+  return tomb;
+}
+
+static void cplus_shadow_slot_put_locked(void *slot, const void *base,
+                                         size_t bytes, uint64_t *lock,
+                                         uint64_t key,
+                                         const void *frame_lock) {
+  if (!slot || !base || !lock || key == 0u)
+    return;
+  cplus_shadow_slot_entry *e = cplus_shadow_slot_find_locked(slot);
+  if (!e)
+    e = cplus_shadow_slot_vacant_locked(slot);
+  if (!e)
+    return;
+  e->addr = slot;
+  e->base = base;
+  /* Overflow-safe one-past-the-end extent; registrations clamp their sizes. */
+  uintptr_t b = (uintptr_t)base;
+  e->bound = bytes > UINTPTR_MAX - b ? (const void *)UINTPTR_MAX
+                                     : (const void *)(b + bytes);
+  e->lock = lock;
+  e->key = key;
+  e->frame_lock = frame_lock;
+}
+
+static void cplus_shadow_slot_erase_locked(void *slot) {
+  cplus_shadow_slot_entry *e = cplus_shadow_slot_find_locked(slot);
+  if (!e)
+    return;
+  e->addr = CPLUS_SHADOW_SLOT_TOMB;
+  e->base = NULL;
+  e->bound = NULL;
+  e->lock = NULL;
+  e->key = 0u;
+  e->frame_lock = NULL;
+}
+
+void cplus_shadow_slot_clear(void *slot) {
+  if (!slot)
+    return;
+  cplus_alloc_lock();
+  cplus_shadow_slot_erase_locked(slot);
+  cplus_alloc_unlock();
+}
+
+void cplus_shadow_slot_seed(void *slot, const void *ptr) {
+  if (!slot)
+    return;
+  cplus_alloc_lock();
+  if (!ptr) {
+    cplus_shadow_slot_erase_locked(slot);
+    cplus_alloc_unlock();
+    return;
+  }
+  /* O(1) exact-base lookup only; interior pointers inherit metadata through
+   * cplus_shadow_slot_copy() at the assignment/arithmetic site. */
+  cplus_live_slot *live = cplus_find_live(ptr);
+  if (!live || live->shadow_key == 0u) {
+    cplus_shadow_slot_erase_locked(slot);
+    cplus_alloc_unlock();
+    return;
+  }
+  cplus_shadow_slot_put_locked(slot, ptr, live->size, &live->shadow_key,
+                               live->shadow_key, NULL);
+  cplus_alloc_unlock();
+}
+
+void cplus_shadow_slot_define(void *slot, const void *base, size_t bytes,
+                              uint64_t *lock, uint64_t key) {
+  if (!slot)
+    return;
+  cplus_alloc_lock();
+  if (!base || !lock || key == 0u)
+    cplus_shadow_slot_erase_locked(slot);
+  else
+    cplus_shadow_slot_put_locked(slot, base, bytes, lock, key, NULL);
+  cplus_alloc_unlock();
+}
+
+void cplus_shadow_slot_copy(void *dst_slot, const void *src_slot) {
+  if (!dst_slot || !src_slot)
+    return;
+  cplus_alloc_lock();
+  cplus_shadow_slot_entry snapshot;
+  int found = 0;
+  const cplus_shadow_slot_entry *src =
+      cplus_shadow_slot_find_locked(src_slot);
+  if (src) {
+    snapshot = *src;
+    found = snapshot.addr != CPLUS_SHADOW_SLOT_TOMB;
+  }
+  if (found)
+    cplus_shadow_slot_put_locked(dst_slot, snapshot.base,
+                                 (size_t)((uintptr_t)snapshot.bound -
+                                          (uintptr_t)snapshot.base),
+                                 snapshot.lock, snapshot.key,
+                                 snapshot.frame_lock);
+  else
+    cplus_shadow_slot_erase_locked(dst_slot);
+  cplus_alloc_unlock();
+}
+
+int cplus_shadow_slot_check(const void *slot, const void *ptr, size_t bytes,
+                            const char *file, int line) {
+  if (!slot)
+    return 1; /* untracked slot: plain-C behaviour, never a false positive */
+  cplus_exit_code code = CPLUS_EXIT_OK;
+  const char *kind = NULL;
+  char msg[256];
+  msg[0] = '\0';
+
+  cplus_shadow_slot_entry snap;
+  uint64_t current = 0u;
+  int tracked = 0;
+  cplus_alloc_lock();
+  cplus_shadow_slot_entry *e = cplus_shadow_slot_find_locked(slot);
+  if (e && e->addr != CPLUS_SHADOW_SLOT_TOMB) {
+    snap = *e;
+    current = snap.lock ? *snap.lock : 0u;
+    tracked = 1;
+  }
+  cplus_alloc_unlock();
+
+  if (!tracked)
+    return 1;
+
+  /* Temporal first: a released object or exited frame has zeroed its lock,
+   * so stale aliases trap deterministically even when the address was reused. */
+  if (!snap.lock || snap.key == 0u || current != snap.key) {
+    code = CPLUS_EXIT_USE_AFTER_FREE;
+    kind = "disjoint-bounds temporal violation";
+    snprintf(msg, sizeof(msg),
+             "pointer slot %p carries stale key %llu (lock holds %llu)",
+             (void *)(uintptr_t)slot, (unsigned long long)snap.key,
+             (unsigned long long)current);
+  } else if (!ptr) {
+    code = CPLUS_EXIT_NULL_POINTER;
+    kind = "disjoint-bounds null dereference";
+    snprintf(msg, sizeof(msg), "pointer slot %p holds NULL",
+             (void *)(uintptr_t)slot);
+  } else {
+    uintptr_t a = (uintptr_t)ptr;
+    uintptr_t b = (uintptr_t)snap.base;
+    uintptr_t end = (uintptr_t)snap.bound;
+    if (a < b || a > end || (uintptr_t)(end - a) < bytes) {
+      code = CPLUS_EXIT_BOUNDS;
+      kind = "disjoint-bounds spatial violation";
+      snprintf(msg, sizeof(msg),
+               "access [%p, +%zu) outside tracked extent [%p, %p)",
+               (void *)(uintptr_t)ptr, bytes, (void *)(uintptr_t)snap.base,
+               (void *)(uintptr_t)snap.bound);
+    }
+  }
+  if (code != CPLUS_EXIT_OK)
+    cplus_fatal(code, kind, file, line, msg); /* never returns (deterministic) */
+  return code == CPLUS_EXIT_OK;
+}
+
+uint64_t cplus_shadow_frame_enter(void) {
+  cplus_alloc_lock();
+  uint64_t key = cplus_next_generation();
+  cplus_alloc_unlock();
+  return key;
+}
+
+void cplus_shadow_frame_leave(uint64_t *key) {
+  if (!key)
+    return;
+  cplus_alloc_lock();
+  *key = 0u; /* O(1) invalidation of every alias carrying this key */
+  cplus_alloc_unlock();
+}
+
+int cplus_shadow_frame_register(void *slot, uint64_t *key, const void *base,
+                                size_t bytes) {
+  if (!slot || !key)
+    return 0;
+  cplus_alloc_lock();
+  uint64_t k = *key;
+  if (!base || k == 0u) {
+    cplus_shadow_slot_erase_locked(slot);
+    cplus_alloc_unlock();
+    return 0;
+  }
+  cplus_shadow_slot_put_locked(slot, base, bytes, key, k, key);
+  cplus_alloc_unlock();
+  return 1;
+}
+
+int cplus_shadow_frame_valid(uint64_t key) { return key != 0u ? 1 : 0; }
+
+uint64_t cplus_shadow_scan_probes(void) { return cplus_shadow_scan_count; }
+
+void cplus_shadow_reset_probes(void) { cplus_shadow_scan_count = 0u; }
+
+/* A live-table rehash moves the shadow_key words that instrumented slots use
+ * as locks.  Rewrite those lock pointers before the old table is freed. */
+static void cplus_shadow_relock_after_grow(cplus_live_slot *old, size_t old_cap,
+                                           cplus_live_slot *fresh,
+                                           size_t new_cap) {
+  if (!old || old_cap == 0u)
+    return;
+  uintptr_t lo = (uintptr_t)old;
+  uintptr_t hi = lo + old_cap * sizeof(*old);
+  size_t mask = new_cap - 1u;
+  for (size_t s = 0; s < CPLUS_SHADOW_SLOT_CAP; ++s) {
+    cplus_shadow_slot_entry *e = &cplus_shadow_slots[s];
+    uintptr_t lock = (uintptr_t)e->lock;
+    if (!e->lock || lock < lo || lock >= hi)
+      continue;
+    for (size_t k = 0; k < old_cap; ++k) {
+      void *p = old[k].ptr;
+      if (!p || p == CPLUS_TOMBSTONE ||
+          (uintptr_t)&old[k].shadow_key != lock)
+        continue;
+      size_t i = cplus_hash(p) & mask;
+      while (fresh[i].ptr != NULL)
+        i = (i + 1) & mask;
+      e->lock = &fresh[i].shadow_key;
+      break;
+    }
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * EffectiveSan-style segregated size-class VM regions (issue #182)
+ *
+ * Opt-in with CPLUS_LOWFAT_ALLOC=1 (sampled once, like CPLUS_QUARANTINE).
+ * One contiguous reservation is split into equally sized per-class regions;
+ * class k's slots all have the same power-of-two extent.  Given any interior
+ * address p, the class and slot index are pure shifts of (p - arena), so base
+ * and requested size come from parallel out-of-band metadata with NO mutex and
+ * NO hash probe.  The arena is published once (release) and never unmapped
+ * (RCU-style: readers never have to reclaim), and each slot's state word is
+ * double-checked around the metadata load.  Sizes above the largest class, or
+ * a failed reservation, fall back to the ordinary tracked allocator, so all
+ * pre-existing paths and the bare-pointer ABI are unchanged.
+ *
+ * Slot claim/recycle is serialized by cplus_alloc_mutex (already held by the
+ * managed allocation paths); only the LOOKUP path is lock-free and O(1).
+ * ------------------------------------------------------------------------- */
+
+#if defined(_MSC_VER) && !defined(__clang__)
+#define CPLUS_LOWFAT_MSVC 1
+#include <intrin.h>
+#else
+#define CPLUS_LOWFAT_MSVC 0
+#include <stdatomic.h>
+#endif
+
+#if CPLUS_LOWFAT_MSVC
+typedef volatile LONG cplus_lf_u32;
+static uint32_t cplus_lf_load_u32(cplus_lf_u32 *p) {
+  return (uint32_t)InterlockedCompareExchange(p, 0L, 0L);
+}
+static void cplus_lf_store_u32(cplus_lf_u32 *p, uint32_t v) {
+  (void)InterlockedExchange(p, (LONG)v);
+}
+typedef void *volatile cplus_lf_ptr;
+static void *cplus_lf_load_ptr(cplus_lf_ptr *p) {
+  return InterlockedCompareExchangePointer(p, NULL, NULL);
+}
+static void cplus_lf_store_ptr(cplus_lf_ptr *p, void *v) {
+  (void)InterlockedExchangePointer(p, v);
+}
+static volatile LONG cplus_lf_lookups; /* 32-bit: Interlocked is always lock-free */
+#define CPLUS_LF_LOOKUP_HIT() ((void)InterlockedIncrement(&cplus_lf_lookups))
+#define CPLUS_LF_LOOKUP_COUNT() ((uint64_t)cplus_lf_lookups)
+#else
+typedef _Atomic uint32_t cplus_lf_u32;
+static uint32_t cplus_lf_load_u32(cplus_lf_u32 *p) {
+  return atomic_load_explicit(p, memory_order_acquire);
+}
+static void cplus_lf_store_u32(cplus_lf_u32 *p, uint32_t v) {
+  atomic_store_explicit(p, v, memory_order_release);
+}
+typedef _Atomic(void *) cplus_lf_ptr;
+static void *cplus_lf_load_ptr(cplus_lf_ptr *p) {
+  return atomic_load_explicit(p, memory_order_acquire);
+}
+static void cplus_lf_store_ptr(cplus_lf_ptr *p, void *v) {
+  atomic_store_explicit(p, v, memory_order_release);
+}
+static _Atomic uint32_t cplus_lf_lookups; /* 32-bit: lock-free on all targets */
+#define CPLUS_LF_LOOKUP_HIT()                                                   \
+  ((void)atomic_fetch_add_explicit(&cplus_lf_lookups, 1u, memory_order_relaxed))
+#define CPLUS_LF_LOOKUP_COUNT()                                                 \
+  ((uint64_t)atomic_load_explicit(&cplus_lf_lookups, memory_order_relaxed))
+#endif
+
+/* Class 0 is the zero-byte extent; 1..16 are 16-byte buckets to 256 bytes;
+ * 17..24 are power-of-two buckets 512 bytes .. 64 KiB.  Larger requests stay
+ * on the ordinary (side-table) allocation path. */
+#define CPLUS_LOWFAT_MAX_CLASS 24u
+#if UINTPTR_MAX > 0xffffffffULL
+#define CPLUS_LOWFAT_REGION_SHIFT 24u /* 16 MiB per class on 64-bit */
+#else
+#define CPLUS_LOWFAT_REGION_SHIFT 20u /* 1 MiB per class on 32-bit */
+#endif
+#define CPLUS_LOWFAT_REGION_BYTES ((size_t)1u << CPLUS_LOWFAT_REGION_SHIFT)
+#define CPLUS_LOWFAT_ARENA_BYTES                                                \
+  ((size_t)(CPLUS_LOWFAT_MAX_CLASS + 1u) * CPLUS_LOWFAT_REGION_BYTES)
+
+typedef struct cplus_lowfat_slot_meta {
+  uint64_t generation;      /* CETS key published with the slot */
+  uint64_t type_tag;        /* out-of-band effective type, 0 = untagged */
+  size_t size;              /* requested extent (<= slot_size) */
+  uint32_t size_class;      /* class of the containing region */
+  cplus_lf_u32 state;       /* 0 = free, 1 = live (atomic, double-checked) */
+  uint32_t reserved;
+} cplus_lowfat_slot_meta;
+
+typedef struct cplus_lowfat_region_desc {
+  size_t slot_size;
+  unsigned shift;           /* log2(slot_size) */
+  size_t slot_count;
+  cplus_lowfat_slot_meta *meta; /* parallel metadata, never reclaimed */
+  size_t *free_stack;           /* recycled slot indices (lock-held) */
+  size_t free_top;
+  size_t next_slot;             /* monotone fresh-slot cursor */
+} cplus_lowfat_region_desc;
+
+static cplus_lowfat_region_desc cplus_lowfat_regions[CPLUS_LOWFAT_MAX_CLASS +
+                                                      1u];
+static cplus_lf_ptr cplus_lowfat_arena; /* published once, never unmapped */
+static int cplus_lowfat_ready;          /* guarded by cplus_alloc_mutex */
+static int cplus_lowfat_unavailable;    /* reservation failed; stay on fallback */
+static size_t cplus_lowfat_live_slots;  /* guarded by cplus_alloc_mutex */
+
+#if defined(CPLUS_POSIX)
+static void *cplus_lowfat_reserve(size_t bytes) {
+  void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  return p == MAP_FAILED ? NULL : p;
+}
+static void cplus_lowfat_unreserve(void *p, size_t bytes) {
+  (void)bytes;
+  (void)munmap(p, bytes);
+}
+#elif defined(_WIN32)
+static void *cplus_lowfat_reserve(size_t bytes) {
+  return VirtualAlloc(NULL, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+}
+static void cplus_lowfat_unreserve(void *p, size_t bytes) {
+  (void)bytes;
+  (void)VirtualFree(p, 0u, MEM_RELEASE);
+}
+#else
+static void *cplus_lowfat_reserve(size_t bytes) { return calloc(1u, bytes); }
+static void cplus_lowfat_unreserve(void *p, size_t bytes) {
+  (void)bytes;
+  free(p);
+}
+#endif
+
+/* Environment is sampled exactly once so no lookup or allocation path calls
+ * getenv() (which races with setenv/putenv in another thread). */
+static int cplus_lowfat_env_enabled = 0;
+#if defined(CPLUS_POSIX)
+static pthread_once_t cplus_lowfat_once = PTHREAD_ONCE_INIT;
+static void cplus_lowfat_sample_env(void) {
+  const char *env = getenv(CPLUS_LOWFAT_ALLOC_ENV);
+  cplus_lowfat_env_enabled = env && env[0] != '\0' && env[0] != '0';
+}
+static int cplus_lowfat_env_state(void) {
+  pthread_once(&cplus_lowfat_once, cplus_lowfat_sample_env);
+  return cplus_lowfat_env_enabled;
+}
+__attribute__((constructor)) static void cplus_lowfat_preinit(void) {
+  pthread_once(&cplus_lowfat_once, cplus_lowfat_sample_env);
+}
+#elif defined(_WIN32)
+static INIT_ONCE cplus_lowfat_once = INIT_ONCE_STATIC_INIT;
+static BOOL CALLBACK cplus_lowfat_sample_env_win(PINIT_ONCE once, PVOID param,
+                                                 PVOID *context) {
+  (void)once;
+  (void)param;
+  (void)context;
+  const char *env = getenv(CPLUS_LOWFAT_ALLOC_ENV);
+  cplus_lowfat_env_enabled = env && env[0] != '\0' && env[0] != '0';
+  return TRUE;
+}
+static int cplus_lowfat_env_state(void) {
+  InitOnceExecuteOnce(&cplus_lowfat_once, cplus_lowfat_sample_env_win, NULL,
+                      NULL);
+  return cplus_lowfat_env_enabled;
+}
+#else
+static int cplus_lowfat_env_state(void) {
+  static int initialized = 0;
+  if (!initialized) {
+    const char *env = getenv(CPLUS_LOWFAT_ALLOC_ENV);
+    cplus_lowfat_env_enabled = env && env[0] != '\0' && env[0] != '0';
+    initialized = 1;
+  }
+  return cplus_lowfat_env_enabled;
+}
+#endif
+
+/* -1 means "use the sampled environment"; >= 0 is an explicit override. */
+static int cplus_lowfat_override = -1;
+
+int cplus_lowfat_enabled(void) {
+  return cplus_lowfat_override >= 0 ? cplus_lowfat_override
+                                    : cplus_lowfat_env_state();
+}
+
+void cplus_lowfat_set_enabled(int enabled) {
+  cplus_lowfat_override = enabled ? 1 : 0;
+}
+
+int cplus_lowfat_type_meta_enabled(void) {
+  cplus_alloc_lock();
+  int ready = cplus_lowfat_ready;
+  cplus_alloc_unlock();
+  return cplus_lowfat_enabled() && ready;
+}
+
+size_t cplus_lowfat_live_count(void) {
+  cplus_alloc_lock();
+  size_t n = cplus_lowfat_live_slots;
+  cplus_alloc_unlock();
+  return n;
+}
+
+uint64_t cplus_lowfat_lockfree_lookups(void) { return CPLUS_LF_LOOKUP_COUNT(); }
+
+static size_t cplus_lowfat_slot_size(uint32_t klass) {
+  if (klass == 0u)
+    return 1u;
+  if (klass <= CPLUS_LOWFAT_SMALL_CLASSES)
+    return (size_t)klass * CPLUS_LOWFAT_SMALL_STEP;
+  return (size_t)CPLUS_LOWFAT_SMALL_MAX
+         << (unsigned)(klass - CPLUS_LOWFAT_SMALL_CLASSES);
+}
+
+static unsigned cplus_lowfat_shift(size_t slot_size) {
+  unsigned s = 0u;
+  while (((size_t)1u << s) < slot_size)
+    ++s;
+  return s;
+}
+
+/* Called with cplus_alloc_mutex held; safe to call repeatedly.  A failed
+ * reservation is sticky so a low-memory process does not retry mmap on every
+ * managed allocation. */
+static void cplus_lowfat_init_locked(void) {
+  if (cplus_lowfat_ready || cplus_lowfat_unavailable)
+    return;
+  void *base = cplus_lowfat_reserve(CPLUS_LOWFAT_ARENA_BYTES);
+  if (!base) {
+    cplus_lowfat_unavailable = 1;
+    return;
+  }
+  for (uint32_t k = 0u; k <= CPLUS_LOWFAT_MAX_CLASS; ++k) {
+    size_t slot = cplus_lowfat_slot_size(k);
+    unsigned shift = cplus_lowfat_shift(slot);
+    size_t count = CPLUS_LOWFAT_REGION_BYTES >> shift;
+    cplus_lowfat_slot_meta *m =
+        (cplus_lowfat_slot_meta *)calloc(count, sizeof(*m));
+    size_t *stack = (size_t *)calloc(count, sizeof(*stack));
+    if (!m || !stack) {
+      free(m);
+      free(stack);
+      for (uint32_t j = 0u; j < k; ++j) {
+        free(cplus_lowfat_regions[j].meta);
+        free(cplus_lowfat_regions[j].free_stack);
+        cplus_lowfat_regions[j].meta = NULL;
+        cplus_lowfat_regions[j].free_stack = NULL;
+      }
+      cplus_lowfat_unreserve(base, CPLUS_LOWFAT_ARENA_BYTES);
+      cplus_lowfat_unavailable = 1;
+      return;
+    }
+    cplus_lowfat_regions[k].slot_size = slot;
+    cplus_lowfat_regions[k].shift = shift;
+    cplus_lowfat_regions[k].slot_count = count;
+    cplus_lowfat_regions[k].meta = m;
+    cplus_lowfat_regions[k].free_stack = stack;
+    cplus_lowfat_regions[k].free_top = 0u;
+    cplus_lowfat_regions[k].next_slot = 0u;
+  }
+  /* Release publish: every region field above is visible to any reader that
+   * subsequently observes the arena. */
+  cplus_lf_store_ptr(&cplus_lowfat_arena, base);
+  cplus_lowfat_ready = 1;
+}
+
+/* Pure O(1) address-to-slot arithmetic: no lock, no allocation, no probe.
+ * Returns 1 for any address inside the reserved arena (live slot or padding). */
+static int cplus_lowfat_region_of(const void *p, size_t *index_out,
+                                  uint32_t *class_out) {
+  void *arena = cplus_lf_load_ptr(&cplus_lowfat_arena);
+  if (!arena || !p)
+    return 0;
+  uintptr_t a = (uintptr_t)arena;
+  uintptr_t x = (uintptr_t)p;
+  if (x < a)
+    return 0;
+  uintptr_t off = x - a;
+  if (off >= (uintptr_t)CPLUS_LOWFAT_ARENA_BYTES)
+    return 0;
+  uint32_t klass = (uint32_t)(off >> CPLUS_LOWFAT_REGION_SHIFT);
+  if (klass > CPLUS_LOWFAT_MAX_CLASS)
+    return 0;
+  const cplus_lowfat_region_desc *d = &cplus_lowfat_regions[klass];
+  size_t within = (size_t)(off & (CPLUS_LOWFAT_REGION_BYTES - 1u));
+  size_t index = within >> d->shift;
+  if (index >= d->slot_count)
+    return 0;
+  if (index_out)
+    *index_out = index;
+  if (class_out)
+    *class_out = klass;
+  return 1;
+}
+
+static void *cplus_lowfat_slot_base(uint32_t klass, size_t index) {
+  void *arena = cplus_lf_load_ptr(&cplus_lowfat_arena);
+  size_t shift = cplus_lowfat_regions[klass].shift;
+  return (void *)((char *)arena + ((size_t)klass << CPLUS_LOWFAT_REGION_SHIFT) +
+                  (index << shift));
+}
+
+int cplus_lowfat_contains(const void *ptr) {
+  size_t index;
+  uint32_t klass;
+  return cplus_lowfat_region_of(ptr, &index, &klass) ? 1 : 0;
+}
+
+/* Lock-free O(1) bounds resolution.  The state word is read before and after
+ * the metadata snapshot; writers hold cplus_alloc_mutex and set it to 0 before
+ * changing anything, so a reader either sees a consistent live slot or falls
+ * back to the side table.  A pointer in a slot's padding (beyond its requested
+ * size) is deliberately not reported as an interior pointer. */
+static int cplus_lowfat_resolve(const void *ptr, void **base_out,
+                                size_t *size_out, uint64_t *gen_out,
+                                uint64_t *tag_out, uint32_t *class_out,
+                                cplus_lowfat_slot_meta **meta_out) {
+  size_t index;
+  uint32_t klass;
+  if (!cplus_lowfat_region_of(ptr, &index, &klass))
+    return 0;
+  cplus_lowfat_slot_meta *m = &cplus_lowfat_regions[klass].meta[index];
+  if (cplus_lf_load_u32(&m->state) != 1u)
+    return 0;
+  void *base = cplus_lowfat_slot_base(klass, index);
+  size_t size = m->size;
+  uint64_t generation = m->generation;
+  uint64_t tag = m->type_tag;
+  uint32_t size_class = m->size_class;
+  if (cplus_lf_load_u32(&m->state) != 1u)
+    return 0;
+  if (size == 0u || (uintptr_t)ptr - (uintptr_t)base >= (uintptr_t)size)
+    return 0;
+  if (base_out)
+    *base_out = base;
+  if (size_out)
+    *size_out = size;
+  if (gen_out)
+    *gen_out = generation;
+  if (tag_out)
+    *tag_out = tag;
+  if (class_out)
+    *class_out = size_class;
+  if (meta_out)
+    *meta_out = m;
+  CPLUS_LF_LOOKUP_HIT();
+  return 1;
+}
+
+/* Called with cplus_alloc_mutex held.  Reserves a slot but leaves its state
+ * free until cplus_lowfat_publish_locked() has filled the metadata. */
+static void *cplus_lowfat_claim_locked(size_t size) {
+  if (!cplus_lowfat_enabled())
+    return NULL;
+  cplus_lowfat_init_locked();
+  if (!cplus_lowfat_ready)
+    return NULL;
+  int klass = cplus_lowfat_size_class(size);
+  if (klass < 0 || (uint32_t)klass > CPLUS_LOWFAT_MAX_CLASS)
+    return NULL;
+  size_t slot = cplus_lowfat_slot_size((uint32_t)klass);
+  if (size == 0u)
+    size = 1u;
+  if (size > slot)
+    return NULL;
+  cplus_lowfat_region_desc *d = &cplus_lowfat_regions[klass];
+  size_t index;
+  if (d->free_top != 0u) {
+    index = d->free_stack[--d->free_top];
+  } else if (d->next_slot < d->slot_count) {
+    index = d->next_slot++;
+  } else {
+    return NULL; /* class exhausted: ordinary allocator handles this one */
+  }
+  return cplus_lowfat_slot_base((uint32_t)klass, index);
+}
+
+/* Called with cplus_alloc_mutex held, immediately after cplus_live_insert(). */
+static void cplus_lowfat_publish_locked(void *p, size_t size, uint64_t gen) {
+  size_t index;
+  uint32_t klass;
+  if (!cplus_lowfat_region_of(p, &index, &klass))
+    return;
+  cplus_lowfat_slot_meta *m = &cplus_lowfat_regions[klass].meta[index];
+  cplus_lf_store_u32(&m->state, 0u);
+  m->size = size;
+  m->generation = gen;
+  m->type_tag = 0u;
+  m->size_class = klass;
+  cplus_lf_store_u32(&m->state, 1u);
+  ++cplus_lowfat_live_slots;
+}
+
+/* Called with cplus_alloc_mutex held.  Clears a slot's out-of-band metadata
+ * WITHOUT making the address available for reuse.  Issue #184 uses this when
+ * a low-fat block is retired under epoch reclamation: the address stays
+ * reserved until a conservative collection proves it unreachable. */
+static void cplus_lowfat_clear_meta_locked(void *p) {
+  size_t index;
+  uint32_t klass;
+  if (!cplus_lowfat_region_of(p, &index, &klass))
+    return;
+  if (cplus_lowfat_slot_base(klass, index) != p)
+    return; /* interior pointers are not valid release targets */
+  cplus_lowfat_slot_meta *m = &cplus_lowfat_regions[klass].meta[index];
+  cplus_lf_store_u32(&m->state, 0u);
+  m->size = 0u;
+  m->generation = 0u;
+  m->type_tag = 0u;
+  m->size_class = 0u;
+  if (cplus_lowfat_live_slots != 0u)
+    --cplus_lowfat_live_slots;
+}
+
+/* Called with cplus_alloc_mutex held; recycles an exact base pointer. */
+static void cplus_lowfat_recycle_locked(void *p) {
+  size_t index;
+  uint32_t klass;
+  if (!cplus_lowfat_region_of(p, &index, &klass))
+    return;
+  if (cplus_lowfat_slot_base(klass, index) != p)
+    return; /* interior pointers are not valid release targets */
+  cplus_lowfat_clear_meta_locked(p);
+  cplus_lowfat_region_desc *d = &cplus_lowfat_regions[klass];
+  if (d->free_top < d->slot_count)
+    d->free_stack[d->free_top++] = index;
 }
 
 /* Persistent retired-address ledger --------------------------------------- */
@@ -989,6 +1809,9 @@ static void cplus_live_grow(void) {
       fresh[i] = cplus_live[k];
     }
   }
+  /* Issue #181: instrumented slots hold pointers into the OLD table's CETS
+   * lock words.  Re-point them before freeing it. */
+  cplus_shadow_relock_after_grow(cplus_live, cplus_live_cap, fresh, cap);
   free(cplus_live);
   cplus_live = fresh;
   cplus_live_cap = cap;
@@ -1057,6 +1880,7 @@ void *cplus_realloc_registered(void *oldp, void *newp, size_t bytes,
   if (old) {
     uint64_t old_generation = old->generation;
     old->ptr = CPLUS_TOMBSTONE;
+    old->shadow_key = 0u; /* issue #181: invalidate every stale alias, O(1) */
     --cplus_live_count;
     ++cplus_live_deleted;
     cplus_recent[cplus_recent_index(oldp)].ptr = oldp;
@@ -1100,11 +1924,18 @@ void cplus_free_registered(void *p, const char *file, int line) {
   }
   uint64_t generation = slot->generation;
   slot->ptr = CPLUS_TOMBSTONE;
+  slot->shadow_key = 0u; /* issue #181: invalidate every stale alias, O(1) */
   --cplus_live_count;
   ++cplus_live_deleted;
   cplus_recent[cplus_recent_index(p)].ptr = p;
   cplus_recent[cplus_recent_index(p)].generation = generation;
   cplus_retired_insert(p, generation);
+  /* Issue #184: epoch mode retains the block out of malloc's reuse pool
+   * until a conservative collection proves no root still references it. */
+  if (cplus_gc_retire_locked(p, slot->size)) {
+    cplus_alloc_unlock();
+    return;
+  }
   /* Free while the side-table lock is still held.  Releasing it first lets a
    * concurrent registration insert the same address into the live table
    * before the free lands, leaving a stale live entry and a real double free. */
@@ -1115,26 +1946,40 @@ void cplus_free_registered(void *p, const char *file, int line) {
 void *cplus_alloc(size_t size) {
   if (size <= 0)
     size = 1;
-  void *p = malloc(size);
-  if (!p) {
-    cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
-                      "managed allocation failed");
-  }
+  /* Opt-in low-fat slot first.  Claim/publish run under the side-table lock;
+   * only the later bounds LOOKUP is lock-free.  A disabled, unavailable or
+   * exhausted class falls back to the original malloc path unchanged. */
   cplus_alloc_lock();
+  cplus_gc_tick_locked(); /* issue #184: periodic epoch boundary, opt-in only */
+  void *p = cplus_lowfat_claim_locked(size);
+  if (!p) {
+    p = malloc(size);
+    if (!p) {
+      cplus_alloc_unlock();
+      cplus_print_fatal(CPLUS_EXIT_RESOURCE, "out of memory", NULL, 0,
+                        "managed allocation failed");
+    }
+  }
+  int lowfat = cplus_lowfat_contains(p);
   /* Match cplus_register_allocation(): an allocator that hands back a live
    * or stale-retired address must fail closed instead of registering a second
-   * owner that a later single release cannot retire. */
-  if (cplus_find_live(p) || cplus_retired_address_stale(p)) {
+   * owner that a later single release cannot retire.  A fresh low-fat slot is
+   * not a malloc block and cannot be a retired heap address. */
+  if (!lowfat && (cplus_find_live(p) || cplus_retired_address_stale(p))) {
     cplus_alloc_unlock();
     cplus_print_fatal(CPLUS_EXIT_DOUBLE_FREE, "allocation registration", NULL,
                       0, "allocator returned a live or retired address");
   }
-  cplus_quarantine_drop(p);
-  size = cplus_clamp_registered_size(p, size);
+  if (!lowfat) {
+    cplus_quarantine_drop(p);
+    size = cplus_clamp_registered_size(p, size);
+  }
   uint64_t gen = cplus_next_generation();
   if (cplus_live_count + cplus_live_deleted + 1 > cplus_live_cap * 3 / 4)
     cplus_live_grow();
   cplus_live_insert(p, size, gen);
+  if (lowfat)
+    cplus_lowfat_publish_locked(p, size, gen);
   cplus_alloc_unlock();
   return p;
 }
@@ -1195,8 +2040,9 @@ void *cplus_realloc(void *ptr, size_t size) {
   }
   size_t n = size < slot->size ? size : slot->size;
   /* Belt-and-braces: even a wrongly registered or stale extent must never
-   * authorize a copy past the block malloc actually handed out. */
-  size_t usable = cplus_malloc_capacity(ptr);
+   * authorize a copy past the block malloc actually handed out.  A low-fat
+   * slot is not a malloc block, so the platform query is skipped for it. */
+  size_t usable = cplus_lowfat_contains(ptr) ? 0u : cplus_malloc_capacity(ptr);
   if (usable != 0u && n > usable)
     n = usable;
   memcpy(fresh, ptr, n);
@@ -1230,11 +2076,23 @@ static void cplus_release_locked(void *ptr) {
   }
   uint64_t generation = slot->generation;
   slot->ptr = CPLUS_TOMBSTONE;
+  slot->shadow_key = 0u; /* issue #181: invalidate every stale alias, O(1) */
   --cplus_live_count;
   ++cplus_live_deleted;
   cplus_recent[cplus_recent_index(ptr)].ptr = ptr;
   cplus_recent[cplus_recent_index(ptr)].generation = generation;
   cplus_retired_insert(ptr, generation);
+  /* Issue #184: in epoch mode keep the block reserved.  The caller owns the
+   * lock here (cplus_release / cplus_realloc), so do not unlock on this path. */
+  if (cplus_gc_retire_locked(ptr, slot->size))
+    return;
+  /* A low-fat slot is reserved VM, not a malloc block: recycle it into its
+   * class free stack and clear its out-of-band metadata instead of free()ing
+   * it.  Quarantine does not apply (the address is never reused by malloc). */
+  if (cplus_lowfat_contains(ptr)) {
+    cplus_lowfat_recycle_locked(ptr);
+    return;
+  }
   if (cplus_quarantine_enabled()) {
     void *oldest = cplus_quarantine[cplus_quarantine_next];
     cplus_quarantine[cplus_quarantine_next] = ptr;
@@ -1325,6 +2183,728 @@ int cplus_retired_ledger_full(void) {
   int full = cplus_retired_wrapped;
   cplus_alloc_unlock();
   return full;
+}
+
+/* -------------------------------------------------------------------------
+ * Issue #184: opt-in epoch/conservative reclamation
+ * ------------------------------------------------------------------------
+ * Normally a release returns the block to malloc immediately, so its address
+ * can be handed out again while a stale alias still exists.  With
+ * CPLUS_RECLAIM_MODE=epoch (or cplus_set_reclaim_mode(1)) a release instead
+ * moves the block to the retired list below.  It is NOT returned to malloc
+ * until a collection has advanced at least one epoch boundary AND no word in
+ * the conservatively scanned roots still points into it.
+ *
+ * The retired-address ledger from issues #110/#111 is still populated at the
+ * moment of retirement, so a second release remains a deterministic 104.
+ * Low-fat slots are kept reserved too (their metadata is cleared without
+ * pushing the slot onto the class free stack) and are only recycled when the
+ * collector proves them unreachable.
+ *
+ * This is entirely additive: no existing signature, struct layout, pointer
+ * representation or default behaviour changes.  All state is guarded by
+ * cplus_alloc_mutex; the collector runs with that lock held and never takes
+ * another runtime lock.
+ * ------------------------------------------------------------------------- */
+
+#define CPLUS_RECLAIM_TICK 256u          /* automatic epoch boundary period */
+#define CPLUS_RECLAIM_ROOT_MAX 16384u     /* bounded root-word snapshot */
+#define CPLUS_RECLAIM_ROOT_SLOT_MAX 256u  /* explicit global pointer slots */
+
+typedef struct cplus_gc_block {
+  void *ptr;
+  size_t size;
+  uint64_t retire_epoch; /* kept until epoch > retire_epoch */
+  int lowfat;            /* reserved VM slot vs malloc block */
+  struct cplus_gc_block *next;
+} cplus_gc_block;
+
+static cplus_gc_block *cplus_gc_retired = NULL;
+static size_t cplus_gc_retired_count = 0u;
+static uint64_t cplus_gc_epoch = 1u;
+static uint64_t cplus_gc_reclaimed = 0u;
+static size_t cplus_gc_alloc_tick = 0u;
+
+static uintptr_t cplus_gc_roots[CPLUS_RECLAIM_ROOT_MAX];
+static size_t cplus_gc_root_count = 0u;
+static int cplus_gc_roots_overflow = 0;
+static void **cplus_gc_root_slots[CPLUS_RECLAIM_ROOT_SLOT_MAX];
+static size_t cplus_gc_root_slot_count = 0u;
+
+/* The env var is sampled exactly once (like CPLUS_QUARANTINE) so no hot path
+ * calls getenv(), which races with setenv/putenv in another thread. */
+static int cplus_gc_cached_mode = 0;
+static int cplus_gc_override = -1; /* >= 0 wins over the sampled environment */
+
+static void cplus_gc_sample_env(void) {
+  const char *env = getenv("CPLUS_RECLAIM_MODE");
+  cplus_gc_cached_mode = env && strcmp(env, "epoch") == 0;
+}
+#if defined(CPLUS_POSIX)
+static pthread_once_t cplus_gc_once = PTHREAD_ONCE_INIT;
+static int cplus_gc_env_state(void) {
+  pthread_once(&cplus_gc_once, cplus_gc_sample_env);
+  return cplus_gc_cached_mode;
+}
+__attribute__((constructor)) static void cplus_gc_preinit(void) {
+  pthread_once(&cplus_gc_once, cplus_gc_sample_env);
+}
+#elif defined(_WIN32)
+static INIT_ONCE cplus_gc_once = INIT_ONCE_STATIC_INIT;
+static BOOL CALLBACK cplus_gc_sample_env_win(PINIT_ONCE once, PVOID param,
+                                             PVOID *context) {
+  (void)once;
+  (void)param;
+  (void)context;
+  cplus_gc_sample_env();
+  return TRUE;
+}
+static int cplus_gc_env_state(void) {
+  InitOnceExecuteOnce(&cplus_gc_once, cplus_gc_sample_env_win, NULL, NULL);
+  return cplus_gc_cached_mode;
+}
+#else
+static int cplus_gc_env_state(void) {
+  static int initialized = 0;
+  if (!initialized) {
+    cplus_gc_sample_env();
+    initialized = 1;
+  }
+  return cplus_gc_cached_mode;
+}
+#endif
+
+int cplus_reclaim_enabled(void) {
+  return cplus_gc_override >= 0 ? cplus_gc_override : cplus_gc_env_state();
+}
+
+void cplus_set_reclaim_mode(int enabled) {
+  cplus_gc_override = enabled ? 1 : 0;
+}
+
+static int cplus_gc_contains_retired_locked(const void *p) {
+  for (cplus_gc_block *node = cplus_gc_retired; node; node = node->next)
+    if (node->ptr == p)
+      return 1;
+  return 0;
+}
+
+/* Called with cplus_alloc_mutex held, from a release path that has already
+ * written the retired ledger.  Returns 1 when the block was retained by the
+ * collector (the caller must NOT free it), 0 on OOM fallback (the caller
+ * keeps the original immediate-free behaviour). */
+static int cplus_gc_retire_locked(void *p, size_t size) {
+  if (!cplus_reclaim_enabled())
+    return 0;
+  cplus_gc_block *node = (cplus_gc_block *)malloc(sizeof(*node));
+  if (!node)
+    return 0;
+  node->ptr = p;
+  node->size = size;
+  /* +2 gives every retired block one full epoch boundary of grace even when
+   * no root references it: retirement happens in epoch E, the first collect
+   * advances to E+1 (retained), the next to E+2 (eligible). */
+  node->retire_epoch = cplus_gc_epoch + 2u;
+  node->lowfat = cplus_lowfat_contains(p);
+  node->next = cplus_gc_retired;
+  cplus_gc_retired = node;
+  ++cplus_gc_retired_count;
+  if (node->lowfat)
+    cplus_lowfat_clear_meta_locked(p);
+  return 1;
+}
+
+static void cplus_gc_tick_locked(void) {
+  if (!cplus_reclaim_enabled())
+    return;
+  if (++cplus_gc_alloc_tick >= CPLUS_RECLAIM_TICK) {
+    cplus_gc_alloc_tick = 0u;
+    cplus_reclaim_collect_locked();
+  }
+}
+
+/* Internal static arrays hold retired addresses as bookkeeping.  Never treat
+ * our own metadata as a live root, or nothing could ever be reclaimed. */
+static int cplus_gc_internal_word(uintptr_t a) {
+#define CPLUS_GC_IS_INTERNAL(arr)                                              \
+  ((a) >= (uintptr_t)(const void *)(arr) &&                                    \
+   (a) < (uintptr_t)(const void *)(arr) + sizeof(arr))
+  return CPLUS_GC_IS_INTERNAL(cplus_recent) ||
+         CPLUS_GC_IS_INTERNAL(cplus_quarantine) ||
+         CPLUS_GC_IS_INTERNAL(cplus_shadow_slots) ||
+         CPLUS_GC_IS_INTERNAL(cplus_gc_roots) ||
+         CPLUS_GC_IS_INTERNAL(cplus_gc_root_slots);
+#undef CPLUS_GC_IS_INTERNAL
+}
+
+static void cplus_gc_add_root(uintptr_t word) {
+  if (word == 0u)
+    return;
+  if (cplus_gc_root_count < CPLUS_RECLAIM_ROOT_MAX)
+    cplus_gc_roots[cplus_gc_root_count++] = word;
+  else
+    cplus_gc_roots_overflow = 1; /* conservative: retain everything */
+}
+
+/* Read every aligned pointer-sized word in [lo, hi) with memcpy (no aliasing
+ * or alignment UB).  A word that merely LOOKS like a heap pointer is enough
+ * to retain a block - that is what "conservative" means here. */
+static void cplus_gc_scan_words(uintptr_t lo, uintptr_t hi, int skip_internal) {
+  const uintptr_t align = sizeof(uintptr_t) - 1u;
+  uintptr_t a = (lo + align) & ~align;
+  if (hi <= a)
+    return;
+  for (; hi - a >= sizeof(uintptr_t); a += sizeof(uintptr_t)) {
+    if (skip_internal && cplus_gc_internal_word(a))
+      continue;
+    uintptr_t word = 0u;
+    memcpy(&word, (const void *)a, sizeof(word));
+    cplus_gc_add_root(word);
+  }
+}
+
+static void cplus_gc_scan_stack(void) {
+  uintptr_t anchor = (uintptr_t)(void *)&anchor;
+  uintptr_t lo = anchor;
+  uintptr_t hi = anchor + 64u * 1024u; /* portable fallback window */
+#if defined(__APPLE__)
+  void *base = pthread_get_stackaddr_np(pthread_self());
+  size_t bytes = pthread_get_stacksize_np(pthread_self());
+  if (base && bytes) {
+    hi = (uintptr_t)base;
+    lo = hi - bytes;
+  }
+#elif defined(__linux__)
+  pthread_attr_t attr;
+  if (pthread_getattr_np(pthread_self(), &attr) == 0) {
+    void *base = NULL;
+    size_t bytes = 0u;
+    if (pthread_attr_getstack(&attr, &base, &bytes) == 0 && bytes &&
+        base) {
+      lo = (uintptr_t)base;
+      hi = lo + bytes;
+    }
+    pthread_attr_destroy(&attr);
+  }
+#endif
+  if (hi > lo)
+    cplus_gc_scan_words(lo, hi, 0);
+}
+
+#if defined(__linux__)
+/* Weak: the symbols are present in the normal executable link and absent in
+ * some static/embedded links.  Missing symbols simply disable the automatic
+ * global scan; cplus_reclaim_register_root() still works everywhere. */
+extern char __data_start __attribute__((weak));
+extern char __bss_start __attribute__((weak));
+extern char _edata __attribute__((weak));
+extern char _end __attribute__((weak));
+#endif
+
+static void cplus_gc_scan_globals(void) {
+#if defined(__APPLE__)
+  const struct mach_header_64 *mh =
+      (const struct mach_header_64 *)_dyld_get_image_header(0);
+  static const char *const sections[] = {"__data", "__bss"};
+  if (mh) {
+    for (size_t i = 0u; i < sizeof(sections) / sizeof(sections[0]); ++i) {
+      unsigned long bytes = 0ul;
+      const uint8_t *p = getsectiondata(mh, "__DATA", sections[i], &bytes);
+      if (p && bytes)
+        cplus_gc_scan_words((uintptr_t)p, (uintptr_t)p + bytes, 1);
+    }
+  }
+#elif defined(__linux__)
+  uintptr_t lo = 0u;
+  uintptr_t hi = 0u;
+  if (&__data_start)
+    lo = (uintptr_t)(void *)&__data_start;
+  else if (&__bss_start)
+    lo = (uintptr_t)(void *)&__bss_start;
+  if (&_end)
+    hi = (uintptr_t)(void *)&_end;
+  else if (&_edata)
+    hi = (uintptr_t)(void *)&_edata;
+  if (lo && hi && hi > lo)
+    cplus_gc_scan_words(lo, hi, 1);
+#endif
+  /* Explicitly registered global slots are scanned on every platform. */
+  for (size_t i = 0u; i < cplus_gc_root_slot_count; ++i) {
+    void **slot = cplus_gc_root_slots[i];
+    if (slot)
+      cplus_gc_add_root((uintptr_t)*slot);
+  }
+}
+
+/* Called with cplus_alloc_mutex held.  One epoch boundary plus a full
+ * conservative root snapshot; unreferenced blocks that survived the grace
+ * epoch are returned to their allocator. */
+static void cplus_reclaim_collect_locked(void) {
+  if (!cplus_reclaim_enabled())
+    return;
+  ++cplus_gc_epoch;
+  cplus_gc_root_count = 0u;
+  cplus_gc_roots_overflow = 0;
+  /* Globals first: the root snapshot is itself a global array, and clearing
+   * it before the global scan prevents the collector from rooting its own
+   * previous snapshot. */
+  cplus_gc_scan_globals();
+  cplus_gc_scan_stack();
+
+  cplus_gc_block **link = &cplus_gc_retired;
+  while (*link) {
+    cplus_gc_block *node = *link;
+    int referenced = cplus_gc_roots_overflow ||
+                     node->retire_epoch > cplus_gc_epoch;
+    if (!referenced) {
+      uintptr_t lo = (uintptr_t)node->ptr;
+      uintptr_t hi = lo + node->size;
+      if (hi < lo)
+        hi = UINTPTR_MAX;
+      for (size_t k = 0u; k < cplus_gc_root_count; ++k) {
+        uintptr_t word = cplus_gc_roots[k];
+        if (word >= lo && word < hi) {
+          referenced = 1;
+          break;
+        }
+      }
+    }
+    if (referenced) {
+      link = &node->next;
+      continue;
+    }
+    *link = node->next;
+    if (node->lowfat)
+      cplus_lowfat_recycle_locked(node->ptr);
+    else
+      free(node->ptr);
+    ++cplus_gc_reclaimed;
+    if (cplus_gc_retired_count)
+      --cplus_gc_retired_count;
+    free(node);
+  }
+}
+
+uint64_t cplus_reclaim_epoch(void) {
+  cplus_alloc_lock();
+  uint64_t e = cplus_gc_epoch;
+  cplus_alloc_unlock();
+  return e;
+}
+
+uint64_t cplus_reclaim_reclaimed_count(void) {
+  cplus_alloc_lock();
+  uint64_t n = cplus_gc_reclaimed;
+  cplus_alloc_unlock();
+  return n;
+}
+
+size_t cplus_reclaim_retired_count(void) {
+  cplus_alloc_lock();
+  size_t n = cplus_gc_retired_count;
+  cplus_alloc_unlock();
+  return n;
+}
+
+int cplus_reclaim_contains_retired(const void *ptr) {
+  if (!ptr)
+    return 0;
+  cplus_alloc_lock();
+  int found = cplus_gc_contains_retired_locked(ptr);
+  cplus_alloc_unlock();
+  return found;
+}
+
+void cplus_reclaim_collect(void) {
+  cplus_alloc_lock();
+  cplus_reclaim_collect_locked();
+  cplus_alloc_unlock();
+}
+
+void cplus_reclaim_register_root(void **slot) {
+  if (!slot)
+    return;
+  cplus_alloc_lock();
+  for (size_t i = 0u; i < cplus_gc_root_slot_count; ++i)
+    if (cplus_gc_root_slots[i] == slot) {
+      cplus_alloc_unlock();
+      return;
+    }
+  if (cplus_gc_root_slot_count < CPLUS_RECLAIM_ROOT_SLOT_MAX)
+    cplus_gc_root_slots[cplus_gc_root_slot_count++] = slot;
+  cplus_alloc_unlock();
+}
+
+void cplus_reclaim_unregister_root(void **slot) {
+  if (!slot)
+    return;
+  cplus_alloc_lock();
+  for (size_t i = 0u; i < cplus_gc_root_slot_count; ++i) {
+    if (cplus_gc_root_slots[i] == slot) {
+      cplus_gc_root_slots[i] =
+          cplus_gc_root_slots[cplus_gc_root_slot_count - 1u];
+      --cplus_gc_root_slot_count;
+      break;
+    }
+  }
+  cplus_alloc_unlock();
+}
+
+/* Additive disjoint shadow metadata (issues #181 / #182).  All of these keep
+ * the bare-pointer ABI: they only READ the existing side table and never
+ * change a pointer's bits or an existing function's signature. */
+
+int cplus_shadow_lookup(const void *ptr, cplus_shadow_info *info) {
+  cplus_shadow_info empty;
+  memset(&empty, 0, sizeof(empty));
+  if (info)
+    *info = empty;
+  if (!ptr)
+    return 0;
+  /* Fast path: low-fat interior pointers resolve in O(1) with no mutex. */
+  void *lf_base = NULL;
+  size_t lf_size = 0u;
+  uint64_t lf_gen = 0u, lf_tag = 0u;
+  uint32_t lf_class = 0u;
+  cplus_lowfat_slot_meta *lf_meta = NULL;
+  if (cplus_lowfat_resolve(ptr, &lf_base, &lf_size, &lf_gen, &lf_tag, &lf_class,
+                           &lf_meta)) {
+    cplus_shadow_info result;
+    memset(&result, 0, sizeof(result));
+    result.base = lf_base;
+    result.bound = (void *)((char *)lf_base + lf_size);
+    result.generation = lf_gen;
+    result.lock = (const void *)lf_meta; /* introspection only; never deref */
+    result.size_class = lf_class;
+    result.flags = CPLUS_SHADOW_LIVE;
+    if (ptr != lf_base)
+      result.flags |= CPLUS_SHADOW_INTERIOR;
+    if (info)
+      *info = result;
+    return 1;
+  }
+  cplus_alloc_lock();
+  /* O(1) exact-base probe first; only true interior pointers need the counted
+   * containment scan (issue #181: keep scans off the instrumented check path). */
+  cplus_live_slot *slot = cplus_find_live(ptr);
+  if (!slot)
+    slot = cplus_shadow_find_locked(ptr);
+  if (slot) {
+    cplus_shadow_info result;
+    memset(&result, 0, sizeof(result));
+    result.base = slot->ptr;
+    result.bound = (void *)((char *)slot->ptr + slot->size);
+    result.generation = slot->generation;
+    /* CETS lock address: the live slot that currently holds the key.  It is
+     * reported for introspection only; callers must not dereference it. */
+    result.lock = slot;
+    result.size_class = slot->size_class;
+    result.flags = CPLUS_SHADOW_LIVE;
+    if (ptr != slot->ptr)
+      result.flags |= CPLUS_SHADOW_INTERIOR;
+    if (info)
+      *info = result;
+  }
+  cplus_alloc_unlock();
+  return slot != NULL ? 1 : 0;
+}
+
+int cplus_shadow_base_bound(const void *ptr, void **base, void **bound) {
+  cplus_shadow_info info;
+  if (!cplus_shadow_lookup(ptr, &info))
+    return 0;
+  if (base)
+    *base = info.base;
+  if (bound)
+    *bound = info.bound;
+  return 1;
+}
+
+int cplus_interior_valid(const void *ptr, uint64_t key) {
+  if (!ptr || key == 0u)
+    return 0;
+  void *base = NULL;
+  size_t size = 0u;
+  uint64_t gen = 0u, tag = 0u;
+  uint32_t klass = 0u;
+  if (cplus_lowfat_resolve(ptr, &base, &size, &gen, &tag, &klass, NULL))
+    return gen == key ? 1 : 0;
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_shadow_find_locked(ptr);
+  int ok = slot != NULL && slot->generation == key;
+  cplus_alloc_unlock();
+  return ok ? 1 : 0;
+}
+
+int cplus_lowfat_class_of(const void *ptr) {
+  if (!ptr)
+    return -1;
+  uint32_t klass = 0u;
+  if (cplus_lowfat_resolve(ptr, NULL, NULL, NULL, NULL, &klass, NULL))
+    return (int)klass;
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_shadow_find_locked(ptr);
+  int result = slot ? (int)slot->size_class : -1;
+  cplus_alloc_unlock();
+  return result;
+}
+
+int cplus_lowfat_bounds(const void *ptr, void **base, size_t *size) {
+  /* Lock-free O(1) path for opted-in low-fat allocations, including interior
+   * pointers that have crossed an uninstrumented C ABI boundary. */
+  void *lf_base = NULL;
+  size_t lf_size = 0u;
+  if (cplus_lowfat_resolve(ptr, &lf_base, &lf_size, NULL, NULL, NULL, NULL)) {
+    if (base)
+      *base = lf_base;
+    if (size)
+      *size = lf_size;
+    return 1;
+  }
+  cplus_shadow_info info;
+  if (!cplus_shadow_lookup(ptr, &info))
+    return 0;
+  if (base)
+    *base = info.base;
+  if (size)
+    *size = (size_t)((char *)info.bound - (char *)info.base);
+  return 1;
+}
+
+/* -------------------------------------------------------------------------
+ * Out-of-band effective type tags (issue #182)
+ *
+ * Type names/sizes are interned into a small static registry; the resulting
+ * non-zero tag is stored in parallel metadata (low-fat slot meta for opted-in
+ * allocations, the existing live slot otherwise).  Registration and checks
+ * use cplus_alloc_mutex, so no new lock or global constructor is needed and
+ * the fast bounds path stays untouched.  Mismatches always go through
+ * cplus_print_fatal -> CPLUS_EXIT_TYPE_CONFUSION (105), never through a raw
+ * abort, so the diagnostic and exit code remain deterministic.
+ * ------------------------------------------------------------------------- */
+
+#define CPLUS_TYPE_REGISTRY_MAX 256u
+#define CPLUS_TYPE_MEMBER_MAX 512u
+#define CPLUS_TYPE_NAME_MAX 64u
+#define CPLUS_TYPE_MEMBER_NAME_MAX 32u
+
+typedef struct cplus_type_entry {
+  uint64_t tag;
+  size_t size;
+  char name[CPLUS_TYPE_NAME_MAX];
+} cplus_type_entry;
+
+typedef struct cplus_type_member_entry {
+  uint64_t parent;
+  uint64_t member;
+  size_t offset;
+  size_t size;
+  char name[CPLUS_TYPE_MEMBER_NAME_MAX];
+} cplus_type_member_entry;
+
+static cplus_type_entry cplus_type_registry[CPLUS_TYPE_REGISTRY_MAX];
+static size_t cplus_type_registry_count;
+static cplus_type_member_entry cplus_type_members[CPLUS_TYPE_MEMBER_MAX];
+static size_t cplus_type_member_count;
+
+/* FNV-1a over a bounded name plus the size hint.  Zero is reserved for
+ * "untagged", so a zero hash is remapped to one. */
+static uint64_t cplus_type_hash(const char *name, size_t size_hint,
+                                uint64_t seed) {
+  uint64_t h = seed ? seed : UINT64_C(14695981039346656037);
+  const char *s = name ? name : "";
+  for (size_t i = 0u; i < CPLUS_TYPE_NAME_MAX && s[i]; ++i) {
+    h ^= (uint64_t)(unsigned char)s[i];
+    h *= UINT64_C(1099511628211);
+  }
+  h ^= (uint64_t)size_hint + UINT64_C(0x9e3779b97f4a7c15) + (h << 6) + (h >> 2);
+  return h ? h : 1u;
+}
+
+cplus_type_tag cplus_type_tag_hash(const char *name, size_t size_hint) {
+  return cplus_type_hash(name, size_hint, 0u);
+}
+
+cplus_type_tag cplus_type_tag_register(const char *name, size_t size_hint) {
+  const char *s = name ? name : "";
+  cplus_alloc_lock();
+  for (size_t i = 0u; i < cplus_type_registry_count; ++i) {
+    if (cplus_type_registry[i].size == size_hint &&
+        strncmp(cplus_type_registry[i].name, s, CPLUS_TYPE_NAME_MAX) == 0) {
+      uint64_t tag = cplus_type_registry[i].tag;
+      cplus_alloc_unlock();
+      return tag;
+    }
+  }
+  cplus_type_tag tag = 0u;
+  if (cplus_type_registry_count < CPLUS_TYPE_REGISTRY_MAX) {
+    tag = cplus_type_hash(s, size_hint, 0u);
+    int clash = 0;
+    for (unsigned tries = 0u; tries < 8u; ++tries) {
+      clash = 0;
+      for (size_t i = 0u; i < cplus_type_registry_count; ++i) {
+        if (cplus_type_registry[i].tag == tag) {
+          clash = 1;
+          break;
+        }
+      }
+      if (!clash)
+        break;
+      tag = cplus_type_hash(s, size_hint, tag);
+    }
+    if (clash)
+      tag = 0u;
+    if (tag != 0u) {
+      cplus_type_entry *e = &cplus_type_registry[cplus_type_registry_count++];
+      memset(e, 0, sizeof(*e));
+      e->tag = tag;
+      e->size = size_hint;
+      size_t n = 0u;
+      while (n + 1u < CPLUS_TYPE_NAME_MAX && s[n])
+        ++n;
+      memcpy(e->name, s, n);
+    }
+  }
+  cplus_alloc_unlock();
+  return tag;
+}
+
+int cplus_type_tag_set(void *ptr, cplus_type_tag tag) {
+  if (!ptr || tag == 0u)
+    return 0;
+  cplus_alloc_lock();
+  int ok = 0;
+  size_t index;
+  uint32_t klass;
+  if (cplus_lowfat_region_of(ptr, &index, &klass)) {
+    cplus_lowfat_slot_meta *m = &cplus_lowfat_regions[klass].meta[index];
+    if (cplus_lf_load_u32(&m->state) == 1u &&
+        cplus_lowfat_slot_base(klass, index) == ptr) {
+      cplus_lf_store_u32(&m->state, 0u);
+      m->type_tag = tag;
+      cplus_lf_store_u32(&m->state, 1u);
+      ok = 1;
+    }
+  }
+  if (!ok) {
+    cplus_live_slot *slot = cplus_find_live(ptr);
+    if (!slot)
+      slot = cplus_shadow_find_locked(ptr);
+    if (slot) {
+      slot->type_tag = tag;
+      /* An interior pointer into a low-fat slot resolves in the live table
+       * via containment; mirror the tag into the O(1) metadata as well so
+       * both lookup paths observe the same effective type. */
+      size_t base_index;
+      uint32_t base_class;
+      if (cplus_lowfat_region_of(slot->ptr, &base_index, &base_class)) {
+        cplus_lowfat_slot_meta *m =
+            &cplus_lowfat_regions[base_class].meta[base_index];
+        cplus_lf_store_u32(&m->state, 0u);
+        m->type_tag = tag;
+        cplus_lf_store_u32(&m->state, 1u);
+      }
+      ok = 1;
+    }
+  }
+  cplus_alloc_unlock();
+  return ok;
+}
+
+cplus_type_tag cplus_type_tag_get(const void *ptr) {
+  if (!ptr)
+    return CPLUS_TYPE_TAG_NONE;
+  void *base = NULL;
+  size_t size = 0u;
+  uint64_t generation = 0u, tag = 0u;
+  uint32_t klass = 0u;
+  if (cplus_lowfat_resolve(ptr, &base, &size, &generation, &tag, &klass, NULL))
+    return tag;
+  cplus_alloc_lock();
+  cplus_live_slot *slot = cplus_shadow_find_locked(ptr);
+  uint64_t result = slot ? slot->type_tag : 0u;
+  cplus_alloc_unlock();
+  return result;
+}
+
+void cplus_type_tag_check(const void *ptr, cplus_type_tag expected,
+                          const char *file, int line) {
+  if (!ptr || expected == 0u)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "type confusion", file, line,
+                      "effective type check needs a live pointer and a tag");
+  cplus_type_tag actual = cplus_type_tag_get(ptr);
+  if (actual != expected) {
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "effective type tag mismatch: got %llu, expected %llu",
+             (unsigned long long)actual, (unsigned long long)expected);
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "type confusion", file, line,
+                      msg);
+  }
+}
+
+int cplus_type_member_register(cplus_type_tag parent, const char *name,
+                               size_t offset, size_t size,
+                               cplus_type_tag member) {
+  if (!parent || !member)
+    return 0;
+  const char *s = name ? name : "";
+  cplus_alloc_lock();
+  int ok = 0;
+  if (cplus_type_member_count < CPLUS_TYPE_MEMBER_MAX) {
+    cplus_type_member_entry *e =
+        &cplus_type_members[cplus_type_member_count++];
+    memset(e, 0, sizeof(*e));
+    e->parent = parent;
+    e->member = member;
+    e->offset = offset;
+    e->size = size;
+    size_t n = 0u;
+    while (n + 1u < CPLUS_TYPE_MEMBER_NAME_MAX && s[n])
+      ++n;
+    memcpy(e->name, s, n);
+    ok = 1;
+  }
+  cplus_alloc_unlock();
+  return ok;
+}
+
+void cplus_type_member_check(const void *ptr, cplus_type_tag parent,
+                             cplus_type_tag member, size_t offset,
+                             size_t bytes, const char *file, int line) {
+  void *base = NULL;
+  void *bound = NULL;
+  size_t size = 0u;
+  if (!cplus_lowfat_bounds(ptr, &base, &size)) {
+    /* cplus_shadow_base_bound returns a one-past-the-end ADDRESS, not a
+     * size_t length (the original call passed &size as void **). */
+    if (!cplus_shadow_base_bound(ptr, &base, &bound))
+      cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "type confusion", file, line,
+                        "member access on an untracked pointer");
+    size = (size_t)((uintptr_t)bound - (uintptr_t)base);
+  }
+  cplus_type_tag actual = cplus_type_tag_get(base);
+  if (actual != parent)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "type confusion", file, line,
+                      "object effective type does not match downcast parent");
+  if (offset > size || bytes > size - offset)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "type confusion", file, line,
+                      "member access lies outside the object's bounds");
+  cplus_alloc_lock();
+  int found = 0, ok = 1;
+  for (size_t i = 0u; i < cplus_type_member_count; ++i) {
+    cplus_type_member_entry *e = &cplus_type_members[i];
+    if (e->parent == parent && e->offset == offset) {
+      found = 1;
+      if (e->member != member || bytes > e->size)
+        ok = 0;
+      break;
+    }
+  }
+  cplus_alloc_unlock();
+  if (found && !ok)
+    cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, "type confusion", file, line,
+                      "member tag does not match the registered layout");
 }
 
 size_t cplus_alloc_count(const void *ptr, size_t elem_size) {

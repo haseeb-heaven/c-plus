@@ -20,20 +20,37 @@
 #include <clang/Lex/Lexer.h>
 
 #include <clang/Frontend/ASTUnit.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
 
+#include <llvm/Support/raw_ostream.h>
+
+#include <algorithm>
 #include <cstdlib>
 #include <climits>
 #include <cstdint>
 #include <cmath>
 #include <cmath>
+#include <iterator>
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 using namespace clang;
 
 namespace cplus {
+
+// Issue #179 — Cake qualifier facts recorded by CPlusRewriter.cpp and the
+// ownership-effect summaries in OwnershipAnalysis.cpp. Primitive parameter
+// types keep this boundary header-free; see the definitions in those files.
+void cplusCakeClearQualifiers();
+void cplusCakeRecordQualifier(const std::string &name, unsigned line, int kind);
+int cplusCakeQualifierOf(const std::string &name, unsigned line);
+std::vector<unsigned> cplusCakeMoveSites(const std::string &name);
+bool cplusCakeEffectConsumesArg(const std::string &fn, int arg);
+
 namespace {
 
 /// Clang FORTIFY lowers some libc calls to *_chk builtins with an extra
@@ -9236,6 +9253,679 @@ public:
   std::set<std::string> destructors_;
 };
 
+// ---------------------------------------------------------------------------
+// Issue #179: Cake-style flow-sensitive _Opt / _Owner / _View checking.
+//
+// This is a separate, additive pass. The existing SafetyVisitor keeps all of
+// its historical diagnostics unchanged; this visitor only fires on variables
+// the rewriter explicitly tagged with a Cake qualifier. That keeps the new
+// rejections deterministic and free of false positives for untagged C code.
+//
+// State is flow-sensitive in the same sense as Cake: branch refinement is
+// scoped to the arm that proves the pointer non-null, and a guard whose other
+// arm exits the function refines the state after the statement. Ownership
+// reuse (moved/released/consumed) is keyed by declaration name and fed by the
+// shared effect summaries, so cplus_move and ownership-transferring calls
+// behave consistently with the rest of the checker.
+//
+// Moved state is NOT a translation-unit-wide fact. The rewriter records each
+// cplus_move site as an ORIGINAL source line; those lines are mapped to byte
+// offsets in the lowered C buffer parsed by Clang. Moved state is seeded only
+// when the walk reaches the site's offset, cleared by an assignment to the
+// same name, intersected at if/else joins, and re-applied on the second pass
+// over a loop body (Cake visits loops twice). This keeps mutually exclusive
+// arms, move/reassign/move sequences and loop-carried moves precise.
+// ---------------------------------------------------------------------------
+namespace {
+
+/// Byte offset in `code` where ORIGINAL source line `line` starts. Clang's
+/// `#line` markers are not source lines and are skipped, so line N of the
+/// lowered buffer maps to line N of the annotated file.
+size_t cakeLineOffset(const std::string &code, unsigned line) {
+  size_t pos = 0;
+  unsigned current = 1;
+  while (pos <= code.size() && current < line) {
+    size_t nl = code.find('\n', pos);
+    if (nl == std::string::npos)
+      return code.size();
+    size_t first = pos;
+    while (first < nl && (code[first] == ' ' || code[first] == '\t'))
+      ++first;
+    if (code.compare(first, 6, "#line ") != 0)
+      ++current;
+    pos = nl + 1;
+  }
+  return pos;
+}
+
+/// Byte offset of the `nth` `cplus_move(name)` token inside [begin, end).
+size_t cakeMoveOffset(const std::string &code, size_t begin, size_t end,
+                      const std::string &name, unsigned nth) {
+  const std::string token = "cplus_move";
+  size_t pos = begin;
+  unsigned seen = 0;
+  auto skipSpace = [&](size_t &q) {
+    while (q < end && (code[q] == ' ' || code[q] == '\t'))
+      ++q;
+  };
+  while (pos < end) {
+    size_t p = code.find(token, pos);
+    if (p == std::string::npos || p >= end)
+      break;
+    size_t q = p + token.size();
+    skipSpace(q);
+    if (q < end && code[q] == '(') {
+      ++q;
+      skipSpace(q);
+      if (code.compare(q, name.size(), name) == 0) {
+        q += name.size();
+        skipSpace(q);
+        if (q < end && code[q] == ')' && seen++ == nth)
+          return p;
+      }
+    }
+    pos = p + token.size();
+  }
+  return std::string::npos;
+}
+
+} // namespace
+
+class CakeFlowVisitor : public RecursiveASTVisitor<CakeFlowVisitor> {
+public:
+  CakeFlowVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string file,
+                  const std::string &code, bool strict)
+      : ctx_(ctx), diags_(diags), file_(std::move(file)), code_(code),
+        strict_(strict) {}
+
+  int qualifierFor(const VarDecl *vd) const { return qualifierOf(vd); }
+  void noteOwnerName(const std::string &n) { currentOwners_.insert(n); }
+  void noteViewName(const std::string &n) { localViews_.insert(n); }
+
+  bool TraverseFunctionDecl(FunctionDecl *fd) {
+    if (!fd || !fd->doesThisDeclarationHaveABody())
+      return true;
+    std::set<std::string> savedOwners = std::move(currentOwners_);
+    std::set<std::string> savedViews = std::move(localViews_);
+    std::set<std::string> savedMoved = std::move(moved_);
+    std::set<std::string> savedReleased = std::move(released_);
+    std::set<std::string> savedNonNull = std::move(nonNull_);
+    std::set<std::string> savedTransferred = std::move(transferred_);
+    auto savedOffsets = std::move(moveOffsets_);
+    auto savedApplied = std::move(appliedSites_);
+    currentOwners_.clear();
+    localViews_.clear();
+    moved_.clear();
+    released_.clear();
+    nonNull_.clear();
+    transferred_.clear();
+    moveOffsets_.clear();
+    appliedSites_.clear();
+    collectTransfers(fd->getBody());
+    // cplus_move is a macro, so it has no CallExpr in the safety AST. The
+    // rewriter records each move site by original source line. Discover the
+    // qualified names first, then map their sites to byte offsets in the
+    // lowered C buffer so the walk can seed moved state at the site itself.
+    struct CakeDeclCollector : RecursiveASTVisitor<CakeDeclCollector> {
+      CakeFlowVisitor &self;
+      CakeDeclCollector(CakeFlowVisitor &s) : self(s) {}
+      bool VisitVarDecl(VarDecl *vd) {
+        const int q = self.qualifierFor(vd);
+        if (q == 2)
+          self.noteOwnerName(vd->getNameAsString());
+        else if (q == 3)
+          self.noteViewName(vd->getNameAsString());
+        return true;
+      }
+    } collector(*this);
+    collector.TraverseStmt(fd->getBody());
+    seedMoveSites();
+    bool r = RecursiveASTVisitor::TraverseFunctionDecl(fd);
+    for (const std::string &n : currentOwners_)
+      if (!moved_.count(n) && !released_.count(n) && !transferred_.count(n))
+        reportAt(fd->getLocation(), "CPLUS-OWN",
+                 "_Owner '" + n +
+                     "' is leaked: it is neither released nor moved on every "
+                     "path",
+                 "release it exactly once or transfer it with cplus_move()");
+    currentOwners_ = std::move(savedOwners);
+    localViews_ = std::move(savedViews);
+    moved_ = std::move(savedMoved);
+    released_ = std::move(savedReleased);
+    nonNull_ = std::move(savedNonNull);
+    transferred_ = std::move(savedTransferred);
+    moveOffsets_ = std::move(savedOffsets);
+    appliedSites_ = std::move(savedApplied);
+    return r;
+  }
+
+  /// Apply the recorded move sites whose byte offsets fall inside the source
+  /// range of the statement just walked. Deferring to AFTER the statement
+  /// means a use within the move expression itself is not mistaken for a
+  /// use-after-move, while the next statement sees the seeded state.
+  bool TraverseStmt(Stmt *s) {
+    bool r = RecursiveASTVisitor::TraverseStmt(s);
+    unsigned begin = 0, end = 0;
+    if (stmtOffsetRange(s, begin, end))
+      applyMovesInRange(begin, end, s->getBeginLoc());
+    return r;
+  }
+
+  bool TraverseIfStmt(IfStmt *s) {
+    if (!s)
+      return true;
+    std::string name;
+    bool thenNonNull = false, elseNonNull = false;
+    refineFromCond(s->getCond(), name, thenNonNull, elseNonNull);
+    const bool tracked = !name.empty() && isQualified(name);
+    const std::set<std::string> savedNonNull = nonNull_;
+    bool r = TraverseStmt(s->getCond());
+
+    // Fork the ownership state for each arm. appliedSites_ is intentionally
+    // shared: a move site belongs to exactly one arm, so the other arm must
+    // not re-apply it when its state is restored.
+    const std::set<std::string> entryMoved = moved_;
+    const std::set<std::string> entryReleased = released_;
+    const std::set<std::string> entryTransferred = transferred_;
+
+    moved_ = entryMoved;
+    released_ = entryReleased;
+    transferred_ = entryTransferred;
+    if (tracked && thenNonNull)
+      nonNull_.insert(name);
+    else
+      nonNull_.erase(name);
+    r &= TraverseStmt(s->getThen());
+    const std::set<std::string> thenMoved = moved_;
+    const std::set<std::string> thenReleased = released_;
+    const std::set<std::string> thenTransferred = transferred_;
+
+    moved_ = entryMoved;
+    released_ = entryReleased;
+    transferred_ = entryTransferred;
+    nonNull_ = savedNonNull;
+    if (Stmt *other = s->getElse()) {
+      if (tracked && elseNonNull)
+        nonNull_.insert(name);
+      else
+        nonNull_.erase(name);
+      r &= TraverseStmt(other);
+    }
+    const std::set<std::string> elseMoved = moved_;
+    const std::set<std::string> elseReleased = released_;
+    const std::set<std::string> elseTransferred = transferred_;
+
+    // Join: a moved/released fact survives only when BOTH arms agree, so a
+    // single move in one arm is never treated as an unconditional transfer.
+    moved_ = intersect(thenMoved, elseMoved);
+    released_ = intersect(thenReleased, elseReleased);
+    transferred_ = intersect(thenTransferred, elseTransferred);
+    nonNull_ = savedNonNull;
+    // A guard whose OTHER arm definitely exits proves non-null after the if.
+    if (tracked) {
+      if (thenNonNull && s->getElse() && containsReturn(s->getElse()))
+        nonNull_.insert(name);
+      if (elseNonNull && containsReturn(s->getThen()))
+        nonNull_.insert(name);
+    }
+    return r;
+  }
+
+  bool TraverseWhileStmt(WhileStmt *s) {
+    return traverseLoop(nullptr, s->getCond(), s->getBody(), nullptr);
+  }
+  bool TraverseForStmt(ForStmt *s) {
+    return traverseLoop(s->getInit(), s->getCond(), s->getBody(), s->getInc());
+  }
+  bool TraverseDoStmt(DoStmt *s) {
+    return traverseLoop(nullptr, s->getCond(), s->getBody(), nullptr);
+  }
+
+  /// Cake visits a loop body twice: once to reach the iteration state and a
+  /// second time with warnings enabled. Rewinding the move sites inside the
+  /// body makes a move without an intervening reassignment a double move on
+  /// the back edge; a reassignment in the body clears the state before the
+  /// move is seen again.
+  bool traverseLoop(Stmt *init, Stmt *cond, Stmt *body, Stmt *inc) {
+    if (!body)
+      return true;
+    const std::set<std::string> entryMoved = moved_;
+    const std::set<std::string> entryReleased = released_;
+    const std::set<std::string> entryTransferred = transferred_;
+    const auto entryApplied = appliedSites_;
+
+    suppress_ = true;
+    TraverseStmt(init);
+    TraverseStmt(cond);
+    TraverseStmt(body);
+    TraverseStmt(inc);
+    suppress_ = false;
+    const std::set<std::string> iterationMoved = moved_;
+    const std::set<std::string> iterationReleased = released_;
+    const std::set<std::string> iterationTransferred = transferred_;
+
+    unsigned bodyBegin = 0, bodyEnd = 0;
+    const bool haveBody = stmtOffsetRange(body, bodyBegin, bodyEnd);
+    for (auto it = appliedSites_.begin(); it != appliedSites_.end();) {
+      if (!entryApplied.count(*it) && haveBody && it->second >= bodyBegin &&
+          it->second <= bodyEnd)
+        it = appliedSites_.erase(it);
+      else
+        ++it;
+    }
+
+    moved_ = iterationMoved;
+    released_ = iterationReleased;
+    transferred_ = iterationTransferred;
+    TraverseStmt(init);
+    TraverseStmt(cond);
+    TraverseStmt(body);
+    TraverseStmt(inc);
+
+    // Zero iterations are possible: only definite state survives the exit,
+    // while a transfer anywhere in the loop still clears the leak obligation.
+    moved_ = intersect(moved_, entryMoved);
+    released_ = setUnion(released_, entryReleased);
+    transferred_ = setUnion(transferred_, entryTransferred);
+    return true;
+  }
+
+  bool TraverseBinaryOperator(BinaryOperator *op) {
+    if (!op || (op->getOpcode() != BO_LAnd && op->getOpcode() != BO_LOr))
+      return RecursiveASTVisitor::TraverseBinaryOperator(op);
+    // `p && *p` and `!p || *p` refine p only in the right operand.
+    std::string name;
+    bool refines = false;
+    const Expr *lhs = op->getLHS()->IgnoreParenCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(lhs)) {
+      if (uo->getOpcode() == UO_LNot) {
+        name = nameOf(uo->getSubExpr());
+        refines = op->getOpcode() == BO_LOr;
+      }
+    }
+    if (name.empty()) {
+      name = nameOf(lhs);
+      refines = op->getOpcode() == BO_LAnd;
+    }
+    std::set<std::string> saved = nonNull_;
+    if (!name.empty() && isQualified(name)) {
+      if (refines)
+        nonNull_.insert(name);
+      else
+        nonNull_.erase(name);
+    }
+    bool r = TraverseStmt(op->getLHS());
+    r &= TraverseStmt(op->getRHS());
+    nonNull_ = saved;
+    return r;
+  }
+
+  bool VisitVarDecl(VarDecl *vd) {
+    const int q = qualifierOf(vd);
+    if (q == 0)
+      return true;
+    const std::string n = vd->getNameAsString();
+    if (q == 1)
+      optVars_.insert(n);
+    else if (q == 3)
+      viewVars_.insert(n);
+    else if (q == 2) {
+      ownerVars_.insert(n);
+      // Parameters are borrowed by the caller; the callee is not required to
+      // destroy them. Only locals create a leak obligation here.
+      if (!isa<ParmVarDecl>(vd))
+        currentOwners_.insert(n);
+    }
+    return true;
+  }
+
+  bool VisitBinaryOperator(BinaryOperator *op) {
+    if (!op || !op->isAssignmentOp())
+      return true;
+    const std::string n = nameOf(op->getLHS());
+    if (n.empty() || !isQualified(n))
+      return true;
+    // A fresh assignment revives a moved-from owner.
+    if (ownerVars_.count(n) || viewVars_.count(n)) {
+      moved_.erase(n);
+      released_.erase(n);
+      transferred_.erase(n);
+    }
+    if (isNullExpr(op->getRHS()))
+      nonNull_.erase(n);
+    else
+      nonNull_.insert(n);
+    return true;
+  }
+
+  bool VisitUnaryOperator(UnaryOperator *op) {
+    if (!op || op->getOpcode() != UO_Deref)
+      return true;
+    const std::string n = nameOf(op->getSubExpr());
+    if (n.empty())
+      return true;
+    if (optVars_.count(n) && !nonNull_.count(n))
+      reportAt(op->getBeginLoc(), "CPLUS-OPT",
+               "_Opt pointer '" + n +
+                   "' is dereferenced without an active non-null refinement",
+               "guard it with 'if (" + n + ") { ... }' or "
+               "'if (!" + n + ") return;' before dereferencing");
+    if ((ownerVars_.count(n) || viewVars_.count(n)) && moved_.count(n))
+      reportAt(op->getBeginLoc(), "CPLUS-OWN",
+               "use-after-move: dereference of moved '" + n + "'",
+               "re-assign the owner or borrow it before the move instead");
+    return true;
+  }
+
+  bool VisitMemberExpr(MemberExpr *member) {
+    if (!member || !member->isArrow())
+      return true;
+    const std::string n = nameOf(member->getBase());
+    if (n.empty())
+      return true;
+    if (optVars_.count(n) && !nonNull_.count(n))
+      reportAt(member->getBeginLoc(), "CPLUS-OPT",
+               "_Opt pointer '" + n +
+                   "' is dereferenced by '->' without an active non-null "
+                   "refinement",
+               "guard it with 'if (" + n + ") { ... }' first");
+    if ((ownerVars_.count(n) || viewVars_.count(n)) && moved_.count(n))
+      reportAt(member->getBeginLoc(), "CPLUS-OWN",
+               "use-after-move: member access through moved '" + n + "'",
+               "re-assign the owner or borrow it before the move instead");
+    return true;
+  }
+
+  bool VisitCallExpr(CallExpr *call) {
+    if (!call)
+      return true;
+    const FunctionDecl *fd = call->getDirectCallee();
+    const std::string fn = fd ? fd->getNameAsString() : std::string();
+    const bool isDrop = fn == "free" || fn == "cplus_release" ||
+                        (fn.size() > 5 &&
+                         fn.compare(fn.size() - 5, 5, "_drop") == 0);
+    if (isDrop || fn == "cplus_move") {
+      if (call->getNumArgs() >= 1) {
+        const std::string n = nameOf(call->getArg(0));
+        if (!n.empty()) {
+          if (isDrop)
+            released_.insert(n);
+          if (fn == "cplus_move") {
+            if (viewVars_.count(n))
+              reportAt(call->getBeginLoc(), "CPLUS-VIEW",
+                       "_View '" + n +
+                           "' is a borrow and must not be moved",
+                       "borrows are non-owning; drop the _View qualifier or "
+                       "move the underlying _Owner");
+            else if (ownerVars_.count(n)) {
+              if (moved_.count(n))
+                reportAt(call->getBeginLoc(), "CPLUS-OWN",
+                         "_Owner '" + n + "' is moved more than once",
+                         "a moved owner is empty; re-assign it before "
+                         "transferring it again");
+              moved_.insert(n);
+              released_.insert(n); // transferred out of this function
+            }
+          }
+        }
+      }
+    }
+    // Ownership-consuming callees reuse the existing effect summaries.
+    for (unsigned i = 0; i < call->getNumArgs(); ++i) {
+      const std::string n = nameOf(call->getArg(i));
+      if (n.empty() || !ownerVars_.count(n))
+        continue;
+      if (cplusCakeEffectConsumesArg(fn, static_cast<int>(i))) {
+        moved_.insert(n);
+        released_.insert(n);
+      }
+    }
+    return true;
+  }
+
+private:
+  static std::string nameOf(const Expr *e) {
+    if (!e)
+      return std::string();
+    e = e->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(e))
+      if (uo->getOpcode() == UO_AddrOf)
+        e = uo->getSubExpr()->IgnoreParenImpCasts();
+    if (const auto *dr = dyn_cast<DeclRefExpr>(e))
+      if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+        return vd->getNameAsString();
+    return std::string();
+  }
+
+  static bool isNullExpr(const Expr *e) {
+    if (!e)
+      return false;
+    e = e->IgnoreParenImpCasts();
+    if (isa<CXXNullPtrLiteralExpr>(e))
+      return true;
+    if (const auto *il = dyn_cast<IntegerLiteral>(e))
+      return il->getValue().isZero();
+    if (const auto *dr = dyn_cast<DeclRefExpr>(e))
+      return dr->getDecl() &&
+             dr->getDecl()->getNameAsString() == "NULL";
+    return false;
+  }
+
+  static bool containsReturn(const Stmt *s) {
+    if (!s)
+      return false;
+    if (isa<ReturnStmt>(s))
+      return true;
+    for (const Stmt *c : s->children())
+      if (containsReturn(c))
+        return true;
+    return false;
+  }
+
+  void collectTransfers(const Stmt *s) {
+    if (!s)
+      return;
+    if (const auto *rs = dyn_cast<ReturnStmt>(s)) {
+      const std::string n = nameOf(rs->getRetValue());
+      if (!n.empty())
+        transferred_.insert(n);
+    }
+    for (const Stmt *c : s->children())
+      collectTransfers(c);
+  }
+
+  /// Turn the rewriter's original-source line facts into byte offsets in the
+  /// lowered C buffer that Clang parsed. Sites are kept in source order, so a
+  /// repeated move on one line is matched to its nth token occurrence.
+  void seedMoveSites() {
+    std::set<std::string> names = currentOwners_;
+    names.insert(localViews_.begin(), localViews_.end());
+    for (const std::string &n : names) {
+      std::vector<unsigned> &offsets = moveOffsets_[n];
+      std::vector<unsigned> lines = cplusCakeMoveSites(n);
+      std::map<unsigned, unsigned> perLine;
+      for (unsigned line : lines) {
+        const size_t begin = cakeLineOffset(code_, line);
+        const size_t end = cakeLineOffset(code_, line + 1);
+        const unsigned nth = perLine[line]++;
+        const size_t off = cakeMoveOffset(code_, begin, end, n, nth);
+        if (off != std::string::npos)
+          offsets.push_back(static_cast<unsigned>(off));
+      }
+      std::sort(offsets.begin(), offsets.end());
+    }
+  }
+
+  /// Source-file byte range of a statement, if both endpoints come from the
+  /// main file (macro expansions report their expansion location here).
+  bool stmtOffsetRange(const Stmt *s, unsigned &begin, unsigned &end) const {
+    if (!s)
+      return false;
+    const SourceManager &sm = ctx_.getSourceManager();
+    SourceLocation b = sm.getExpansionLoc(s->getBeginLoc());
+    SourceLocation e = sm.getExpansionLoc(s->getEndLoc());
+    if (!b.isValid() || !e.isValid() ||
+        sm.getFileID(b) != sm.getMainFileID() ||
+        sm.getFileID(e) != sm.getMainFileID())
+      return false;
+    begin = sm.getFileOffset(b);
+    end = sm.getFileOffset(e);
+    return true;
+  }
+
+  void applyMovesInRange(unsigned begin, unsigned end, SourceLocation loc) {
+    for (const auto &entry : moveOffsets_) {
+      const std::string &n = entry.first;
+      for (unsigned off : entry.second) {
+        if (off < begin || off > end)
+          continue;
+        const auto site = std::make_pair(n, off);
+        if (!appliedSites_.insert(site).second)
+          continue;
+        applyMove(n, loc);
+      }
+    }
+  }
+
+  void applyMove(const std::string &n, SourceLocation loc) {
+    if (viewVars_.count(n)) {
+      reportAt(loc, "CPLUS-VIEW",
+               "_View '" + n + "' is a borrow and must not be moved",
+               "borrows are non-owning; move the underlying _Owner instead");
+      moved_.insert(n);
+      return;
+    }
+    if (!ownerVars_.count(n)) {
+      moved_.insert(n);
+      return;
+    }
+    if (moved_.count(n))
+      reportAt(loc, "CPLUS-OWN", "_Owner '" + n + "' is moved more than once",
+               "a moved owner is empty; re-assign it before transferring it "
+               "again");
+    moved_.insert(n);
+    released_.insert(n); // transferred out; not a leak at scope exit
+  }
+
+  static std::set<std::string> intersect(const std::set<std::string> &a,
+                                         const std::set<std::string> &b) {
+    std::set<std::string> out;
+    std::set_intersection(a.begin(), a.end(), b.begin(), b.end(),
+                          std::inserter(out, out.begin()));
+    return out;
+  }
+
+  static std::set<std::string> setUnion(const std::set<std::string> &a,
+                                        const std::set<std::string> &b) {
+    std::set<std::string> out = a;
+    out.insert(b.begin(), b.end());
+    return out;
+  }
+
+  int qualifierOf(const VarDecl *vd) const {
+    if (!vd)
+      return 0;
+    const std::string n = vd->getNameAsString();
+    PresumedLoc pl = ctx_.getSourceManager().getPresumedLoc(vd->getLocation());
+    if (pl.isValid()) {
+      int q = cplusCakeQualifierOf(n, pl.getLine());
+      if (q)
+        return q;
+    }
+    const VarDecl *canonical = vd->getCanonicalDecl();
+    if (canonical && canonical != vd) {
+      PresumedLoc cp =
+          ctx_.getSourceManager().getPresumedLoc(canonical->getLocation());
+      if (cp.isValid())
+        return cplusCakeQualifierOf(n, cp.getLine());
+    }
+    return 0;
+  }
+
+  bool isQualified(const std::string &n) const {
+    return optVars_.count(n) || ownerVars_.count(n) || viewVars_.count(n);
+  }
+
+  void refineFromCond(const Expr *cond, std::string &name, bool &thenNonNull,
+                      bool &elseNonNull) const {
+    name.clear();
+    thenNonNull = elseNonNull = false;
+    if (!cond)
+      return;
+    const Expr *c = cond->IgnoreParenCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(c)) {
+      if (uo->getOpcode() == UO_LNot) {
+        name = nameOf(uo->getSubExpr());
+        thenNonNull = false;
+        elseNonNull = !name.empty();
+      }
+      return;
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(c)) {
+      if (!bo->isEqualityOp())
+        return;
+      name = nameOf(bo->getLHS());
+      if (name.empty())
+        name = nameOf(bo->getRHS());
+      const bool nullComparison =
+          isNullExpr(bo->getLHS()) || isNullExpr(bo->getRHS());
+      if (!name.empty() && nullComparison) {
+        thenNonNull = bo->getOpcode() == BO_NE;
+        elseNonNull = bo->getOpcode() == BO_EQ;
+      } else {
+        name.clear();
+      }
+      return;
+    }
+    name = nameOf(c);
+    thenNonNull = !name.empty();
+  }
+
+  void reportAt(SourceLocation loc, const char *category,
+                const std::string &message, const std::string &help) {
+    if (suppress_)
+      return;
+    std::string key = message + "@" + std::to_string(loc.getRawEncoding());
+    if (!reported_.insert(key).second)
+      return;
+    PresumedLoc pl = ctx_.getSourceManager().getPresumedLoc(loc);
+    Diag d;
+    d.level = strict_ ? DiagLevel::Error : DiagLevel::Warning;
+    d.message = "[" + std::string(category) + "] " + message;
+    d.help = help;
+    d.file = file_;
+    if (pl.isValid()) {
+      d.line = pl.getLine();
+      d.column = pl.getColumn();
+      std::string sourceFile = pl.getFilename();
+      if (sourceFile == file_ + ".c")
+        sourceFile = file_;
+      if (!sourceFile.empty() && sourceFile != file_)
+        d.file = sourceFile;
+    }
+    diags_.report(std::move(d));
+  }
+
+  ASTContext &ctx_;
+  DiagnosticEngine &diags_;
+  std::string file_;
+  std::string code_;
+  bool strict_ = false;
+  bool suppress_ = false;
+  std::set<std::string> optVars_;
+  std::set<std::string> ownerVars_;
+  std::set<std::string> viewVars_;
+  std::set<std::string> currentOwners_;
+  std::set<std::string> localViews_;
+  std::set<std::string> moved_;
+  std::set<std::string> released_;
+  std::set<std::string> nonNull_;
+  std::set<std::string> transferred_;
+  std::map<std::string, std::vector<unsigned>> moveOffsets_;
+  std::set<std::pair<std::string, unsigned>> appliedSites_;
+  std::set<std::string> reported_;
+};
+
 } // namespace
 
 namespace {
@@ -9564,6 +10254,11 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   setCheckedAllocSites(check.takeAllocSites());
   setCheckedFreeSites(check.takeFreeSites());
 
+  // Issue #179: Cake qualifiers are checked only when the source actually
+  // declared them, so plain C and every existing diagnostic are untouched.
+  CakeFlowVisitor cake(ast->getASTContext(), diags, filename, loweredC, strict);
+  cake.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
+
   // Thread-race heuristic: the same entry function passed to more than one
   // pthread_create that writes a global has unsynchronised shared mutable
   // state. Reject in STRICT, warn in DEFAULT.
@@ -9654,6 +10349,347 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   };
   FunctionRunner runner(ast->getASTContext(), filename, diags);
   runner.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
+}
+
+// ---------------------------------------------------------------------------
+// Issue #181: opt-in `-fcplus-disjoint-bounds` instrumentation.
+//
+// This is deliberately additive and off by default.  It runs AFTER all static
+// safety analysis and rewrites ONLY the lowered C text: every pointer object
+// gets (base, bound, key, lock) metadata in the runtime's pointer-slot side
+// table, pointer assignments/arithmetic propagate that tuple, and every
+// dereference/subscript gets an O(1) cplus_shadow_slot_check() call.  A stack
+// frame key is registered on entry and invalidated by a cleanup attribute on
+// every exit path.  Untagged/uninstrumented pointers keep plain-C behaviour.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct ShadowEdit {
+  SourceLocation loc;
+  std::string text;
+  bool afterToken;
+};
+
+static std::vector<std::string>
+shadowParseArgs(const std::vector<std::string> &backendArgs) {
+  std::vector<std::string> args;
+  for (size_t i = 0; i < backendArgs.size(); ++i) {
+    const std::string &arg = backendArgs[i];
+    if (arg == "-isysroot") {
+      ++i; // skip the SDK path
+      continue;
+    }
+    if (arg.rfind("-isysroot=", 0) == 0)
+      continue;
+    if (arg.rfind("-I", 0) == 0 || arg.rfind("-D", 0) == 0 ||
+        arg.rfind("-std=", 0) == 0)
+      args.push_back(arg);
+  }
+#ifdef CPLUS_CLANG_RESOURCE_DIR
+  args.push_back(std::string("-resource-dir=") + CPLUS_CLANG_RESOURCE_DIR);
+#endif
+  args.push_back("-fsyntax-only");
+  return args;
+}
+
+static bool shadowInMainFile(const SourceManager &sm, SourceLocation loc) {
+  return loc.isValid() && !loc.isMacroID() &&
+         sm.isWrittenInMainFile(sm.getExpansionLoc(loc));
+}
+
+static bool shadowDirectCompoundStmtChild(ASTContext &ctx, const Stmt *s) {
+  for (const auto &p : ctx.getParents(*s))
+    if (p.get<CompoundStmt>())
+      return true;
+  return false;
+}
+
+/// Statement to instrument before: the nearest ancestor that is a direct
+/// child of a CompoundStmt (so the inserted check is a valid statement).
+static const Stmt *shadowAnchorStmt(ASTContext &ctx, const Stmt *s) {
+  DynTypedNode cur = DynTypedNode::create(*s);
+  for (unsigned depth = 0; depth < 64; ++depth) {
+    DynTypedNodeList parents = ctx.getParents(cur);
+    if (parents.empty())
+      return NULL;
+    const DynTypedNode &parent = *parents.begin();
+    if (parent.get<CompoundStmt>())
+      return cur.get<Stmt>();
+    if (const Stmt *next = parent.get<Stmt>()) {
+      cur = DynTypedNode::create(*next);
+      continue;
+    }
+    // A dereference inside a variable initializer reaches a VarDecl before
+    // its DeclStmt.  Climb the Decl chain to that statement.
+    if (const Decl *d = parent.get<Decl>()) {
+      DynTypedNode dn = DynTypedNode::create(*d);
+      for (unsigned j = 0; j < 16; ++j) {
+        DynTypedNodeList ps = ctx.getParents(dn);
+        if (ps.empty())
+          break;
+        if (const DeclStmt *ds = ps.begin()->get<DeclStmt>())
+          return ds;
+        if (const Decl *nd = ps.begin()->get<Decl>()) {
+          dn = DynTypedNode::create(*nd);
+          continue;
+        }
+        break;
+      }
+    }
+    return NULL;
+  }
+  return NULL;
+}
+
+static SourceLocation shadowAfterSemicolon(ASTContext &ctx, const Stmt *s) {
+  return Lexer::findLocationAfterToken(s->getEndLoc(), tok::semi,
+                                       ctx.getSourceManager(),
+                                       ctx.getLangOpts(), false);
+}
+
+static std::string shadowSourceText(const Expr *e, const ASTContext &ctx) {
+  return Lexer::getSourceText(CharSourceRange::getTokenRange(e->getSourceRange()),
+                              ctx.getSourceManager(), ctx.getLangOpts())
+      .str();
+}
+
+/// Only side-effect-free index expressions are duplicated into the check.
+static bool shadowSimpleIndex(const Expr *e) {
+  if (!e || !e->getType()->isIntegerType())
+    return false;
+  const Expr *x = e->IgnoreParenImpCasts();
+  if (isa<IntegerLiteral>(x) || isa<DeclRefExpr>(x))
+    return true;
+  if (const auto *uo = dyn_cast<UnaryOperator>(x))
+    return uo->getOpcode() == UO_Plus || uo->getOpcode() == UO_Minus
+               ? shadowSimpleIndex(uo->getSubExpr())
+               : false;
+  if (const auto *bo = dyn_cast<BinaryOperator>(x))
+    return !bo->isAssignmentOp() && !bo->isCompoundAssignmentOp() &&
+           shadowSimpleIndex(bo->getLHS()) &&
+           shadowSimpleIndex(bo->getRHS());
+  if (const auto *cast = dyn_cast<ExplicitCastExpr>(x))
+    return shadowSimpleIndex(cast->getSubExpr());
+  return false;
+}
+
+class ShadowInstrumentVisitor
+    : public RecursiveASTVisitor<ShadowInstrumentVisitor> {
+public:
+  ShadowInstrumentVisitor(ASTContext &ctx, std::vector<ShadowEdit> &edits)
+      : ctx_(ctx), sm_(ctx.getSourceManager()), edits_(edits) {}
+
+  bool VisitFunctionDecl(FunctionDecl *fd) {
+    Stmt *body = fd->doesThisDeclarationHaveABody() ? fd->getBody() : nullptr;
+    if (!body || !shadowInMainFile(sm_, body->getBeginLoc()))
+      return true;
+    std::string text =
+        "\n  uint64_t __cplus_shadow_frame "
+        "__attribute__((cleanup(cplus_shadow_frame_leave))) = "
+        "cplus_shadow_frame_enter();";
+    for (const ParmVarDecl *p : fd->parameters())
+      if (p->getType()->isPointerType())
+        text += "\n  cplus_shadow_slot_seed(&" + p->getNameAsString() +
+                ", (const void *)(" + p->getNameAsString() + "));";
+    edits_.push_back({body->getBeginLoc(), text, true});
+    return true;
+  }
+
+  bool VisitVarDecl(VarDecl *vd) {
+    if (!vd->isLocalVarDecl() || !shadowInMainFile(sm_, vd->getLocation()))
+      return true;
+    const std::string name = vd->getNameAsString();
+    if (name.empty())
+      return true;
+    if (vd->getType()->isArrayType()) {
+      const DeclStmt *ds = enclosingDeclStmt(vd);
+      if (!ds || !shadowDirectCompoundStmtChild(ctx_, ds))
+        return true;
+      SourceLocation after = shadowAfterSemicolon(ctx_, ds);
+      if (after.isInvalid() || !shadowInMainFile(sm_, after))
+        return true;
+      edits_.push_back({after, "\n  cplus_shadow_frame_register(&" + name +
+                                   ", &__cplus_shadow_frame, (const void *)(" +
+                                   name + "), sizeof(" + name + "));",
+                        false});
+      return true;
+    }
+    if (!vd->getType()->isPointerType() || !vd->hasInit())
+      return true;
+    const DeclStmt *ds = enclosingDeclStmt(vd);
+    if (!ds || !shadowDirectCompoundStmtChild(ctx_, ds))
+      return true;
+    SourceLocation after = shadowAfterSemicolon(ctx_, ds);
+    if (after.isInvalid() || !shadowInMainFile(sm_, after))
+      return true;
+    edits_.push_back({after, "\n  " + seedText(name, vd->getInit()), false});
+    return true;
+  }
+
+  bool VisitBinaryOperator(BinaryOperator *op) {
+    if (op->getOpcode() != BO_Assign ||
+        !shadowInMainFile(sm_, op->getBeginLoc()) ||
+        !shadowDirectCompoundStmtChild(ctx_, op))
+      return true;
+    // Compound pointer assignment (p += n) keeps the same base/bound/key, so
+    // no re-seed is needed; only plain assignment carries new provenance.
+    const auto *lhs =
+        dyn_cast<DeclRefExpr>(op->getLHS()->IgnoreParenImpCasts());
+    if (!lhs)
+      return true;
+    const auto *lv = dyn_cast<VarDecl>(lhs->getDecl());
+    if (!lv || !lv->isLocalVarDecl() || !lv->getType()->isPointerType())
+      return true;
+    SourceLocation after = shadowAfterSemicolon(ctx_, op);
+    if (after.isInvalid() || !shadowInMainFile(sm_, after))
+      return true;
+    const std::string name = lv->getNameAsString();
+    const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
+    std::string text;
+    if (const auto *src = dyn_cast<DeclRefExpr>(rhs))
+      text = "cplus_shadow_slot_copy(&" + name + ", &" +
+             shadowSourceText(src, ctx_) + ");";
+    else if (const auto *arith = dyn_cast<BinaryOperator>(rhs)) {
+      const Expr *ptrSide = arith->getLHS()->IgnoreParenImpCasts();
+      if (!ptrSide->getType()->isPointerType())
+        ptrSide = arith->getRHS()->IgnoreParenImpCasts();
+      const auto *src = dyn_cast<DeclRefExpr>(ptrSide);
+      if (src && (arith->getOpcode() == BO_Add ||
+                  arith->getOpcode() == BO_Sub))
+        text = "cplus_shadow_slot_copy(&" + name + ", &" +
+               shadowSourceText(src, ctx_) + ");";
+    }
+    if (text.empty())
+      text = "cplus_shadow_slot_seed(&" + name + ", (const void *)(" + name +
+             "));";
+    edits_.push_back({after, "\n  " + text, false});
+    return true;
+  }
+
+  bool VisitUnaryOperator(UnaryOperator *uo) {
+    if (uo->getOpcode() != UO_Deref)
+      return true;
+    const auto *base =
+        dyn_cast<DeclRefExpr>(uo->getSubExpr()->IgnoreParenImpCasts());
+    if (!base || !shadowPointerish(base))
+      return true;
+    const std::string b = shadowSourceText(base, ctx_);
+    addCheck(uo, shadowSourceText(base, ctx_), "(const void *)(" + b + ")",
+             "sizeof(*(" + b + "))");
+    return true;
+  }
+
+  bool VisitArraySubscriptExpr(ArraySubscriptExpr *sub) {
+    const auto *base =
+        dyn_cast<DeclRefExpr>(sub->getBase()->IgnoreParenImpCasts());
+    if (!base || !shadowPointerish(base) ||
+        !shadowSimpleIndex(sub->getIdx()))
+      return true;
+    const std::string b = shadowSourceText(base, ctx_);
+    const std::string idx = shadowSourceText(sub->getIdx(), ctx_);
+    addCheck(sub, shadowSourceText(base, ctx_),
+             "(const void *)((const char *)(" + b +
+                 ") + (unsigned long long)(" + idx +
+                 ") * (unsigned long long)sizeof((" + b + ")[0]))",
+             "sizeof((" + b + ")[0])");
+    return true;
+  }
+
+private:
+  static bool shadowPointerish(const DeclRefExpr *e) {
+    return e->getType()->isPointerType() || e->getType()->isArrayType();
+  }
+
+  const DeclStmt *enclosingDeclStmt(const Decl *d) const {
+    DynTypedNode cur = DynTypedNode::create(*d);
+    for (unsigned depth = 0; depth < 16; ++depth) {
+      DynTypedNodeList parents = ctx_.getParents(cur);
+      if (parents.empty())
+        return NULL;
+      if (const DeclStmt *ds = parents.begin()->get<DeclStmt>())
+        return ds;
+      if (const Decl *next = parents.begin()->get<Decl>()) {
+        cur = DynTypedNode::create(*next);
+        continue;
+      }
+      return NULL;
+    }
+    return NULL;
+  }
+
+  std::string seedText(const std::string &name, const Expr *init) const {
+    if (const auto *addr = dyn_cast<UnaryOperator>(init->IgnoreParenImpCasts())) {
+      if (addr->getOpcode() == UO_AddrOf) {
+        const auto *obj = dyn_cast<DeclRefExpr>(
+            addr->getSubExpr()->IgnoreParenImpCasts());
+        if (obj && shadowInMainFile(sm_, obj->getLocation())) {
+          const std::string o = shadowSourceText(obj, ctx_);
+          return "cplus_shadow_frame_register(&" + name +
+                 ", &__cplus_shadow_frame, (const void *)(" + o +
+                 "), sizeof(" + o + "));";
+        }
+      }
+    }
+    return "cplus_shadow_slot_seed(&" + name + ", (const void *)(" + name +
+           "));";
+  }
+
+  void addCheck(const Stmt *s, const std::string &slot,
+                const std::string &ptrExpr, const std::string &sizeExpr) {
+    if (!shadowInMainFile(sm_, s->getBeginLoc()))
+      return;
+    const Stmt *anchor = shadowAnchorStmt(ctx_, s);
+    if (!anchor || !shadowInMainFile(sm_, anchor->getBeginLoc()))
+      return;
+    edits_.push_back({anchor->getBeginLoc(),
+                      "\n  cplus_shadow_slot_check(&" + slot + ", " + ptrExpr +
+                          ", " + sizeExpr + ", __FILE__, __LINE__);\n  ",
+                      false});
+  }
+
+  ASTContext &ctx_;
+  SourceManager &sm_;
+  std::vector<ShadowEdit> &edits_;
+};
+
+} // namespace
+
+bool instrumentDisjointBounds(const std::string &loweredC,
+                              const std::vector<std::string> &backendArgs,
+                              std::string &out, std::string &error) {
+  std::vector<std::string> args = shadowParseArgs(backendArgs);
+  clang::IgnoringDiagConsumer ignored;
+  std::unique_ptr<ASTUnit> ast = tooling::buildASTFromCodeWithArgs(
+      loweredC, args, "cplus-disjoint-bounds.c", "cplus-shadow-instrument",
+      std::make_shared<PCHContainerOperations>(),
+      tooling::getClangStripDependencyFileAdjuster(), {}, &ignored);
+  if (!ast || ast->getDiagnostics().hasErrorOccurred()) {
+    error = "cannot build the AST for disjoint-bounds instrumentation";
+    return false;
+  }
+  ASTContext &ctx = ast->getASTContext();
+  SourceManager &sm = ctx.getSourceManager();
+  std::vector<ShadowEdit> edits;
+  ShadowInstrumentVisitor visitor(ctx, edits);
+  visitor.TraverseDecl(ctx.getTranslationUnitDecl());
+  if (edits.empty()) {
+    out = loweredC;
+    return true;
+  }
+  Rewriter rewriter;
+  rewriter.setSourceMgr(sm, ctx.getLangOpts());
+  for (const ShadowEdit &edit : edits) {
+    if (!shadowInMainFile(sm, edit.loc))
+      continue;
+    if (edit.afterToken)
+      rewriter.InsertTextAfterToken(edit.loc, edit.text);
+    else
+      rewriter.InsertText(edit.loc, edit.text);
+  }
+  llvm::raw_string_ostream os(out);
+  rewriter.getEditBuffer(sm.getMainFileID()).write(os);
+  os.flush();
+  return true;
 }
 
 } // namespace cplus

@@ -5,7 +5,7 @@ class IntVecLite {
   int *data;
   size_t n;
   IntVecLite(void) { self->data = NULL; self->n = 0; }
-  void push(int v) { int *fresh = (int *)cplus_alloc(sizeof(int) * (self->n + 1)); for (size_t i = 0; i < self->n; i++) fresh[i] = self->data[i]; if (self->data) cplus_release(self->data); self->data = fresh; self->data[self->n++] = v; }
+  void push(int v) { int *fresh = (int *)cplus_alloc(sizeof(int) * (self->n + 1)); for (size_t i = 0; i < self->n; i++) fresh[i] = self->data[i]; if (self->data) cplus_release(self->data); self->data = fresh; fresh = NULL; self->data[self->n++] = v; }
   size_t len(void) { return self->n; }
   void drop(void) { if (self->data) { cplus_release(self->data); self->data = NULL; self->n = 0; } }
 };

@@ -37,7 +37,94 @@
 
 namespace cplus {
 
+// Issue #181 — implemented in Sema/AstSafetyCheck.cpp.  Declared here rather
+// than in a header because the opt-in flag is the only new public surface.
+bool instrumentDisjointBounds(const std::string &loweredC,
+                              const std::vector<std::string> &backendArgs,
+                              std::string &out, std::string &error);
+
 namespace {
+
+// `-fcplus-disjoint-bounds` is consumed by the driver: it is never forwarded
+// to the C backend (Clang does not know it) and is stripped before every
+// pass-through/STRICT parity check.  Later tokens win, so -fno-... disables.
+static bool takeDisjointBoundsFlag(std::vector<std::string> &args,
+                                   bool &enabled) {
+  bool seen = false;
+  enabled = false;
+  for (auto it = args.begin(); it != args.end();) {
+    if (*it == "-fcplus-disjoint-bounds") {
+      enabled = true;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    if (*it == "-fno-cplus-disjoint-bounds") {
+      enabled = false;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    ++it;
+  }
+  return seen;
+}
+
+// Issue #184 — `-fcplus-safe-gc` is consumed by the driver exactly like
+// `-fcplus-disjoint-bounds`: Clang never sees it, and it is removed before the
+// STRICT pass-through allow-list.  It turns on the additive epoch/conservative
+// reclamation mode from a constructor in each lowered TU.  The runtime call is
+// an opt-in override; the default (CPLUS_RECLAIM_MODE unset) stays unchanged.
+static bool takeSafeGcFlag(std::vector<std::string> &args, bool &enabled) {
+  bool seen = false;
+  enabled = false;
+  for (auto it = args.begin(); it != args.end();) {
+    if (*it == "-fcplus-safe-gc") {
+      enabled = true;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    if (*it == "-fno-cplus-safe-gc") {
+      enabled = false;
+      seen = true;
+      it = args.erase(it);
+      continue;
+    }
+    ++it;
+  }
+  return seen;
+}
+
+static const char *const kSafeGcPreamble =
+    "\n/* issue #184: opt-in epoch/conservative reclamation */\n"
+    "extern void cplus_set_reclaim_mode(int);\n"
+    "#if defined(__GNUC__) || defined(__clang__)\n"
+    "__attribute__((constructor)) static void cplus_driver_safe_gc_init(void) "
+    "{\n"
+    "  cplus_set_reclaim_mode(1);\n"
+    "}\n"
+    "#endif\n";
+
+// Prototypes for the generated instrumentation calls, prepended only when the
+// opt-in flag is used.  The lowered C already gets the runtime include dir
+// from backendArgs(); these declarations keep the injected AST independent of
+// whether source code included cplus/cplus.h itself.
+static const char *const kDisjointBoundsPreamble =
+    "\n/* issue #181: opt-in disjoint-bounds instrumentation */\n"
+    "#include <stddef.h>\n"
+    "#include <stdint.h>\n"
+    "extern uint64_t cplus_shadow_frame_enter(void);\n"
+    "extern void cplus_shadow_frame_leave(uint64_t *);\n"
+    "extern void cplus_shadow_slot_seed(void *, const void *);\n"
+    "extern void cplus_shadow_slot_define(void *, const void *, size_t, "
+    "uint64_t *, uint64_t);\n"
+    "extern void cplus_shadow_slot_copy(void *, const void *);\n"
+    "extern void cplus_shadow_slot_clear(void *);\n"
+    "extern int cplus_shadow_slot_check(const void *, const void *, size_t, "
+    "const char *, int);\n"
+    "extern int cplus_shadow_frame_register(void *, uint64_t *, const void *, "
+    "size_t);\n";
 
 static bool g_logEnabled = false;
 static int g_logLevel = 3; // CLOG_WARN
@@ -1434,6 +1521,36 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // could reject it.
   const bool strictSafe = opts.strict && opts.mode == Mode::Safe;
   g_strictSafePaths = strictSafe;
+
+  // Issue #181: opt-in disjoint-bounds instrumentation.  Main.cpp forwards
+  // every -f* token as a pass-through argument, so consume it here before the
+  // STRICT allow-list and the backend command lines are assembled.
+  std::vector<std::string> userArgs = opts.extraArgs;
+  bool disjointBounds = false;
+  const bool sawDisjointBounds = takeDisjointBoundsFlag(userArgs, disjointBounds);
+  if (disjointBounds && opts.mode != Mode::Safe) {
+    errs << "error: -fcplus-disjoint-bounds requires Safe mode; --legacy-c "
+            "preserves plain-C source and ABI\n";
+    return 1;
+  }
+  if (sawDisjointBounds && opts.verbose)
+    errs << "note: -fcplus-disjoint-bounds " << (disjointBounds ? "enabled" : "disabled")
+         << "\n";
+
+  // Issue #184: opt-in epoch/conservative reclamation.  Consumed here, before
+  // the STRICT allow-list, so it cannot reach the C backend as an unknown -f
+  // flag.  The flag only enables a runtime mode; no pointer ABI changes.
+  bool safeGc = false;
+  const bool sawSafeGc = takeSafeGcFlag(userArgs, safeGc);
+  if (safeGc && opts.mode != Mode::Safe) {
+    errs << "error: -fcplus-safe-gc requires Safe mode; --legacy-c preserves "
+            "plain-C source and ABI\n";
+    return 1;
+  }
+  if (sawSafeGc && opts.verbose)
+    errs << "note: -fcplus-safe-gc " << (safeGc ? "enabled" : "disabled")
+         << "\n";
+
   std::vector<std::string> inputs = opts.inputs.empty()
                                         ? std::vector<std::string>{opts.input}
                                         : opts.inputs;
@@ -1457,7 +1574,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // the driver-selected Undefined sanitizer. A pass-through -fno-sanitize=
   // flag could silently disable that backend check, so reject the pair.
   if (wants(san, Sanitizer::Undefined) &&
-      extraArgsDisableSignedOverflow(opts.extraArgs)) {
+      extraArgsDisableSignedOverflow(userArgs)) {
     errs << "error: pass-through flags disable the signed-integer-overflow "
             "sanitizer that C+ relies on to suppress native guards; remove "
             "'-fno-sanitize=undefined' or use --sanitize=none\n";
@@ -1508,7 +1625,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       }
       return false;
     };
-    for (const auto &a : opts.extraArgs)
+    for (const auto &a : userArgs)
       if (rejectResponseFile(a))
         return 1;
     // Clang expands any argv token beginning with '@', not just pass-through
@@ -1517,30 +1634,30 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (rejectResponseFile(opts.output))
       return 1;
   }
-  if (strictSafe && extraArgsChangeParse(opts.extraArgs)) {
+  if (strictSafe && extraArgsChangeParse(userArgs)) {
     errs << "error: pass-through flags change how the C+ safety AST parses "
             "the program but are not forwarded to it (-include, -imacros, "
             "-isystem, -x, -include-pch); STRICT would analyse a different "
             "program than it compiles\n";
     return 1;
   }
-  if (strictSafe && extraArgsWeakenSanitizerAbort(opts.extraArgs)) {
+  if (strictSafe && extraArgsWeakenSanitizerAbort(userArgs)) {
     errs << "error: pass-through flags weaken sanitizer abort behaviour "
             "(-fsanitize-recover / -fno-sanitize-trap) that C+ relies on; "
             "remove them or use --sanitize=none\n";
     return 1;
   }
-  if (strictSafe && extraArgsDisablePointerSanitizers(opts.extraArgs)) {
+  if (strictSafe && extraArgsDisablePointerSanitizers(userArgs)) {
     errs << "error: pass-through flags disable bounds/null/alignment "
             "sanitizers that witness the C+ runtime checks\n";
     return 1;
   }
-  if (strictSafe && extraArgsWeakenSafetyWarnings(opts.extraArgs)) {
+  if (strictSafe && extraArgsWeakenSafetyWarnings(userArgs)) {
     errs << "error: pass-through flags downgrade a STRICT safety warning "
             "promoted to error (-Wno-error=<safety> / -Wno-<safety>)\n";
     return 1;
   }
-  if (strictSafe && redefinesReservedCPlusMacro(opts.extraArgs)) {
+  if (strictSafe && redefinesReservedCPlusMacro(userArgs)) {
     errs << "error: pass-through -D/-U redefines a reserved C+ gate macro "
             "(CPLUS*) or a compiler/runtime instrumentation helper; STRICT "
             "cannot verify a program whose safety helpers are replaced\n";
@@ -1550,7 +1667,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // is what stops unseen spellings (-Xclang injection, @response files,
   // -include variants, -- ordering tricks, stray bare inputs) rather than a
   // never-complete deny-list.
-  if (strictSafe && !strictSafePassthroughAllowed(opts.extraArgs)) {
+  if (strictSafe && !strictSafePassthroughAllowed(userArgs)) {
     errs << "error: pass-through flag outside the STRICT Safe allow-list "
             "(-I/-D/-std=/-isysroot/-O/-W/-L/-l/-g/-pthread/...); flags such "
             "as -Xclang, @response, -include/-imacros/-isystem, -U, -x and "
@@ -1566,7 +1683,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       if (!wants(san, entry.bit))
         continue;
       if (!sanitizerSupported(entry.bit, clang,
-                              stripLanguageFlags(opts.extraArgs))) {
+                              stripLanguageFlags(userArgs))) {
         errs << "error: sanitizer '" << entry.name
              << "' is not supported by the selected backend (" << clang
              << "); detected by a compile-and-run probe\n";
@@ -1640,7 +1757,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
        * unused here and Clang's -Werror rejects them (e.g. -luv from the
        * async stdlib tests). */
       for (const auto &a :
-           withoutLinkerFlags(stripLanguageFlags(opts.extraArgs)))
+           withoutLinkerFlags(stripLanguageFlags(userArgs)))
         rtArgs.push_back(a);
       appendSafetyTail(rtArgs);
       if (runProgram(clang, rtArgs) != 0) {
@@ -1693,8 +1810,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (astInputDir.empty())
       astInputDir = ".";
     astArgs.push_back("-I" + std::string(astInputDir));
-    for (size_t i = 0; i < opts.extraArgs.size(); ++i) {
-      const std::string &a = opts.extraArgs[i];
+    for (size_t i = 0; i < userArgs.size(); ++i) {
+      const std::string &a = userArgs[i];
       if (a.rfind("-fsanitize=", 0) == 0 || a.rfind("-fno-sanitize=", 0) == 0)
         continue;
       llvm::StringRef na = normalizeFlag(a);
@@ -1703,8 +1820,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       // the value), making the safety AST fail to parse -- the compiled TU
       // parses it fine. Fold the pair into one token so check and build feed
       // the analyser the same definition the backend compiles.
-      if ((na == "-I" || na == "-D") && i + 1 < opts.extraArgs.size()) {
-        astArgs.push_back(na.str() + opts.extraArgs[++i]);
+      if ((na == "-I" || na == "-D") && i + 1 < userArgs.size()) {
+        astArgs.push_back(na.str() + userArgs[++i]);
         continue;
       }
       astArgs.push_back(a);
@@ -1852,6 +1969,24 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       loweredText = instrumentDynamicArrayBounds(loweredText,
                                                  rewritten.arrayLengths);
     }
+    if (disjointBounds) {
+      // Additive opt-in: instrument the final lowered text and parse it back
+      // once to place the check statements.  Failure is an error rather than
+      // a silently unprotected build.
+      std::string instrumented;
+      std::string ierr;
+      if (!instrumentDisjointBounds(loweredText, astArgs, instrumented, ierr)) {
+        errs << "error: " << ierr << "\n";
+        return 1;
+      }
+      loweredText = std::string(kDisjointBoundsPreamble) + instrumented;
+    }
+    if (safeGc) {
+      // Additive opt-in: a constructor in the lowered TU enables the runtime
+      // epoch reclamation mode before main().  Default builds do not see this
+      // declaration, symbol call or constructor at all.
+      loweredText = std::string(kSafeGcPreamble) + loweredText;
+    }
 
     if (fileIndex == 0 && !opts.emitC.empty()) {
       if (!writeFile(opts.emitC, loweredText, &err)) {
@@ -1884,7 +2019,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     std::vector<std::string> args = withoutLinkerFlags(base);
     args.push_back("-I" + std::string(inputDir));
     for (const auto &a :
-         withoutLinkerFlags(stripLanguageFlags(opts.extraArgs)))
+         withoutLinkerFlags(stripLanguageFlags(userArgs)))
       args.push_back(a);
     appendSafetyTail(args);
     if (opts.command == "check") {
@@ -1949,7 +2084,7 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (!runtime.empty())
       linkArgs.push_back(runtime);
   }
-  for (const auto &a : stripLanguageFlags(opts.extraArgs))
+  for (const auto &a : stripLanguageFlags(userArgs))
     linkArgs.push_back(a);
   appendSafetyTail(linkArgs);
   linkArgs.push_back("-o");

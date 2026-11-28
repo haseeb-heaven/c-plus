@@ -1975,4 +1975,79 @@ findUserDeclaredHelperSymbols(const std::string &source,
   collector.TraverseDecl(ctx.getTranslationUnitDecl());
   return found;
 }
+
+// --- Cake-style flow-sensitive qualifiers (issue #179) ----------------------
+// `_Opt`, `_Owner` and `_View` are source-level annotations only. They are
+// erased by the rewriter before C emission, so they have no runtime
+// representation and cannot affect layout, offsets or calling conventions.
+// The rewriter records each occurrence here (declared name + ORIGINAL source
+// line) and the AST safety checker consumes the facts when it walks Clang's
+// AST of the lowered C.  The boundary uses only primitive types so the two
+// consumers need no new shared header.
+namespace {
+
+struct CakeQualRecord {
+  std::string name;
+  unsigned line = 0;
+  int kind = 0; // 1 = _Opt, 2 = _Owner, 3 = _View, 4 = cplus_move site
+};
+
+std::vector<CakeQualRecord> &cakeQualRecords() {
+  static std::vector<CakeQualRecord> records;
+  return records;
+}
+
+} // namespace
+
+void cplusCakeRecordQualifier(const std::string &name, unsigned line,
+                              int kind) {
+  if (name.empty() || kind == 0)
+    return;
+  cakeQualRecords().push_back({name, line, kind});
+}
+
+void cplusCakeClearQualifiers() { cakeQualRecords().clear(); }
+
+int cplusCakeQualifierOf(const std::string &name, unsigned line) {
+  // Reverse order so the innermost / most recent declaration wins when a name
+  // is reused on the same line.
+  for (auto it = cakeQualRecords().rbegin(); it != cakeQualRecords().rend();
+       ++it)
+    if (it->line == line && it->name == name)
+      return it->kind;
+  return 0;
+}
+
+/// Original-source lines of the `cplus_move(name)` sites recorded in this TU,
+/// in source order. The rewriter records each macro invocation because
+/// cplus_move expands to a statement expression and therefore has no
+/// `CallExpr` in the safety AST. Returning the individual sites (rather than a
+/// TU-wide count) lets the Cake checker order moves against assignments and
+/// branch/loop structure; the checker maps each line to a byte offset in the
+/// lowered C buffer before seeding moved state at that site.
+std::vector<unsigned> cplusCakeMoveSites(const std::string &name) {
+  std::vector<unsigned> lines;
+  for (const CakeQualRecord &r : cakeQualRecords())
+    if (r.kind == 4 && r.name == name)
+      lines.push_back(r.line);
+  return lines;
+}
+
+/// Reuse the existing effect summaries to decide whether passing `arg` to
+/// `fn` consumes an owner. Additive: none of the existing FunctionEffect
+/// fields or diagnostic paths are changed.
+bool cplusCakeEffectConsumesArg(const std::string &fn, int arg) {
+  if (fn.empty() || arg < 0)
+    return false;
+  FunctionEffect e = libcEffect(fn);
+  if (e.frees || (e.freedArg >= 0 && e.freedArg == arg))
+    return true;
+  for (int idx : e.ownershipTransferArgs)
+    if (idx == arg)
+      return true;
+  for (int idx : e.freeArgs)
+    if (idx == arg)
+      return true;
+  return false;
+}
 } // namespace cplus

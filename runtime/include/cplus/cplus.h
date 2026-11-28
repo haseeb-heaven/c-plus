@@ -239,6 +239,52 @@ uint64_t cplus_epoch(void);
 int cplus_address_retired(const void *ptr);
 int cplus_retired_ledger_full(void);
 
+/* -------------------------------------------------------------------------
+ * Issue #184: opt-in epoch/conservative reclamation (additive, OFF by
+ * default).  All existing signatures, pointer representations and default
+ * behaviour are unchanged.
+ *
+ * Normally cplus_release()/cplus_free_registered() return the block to malloc
+ * immediately, so an address can be handed out again while a stale alias still
+ * exists.  With CPLUS_RECLAIM_MODE=epoch (sampled once at startup, like
+ * CPLUS_QUARANTINE) or cplus_set_reclaim_mode(1), a release instead moves the
+ * block to a retired list.  Retirement is recorded in the SAME persistent
+ * retired-address ledger, so a second release remains a deterministic
+ * CPLUS_EXIT_DOUBLE_FREE (104) while the block is retained.
+ *
+ * cplus_reclaim_collect() advances the epoch by one and reclaims a retired
+ * block only when (a) it survived at least one full epoch boundary and
+ * (b) no conservatively scanned root word points into it.  Roots are the
+ * current thread's stack, the program's static data/bss (best effort per
+ * platform), and any global pointer slots registered with
+ * cplus_reclaim_register_root().  A root match on any byte in [base, base+size)
+ * counts, so interior aliases retain the block too.  The collector is
+ * conservative: a stale stack word may retain a block longer than necessary,
+ * but it never reclaims a block that is still referenced.
+ *
+ * Automatic collections also run periodically (every 256 managed allocations)
+ * while the mode is on.  The introspection calls below report the epoch,
+ * reclaimed-block total, current retired count and membership; they take the
+ * runtime lock and are safe to call from the game/app thread.  No UI, script
+ * or game native is involved.
+ *
+ * Limits (documented, not silently claimed): register-only roots and stack
+ * words are visible; pointers held solely in CPU registers or in memory the
+ * collector does not scan (heap objects other than registered slots, other
+ * threads' stacks) are not.  The scan covers the calling thread only, so an
+ * app that publishes a pointer to another thread must register that global
+ * slot explicitly.
+ * ------------------------------------------------------------------------- */
+int cplus_reclaim_enabled(void);
+void cplus_set_reclaim_mode(int enabled); /* 1 = epoch GC, 0 = default free */
+uint64_t cplus_reclaim_epoch(void);
+uint64_t cplus_reclaim_reclaimed_count(void);
+size_t cplus_reclaim_retired_count(void);
+int cplus_reclaim_contains_retired(const void *ptr);
+void cplus_reclaim_collect(void);
+void cplus_reclaim_register_root(void **slot);
+void cplus_reclaim_unregister_root(void **slot);
+
 /* Bounded side-table behavior (documented, deterministic):
  *
  *  - The live table is keyed on base addresses.  An interior pointer does not
@@ -276,6 +322,210 @@ int cplus_retired_ledger_full(void);
  * token or a fat pointer); an earlier no-reuse retry policy was reverted
  * because it cost ~31x on alloc_churn and was still not sound.  Ordinary
  * dereferences are not instrumented by this runtime. */
+
+/* -------------------------------------------------------------------------
+ * Additive disjoint shadow metadata (issues #181 / #182)
+ *
+ * SoftBound+CETS-style spatial/temporal metadata and EffectiveSan-style
+ * low-fat size-class metadata, exposed as INTROSPECTION ONLY.  Every pointer
+ * in C memory stays a bare address: sizeof(void *), struct padding and
+ * offsetof are unchanged, and an uninstrumented precompiled C library that
+ * receives one of these pointers observes an ordinary C pointer.
+ *
+ * The authoritative metadata is the existing side table (issues #110/#111):
+ * each live slot holds base = allocation address, bound = base + size, the
+ * CETS key in `generation`, and the derived low-fat `size_class`.  Zero is
+ * never a valid key.  Queries report success/failure instead of terminating,
+ * so a pointer that never passed through a tracked allocation keeps plain-C
+ * behaviour at the uninstrumented ABI boundary.
+ *
+ * The complete semantics of these additive exports are documented in
+ * `docs/abi/ADDITIVE_RUNTIME_EXPORTS.md`.
+ * ------------------------------------------------------------------------- */
+
+typedef struct cplus_shadow_info {
+  void *base;          /* lowest byte of the covering live allocation */
+  void *bound;         /* one-past-the-end byte (base + size) */
+  uint64_t generation; /* CETS temporal key; 0 when no live allocation covers */
+  const void *lock;    /* CETS lock address: live slot currently holding key */
+  uint32_t size_class; /* EffectiveSan-style segregated size class */
+  uint32_t flags;      /* CPLUS_SHADOW_* bits */
+} cplus_shadow_info;
+
+#define CPLUS_SHADOW_LIVE 0x1u     /* a live allocation covers the pointer */
+#define CPLUS_SHADOW_INTERIOR 0x2u /* pointer is strictly inside base..bound */
+
+/* Disjoint (base, bound) lookup.  `ptr` may be the base or any interior byte.
+ * Returns 1 and fills `info` when a live tracked allocation covers it;
+ * returns 0 and zero-fills `info` for NULL/untracked/retired pointers (never
+ * fatal: that is the plain-C ABI boundary). */
+int cplus_shadow_lookup(const void *ptr, cplus_shadow_info *info);
+
+/* Convenience form of the spatial half.  NULL out-params are ignored. */
+int cplus_shadow_base_bound(const void *ptr, void **base, void **bound);
+
+/* CETS-style generation-checked interior validation.  Returns 1 only when a
+ * live allocation covers `ptr` AND its current generation equals `key`
+ * (which must be non-zero).  Address reuse changes the generation, so an old
+ * key fails deterministically (ABA / dangling alias). */
+int cplus_interior_valid(const void *ptr, uint64_t key);
+
+/* EffectiveSan-style low-fat queries (no pointer bit or struct layout change).
+ * Pure, lock-free, total mapping from a byte count to a segregated size class:
+ * 0 = zero bytes, 1..16 = 16-byte buckets up to 256, then power-of-two
+ * classes (17 == 512 bytes, 18 == 1024, ...).  Every `size_t` value has a
+ * class: the top class absorbs all byte counts beyond its extent, including
+ * SIZE_MAX.  This function never fails and never returns -1. */
+int cplus_lowfat_size_class(size_t bytes);
+/* Size class recorded for a live allocation, or -1 for untracked pointers. */
+int cplus_lowfat_class_of(const void *ptr);
+/* Resolve an interior pointer to its allocation base and byte size.
+ * Returns 1 on success, 0 for untracked/retired pointers (graceful C ABI
+ * boundary). */
+int cplus_lowfat_bounds(const void *ptr, void **base, size_t *size);
+
+/* -------------------------------------------------------------------------
+ * Issue #181: opt-in `-fcplus-disjoint-bounds` instrumentation API
+ *
+ * These are ADDITIVE entry points for code generated with the driver's
+ * `-fcplus-disjoint-bounds` flag (off by default).  They never change the
+ * representation of a C pointer: metadata lives in a side table keyed by the
+ * ADDRESS OF THE POINTER SLOT (SoftBound-style), not in the pointer value.
+ * Every lookup below is an open-addressed hash probe, i.e. O(1) average and
+ * independent of the number of live allocations; the linear containment scan
+ * used by the introspection API above is never on the check path.
+ *
+ * Temporal safety uses CETS-style key/lock pairs: a slot carries `key` and the
+ * address of the `lock` word.  A managed allocation's lock is invalidated
+ * (zeroed) when it is released or reused; a stack frame's lock is the local
+ * frame-key word, zeroed by cplus_shadow_frame_leave() on scope exit.  Both
+ * invalidations are O(1) and apply to every outstanding alias at once.
+ *
+ * A pointer slot with no metadata remains untracked: the check succeeds and
+ * plain-C/uninstrumented-ABI behaviour is preserved.  Only slots explicitly
+ * seeded, defined or copied by instrumented code trap on violation.
+ * ------------------------------------------------------------------------- */
+
+/* Seed a slot from a tracked allocation's base pointer (O(1) exact lookup).
+ * Untracked/NULL pointers clear the slot instead of guessing bounds. */
+void cplus_shadow_slot_seed(void *slot, const void *ptr);
+/* Explicitly define base, bound and CETS key/lock for a slot (stack objects,
+ * objects with statically known extents).  A NULL lock or zero key clears it. */
+void cplus_shadow_slot_define(void *slot, const void *base, size_t bytes,
+                              uint64_t *lock, uint64_t key);
+/* Propagate the complete (base, bound, key, lock) tuple between pointer slots;
+ * this is how pointer assignments and arithmetic preserve provenance. */
+void cplus_shadow_slot_copy(void *dst_slot, const void *src_slot);
+void cplus_shadow_slot_clear(void *slot);
+/* O(1) spatial + temporal check for [ptr, ptr + bytes) against a slot.
+ * Returns 1 on success; on violation calls cplus_fatal() with a deterministic
+ * code (CPLUS_EXIT_BOUNDS / CPLUS_EXIT_NULL_POINTER /
+ * CPLUS_EXIT_USE_AFTER_FREE) after releasing internal locks. */
+int cplus_shadow_slot_check(const void *slot, const void *ptr, size_t bytes,
+                            const char *file, int line);
+
+/* Stack-frame key registration: enter() mints a non-zero key, leave() zeroes
+ * it (invalidation of every slot tied to that frame is O(1)); register()
+ * defines a slot using the frame's key/lock.  leave() has the cleanup-function
+ * signature so generated C can attach
+ * `__attribute__((cleanup(cplus_shadow_frame_leave)))` and get correct
+ * invalidation on every return path. */
+uint64_t cplus_shadow_frame_enter(void);
+void cplus_shadow_frame_leave(uint64_t *key);
+int cplus_shadow_frame_register(void *slot, uint64_t *key, const void *base,
+                                size_t bytes);
+int cplus_shadow_frame_valid(uint64_t key);
+
+/* Instrumentation diagnostics for regression tests: count only the linear
+ * introspection containment scans, never an O(1) slot check. */
+uint64_t cplus_shadow_scan_probes(void);
+void cplus_shadow_reset_probes(void);
+
+/* -------------------------------------------------------------------------
+ * Opt-in low-fat segregated size-class VM regions (issue #182)
+ *
+ * When CPLUS_LOWFAT_ALLOC is set to a non-"0" value in the environment at
+ * process start, managed allocations small enough to fit a size class are
+ * served from reserved, size-classed virtual memory regions.  Every slot in a
+ * class has the same power-of-two extent, so any interior pointer round-tripped
+ * through UNINSTRUMENTED precompiled C code still resolves to its base and
+ * requested byte size with pure address arithmetic: no global mutex, no hash
+ * probe, no pointer-bit trick and no change to sizeof(void *), struct padding,
+ * offsetof or the external C calling convention.  Region publication is
+ * RCU-style (write once before publish, never reclaim), so lookups only take
+ * acquire loads of atomic pointers/state words.
+ *
+ * Sizes larger than the largest class (or a failed reservation) fall back to
+ * the ordinary tracked allocator: the introspection APIs keep working through
+ * the existing side table, and plain-C behaviour is preserved at the ABI
+ * boundary.  cplus_lowfat_set_enabled() overrides the sampled environment and
+ * is intended for deterministic tests; it never changes existing signatures.
+ * ------------------------------------------------------------------------- */
+
+#define CPLUS_LOWFAT_ALLOC_ENV "CPLUS_LOWFAT_ALLOC"
+
+/* Current opt-in state (environment sampled once, optionally overridden). */
+int cplus_lowfat_enabled(void);
+void cplus_lowfat_set_enabled(int enabled);
+/* Type-tag metadata is attached inside low-fat slot metadata; this reports
+ * whether that out-of-band metadata store is actually available. */
+int cplus_lowfat_type_meta_enabled(void);
+/* Non-zero when `ptr` is an address inside a reserved low-fat region (live or
+ * free); O(1), lock-free. */
+int cplus_lowfat_contains(const void *ptr);
+/* Diagnostics: number of live low-fat slots and number of O(1) lock-free
+ * bounds resolutions performed so far. */
+size_t cplus_lowfat_live_count(void);
+uint64_t cplus_lowfat_lockfree_lookups(void);
+
+/* -------------------------------------------------------------------------
+ * Out-of-band effective type tags (issue #182)
+ *
+ * A tag is an opaque non-zero token derived from a type name and size.  Tags
+ * are stored in parallel metadata (the low-fat slot record, or the existing
+ * live slot for ordinary managed allocations); no struct layout or pointer
+ * representation changes.  attach/get are non-fatal, check traps with the
+ * deterministic CPLUS_EXIT_TYPE_CONFUSION (105) diagnostic on a mismatch or a
+ * missing tag.  Member registration/check catches bad downcasts and
+ * out-of-range member accesses without altering the enclosing struct.
+ * ------------------------------------------------------------------------- */
+
+typedef uint64_t cplus_type_tag;
+#define CPLUS_TYPE_TAG_NONE ((cplus_type_tag)0u)
+
+/* Pure FNV-style mapping (never returns zero); does not register anything. */
+cplus_type_tag cplus_type_tag_hash(const char *name, size_t size_hint);
+/* Register (or look up) a type, returning a stable non-zero tag; 0 on table
+ * exhaustion or an unresolvable hash collision. */
+cplus_type_tag cplus_type_tag_register(const char *name, size_t size_hint);
+/* Attach a tag to a live tracked allocation (base or interior pointer).
+ * Returns 1 on success, 0 for NULL/untracked pointers.  Never fatal. */
+int cplus_type_tag_set(void *ptr, cplus_type_tag tag);
+/* Query the effective tag of a live tracked allocation; 0 when untagged or
+ * untracked (the graceful uninstrumented-C boundary). */
+cplus_type_tag cplus_type_tag_get(const void *ptr);
+/* Deterministic trap: requires `ptr` to resolve to a live allocation whose
+ * effective tag equals `expected` (which must be non-zero). */
+void cplus_type_tag_check(const void *ptr, cplus_type_tag expected,
+                          const char *file, int line);
+
+/* Register a member/sub-object tag at a byte offset inside `parent`. */
+int cplus_type_member_register(cplus_type_tag parent, const char *name,
+                               size_t offset, size_t size,
+                               cplus_type_tag member);
+/* Check an access to [offset, offset+bytes) of a downcast object: resolves the
+ * object's bounds (O(1) for low-fat pointers), verifies the parent and member
+ * tags, and traps deterministically on any mismatch or out-of-range access. */
+void cplus_type_member_check(const void *ptr, cplus_type_tag parent,
+                             cplus_type_tag member, size_t offset,
+                             size_t bytes, const char *file, int line);
+
+/* Convenience forms that capture the call site. */
+#define cplus_type_check(ptr, tag)                                             \
+  cplus_type_tag_check((ptr), (tag), __FILE__, __LINE__)
+#define cplus_type_check_member(ptr, parent, member, offset, bytes)             \
+  cplus_type_member_check((ptr), (parent), (member), (offset), (bytes),         \
+                          __FILE__, __LINE__)
 
 /* Inserted by the C+ compiler for dynamic indices into fixed-size arrays.
  * Returns the index when it is in range; otherwise prints a diagnostic and

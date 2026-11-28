@@ -11,6 +11,11 @@
 //                                        /*cplus$own:h:T_drop*/
 //   p.method(args)                    -> Player_method(&p, args)
 //   p->method(args)                   -> Player_method(p, args)
+//   generic Vec<T>;                   -> one monomorphised `struct Vec_T` per
+//                                        distinct element type, with plain C
+//                                        fields and static inline C helpers;
+//                                        no hidden field, vtable or descriptor
+//   Vec<int>                          -> Vec_int
 //
 // Unchanged source is copied verbatim, so rejected C constructs produce the
 // same diagnostics as the host C compiler.
@@ -35,9 +40,42 @@
 
 namespace cplus {
 
+// Issue #179: qualifier facts recorded by this rewriter and consumed by the
+// AST safety checker. Defined in Analysis/OwnershipAnalysis.cpp; primitive
+// parameter types keep this boundary header-free.
+void cplusCakeClearQualifiers();
+void cplusCakeRecordQualifier(const std::string &name, unsigned line, int kind);
+
+// Issue #184: call-site validation for spatial annotations.  Implemented in
+// TypeChecker.cpp so the annotation contracts are checked by the type-checking
+// half of Sema while the C+ syntax rewriter stays responsible only for erasing
+// the annotations and inserting the ABI-preserving dynamic guards.
+void checkAnnotatedCallSites(const std::string &source,
+                             const std::vector<std::string> &contracts,
+                             DiagnosticEngine &diags,
+                             const std::string &filename);
+
+// Issue #185: static active-variant validation for erased `@tagged` unions.
+// Implemented in TypeChecker.cpp; the rewriter owns only erasure/lowering.
+void checkTaggedVariantAccess(const std::string &source,
+                              const std::vector<std::string> &facts,
+                              DiagnosticEngine &diags,
+                              const std::string &filename);
+
 namespace {
 
 constexpr size_t kNPos = static_cast<size_t>(-1);
+
+/// Cake pointer qualifier spelling -> stable kind code (0 = not a qualifier).
+inline int cakeQualifierKind(const std::string &text) {
+  if (text == "_Opt")
+    return 1;
+  if (text == "_Owner")
+    return 2;
+  if (text == "_View")
+    return 3;
+  return 0;
+}
 
 std::set<std::string> &externalClasses() {
   static std::set<std::string> names;
@@ -91,6 +129,28 @@ struct ResourceInfo {
   size_t nameIdx = 0;
   size_t bodyOpen = 0;
   size_t bodyClose = 0;
+};
+
+/// Issue #183: documented generic container spelling.
+///
+///   generic Vec<T>;
+///
+/// declares a single-parameter container whose C representation is fixed:
+///
+///   struct Vec_T { T *data; size_t len; size_t cap; };
+///
+/// Every distinct `Vec<int>` / `Vec<double>` use site is monomorphised into a
+/// concrete struct plus three `static inline` C functions.  The emitted struct
+/// contains only the three declared fields: there is no hidden field, vtable
+/// pointer or runtime type descriptor, and a `Vec_int *` is an ordinary C
+/// pointer with the platform ABI.
+struct GenericDecl {
+  std::string name;
+  std::string param;
+  size_t keyword = 0;
+  size_t nameIdx = 0;
+  size_t paramIdx = 0;
+  size_t semi = 0;
 };
 
 class TokenStream {
@@ -198,6 +258,43 @@ private:
   const std::vector<Token> &toks_;
 };
 
+/// Find the identifier introduced by the pointer declaration that carries the
+/// Cake qualifier at token `qi`. Handles both `_Opt T *p` (qualifier before
+/// the type) and `T *_Opt p` (qualifier after the star). Declaration
+/// specifiers, tag names and the declarator star run are skipped; the first
+/// remaining identifier is the declared binding.
+static std::string cakeDeclaredName(const TokenStream &ts, size_t qi) {
+  static const std::set<std::string> specifiers = {
+      "const", "volatile", "restrict", "static", "extern", "register",
+      "struct", "union", "enum", "unsigned", "signed", "long", "short",
+      "int", "char", "float", "double", "void", "_Bool", "_Atomic"};
+  size_t i = ts.nextSig(qi);
+  for (unsigned guard = 0; i < ts.size() && guard < 24; ++guard) {
+    const Token &t = ts[i];
+    if (ts.isPunct(i, "*") || ts.isPunct(i, "&")) {
+      i = ts.nextSig(i);
+      continue;
+    }
+    if (t.kind == TokKind::Identifier && cakeQualifierKind(t.text) != 0) {
+      i = ts.nextSig(i);
+      continue;
+    }
+    if (t.kind == TokKind::Identifier &&
+        (specifiers.count(t.text) ||
+         (!t.text.empty() && t.text[0] >= 'A' && t.text[0] <= 'Z'))) {
+      if ((t.text == "struct" || t.text == "union" || t.text == "enum") &&
+          ts.nextSig(i) < ts.size())
+        i = ts.nextSig(i); // skip the tag name
+      i = ts.nextSig(i);
+      continue;
+    }
+    if (t.kind == TokKind::Identifier)
+      return t.text;
+    break;
+  }
+  return std::string();
+}
+
 bool isTypeStarter(const std::string &s) {
   static const std::set<std::string> kStarters = {
       "struct", "union", "enum", "const",   "volatile", "static",
@@ -230,26 +327,603 @@ std::string lineDirective(const std::string &file, unsigned line) {
   return "#line " + std::to_string(line) + " \"" + escaped + "\"\n";
 }
 
+// ---------------------------------------------------------------------------
+// Issue #184: spatial / thin-boundary annotations.
+//
+// `@notnull`, `@zeroterm` and `@numelts(expr)` are C+ source-only contracts.
+// They are consumed here, erased from the emitted C, and turned into:
+//   * a serialized contract checked at call sites in TypeChecker.cpp, and
+//   * a per-pointer dynamic guard emitted at subscript / dereference sites
+//     using the existing ABI-preserving cplus_check_bounds /
+//     cplus_check_nonnull runtime hooks.
+// The emitted parameter list is still exactly `T *, size_t`: no fat pointer,
+// hidden struct field or adapter is introduced.
+// ---------------------------------------------------------------------------
+
+struct SafetyAnnotation {
+  enum class Kind { NotNull, ZeroTerm, NumElts };
+  Kind kind = Kind::NotNull;
+  std::string pointer;
+  std::string lengthExpr;
+  std::string function;
+  size_t paramIndex = kNPos;
+  unsigned line = 1;
+  unsigned column = 1;
+};
+
+namespace {
+
+bool annTrivia(const Token &t) {
+  return t.kind == TokKind::Whitespace || t.kind == TokKind::Comment;
+}
+
+size_t annNext(const std::vector<Token> &toks, size_t i) {
+  ++i;
+  while (i < toks.size() && annTrivia(toks[i]))
+    ++i;
+  return i;
+}
+
+size_t annPrev(const std::vector<Token> &toks, size_t i) {
+  while (i > 0) {
+    --i;
+    if (!annTrivia(toks[i]))
+      return i;
+  }
+  return kNPos;
+}
+
+bool annIsIdent(const std::vector<Token> &toks, size_t i, const char *s) {
+  return i < toks.size() && toks[i].kind == TokKind::Identifier &&
+         toks[i].text == s;
+}
+
+bool annIsPunct(const std::vector<Token> &toks, size_t i, const char *s) {
+  return i < toks.size() && toks[i].kind == TokKind::Punct &&
+         toks[i].text == s;
+}
+
+size_t annMatch(const std::vector<Token> &toks, size_t open,
+                const char *o, const char *c) {
+  int depth = 0;
+  for (size_t i = open; i < toks.size(); ++i) {
+    if (annIsPunct(toks, i, o))
+      ++depth;
+    else if (annIsPunct(toks, i, c) && --depth == 0)
+      return i;
+  }
+  return kNPos;
+}
+
+std::string annJoin(const std::vector<Token> &toks, size_t from, size_t to) {
+  std::string out;
+  for (size_t i = from; i < to; ++i) {
+    if (annTrivia(toks[i]))
+      continue;
+    if (!out.empty())
+      out += " ";
+    out += toks[i].text;
+  }
+  return out;
+}
+
+std::string annQuote(const std::string &s) {
+  std::string out;
+  for (char c : s) {
+    if (c == '\\' || c == '"')
+      out += '\\';
+    out += c;
+  }
+  return out;
+}
+
+/// Find the function definition whose parameter list contains `starIdx`.
+/// Returns the function name through `name` and the zero-based parameter index
+/// through `param`.  A struct field annotation has no enclosing function and
+/// is still erased, but it produces no call-site contract.
+bool annEnclosingFunction(const std::vector<Token> &toks, size_t starIdx,
+                          std::string &name, size_t &param) {
+  for (size_t k = starIdx; k != kNPos; k = annPrev(toks, k)) {
+    if (toks[k].kind != TokKind::Identifier)
+      continue;
+    size_t lp = annNext(toks, k);
+    if (!annIsPunct(toks, lp, "("))
+      continue;
+    size_t rp = annMatch(toks, lp, "(", ")");
+    if (rp == kNPos || rp <= starIdx)
+      continue;
+    size_t open = annNext(toks, rp);
+    if (!annIsPunct(toks, open, "{"))
+      continue;
+    size_t close = annMatch(toks, open, "{", "}");
+    if (close == kNPos || close < starIdx)
+      continue;
+    name = toks[k].text;
+    param = 0;
+    size_t partStart = lp + 1;
+    int depth = 0;
+    for (size_t j = lp + 1; j <= rp; ++j) {
+      bool end = j == rp;
+      if (!end && annIsPunct(toks, j, "("))
+        ++depth;
+      if (!end && annIsPunct(toks, j, ")"))
+        --depth;
+      if (!end && !(depth == 0 && annIsPunct(toks, j, ",")))
+        continue;
+      if (starIdx >= partStart && starIdx < j)
+        return true;
+      ++param;
+      partStart = j + 1;
+    }
+    return false;
+  }
+  return false;
+}
+
+} // namespace
+
+/// Strip annotations from `toks` (in place) and collect their contracts.
+/// Keeping this as a token pass rather than a text regex means annotations in
+/// comments and string literals are never touched, and diagnostics retain the
+/// original line/column even though the emitted C is shorter.
+std::vector<SafetyAnnotation>
+extractSafetyAnnotations(std::vector<Token> &toks, DiagnosticEngine &diags,
+                         const std::string &filename,
+                         std::vector<std::string> &contracts) {
+  struct EraseRange {
+    size_t from;
+    size_t to; // exclusive
+  };
+  std::vector<EraseRange> erase;
+  std::vector<SafetyAnnotation> out;
+
+  for (size_t i = 0; i < toks.size(); ++i) {
+    if (!annIsPunct(toks, i, "@"))
+      continue;
+    size_t nameTok = annNext(toks, i);
+    if (nameTok >= toks.size() || toks[nameTok].kind != TokKind::Identifier)
+      continue;
+    const std::string tag = toks[nameTok].text;
+    SafetyAnnotation::Kind kind;
+    if (tag == "notnull")
+      kind = SafetyAnnotation::Kind::NotNull;
+    else if (tag == "zeroterm")
+      kind = SafetyAnnotation::Kind::ZeroTerm;
+    else if (tag == "numelts")
+      kind = SafetyAnnotation::Kind::NumElts;
+    else
+      continue; // an unrelated '@' is left verbatim for the C compiler
+
+    size_t last = nameTok;
+    size_t valueFrom = kNPos, valueTo = kNPos;
+    if (kind == SafetyAnnotation::Kind::NumElts) {
+      size_t lp = annNext(toks, nameTok);
+      if (!annIsPunct(toks, lp, "(")) {
+        diags.error("[CPLUS-SPATIAL] @numelts requires a count expression in "
+                    "parentheses",
+                    filename, toks[i].line, toks[i].column);
+        continue;
+      }
+      size_t rp = annMatch(toks, lp, "(", ")");
+      if (rp == kNPos) {
+        diags.error("[CPLUS-SPATIAL] unterminated @numelts expression",
+                    filename, toks[i].line, toks[i].column);
+        continue;
+      }
+      valueFrom = lp + 1;
+      valueTo = rp;
+      last = rp;
+    } else if (annIsPunct(toks, annNext(toks, nameTok), "(")) {
+      diags.error("[CPLUS-SPATIAL] @" + tag + " takes no arguments", filename,
+                  toks[i].line, toks[i].column);
+    }
+
+    // The annotation must sit on a pointer declarator.  Cyclone-style
+    // annotations are written after the `*` (`T *@notnull p`).
+    size_t star = kNPos;
+    for (size_t k = annPrev(toks, i); k != kNPos; k = annPrev(toks, k)) {
+      if (annIsPunct(toks, k, "*")) {
+        star = k;
+        break;
+      }
+      if (annIsPunct(toks, k, ";") || annIsPunct(toks, k, "{") ||
+          annIsPunct(toks, k, "}") || annIsPunct(toks, k, ","))
+        break;
+    }
+    size_t pointerTok = annNext(toks, last);
+    if (star == kNPos || pointerTok >= toks.size() ||
+        toks[pointerTok].kind != TokKind::Identifier) {
+      diags.error("[CPLUS-SPATIAL] @" + tag +
+                      " must annotate a pointer declarator (T *@" + tag +
+                      " name)",
+                  filename, toks[i].line, toks[i].column);
+      erase.push_back({i, last + 1});
+      continue;
+    }
+
+    SafetyAnnotation a;
+    a.kind = kind;
+    a.pointer = toks[pointerTok].text;
+    a.line = toks[i].line;
+    a.column = toks[i].column;
+    if (kind == SafetyAnnotation::Kind::NumElts)
+      a.lengthExpr = annJoin(toks, valueFrom, valueTo);
+    annEnclosingFunction(toks, star, a.function, a.paramIndex);
+    out.push_back(a);
+    if (!a.function.empty()) {
+      const char *tagText = kind == SafetyAnnotation::Kind::NotNull
+                                ? "notnull"
+                                : (kind == SafetyAnnotation::Kind::ZeroTerm
+                                       ? "zeroterm"
+                                       : "numelts");
+      contracts.push_back("F|" + a.function + "|" +
+                          std::to_string(a.paramIndex) + "|" + a.pointer +
+                          "|" + tagText + "|" + a.lengthExpr + "|" +
+                          std::to_string(a.line) + "|" +
+                          std::to_string(a.column));
+    }
+    erase.push_back({i, last + 1});
+  }
+
+  // Erase back-to-front so earlier indices stay valid.
+  std::sort(erase.begin(), erase.end(),
+            [](const EraseRange &a, const EraseRange &b) {
+              return a.from > b.from;
+            });
+  for (const auto &r : erase)
+    toks.erase(toks.begin() + static_cast<long>(r.from),
+               toks.begin() + static_cast<long>(r.to));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Issue #185: `@tagged union` contracts.
+//
+//   @tagged union Value { int i; float f; };
+//
+// declares an ordinary C union; the `@tagged` spelling is erased before
+// Clang sees the translation unit, so the emitted union has exactly the
+// declared fields and C layout.  Each variable of a tagged-union type gets a
+// side table entry (a local `int` tag) and every member access is wrapped in a
+// check that traps when the member is not the active variant.  The facts are
+// also serialized for TypeChecker.cpp so a statically provable wrong-variant
+// access is rejected before code generation.
+// ---------------------------------------------------------------------------
+
+struct TaggedUnionDef {
+  std::string name;
+  std::vector<std::string> fields;
+};
+
+struct TaggedVar {
+  std::string name;
+  std::string type;
+  std::string tag;
+  size_t semi = kNPos;
+  size_t block = kNPos;
+  unsigned line = 1;
+  unsigned column = 1;
+};
+
+struct TaggedAccess {
+  size_t varTok = kNPos;
+  size_t fieldTok = kNPos;
+  std::string var;
+  std::string field;
+  std::string tag;
+  int index = -1;
+  bool store = false;
+  size_t block = kNPos;
+  unsigned line = 1;
+  unsigned column = 1;
+};
+
+struct TaggedInfo {
+  std::map<std::string, TaggedUnionDef> unions;
+  std::vector<TaggedVar> vars;
+  std::vector<TaggedAccess> accesses;
+  std::vector<std::string> facts;
+  bool used = false;
+};
+
+/// Token index of the innermost enclosing `{` at `pos`, used to keep the
+/// static variant replay inside one straight-line block (an if/else that sets
+/// different variants must not be reported as a definite error).
+static size_t taggedBlockAt(const std::vector<Token> &toks, size_t pos) {
+  std::vector<size_t> open;
+  for (size_t i = 0; i < pos && i < toks.size(); ++i) {
+    if (toks[i].kind != TokKind::Punct)
+      continue;
+    if (toks[i].text == "{")
+      open.push_back(i);
+    else if (toks[i].text == "}" && !open.empty())
+      open.pop_back();
+  }
+  return open.empty() ? kNPos : open.back();
+}
+
+static std::string taggedFieldList(const TaggedUnionDef &def) {
+  std::string out;
+  for (const auto &f : def.fields) {
+    if (!out.empty())
+      out += ",";
+    out += f;
+  }
+  return out;
+}
+
+/// Consume `@tagged` from the token stream, recording union definitions,
+/// tagged variables and member accesses.  The token stream that reaches the
+/// Lowerer no longer contains the annotation: only plain C `union` syntax and
+/// the generated side-tag statements remain.
+static TaggedInfo extractTaggedUnions(std::vector<Token> &toks,
+                                      DiagnosticEngine &diags,
+                                      const std::string &filename) {
+  TaggedInfo info;
+  std::vector<size_t> erase;
+
+  // Pass 1: erase every `@tagged` marker, definitions and declarations alike.
+  // The annotation is source-only and must never reach the C compiler.  Doing
+  // this before Passes 2/3 means the variable/access token indices recorded
+  // below refer to the exact stream the Lowerer will emit from, so the
+  // side-tag and variant-check hooks stay aligned.  Definitions additionally
+  // contribute a union fact; `@tagged union Name v;` is recognised by Pass 2
+  // as an ordinary `union Name v;` declaration once the marker is gone.
+  for (size_t i = 0; i < toks.size(); ++i) {
+    if (!annIsPunct(toks, i, "@") || !annIsIdent(toks, annNext(toks, i),
+                                                 "tagged"))
+      continue;
+    size_t kw = annNext(toks, i);
+    erase.push_back(i);
+    erase.push_back(kw);
+    info.used = true;
+
+    size_t u = annNext(toks, kw);
+    if (!annIsIdent(toks, u, "union"))
+      continue;
+    size_t nameIdx = annNext(toks, u);
+    if (nameIdx >= toks.size() ||
+        toks[nameIdx].kind != TokKind::Identifier)
+      continue;
+    size_t open = annNext(toks, nameIdx);
+    if (!annIsPunct(toks, open, "{"))
+      continue;
+    size_t close = annMatch(toks, open, "{", "}");
+    if (close == kNPos) {
+      diags.error("[CPLUS-VARIANT] unterminated @tagged union body", filename,
+                  toks[i].line, toks[i].column);
+      continue;
+    }
+    TaggedUnionDef def;
+    def.name = toks[nameIdx].text;
+    int depth = 0;
+    for (size_t k = open + 1; k <= close; ++k) {
+      if (annIsPunct(toks, k, "{"))
+        ++depth;
+      else if (annIsPunct(toks, k, "}"))
+        --depth;
+      if (depth != 0 || !annIsPunct(toks, k, ";"))
+        continue;
+      size_t last = annPrev(toks, k);
+      if (last != kNPos && toks[last].kind == TokKind::Identifier)
+        def.fields.push_back(toks[last].text);
+    }
+    if (def.fields.empty())
+      diags.error("[CPLUS-VARIANT] @tagged union '" + def.name +
+                      "' has no members",
+                  filename, toks[i].line, toks[i].column);
+    info.facts.push_back("D|" + def.name + "|" + taggedFieldList(def));
+    info.unions[def.name] = def;
+  }
+  std::sort(erase.begin(), erase.end(),
+            [](size_t a, size_t b) { return a > b; });
+  for (size_t e : erase)
+    toks.erase(toks.begin() + static_cast<long>(e));
+
+  // Pass 2: declarations of a tagged-union type (`union Name v;`).
+  unsigned tagCounter = 0;
+  for (size_t i = 0; i + 3 < toks.size(); ++i) {
+    if (!annIsIdent(toks, i, "union"))
+      continue;
+    size_t typeIdx = annNext(toks, i);
+    if (typeIdx >= toks.size() || toks[typeIdx].kind != TokKind::Identifier)
+      continue;
+    auto uit = info.unions.find(toks[typeIdx].text);
+    if (uit == info.unions.end())
+      continue;
+    size_t varIdx = annNext(toks, typeIdx);
+    if (varIdx >= toks.size() || toks[varIdx].kind != TokKind::Identifier)
+      continue;
+    // `union Name {` is the definition, not a variable declaration.
+    if (annIsPunct(toks, varIdx, "{"))
+      continue;
+    size_t after = annNext(toks, varIdx);
+    while (annIsPunct(toks, after, "[")) {
+      size_t rb = annMatch(toks, after, "[", "]");
+      if (rb == kNPos)
+        break;
+      after = annNext(toks, rb);
+    }
+    if (!annIsPunct(toks, after, ";") && !annIsPunct(toks, after, "=") &&
+        !annIsPunct(toks, after, ","))
+      continue;
+    size_t semi = after;
+    while (semi < toks.size() && !annIsPunct(toks, semi, ";"))
+      ++semi;
+    if (semi >= toks.size())
+      continue;
+
+    TaggedVar v;
+    v.name = toks[varIdx].text;
+    v.type = toks[typeIdx].text;
+    v.tag = "__cplus_tag_" + std::to_string(tagCounter++) + "_" + v.name;
+    v.semi = semi;
+    v.block = taggedBlockAt(toks, i);
+    v.line = toks[varIdx].line;
+    v.column = toks[varIdx].column;
+    info.vars.push_back(v);
+    info.facts.push_back("V|" + v.name + "|" + v.type + "|" +
+                         std::to_string(v.line) + "|" +
+                         std::to_string(v.column) + "|" +
+                         std::to_string(v.block));
+  }
+
+  // Pass 3: member accesses (`v.field`) of those variables.
+  static const std::set<std::string> kAssignOps = {
+      "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="};
+  for (size_t i = 0; i + 2 < toks.size(); ++i) {
+    if (toks[i].kind != TokKind::Identifier)
+      continue;
+    const TaggedVar *tv = nullptr;
+    for (auto it = info.vars.rbegin(); it != info.vars.rend(); ++it)
+      if (it->name == toks[i].text && it->semi <= i) {
+        tv = &*it;
+        break;
+      }
+    if (!tv)
+      continue;
+    size_t dot = annNext(toks, i);
+    if (!annIsPunct(toks, dot, "."))
+      continue;
+    size_t fld = annNext(toks, dot);
+    if (fld >= toks.size() || toks[fld].kind != TokKind::Identifier)
+      continue;
+    auto uit = info.unions.find(tv->type);
+    if (uit == info.unions.end())
+      continue;
+    const std::vector<std::string> &fields = uit->second.fields;
+    auto fit = std::find(fields.begin(), fields.end(), toks[fld].text);
+    if (fit == fields.end()) {
+      diags.error("[CPLUS-VARIANT] member '" + toks[fld].text +
+                      "' is not declared in tagged union '" + tv->type + "'",
+                  filename, toks[fld].line, toks[fld].column);
+      continue;
+    }
+    TaggedAccess a;
+    a.varTok = i;
+    a.fieldTok = fld;
+    a.var = tv->name;
+    a.field = toks[fld].text;
+    a.tag = tv->tag;
+    a.index = static_cast<int>(fit - fields.begin());
+    a.store = kAssignOps.count(toks[annNext(toks, fld)].text) != 0 ||
+              annIsPunct(toks, annNext(toks, fld), "++") ||
+              annIsPunct(toks, annNext(toks, fld), "--");
+    a.block = taggedBlockAt(toks, i);
+    a.line = toks[i].line;
+    a.column = toks[i].column;
+    info.accesses.push_back(a);
+    info.facts.push_back(std::string(a.store ? "S|" : "R|") + a.var + "|" +
+                         a.field + "|" + std::to_string(a.line) + "|" +
+                         std::to_string(a.column) + "|" +
+                         std::to_string(a.block));
+  }
+  return info;
+}
+
+/// Self-contained trap helper.  It is emitted once per translation unit and
+/// carries no user-visible symbol: the union itself keeps its plain C layout.
+static const char *const kTaggedPrelude =
+    "#line 1 \"<cplus-tagged-prelude>\"\n"
+    "#ifndef CPLUS_TAGGED_PRELUDE_DEFINED\n"
+    "#define CPLUS_TAGGED_PRELUDE_DEFINED\n"
+    "#include <stdio.h>\n"
+    "#include <stdlib.h>\n"
+    "static inline void cplus_variant_check(int active, int expected,\n"
+    "                                       const char *member,\n"
+    "                                       const char *file, unsigned line) {\n"
+    "  if (active != expected) {\n"
+    "    fprintf(stderr, \"[CPLUS-VARIANT] wrong active variant for '%s' at "
+    "%s:%u (active=%d, expected=%d)\\n\",\n"
+    "            member, file, line, active, expected);\n"
+    "    abort();\n"
+    "  }\n"
+    "}\n"
+    "#endif\n";
+
 class Lowerer {
 public:
   Lowerer(const std::vector<Token> &toks, DiagnosticEngine &diags,
-          const std::string &filename, bool headerMode)
-      : ts(toks), diags_(diags), filename_(filename),
-        headerMode_(headerMode) {}
+          const std::string &filename, bool headerMode,
+          const std::vector<SafetyAnnotation> &annotations,
+          const TaggedInfo &tagged)
+      : ts(toks), annotations_(annotations), tagged_(tagged), diags_(diags),
+        filename_(filename), headerMode_(headerMode) {
+    for (const auto &a : annotations) {
+      if (a.pointer.empty())
+        continue;
+      if (a.kind == SafetyAnnotation::Kind::NumElts)
+        countExpr_[spatialKey(a)] = a.lengthExpr;
+      else if (a.kind == SafetyAnnotation::Kind::NotNull)
+        notNullPtrs_.insert(spatialKey(a));
+      else
+        zeroTermPtrs_.insert(spatialKey(a));
+    }
+  }
+  static std::string spatialKey(const SafetyAnnotation &a) {
+    return a.function + "::" + a.pointer;
+  }
+  /// Resolve the enclosing function at a use site so annotations from two
+  /// functions that declare the same pointer name stay distinct.
+  std::string spatialKeyAt(size_t pos, const std::string &name) const {
+    for (size_t k = pos; k != kNPos && k < ts.size(); --k) {
+      if (ts[k].kind != TokKind::Identifier || ts[k].text != name)
+        continue;
+      for (const auto &a : annotations_)
+        if (a.pointer == name &&
+            (a.function.empty() || enclosingFunctionAt(k) == a.function))
+          return spatialKey(a);
+    }
+    return name; // legacy unqualified lookup
+  }
+  std::string enclosingFunctionAt(size_t pos) const {
+    std::string name, dummyParamIndex;
+    size_t param = kNPos;
+    (void)param;
+    // Find the function whose body brace encloses `pos` by scanning forward
+    // through identifiers followed by '(' ... '{' ... '}' wrapping pos.
+    for (size_t k = 0; k + 1 < ts.size(); ++k) {
+      if (ts[k].kind != TokKind::Identifier)
+        continue;
+      size_t lp = ts.nextSig(k);
+      if (lp == kNPos || !ts.isPunct(lp, "("))
+        continue;
+      size_t rp = ts.matchParen(lp);
+      if (rp == kNPos || rp >= pos)
+        continue;
+      size_t open = ts.nextSig(rp);
+      if (open == kNPos || !ts.isPunct(open, "{"))
+        continue;
+      size_t close = ts.matchBrace(open);
+      if (close != kNPos && pos >= open && pos <= close)
+        return ts[k].text;
+    }
+    return name;
+  }
+
 
   RewrittenSource run() {
     collectDeclarations();
+    collectGenerics();
     collectDefaultArgs();
     collectVariableTypes();
     collectAutoClasses();
     collectShadowingNonClassVars();
     collectArrays();
     collectDynamicPointers();
+    collectTaggedAccesses();
     emitTranslationUnit();
 
     RewrittenSource result;
-    result.text = lineDirective(filename_, 1) + out_;
-    result.changed = changed_;
+    result.text = lineDirective(filename_, 1);
+    if (tagged_.used) {
+      // The helper prelude must not displace source locations: restore the
+      // location the leading #line established before the first user token.
+      result.text += kTaggedPrelude;
+      result.text += lineDirective(filename_, 1);
+    }
+    result.text += out_;
+    result.changed = changed_ || tagged_.used;
     result.resourceTypes = resourceTypes_;
     result.classTypes = classTypes_;
     result.arrayLengths = arrays_;
@@ -295,6 +969,110 @@ private:
       if (externalCtors().count(name))
         classNamesWithCtor_.insert(name);
     }
+  }
+
+  /// Issue #183: discover `generic Name<T>;` declarations and the set of
+  /// concrete element types actually used as `Name<type>` in this TU.  Both
+  /// passes are single, ordered scans, so emitted definitions are deterministic
+  /// (declaration order, then lexicographically ordered element types).
+  ///
+  /// Idempotent: the tables are rebuilt from scratch on every call, and
+  /// declarations are deduplicated by name.  Re-running a lowering phase
+  /// therefore neither duplicates declarations / instantiations nor re-emits
+  /// diagnostics or monomorphised definitions.
+  void collectGenerics() {
+    generics_.clear();
+    genericDeclNameIdx_.clear();
+    instantiations_.clear();
+    genericStructVars_.clear();
+    suppressedGenericDecls_.clear();
+
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (!ts.isIdent(i, "generic"))
+        continue;
+      GenericDecl g;
+      g.keyword = i;
+      size_t s = ts.nextSig(i);
+      if (s >= ts.size() || ts[s].kind != TokKind::Identifier)
+        continue;
+      g.nameIdx = s;
+      g.name = ts[s].text;
+      size_t lt = ts.nextSig(s);
+      if (!ts.isPunct(lt, "<"))
+        continue;
+      size_t p = ts.nextSig(lt);
+      if (p >= ts.size() || ts[p].kind != TokKind::Identifier)
+        continue;
+      g.paramIdx = p;
+      g.param = ts[p].text;
+      size_t gt = ts.nextSig(p);
+      if (!ts.isPunct(gt, ">"))
+        continue;
+      size_t semi = ts.nextSig(gt);
+      if (!ts.isPunct(semi, ";"))
+        continue;
+      g.semi = semi;
+      genericDeclNameIdx_.insert(g.nameIdx);
+      // Deduplicate by name *before* recording the declaration.  Comparing
+      // against a just-pushed entry would diagnose every valid declaration as
+      // a duplicate of itself; a repeated visit of the same spelling is not a
+      // redefinition either.  Keep the first declaration as the canonical one
+      // and remember any later spelling only so its tokens are still erased.
+      bool duplicate = false;
+      for (const auto &prior : generics_)
+        if (prior.name == g.name) {
+          duplicate = true;
+          break;
+        }
+      if (duplicate)
+        suppressedGenericDecls_[g.keyword] = g.semi;
+      else
+        generics_.push_back(g);
+      i = semi;
+    }
+    for (size_t i = 0; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Identifier || genericDeclNameIdx_.count(i))
+        continue;
+      size_t gi = genericAt(i);
+      if (gi == kNPos)
+        continue;
+      size_t lt = ts.nextSig(i);
+      if (!ts.isPunct(lt, "<"))
+        continue;
+      size_t ty = ts.nextSig(lt);
+      if (ty >= ts.size() || ts[ty].kind != TokKind::Identifier)
+        continue;
+      size_t gt = ts.nextSig(ty);
+      if (!ts.isPunct(gt, ">"))
+        continue;
+      // Only the declared parameter identifier is substituted; a second
+      // parameter spelling is rejected rather than silently emitted.
+      if (ts[ty].text == generics_[gi].param)
+        continue;
+      const std::string concrete = generics_[gi].name + "_" + ts[ty].text;
+      instantiations_[generics_[gi].name].insert(ts[ty].text);
+      // `Vec<int> vi;` declares a plain C struct, so vi.len is an ordinary
+      // writable field.  Remember such variables so `.len` assignment is not
+      // mistaken for the C+ array-length property (see tryEmitArrayLen).
+      size_t var = ts.nextSig(gt);
+      if (var < ts.size() && ts[var].kind == TokKind::Identifier) {
+        size_t after = ts.nextSig(var);
+        if (ts.isPunct(after, ";") || ts.isPunct(after, "=") ||
+            ts.isPunct(after, ",") || ts.isPunct(after, "[")) {
+          genericStructVars_.push_back(
+              {ts[var].text, concrete, var, computeScopeEnd(var)});
+        }
+      }
+    }
+  }
+
+  size_t genericAt(size_t i) const {
+    if (i >= ts.size() || ts[i].kind != TokKind::Identifier)
+      return kNPos;
+    for (size_t k = 0; k < generics_.size(); ++k)
+      if (generics_[k].name == ts[i].text)
+        return k;
+    return kNPos;
   }
 
   bool parseResource(size_t i, ResourceInfo *r) {
@@ -1042,11 +1820,112 @@ private:
     return true;
   }
 
+  /// Token index just after the assignment expression that starts at `from`:
+  /// the first `;`, `,`, `)`, `]` or `}` at nesting depth zero.  The store guard
+  /// needs this boundary so `tag = i, v.m = x` is one expression rather than a
+  /// separate statement; `if (c) v.i = 7; else ...` must not be split by the
+  /// tag write into an `if` body followed by a dangling `else`.
+  size_t taggedExprEnd(size_t from) const {
+    int paren = 0, bracket = 0, brace = 0;
+    for (size_t i = from; i < ts.size(); ++i) {
+      if (ts[i].kind != TokKind::Punct)
+        continue;
+      const std::string &p = ts[i].text;
+      if (p == "(") {
+        ++paren;
+      } else if (p == ")") {
+        if (paren == 0)
+          return i == 0 ? 0 : i - 1;
+        --paren;
+      } else if (p == "[") {
+        ++bracket;
+      } else if (p == "]") {
+        if (bracket == 0)
+          return i == 0 ? 0 : i - 1;
+        --bracket;
+      } else if (p == "{") {
+        ++brace;
+      } else if (p == "}") {
+        if (brace == 0)
+          return i == 0 ? 0 : i - 1;
+        --brace;
+      } else if (paren == 0 && bracket == 0 && brace == 0 &&
+                 (p == ";" || p == ",")) {
+        // The suffix is emitted AFTER the token at this index; return the
+        // last expression token so the closing ')' precedes the ';'.
+        return i == 0 ? 0 : i - 1;
+      }
+    }
+    return kNPos;
+  }
+
+  /// Map tagged-union facts onto token emission points.  A declaration gets a
+  /// side tag initialised to "no variant"; a read is wrapped in a trap check;
+  /// a store first records the new active variant.  No field is added to the
+  /// emitted union, so its C layout and ABI stay unchanged.
+  void collectTaggedAccesses() {
+    for (const auto &v : tagged_.vars) {
+      if (v.semi < ts.size())
+        taggedSuffix_[v.semi] += " int " + v.tag + " = -1;";
+    }
+    for (const auto &a : tagged_.accesses) {
+      const std::string member = a.var + "." + a.field;
+      const std::string check =
+          "(cplus_variant_check(" + a.tag + ", " + std::to_string(a.index) +
+          ", \"" + annQuote(member) + "\", \"" + annQuote(filename_) +
+          "\", " + std::to_string(a.line) + "), ";
+      if (a.store) {
+        size_t end = taggedExprEnd(a.fieldTok);
+        if (end != kNPos) {
+          taggedPrefix_[a.varTok] =
+              "(" + a.tag + " = " + std::to_string(a.index) + ", ";
+          taggedSuffix_[end] += ")";
+        } else {
+          // No statement terminator: keep the original statement prefix rather
+          // than emitting an unmatched '(' into the C output.
+          taggedPrefix_[a.varTok] =
+              a.tag + " = " + std::to_string(a.index) + "; ";
+        }
+      } else {
+        taggedPrefix_[a.varTok] = check;
+        taggedSuffix_[a.fieldTok] = ")";
+      }
+    }
+    if (!taggedPrefix_.empty() || !taggedSuffix_.empty())
+      changed_ = true;
+  }
+
   // --- emission -------------------------------------------------------------
 
   void emit(const std::string &s) { out_ += s; }
 
-  void emitToken(size_t i) {
+  /// Emit one token with no annotation-aware rewriting.  Kept separate from
+  /// emitToken() so a rewritten expression can emit its own token range
+  /// without recursing back into the annotation rules.
+  void emitPlainToken(size_t i) {
+    // Issue #179: Cake qualifiers are compile-time-only. Record the fact for
+    // the safety checker, then emit NOTHING here: the generated C always has
+    // a bare `T *`, so layout, offsets and calling conventions are unchanged.
+    if (ts[i].kind == TokKind::Identifier) {
+      int qk = cakeQualifierKind(ts[i].text);
+      if (qk != 0) {
+        std::string name = cakeDeclaredName(ts, i);
+        if (!name.empty())
+          cplusCakeRecordQualifier(name, ts[i].line, qk);
+        changed_ = true;
+        return;
+      }
+      // cplus_move is a macro, so the safety AST has no CallExpr for it.
+      // Record the moved name at the token level for the Cake checker.
+      if (ts[i].text == "cplus_move") {
+        size_t lp = ts.nextSig(i);
+        if (ts.isPunct(lp, "(")) {
+          size_t arg = ts.nextSig(lp);
+          if (arg < ts.size() && ts[arg].kind == TokKind::Identifier)
+            cplusCakeRecordQualifier(ts[arg].text, ts[i].line, 4);
+        }
+      }
+    }
     bool instance = ts.isIdent(i, "self") || ts.isIdent(i, "this");
     if (ctorBody_ && instance) {
       out_ += "_cplus_self";
@@ -1079,6 +1958,299 @@ private:
     out_ += ts[i].text;
   }
 
+  bool isDtorType(const std::string &name) const {
+    if (std::find(resourceTypes_.begin(), resourceTypes_.end(), name) !=
+            resourceTypes_.end() ||
+        std::find(classTypes_.begin(), classTypes_.end(), name) !=
+            classTypes_.end())
+      return true;
+    // A plain C struct with a matching `Type_drop` function is enough: the
+    // marker only names a direct C call, never a hidden field or vtable.
+    const std::string symbol = name + "_drop";
+    for (size_t k = 0; k < ts.size(); ++k)
+      if (ts[k].kind == TokKind::Identifier && ts[k].text == symbol)
+        return true;
+    return false;
+  }
+
+  /// Issue #183: `dtor T x = init;` is Cforall-style RAII sugar.  It lowers to
+  /// the ordinary declaration plus the existing `/*cplus$own:...*/` marker;
+  /// RaiiLowering then emits a direct `T_drop(&x)` at every scope exit.  No
+  /// hidden field is added to `T` and no cleanup record is allocated.
+  bool tryEmitDtorDecl(size_t i) {
+    if (!ts.isIdent(i, "dtor"))
+      return false;
+    size_t semi = ts.statementEnd(i);
+    if (semi == kNPos || semi <= i + 1)
+      return false;
+    size_t eq = kNPos;
+    int paren = 0, bracket = 0;
+    for (size_t k = i + 1; k < semi; ++k) {
+      if (ts.isPunct(k, "("))
+        ++paren;
+      else if (ts.isPunct(k, ")"))
+        --paren;
+      else if (ts.isPunct(k, "["))
+        ++bracket;
+      else if (ts.isPunct(k, "]"))
+        --bracket;
+      else if (ts.isPunct(k, "=") && paren == 0 && bracket == 0) {
+        eq = k;
+        break;
+      }
+    }
+    size_t nameIdx = eq != kNPos ? ts.prevSig(eq) : ts.prevSig(semi);
+    if (nameIdx == kNPos || nameIdx <= i + 1 ||
+        ts[nameIdx].kind != TokKind::Identifier)
+      return false;
+    size_t typeIdx = ts.nextSig(i);
+    if (typeIdx == kNPos || typeIdx >= nameIdx ||
+        ts[typeIdx].kind != TokKind::Identifier ||
+        ts.nextSig(typeIdx) != nameIdx)
+      return false;
+    const std::string type = ts[typeIdx].text;
+    if (!isDtorType(type))
+      return false;
+    const std::string name = ts[nameIdx].text;
+    for (size_t k = i + 1; k <= semi; ++k)
+      emitPlainToken(k);
+    emit(" /*cplus$own:" + name + ":" + type + "_drop*/");
+    suppressUntil_ = semi;
+    changed_ = true;
+    return true;
+  }
+
+  /// `guard stmt;` is scoped-guard sugar lowered to the existing `defer`
+  /// machinery.  Defer records live in an OwnedVar on the stack, so cleanup
+  /// is a direct source-level call on every exit path, never a malloc'd
+  /// cplus_cleanup node.
+  bool tryEmitGuardStmt(size_t i) {
+    if (!ts.isIdent(i, "guard"))
+      return false;
+    size_t prev = ts.prevSig(i);
+    // `guard` is sugar only at the start of a statement. A local variable or
+    // expression named `guard` (e.g. `char guard; ... guard == 0x5a`) must
+    // stay an ordinary identifier.
+    if (prev == kNPos ||
+        !(ts.isPunct(prev, ";") || ts.isPunct(prev, "{") ||
+          ts.isPunct(prev, "}")))
+      return false;
+    size_t body = ts.nextSig(i);
+    if (body >= ts.size() || ts.isPunct(body, "=") || ts.isPunct(body, "("))
+      return false;
+    // `guard z;` / `guard g = guard(&m);` declare a guard object. Sugar
+    // requires an expression or block body, not a bare identifier that is
+    // immediately followed by ';' or '='.
+    if (ts[body].kind == TokKind::Identifier) {
+      size_t after = ts.nextSig(body);
+      if (after != kNPos &&
+          (ts.isPunct(after, ";") || ts.isPunct(after, "=")))
+        return false;
+    }
+    // `guard g = guard(&m);` is a C+ guard-object declaration/constructor
+    // call, not the `guard stmt;` statement form. Never rewrite it here.
+    if (ts[body].kind == TokKind::Identifier) {
+      size_t after = ts.nextSig(body);
+      if (after != kNPos && ts.isPunct(after, "="))
+        return false;
+    }
+    size_t semi;
+    if (ts.isPunct(body, "{")) {
+      semi = ts.matchBrace(body);
+      if (semi == kNPos)
+        return false;
+    } else {
+      semi = ts.statementEnd(i + 1);
+      if (semi == kNPos || semi == i + 1)
+        return false;
+    }
+    // A one-shot flag makes the guard idempotent when the defer text is
+    // emitted both at an early exit and again at normal scope close.
+    const std::string flag = "__cplus_guard_" + std::to_string(guardCounter_++);
+    emit("int " + flag + " = 0; defer if (!" + flag + ") { " + flag +
+         " = 1; ");
+    for (size_t k = i + 1; k <= semi; ++k)
+      emitPlainToken(k);
+    emit(" };");
+    suppressUntil_ = semi;
+    changed_ = true;
+    return true;
+  }
+
+  static bool parseDecimal(const std::string &s, unsigned long long &v) {
+    if (s.empty())
+      return false;
+    v = 0;
+    for (char c : s) {
+      if (c < '0' || c > '9')
+        return false;
+      v = v * 10 + static_cast<unsigned long long>(c - '0');
+    }
+    return true;
+  }
+
+  /// `p[i]` on an `@numelts(n)` pointer becomes a checked subscript.  The
+  /// check is a plain C call returning void, wrapped in a comma expression so
+  /// the index value is preserved; `p` and `n` remain bare C values.
+  bool tryEmitAnnotatedSubscript(size_t i) {
+    if (ts[i].kind != TokKind::Identifier)
+      return false;
+    auto it = countExpr_.find(spatialKeyAt(i, ts[i].text));
+    if (it == countExpr_.end())
+      return false;
+    size_t lb = ts.nextSig(i);
+    if (!ts.isPunct(lb, "["))
+      return false;
+    size_t rb = ts.matchBracket(lb);
+    if (rb == kNPos || rb <= lb + 1)
+      return false;
+
+    const std::string name = ts[i].text;
+    const std::string count = it->second;
+    const std::string index = joinTokens(ts, lb + 1, rb);
+    unsigned long long iv = 0, cv = 0;
+    if (parseDecimal(index, iv) && parseDecimal(count, cv) && iv >= cv) {
+      diags_.error("[CPLUS-SPATIAL] constant index " + index +
+                       " exceeds the @numelts(" + count + ") bound",
+                   filename_, ts[i].line, ts[i].column);
+    }
+
+    emitPlainToken(i);
+    emit("[(cplus_check_bounds(" + name + ", (size_t)(" + count +
+         "), (size_t)(");
+    for (size_t k = lb + 1; k < rb; ++k)
+      emitPlainToken(k);
+    emit("), \"" + annQuote(filename_) + "\", " +
+         std::to_string(ts[i].line) + ", \"" + name + "[" + index +
+         "\"), (size_t)(");
+    for (size_t k = lb + 1; k < rb; ++k)
+      emitPlainToken(k);
+    emit("))]");
+    suppressUntil_ = rb;
+    changed_ = true;
+    return true;
+  }
+
+  bool emitNotNullGuard(const std::string &name, const Token &at) {
+    emit("(cplus_check_nonnull(" + name + ", \"" + annQuote(filename_) +
+         "\", " + std::to_string(at.line) + ", \"" + name + "\"), " + name +
+         ")");
+    changed_ = true;
+    return true;
+  }
+
+  bool tryEmitNotNullArrow(size_t i) {
+    if (ts[i].kind != TokKind::Identifier ||
+        notNullPtrs_.count(spatialKeyAt(i, ts[i].text)) == 0)
+      return false;
+    if (!ts.isPunct(ts.nextSig(i), "->"))
+      return false;
+    emitNotNullGuard(ts[i].text, ts[i]);
+    suppressUntil_ = i;
+    return true;
+  }
+
+  static bool isUnaryPrefix(const Token &t) {
+    if (t.kind != TokKind::Punct && t.kind != TokKind::Identifier)
+      return false;
+    static const std::set<std::string> kPrefix = {
+        "(", ",", "=", "return", "{", ";", "[", "!", "~", "&&", "||",
+        "?", ":", "+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==",
+        "!=", "sizeof"};
+    return kPrefix.count(t.text) != 0;
+  }
+
+  bool tryEmitNotNullStar(size_t i) {
+    if (!ts.isPunct(i, "*"))
+      return false;
+    size_t nameIdx = ts.nextSig(i);
+    if (nameIdx >= ts.size() || ts[nameIdx].kind != TokKind::Identifier ||
+        notNullPtrs_.count(spatialKeyAt(nameIdx, ts[nameIdx].text)) == 0)
+      return false;
+    size_t prev = ts.prevSig(i);
+    if (prev == kNPos || !isUnaryPrefix(ts[prev]))
+      return false;
+    const std::string name = ts[nameIdx].text;
+    emit("(cplus_check_nonnull(" + name + ", \"" + annQuote(filename_) +
+         "\", " + std::to_string(ts[i].line) + ", \"" + name + "\"), *");
+    emitPlainToken(nameIdx);
+    emit(")");
+    suppressUntil_ = nameIdx;
+    changed_ = true;
+    return true;
+  }
+
+  /// Annotation-aware token emission.  A rewritten construct marks its last
+  /// token in `suppressUntil_`; the plain top-level loop then skips those
+  /// tokens without needing to know which rewrite consumed them.
+  void emitToken(size_t i) {
+    if (suppressUntil_ != kNPos) {
+      if (i <= suppressUntil_)
+        return;
+      suppressUntil_ = kNPos;
+    }
+    auto pre = taggedPrefix_.find(i);
+    if (pre != taggedPrefix_.end())
+      emit(pre->second);
+    if (!tryEmitGenericUse(i) && !tryEmitDtorDecl(i) && !tryEmitGuardStmt(i) &&
+        !tryEmitAnnotatedSubscript(i) && !tryEmitNotNullArrow(i) &&
+        !tryEmitNotNullStar(i))
+      emitPlainToken(i);
+    auto post = taggedSuffix_.find(i);
+    if (post != taggedSuffix_.end())
+      emit(post->second);
+  }
+
+  /// Rewrite `Vec<int>` -> `Vec_int`.  A single type token is accepted: that
+  /// keeps the spelling unambiguous in plain C and avoids the `>>` token that
+  /// a nested instantiation would produce.  The declaration spelling itself
+  /// is never rewritten (it is erased by emitTranslationUnit()).
+  bool tryEmitGenericUse(size_t i) {
+    if (ts[i].kind != TokKind::Identifier || genericDeclNameIdx_.count(i))
+      return false;
+    size_t gi = genericAt(i);
+    if (gi == kNPos)
+      return false;
+    size_t lt = ts.nextSig(i), ty = ts.nextSig(lt), gt = ts.nextSig(ty);
+    if (!ts.isPunct(lt, "<") || ty >= ts.size() ||
+        ts[ty].kind != TokKind::Identifier || !ts.isPunct(gt, ">"))
+      return false;
+    if (ts[ty].text == generics_[gi].param)
+      return false;
+    emit(generics_[gi].name + "_" + ts[ty].text);
+    suppressUntil_ = gt;
+    changed_ = true;
+    return true;
+  }
+
+  /// Emit the monomorphised definitions in place of `generic Vec<T>;`.
+  /// Everything is plain C: the struct has exactly the three declared fields,
+  /// and the helpers are `static inline` functions with ordinary signatures.
+  void emitMonomorphizations(const GenericDecl &g) {
+    emit("#include <stddef.h>\n");
+    auto it = instantiations_.find(g.name);
+    if (it != instantiations_.end()) {
+      for (const auto &ty : it->second) {
+        const std::string n = g.name + "_" + ty;
+        emit("struct " + n + " {\n");
+        emit("  " + ty + " *data;\n");
+        emit("  size_t len;\n");
+        emit("  size_t cap;\n");
+        emit("};\n");
+        emit("typedef struct " + n + " " + n + ";\n");
+        emit("static inline void " + n + "_init(" + n +
+             " *self) { self->data = 0; self->len = 0; self->cap = 0; }\n");
+        emit("static inline " + ty + " " + n + "_at(const " + n + " *self, "
+             "size_t i) { return self->data[i]; }\n");
+        emit("static inline size_t " + n + "_len(const " + n +
+             " *self) { return self->len; }\n");
+      }
+    }
+    emit(lineDirective(filename_, g.semi < ts.size()
+                                       ? ts[ts.nextSig(g.semi)].line
+                                       : ts[g.semi].line + 1));
+  }
+
   size_t classAt(size_t i) const {
     for (size_t k = 0; k < classes_.size(); ++k)
       if (classes_[k].keyword == i)
@@ -1095,6 +2267,30 @@ private:
 
   void emitTranslationUnit() {
     for (size_t i = 0; i < ts.size(); ++i) {
+      // Issue #183: replace the generic declaration with the monomorphised
+      // definitions.  The `generic`/`<T>`/`;` spelling never reaches the C
+      // output, so no downstream pass can mistake it for a comparison.
+      bool emittedGeneric = false;
+      for (const auto &g : generics_) {
+        if (g.keyword == i) {
+          emitMonomorphizations(g);
+          i = g.semi;
+          emittedGeneric = true;
+          changed_ = true;
+          break;
+        }
+      }
+      if (emittedGeneric)
+        continue;
+      // A deduplicated same-name declaration is erased but never emitted a
+      // second time, so the C output contains exactly one struct/helper set
+      // per generic name even if the source repeats the declaration.
+      if (auto dup = suppressedGenericDecls_.find(i);
+          dup != suppressedGenericDecls_.end()) {
+        i = dup->second;
+        changed_ = true;
+        continue;
+      }
       if (tryEmitRangeFor(i) || tryEmitDefaultDefinition(i) ||
           tryEmitDefaultCall(i)) {
         i = skipTo_;
@@ -1838,6 +3034,20 @@ private:
     if (ts.isPunct(ts.nextSig(member), "("))
       return false;
     if (!isStatic && !isDynamic) {
+      // A monomorphised generic container is an ordinary C struct: its `len`
+      // member is a plain writable field, not the C+ array-length property.
+      // Keep `v.len = n` verbatim for variables declared as `Vec<T>` only.
+      // All other untracked receivers keep the diagnostic below, so managed
+      // metadata and raw pointers remain read-only / length-inference-free.
+      size_t afterMember = ts.nextSig(member);
+      if (ts.isPunct(afterMember, "=")) {
+        bool genericVar = false;
+        for (const auto &v : genericStructVars_)
+          if (v.name == ts[i].text)
+            genericVar = true;
+        if (genericVar)
+          return false;
+      }
       // A pointer with no C+ length metadata (e.g. raw malloc) cannot have
       // `.len` inferred: pointer arithmetic is never used to guess a length.
       // Replace with 0 so Clang does not emit a cascade of follow-on errors.
@@ -2042,6 +3252,29 @@ private:
   bool headerMode_ = false;
   size_t skipTo_ = kNPos;
 
+  // Issue #184: annotations are erased before Lowerer sees the token stream;
+  // these maps carry the contracts needed to insert dynamic guards.
+  const std::vector<SafetyAnnotation> &annotations_;
+  /// Issue #185: tagged-union facts and token-indexed emission hooks.
+  const TaggedInfo &tagged_;
+  std::map<size_t, std::string> taggedPrefix_;
+  std::map<size_t, std::string> taggedSuffix_;
+  std::map<std::string, std::string> countExpr_;
+  std::set<std::string> notNullPtrs_;
+  std::set<std::string> zeroTermPtrs_;
+  size_t suppressUntil_ = kNPos;
+  unsigned guardCounter_ = 0;
+
+  // Issue #183: monomorphised generics.  `instantiations_` is a set so the
+  // emitted order is deterministic; declaration order comes from generics_.
+  std::vector<GenericDecl> generics_;
+  std::set<size_t> genericDeclNameIdx_;
+  std::map<std::string, std::set<std::string>> instantiations_;
+  /// Same-name `generic ...;` spellings beyond the canonical declaration:
+  /// keyword -> semicolon.  Their tokens are erased without emitting a
+  /// second (duplicate) set of monomorphisations or a diagnostic.
+  std::map<size_t, size_t> suppressedGenericDecls_;
+
   std::map<size_t, int> extraBraces_;
   unsigned rangeCounter_ = 0;
   std::vector<FuncDefaults> funcsWithDefaults_;
@@ -2074,6 +3307,21 @@ private:
       }
     return result;
   }
+  /// Issue #183: locals declared as `Vec<int>` / `Vec<double>`.  Their C
+  /// representation is a plain struct, so `v.len` is a real field rather than
+  /// the managed-array length property.
+  std::vector<VarClass> genericStructVars_;
+  std::string genericStructVarType(const std::string &name, size_t usePos) const {
+    std::string result;
+    size_t best = kNPos;
+    for (const auto &v : genericStructVars_)
+      if (v.name == name && v.pos <= usePos && usePos <= v.scopeEnd &&
+          (best == kNPos || v.pos >= best)) {
+        best = v.pos;
+        result = v.cls;
+      }
+    return result;
+  }
   std::map<std::string, size_t> arrays_;
   std::set<std::string> dynamicPointers_;
   struct DynamicLength {
@@ -2097,9 +3345,24 @@ RewrittenSource rewriteCPlusSource(const std::string &source,
                                    DiagnosticEngine &diags,
                                    const std::string &filename,
                                    bool headerMode) {
+  // Facts are per-TU: a prior translation unit must not leak its qualifiers
+  // into this one's safety check.
+  cplusCakeClearQualifiers();
   std::vector<Token> toks = lexCPlus(source);
-  Lowerer lowerer(toks, diags, filename, headerMode);
+  std::vector<std::string> contracts;
+  std::vector<SafetyAnnotation> annotations =
+      extractSafetyAnnotations(toks, diags, filename, contracts);
+  // Issue #185: erase `@tagged` before Clang parses the buffer; serialize the
+  // variant facts for the static checker in TypeChecker.cpp.
+  TaggedInfo tagged = extractTaggedUnions(toks, diags, filename);
+  Lowerer lowerer(toks, diags, filename, headerMode, annotations, tagged);
   RewrittenSource result = lowerer.run();
+  // Contracts are checked against the original source (still carrying the
+  // annotation spellings) by the type-checking half of Sema.
+  if (!contracts.empty())
+    checkAnnotatedCallSites(source, contracts, diags, filename);
+  if (!tagged.facts.empty())
+    checkTaggedVariantAccess(source, tagged.facts, diags, filename);
   // Preserve the original source's trailing newlines exactly.  Token
   // reconstruction drops trailing trivia, so a naive single-newline restore
   // collapsed multiple blank lines at EOF and broke byte identity (e.g. an
