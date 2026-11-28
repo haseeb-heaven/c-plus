@@ -238,8 +238,15 @@ measurement instead of equivalence claims.
 
 ## Design provenance
 
-The scoped-memory design is inspired by Fil-C, TrapC, Rust and the the inspiration language-Lang
-(`aardappel/scoped`) data-stack model. The name and ideas appear only here in
-this README; library code, tests and docs use neutral names such as
-`stdlib/scoped_mem.hp`. No upstream source was copied, and this is not a claim
-of Rust/the inspiration language equivalence or 100% memory safety.
+C+ is **mostly inspired by Fil-C, the C3 language and the Goose language**:
+Fil-C for out-of-band pointer validity with an unchanged C pointer ABI, C3 for
+modern C-compatible syntax and diagnostic style, and Goose for safe-systems
+ergonomics and the cross-language benchmark reference. The scoped/arena layer
+is additionally inspired by aardappel/scoped (Apache-2.0); TrapC and Rust are
+referenced as safety models, not as code sources.
+
+No source from those projects was copied unless vendored with its own license
+(see proof/benchmarks/README.md for cross-language data and
+docs/security/upstream-techniques.md for source-cited Fil-C notes). This is
+not a claim of equivalence to any of them, nor of 100% memory safety. Full
+details: docs/DESIGN_PROVENANCE.md.

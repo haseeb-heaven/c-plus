@@ -18,6 +18,7 @@ library layer: a checked, additive C API that keeps the ordinary C ABI.
 | --- | --- |
 | **Agent 2 scope: apps/GAME_SUITE freeze** | [AGENT2_FOCUS.md](AGENT2_FOCUS.md) |
 | **Core memory philosophy (scoped-memory-style)** | [CORE_PHILOSOPHY.md](CORE_PHILOSOPHY.md) |
+| **Design provenance (Fil-C / C3 / Goose / scoped)** | [DESIGN_PROVENANCE.md](DESIGN_PROVENANCE.md) |
 | Architecture and layout | [ARCHITECTURE.md](ARCHITECTURE.md), [STRUCTURE.md](STRUCTURE.md) |
 | Standard library API | [STDLIB.md](STDLIB.md), [MODERN_STDLIB.md](MODERN_STDLIB.md) |
 | Checked C layer | [SAFE_CRT.md](SAFE_CRT.md), [LOGGING.md](LOGGING.md) |
