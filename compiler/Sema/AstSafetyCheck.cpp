@@ -3993,6 +3993,19 @@ public:
     // `if (!p) p = &x;` — the assignment in the then arm makes p non-null
     bool keepErase = false;
     // on both paths after the statement. Also handles `if (p == NULL) p = &x;`.
+    // Only `==` against a null constant proves a named variable non-null;
+    // `!=` (or a comparison between two non-null values) proves no such fact.
+    auto nullEqualityVar = [&](const Expr *cond) -> std::string {
+      const auto *bo = dyn_cast_or_null<BinaryOperator>(
+          cond ? cond->IgnoreParenImpCasts() : nullptr);
+      if (!bo || bo->getOpcode() != BO_EQ)
+        return std::string();
+      if (isNullConstant(bo->getRHS()))
+        return varNameOf(bo->getLHS());
+      if (isNullConstant(bo->getLHS()))
+        return varNameOf(bo->getRHS());
+      return std::string();
+    };
     if (report_ && s->getThen()) {
       std::string n;
       if (negatedGuard)
@@ -4000,13 +4013,7 @@ public:
             cast<UnaryOperator>(s->getCond()->IgnoreParenImpCasts())
                 ->getSubExpr());
       if (n.empty())
-        if (const auto *bo = dyn_cast_or_null<BinaryOperator>(
-                s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
-          if (bo->isEqualityOp()) {
-            n = varNameOf(bo->getLHS());
-            if (n.empty() && isNullConstant(bo->getLHS()))
-              n = varNameOf(bo->getRHS());
-          }
+        n = nullEqualityVar(s->getCond());
       if (!n.empty()) {
         bool assigns = false;
         std::function<void(const Stmt *)> scan = [&](const Stmt *node) {
@@ -4099,22 +4106,21 @@ public:
         if (uo->getOpcode() == UO_LNot) {
           condVar = varNameOf(uo->getSubExpr());
           // `if (!p) return;` proves p non-null after the statement.
-          keepErase = containsReturn(s->getThen());
-        }
-      if (const auto *bo = dyn_cast_or_null<BinaryOperator>(
-              s->getCond() ? s->getCond()->IgnoreParenImpCasts() : nullptr))
-        if (bo->isEqualityOp() && containsReturn(s->getThen())) {
-          std::string n = varNameOf(bo->getLHS());
-          if (n.empty() && isNullConstant(bo->getLHS()))
-            n = varNameOf(bo->getRHS());
-          if (!n.empty()) {
-            guardedFromConst_.insert(n);
-            // `if (p == 0) return;` proves p is non-null afterwards.
-            condVar = n;
+          if (containsReturn(s->getThen())) {
             keepErase = true;
-            keepEraseVar = n;
+            keepEraseVar = condVar;
           }
         }
+      if (containsReturn(s->getThen())) {
+        std::string n = nullEqualityVar(s->getCond());
+        if (!n.empty()) {
+          guardedFromConst_.insert(n);
+          // `if (p == 0) return;` proves p is non-null afterwards.
+          condVar = n;
+          keepErase = true;
+          keepEraseVar = n;
+        }
+      }
       if (!condVar.empty())
         nullVars_.erase(condVar);
     }
@@ -4156,7 +4162,7 @@ public:
       auto fromZeroEquality = [&](const Expr *e) -> const VarDecl * {
         const auto *bo = dyn_cast_or_null<BinaryOperator>(
             e ? e->IgnoreParenCasts() : nullptr);
-        if (!bo || !bo->isEqualityOp()) return nullptr;
+        if (!bo || bo->getOpcode() != BO_EQ) return nullptr;
         if (!isNullConstant(bo->getRHS()->IgnoreParenCasts())) return nullptr;
         const auto *ref = dyn_cast<DeclRefExpr>(
             bo->getLHS()->IgnoreParenCasts());
@@ -4202,16 +4208,13 @@ public:
     if (ifGuardVar && !containsReturn(s->getThen()))
       nonZeroVars_.erase(ifGuardVar);
     guardedSnprintf_ = savedGuarded;
-    if (keepErase) {
-      // The branch we kept may itself assign `p = NULL` (RAII lowering does
-      // this on failure paths). The continuing path is still non-null.
-      for (const auto &kv : savedNulls)
-        nullVars_.erase(kv);
-      if (!keepEraseVar.empty())
-        nullVars_.erase(keepEraseVar);
-    } else {
-      nullVars_ = savedNulls;
-    }
+    // Restore every null fact saved before the branch: only the variable
+    // proved non-null on the continuing path may lose its null state. The
+    // kept arm may itself assign `p = NULL` (RAII lowering does this on
+    // failure paths), so the erase must happen after the restore.
+    nullVars_ = savedNulls;
+    if (keepErase && !keepEraseVar.empty())
+      nullVars_.erase(keepEraseVar);
     --conditionalDepth_;
     return r;
   }
