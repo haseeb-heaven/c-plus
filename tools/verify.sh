@@ -43,7 +43,7 @@ echo "== strict/default modes =="
 ./tests/core/strict_mode.sh
 
 echo "== contracts and SDK smoke =="
-python3 tests/core/validate_contracts.py
+./tests/core/validate_contracts.sh
 ./tests/core/sdk_smoke.sh
 
 echo "== native capabilities =="
