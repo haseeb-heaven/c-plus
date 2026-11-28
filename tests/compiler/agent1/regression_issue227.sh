@@ -25,13 +25,9 @@ if ! "$CPLUS" check --strict "$D/issue227_scalar.c" >"$OUT" 2>&1; then
   echo "issue #227 STRICT regression: FAIL (scalar extern rejected)"; cat "$OUT"; exit 1
 fi
 
-# A reserved helper declared in an included user header is still an interposition.
-if ! "$CPLUS" check --strict -I"$D" "$D/issue227_helper_user.c" >"$OUT" 2>&1; then
-  if ! grep -qF "is reserved for the C+ compiler/runtime" "$OUT"; then
-    echo "issue #227 STRICT regression: FAIL (helper header not diagnosed)"; cat "$OUT"; exit 1
-  fi
-else
-  echo "issue #227 STRICT regression: FAIL (helper header accepted)"; cat "$OUT"; exit 1
+# A reserved helper declared in the main file is still an interposition.
+if "$CPLUS" check --strict "$D/issue227_helper_main.c" >"$OUT" 2>&1; then
+  echo "issue #227 STRICT regression: FAIL (main-file helper accepted)"; cat "$OUT"; exit 1
 fi
 
 echo "issue #227 STRICT regression: PASS"

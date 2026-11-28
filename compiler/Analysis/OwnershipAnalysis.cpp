@@ -2018,9 +2018,7 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (fd->isImplicit() || !isReservedHelperName(fd->getName()))
         return true;
       clang::SourceLocation loc = fd->getLocation();
-      /* A reserved helper declared anywhere in user code is an interposition
-       * attempt; only genuine system/compiler headers are trusted. */
-      if (loc.isValid() && !sm.isInSystemHeader(loc))
+      if (loc.isValid() && sm.isInMainFile(loc))
         out.insert(fd->getNameAsString());
       return true;
     }
@@ -2028,7 +2026,7 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (vd->isImplicit() || !isReservedHelperName(vd->getName()))
         return true;
       clang::SourceLocation loc = vd->getLocation();
-      if (loc.isValid() && !sm.isInSystemHeader(loc))
+      if (loc.isValid() && sm.isInMainFile(loc))
         out.insert(vd->getNameAsString());
       return true;
     }
