@@ -1,5 +1,7 @@
 #include "Analysis/OwnershipAnalysis.h"
 
+#include <functional>
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
@@ -259,14 +261,41 @@ static bool isCompilerHelperEffectName(llvm::StringRef name) {
 /// declared contract; scalar-only externs (e.g. `int ext_add(int,int)`) are
 /// pure by construction and must stay accepted in STRICT.
 static bool hasPointerEffectSignature(const clang::FunctionDecl *fd) {
-  auto isPtr = [](clang::QualType t) {
-    return t->isPointerType() || t->isFunctionPointerType() ||
-           t->isMemberPointerType();
+  // Aggregates can carry pointers too; a record with any pointer field is as
+  // unverifiable as a direct pointer parameter. Limit recursion to one level
+  // of nested records (with a visited set) so recursive types terminate.
+  std::set<const clang::RecordType *> seen;
+  std::function<bool(clang::QualType, unsigned)> carriesPointer =
+      [&](clang::QualType t, unsigned depth) -> bool {
+    if (t.isNull())
+      return false;
+    if (t->isPointerType() || t->isFunctionPointerType() ||
+        t->isMemberPointerType())
+      return true;
+    if (depth > 2)
+      return false;
+    const clang::Type *ty = t->getUnqualifiedDesugaredType();
+    if (const auto *rt = dyn_cast_or_null<clang::RecordType>(ty)) {
+      if (!seen.insert(rt).second)
+        return false;
+      const clang::RecordDecl *rd = rt->getDecl();
+      if (!rd)
+        return false;
+      rd = rd->getDefinitionOrSelf();
+      for (const clang::FieldDecl *fld : rd->fields())
+        if (carriesPointer(fld->getType(), depth + 1))
+          return true;
+    }
+    return false;
   };
-  if (isPtr(fd->getReturnType()))
+  // Variadic and unprototyped (K&R) functions may receive arbitrary pointer
+  // arguments without a declared contract; they must stay unverified.
+  if (fd->isVariadic() || !fd->hasWrittenPrototype())
+    return true;
+  if (carriesPointer(fd->getReturnType(), 0))
     return true;
   for (const clang::ParmVarDecl *p : fd->parameters())
-    if (isPtr(p->getType()))
+    if (carriesPointer(p->getType(), 0))
       return true;
   return false;
 }
@@ -1989,7 +2018,9 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (fd->isImplicit() || !isReservedHelperName(fd->getName()))
         return true;
       clang::SourceLocation loc = fd->getLocation();
-      if (loc.isValid() && sm.isInMainFile(loc))
+      /* A reserved helper declared anywhere in user code is an interposition
+       * attempt; only genuine system/compiler headers are trusted. */
+      if (loc.isValid() && !sm.isInSystemHeader(loc))
         out.insert(fd->getNameAsString());
       return true;
     }
@@ -1997,7 +2028,7 @@ findUserDeclaredHelperSymbols(const std::string &source,
       if (vd->isImplicit() || !isReservedHelperName(vd->getName()))
         return true;
       clang::SourceLocation loc = vd->getLocation();
-      if (loc.isValid() && sm.isInMainFile(loc))
+      if (loc.isValid() && !sm.isInSystemHeader(loc))
         out.insert(vd->getNameAsString());
       return true;
     }

@@ -232,6 +232,19 @@ if matches "vendored_header_ffi"; then
   fi
 fi
 
+# --- issue #227: STRICT extern effect classification ----------------------
+
+if matches "issue227_strict"; then
+  if CPLUS_BIN="$CPLUS" /bin/sh \
+      "$ROOT/tests/compiler/agent1/regression_issue227.sh" \
+      >"$OUT/issue227_strict.suite.log" 2>&1; then
+    pass "issue227_strict"
+  else
+    cat "$OUT/issue227_strict.suite.log" >&2
+    fail "issue227_strict" "see tests/out/issue227_strict.suite.log"
+  fi
+fi
+
 echo
 gap_word=gaps
 [ "$GAP" -eq 1 ] && gap_word=gap
