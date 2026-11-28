@@ -3139,32 +3139,6 @@ static bool isDeclTypeTok(const std::string &s) {
   return kTypes.count(s) != 0;
 }
 
-/// True when this `*` is a declarator star in a type such as `char **argv`,
-/// `int **q` or `struct S **p`.  Walk back over the whole run of stars: if
-/// the token before the run is a type keyword (or a struct/union/enum tag),
-/// the stars declare a name rather than dereference a value.  A run preceded
-/// by an expression token (`=`, `{`, `return`, ...) is a nested deref and is
-/// intentionally left to the normal expression path.
-static bool isDeclaratorStarRun(const std::vector<Token> &toks,
-                                const std::vector<size_t> &sig, size_t si) {
-  size_t r = si;
-  while (r > 0 && toks[sig[r - 1]].kind == TokKind::Punct &&
-         toks[sig[r - 1]].text == "*")
-    --r;
-  if (r == 0)
-    return false;
-  const Token &before = toks[sig[r - 1]];
-  if (isDeclTypeTok(before.text))
-    return true;
-  if (r >= 2 && before.kind == TokKind::Identifier) {
-    const Token &pre = toks[sig[r - 2]];
-    if (pre.kind == TokKind::Identifier &&
-        (pre.text == "struct" || pre.text == "union" || pre.text == "enum"))
-      return true;
-  }
-  return false;
-}
-
 /// True when an obvious local guard proves `name` non-null before baseSi.
 /// We keep this deliberately narrow (short-circuit RHS and `if(!p) return;`)
 /// and fall back to emitting a check whenever there is any doubt.
@@ -3290,6 +3264,58 @@ static std::set<std::string> collectDeclTypeNames(
       names.insert(toks[sig[last]].text);
   }
   return names;
+}
+
+/// True when this `*` is a declarator star in a type such as `char **argv`,
+/// `int **q`, `struct S **p`, or a later declarator in `T *a, *b;` /
+/// `T *a, **b;`.  Walk back over the whole run of stars: if the token before
+/// the run is a type keyword (or a struct/union/enum tag), the stars declare
+/// a name rather than dereference a value.  A preceding comma is also a
+/// declarator separator when the declaration statement starts with a type
+/// (builtin, or a typedef/tag name recorded in this TU); a comma inside an
+/// expression (`f(a * b, *c)`) must keep its dereference check.  A run
+/// preceded by an expression token (`=`, `{`, `return`, ...) is a nested
+/// deref and stays on the normal expression path.
+static bool isDeclaratorStarRun(const std::vector<Token> &toks,
+                                const std::vector<size_t> &sig, size_t si,
+                                const std::set<std::string> &typeNames) {
+  size_t r = si;
+  while (r > 0 && toks[sig[r - 1]].kind == TokKind::Punct &&
+         toks[sig[r - 1]].text == "*")
+    --r;
+  if (r == 0)
+    return false;
+  const Token &before = toks[sig[r - 1]];
+  if (isDeclTypeTok(before.text))
+    return true;
+  if (r >= 2 && before.kind == TokKind::Identifier) {
+    const Token &pre = toks[sig[r - 2]];
+    if (pre.kind == TokKind::Identifier &&
+        (pre.text == "struct" || pre.text == "union" || pre.text == "enum"))
+      return true;
+  }
+  // A comma before the star run is a declarator separator only when the
+  // declaration statement begins with a type.  Scan back past initializers
+  // (`int *x = p, *y = p;`) to the statement boundary; expression commas
+  // (`f(a * b, *c)`, `x = a * b, *c = d;`) begin with an expression token.
+  if (before.kind == TokKind::Punct && before.text == ",") {
+    size_t first = r;
+    while (first > 0) {
+      const Token &u = toks[sig[first - 1]];
+      if (u.kind == TokKind::Punct &&
+          (u.text == ";" || u.text == "{" || u.text == "}" ||
+           u.text == "(" || u.text == ")"))
+        break;
+      --first;
+    }
+    if (first > 0) {
+      const Token &head = toks[sig[first]];
+      if (isDeclTypeTok(head.text) ||
+          (head.kind == TokKind::Identifier && typeNames.count(head.text) != 0))
+        return true;
+    }
+  }
+  return false;
 }
 
 /// True when the `[` at `si` follows the declared name of an array, e.g.
@@ -3585,8 +3611,8 @@ collectNonnullDerefSites(const std::string &source,
       if (canEndFactor(prev) || isDeclTypeTok(prev.text) ||
           prev.text == "sizeof" || prev.text == "&")
         continue;
-      if (isDeclaratorStarRun(toks, sig, si))
-        continue; // `char **argv`, `int **q`, `struct T **p`
+      if (isDeclaratorStarRun(toks, sig, si, typeNames))
+        continue; // `char **argv`, `int **q`, `T *a, *b`, `struct T **p`
       const Token &base = toks[sig[si + 1]];
       if (base.kind != TokKind::Identifier)
         continue; // nested/parenthesised derefs: leave as-is
