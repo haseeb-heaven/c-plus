@@ -259,6 +259,25 @@ Full data: [benchmarks](proof/benchmarks/README.md).
 - [olive.c 2D software renderer](examples/modern_c_ports/olive_demo/README.md)
 - [All proof evidence](proof/README.md) - real SDL3 framebuffer PNGs, not CLI transcripts
 
+## GUI demos - real libraries, real C ABI
+
+![Nuklear GUI](examples/nuklear_gui/screenshots/nuklear_gui.png)
+
+![microui calculator and notes](examples/microui/screenshots/microui.png)
+
+![Olive UI](examples/modern_c_ports/olive_demo/screenshots/olive_sdl_view.png)
+
+| Demo | C source stays C | Library form | Gate |
+|---|---|---|---|
+| [Nuklear](examples/nuklear_gui/README.md) | `third_party/nuklear/nuklear_impl.c` + C backend | static C objects + dynamic SDL3 | `NUKLEAR_GUI_TEST 7 7 0` |
+| [microui](examples/microui/README.md) | `stdlib/microui/microui.c` + C backend | static C objects + dynamic SDL3 | `MICROUI_TEST 6 6 0` |
+| [Olive](examples/modern_c_ports/olive_demo/README.md) | `olive.c` via `c+ --legacy-c` | static `.a` or dynamic `.dylib` | `OLIVE_SDL_TEST 6 6 0` |
+
+All three keep C `sizeof`/`alignof` unchanged, link prebuilt C libraries
+directly, and capture real framebuffer screenshots - not CLI transcripts.
+The [raylib demos](examples/raylib_demos/README.md) additionally prove both
+`libraylib.a` (static) and `libraylib.6.2.0.dylib` (dynamic) work unchanged.
+
 ## 🚀 Quick start
 
 **Requirements:** CMake, a C++20 compiler, and LLVM/Clang development packages.
