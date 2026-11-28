@@ -398,20 +398,18 @@ optimised away. The `safe` column is the cost of C+ runtime guards; the
 
 | Language / toolchain | Compile | Runtime | ns/iter | Score |
 |---|---:|---:|---:|---|
-| Rust `-O` | 796 ms | **2,208,084 ns** | **1.104** | **fastest runtime** |
-| Goose native (`goose build`) | **220 ms** | 2,486,000 ns | 1.243 | fastest compile |
-| Zig `ReleaseFast` | 6710 ms | 2,530,000 ns | 1.265 | 3rd runtime |
-| C+ `--release --sanitize=none` | 1364 ms | 3,604,000 ns | 1.802 | 4th runtime |
-| C+ `--default` (guards on) | 1017 ms | 18,780,000 ns | 9.390 | guarded mode |
+| Rust `-O` | 0.796 s | **0.00221 s** | **1.104** | **fastest runtime** |
+| Goose native (`goose build`) | **0.220 s** | 0.00249 s | 1.243 | fastest compile |
+| Zig `ReleaseFast` | 6.710 s | 0.00253 s | 1.265 | 3rd runtime |
+| C+ `--release --sanitize=none` | 1.364 s | 0.00360 s | 1.802 | 4th runtime |
+| C+ `--default` (guards on) | 1.017 s | 0.01878 s | 9.390 | guarded mode |
 | C3 | NOT_TESTED | NOT_TESTED | NOT_TESTED | compiler not installed |
 | Fil-C | NOT_TESTED | NOT_TESTED | NOT_TESTED | compiler not installed |
 
 Heavy 200M-iteration loop (checksum `1677765674676096`): C `1.948`,
 Goose `2.061`, C+ release `2.743`, Zig `3.121`, Rust `3.744` ns/iter -
 different workload, different winner. C3/Fil-C binaries absent, so
-`NOT_TESTED` rather than a made-up number.Heavy 200M-iteration loop: C `1.948`, Goose `2.061`, C+ release `2.743`,
-Zig `3.121`, Rust `3.744` ns/iter - different workload, different winner.
-Fil-C/TrapC binaries absent = `NOT_TESTED`.
+`NOT_TESTED` rather than a made-up number.
 
 ### Evidence gates (correctness, not speed)
 
