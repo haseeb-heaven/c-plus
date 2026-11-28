@@ -83,9 +83,12 @@ static int check_capacity(const char *api, const void *p, size_t need,
  * Refuse ONLY when a capacity is provable (tracked allocation or BOS) and n
  * exceeds it: that is a heap/source over-read, which must never reach the raw
  * cplus_memcpy/cplus_memmove loop. Both checks run before any write, so the
- * destination is left intact on refusal. */
+ * destination is left intact on refusal. A resolved zero (BOS 0 or a genuine
+ * one-past-the-end address) means no provable size, not an empty object, and
+ * is normalized to UNKNOWN exactly as source_capacity() does below. */
 static int check_source_capacity(const char *api, const void *s, size_t n) {
     size_t cap = resolve_capacity(s, (size_t)CPLUS_BOUNDED_OBJ_SIZE(s));
+    if (cap == 0u) cap = (size_t)-1; /* BOS 0 == no object known, not empty */
     if (cap == (size_t)-1 || n <= cap) return 0;
     cplus_libc_log(api, "source over-read refused");
     errno = ERANGE;
