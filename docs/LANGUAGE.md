@@ -397,8 +397,11 @@ scan(n, d, name);
 ```
 
 It reads whitespace-separated values from standard input. Strings are copied
-into the destination array up to its `sizeof` (or 256 bytes for a `char *`),
-and a failed conversion is a fatal input error (exit 109).
+into the destination array up to its `sizeof`. For a bare `char *` (or
+`const char *`) the destination is the buffer the pointer refers to, not the
+pointer object; `CPLUS_SCAN_PTR_CAPACITY` (256) bytes must be available there,
+including the terminating NUL. A failed conversion is a fatal input error
+(exit 109).
 
 Both macros reserve the names `print` and `scan` in C+ code.
 

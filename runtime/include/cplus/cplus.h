@@ -481,26 +481,48 @@ void cplus_scan_value_at(void *dest, size_t size, cplus_scan_kind kind,
                       default: CPLUS_PRINT_UNKNOWN)),                         \
       (x))
 
+/* #233: a `char *` / `const char *` scan destination names a caller-owned
+ * buffer; it is NOT a pointer slot to be filled with input characters.  The
+ * capacity below is the documented caller contract for a bare char pointer
+ * (arrays keep their own sizeof).  A `const char *` destination is accepted
+ * for compatibility with existing string-scan call sites: const is cast away
+ * only at the void* boundary, and the runtime still enforces this capacity. */
+#define CPLUS_SCAN_PTR_CAPACITY 256u
+
+#define CPLUS_SCAN_IS_PTR(x)                                                  \
+  (__builtin_types_compatible_p(__typeof__(x), char *) ||                     \
+   __builtin_types_compatible_p(__typeof__(x), const char *))
+
+/* `(x) + 0` applies integer promotions, so unsigned char/short would reach
+ * _Generic as `int` and be scanned with signed bounds.  Match those two types
+ * explicitly before the promoted _Generic dispatch. */
+#define CPLUS_SCAN_KIND(x)                                                    \
+  (__builtin_types_compatible_p(__typeof__(x), char)                          \
+       ? CPLUS_SCAN_CHAR                                                      \
+       : (__builtin_types_compatible_p(__typeof__(x), unsigned char) ||        \
+          __builtin_types_compatible_p(__typeof__(x), unsigned short))         \
+             ? CPLUS_SCAN_UINT                                                \
+             : _Generic((x) + 0,                                              \
+                  char *: CPLUS_SCAN_STR,                                     \
+                  const char *: CPLUS_SCAN_STR,                               \
+                  int: CPLUS_SCAN_INT,                                        \
+                  unsigned int: CPLUS_SCAN_UINT,                              \
+                  long: CPLUS_SCAN_LONG,                                      \
+                  unsigned long: CPLUS_SCAN_ULONG,                            \
+                  long long: CPLUS_SCAN_LLONG,                                \
+                  unsigned long long: CPLUS_SCAN_ULLONG,                      \
+                  float: CPLUS_SCAN_FLOAT,                                    \
+                  double: CPLUS_SCAN_DOUBLE,                                  \
+                  default: CPLUS_SCAN_INT))
+
+/* The uintptr_t hop keeps the untaken branch well-typed for scalar lvalues
+ * (no int-to-pointer cast diagnostic) while preserving the caller's address. */
 #define cplus_scan_one(x)                                                     \
-  cplus_scan_value_at((void *)&(x),                                           \
-                      __builtin_types_compatible_p(__typeof__(x), char *)     \
-                          ? 256u                                              \
-                          : sizeof(x),                                        \
-                      (__builtin_types_compatible_p(__typeof__(x), char)      \
-                           ? CPLUS_SCAN_CHAR                                  \
-                           : _Generic((x) + 0,                                \
-                               char *: CPLUS_SCAN_STR,                        \
-                               const char *: CPLUS_SCAN_STR,                  \
-                               int: CPLUS_SCAN_INT,                           \
-                               unsigned int: CPLUS_SCAN_UINT,                 \
-                               long: CPLUS_SCAN_LONG,                         \
-                               unsigned long: CPLUS_SCAN_ULONG,               \
-                               long long: CPLUS_SCAN_LLONG,                   \
-                               unsigned long long: CPLUS_SCAN_ULLONG,         \
-                               float: CPLUS_SCAN_FLOAT,                       \
-                               double: CPLUS_SCAN_DOUBLE,                     \
-                               default: CPLUS_SCAN_INT)),                     \
-                      #x, __FILE__, __LINE__)
+  cplus_scan_value_at((CPLUS_SCAN_IS_PTR(x) ? (void *)(uintptr_t)(x)           \
+                                            : (void *)&(x)),                  \
+                      (CPLUS_SCAN_IS_PTR(x) ? CPLUS_SCAN_PTR_CAPACITY          \
+                                            : sizeof(x)),                     \
+                      CPLUS_SCAN_KIND(x), #x, __FILE__, __LINE__)
 
 /* Fixed-width argument dispatch (up to 16 values). */
 #define CPLUS_PICK16(_1, _2, _3, _4, _5, _6, _7, _8,                          \

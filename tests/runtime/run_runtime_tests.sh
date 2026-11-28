@@ -95,5 +95,20 @@ else
   tail -30 /tmp/rt7.log /tmp/rt7.out /tmp/rt7.err 2>/dev/null || true
 fi
 
+# 8) #233: a char*/const char* scan destination must be the pointed-to buffer,
+# never the pointer object.  A PROT_NONE page puts a deterministic SIGSEGV in
+# the path of the old &x write; unsigned char/short must keep unsigned bounds.
+if "$CC" -std=gnu17 -O0 -g -Wall -Wextra -I"$ROOT/runtime/include" \
+     "$ROOT/tests/runtime/test_scan_macro_bounds.c" \
+     "$ROOT/runtime/cplus_runtime.c" -lm -pthread \
+     -o "$OUT/test_scan_macro_bounds" >/tmp/rt8.log 2>&1 \
+    && "$OUT/test_scan_macro_bounds" >/tmp/rt8.out 2>/tmp/rt8.err \
+    && grep -q "scan_macro_bounds: ok" /tmp/rt8.out; then
+  pass=$((pass+1)); echo "ok scan_macro_bounds_guard_page"
+else
+  fail=$((fail+1)); echo "FAIL scan_macro_bounds_guard_page"
+  tail -30 /tmp/rt8.log /tmp/rt8.out /tmp/rt8.err 2>/dev/null || true
+fi
+
 echo "runtime tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
