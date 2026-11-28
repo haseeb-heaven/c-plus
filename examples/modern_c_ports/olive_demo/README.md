@@ -77,3 +77,17 @@ OLIVE_SDL_TEST 6 6 0
 
 Both the repository compiler and the clang fallback produce identical
 output. Generated files stay under `out/` and are not committed.
+
+## Three extra easy examples
+
+`examples/` contains three small, self-contained olive.c examples that use
+only the single-header renderer (no vc.c, no assets):
+
+- `lines_demo.c` - line grid, nested rectangles and circles.
+- `text_demo.c` - the built-in 6x6 bitmap font at several glyph sizes.
+- `squish_demo.c` - nested gradient triangles and translucent circles.
+
+Each writes a deterministic 320x240 binary PPM under `out/` and prints its
+byte count and FNV-1a64. Verify all three with `run_examples.sh` (prints
+`OLIVE_EXAMPLES 12 12 0`). It builds with the C+ compiler (`CPLUS_BIN`
+override) and falls back to clang; both produce byte-identical frames.
