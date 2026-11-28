@@ -38,7 +38,9 @@
 
 static char g_contract_buf[CONTRACT_CAP + 1];
 static char g_msg[2048];
-static error *g_err;            /* points at the error owned by main() */
+static error *g_err;            /* points at the error owned by run_checks() */
+static size_t g_contract_len;
+static yyjson_doc *g_raw;
 
 static const char *API_KEYS[] = {
     "name", "params", "ownership", "transfer", "extent",
@@ -138,12 +140,15 @@ static int g_api_n = 0;
 
 /* ---- failure / set helpers --------------------------------------------- */
 
+/* Checks record the failure message and return a non-zero status instead of
+ * terminating: no owner is live at a terminating path.  main() is the only
+ * caller of fail(), which it reaches after every owner has left scope. */
 static void fail(const char *msg) {
     fprintf(stderr, "compiler contract alignment FAILED: %s\n", msg);
     exit(1);
 }
 
-#define FAIL(...) do { snprintf(g_msg, sizeof(g_msg), __VA_ARGS__); fail(g_msg); } while (0)
+#define FAIL(...) do { snprintf(g_msg, sizeof(g_msg), __VA_ARGS__); return 1; } while (0)
 
 static int in_set(const char *s, const char *const *set, int n) {
     int i;
@@ -228,8 +233,8 @@ static int is_list(yyjson_val *v) {
 /* Python exact_keys(): compare the object's key set with the expected set.
  * Enumeration uses yyjson (json_view does not expose keys); membership uses
  * yyjson_obj_get so the comparison is set-based exactly like Python's set(obj). */
-static void exact_keys(yyjson_val *obj, const char *const *expected, int n,
-                       const char *where) {
+static int exact_keys(yyjson_val *obj, const char *const *expected, int n,
+                      const char *where) {
     char missing[1024], extra[1024];
     yyjson_obj_iter it;
     yyjson_val *k;
@@ -248,10 +253,11 @@ static void exact_keys(yyjson_val *obj, const char *const *expected, int n,
     }
     if (missing[0] != '\0' || extra[0] != '\0')
         FAIL("%s: key mismatch, missing=[%s], extra=[%s]", where, missing, extra);
+    return 0;
 }
 
 /* Python non_empty_str_list(): a non-empty list of non-empty strings. */
-static void non_empty_str_list(yyjson_val *arr, const char *where) {
+static int non_empty_str_list(yyjson_val *arr, const char *where) {
     size_t i, n;
     if (!is_list(arr) || yyjson_arr_size(arr) == 0)
         FAIL("%s: expected a non-empty list", where);
@@ -261,6 +267,7 @@ static void non_empty_str_list(yyjson_val *arr, const char *where) {
         if (s == NULL || !has_nonspace(s))
             FAIL("%s: expected non-empty strings", where);
     }
+    return 0;
 }
 
 static void lower_in_place(char *s) {
@@ -272,12 +279,13 @@ static void lower_in_place(char *s) {
 
 /* Python check_extended_semantics(): typed-field checks plus serialized-text
  * markers so the semantic evidence is machine-verifiable. */
-static void check_extended_semantics(yyjson_val *api, const char *where) {
+static int check_extended_semantics(yyjson_val *api, const char *where) {
     yyjson_val *params = yyjson_obj_get(api, "params");
     yyjson_val *failure = yyjson_obj_get(api, "failure");
     size_t i, nparams;
     char *text;
     size_t text_len = 0;
+    int ret = 0;
 
     /* argument_types: every param carries a non-empty C type. */
     if (!is_list(params) || yyjson_arr_size(params) == 0)
@@ -346,16 +354,21 @@ static void check_extended_semantics(yyjson_val *api, const char *where) {
                 break;
             }
         }
-        if (!found)
-            FAIL("%s: extended entry missing %s evidence", where,
-                 ASPECT_MARKER_NAMES[i]);
+        if (!found) {
+            snprintf(g_msg, sizeof(g_msg),
+                     "%s: extended entry missing %s evidence", where,
+                     ASPECT_MARKER_NAMES[i]);
+            ret = 1;
+            break;
+        }
     }
     json_free(text);
+    return ret;
 }
 
 /* ---- file + parse ------------------------------------------------------ */
 
-static size_t load_contract(const char *path) {
+static int load_contract(const char *path) {
     error err = error();
     file f = file(path, "rb");
     long size = 0;
@@ -371,33 +384,36 @@ static size_t load_contract(const char *path) {
         FAIL("contract file too large: %ld", size);
     got = fread(g_contract_buf, 1, (size_t)size, f.native());
     g_contract_buf[got] = '\0';
-    return got;
+    g_contract_len = got;
+    return 0;
 }
 
-static yyjson_doc *parse_raw(const char *text, size_t len) {
+static int parse_raw(const char *text, size_t len) {
     yyjson_read_err rerr;
     yyjson_doc *doc = yyjson_read_opts((char *)text, len, YYJSON_READ_NOFLAG, NULL, &rerr);
     if (doc == NULL)
         FAIL("invalid JSON in compiler_libc_contracts.json: %s",
              rerr.msg != NULL ? rerr.msg : "parse failed");
-    return doc;
+    g_raw = doc;
+    return 0;
 }
 
 /* ---- main -------------------------------------------------------------- */
 
-int main(int argc, char **argv) {
+static int run_checks(const char *path) {
     error err = error();
     json doc;
     json_view root_view;
     yyjson_doc *raw;
     yyjson_val *root, *apis, *semantics, *aspects, *symbols, *per_api_keys;
-    const char *path = (argc > 1) ? argv[1] : CONTRACT_PATH;
     char where[128], sub[160];
     size_t len, idx;
     int i;
 
     g_err = &err;
-    len = load_contract(path);
+    if (load_contract(path) != 0)
+        return 1;
+    len = g_contract_len;
 
     /* Authoritative parse through stdlib/json.hp; raw parse only for key
      * enumeration (json_view intentionally has no key iterator). */
@@ -406,7 +422,9 @@ int main(int argc, char **argv) {
         FAIL("invalid JSON in compiler_libc_contracts.json: %s", g_err->what());
     root_view = doc.root();
     (void)root_view; /* root is read through raw values below; kept for parity */
-    raw = parse_raw(g_contract_buf, len);
+    if (parse_raw(g_contract_buf, len) != 0)
+        return 1;
+    raw = g_raw;
     root = yyjson_doc_get_root(raw);
     if (root == NULL || !yyjson_is_obj(root))
         FAIL("top level: expected object");
@@ -482,7 +500,7 @@ int main(int argc, char **argv) {
         size_t pi, ni;
 
         snprintf(where, sizeof(where), "apis[%d]", (int)idx);
-        exact_keys(api, API_KEYS, N_API_KEYS, where);
+        if (exact_keys(api, API_KEYS, N_API_KEYS, where) != 0) return 1;
 
         name = jstr(yyjson_obj_get(api, "name"));
         if (name == NULL || !has_nonspace(name))
@@ -502,7 +520,7 @@ int main(int argc, char **argv) {
             const char *pn, *pt, *pe;
             int flag;
             snprintf(sub, sizeof(sub), "%s.params[%d]", where, (int)pi);
-            exact_keys(p, PARAM_KEYS, N_PARAM_KEYS, sub);
+            if (exact_keys(p, PARAM_KEYS, N_PARAM_KEYS, sub) != 0) return 1;
             pn = jstr(yyjson_obj_get(p, "name"));
             if (pn == NULL || !has_nonspace(pn))
                 FAIL("%s.name: expected a non-empty string", sub);
@@ -529,18 +547,18 @@ int main(int argc, char **argv) {
         }
 
         snprintf(sub, sizeof(sub), "%s.effects", where);
-        non_empty_str_list(yyjson_obj_get(api, "effects"), sub);
+        if (non_empty_str_list(yyjson_obj_get(api, "effects"), sub) != 0) return 1;
 
         failure = yyjson_obj_get(api, "failure");
         snprintf(sub, sizeof(sub), "%s.failure", where);
-        exact_keys(failure, FAILURE_KEYS, N_FAILURE_KEYS, sub);
+        if (exact_keys(failure, FAILURE_KEYS, N_FAILURE_KEYS, sub) != 0) return 1;
         {
             const char *rc = jstr(yyjson_obj_get(failure, "result_code"));
             if (rc == NULL || !has_nonspace(rc))
                 FAIL("%s.failure.result_code: expected a non-empty string", where);
         }
         snprintf(sub, sizeof(sub), "%s.failure.conditions", where);
-        non_empty_str_list(yyjson_obj_get(failure, "conditions"), sub);
+        if (non_empty_str_list(yyjson_obj_get(failure, "conditions"), sub) != 0) return 1;
 
         {
             yyjson_val *diags = yyjson_obj_get(api, "diagnostics");
@@ -556,9 +574,9 @@ int main(int argc, char **argv) {
 
         dyn = yyjson_obj_get(api, "dynamic");
         snprintf(sub, sizeof(sub), "%s.dynamic", where);
-        exact_keys(dyn, DYNAMIC_KEYS, N_DYNAMIC_KEYS, sub);
+        if (exact_keys(dyn, DYNAMIC_KEYS, N_DYNAMIC_KEYS, sub) != 0) return 1;
         snprintf(sub, sizeof(sub), "%s.dynamic.checks", where);
-        non_empty_str_list(yyjson_obj_get(dyn, "checks"), sub);
+        if (non_empty_str_list(yyjson_obj_get(dyn, "checks"), sub) != 0) return 1;
         snprintf(sub, sizeof(sub), "%s.dynamic.limitations", where);
         if (!is_list(yyjson_obj_get(dyn, "limitations")))
             FAIL("%s: expected a list", sub);
@@ -620,7 +638,7 @@ int main(int argc, char **argv) {
         for (j = 0; j < g_api_n; j++) {
             if (strcmp(g_api_names[j], name) == 0) {
                 snprintf(where, sizeof(where), "api '%s'", name);
-                check_extended_semantics(g_api_vals[j], where);
+                if (check_extended_semantics(g_api_vals[j], where) != 0) return 1;
                 found = 1;
                 break;
             }
@@ -629,8 +647,15 @@ int main(int argc, char **argv) {
             FAIL("missing extended P0 contract: %s", name);
     }
 
-    printf("compiler contract alignment: ok\n");
     yyjson_doc_free(raw);
     doc.drop();
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    const char *path = (argc > 1) ? argv[1] : CONTRACT_PATH;
+    if (run_checks(path) != 0)
+        fail(g_msg);
+    printf("compiler contract alignment: ok\n");
     return 0;
 }
