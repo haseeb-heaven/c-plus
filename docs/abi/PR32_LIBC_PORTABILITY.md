@@ -43,7 +43,7 @@ From `out/toolchain.txt` (probe UTC 2026-11-24T07:11:31Z):
 Final runner line from the evidence run in this worktree:
 
 ```
-PR32_LIBC 10 7 0 3
+PR32_LIBC 10 8 0 2
 ```
 
 | Check | Result | Evidence / exact failure text |
