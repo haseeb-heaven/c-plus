@@ -91,6 +91,12 @@ struct LoopInfo {
   /// A `switch` is tracked in the same stack as loops, but `continue` must
   /// target the innermost real loop rather than the switch frame.
   bool isSwitch = false;
+  /// Issue #228: do/while state is per frame.  A `do` body's closing `}` / `;`
+  /// only marks `bodyClosed`; the frame stays on the stack until its trailing
+  /// `while` consumes it.  A nested `while` therefore pushes its own frame
+  /// instead of stealing this flag, and `break` targets the right body.
+  bool isDo = false;
+  bool bodyClosed = false;
 };
 
 struct Edit {
@@ -682,6 +688,18 @@ private:
     ++obligations_;
   }
 
+  /// Retire the innermost loop frame whose body just closed.  A `do` frame is
+  /// kept (marked `bodyClosed`) because its trailing `while` must consume that
+  /// same frame instead of pushing a fresh one; all other loops die here.
+  void closeLoopFrame() {
+    if (loops_.empty())
+      return;
+    if (loops_.back().isDo)
+      loops_.back().bodyClosed = true;
+    else
+      loops_.pop_back();
+  }
+
   void handlePunct(size_t i, const Token &t) {
     if (t.text == "(") {
       ++parenDepth_;
@@ -709,7 +727,7 @@ private:
       // Leaving the frame alive made a later break/continue read a stale
       // target and drop nothing.
       if (parenDepth_ == 0 && !loops_.empty() && loops_.back().bodyPos < 0)
-        loops_.pop_back();
+        closeLoopFrame();
       atStmtStart_ = true;
       return;
     }
@@ -773,7 +791,9 @@ private:
         inFunction_ = true;
         // All ownership state is now scoped, so entering a function needs no
         // reset: a sibling function's bindings can no longer be observed.
-        doAwaitingWhile_ = false;
+        // Loop frames are the exception: do/while state lives on the frame
+        // (issue #228), so a new function starts with a fresh loop stack.
+        loops_.clear();
         // Parameters are out-param escape targets: storing a live owner into
         // one hands its lifetime to the caller.
         currentParams_.clear();
@@ -794,7 +814,10 @@ private:
     s.exceptionBlock = isFunction ? false : isExceptionBlockOpen(i);
     scopes_.push_back(std::move(s));
 
-    if (loops_.size() > 0 && loops_.back().bodyPos < 0)
+    // Issue #228: a `{` inside a header/parenthesised expression (compound
+    // literal, statement expression) is not a loop body.  Binding bodyPos to
+    // it made the real body keep a stale target and retire the frame early.
+    if (parenDepth_ == 0 && !loops_.empty() && loops_.back().bodyPos < 0)
       loops_.back().bodyPos = static_cast<int>(scopes_.size()) - 1;
 
     ++functionDepth_;
@@ -811,13 +834,14 @@ private:
 
     int closedIndex = static_cast<int>(scopes_.size()) - 1;
     if (!loops_.empty() && loops_.back().bodyPos == closedIndex)
-      loops_.pop_back();
+      closeLoopFrame();
     // A loop whose body is a compound statement owned by a nested construct
     // (e.g. `while (c) switch (x) { ... }`) never got a bodyPos of its own.
     // Retire that frame here too so it cannot shadow a real enclosing loop.
-    if (!loops_.empty() && loops_.back().bodyPos < 0 &&
+    if (parenDepth_ == 0 && !loops_.empty() &&
+        loops_.back().bodyPos < 0 &&
         loops_.back().stackSizeAtKeyword == static_cast<size_t>(closedIndex))
-      loops_.pop_back();
+      closeLoopFrame();
 
     // Retire the live-binding entries of every obligation in this scope so an
     // enclosing binding of the same name becomes visible again.
@@ -1122,17 +1146,19 @@ private:
     }
     if (t.text == "for" || t.text == "while" || t.text == "do" ||
         t.text == "switch") {
-      // The `while` in `do { ... } while (c);` closes the `do` frame; pushing a
-      // fresh frame for it left a stale LoopInfo that later breaks targeted.
-      if (t.text == "while" && doAwaitingWhile_) {
-        doAwaitingWhile_ = false;
+      // The `while` in `do { ... } while (c);` closes that `do` frame.  The
+      // state is on the frame itself (issue #228): a nested `while` or `do`
+      // inside the body cannot clear it, so it pushes its own frame and `break`
+      // inside it targets the correct body.
+      if (t.text == "while" && !loops_.empty() && loops_.back().isDo &&
+          loops_.back().bodyClosed) {
+        loops_.pop_back();
       } else {
         LoopInfo l;
         l.stackSizeAtKeyword = scopes_.size();
         l.isSwitch = t.text == "switch";
+        l.isDo = t.text == "do";
         loops_.push_back(l);
-        if (t.text == "do")
-          doAwaitingWhile_ = true;
       }
       atStmtStart_ = false;
       return;
@@ -2681,9 +2707,6 @@ private:
   bool inFunction_ = false;
   int functionDepth_ = 0;
   int parenDepth_ = 0;
-  /// The `while` token that closes a `do { ... } while (c);` belongs to that
-  /// `do`, not to a new loop frame.
-  bool doAwaitingWhile_ = false;
   bool atStmtStart_ = true;
   unsigned obligations_ = 0;
   unsigned deferCounter_ = 0;

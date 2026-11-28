@@ -218,6 +218,20 @@ if matches "instrumented_runtime_linker_flags"; then
   fi
 fi
 
+# --- nested do/while lowered cleanup (issue #228) --------------------------
+
+if matches "issue228"; then
+  if CPLUS_BIN="$CPLUS" /bin/sh \
+      "$ROOT/tests/compiler/agent1/regression_issue228.sh" \
+      >"$OUT/issue228.suite.log" 2>&1; then
+    pass "issue228_nested_do_while_lowered"
+  else
+    cat "$OUT/issue228.suite.log" >&2
+    fail "issue228_nested_do_while_lowered" \
+      "see tests/out/issue228.suite.log"
+  fi
+fi
+
 # --- vendored third-party header FFI diagnostics --------------------------
 
 if matches "vendored_header_ffi"; then
