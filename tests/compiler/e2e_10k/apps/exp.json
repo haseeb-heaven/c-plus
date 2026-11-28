@@ -8420,44 +8420,44 @@
     "out": "S=hello\nS=hello\nS=hello\nS=hello\nS=hello\nS=hello\nS=hello\nS=hello\n"
   },
   "cplus_fgets_s_checked|known_zero|p2": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|known_zero|p3": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|known_zero|x1": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|known_zero|x2": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\nR=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|known_zero|x3": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\nR=0\nR=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|known_zero|x4": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\nR=0\nR=0\nR=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|known_zero|x6": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\nR=0\nR=0\nR=0\nR=0\nR=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|known_zero|x8": {
-    "err": "",
-    "exit": 0,
-    "out": "R=0\nR=0\nR=0\nR=0\nR=0\nR=0\nR=0\nR=0\n"
+    "err": "[CPLUS-SAFE] fgets_s: requested I/O size exceeds buffer capacity\n",
+    "exit": 70,
+    "out": ""
   },
   "cplus_fgets_s_checked|null_buf|p2": {
     "err": "",
@@ -9662,12 +9662,12 @@
   "cplus_fread_s_checked|known_exact|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nS=abcdef\n"
+    "out": "R=0\nS=\n"
   },
   "cplus_fread_s_checked|known_exact|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=2\nS=abcdef\n"
+    "out": "R=0\nS=\n"
   },
   "cplus_fread_s_checked|known_exact|x1": {
     "err": "",
@@ -9702,12 +9702,12 @@
   "cplus_fread_s_checked|known_too_large|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\n"
+    "out": "R=0\n"
   },
   "cplus_fread_s_checked|known_too_large|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=2\n"
+    "out": "R=0\n"
   },
   "cplus_fread_s_checked|known_too_large|x1": {
     "err": "",
@@ -9827,7 +9827,7 @@
   "cplus_fread_s_checked|repeated|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=2\nR=0\nS=abcdef\n"
+    "out": "R=0\nR=0\nS=\n"
   },
   "cplus_fread_s_checked|repeated|x1": {
     "err": "",
@@ -9862,52 +9862,52 @@
   "cplus_fread_s|bmax_below|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\n"
+    "out": "R=0\n"
   },
   "cplus_fread_s|bmax_below|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=2\n"
+    "out": "R=0\n"
   },
   "cplus_fread_s|bmax_below|x1": {
     "err": "",
     "exit": 0,
-    "out": "R=3\n"
+    "out": "R=0\n"
   },
   "cplus_fread_s|bmax_below|x2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\n"
+    "out": "R=0\nR=0\n"
   },
   "cplus_fread_s|bmax_below|x3": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\n"
   },
   "cplus_fread_s|bmax_below|x4": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\nR=0\n"
   },
   "cplus_fread_s|bmax_below|x6": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\nR=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\nR=0\nR=0\nR=0\n"
   },
   "cplus_fread_s|bmax_below|x8": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\nR=3\nR=3\nR=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\nR=0\nR=0\nR=0\nR=0\nR=0\n"
   },
   "cplus_fread_s|bmax_exact|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nS=abcdef\n"
+    "out": "R=0\nS=\n"
   },
   "cplus_fread_s|bmax_exact|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=2\nS=abcdef\n"
+    "out": "R=0\nS=\n"
   },
   "cplus_fread_s|bmax_exact|x1": {
     "err": "",
@@ -10067,7 +10067,7 @@
   "cplus_fread_s|repeated|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=2\nR=0\nS=abcdef\n"
+    "out": "R=0\nR=0\nS=\n"
   },
   "cplus_fread_s|repeated|x1": {
     "err": "",
@@ -10102,12 +10102,12 @@
   "cplus_fread_s|six_bytes|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nS=abcdef\n"
+    "out": "R=0\nS=\n"
   },
   "cplus_fread_s|six_bytes|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=2\nS=abcdef\n"
+    "out": "R=0\nS=\n"
   },
   "cplus_fread_s|six_bytes|x1": {
     "err": "",
@@ -10702,12 +10702,12 @@
   "cplus_fwrite_s_checked|known_exact|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=6\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s_checked|known_exact|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=6\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s_checked|known_exact|x1": {
     "err": "",
@@ -10742,12 +10742,12 @@
   "cplus_fwrite_s_checked|known_too_large|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=6\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s_checked|known_too_large|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=6\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s_checked|known_too_large|x1": {
     "err": "",
@@ -10862,12 +10862,12 @@
   "cplus_fwrite_s_checked|repeated|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\n"
+    "out": "R=0\nR=0\n"
   },
   "cplus_fwrite_s_checked|repeated|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\n"
+    "out": "R=0\nR=0\n"
   },
   "cplus_fwrite_s_checked|repeated|x1": {
     "err": "",
@@ -10902,42 +10902,42 @@
   "cplus_fwrite_s|bmax_below|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s|bmax_below|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=3\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s|bmax_below|x1": {
     "err": "",
     "exit": 0,
-    "out": "R=3\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s|bmax_below|x2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\n"
+    "out": "R=0\nR=0\n"
   },
   "cplus_fwrite_s|bmax_below|x3": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\n"
   },
   "cplus_fwrite_s|bmax_below|x4": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\nR=0\n"
   },
   "cplus_fwrite_s|bmax_below|x6": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\nR=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\nR=0\nR=0\nR=0\n"
   },
   "cplus_fwrite_s|bmax_below|x8": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\nR=3\nR=3\nR=3\nR=3\nR=3\nR=3\n"
+    "out": "R=0\nR=0\nR=0\nR=0\nR=0\nR=0\nR=0\nR=0\n"
   },
   "cplus_fwrite_s|null_buf|p2": {
     "err": "",
@@ -11062,12 +11062,12 @@
   "cplus_fwrite_s|repeated|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\n"
+    "out": "R=0\nR=0\n"
   },
   "cplus_fwrite_s|repeated|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=3\nR=3\n"
+    "out": "R=0\nR=0\n"
   },
   "cplus_fwrite_s|repeated|x1": {
     "err": "",
@@ -11102,12 +11102,12 @@
   "cplus_fwrite_s|six_bytes|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=6\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s|six_bytes|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=6\n"
+    "out": "R=0\n"
   },
   "cplus_fwrite_s|six_bytes|x1": {
     "err": "",
@@ -30467,7 +30467,7 @@
   "fread_s|macro|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=1\nS=abcd\n"
+    "out": "R=0\nS=\n"
   },
   "fread_s|macro|x1": {
     "err": "",
@@ -31302,12 +31302,12 @@
   "fwrite_s|macro|p2": {
     "err": "",
     "exit": 0,
-    "out": "R=4\n"
+    "out": "R=0\n"
   },
   "fwrite_s|macro|p3": {
     "err": "",
     "exit": 0,
-    "out": "R=4\n"
+    "out": "R=0\n"
   },
   "fwrite_s|macro|x1": {
     "err": "",

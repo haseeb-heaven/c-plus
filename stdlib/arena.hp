@@ -301,7 +301,12 @@ static inline void *stdlib_arena_realloc(stdlib_arena *a, void *ptr,
     /* Non-top allocation (possibly from an earlier block): allocate+copy. */
     fresh = stdlib_arena_alloc(a, new_size, align, err);
     if (fresh == (void *)0) return (void *)0;
-    if (old_size != 0) memcpy(fresh, ptr, old_size);
+    /* Copy only what fits in the new allocation: shrinking a non-top block
+       copies old_size bytes into a smaller buffer otherwise. */
+    if (old_size != 0) {
+        size_t copy_n = old_size < new_size ? old_size : new_size;
+        memcpy(fresh, ptr, copy_n);
+    }
     return fresh;
 }
 

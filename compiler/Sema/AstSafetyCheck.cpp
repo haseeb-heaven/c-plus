@@ -4217,7 +4217,10 @@ public:
       return;
     ReleaseCollector collector;
     collector.TraverseStmt(body);
-    unsigned pos = body->getBeginLoc().getRawEncoding();
+    // Stamp the may-release at the END of the arm: a free inside this very
+    // arm is not a second free, and stamping at the arm's first token made
+    // the first free look like a release from an earlier branch path.
+    unsigned pos = body->getEndLoc().getRawEncoding();
     for (const auto &name : collector.released) {
       maybeReleasedVars_.insert(name);
       auto it = maybeReleaseLines_.find(name);
@@ -7336,6 +7339,20 @@ public:
       bool isReallocRebind = !reallocRebindOwner_.empty() &&
                              varNameOf(lhsExpr) == reallocRebindOwner_ &&
                              varNameOf(rhsExpr) == reallocRebindTemp_;
+      // Another valid spelling of the same rebind is `p = q` where q holds
+      // this function's realloc result but the success guard was written as
+      // a separate statement. q is a fresh block, so assigning it to p must
+      // revive p even when the guard-specific rebind flag was not installed.
+      if (!isReallocRebind && reallocResultVars_.count(varNameOf(rhsExpr)))
+        isReallocRebind = true;
+      if (isReallocRebind && !varNameOf(lhsExpr).empty()) {
+        clearReleased(varNameOf(lhsExpr));
+        maybeReleasedVars_.erase(varNameOf(lhsExpr));
+        // free(p) also records a field-style release key; clear it too so
+        // isReleased() does not re-derive a dangling state from that key.
+        releasedFields_.erase(varNameOf(lhsExpr));
+        releasedFields_.erase(lvalueKey(lhsExpr));
+      }
       if (!derivedFromReleasedPointer(rhsExpr) && !isReallocRebind) {
         std::string lhsVarName = varNameOf(lhsExpr);
         clearReleased(lhsVarName);
@@ -8729,6 +8746,9 @@ public:
           releaseLocs_[pname] = call->getBeginLoc();
           markReleased(pname);
         }
+        // A nullification remembered from an earlier branch is consumed by
+        // this release; keeping it would suppress a genuine second free.
+        branchNullifiedVars_.erase(pname);
       }
     // Constant arguments to an inferred arithmetic helper (e.g.
     // `safe_add(INT_MAX, 1)`) are checked at the call site.

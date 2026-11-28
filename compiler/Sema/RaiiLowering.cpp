@@ -1630,10 +1630,12 @@ private:
           ++argIndex;
           start = k + 1;
         }
-        if (!transferred.empty()) {
-          // Wrap the whole call so the comma stays inside a primary
-          // expression: this is valid as a statement, in a condition, as a
-          // macro argument and as an operand of a larger expression.
+        // A trailing `(void)cplus_zero(...)` comma operand has type void, so
+        // wrapping a call that is used as a value (`int r = f(o);`) would
+        // emit invalid C. Only add the guard for a bare call statement.
+        bool bareCallStatement =
+            isPunct(nextSig(rp), ";") || isPunct(nextSig(rp), "}");
+        if (!transferred.empty() && bareCallStatement) {
           std::string tail;
           for (const std::string &name : transferred)
             tail += ", (void)cplus_zero(&" + name + ", sizeof(" + name + "))";
