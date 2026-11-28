@@ -5997,26 +5997,58 @@ std::string instrumentDynamicArrayBounds(
                 "    return r;\n"
                 "  }\n"
                 "  return __cplus_checked_mul_i64(a, b, bits, sgn);\n");
+    // Unsigned operands arrive as int64_t bit patterns.  Doing /, % or >>
+    // on the signed parameter would perform signed idiv / arithmetic shift:
+    // values with bit 63 set are corrupted, INT64_MIN / UINT64_MAX traps with
+    // SIGFPE, and UINT64_MAX >> 1 sign-extends instead of logical-shifting.
+    // Mask to the source width first so narrow unsigned types match the
+    // runtime helper as well.  Signed operands keep the existing fast path.
     emitWrapper("div",
-                "  if (b == 0)\n"
+                "  uint64_t ua, ub;\n"
+                "  if (sgn) {\n"
+                "    if (b == 0)\n"
+                "      return __cplus_checked_div_i64(a, b, bits, sgn);\n"
+                "    if (bits > 1 && bits <= 64 && b == -1 &&\n"
+                "        a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
+                "      return __cplus_checked_div_i64(a, b, bits, sgn);\n"
+                "    return a / b;\n"
+                "  }\n"
+                "  ua = (uint64_t)a; ub = (uint64_t)b;\n"
+                "  if (bits > 0 && bits < 64) {\n"
+                "    uint64_t m = (((uint64_t)1) << bits) - 1;\n"
+                "    ua &= m; ub &= m;\n"
+                "  }\n"
+                "  if (ub == 0)\n"
                 "    return __cplus_checked_div_i64(a, b, bits, sgn);\n"
-                "  if (sgn && bits > 1 && bits <= 64 && b == -1 &&\n"
-                "      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
-                "    return __cplus_checked_div_i64(a, b, bits, sgn);\n"
-                "  return a / b;\n");
+                "  return (int64_t)(ua / ub);\n");
     emitWrapper("rem",
-                "  if (b == 0)\n"
+                "  uint64_t ua, ub;\n"
+                "  if (sgn) {\n"
+                "    if (b == 0)\n"
+                "      return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
+                "    if (bits > 1 && bits <= 64 && b == -1 &&\n"
+                "        a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
+                "      return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
+                "    return a % b;\n"
+                "  }\n"
+                "  ua = (uint64_t)a; ub = (uint64_t)b;\n"
+                "  if (bits > 0 && bits < 64) {\n"
+                "    uint64_t m = (((uint64_t)1) << bits) - 1;\n"
+                "    ua &= m; ub &= m;\n"
+                "  }\n"
+                "  if (ub == 0)\n"
                 "    return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
-                "  if (sgn && bits > 1 && bits <= 64 && b == -1 &&\n"
-                "      a == (bits == 32 ? (int64_t)INT32_MIN : INT64_MIN))\n"
-                "    return __cplus_checked_rem_i64(a, b, bits, sgn);\n"
-                "  return a % b;\n");
+                "  return (int64_t)(ua % ub);\n");
     emitWrapper("shl",
                 "  if (b < 0 || (unsigned long long)b >= bits)\n"
                 "    return __cplus_checked_shl_i64(a, b, bits, sgn);\n"
                 "  if (sgn) {\n"
                 "    uint64_t ua = (uint64_t)a; unsigned c = (unsigned)b;\n"
-                "    uint64_t limit = (~(uint64_t)0) >> (64 - bits);\n"
+                "    // Allowed result bits are 0..bits-2; bit bits-1 is the\n"
+                "    // sign bit.  The old mask covered bits-1..0, so bits==64\n"
+                "    // gave ~limit==0 (no check at all) and bits==32 missed\n"
+                "    // a value reaching bit 31.\n"
+                "    uint64_t limit = (((uint64_t)1) << (bits - 1)) - 1;\n"
                 "    if (a < 0 || ((ua << c) & ~limit))\n"
                 "      return __cplus_checked_shl_i64(a, b, bits, sgn);\n"
                 "  }\n"
@@ -6024,7 +6056,14 @@ std::string instrumentDynamicArrayBounds(
     emitWrapper("shr",
                 "  if (b < 0 || (unsigned long long)b >= bits)\n"
                 "    return __cplus_checked_shr_i64(a, b, bits, sgn);\n"
-                "  return (int64_t)(a >> (uint64_t)b);\n");
+                "  if (sgn)\n"
+                "    return (int64_t)(a >> (uint64_t)b);\n"
+                "  {\n"
+                "    uint64_t ua = (uint64_t)a;\n"
+                "    if (bits > 0 && bits < 64)\n"
+                "      ua &= (((uint64_t)1) << bits) - 1;\n"
+                "    return (int64_t)(ua >> (uint64_t)b);\n"
+                "  }\n");
     // Round-trip predicate from Clang's any-extend + compare, expressed in C.
     prelude +=
         "CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(\n"
