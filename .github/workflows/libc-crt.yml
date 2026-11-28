@@ -2,9 +2,9 @@ name: libc-crt
 
 on:
   push:
-    branches: [develop, agent/modern-stdlib, agent/core-safety]
+    branches: [develop, agent/modern-stdlib, agent/core-safety, alpha-version]
   pull_request:
-    branches: [develop]
+    branches: [develop, alpha-version]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}

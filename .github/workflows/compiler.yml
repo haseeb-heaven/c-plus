@@ -2,9 +2,9 @@ name: compiler
 
 on:
   push:
-    branches: [develop, agent/core-safety]
+    branches: [develop, agent/core-safety, alpha-version]
   pull_request:
-    branches: [develop]
+    branches: [develop, alpha-version]
 
 # Collapse the duplicate push + pull_request runs that fire when a branch with
 # an open PR is pushed (e.g. agent/core-safety / PR #16). head_ref is set for
