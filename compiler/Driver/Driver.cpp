@@ -36,7 +36,11 @@
 #include <sstream>
 #include <system_error>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#else
 #include <unistd.h>
+#endif
 
 // Needed to pass an explicitly constructed environment to ExecuteAndWait.
 // The sanitizer probe overrides ASAN_OPTIONS/UBSAN_OPTIONS without a shell.
@@ -158,10 +162,12 @@ bool writeFd(int fd, const std::string &text, std::string *err) {
   // createUniqueFile/createTemporaryFile already use exclusive creation;
   // keep the contents private too (mkstemp-style 0600, not umask-dependent
   // 0644) on every path that goes through this helper.  Issue #108.
+#ifndef _WIN32
   if (::fchmod(fd, S_IRUSR | S_IWUSR) != 0) {
     *err = "cannot restrict temporary file permissions";
     return false;
   }
+#endif
   llvm::raw_fd_ostream os(fd, true, llvm::sys::fs::OF_Text);
   os << text;
   os.close();
@@ -1558,7 +1564,11 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
   // runtimeLibArg(false) already ignores it; drop it here as well so no other
   // consumer can pick it up by accident.
   if (strictSafe) {
+#ifdef _WIN32
+    ::_putenv_s("CPLUS_RUNTIME_LIB", "");
+#else
     ::unsetenv("CPLUS_RUNTIME_LIB");
+#endif
     // An env-supplied contract CAN carry a legitimate, validated effect
     // summary (the honest header-declared FFI shape), so it must stay usable.
     // Harden it instead: a relative, symlinked or missing path is a

@@ -447,7 +447,7 @@ static void clog_safe_write(const char *str, size_t len) {
   if (clog_is_console_output(output)) {
     int wlen = MultiByteToWideChar(CP_UTF8, 0, str, len, NULL, 0);
     if (wlen > 0) {
-      wchar_t *wstr = malloc((wlen + 1) * sizeof(wchar_t));
+      wchar_t *wstr = (wchar_t *)malloc((wlen + 1) * sizeof(wchar_t));
       if (wstr) {
         MultiByteToWideChar(CP_UTF8, 0, str, len, wstr, wlen);
         wstr[wlen] = L'\0';
@@ -477,7 +477,7 @@ static inline void clog_signal_log(const char *message) {
   size_t len = strlen(message);
   int wlen = MultiByteToWideChar(CP_UTF8, 0, message, len, NULL, 0);
   if (wlen > 0) {
-    wchar_t *wstr = malloc((wlen + 1) * sizeof(wchar_t));
+    wchar_t *wstr = (wchar_t *)malloc((wlen + 1) * sizeof(wchar_t));
     if (wstr) {
       MultiByteToWideChar(CP_UTF8, 0, message, len, wstr, wlen);
       wstr[wlen] = L'\0';
