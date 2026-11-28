@@ -519,18 +519,31 @@ static inline void *stdlib_realloc(void *ptr, size_t bytes) {
 /* Division helper without variable division/remainder operators: the strict
  * checker rejects divisions whose divisor cannot be proven non-zero. This
  * shift-and-subtract form is exact across the FULL size_t range (not just
- * 16-bit quotients): iterate from the highest bit down to 0. */
+ * 16-bit quotients).
+ *
+ * The checker only accepts a shift count it can fold to a constant, so the
+ * bit index is never used as a shift count. Double b and the matching
+ * quotient bit by a constant one to reach the highest usable multiple, then
+ * halve both on the way down; 1 is always below the width of size_t. */
 static inline size_t stdlib_safe_div(size_t a, size_t b) {
     size_t q = 0, r = a;
-    int sh;
+    size_t v, d;
     if (b == 0)
         return 0;
-    for (sh = (int)(sizeof(size_t) * 8u) - 1; sh >= 0; --sh) {
-        size_t d = (size_t)1 << sh;
-        if (b <= (SIZE_MAX >> sh)) {
-            size_t v = b << sh;
-            if (r >= v) { r -= v; q += d; }
-        }
+    /* v = b << sh and d = 1 << sh for the largest sh with b << sh in range. */
+    v = b;
+    d = 1;
+    while (v <= (SIZE_MAX >> 1)) {
+        v <<= 1;
+        d <<= 1;
+    }
+    /* Restore-divide from that highest bit down to bit 0. */
+    for (;;) {
+        if (r >= v) { r -= v; q += d; }
+        if (d == 1)
+            break;
+        v >>= 1;
+        d >>= 1;
     }
     return q;
 }
