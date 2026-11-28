@@ -42,7 +42,7 @@ def syntax_case(d):
 
 
 def ubsan_case(d):
-    src = os.path.join(d, "oob.c")
+    src = os.path.join(d, "oob.cp")
     with open(src, "w") as f:
         f.write("#include <stdio.h>\nstatic int f(int idx){\n"
                 "  int a[4] = {1,2,3,4};\n")
@@ -58,7 +58,7 @@ def ubsan_case(d):
         return False, "build_rc=%s %s" % (rc, out[:400])
     rc, out = run([exe])
     ok = (rc != 0 and "runtime error" in out and
-          re.search(r"oob\.c:42:", out) is not None)
+          re.search(r"oob\.cp:42:", out) is not None)
     return ok, "run_rc=%s %s" % (rc, out[:400])
 
 
