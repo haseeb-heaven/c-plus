@@ -23,6 +23,16 @@
 #define RSIZE_MAX_MEM ((size_t)(SIZE_MAX >> 1))
 #endif
 
+/* Best-effort compile-time source-size proof. The public bounded signatures
+ * carry a `known` argument for the DESTINATION only, so inside this callee a
+ * stack/global source is normally BOS_UNKNOWN; tracked allocations are still
+ * resolved by cplus_alloc_remaining_capacity() below. */
+#if defined(__GNUC__) || defined(__clang__)
+#define CPLUS_BOUNDED_OBJ_SIZE(p) __builtin_object_size((p), 1)
+#else
+#define CPLUS_BOUNDED_OBJ_SIZE(p) ((size_t)-1)
+#endif
+
 /* Set/read concurrently by callers; use atomics to avoid a C11 data race
  * (mirrors safe_memory.c's g_unknown_capacity_strict). */
 static int g_unknown_strict = 0;
@@ -77,7 +87,8 @@ static int cplus_refuse_absurd_length(size_t n) {
  * unknown capacity keeps the pre-existing permissive policy.  Closing this
  * asymmetry prevents a heap over-read / memory disclosure in memcpy/memmove. */
 static int check_src_capacity(const char *api, const void *s, size_t n) {
-    size_t cap = cplus_alloc_remaining_capacity(s);
+    size_t cap = resolve_capacity(s, (size_t)CPLUS_BOUNDED_OBJ_SIZE(s));
+    if (cap == 0u) cap = (size_t)-1; /* BOS 0 == no object known, not empty */
     if (cap == (size_t)-1 || n <= cap) return 0;
     cplus_libc_log(api, "source over-read refused");
     errno = ERANGE;
