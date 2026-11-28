@@ -63,20 +63,20 @@ static inline int time_format_iso8601(unsigned long long unix_ns, char *buf,
         return STDLIB_FAIL;
     }
     if (secs_u > (unsigned long long)LONG_MAX) {
-        buf[0] = '\0';
+        *buf = '\0';
         error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
                        "time_format_iso8601: timestamp out of range");
         return STDLIB_FAIL;
     }
     seconds = (time_t)secs_u;
     if (gmtime_r(&seconds, &parts) == NULL) {
-        buf[0] = '\0';
+        *buf = '\0';
         error_fail_cat(err, STDLIB_CATEGORY_RANGE, CPLUS_EXIT_BOUNDS,
                        "time_format_iso8601: timestamp out of range");
         return STDLIB_FAIL;
     }
     if (strftime(buf, size, "%Y-%m-%dT%H:%M:%SZ", &parts) == 0) {
-        buf[0] = '\0';
+        *buf = '\0';
         error_fail_cat(err, STDLIB_CATEGORY_BOUNDS, CPLUS_EXIT_BOUNDS,
                        "time_format_iso8601: buffer too small");
         return STDLIB_FAIL;
