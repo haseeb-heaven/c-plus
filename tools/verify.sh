@@ -22,7 +22,7 @@ echo "== perf comparison =="
 ./tests/core/perf_compare.sh >/dev/null
 
 echo "== adversarial fuzz =="
-python3 tests/core/adversarial_fuzz.py
+./tests/core/adversarial_fuzz.sh
 
 echo "== mass fuzz (thousands of cases, multi-seed) =="
 ./tests/core/mass_fuzz_all.sh
