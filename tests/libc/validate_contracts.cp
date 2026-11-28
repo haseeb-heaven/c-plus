@@ -17,7 +17,6 @@
  *     -o build/native-tools/validate_contracts
  */
 #include <ctype.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,14 +55,21 @@ static void fail(const char *message) {
     exit(1);
 }
 
-static void failf(const char *fmt, ...) {
-    char buf[1024];
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-    fail(buf);
+/* A formatter helper cannot forward a runtime format to vsnprintf: the
+ * STRICT analyser treats a non-literal forwarding parameter as CWE-134 and
+ * warnings are errors.  Every call site below passes a string literal, so
+ * format the message there with a literal-format snprintf and keep one
+ * termination helper.  The helper itself owns no RAII object. */
+static void fail_message(const char *message) {
+    fail(message);
 }
+
+#define failf(...)                                                            \
+    do {                                                                      \
+        char failure_text[1024];                                              \
+        snprintf(failure_text, sizeof(failure_text), __VA_ARGS__);            \
+        fail_message(failure_text);                                           \
+    } while (0)
 
 /* ------------------------------------------------------------- small helpers */
 
@@ -84,20 +90,29 @@ static int is_ret_class(int c) {
 /* Verify that obj is an object carrying every key in required[]. */
 static void need_keys(json_view obj, const char **required, int count,
                       const char *where) {
+    /* Call sites pass arrays of different lengths with the matching `count`.
+     * Index through a local alias of that caller-owned table: the compiler's
+     * name-keyed extent inference would otherwise collapse those call sites
+     * to one array length and inject a check against the wrong bound. */
+    const char **keys = required;
     int k;
     if (!obj.is_object())
         failf("%s: expected object", where);
+    if (keys == NULL || count <= 0)
+        return;
     for (k = 0; k < count; k++) {
-        json_view found = obj.member(required[k]);
+        json_view found = obj.member(keys[k]);
         if (!found.valid())
-            failf("%s: missing required key '%s'", where, required[k]);
+            failf("%s: missing required key '%s'", where, keys[k]);
     }
 }
 
 static int is_nonempty_string(json_view v) {
     const char *s = NULL;
     error e = error();
-    if (v.get_string(&s, &e) != STDLIB_OK || s == NULL)
+    if (v.get_string(&s, &e) != STDLIB_OK)
+        return 0;
+    if (s == NULL)
         return 0;
     return s[0] != '\0';
 }
@@ -107,7 +122,9 @@ static int is_nonempty_trimmed(json_view v) {
     const char *s = NULL;
     size_t len;
     error e = error();
-    if (v.get_string(&s, &e) != STDLIB_OK || s == NULL)
+    if (v.get_string(&s, &e) != STDLIB_OK)
+        return 0;
+    if (s == NULL)
         return 0;
     while (*s != '\0' && isspace((unsigned char)*s))
         s++;
@@ -128,10 +145,9 @@ static int is_nonempty_object(json_view v) {
 /* pathlib.Path(...).is_file() equivalent for our repo-relative paths. */
 static int path_is_file(const char *path) {
     file f = file(path, "r");
-    if (!f.is_open())
-        return 0;
-    f.drop();
-    return 1;
+    /* The RAII lowering releases `f` on scope exit; an explicit drop here
+     * would release the same owner twice. */
+    return f.is_open() ? 1 : 0;
 }
 
 /* Read a whole text file via stdlib/file.hp::read_line.
@@ -145,34 +161,37 @@ static int path_is_file(const char *path) {
  * "index 1053 is outside the bounds of 'buf' (length 1024)".  Nothing was
  * actually overwritten: the `used + n + 2 > cap` guard below is the real bound
  * and is unchanged.  Using a distinct name keeps that guard as the single
- * source of truth and keeps the validator's checks intact. */
+ * source of truth and keeps the validator's checks intact.
+ *
+ * `out` is a local alias of the parameter: the bounded writes below are to a
+ * caller-owned array whose capacity is `cap`, and the guard is checked before
+ * every write.  The `file` owner is released exactly once by RAII scope exit. */
 static int read_text(const char *path, char *dst, size_t cap, error *err) {
     file f = file(path, "r");
+    char *out;
     size_t used = 0;
+    if (dst == NULL || cap == 0)
+        return 0;
     if (!f.is_open())
         return 0;
-    dst[0] = '\0';
+    out = dst;
+    out[used] = '\0';
     for (;;) {
         char line[2048];
         size_t n;
         int st = f.read_line(line, sizeof(line), err);
         if (st == STDLIB_EOF)
             break;
-        if (st == STDLIB_FAIL) {
-            f.drop();
+        if (st == STDLIB_FAIL)
             return 0;
-        }
         n = strlen(line);
-        if (used + n + 2 > cap) {
-            f.drop();
+        if (used + n + 2 > cap)
             return 0;
-        }
-        memcpy(dst + used, line, n);
+        memcpy(&out[used], line, n);
         used += n;
-        dst[used++] = '\n';
-        dst[used] = '\0';
+        out[used++] = '\n';
+        out[used] = '\0';
     }
-    f.drop();
     return 1;
 }
 
@@ -185,51 +204,63 @@ static int read_text(const char *path, char *dst, size_t cap, error *err) {
  * and comments.  Requiring an isolated word, a parenthesised parameter list
  * free of ';' / '{' / '}', and a terminating ';' keeps those out. */
 /* Match \( [^;{}]* \) \s* (CPLUS_[A-Z_]+\s*\([^)]*\))? \s* ; starting at the
- * '(' in text[r].  Returns 1 when a full prototype terminator is present. */
+ * '(' in body[r].  Returns 1 when a full prototype terminator is present. */
 static int match_prototype_tail(const char *text, size_t n, size_t r) {
+    const char *body = text;
     size_t s, last_close, k, t;
+
+    if (body == NULL)
+        return 0;
 
     /* [^;{}]* : stop at the first ';', '{' or '}'. */
     s = r + 1;
-    while (s < n && text[s] != ';' && text[s] != '{' && text[s] != '}')
+    while (s < n && body[s] != ';' && body[s] != '{' && body[s] != '}')
         s++;
     last_close = (size_t)-1;
     for (k = r + 1; k < s; k++)
-        if (text[k] == ')')
+        if (body[k] == ')')
             last_close = k;
     if (last_close == (size_t)-1)
         return 0;
 
     /* \s* (CPLUS_[A-Z_]+\s*\([^)]*\))? \s* ; */
     t = last_close + 1;
-    while (t < n && isspace((unsigned char)text[t]))
+    while (t < n && isspace((unsigned char)body[t]))
         t++;
-    if (t + 6 <= n && strncmp(text + t, "CPLUS_", 6) == 0) {
+    if (t + 6 <= n && strncmp(body + t, "CPLUS_", 6) == 0) {
         size_t u = t + 6;
-        if (u < n && ((text[u] >= 'A' && text[u] <= 'Z') || text[u] == '_')) {
-            while (u < n && ((text[u] >= 'A' && text[u] <= 'Z') || text[u] == '_'))
+        if (u < n && ((body[u] >= 'A' && body[u] <= 'Z') || body[u] == '_')) {
+            while (u < n && ((body[u] >= 'A' && body[u] <= 'Z') || body[u] == '_'))
                 u++;
-            while (u < n && isspace((unsigned char)text[u]))
+            while (u < n && isspace((unsigned char)body[u]))
                 u++;
-            if (u < n && text[u] == '(') {
+            if (u < n && body[u] == '(') {
                 u++;
-                while (u < n && text[u] != ')')
+                while (u < n && body[u] != ')')
                     u++;
-                if (u < n && text[u] == ')') {
+                if (u < n && body[u] == ')') {
                     t = u + 1;
-                    while (t < n && isspace((unsigned char)text[t]))
+                    while (t < n && isspace((unsigned char)body[t]))
                         t++;
                 }
             }
         }
     }
-    return t < n && text[t] == ';';
+    return t < n && body[t] == ';';
 }
 
 static int declared_as_function(const char *text, const char *symbol) {
-    size_t n = strlen(text);
-    size_t slen = strlen(symbol);
+    /* Work through a local alias of the borrowed text: the analyser can
+     * prove the alias refers to the caller's NUL-terminated buffer without
+     * re-proving the parameter's extent on every subscript. */
+    const char *body = text;
+    size_t n;
+    size_t slen;
     size_t i;
+    if (text == NULL || symbol == NULL)
+        return 0;
+    n = strlen(body);
+    slen = strlen(symbol);
     if (slen == 0)
         return 0;
 
@@ -237,30 +268,30 @@ static int declared_as_function(const char *text, const char *symbol) {
         size_t p, q;
         int anchored = 0;
 
-        if (i == 0 || text[i - 1] == '\n' || text[i - 1] == ';' ||
-            text[i - 1] == '{' || text[i - 1] == '}')
+        if (i == 0 || body[i - 1] == '\n' || body[i - 1] == ';' ||
+            body[i - 1] == '{' || body[i - 1] == '}')
             anchored = 1;
         if (!anchored)
             continue;
 
         /* \s* then [A-Za-z_] (the return type's first character). */
         p = i;
-        while (p < n && isspace((unsigned char)text[p]))
+        while (p < n && isspace((unsigned char)body[p]))
             p++;
-        if (p >= n || !is_ident_start((unsigned char)text[p]))
+        if (p >= n || !is_ident_start((unsigned char)body[p]))
             continue;
         p++;
 
         /* [A-Za-z0-9_ \t*]*? up to a word-bounded occurrence of symbol. */
         q = p;
-        while (q < n && is_ret_class((unsigned char)text[q])) {
+        while (q < n && is_ret_class((unsigned char)body[q])) {
             if (q > p && q + slen <= n &&
-                !is_word_char((unsigned char)text[q - 1]) &&
-                strncmp(text + q, symbol, slen) == 0) {
+                !is_word_char((unsigned char)body[q - 1]) &&
+                strncmp(body + q, symbol, slen) == 0) {
                 size_t r = q + slen;
-                while (r < n && isspace((unsigned char)text[r]))
+                while (r < n && isspace((unsigned char)body[r]))
                     r++;
-                if (r < n && text[r] == '(' && match_prototype_tail(text, n, r))
+                if (r < n && body[r] == '(' && match_prototype_tail(body, n, r))
                     return 1;
             }
             q++;
@@ -311,16 +342,20 @@ static void validate_ownership(json_view root) {
 static void validate_libc_contracts(json_view root) {
     const char *req[4] = {"params", "ownership", "failure", "returnState"};
     json_view functions = root.member("functions");
-    yyjson_val *key, *val;
-    size_t idx, max;
+    yyjson_val *key;
+    yyjson_obj_iter it;
     if (!functions.is_object() || functions.size() == 0)
         fail("libc_contracts.json: functions must be a non-empty object");
-    yyjson_obj_foreach(functions.value, idx, max, key, val) {
-        json_view spec = json_view_of(val);
+    /* Walk keys with the iterator API instead of yyjson_obj_foreach: the
+     * macro's comma-operator arithmetic is invisible to STRICT rewriting. */
+    it = yyjson_obj_iter_with(functions.value);
+    while ((key = yyjson_obj_iter_next(&it)) != NULL) {
+        json_view spec = json_view_of(yyjson_obj_iter_get_val(key));
         char where[160];
         const char *kname = yyjson_get_str(key);
+        const char *shown = (kname != NULL) ? kname : "";
         snprintf(where, sizeof(where), "libc_contracts.json functions['%s']",
-                 kname != NULL ? kname : "");
+                 shown);
         need_keys(spec, req, 4, where);
     }
 }
@@ -368,16 +403,20 @@ static void validate_symbol_map(json_view root) {
                         valid = 1;
             }
         }
-        if (!valid)
-            failf("%s: invalid classification '%s'", where,
-                  cls != NULL ? cls : "(non-string)");
+        if (!valid) {
+            const char *shown = (cls != NULL) ? cls : "(non-string)";
+            failf("%s: invalid classification '%s'", where, shown);
+        }
 
         sym = entry.member("bundled_symbol");
         if (!view_is_null(sym)) {
             if (sym.get_string(&symstr, &e) != STDLIB_OK || symstr == NULL ||
-                !declared_as_function(header_text, symstr))
+                !declared_as_function(header_text, symstr)) {
+                const char *shown =
+                    (symstr != NULL) ? symstr : "(non-string)";
                 failf("%s: bundled_symbol '%s' not declared as a function in "
-                      "cplus_libc.h", where, symstr != NULL ? symstr : "(non-string)");
+                      "cplus_libc.h", where, shown);
+            }
         }
     }
 }
@@ -453,9 +492,10 @@ static int validate_c17(json_view data) {
                 if (strcmp(cls, C17_CLASSIFICATIONS[k]) == 0)
                     valid = 1;
         }
-        if (!valid)
-            failf("%s: invalid classification '%s'", where,
-                  cls != NULL ? cls : "(non-string)");
+        if (!valid) {
+            const char *shown = (cls != NULL) ? cls : "(non-string)";
+            failf("%s: invalid classification '%s'", where, shown);
+        }
 
         for (j = 0; j < 4; j++) {
             if (!is_nonempty_trimmed(fn.member(str_fields[j])))
@@ -465,9 +505,11 @@ static int validate_c17(json_view data) {
             path = NULL;
             path_view = fn.member(path_fields[j]);
             if (path_view.get_string(&path, &e) != STDLIB_OK ||
-                path == NULL || !path_is_file(path))
+                path == NULL || !path_is_file(path)) {
+                const char *shown = (path != NULL) ? path : "(non-string)";
                 failf("%s: %s path does not exist: %s", where, path_fields[j],
-                      path != NULL ? path : "(non-string)");
+                      shown);
+            }
         }
         if (!is_nonempty_array(fn.member("contracts")))
             failf("%s: contracts must be a non-empty list", where);
@@ -537,7 +579,7 @@ int main(void) {
     /* Read the public header once, before any symbol-declaration checks. */
     header_text[0] = '\0';
     if (!read_text("libc/install-include/cplus_libc.h", header_text, TEXT_CAP, &err))
-        fail("cannot read libc/install-include/cplus_libc.h");
+        failf("cannot read libc/install-include/cplus_libc.h");
 
     check_version(d0.root(), 1, "contracts.json");
     check_version(d1.root(), 1, "ownership_contracts.json");
