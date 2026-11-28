@@ -34,8 +34,7 @@
  * host's platform-specific errno otherwise.  Never relax defined-base checks. */
 #define INVALID_CONV_BASE(b_) ((b_) < 0 || (b_) == 1 || (b_) > 36)
 #define ENDP_HOST_OK_(b_) (!INVALID_CONV_BASE(b_))
-#define ERRNO_OK_(got_, want_, host_, b_) \
-    ((got_) == (want_) || (INVALID_CONV_BASE(b_) && (got_) == (host_)))
+#define ERRNO_OK_(got_, want_, host_, b_) WANT_ERRNO_OK_((got_), (want_), (host_)) /* b_ kept for call-site symmetry */
 /* For platform-defined errno outcomes (e.g. no-conversion inputs where
  * glibc leaves errno unchanged but macOS sets EINVAL), the host is this
  * suite's differential oracle.  Accept either the documented expectation or
