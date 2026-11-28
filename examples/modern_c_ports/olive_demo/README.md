@@ -113,3 +113,38 @@ the interactive demo, the system SDL3 C library. Both static and dynamic C
 library forms work: the C+ driver passes library flags to the backend linker
 without lowering libraries as C+ source, so an already-compiled C ABI
 library is used as-is.
+
+## Exact commands (from repository root)
+
+Prerequisite: olive.c is vendored in `stdlib/` (no external C library). The
+interactive SDL demo links the system SDL3 from Homebrew.
+
+```sh
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH
+unset SDKROOT
+C=build/c+
+
+# Still-frame demo (plain C renderer, built through c+ --legacy-c):
+$C build examples/modern_c_ports/olive_demo/triangle_demo.c \
+  --legacy-c --sanitize=none -std=c11 \
+  -Iexamples/modern_c_ports/olive_demo -o /tmp/olive_still
+/tmp/olive_still   # writes out/frame.ppm when run from the demo dir
+
+# Interactive SDL3 demo:
+$C build examples/modern_c_ports/olive_demo/olive_sdl_demo.c \
+  --legacy-c --sanitize=none -std=c11 \
+  -Iexamples/modern_c_ports/olive_demo -I/opt/homebrew/include \
+  -o /tmp/olive_sdl -- -L/opt/homebrew/lib -Wl,-rpath,/opt/homebrew/lib \
+  -lSDL3 -framework Cocoa -framework OpenGL -framework GLUT \
+  -framework CoreVideo -framework IOKit -framework QuartzCore
+GUI_PROOF=1 /tmp/olive_sdl   # real framebuffer proof
+/tmp/olive_sdl               # real interactive window
+
+# Run all Olive demos with verification:
+sh examples/modern_c_ports/olive_demo/run.sh           # OLIVE_DEMO PASS
+sh examples/modern_c_ports/olive_demo/run_sdl.sh       # OLIVE_SDL_TEST 6 6 0
+sh examples/modern_c_ports/olive_demo/run_examples.sh  # OLIVE_EXAMPLES 12 12 0
+```
+
+The three extra examples (`lines`, `text`, `squish`) compile the same way as
+`triangle_demo.c` from `examples/modern_c_ports/olive_demo/examples/`.

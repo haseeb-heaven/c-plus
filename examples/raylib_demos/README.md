@@ -45,3 +45,33 @@ The same mechanism works for any prebuilt static (`.a`) or dynamic
 (`.dylib`/`.so`) C library: pass `-L<dir> -l<name>` for the link stage, or
 the bare archive path after `--`. The compiler never lowers a library as
 C+ source, so third-party C ABIs stay intact.
+
+## Exact commands (from repository root)
+
+Prerequisite: raylib is vendored in `examples/raylib/` (headers in `include/`,
+`libraylib.a` and `libraylib.6.2.0.dylib` in `lib/`). SDL3 is not needed here.
+
+```sh
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH
+unset SDKROOT
+C=build/c+   # or build-alpha/c+
+RL=examples/raylib
+RP=$(cd "$RL/lib" && pwd)
+
+# Build one demo (modern C+, real .cp):
+$C build examples/raylib_demos/shapes2d.cp --default --sanitize=none \
+  -I. -I"$RL/include" -o /tmp/shapes2d -- -L"$RL/lib" -Wl,-rpath,"$RP" \
+  -lraylib -framework CoreVideo -framework IOKit -framework Cocoa \
+  -framework QuartzCore -framework GLUT -framework OpenGL \
+  -Wno-unused-command-line-argument
+
+# Run it:
+RAYLIB_PROOF=1 /tmp/shapes2d     # deterministic PNG proof in out/
+/tmp/shapes2d                    # real interactive GUI window
+
+# Run all three demos with verification:
+sh examples/raylib_demos/run.sh  # RAYLIB_DEMOS 12 12 0
+```
+
+`cube3d.cp` uses the same command with the source name changed; it renders
+real GPU 3D via `BeginMode3D`/`DrawCube`.
