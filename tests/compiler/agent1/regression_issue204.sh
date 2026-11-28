@@ -4,11 +4,27 @@
 # the translation unit. Runs a dependency-free CPlusLexer unit test and an
 # end-to-end lowered-program fixture.
 #
-# Usage: CPLUS_BIN=/path/to/c+ sh tests/compiler/agent1/regression_issue204.sh
+# Usage: CPLUS_BUILD=/path/to/build-dir sh tests/compiler/agent1/regression_issue204.sh
+#        (CPLUS_BIN and CPLUS_CORE_LIB override either discovered artifact)
 set -u
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-CPLUS=${CPLUS_BIN:-$ROOT/build/c+}
-LIB=${CPLUS_CORE_LIB:-$ROOT/build-local/libcplus_core.a}
+# Discover the build directory holding the compiler artifacts. Fresh builds may
+# live in build-verify/ or build-final/; keep build-local/ and the legacy build/
+# directory working for existing setups.
+BUILD=${CPLUS_BUILD:-}
+if [ -z "$BUILD" ]; then
+  for candidate in "$ROOT/build-local" "$ROOT/build-verify" \
+                   "$ROOT/build-final" "$ROOT/build"; do
+    if [ -f "$candidate/libcplus_core.a" ] &&
+       { [ -n "${CPLUS_BIN:-}" ] || [ -x "$candidate/c+" ]; }; then
+      BUILD=$candidate
+      break
+    fi
+  done
+fi
+[ -n "$BUILD" ] || BUILD=$ROOT/build
+CPLUS=${CPLUS_BIN:-$BUILD/c+}
+LIB=${CPLUS_CORE_LIB:-$BUILD/libcplus_core.a}
 CXX=${CXX:-/usr/bin/c++}
 WORK=${TMPDIR:-/tmp}/cplus-issue204-$$
 mkdir -p "$WORK" || exit 1
@@ -16,9 +32,6 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-if [ ! -f "$LIB" ]; then
-  LIB="$ROOT/build/libcplus_core.a"
-fi
 [ -f "$LIB" ] || fail "libcplus_core.a not found (build the compiler first)"
 
 $CXX -std=c++20 -I"$ROOT/compiler" \
