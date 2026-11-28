@@ -1,0 +1,185 @@
+name: release-alpha
+
+# Alpha release pipeline. Triggered ONLY by version-alpha tags; never by
+# branch pushes (including develop / alpha-version). Each matrix entry builds
+# and packages the real toolchain; the release job then publishes a
+# GitHub PRE-release with the resulting assets.
+on:
+  push:
+    tags: ['v*-alpha*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-alpha-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-unix:
+    name: ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runners: no cross-compile or unverified platform claims.
+          - { os: macos, arch: arm64, runner: macos-15 }
+          - { os: macos, arch: x86_64, runner: macos-15-intel }
+          - { os: linux, arch: x86_64, runner: ubuntu-24.04 }
+          - { os: linux, arch: arm64, runner: ubuntu-24.04-arm }
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/cplus-ccache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sanitize tag for asset names
+        shell: bash
+        run: echo "ASSET_TAG=$(printf '%s' "$GITHUB_REF_NAME" | tr -cs '[:alnum:]._-' '-')" >> "$GITHUB_ENV"
+
+      - name: Cache compiler results
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cplus-ccache
+          key: cplus-ccache-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('CMakeLists.txt', 'compiler/**/*.cpp', 'runtime/*.c') }}
+          restore-keys: cplus-ccache-${{ matrix.os }}-${{ matrix.arch }}-
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          brew install llvm cmake ninja ccache
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm-dev libclang-dev cmake ninja-build ccache
+
+      - name: Configure (macOS)
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          PREFIX="$(brew --prefix llvm)"
+          cmake -S . -B build -G Ninja \
+            -DLLVM_DIR="$PREFIX/lib/cmake/llvm" \
+            -DClang_DIR="$PREFIX/lib/cmake/clang" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Configure (Linux)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          LLVM_VER="$(llvm-config --version | cut -d. -f1)"
+          cmake -S . -B build -G Ninja \
+            -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+            -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build and install into staging prefix
+        shell: bash
+        run: |
+          set -eu
+          STAGE="$RUNNER_TEMP/cplus-stage"
+          rm -rf "$STAGE"
+          cmake --build build --target c+ cplus_runtime --parallel
+          cmake --install build --prefix "$STAGE"
+          test -x "$STAGE/bin/c+"
+          test -f "$STAGE/include/cplus/cplus.h"
+          test -f "$STAGE/lib/libcplus_runtime.a"
+          cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE/"
+          tar -czf "cplus-${ASSET_TAG}-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" -C "$STAGE" .
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cplus-${{ env.ASSET_TAG }}-${{ matrix.os }}-${{ matrix.arch }}
+          path: cplus-${{ env.ASSET_TAG }}-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  build-windows:
+    # Windows is EXPLICITLY compile-only: the C+ runtime object and headers
+    # are compiled/packaged, but no compiler executable or runtime behaviour
+    # is claimed. The asset name carries the "compile-only" marker.
+    name: windows-${{ matrix.arch }}-compile-only
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: windows-2022 }
+          - { arch: arm64, runner: windows-11-arm }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sanitize tag for asset names
+        shell: bash
+        run: echo "ASSET_TAG=$(printf '%s' "$GITHUB_REF_NAME" | tr -cs '[:alnum:]._-' '-')" >> "$GITHUB_ENV"
+
+      - name: Compile-only build of the C+ runtime (no runtime claim)
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p stage/include/cplus stage/lib
+          cp runtime/include/cplus/*.h stage/include/cplus/
+          cp LICENSE THIRD_PARTY_NOTICES.md stage/
+          if ! command -v clang >/dev/null 2>&1; then
+            echo "clang not found: Windows compile-only probe NOT TESTED" >&2
+            exit 1
+          fi
+          clang --version | head -2
+          clang -std=c11 -O2 -c runtime/cplus_runtime.c -o stage/lib/cplus_runtime.obj
+          test -s stage/lib/cplus_runtime.obj
+          cat > stage/README-WINDOWS.txt <<'EOF'
+          C+ Windows ${{ matrix.arch }} artifact: COMPILE-ONLY.
+          The C+ runtime source was compiled to cplus_runtime.obj; the c+
+          compiler executable and runtime behaviour were NOT built, run,
+          or verified. Runtime support for Windows remains unclaimed.
+          EOF
+
+      - name: Package compile-only zip
+        shell: pwsh
+        run: Compress-Archive -Path stage/* -DestinationPath "cplus-${{ env.ASSET_TAG }}-windows-${{ matrix.arch }}-compile-only.zip"
+
+      - name: Upload compile-only artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cplus-${{ env.ASSET_TAG }}-windows-${{ matrix.arch }}-compile-only
+          path: cplus-${{ env.ASSET_TAG }}-windows-${{ matrix.arch }}-compile-only.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish alpha pre-release
+    needs: [build-unix, build-windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Fail closed if any matrix asset is missing
+        shell: bash
+        run: |
+          set -eu
+          count="$(find release-assets -maxdepth 1 -type f | wc -l)"
+          test "$count" -ge 6
+          ls -l release-assets
+
+      - name: Create pre-release and attach assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -eu
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --title "C+ $GITHUB_REF_NAME (alpha)" \
+            --prerelease --generate-notes
