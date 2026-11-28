@@ -71,6 +71,9 @@ struct DriverOptions {
   // DEFAULT (false): report proven errors, warn on unverified operations.
   // STRICT (true): reject unverified operations rather than warn.
   bool strict = false;
+  // --safety=fast keeps compile-time checks, data-stack handling and UBSan
+  // but omits pointer-to-extent side-table lookups in lowered C.
+  bool fastSafety = false;
   bool verbose = false;
   // Issue #34: every C+ warning is fatal by default. --legacy-c keeps plain-C
   // behaviour unless -Werror is requested explicitly; -w never suppresses C+

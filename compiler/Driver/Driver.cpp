@@ -2048,8 +2048,8 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
     if (opts.mode == Mode::Safe && opts.command != "check") {
       // Runtime checks are inserted only after all static analysis, so an
       // instrumented index expression cannot mask a provable bounds error.
-      loweredText = instrumentDynamicArrayBounds(loweredText,
-                                                 rewritten.arrayLengths);
+      loweredText = instrumentDynamicArrayBounds(
+          loweredText, rewritten.arrayLengths, /*sideTable=*/!opts.fastSafety);
     }
     if (disjointBounds) {
       // Additive opt-in: instrument the final lowered text and parse it back

@@ -6151,7 +6151,8 @@ static void collectAliasBoundsSites(
 
 std::string instrumentDynamicArrayBounds(
     const std::string &source,
-    const std::map<std::string, size_t> &arrayLengths) {
+    const std::map<std::string, size_t> &arrayLengths,
+    bool sideTable) {
   // Merge producer sites with the token-level fallback.  Dedup on the *full*
   // (begin, op, opLength, end) tuple: nested sites legitimately share `begin`
   // (e.g. `a+b+c`), so deduping on begin alone would drop required inner
@@ -6674,6 +6675,10 @@ std::string instrumentDynamicArrayBounds(
     }
     return false;
   };
+  // --safety=fast keeps compile-time bounds checks, data-stack handling and
+  // UBSan but omits every pointer-to-extent side-table lookup. Cross-thread
+  // free/double-free detection still belongs to --safety=strict.
+  if (sideTable) {
   const auto &allocSites = checkedAllocSites();
   for (const CheckedAllocSite &site : allocSites) {
     if (managedAllocIn(sourceSlice(source, site.begin, site.end)) ||
@@ -6753,6 +6758,7 @@ std::string instrumentDynamicArrayBounds(
     }
     havePtrFormation = true;
   }
+  } // sideTable
 
   // Plain pointer dereferences: wrap the base once so it is evaluated a
   // single time.  CPLUS_NONNULL yields the original pointer value after the
