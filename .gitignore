@@ -178,3 +178,9 @@ tests/stdlib/scoped_mem/test_release
 
 # OpenQodex local tool state (reports/config are tool-local, not source).
 /.openqodex/
+
+# Additional scoped_mem runner binaries (cross-TU and poison regressions).
+tests/stdlib/scoped_mem/gen_test
+tests/stdlib/scoped_mem/scratch_view_owner
+tests/stdlib/scoped_mem/scratch_view_owner_release
+tests/stdlib/scoped_mem/test_align
