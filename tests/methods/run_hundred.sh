@@ -25,7 +25,10 @@ run_one() {
     inc="$INC"; libs="$SAFE $LIBC"
   fi
   bin="$OUT/${name}_${variant}_${san}"
-  if "$CC" -O1 -g -std=c99 -Wall -Wextra -pedantic \
+  # TIME_UTC is an ISO C11 feature; this suite declares itself "Standalone C11".
+  std=-std=c99
+  [ "$name" = hundred_time_fenv ] && std=-std=c11
+  if "$CC" -O1 -g "$std" -Wall -Wextra -pedantic \
       -fno-builtin-fmax -fno-builtin-fmin -fno-builtin-fmaxf -fno-builtin-fminf \
       -fno-builtin-fmaxl -fno-builtin-fminl \
       $san $inc "$file" $libs -lm -pthread \
