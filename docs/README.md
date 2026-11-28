@@ -28,6 +28,7 @@ library layer: a checked, additive C API that keeps the ordinary C ABI.
 | ABI preservation | [ABI_SAFE_LAYER.md](ABI_SAFE_LAYER.md), [abi/](abi/), [abi/ABI_GATE.md](abi/ABI_GATE.md), [abi/STRICT_C_ABI_BOUNDARY.md](abi/STRICT_C_ABI_BOUNDARY.md) |
 | Security evidence | [security/](security/) — start with `RED_BLUE_20_FINAL.md` |
 | Limitations and honest scope | [LIMITATIONS.md](LIMITATIONS.md), [THREAT_MODEL.md](THREAT_MODEL.md) |
+| Windows cross-build status (compile-only) | [WINDOWS_CROSS_BUILD.md](WINDOWS_CROSS_BUILD.md) |
 | Modern 3D/GUI/CLI libraries | [stdlib/MODERN_LIBS_3D_GUI_CLI.md](stdlib/MODERN_LIBS_3D_GUI_CLI.md) |
 | Modern/safer measured evidence | [stdlib/MODERN_SAFER_EVIDENCE.md](stdlib/MODERN_SAFER_EVIDENCE.md) |
 | Edge-case campaigns | [stdlib/EDGE100_FINAL.md](stdlib/EDGE100_FINAL.md) |
