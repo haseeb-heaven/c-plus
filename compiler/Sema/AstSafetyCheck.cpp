@@ -1824,6 +1824,33 @@ public:
     return !f.empty() && f != filename_ && f != filename_ + ".c";
   }
 
+  /// Vendored third-party C headers (and system headers) are external FFI
+  /// boundaries: C+ does not own their bodies, so it cannot prove extents,
+  /// nullability or divisor facts for the code inside them.  Keep the filter
+  /// location-based -- the same construct written by the user is still
+  /// diagnosed (the expansion location of a user macro stays in user code).
+  bool isExternalHeaderLocation(SourceLocation loc) const {
+    if (loc.isInvalid())
+      return false;
+    SourceManager &sm = ctx_.getSourceManager();
+    if (sm.isInSystemHeader(loc))
+      return true;
+    PresumedLoc p = sm.getPresumedLoc(loc);
+    if (!p.isValid())
+      return false;
+    llvm::StringRef file(p.getFilename());
+    size_t at = file.find("third_party");
+    while (at != llvm::StringRef::npos) {
+      bool left = at == 0 || file[at - 1] == '/' || file[at - 1] == '\\';
+      size_t end = at + sizeof("third_party") - 1;
+      bool right = end == file.size() || file[end] == '/' || file[end] == '\\';
+      if (left && right)
+        return true;
+      at = file.find("third_party", at + 1);
+    }
+    return false;
+  }
+
   /// Signed arithmetic result check with a wider intermediate type so the
   /// overflow is seen before wrapping.
   bool arithmeticOverflow(const Expr *op, long long a, long long b,
@@ -6023,8 +6050,11 @@ public:
           }
         }
       }
-      if (opc == BO_Div || opc == BO_Rem || opc == BO_DivAssign ||
-          opc == BO_RemAssign) {
+      if ((opc == BO_Div || opc == BO_Rem || opc == BO_DivAssign ||
+           opc == BO_RemAssign) &&
+          // A divisor in a vendored/system header is outside the code C+
+          // owns; the same division in user source is still checked below.
+          !isExternalHeaderLocation(op->getBeginLoc())) {
         llvm::APSInt dv;
         bool known = knownConst(op->getRHS(), dv);
         if (known && dv.isZero()) {
@@ -6636,7 +6666,8 @@ public:
   /// Null pointers passed to libc read/write APIs are contract violations.
   void checkLibcNullSource(const CallExpr *call, const std::string &api,
                            unsigned idx = 1) {
-    if (call->getNumArgs() <= idx)
+    if (call->getNumArgs() <= idx ||
+        isExternalHeaderLocation(call->getBeginLoc()))
       return;
     const Expr *src = call->getArg(idx)->IgnoreParenCasts();
     if (isNullConstant(src) || nullVarOf(src))
@@ -7025,7 +7056,7 @@ public:
     // Interprocedural nullability: a provably null argument crossing into a
     // callee that dereferences that parameter is unsafe even though the
     // dereference happens in the callee's body.
-    if (report_) {
+    if (report_ && !isExternalHeaderLocation(call->getBeginLoc())) {
       bool reported = false;
       for (const auto &target : calleeNames(call, callee)) {
         for (unsigned i = 0; i < call->getNumArgs() && !reported; ++i) {
@@ -7663,7 +7694,8 @@ public:
       // Keep the legacy nullableArg policy (all pointer args) unchanged; the
       // precise nullableArgIndices mean "accepts NULL" and must not be
       // reinterpreted as a violation.
-      if (contract.nullableArg && !contract.frees)
+      if (contract.nullableArg && !contract.frees &&
+          !isExternalHeaderLocation(call->getBeginLoc()))
         for (unsigned i = 0; i < call->getNumArgs(); ++i)
           if (isNullConstant(call->getArg(i)->IgnoreParenCasts()) ||
               nullVarOf(call->getArg(i))) {
@@ -8258,7 +8290,8 @@ public:
     const Expr *subBase = subscript->getBase()->IgnoreParenCasts();
     if (const auto *pref = dyn_cast<DeclRefExpr>(subBase))
       if (const auto *pvd = dyn_cast<ParmVarDecl>(pref->getDecl()))
-        if (pvd->getType()->isPointerType() && !heapStateOf(subBase) &&
+        if (!isExternalHeaderLocation(subscript->getBeginLoc()) &&
+            pvd->getType()->isPointerType() && !heapStateOf(subBase) &&
             !hasProvenParamExtent(pvd, subscript)) {
           std::string msg = "pointer parameter '" +
                             pvd->getNameAsString() +
@@ -8286,7 +8319,8 @@ public:
                 proven = true;
             if (callReturnExtent_.count(call->getBeginLoc().getRawEncoding()))
               proven = true;
-            if (!proven && strict_)
+            if (!proven && strict_ &&
+                !isExternalHeaderLocation(subscript->getBeginLoc()))
               report(subscript->getBeginLoc(),
                      "pointer '" + pvd->getNameAsString() +
                          "' from an unresolved call has unverifiable extent; "

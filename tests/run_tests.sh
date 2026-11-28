@@ -218,6 +218,20 @@ if matches "instrumented_runtime_linker_flags"; then
   fi
 fi
 
+# --- vendored third-party header FFI diagnostics --------------------------
+
+if matches "vendored_header_ffi"; then
+  if CPLUS_BIN="$CPLUS" /bin/sh \
+      "$ROOT/tests/compiler/vendored_header_ffi_provenance.sh" \
+      >"$OUT/vendored_header_ffi.suite.log" 2>&1; then
+    pass "vendored_header_ffi"
+  else
+    cat "$OUT/vendored_header_ffi.suite.log" >&2
+    fail "vendored_header_ffi" \
+      "see tests/out/vendored_header_ffi.suite.log"
+  fi
+fi
+
 echo
 gap_word=gaps
 [ "$GAP" -eq 1 ] && gap_word=gap
