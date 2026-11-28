@@ -4,7 +4,7 @@ Complete honest classification of all **25 ISO C17 headers** on branch `agent/mo
 
 Classifications:
 - `IMPLEMENTED`: implemented directly in C+ (`libc/src/`, `stdlib/safe/src/`) with tests.
-- `VENDORED`: backed by pinned upstream permissive-licensed library (`rurban/safeclib` MIT, `musl` MIT, `yyjson` MIT, `exceptions4c` MIT).
+- `VENDORED`: backed by pinned upstream permissive-licensed library (`rurban/safeclib` MIT, `musl` MIT, `yyjson` MIT, `exceptions4c` Apache-2.0).
 - `HOST-DELEGATED`: thin NULL/bounds-hardened logged adapter over the host C toolchain (`cplus_*` in `libcplus_hardened_libc.a/.dylib|.so` and `cplus_*_s` in `libcplus_safecrt.a`).
 - `PARTIAL`: subset of header functions available; remaining routines noted explicitly.
 - `UNSUPPORTED`: not shipped in `libc/` or `stdlib/safe/`; exact blocker documented.

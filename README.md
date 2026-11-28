@@ -400,3 +400,4 @@ No source from those projects was copied unless vendored with its own license
 docs/security/upstream-techniques.md for source-cited Fil-C notes). This is
 not a claim of equivalence to any of them, nor of 100% memory safety. Full
 details: docs/DESIGN_PROVENANCE.md.
+Upstream licenses and vendored-library provenance: [docs/libc/SAFER_UPSTREAM_INTEGRATION.md](docs/libc/SAFER_UPSTREAM_INTEGRATION.md).

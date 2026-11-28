@@ -99,7 +99,7 @@ All entries below are **study references only**; no files were copied by this ev
 ## 7. Warnings
 
 1. `third_party/intel-safestringlib/` has **no `UPSTREAM_COMMIT` file**. Its SHA lives only in `PROVENANCE.md` and `docs/UPSTREAM_LICENSES.md`. Add a pin file if the reference copy is retained (out of scope for this report).
-2. `docs/UPSTREAM_LICENSES.md` §5 labels exceptions4c as **MIT**, while `third_party/exceptions4c/LICENSE` and `PROVENANCE.md` say **Apache-2.0**. The license file wins; the doc line should be corrected by its owner.
+2. RESOLVED: `docs/UPSTREAM_LICENSES.md` §5 and `docs/libc/ISO_C_AUDIT.md` now label exceptions4c as **Apache-2.0**, matching `third_party/exceptions4c/LICENSE`, `NOTICE` and `PROVENANCE.md`.
 3. License record conflict for **Cake**: `docs/UPSTREAM_AUDIT.md` says GPLv3 + AI-training addendum / rejected; `docs/libc/SAFER_UPSTREAM_INTEGRATION.md` lists it as MIT design reference. Resolve before relying on either table.
 4. `libc/upstream/musl/PROVENANCE.md` claims `src/malloc/* (malloc.c etc.)`, but the tree contains only `calloc.c`, `free.c`, `realloc.c`; provenance prose is broader than the vendored set.
 5. Intel `unittests/*.c` and safeclib's absent upstream tests mean upstream test parity is **not** established locally; do not describe those copies as "tested" without a runner.

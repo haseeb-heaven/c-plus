@@ -9,8 +9,8 @@
 ## Local adaptations
 
 - 2026-11-21: vendored upstream source tree; added PROVENANCE/UPSTREAM_COMMIT.
-- 2026-11-21: C+ build generates minimal `config.h` and compiles selected safeclib sources with `-DCPLUS_SAFECLIB_BUILD` to isolate from host libc; symbol prefixing/cplus adapter used to avoid collisions.
-- 2026-11-22: Fixed trailing-token `*ptr = dest` state update and end-of-tokens (`dest == NULL && *dmaxp == 0 && **ptr == '\0'`) return in `src/str/strtok_s.c`; added 5-arg `cplus_sc_strtok_s` adapter in `src/cplus_sc_wrappers.c` matching 5-arg `strtok_s` call signature.
+- 2026-11-21: C+ build generates minimal `config.h` and compiles selected safeclib sources with `-D__STDC_WANT_LIB_EXT1__=0` plus per-symbol `-D...=cplus_sc_*` prefixes to isolate from host libc; a `cplus_sc_*` adapter avoids collisions. (An earlier note named `-DCPLUS_SAFECLIB_BUILD`; that flag is not passed by the current `scripts/build_safecrt.sh`.)
+- 2026-11-22: Fixed trailing-token `*ptr = dest` state update and end-of-tokens (`dest == NULL && *dmaxp == 0 && **ptr == '\0'`) return in `src/str/strtok_s.c`; added a public 4-arg `cplus_sc_strtok_s` adapter in `src/cplus_sc_wrappers.c` that forwards to the 5-arg internal `cplus_sc__strtok_s_chk` with its `BOS(dest)` argument.
 - 2026-11-22: SECURITY PATCH in `src/str/strnlen_s.c`: changed
   `while (*str && smax)` to `while (smax && *str)`. Upstream evaluated the
   dereference before the bound, reading one byte past a fully populated

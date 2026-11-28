@@ -7,7 +7,7 @@ Full integration audit and security/ownership evaluation live in [`docs/libc/SAF
 - Commit: `90b076e94c4b0fb202dddf948d5d620e5395c1b0`
 - License: MIT (Cisco 2012-2013, Reini Urban 2017; `third_party/safeclib/COPYING` preserved)
 - Local path: `third_party/safeclib/`
-- Linked via `scripts/build_safecrt.sh` (`-DCPLUS_SAFECLIB_BUILD`, `cplus_sc_*` wrappers). Local fixes recorded in `third_party/safeclib/PROVENANCE.md` (`src/str/strtok_s.c`, `src/cplus_sc_wrappers.c`).
+- Linked via `scripts/build_safecrt.sh` (`-D__STDC_WANT_LIB_EXT1__=0`, per-symbol `-D...=cplus_sc_*` prefixes, `cplus_sc_*` wrappers; `-DCPLUS_SAFECLIB_BUILD` is documented historically but not passed by the current script). Local fixes recorded in `third_party/safeclib/PROVENANCE.md` (`src/str/strtok_s.c`, `src/cplus_sc_wrappers.c`).
 
 ## 2. intel/safestringlib (vendored reference only; NOT linked)
 - Upstream: https://github.com/intel/safestringlib
@@ -29,6 +29,6 @@ Full integration audit and security/ownership evaluation live in [`docs/libc/SAF
 - Local path: `third_party/ctl/` (`ctl/vector.h` hardened for empty `pop_back`, overflow in `fit`, and `realloc` failure preservation).
 
 ## 5. exceptions4c, yyjson, stb, miniaudio, Nuklear
-- `exceptions4c`: MIT (`third_party/exceptions4c/PROVENANCE.md`) — C99 `(void)` prototype fix in `exceptions4c.h`.
+- `exceptions4c`: Apache-2.0 (`third_party/exceptions4c/PROVENANCE.md`, `LICENSE`, `NOTICE`) — C99 `(void)` prototype fix in `exceptions4c.h`.
 - `yyjson` (MIT), `stb` (MIT/PD), `miniaudio` (MIT-0/PD), `Nuklear` (MIT/PD): original third-party headers/licenses preserved.
 - Platform CRTs (Apple libc, glibc, UCRT, musl): linked via system toolchain only; never copied or globally replaced.
