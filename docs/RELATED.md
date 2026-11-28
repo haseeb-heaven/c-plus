@@ -25,7 +25,7 @@ compiler and adds a small source lowering plus targeted checks.
 
 ## Goose
 
-Site: <https://aardappel.github.io/scoped/> · samples: <https://aardappel.github.io/scoped/samples/>
+Site: <https://github.com/aardappel/goose/> · samples: <https://github.com/aardappel/goose/samples/>
 
 Goose is a new memory-safe systems language with no heap allocator, no GC and
 no lifetime annotations. Its documented model:

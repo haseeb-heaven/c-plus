@@ -103,7 +103,7 @@ behaviour.
 
 ## Honest scope and non-claims
 
-- **Inspiration, not code.** The ideas come from `aardappel/scoped`
+- **Inspiration, not code.** The ideas come from `aardappel/goose`
   (Apache-2.0), as summarised in `docs/stdlib/SCOPED_MEMORY_INSPIRATION.md`.
   No the inspiration language code, compiler, type rules, or binaries were copied or linked.
   These are ordinary C+ programs using this repository's stdlib headers.

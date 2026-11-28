@@ -1,6 +1,6 @@
 # Modern-C ports of the inspiration language sample workloads — proof pack (2026-11-25)
 
-Upstream inspected via `gh api repos/aardappel/scoped/contents/samples`: 32
+Upstream inspected via `gh api repos/aardappel/goose/contents/samples`: 32
 numbered the inspiration language programs and 31 expected-output files (`samples/expected/`).
 
 **These are independent C11 reimplementations of the sample workloads — no
