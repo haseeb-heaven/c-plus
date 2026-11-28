@@ -89,6 +89,14 @@ static inline int stdlib_arena_new_block(stdlib_arena *a, size_t capacity,
                               CPLUS_EXIT_BOUNDS, "arena: block size overflow"),
                STDLIB_FAIL;
     raw = sizeof(*b) + capacity + STDLIB_ALIGN_DEFAULT;
+    /* cplus_alloc aborts the process when malloc refuses a request.  Cap the
+     * raw size at the checked allocator's documented practical ceiling so an
+     * oversized block is a recoverable STDLIB_FAIL, not a fatal exit. */
+    if (raw > STDLIB_ALLOC_LIMIT)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS,
+                              "arena: block size exceeds STDLIB_ALLOC_LIMIT"),
+               STDLIB_FAIL;
     b = (stdlib_arena_block *)cplus_alloc(raw);
     if (b == (stdlib_arena_block *)0)
         return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
