@@ -42,10 +42,10 @@ unset SDKROOT
 C=build/c+
 OUT=$(mktemp -d)
 
-/usr/bin/clang -std=c11 -O2 -Istdlib/microui -I/opt/homebrew/include \
-  -c stdlib/microui/microui.c -o "$OUT/microui.o"
-/usr/bin/clang -std=c11 -O2 -Istdlib/microui -I/opt/homebrew/include \
-  -c stdlib/microui/microui_sdl3_backend.c -o "$OUT/backend.o"
+$C build --legacy-c --sanitize=none -std=c11 -I. -Istdlib/microui -I/opt/homebrew/include -c \
+  stdlib/microui/microui.c -o "$OUT/microui.o"
+$C build --legacy-c --sanitize=none -std=c11 -I. -Istdlib/microui -I/opt/homebrew/include -c \
+  stdlib/microui/microui_sdl3_backend.c -o "$OUT/backend.o"
 
 $C build examples/microui/microui_app.cp --default --sanitize=none \
   -I. -Istdlib/microui -o "$OUT/app" -- "$OUT/microui.o" "$OUT/backend.o" \

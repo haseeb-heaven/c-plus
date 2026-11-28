@@ -49,13 +49,13 @@ C=build/c+
 OUT=$(mktemp -d)
 
 # 1) compile the vendored C implementation once:
-/usr/bin/clang -std=c11 -O2 -Ithird_party/nuklear -I/opt/homebrew/include \
-  -DNK_INCLUDE_STANDARD_VARARGS -c third_party/nuklear/nuklear_impl.c \
+$C build --legacy-c --sanitize=none -std=c11 -I. -Ithird_party/nuklear -I/opt/homebrew/include -c \
+  -DNK_INCLUDE_STANDARD_VARARGS third_party/nuklear/nuklear_impl.c \
   -o "$OUT/nuklear_impl.o"
 
 # 2) compile the stdlib ABI backend once:
-/usr/bin/clang -std=c11 -O2 -I. -Ithird_party/nuklear -I/opt/homebrew/include \
-  -c stdlib/nuklear/nuklear_gui_backend.c -o "$OUT/backend.o"
+$C build --legacy-c --sanitize=none -std=c11 -I. -Ithird_party/nuklear -I/opt/homebrew/include -c \
+  stdlib/nuklear/nuklear_gui_backend.c -o "$OUT/backend.o"
 
 # 3) build the modern C+ app (stdlib/gfx_nuklear.hp):
 $C build examples/nuklear_gui/nuklear_gui.cp --default --sanitize=none \

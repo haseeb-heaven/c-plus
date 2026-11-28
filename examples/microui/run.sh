@@ -20,8 +20,8 @@ C=${CPLUS_BIN:-"$R/build/c+"}
 pass=0; fail=0; cases=0
 check() { cases=$((cases+1)); if [ "$1" = ok ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "MICROUI_TEST FAIL $2"; fi; }
 
-/usr/bin/clang -std=c11 -O2 -I. -I/opt/homebrew/include -c "$R/stdlib/microui/microui.c" -o "$OUT/microui.o" >"$OUT/mu.log" 2>&1 && check ok mu || { check no mu; tail -6 "$OUT/mu.log"; }
-/usr/bin/clang -std=c11 -O2 -I. -I/opt/homebrew/include -c "$R/stdlib/microui/microui_sdl3_backend.c" -o "$OUT/microui_backend.o" >"$OUT/backend.log" 2>&1 && check ok backend || { check no backend; tail -6 "$OUT/backend.log"; }
+"$C" build "$R/stdlib/microui/microui.c" --legacy-c --sanitize=none -std=c11 -I"$R" -I"$R/stdlib/microui" -I/opt/homebrew/include -c -o "$OUT/microui.o" >"$OUT/mu.log" 2>&1 && check ok mu || { check no mu; tail -6 "$OUT/mu.log"; }
+"$C" build "$R/stdlib/microui/microui_sdl3_backend.c" --legacy-c --sanitize=none -std=c11 -I"$R" -I"$R/stdlib/microui" -I/opt/homebrew/include -c -o "$OUT/microui_backend.o" >"$OUT/backend.log" 2>&1 && check ok backend || { check no backend; tail -6 "$OUT/backend.log"; }
 
 if [ -x "$C" ] && "$C" build microui_app.cp --default --sanitize=none -I"$R" -I"$R/stdlib/microui" -o "$OUT/microui_app" -- "$OUT/microui.o" "$OUT/microui_backend.o" -L/opt/homebrew/lib -Wl,-rpath,/opt/homebrew/lib -lSDL3 -framework Cocoa -framework OpenGL -framework GLUT -framework CoreVideo -framework IOKit -framework QuartzCore -Wno-unused-command-line-argument >"$OUT/app.log" 2>&1; then check ok build; else check no build; tail -8 "$OUT/app.log"; fi
 rm -f "$OUT/microui.bmp"

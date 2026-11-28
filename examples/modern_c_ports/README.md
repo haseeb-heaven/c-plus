@@ -20,7 +20,7 @@ All 32 numbered upstream samples are ported; `PORTS_MODERN_C 32 32 0`.
 ## Proof
 
 `sh proof/modern_c_ports/run.sh` → `PORTS_MODERN_C <cases> <pass> <fail>`;
-the runner rebuilds every binary from source with `/usr/bin/clang -std=c11
+the runner rebuilds every binary from source with `c+ --legacy-c -std=c11
 -O2`, runs it under `timeout 20`, and diffs stdout against `expected/`.
 Committed binaries are in `bin/`; sources and expected outputs are alongside.
 

@@ -24,10 +24,12 @@ check() { cases=$((cases+1)); if [ "$1" = ok ]; then pass=$((pass+1)); else fail
 
 # The stdlib facade keeps SDL3/Nuklear headers out of the C+ TU: both sources
 # are real third-party C, compiled once here and linked through a plain C ABI.
-/usr/bin/clang -std=c11 -O2 -I"$R/third_party/nuklear" -I/opt/homebrew/include \
-  -c "$R/third_party/nuklear/nuklear_impl.c" -o "$OUT/nuklear_impl.o" >"$OUT/impl.log" 2>&1 && check ok impl || { check no impl; tail -6 "$OUT/impl.log"; }
-/usr/bin/clang -std=c11 -O2 -I"$R" -I"$R/third_party/nuklear" -I/opt/homebrew/include \
-  -c "$R/stdlib/nuklear/nuklear_gui_backend.c" -o "$OUT/nuklear_backend.o" >"$OUT/backend.log" 2>&1 && check ok backend || { check no backend; tail -6 "$OUT/backend.log"; }
+"$C" build "$R/third_party/nuklear/nuklear_impl.c" --legacy-c --sanitize=none -std=c11 \
+  -I"$R" -I"$R/third_party/nuklear" -I/opt/homebrew/include \
+  -c -o "$OUT/nuklear_impl.o" >"$OUT/impl.log" 2>&1 && check ok impl || { check no impl; tail -6 "$OUT/impl.log"; }
+"$C" build "$R/stdlib/nuklear/nuklear_gui_backend.c" --legacy-c --sanitize=none -std=c11 \
+  -I"$R" -I"$R/third_party/nuklear" -I/opt/homebrew/include \
+  -c -o "$OUT/nuklear_backend.o" >"$OUT/backend.log" 2>&1 && check ok backend || { check no backend; tail -6 "$OUT/backend.log"; }
 
 if [ -x "$C" ] && (cd "$R" && "$C" build "$D/nuklear_gui.cp" --default --sanitize=none \
     -I. -Istdlib/nuklear -o "$OUT/nuklear_gui" -- \

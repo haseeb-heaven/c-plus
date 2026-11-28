@@ -60,9 +60,12 @@ texture and scales it to a 640x480 window. Controls:
 Build and run interactively:
 
 ```sh
-clang -std=c11 -O2 -Wall -Wextra -Werror -I. -I/opt/homebrew/include \
-  olive_sdl_demo.c -o /tmp/olive_sdl -L/opt/homebrew/lib \
-  -Wl,-rpath,/opt/homebrew/lib -lSDL3
+# From examples/modern_c_ports/olive_demo:
+C=../../../build/c+
+$C build olive_sdl_demo.c --legacy-c --sanitize=none -std=c11 -Wall -Wextra -Werror -I. -I/opt/homebrew/include \
+  -o /tmp/olive_sdl -- -L/opt/homebrew/lib -Wl,-rpath,/opt/homebrew/lib -lSDL3 \
+  -framework Cocoa -framework OpenGL -framework GLUT -framework CoreVideo \
+  -framework IOKit -framework QuartzCore
 /tmp/olive_sdl
 ```
 
