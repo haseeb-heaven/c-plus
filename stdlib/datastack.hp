@@ -208,6 +208,14 @@ static inline int stdlib_datastack_init(stdlib_datastack *ds, size_t capacity,
     if (ds == 0 || capacity == 0 || capacity > (size_t)-1 / 2u)
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED, "datastack: invalid config"), STDLIB_FAIL;
+    /* cplus_alloc calls cplus_print_fatal (process exit) when malloc refuses
+     * a request.  Refuse anything above the checked allocator's documented
+     * practical ceiling first so a huge-but-non-overflowing request stays a
+     * recoverable STDLIB_FAIL with a category/code instead of an abort. */
+    if (capacity > STDLIB_ALLOC_LIMIT)
+        return error_fail_cat(err, STDLIB_CATEGORY_RANGE,
+                              CPLUS_EXIT_BOUNDS,
+                              "datastack: capacity exceeds STDLIB_ALLOC_LIMIT"), STDLIB_FAIL;
     ds->base = (unsigned char *)cplus_alloc(capacity);
     if (ds->base == (unsigned char *)0)
         return error_fail_cat(err, STDLIB_CATEGORY_MEMORY,
