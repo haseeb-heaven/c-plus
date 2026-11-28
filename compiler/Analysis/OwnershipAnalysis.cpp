@@ -281,7 +281,8 @@ static bool hasPointerEffectSignature(const clang::FunctionDecl *fd) {
       const clang::RecordDecl *rd = rt->getDecl();
       if (!rd)
         return false;
-      rd = rd->getDefinitionOrSelf();
+      if (const clang::RecordDecl *def = rd->getDefinition())
+        rd = def;
       for (const clang::FieldDecl *fld : rd->fields())
         if (carriesPointer(fld->getType(), depth + 1))
           return true;
