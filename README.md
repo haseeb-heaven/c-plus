@@ -226,6 +226,22 @@ stdlib_arena_reset(&a, &err);
 if (v.is_live()) ... // false: token retired at reset
 ```
 
+## Comparison: C+ vs C3, Fil-C, Zig
+
+| Aspect | C+ | C3 | Fil-C | Zig |
+|---|---|---|---|---|
+| Runtime safety | guards + live table, no GC | opt-in bounds/checks | invisible capabilities (side tables) + GC | optional safety checks (disablable) |
+| Compile-time | proven diagnostics, STRICT gate | contracts, contracts in types | LLVM-based static checks | comptime, compile-time evaluation |
+| RAII | deterministic `class` + `drop()` | `defer`, scoped | GC-managed | `defer`/`errdefer` (manual) |
+| Speed (this host) | 2.743 ns/iter (heavy, c+ release) | NOT_TESTED | NOT_TESTED | 3.121 ns/iter (heavy) |
+| Safety model | heap-free datastacks + guards | modern C-like, contracts | capability pointers, unchanged `sizeof(T*)` | manual ownership + optional checks |
+| C source preserved | yes (`.cp`, `LEGACY` keeps bytes) | no (new syntax) | yes (compiles C) | no (new syntax) |
+| C ABI preserved | yes (`sizeof`/`alignof` fixed) | C interop only | yes (8-byte pointers) | C interop only |
+| Parameters/generics | `Vec(T)`/`Slice(T)` + C wrappers | generics | C macros | `comptime` generics |
+
+C3/Fil-C binaries are absent here, so speed is `NOT_TESTED` - never fabricated.
+Full data: [benchmarks](proof/benchmarks/README.md).
+
 ## 📚 Examples index
 
 - [CLI + web + SQL apps](apps/README.md) and [games/GUI](proof/games_apps/README.md)
