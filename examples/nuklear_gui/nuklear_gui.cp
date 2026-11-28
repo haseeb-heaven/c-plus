@@ -1,6 +1,7 @@
-/* Modern C+ app driving a real Nuklear GUI through a plain-C ABI wrapper. */
+/* Modern C+ app driving a real Nuklear GUI through the C+ stdlib binding
+ * (stdlib/gfx_nuklear.hp) over the vendored third_party/nuklear backend. */
 #include "cplus/cplus.h"
-#include "nuklear_gui_api.h"
+#include "stdlib/gfx_nuklear.hp"
 #include <stdlib.h>
 #include <string.h>
 

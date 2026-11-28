@@ -11,16 +11,21 @@ a checkbox and an editable text field.
 
 - `nuklear_gui.cp` - modern C+ app: a `class` wraps the GUI state, and all
   widgets are driven from methods. Compiled with `--default` (not `--legacy-c`).
-- `nuklear_backend.c` - plain-C ABI wrapper around SDL3 and Nuklear.
-- `nuklear_gui_api.h` - the small C ABI boundary between the two.
+- `stdlib/gfx_nuklear.hp` - the C+ standard-library Nuklear binding. The app
+  includes this facade, not a local wrapper header.
+- `stdlib/nuklear/nuklear_gui_backend.c` / `nuklear_gui_api.h` - the stdlib
+  plain-C ABI backend around SDL3 and Nuklear (`third_party/nuklear/`).
 
 ## Works with prebuilt C libraries
 
-SDL3 and Nuklear are existing C libraries. The C+ app includes only the
-local wrapper header, so the C+ analyser never parses third-party headers;
-the prebuilt C objects are passed to the backend linker unchanged. This is
-the supported pattern for using any already-compiled static (`.a`) or
-dynamic (`.dylib`/`.so`) C library without changing its ABI.
+SDL3 and Nuklear are existing C libraries. The stdlib facade includes only the
+plain-C ABI header, so the C+ analyser never parses third-party headers; the
+backend objects are passed to the backend linker unchanged. This is the
+supported pattern for using any already-compiled static (`.a`) or dynamic
+(`.dylib`/`.so`) C library without changing its ABI. Including
+`stdlib/gui.hp` directly would pull SDL3's headers into the C+ translation
+unit and trip warnings-as-errors inside third-party code, so this example uses
+the plain-C-ABI facade instead (same pattern as `examples/microui`).
 
 ## Run
 

@@ -1,0 +1,52 @@
+/* C+ standard library: immediate-mode GUI via Nuklear (MIT / public domain),
+ * vendored in third_party/nuklear, with its official SDL3 renderer backend.
+ *
+ * This is the C+ language binding for that library. Only the plain-C ABI
+ * header is included here; SDL3 and Nuklear headers stay in the backend
+ * translation unit, so the C+ analyser never parses third-party UI headers.
+ *
+ * Build third_party/nuklear/nuklear_impl.c once and stdlib/nuklear/
+ * nuklear_gui_backend.c once, then link both with SDL3. See examples/
+ * nuklear_gui for a complete working demo with a real framebuffer capture.
+ */
+#ifndef CPLUS_STD_GFX_NUKLEAR_HP
+#define CPLUS_STD_GFX_NUKLEAR_HP
+
+#include "cplus/cplus.h"
+#include "nuklear_gui_api.h"
+
+/* C+ RAII facade over the plain-C backend in stdlib/nuklear/. */
+class nuklear_gui {
+    void *backend;
+    int frames;
+
+    nuklear_gui(void) {
+        this->backend = (void *)0;
+        this->frames = 0;
+    }
+
+    int open(void) {
+        this->backend = ng_init();
+        return this->backend != (void *)0;
+    }
+
+    int poll(int *quit) { return ng_poll(this->backend, quit); }
+
+    void frame(int proof, int *clicks, float *value, int *check, char *name,
+               int cap) {
+        ng_ui(this->backend, this->frames, clicks, value, check, name, cap);
+        ng_render(this->backend);
+        this->frames++;
+    }
+
+    int frame_count(void) { return this->frames; }
+    int event_count(void) { return ng_events_seen(this->backend); }
+    void capture(const char *path) { ng_shot(this->backend, path); }
+
+    void drop(void) {
+        ng_drop(this->backend);
+        this->backend = (void *)0;
+    }
+};
+
+#endif /* CPLUS_STD_GFX_NUKLEAR_HP */
