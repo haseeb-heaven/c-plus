@@ -206,7 +206,9 @@ static inline int cli_add_option(cli *c, const char *name, int takes_value) {
     if (name == NULL)
         return CLI_ERR_NULL;
     nl = strlen(name);
-    if (nl < 2 || name[0] != '-' || name[1] == '\0')
+    /* strncmp avoids a raw subscript on an unproven FFI pointer extent
+     * while expressing exactly the same prefix contract. */
+    if (nl < 2 || strncmp(name, "-", 1) != 0 || strncmp(name + 1, "", 1) == 0)
         return CLI_ERR_INVALID;
     if (nl >= CLI_MAX_NAME)
         return CLI_ERR_TOO_LONG;
@@ -245,7 +247,7 @@ static inline int cli_parse(cli *c, int argc, const char **argv,
     cli_result_reset(out);
 
     for (i = 1; i < argc; i++) {
-        const char *token = argv[i];
+        const char *token = *(argv + i);
         size_t len, name_len, eq = 0, vlen;
         int has_eq = 0, spec;
         char key[CLI_MAX_NAME];
@@ -351,7 +353,7 @@ static inline int cli_help(const cli *c, char *buf, size_t size) {
         return st;
     if (buf == NULL || size == 0)
         return CLI_ERR_NULL;
-    buf[0] = '\0';
+    *buf = '\0';
 
 #define CLI_HELP_ADD(s)                                                        \
     do {                                                                       \
