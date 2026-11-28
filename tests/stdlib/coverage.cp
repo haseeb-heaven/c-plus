@@ -223,10 +223,10 @@ static int contains_word(const char *text, const char *word) {
     const char *p = text;
     if (n == 0) return 0;
     while ((p = strstr(p, word)) != NULL) {
-        /* Use a non-negative index from `text`; p[-1] is correct C but the
-         * current lowerer reuses stale array bounds metadata for it. */
-        size_t off = (size_t)(p - text);
-        int before = (off > 0) ? is_wordc(text[off - 1]) : 0;
+        /* *(p - 1) rather than p[-1]: the current lowerer reuses stale array
+         * bounds metadata for the subscript form and emits a bounds check
+         * with index SIZE_MAX.  Same C semantics, no diagnostic suppressed. */
+        int before = (p > text) ? is_wordc(*(p - 1)) : 0;
         int after = is_wordc(p[n]);
         if (!before && !after) return 1;
         p++;
@@ -241,8 +241,7 @@ static int contains_call(const char *text, const char *name) {
     if (n == 0) return 0;
     while ((p = strstr(p, name)) != NULL) {
         const char *q;
-        { size_t off = (size_t)(p - text);
-          if (off > 0 && is_wordc(text[off - 1])) { p++; continue; } }
+        if (p > text && is_wordc(*(p - 1))) { p++; continue; }
         q = p + n;
         while (is_ws(*q)) q++;
         if (*q == '(') return 1;
