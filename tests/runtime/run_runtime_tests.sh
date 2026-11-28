@@ -110,5 +110,27 @@ else
   tail -30 /tmp/rt8.log /tmp/rt8.out /tmp/rt8.err 2>/dev/null || true
 fi
 
+# 9) #234: on non-Apple platforms a retired address must be rejected without
+# probing malloc_usable_size() on the freed pointer.  Compile the real runtime
+# through its Linux preprocessor path with a counting stub for that query.
+FAKE_INC="$OUT/fake_linux_include"
+mkdir -p "$FAKE_INC"
+cat >"$FAKE_INC/malloc.h" <<'EOF'
+#include <stddef.h>
+size_t malloc_usable_size(void *p);
+EOF
+if "$CC" -std=gnu17 -O0 -g -Wall -Wextra -U__APPLE__ -D__linux__ -D__unix__ \
+     -I"$FAKE_INC" -I"$ROOT/runtime/include" \
+     "$ROOT/runtime/cplus_runtime.c" \
+     "$ROOT/tests/runtime/test_retired_probe_linux.c" -lm -pthread \
+     -o "$OUT/test_retired_probe_linux" >/tmp/rt9.log 2>&1 \
+    && "$OUT/test_retired_probe_linux" >/tmp/rt9.out 2>/tmp/rt9.err \
+    && grep -q "retired_probe_linux: ok" /tmp/rt9.out; then
+  pass=$((pass+1)); echo "ok retired_probe_linux_conservative"
+else
+  fail=$((fail+1)); echo "FAIL retired_probe_linux_conservative"
+  tail -30 /tmp/rt9.log /tmp/rt9.out /tmp/rt9.err 2>/dev/null || true
+fi
+
 echo "runtime tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

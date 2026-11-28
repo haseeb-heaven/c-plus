@@ -709,17 +709,23 @@ static uint64_t cplus_retired_generation(const void *p); /* defined below */
 
 /* Called with the allocator lock held.  A retired address is a stale alias
  * unless the allocator proves a *new* block currently lives there.  macOS
- * malloc_size()/glibc malloc_usable_size() return 0 for a freed block and a
- * positive size for a live one, which distinguishes S1/S9 (stale alias)
- * from a legitimate fresh malloc that reuses an address.  A block still held
- * in our quarantine has not been returned to malloc yet and is always stale.
- * Without a platform query we reject conservatively. */
+ * malloc_size() reports 0 for a freed block, so it can distinguish S1/S9
+ * (stale alias) from a legitimate fresh malloc that reuses an address.
+ *
+ * #234: glibc's malloc_usable_size() must NOT be used here.  It dereferences
+ * the chunk header of a pointer that may already have been freed (UAF / SIGSEGV)
+ * and reports a stale nonzero size for freed chunks, so it cannot prove liveness
+ * anyway.  The usable-size probe is therefore Apple-only; every other platform
+ * rejects conservatively.  A block still held in our quarantine has not been
+ * returned to malloc yet and is always stale.  cplus_malloc_capacity() itself
+ * remains available for the *live* clamp path, where the pointer is known to be
+ * allocated. */
 static int cplus_retired_address_stale(const void *p) {
   if (cplus_retired_generation(p) == 0u)
     return 0;
   if (cplus_quarantine_contains(p))
     return 1;
-#if CPLUS_HAVE_MALLOC_CAPACITY
+#if defined(__APPLE__) && CPLUS_HAVE_MALLOC_CAPACITY
   return cplus_malloc_capacity(p) == 0u;
 #else
   return 1;
