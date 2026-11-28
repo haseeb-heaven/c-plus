@@ -23,6 +23,11 @@
 #include <wchar.h>
 #include <inttypes.h>
 
+/* C leaves endptr unspecified for an invalid conversion base.  The C+ hardened
+ * wrappers define it as nptr (with EINVAL); glibc leaves it NULL.  Do not
+ * compare an unspecified host value against the hardened contract. */
+#define INVALID_CONV_BASE(b_) ((b_) < 0 || (b_) == 1 || (b_) > 36)
+
 /* ---- functions under test (namespaced wrappers in libcplus_hardened.a) --- */
 extern void *cplus_malloc(size_t);
 extern void *cplus_calloc(size_t, size_t);
@@ -205,7 +210,8 @@ static void gen_string(int i, char *buf, size_t cap) {
     if (cv_ != hv_)                                                            \
         FINDING("%s('%s',base=%d): value %" PRIFMT " != host %" PRIFMT,         \
                 NAME, s, b, cv_, hv_);                                         \
-    if ((ce_ ? (ce_ - s) : (ptrdiff_t)-1) != (he_ ? (he_ - s) : (ptrdiff_t)-1)) \
+    if (!INVALID_CONV_BASE(b) &&                                              \
+        (ce_ ? (ce_ - s) : (ptrdiff_t)-1) != (he_ ? (he_ - s) : (ptrdiff_t)-1)) \
         FINDING("%s('%s',base=%d): endptr off %td != host %td",                \
                 NAME, s, b, ce_ ? (ce_ - s) : (ptrdiff_t)-1,                    \
                 he_ ? (he_ - s) : (ptrdiff_t)-1);                              \
@@ -320,7 +326,8 @@ static void test_wcstoimax(void) {
         if (cv != hv)
             FINDING("wcstoimax('%ls',base=%d): value %lld != host %lld",
                     wb, base, (long long)cv, (long long)hv);
-        if ((ce ? (ce - wb) : (ptrdiff_t)-1) != (he ? (he - wb) : (ptrdiff_t)-1))
+        if (!INVALID_CONV_BASE(base) &&
+            (ce ? (ce - wb) : (ptrdiff_t)-1) != (he ? (he - wb) : (ptrdiff_t)-1))
             FINDING("wcstoimax('%ls',base=%d): endptr off %td != host %td",
                     wb, base, ce ? (ce - wb) : (ptrdiff_t)-1,
                     he ? (he - wb) : (ptrdiff_t)-1);
@@ -341,7 +348,8 @@ static void test_wcstoimax(void) {
         if (uv != vv)
             FINDING("wcstoumax('%ls',base=%d): value %llu != host %llu",
                     wb, base, (unsigned long long)uv, (unsigned long long)vv);
-        if ((ce ? (ce - wb) : (ptrdiff_t)-1) != (he ? (he - wb) : (ptrdiff_t)-1))
+        if (!INVALID_CONV_BASE(base) &&
+            (ce ? (ce - wb) : (ptrdiff_t)-1) != (he ? (he - wb) : (ptrdiff_t)-1))
             FINDING("wcstoumax('%ls',base=%d): endptr off %td != host %td",
                     wb, base, ce ? (ce - wb) : (ptrdiff_t)-1,
                     he ? (he - wb) : (ptrdiff_t)-1);
