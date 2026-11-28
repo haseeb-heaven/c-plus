@@ -1,0 +1,207 @@
+{
+  "spec_version": "0.1",
+  "mode": "STRICT (--strict --sanitize=none)",
+  "description": "Source of truth for the strict-safe subset runner. Every status in the generated coverage matrix is derived from an actual execution of these fixtures; nothing here asserts coverage.",
+  "rules": [
+    {
+      "id": "ARITH-OVERFLOW",
+      "category": "arithmetic",
+      "enforcement": "static_proof",
+      "proof_rule": "A signed add/sub/mul is admitted only when every operand's static range makes overflow impossible; otherwise STRICT rejects with CPLUS-ARITH.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_arith_overflow.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_arith_overflow.c", "mode": "check", "expect": "reject", "require": ["signed integer overflow in addition"]}
+    },
+    {
+      "id": "ARITH-DIVZERO",
+      "category": "arithmetic",
+      "enforcement": "static_proof",
+      "proof_rule": "A division/modulo is admitted only when the divisor is provably nonzero; a provably zero divisor is rejected by STRICT with CPLUS-ARITH.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_arith_divzero.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_arith_divzero.c", "mode": "check", "expect": "reject", "require": ["division by zero"]}
+    },
+    {
+      "id": "BOUNDS-FIXED",
+      "category": "fixed bounds",
+      "enforcement": "static_proof",
+      "proof_rule": "A compile-time constant index i into a fixed array of length N is admitted only if 0 <= i < N; otherwise STRICT rejects with CPLUS-BOUNDS/CPLUS-SAFE-BOUNDS.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_fixed.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c", "mode": "check", "expect": "reject", "require": ["outside the bounds"]}
+    },
+    {
+      "id": "BOUNDS-HEAP",
+      "category": "heap bounds",
+      "enforcement": "static_proof",
+      "proof_rule": "For a tracked heap allocation of S bytes passed to a callee, every dereference p[i] must be provable within S/sizeof(*p); interprocedural extent propagation rejects the violation.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_heap.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_heap.c", "mode": "check", "expect": "reject", "require": ["exceeds heap allocation"]}
+    },
+    {
+      "id": "BOUNDS-VLA",
+      "category": "VLA bounds",
+      "enforcement": "trusted_boundary",
+      "proof_rule": "Constant-extent arrays and loop-tracked VLAs are admitted; a sizeof whose VLA operand has side effects is not a safe constant expression and is rejected.",
+      "runtime_check": null,
+      "trusted_boundary": "VLA extents are not part of the plain-C ABI contract; use a fixed extent or cplus-managed allocation with an explicit length field.",
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_vla.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_vla.c", "mode": "check", "expect": "reject", "require": ["sizeof on a VLA evaluates the expression at run time"]}
+    },
+    {
+      "id": "BOUNDS-DYNAMIC-RUNTIME",
+      "category": "heap bounds",
+      "enforcement": "runtime_check",
+      "proof_rule": "When no static extent proof exists, the operation is not admitted by proof; the emitted C+ guard checks the index against the tracked allocation length at run time and aborts on violation.",
+      "runtime_check": "C+ runtime emits a bounds guard; violation aborts with \"C+ error: index N is outside the bounds of 'p' (length L)\".",
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_dynamic.c", "mode": "build_run", "expect": "accept", "forbid": ["C+ error:", "runtime error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_dynamic.c", "mode": "build_run", "expect": "reject", "require": ["outside the bounds of 'p'"]}
+    },
+    {
+      "id": "NULL-DEREF",
+      "category": "null/uninit",
+      "enforcement": "static_proof",
+      "proof_rule": "A dereference of a pointer known to be null on any reaching path is rejected; admitted programs must guard the pointer before dereference.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_null_deref.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_null_deref.c", "mode": "check", "expect": "reject", "require": ["null pointer dereference"]}
+    },
+    {
+      "id": "UNINIT-JOIN",
+      "category": "null/uninit",
+      "enforcement": "static_proof",
+      "proof_rule": "Definite-assignment CFG analysis requires every variable to be assigned on every path reaching a read; a join with an unassigned path is rejected.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_uninit_join.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_uninit_join.c", "mode": "check", "expect": "reject", "require": ["uninitialized when used here"]}
+    },
+    {
+      "id": "ALIAS-TYPEPUN",
+      "category": "alias/provenance",
+      "enforcement": "static_proof",
+      "proof_rule": "A dereference through an lvalue whose type is incompatible with the stored object's effective type is rejected (strict aliasing); byte copies via memcpy are admitted.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_alias_typepun.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_alias_typepun.c", "mode": "check", "expect": "reject", "require": ["type-punned dereference"]}
+    },
+    {
+      "id": "PROVENANCE-ESCAPE",
+      "category": "alias/provenance",
+      "enforcement": "static_proof",
+      "proof_rule": "A managed or borrowed pointer whose owner's scope ends at the return edge cannot escape that scope; returning the pointee by value is admitted.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_provenance_escape.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_provenance_escape.c", "mode": "check", "expect": "reject", "require": ["managed pointer 'b' cannot escape"]}
+    },
+    {
+      "id": "LIFETIME-UAF",
+      "category": "lifetime/free",
+      "enforcement": "static_proof",
+      "proof_rule": "Once a tracked owner is released, any subsequent liveness check or dereference of the same pointer is a use-after-free and is rejected.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_lifetime_uaf.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_lifetime_uaf.c", "mode": "check", "expect": "reject", "require": ["use-after-free"]}
+    },
+    {
+      "id": "LIFETIME-DOUBLE-FREE",
+      "category": "lifetime/free",
+      "enforcement": "static_proof",
+      "proof_rule": "Each tracked owner must be released exactly once on each path; a second release of the same owner is rejected with CPLUS-OWNER.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_lifetime_double_free.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_lifetime_double_free.c", "mode": "check", "expect": "reject", "require": ["double free"]}
+    },
+    {
+      "id": "LIFETIME-REALLOC",
+      "category": "lifetime/realloc",
+      "enforcement": "trusted_boundary",
+      "proof_rule": "Raw realloc is rejected because failure loses the original block; the accepted form is the C+ managed reallocation helper with an explicit success check.",
+      "runtime_check": null,
+      "trusted_boundary": "cplus_realloc / cplus_realloc_registered are the trusted boundary for resize; the plain C realloc contract is not admitted in the strict subset.",
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_lifetime_realloc.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_lifetime_realloc.c", "mode": "check", "expect": "reject", "require": ["raw realloc can lose the original block"]}
+    },
+    {
+      "id": "FFI-FORMAT",
+      "category": "strings/FFI",
+      "enforcement": "static_proof",
+      "proof_rule": "The format argument of printf/fprintf/snprintf must be a string literal; a non-literal format string is rejected with CPLUS-FFI.",
+      "runtime_check": null,
+      "trusted_boundary": "Untrusted text crosses the FFI boundary only as a %s argument to a literal format string.",
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_ffi_format.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_ffi_format.c", "mode": "check", "expect": "reject", "require": ["format string is not a string literal"]}
+    },
+    {
+      "id": "RAII-SIGNAL-CALLBACK",
+      "category": "RAII/callbacks",
+      "enforcement": "static_proof",
+      "proof_rule": "A signal/callback handler body may only call async-signal-safe functions; a non-async-signal-safe call in such a handler is rejected with CPLUS-FFI.",
+      "runtime_check": null,
+      "trusted_boundary": "Handler state is confined to volatile sig_atomic_t; all other work is deferred out of the callback.",
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_raii_signal_callback.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_raii_signal_callback.c", "mode": "check", "expect": "reject", "require": ["not async-signal-safe"]}
+    },
+    {
+      "id": "RAII-DEFER-JUMP",
+      "category": "RAII/callbacks",
+      "enforcement": "static_proof",
+      "proof_rule": "Control flow (return/goto/break) must not leave a defer/resource cleanup block; such a jump is rejected so the cleanup always runs.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_raii_defer_jump.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_raii_defer_jump.c", "mode": "check", "expect": "reject", "require": ["cannot jump out of a defer cleanup"]}
+    },
+    {
+      "id": "JOIN-PHI-BOUNDS",
+      "category": "control-flow joins",
+      "enforcement": "static_proof",
+      "proof_rule": "At a control-flow join (phi/conditional expression), the worst-case index over all arms must be within the callee's proven extent; a single out-of-range arm is rejected.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_join_phi_bounds.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_join_phi_bounds.c", "mode": "check", "expect": "reject", "require": ["chosen by conditional expression is out of bounds"]}
+    },
+    {
+      "id": "THREAD-RACE",
+      "category": "threads",
+      "enforcement": "static_proof",
+      "proof_rule": "A thread function may not write a shared global without synchronization; unsynchronized shared writes are rejected with CPLUS-FFI.",
+      "runtime_check": null,
+      "trusted_boundary": "Shared mutable state must be confined to one thread or passed through an explicit synchronization primitive.",
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_thread_race.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_thread_race.c", "mode": "check", "expect": "reject", "require": ["unsynchronized write to shared global"]}
+    },
+    {
+      "id": "FUNC-BOUNDARY-NULL",
+      "category": "function boundaries",
+      "enforcement": "static_proof",
+      "proof_rule": "At a call boundary, an argument proven null cannot be passed to a callee that dereferences it; the call is rejected with CPLUS-LIFETIME.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_func_boundary_null.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_func_boundary_null.c", "mode": "check", "expect": "reject", "require": ["null pointer argument 0 passed to 'deref'"]}
+    },
+    {
+      "id": "FIELD-RESOURCE-COPY",
+      "category": "fields/containers",
+      "enforcement": "static_proof",
+      "proof_rule": "A resource-typed field/container object is linear: it may be passed by address but not copied by value into a second owner; a value copy is rejected.",
+      "runtime_check": null,
+      "trusted_boundary": null,
+      "positive": {"fixture": "tests/compiler/strict_rules/fixtures/pos_field_resource_copy.c", "mode": "check", "expect": "accept", "forbid": ["error:"]},
+      "negative": {"fixture": "tests/compiler/strict_rules/fixtures/neg_field_resource_copy.c", "mode": "check", "expect": "reject", "require": ["cannot be copied"]}
+    }
+  ]
+}

@@ -240,7 +240,9 @@ static inline file file_borrow(FILE *handle) {
 
 /* Secure anonymous temporary file (unlinked on close/drop by tmpfile). */
 static inline file file_temp(error *err) {
-    file temp = file(NULL, NULL);
+    file temp;
+    temp.stream = NULL;
+    temp.owns = 0;
     error_reset(err);
     temp.stream = tmpfile();
     if (temp.stream == NULL) {

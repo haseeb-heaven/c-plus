@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-23T23:10:21.390351+00:00",
+  "generated": "2026-11-25T18:43:48.861966+00:00",
   "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "note": "fil-c/trapc recorded only when binaries are supplied via FILC_BIN/TRAPC_BIN",
   "scenarios": [
@@ -37,7 +37,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.bin"
       ],
       "compile_rc": 1,
-      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.c:1:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.c:1:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_strict.c:1:36: error: [CPLUS-FFI] out-of-bounds access: index 7 reaches past array 'a' of length 4\n  int main(void){int a[4]={0};return a[7];}\n                      ",
       "outcome": "compile_reject"
     },
     {
@@ -54,7 +54,7 @@
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.bin"
       ],
       "compile_rc": 1,
-      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.c:1:36: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.c:1:37: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void){int a[4]={0};return a[7];}\n                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_cplus_default.c:1:36: error: [CPLUS-FFI] out-of-bounds access: index 7 reaches past array 'a' of length 4\n  int main(void){int a[4]={0};return a[7];}\n                    ",
       "outcome": "compile_reject"
     },
     {
@@ -73,7 +73,7 @@
       "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_clang.c:1:36: warning: array index 7 is past the end of the array (that has type 'int[4]') [-Warray-bounds]\n    1 | int main(void){int a[4]={0};return a[7];}\n      |                                    ^ ~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/const_oob_clang.c:1:16: note: array 'a' declared here\n    1 | int main(void){int a[4]={0};return a[7];}\n      |                ^\n1 warning generated.\n",
       "run_rc": 1,
       "runtime_output": "",
-      "outcome": "clean_run"
+      "outcome": "runtime_trap"
     },
     {
       "scenario": "const_oob",
@@ -219,7 +219,7 @@
       "compile_rc": 0,
       "compiler_output": "",
       "run_rc": 101,
-      "runtime_output": "\nthread 'main' (28047704) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_rustc_debug.rs:1:21:\nattempt to add with overflow\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+      "runtime_output": "\nthread 'main' (3892989) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/overflow_rustc_debug.rs:1:21:\nattempt to add with overflow\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
       "outcome": "runtime_trap"
     },
     {
@@ -271,11 +271,9 @@
         "-o",
         "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_default.bin"
       ],
-      "compile_rc": 0,
-      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_default.c:2:16: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'd'\n  int main(void){d(0);return 0;}\n                 ^\n",
-      "run_rc": 102,
-      "runtime_output": "C+ runtime error: null pointer dereference at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_default.c:1: null pointer dereference (p)\n",
-      "outcome": "runtime_trap"
+      "compile_rc": 1,
+      "compiler_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_cplus_default.c:2:16: warning: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'd'\n  int main(void){d(0);return 0;}\n                 ^\nerror: 1 C+ warning(s) treated as errors (default warning policy)\n",
+      "outcome": "compile_reject"
     },
     {
       "scenario": "null_deref",
@@ -330,7 +328,7 @@
       "compile_rc": 0,
       "compiler_output": "",
       "run_rc": -6,
-      "runtime_output": "\nthread 'main' (28048759) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_rustc_debug.rs:1:58:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
+      "runtime_output": "\nthread 'main' (3895132) panicked at /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/cross_compiler/results/null_deref_rustc_debug.rs:1:58:\nnull pointer dereference occurred\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nthread caused non-unwinding panic. aborting.\n",
       "outcome": "runtime_trap"
     },
     {
@@ -472,23 +470,23 @@
       "toolchain": "cplus_strict",
       "status": "OK",
       "runs": 3,
-      "median_s": 1.34,
-      "median_rss_bytes": 1671168
+      "median_s": 14.35,
+      "median_rss_bytes": 1687552
     },
     {
       "bench": "compute",
       "toolchain": "cplus_default",
       "status": "OK",
       "runs": 3,
-      "median_s": 1.23,
-      "median_rss_bytes": 1671168
+      "median_s": 12.7,
+      "median_rss_bytes": 1687552
     },
     {
       "bench": "compute",
       "toolchain": "clang",
       "status": "OK",
       "runs": 3,
-      "median_s": 0.08,
+      "median_s": 0.43,
       "median_rss_bytes": 1654784
     },
     {
@@ -496,7 +494,7 @@
       "toolchain": "gcc",
       "status": "OK",
       "runs": 3,
-      "median_s": 0.07,
+      "median_s": 0.91,
       "median_rss_bytes": 1507328
     },
     {
@@ -504,15 +502,15 @@
       "toolchain": "rustc_debug",
       "status": "OK",
       "runs": 3,
-      "median_s": 1.34,
-      "median_rss_bytes": 1802240
+      "median_s": 16.67,
+      "median_rss_bytes": 1720320
     },
     {
       "bench": "compute",
       "toolchain": "rustc_release",
       "status": "OK",
       "runs": 3,
-      "median_s": 0.08,
+      "median_s": 0.58,
       "median_rss_bytes": 1802240
     }
   ],

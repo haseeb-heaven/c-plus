@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-23T21:10:18.787008+00:00",
+  "generated": "2026-11-25T18:56:01.156131+00:00",
   "cplus": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "clang": "/usr/bin/clang",
   "results": [
@@ -122,7 +122,7 @@
       "kind": "unsafe",
       "name": "oob_write",
       "check_rc": 1,
-      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/oob_write.c:2:34: error: [CPLUS-SAFE-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void) { int a[4] = {0}; a[7] = 3; return a[7]; }\n                                   ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/u",
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/oob_write.c:2:35: error: [CPLUS-BOUNDS] constant array index 7 is outside the bounds of 'a'\n  int main(void) { int a[4] = {0}; a[7] = 3; return a[7]; }\n                                    ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsaf",
       "expected_diag": "[CPLUS-SAFE-BOUNDS]",
       "expected_trap": null,
       "status": "PASS"
@@ -167,7 +167,7 @@
       "kind": "unsafe",
       "name": "double_free",
       "check_rc": 1,
-      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/double_free.c:6:3: error: [CPLUS-OWNER] double free of 'p'\n    cplus_release(p);\n    ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/double_free.c: warning: [CPLUS-MULTITU] STRIC",
+      "diagnostic": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/double_free.c:6:3: error: [CPLUS-OWNER] double free of 'p'\n    cplus_release(p);\n    ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/c_apps/unsafe/double_free.c: note: [CPLUS-MULTITU] STRICT a",
       "expected_diag": "[CPLUS-OWNER]",
       "expected_trap": null,
       "status": "PASS"

@@ -4,10 +4,18 @@ Sources: docs/LIMITATIONS.md, SAFE_SUBSET.md, CRITICAL_ISSUES.md,
 tests/known_gaps/README.md, and docs/RUST_COMPARISON.md.
 
 ## Safety-model gaps
-- No full Rust-style borrow checker/lifetime annotations; borrows tracked only
-  for simple local `T *p = &owner`.
-- No general data-race verification; only same-TU global-write heuristics.
-- Raw malloc/free UAF not detected in default builds (ASan opt-in needed).
+- No full Rust-style borrow checker/lifetime annotations. Local scalar
+  borrows, struct/union field provenance, conditional aliases, integer
+  round-trips, identity helpers and `free(*pp)` / `free(pp[0])` pointee
+  releases are tracked; arrays-of-pointers with runtime indices and general
+  container element lifetimes remain unsupported.
+- No general data-race verification. Same-TU global writes, transitive helper
+  writes, shared heap arguments, mutex lock/unlock discipline and opposite
+  lock nesting orders are diagnosed in STRICT; race-freedom is not claimed.
+- Raw malloc/free UAF is detected for the documented single-TU shapes in
+  STRICT (including indirect helpers and double-pointer indirection). General
+  temporal safety across address reuse, threads and multiple TUs is not
+  claimed; ASan remains a separate, host-dependent runtime check.
 - No leak detection for raw/borrowed pointers.
 - No cross-TU ownership ABI checking (single-TU compiler).
 - Fields/containers with untracked element lifetimes unsupported.
@@ -59,6 +67,24 @@ tests/known_gaps/README.md, and docs/RUST_COMPARISON.md.
 - 11 top-level safety fixtures + 100 subdirectory sources are not asserted by
   an active runner (see test_inventory.md).
 - 74 metrics scripts are not wired into an aggregator.
+
+## Verified status (2026-11-26, agent/core-safety @defae65)
+
+- Agent 1 runner: **198 PASS, 0 FAIL, 3 SKIP** (201 cases).
+- Repo tests: **149 passed, 0 failed**; `ctest` **2/2**; semantic-adversarial
+  **58/58**; pointer-provenance **14/14**; AST identity **9/9**; data-race
+  **9/9**; RAII cleanup **21/21**; RAII shadowing **11/11**; Proof 1 UAF
+  **4/4**; ABI gate **5/5**; abi_ownership **42/42**.
+- The former 15 `compile_fail` diagnostic failures are fixed: expected
+  constant-bounds/VLA messages are restored and asserted in both `check`
+  and `build`; every `.err` fixture matches.
+- The former 17/19 PR33 merge conflicts with `agent/modern-stdlib` were
+  resolved in `99d31c7`; the combined tree passes ABI fingerprint match,
+  libc 109/0, CRT all checks, coverage 92.51%/82.10%. The gate script now
+  reports NOT_TESTED because the stdlib branch is contained in core-safety.
+- CI: Linux x86-64 and macOS arm64 compiler jobs pass at PR head;
+  SonarCloud still FAILS and PR #16 has 0 reviews. No automatic merge.
+
 
 ## CI gaps
 - Linux x86-64 compiler CI passes. macOS arm64 job cancelled with zero steps

@@ -20,20 +20,37 @@
 #include <clang/Lex/Lexer.h>
 
 #include <clang/Frontend/ASTUnit.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
 
+#include <llvm/Support/raw_ostream.h>
+
+#include <algorithm>
 #include <cstdlib>
 #include <climits>
 #include <cstdint>
 #include <cmath>
 #include <cmath>
+#include <iterator>
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 using namespace clang;
 
 namespace cplus {
+
+// Issue #179 — Cake qualifier facts recorded by CPlusRewriter.cpp and the
+// ownership-effect summaries in OwnershipAnalysis.cpp. Primitive parameter
+// types keep this boundary header-free; see the definitions in those files.
+void cplusCakeClearQualifiers();
+void cplusCakeRecordQualifier(const std::string &name, unsigned line, int kind);
+int cplusCakeQualifierOf(const std::string &name, unsigned line);
+std::vector<unsigned> cplusCakeMoveSites(const std::string &name);
+bool cplusCakeEffectConsumesArg(const std::string &fn, int arg);
+
 namespace {
 
 /// Clang FORTIFY lowers some libc calls to *_chk builtins with an extra
@@ -62,6 +79,34 @@ inline std::string normalizeFortifyName(std::string n) {
 /// getZExtValue()/getSExtValue() assert for values wider than 64 bits
 /// (e.g. `__int128`). All narrowing call sites must check this first.
 inline bool fits64(const llvm::APSInt &v) { return v.getBitWidth() <= 64; }
+
+/// Add `delta * scale` to a signed byte offset without signed overflow.
+inline bool addScaledOffset(long long &offset, long long delta,
+                            long long scale) {
+  if (scale <= 0)
+    return false;
+  if (delta > 0 && delta > LLONG_MAX / scale)
+    return false;
+  if (delta < 0 && delta < LLONG_MIN / scale)
+    return false;
+  const long long scaled = delta * scale;
+  if (scaled > 0 && offset > LLONG_MAX - scaled)
+    return false;
+  if (scaled < 0 && offset < LLONG_MIN - scaled)
+    return false;
+  offset += scaled;
+  return true;
+}
+
+/// Compute `base + delta * scale` with an explicit overflow check. Returns
+/// false on overflow so callers can reject the offset as out of bounds.
+inline bool mulAddFits(unsigned long long base, unsigned long long delta,
+                       unsigned long long scale, unsigned long long &out) {
+  if (scale == 0 || delta > (ULLONG_MAX - base) / scale)
+    return false;
+  out = base + delta * scale;
+  return true;
+}
 
 /// True when a scanf-style format contains an unbounded `%s` conversion
 /// (no field width), which can overflow any fixed-size destination array.
@@ -401,6 +446,20 @@ public:
   }
   void setHandledReallocs(const std::set<unsigned> &s) { handledReallocs_ = s; }
   const std::set<unsigned> &handledReallocs() const { return handledReallocs_; }
+  void setHandledReallocVars(const std::set<std::string> &s) {
+    handledReallocVars_ = s;
+  }
+  const std::set<std::string> &handledReallocVars() const {
+    return handledReallocVars_;
+  }
+  void setReallocAssignCalls(
+      const std::map<const VarDecl *, const CallExpr *> &m) {
+    reallocAssignCalls_ = m;
+  }
+  const std::map<const VarDecl *, const CallExpr *> &reallocAssignCalls()
+      const {
+    return reallocAssignCalls_;
+  }
   void setConstLocals(const std::map<std::string, llvm::APSInt> &m) { constLocals_ = m; }
   const std::map<std::string, llvm::APSInt> &constLocals() const { return constLocals_; }
   void setConstFloatLocals(const std::map<std::string, double> &m) {
@@ -637,9 +696,38 @@ public:
     if (!e)
       return std::string();
     e = e->IgnoreParenImpCasts();
-    if (const auto *cast = dyn_cast<CastExpr>(e))
+    // Macro expansions reach the AST as statement expressions (and sometimes
+    // as identity helpers). Peel those wrappers so the provenance integer
+    // inside the macro is still visible; do not strip explicit casts here,
+    // they are the laundering shape we are looking for.
+    if (const auto *se = dyn_cast<StmtExpr>(e)) {
+      const CompoundStmt *cs = se->getSubStmt();
+      if (cs && cs->size() != 0)
+        if (const auto *last = dyn_cast<Expr>(cs->body_back()))
+          return pointerSourceOf(last);
+    }
+    if (const auto *cast = dyn_cast<CastExpr>(e)) {
       if (cast->getType()->isIntegerType())
         return castedVarName(cast->getSubExpr());
+      // A pointer cast is transparent only when its operand jumped through an
+      // integer: `(int *)(uintptr_t)p`. A plain `(int *)p` alias is handled by
+      // the ordinary name/alias paths and must not acquire a new source here.
+      if (cast->getType()->isPointerType()) {
+        const Expr *sub = cast->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *ice = dyn_cast<CastExpr>(sub))
+          if (ice->getType()->isIntegerType())
+            return pointerSourceOf(sub);
+      }
+    }
+    if (const auto *call = dyn_cast<CallExpr>(e))
+      for (const auto &n : calleeNames(call, call->getDirectCallee())) {
+        auto rp = returnedParam_.find(n);
+        if (rp != returnedParam_.end() && rp->second < call->getNumArgs()) {
+          std::string src = pointerSourceOf(call->getArg(rp->second));
+          if (!src.empty())
+            return src;
+        }
+      }
     if (const auto *bo = dyn_cast<BinaryOperator>(e))
       if (bo->isBitwiseOp() || bo->isAdditiveOp()) {
         // Tagged (`u | 2`) and re-based (`u + 8`) integer views of p keep p's
@@ -654,6 +742,45 @@ public:
           return it->second;
       }
     return std::string();
+  }
+
+  /// True when `e` is a pointer produced by a pointer->integer->pointer
+  /// round-trip, e.g. the `(int *)(uintptr_t)a` inside the LAUNDER macro.
+  /// Plain pointer casts (`(int *)p`) and plain pointer arithmetic do not
+  /// qualify, so existing alias/offset rules keep handling those shapes.
+  static bool isCastLaunderedPointer(const Expr *e, unsigned depth = 0) {
+    if (!e || depth > 8)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    while (const auto *ce = dyn_cast<ExplicitCastExpr>(x)) {
+      if (ce->getType()->isPointerType()) {
+        x = ce->getSubExpr()->IgnoreParenImpCasts();
+        continue;
+      }
+      if (ce->getType()->isIntegerType())
+        return true;
+      break;
+    }
+    return false;
+  }
+
+  /// Byte extent of the object named by a provenance source, whether it came
+  /// from a fixed stack array or from a tracked allocation.
+  long long provenanceByteExtent(const std::string &src) const {
+    if (src.empty())
+      return -1;
+    auto sit = stackArrayExtents_.find(src);
+    if (sit != stackArrayExtents_.end() && sit->second > 0)
+      return sit->second;
+    auto hit = heapAllocs_.find(src);
+    if (hit != heapAllocs_.end() && hit->second.bytes > 0)
+      return hit->second.bytes;
+    auto vit = namedVars_.find(src);
+    if (vit != namedVars_.end())
+      if (const HeapAllocState *st = heapStateOfVar(vit->second))
+        if (st->bytes > 0)
+          return st->bytes;
+    return -1;
   }
 
   /// True when `e` is an integer expression that carries pointer provenance:
@@ -2681,7 +2808,7 @@ public:
           sl->getDirectCallee()->getNameAsString() == "strlen" &&
           sl->getNumArgs() == 1) {
         if (report_)
-          strlenSized_[vd] = varNameOf(sl->getArg(0));
+          strlenSized_[vd] = stringSourceKey(sl->getArg(0));
         return;
       }
     }
@@ -2895,6 +3022,12 @@ public:
   bool evalIndexValue(const Expr *idx, long long &out) const {
     if (!idx)
       return false;
+    // A postfix/prefix increment used as a subscript (`a[i++]`) yields the
+    // counter's current value. Resolve it through the enclosing loop's
+    // induction override instead of treating it as an opaque expression.
+    if (const auto *uo = dyn_cast<UnaryOperator>(idx->IgnoreParenImpCasts()))
+      if (uo->isIncrementDecrementOp())
+        return evalIndexValue(uo->getSubExpr(), out);
     // `idx + K` (or `K + idx`): resolve the induction variable then add the
     // constant offset, so `arr[idx + 1]` in a counted loop is checked.
     if (const auto *bo = dyn_cast<BinaryOperator>(idx->IgnoreParenImpCasts())) {
@@ -3001,9 +3134,189 @@ public:
     return true;
   }
 
+  /// Recognise `while (i < N)` / `while (i <= N)` with a constant bound, a
+  /// constant starting value and a unit increment in the body. The worst-case
+  /// value of the induction variable is then used for subscripts in the body.
+  bool parseWhileLoopBound(const WhileStmt *s, const VarDecl *&vd,
+                           long long &maxIndex) const {
+    if (!s || !s->getCond())
+      return false;
+    const auto *bo =
+        dyn_cast<BinaryOperator>(s->getCond()->IgnoreParenImpCasts());
+    if (!bo || (bo->getOpcode() != BO_LT && bo->getOpcode() != BO_LE))
+      return false;
+    const auto *ref =
+        dyn_cast<DeclRefExpr>(bo->getLHS()->IgnoreParenImpCasts());
+    const auto *ivd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!ivd || !ivd->getType()->isIntegerType())
+      return false;
+    llvm::APSInt bv;
+    if (!knownConst(bo->getRHS(), bv) || !fits64(bv))
+      return false;
+    long long bound =
+        bv.isNegative() ? bv.getSExtValue() : (long long)bv.getZExtValue();
+    long long lower = 0;
+    if (ivd->getInit()) {
+      Expr::EvalResult ir;
+      if (!ivd->getInit()->EvaluateAsInt(ir, ctx_) || !ir.Val.isInt() ||
+          !fits64(ir.Val.getInt()))
+        return false;
+      lower = ir.Val.getInt().getSExtValue();
+    } else {
+      auto lit = loopLowerBound_.find(ivd);
+      if (lit == loopLowerBound_.end())
+        return false;
+      lower = lit->second;
+    }
+    if (bound < 0 || lower < 0 || lower >= bound)
+      return false;
+    maxIndex = (bo->getOpcode() == BO_LT) ? bound - 1 : bound;
+    if (maxIndex < lower || !bodyHasUnitIncrement(s->getBody(), ivd))
+      return false;
+    vd = ivd;
+    return true;
+  }
+
+  /// True when the loop body increments `vd` by one (`i++`, `++i`, `i += 1`),
+  /// including an increment nested in a subscript's index expression.
+  bool bodyHasUnitIncrement(const Stmt *body, const VarDecl *vd,
+                            unsigned depth = 0) const {
+    if (!body || !vd || depth > 12)
+      return false;
+    if (const auto *e = dyn_cast<Expr>(body)) {
+      const Expr *x = e->IgnoreParenImpCasts();
+      if (const auto *uo = dyn_cast<UnaryOperator>(x))
+        if (uo->isIncrementOp())
+          if (const auto *ref = dyn_cast<DeclRefExpr>(
+                  uo->getSubExpr()->IgnoreParenImpCasts()))
+            if (ref->getDecl() == vd)
+              return true;
+      if (const auto *bo = dyn_cast<BinaryOperator>(x))
+        if (bo->getOpcode() == BO_AddAssign) {
+          Expr::EvalResult sr;
+          if (bo->getRHS()->EvaluateAsInt(sr, ctx_) && sr.Val.isInt() &&
+              sr.Val.getInt() == 1)
+            if (const auto *ref = dyn_cast<DeclRefExpr>(
+                    bo->getLHS()->IgnoreParenImpCasts()))
+              if (ref->getDecl() == vd)
+                return true;
+        }
+    }
+    for (const Stmt *c : body->children())
+      if (bodyHasUnitIncrement(c, vd, depth + 1))
+        return true;
+    return false;
+  }
+
+  /// True when an index expression mentions an induction variable whose value
+  /// is supplied by loopIndexOverride_ (`a[i++]`, `a[i + 1]`, ...).
+  bool indexMentionsLoopOverride(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 12)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (loopIndexOverride_.count(vd) != 0)
+          return true;
+    for (const Stmt *c : x->children())
+      if (const auto *ce = dyn_cast<Expr>(c))
+        if (indexMentionsLoopOverride(ce, depth + 1))
+          return true;
+    return false;
+  }
+
+  /// Collect the constant values of every possibly-selected arm of a
+  /// conditional index. A literal condition selects one arm; any condition
+  /// that is not an integer constant expression keeps both arms so STRICT
+  /// fails closed on an out-of-bounds arm.
+  void collectConditionalIndexArms(const Expr *e, std::vector<long long> &out,
+                                   unsigned depth) const {
+    if (!e || depth > 8)
+      return;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (const auto *co = dyn_cast<ConditionalOperator>(x)) {
+      Expr::EvalResult r;
+      if (co->getCond() && co->getCond()->EvaluateAsInt(r, ctx_) &&
+          r.Val.isInt())
+        collectConditionalIndexArms(
+            r.Val.getInt().isZero() ? co->getFalseExpr() : co->getTrueExpr(),
+            out, depth + 1);
+      else {
+        collectConditionalIndexArms(co->getTrueExpr(), out, depth + 1);
+        collectConditionalIndexArms(co->getFalseExpr(), out, depth + 1);
+      }
+      return;
+    }
+    long long v = 0;
+    if (evalIndexValue(x, v))
+      out.push_back(v);
+  }
+
+  static bool indexHasConditional(const Expr *e, unsigned depth = 0) {
+    if (!e || depth > 8)
+      return false;
+    const Expr *x = e->IgnoreParenImpCasts();
+    if (isa<ConditionalOperator>(x))
+      return true;
+    for (const Stmt *child : x->children())
+      if (const auto *ce = dyn_cast<Expr>(child))
+        if (indexHasConditional(ce, depth + 1))
+          return true;
+    return false;
+  }
+
+  /// STRICT rejects a subscript whose conditional index has a constant arm
+  /// outside the addressed object, including nested conditionals.
+  void checkConditionalIndexArms(const ArraySubscriptExpr *sub) {
+    if (!sub || !indexHasConditional(sub->getIdx()))
+      return;
+    std::vector<long long> arms;
+    collectConditionalIndexArms(sub->getIdx(), arms, 0);
+    if (arms.empty())
+      return;
+    const Expr *base = sub->getBase()->IgnoreParenImpCasts();
+    unsigned long long count = 0;
+    if (const auto *at = ctx_.getAsConstantArrayType(base->getType()))
+      count = at->getSize().getZExtValue();
+    else if (const HeapAllocState *st = heapStateOf(base)) {
+      const auto *pt = base->getType()->getAs<PointerType>();
+      unsigned es =
+          pt ? (unsigned)(ctx_.getTypeSize(pt->getPointeeType()) / 8u) : 0;
+      if (es && st->bytes > 0)
+        count = (unsigned long long)st->bytes / es;
+    }
+    if (!count)
+      return;
+    std::string name = varNameOf(base);
+    if (name.empty())
+      name = "array";
+    for (long long v : arms) {
+      if (v < 0 || (unsigned long long)v >= count) {
+        report(sub->getBeginLoc(),
+               "out-of-bounds access: index " + std::to_string(v) +
+                   " reaches past array '" + name + "' of length " +
+                   std::to_string(count));
+        return;
+      }
+    }
+  }
+
   /// Reject array subscripts / pointer offsets beyond a tracked heap extent.
   void checkHeapSubscript(const ArraySubscriptExpr *sub, SourceLocation loc) {
-    const HeapAllocState *st = heapStateOf(sub->getBase());
+    const Expr *baseExpr = sub->getBase()->IgnoreParenImpCasts();
+    const HeapAllocState *st = heapStateOf(baseExpr);
+    unsigned long long fieldOffsetBytes = 0;
+    // A downcast member access (`((Large *)small)->payload[3]`) hides the
+    // allocation extent behind a MemberExpr. Resolve the underlying object
+    // and account for the field's byte offset before comparing extents.
+    if (const auto *me = dyn_cast<MemberExpr>(baseExpr)) {
+      if (const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl()))
+        fieldOffsetBytes =
+            (unsigned long long)(ctx_.getFieldOffset(fd) / 8u);
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              me->getBase()->IgnoreParenImpCasts()))
+        st = heapStateOf(ref);
+    }
     if (!st)
       return;
     if (st->provenanceLost) {
@@ -3044,13 +3357,15 @@ public:
     unsigned long long elemSize = 0;
     if ((elem->isIntegerType() || elem->isCharType() ||
          elem->isFloatingType() || elem->isEnumeralType() ||
-         elem->isRecordType()) &&
+         elem->isPointerType() || elem->isRecordType()) &&
         !elem->isDependentType() && !elem->isIncompleteType())
       elemSize = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
     if (elemSize == 0)
       return;
-    unsigned long long off = (unsigned long long)idx * elemSize;
-    if (off >= (unsigned long long)st->bytes)
+    unsigned long long off = 0;
+    // A wrapped 64-bit product would make an enormous index look in-bounds.
+    if (!mulAddFits(fieldOffsetBytes, (unsigned long long)idx, elemSize, off) ||
+        off >= (unsigned long long)st->bytes)
       report(loc, "array index " + std::to_string(idx) + " exceeds " +
                       extentLabel(st->origin) + " '" + name + "' of " +
                       std::to_string(st->bytes) + " bytes");
@@ -3155,14 +3470,20 @@ public:
                 QualType elem = pt->getPointeeType();
                 unsigned long long es = 0;
                 if ((elem->isIntegerType() || elem->isCharType() ||
-                     elem->isFloatingType() || elem->isEnumeralType()) &&
-                    !elem->isDependentType())
+                     elem->isFloatingType() || elem->isEnumeralType() ||
+                     elem->isPointerType() || elem->isRecordType()) &&
+                    !elem->isDependentType() && !elem->isIncompleteType())
                   es = (unsigned long long)(ctx_.getTypeSize(elem) / 8u);
                 if (es != 0) {
-                  long long byteOff = off * (long long)es;
-                  if (byteOff < 0 ||
-                      (unsigned long long)byteOff >=
-                          (unsigned long long)baseSt->bytes)
+                  unsigned long long byteOff = 0;
+                  bool exceeds = off < 0;
+                  if (!exceeds &&
+                      !mulAddFits(0ULL, (unsigned long long)off, es, byteOff))
+                    exceeds = true;
+                  if (!exceeds &&
+                      byteOff >= (unsigned long long)baseSt->bytes)
+                    exceeds = true;
+                  if (exceeds)
                     report(loc, "pointer offset " + std::to_string(off) +
                                     " exceeds " +
                                     extentLabel(baseSt->origin) + " '" +
@@ -3199,25 +3520,66 @@ public:
       report(loc, "write to string literal '" + vd->getNameAsString() + "'");
   }
 
+  /// Canonical identity of a string source. A pointer alias
+  /// (`const char *s2 = s`) and identical string literals produce the same
+  /// key as the expression passed to `strlen`; a VarDecl pointer (not a
+  /// mutable name group) keeps the key stable across the AST walk.
+  std::string stringSourceKey(const Expr *e, unsigned depth = 0) const {
+    if (!e || depth > 4)
+      return std::string();
+    e = e->IgnoreParenImpCasts();
+    if (const auto *sl = dyn_cast<StringLiteral>(e))
+      return "literal:" + sl->getBytes().str();
+    if (const auto *bo = dyn_cast<BinaryOperator>(e)) {
+      llvm::APSInt k;
+      if ((bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) &&
+          knownConst(bo->getRHS(), k) && k.isZero())
+        return stringSourceKey(bo->getLHS(), depth + 1);
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(e)) {
+      if (uo->getOpcode() == UO_AddrOf) {
+        const Expr *inner = uo->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *ase = dyn_cast<ArraySubscriptExpr>(inner)) {
+          llvm::APSInt k;
+          if (knownConst(ase->getIdx(), k) && k.isZero())
+            return stringSourceKey(ase->getBase(), depth + 1);
+        }
+      }
+    }
+    const auto *ref = dyn_cast<DeclRefExpr>(e);
+    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+    if (!vd)
+      return std::string();
+    // Follow a stable initializer alias, but not a variable that has since
+    // been reassigned to a different string.
+    if (vd->getInit() && !assignedVars_.count(vd->getNameAsString())) {
+      const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      if (isa<DeclRefExpr>(init) || isa<StringLiteral>(init))
+        return stringSourceKey(init, depth + 1);
+    }
+    return "var:" +
+           std::to_string(reinterpret_cast<uintptr_t>(vd->getCanonicalDecl()));
+  }
+
   /// `malloc(strlen(src))` followed by strcpy/strcat overflows by the NUL.
   void checkStrcpyNul(const CallExpr *call) {
     if (call->getNumArgs() < 2)
       return;
-    const auto *ref = dyn_cast<DeclRefExpr>(
-        call->getArg(0)->IgnoreParenImpCasts());
-    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (!vd)
+    // Resolve `dst + 0` and `&dst[0]` through the shared destination logic.
+    const StringDestination dst =
+        stringDestination(call->getArg(0)->IgnoreParenImpCasts());
+    const VarDecl *vd = dst.var;
+    if (!vd || dst.offset != 0)
       return;
     auto it = strlenSized_.find(vd);
     if (it == strlenSized_.end())
       return;
-    std::string srcName = varNameOf(call->getArg(1));
-    if (srcName.empty() || srcName == it->second)
+    std::string srcKey = stringSourceKey(call->getArg(1));
+    if (srcKey.empty() || srcKey == it->second)
       report(call->getBeginLoc(),
              "string copy needs a NUL terminator: buffer '" +
                  vd->getNameAsString() + "' was sized by strlen alone");
   }
-
   /// Detect frees of objects that cannot be the start of an allocation.
   /// These are always bugs in C and are rejected in both safety modes.
   void checkInvalidFree(SourceLocation loc, const Expr *arg,
@@ -3236,7 +3598,10 @@ public:
         const Expr *sub = uo->getSubExpr()->IgnoreParenImpCasts();
         if (const auto *ref = dyn_cast<DeclRefExpr>(sub)) {
           const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
-          if (vd && !vd->getType()->isPointerType()) {
+          // &vd is the address of the variable's own storage (stack, global
+          // or TLS), never the heap block pointer held inside vd. This also
+          // applies when vd is itself a pointer variable (`free(&ptr)`).
+          if (vd) {
             report(loc, "invalid free of address of non-heap object '" +
                             vd->getNameAsString() + "' via " + api);
             return;
@@ -3505,6 +3870,12 @@ public:
       for (const auto &alias : it->second)
         if (releasedFields_.count(alias) || releasedVars_.count(alias))
           return true;
+    // Reverse direction: a local alias loaded from a field/array element
+    // (`int *q = a[0]`) is dangling when that element is released.
+    for (const auto &kv : fieldAliases_)
+      if (kv.second.count(name) &&
+          (releasedFields_.count(kv.first) || releasedVars_.count(kv.first)))
+        return true;
     // Integer-laundered pointer: `(int *)u` where u came from freed p.
     auto pit = provenanceSource_.find(cname);
     if (pit != provenanceSource_.end() && releasedVars_.count(pit->second))
@@ -3847,17 +4218,22 @@ public:
       return false;
     const auto *ref = dyn_cast<DeclRefExpr>(tmpRef);
     const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (!vd || !vd->getInit())
+    if (!vd)
       return false;
     // Strip explicit casts as well (`int *q = (int *)realloc(...)`), and
     // resolve indirect realloc through a function pointer (T1_indirect_realloc
-    // calls realloc via `void *(*r)(void*,size_t) = realloc`).  The
-    // branch-aware state machine below then invalidates the old pointer only
-    // on the SUCCESS path, so the failure-path `free(p)` stays valid.
-    const Expr *initE = vd->getInit()->IgnoreParenImpCasts();
-    while (const auto *ce = dyn_cast<ExplicitCastExpr>(initE))
+    // calls realloc via `void *(*r)(void*,size_t) = realloc`).  Also accept a
+    // reassignment `q = realloc(...)` of an already-declared variable, which
+    // is the shape used by stdlib/error.hp.
+    const Expr *initE = vd->getInit() ? vd->getInit()->IgnoreParenImpCasts()
+                                      : nullptr;
+    while (const auto *ce = dyn_cast_or_null<ExplicitCastExpr>(initE))
       initE = ce->getSubExpr()->IgnoreParenImpCasts();
-    const auto *call = dyn_cast<CallExpr>(initE);
+    const CallExpr *call = dyn_cast_or_null<CallExpr>(initE);
+    if (!call) {
+      auto ait = reallocAssignCalls_.find(vd->getCanonicalDecl());
+      call = ait == reallocAssignCalls_.end() ? nullptr : ait->second;
+    }
     if (!call || call->getNumArgs() < 1)
       return false;
     bool isRealloc = false;
@@ -3983,6 +4359,8 @@ public:
       const CallExpr *rc = nullptr;
       if (detectReallocSuccess(s, owner, tmp, &rc) && rc)
         handledReallocs_.insert(rc->getBeginLoc().getRawEncoding());
+        if (!tmp.empty())
+          handledReallocVars_.insert(tmp);
     }
     std::string keepEraseVar;
     bool negatedGuard = false;
@@ -4311,7 +4689,24 @@ public:
           isConstCharParam(nb))
         nulTraversal_.insert({nb, ni});
     }
+    // A counted `while` loop has no dedicated `inc` slot like `for`, so the
+    // induction override must be installed here. Without it `a[i++]` inside
+    // `while (i < N)` is opaque to evalIndexValue() and an OOB access escapes.
+    const VarDecl *induction = nullptr;
+    long long worstIndex = 0;
+    bool haveBound = report_ && parseWhileLoopBound(s, induction, worstIndex);
+    auto oldIt = loopIndexOverride_.find(induction);
+    bool hadOld = oldIt != loopIndexOverride_.end();
+    long long saved = hadOld ? oldIt->second : 0;
+    if (haveBound)
+      loopIndexOverride_[induction] = worstIndex;
     bool r = RecursiveASTVisitor::TraverseWhileStmt(s);
+    if (haveBound) {
+      if (hadOld)
+        loopIndexOverride_[induction] = saved;
+      else
+        loopIndexOverride_.erase(induction);
+    }
     if (report_)
       nulTraversal_ = savedNul;
     if (guardVar)
@@ -4425,6 +4820,8 @@ public:
     stringPtrs_.clear(); // names are function-scoped, not TU-scoped
     localParamAliases_.clear(); // per-function alias -> parameter slot map
     forgedUnionVars_.clear();    // compile-time union-punning provenance
+    unprovenPtrOffset_.clear();
+    arrayDerivedPtr_.clear();
     forgedPointerVars_.clear();  // locals copied from a forged union pointer
     structLocalAddrVars_.clear(); // structs initialized with `&local`
     stackFieldOwner_.clear();     // issue #37: field provenance is frame-scoped
@@ -4442,6 +4839,7 @@ public:
       heapInterior_.clear();
       onePastEnd_.clear();
       strlenSized_.clear();
+      knownStrLen_.clear();
       reallocResultVars_.clear();
 
     }
@@ -4780,6 +5178,14 @@ public:
     if (!sub || !cast->getType()->isPointerType() ||
         !sub->getType()->isIntegerType() || isNullConstant(sub))
       return true;
+    // Portable invalid-pointer sentinels (NULL and (void *)-1, e.g. MAP_FAILED)
+    // are compared, never dereferenced; accepting the cast is sound.
+    Expr::EvalResult sentinel;
+    if (sub->EvaluateAsInt(sentinel, ctx_) && sentinel.Val.isInt()) {
+      llvm::APSInt v = sentinel.Val.getInt();
+      if (v.isZero() || v.isNegative())
+        return true;
+    }
     if (const auto *ref = dyn_cast<DeclRefExpr>(sub))
       if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
         if (provenanceInts_.count(vd->getNameAsString()))
@@ -4995,15 +5401,50 @@ public:
   }
 
   bool VisitReturnStmt(ReturnStmt *s) {
+    if (report_ && s->getRetValue() &&
+        s->getRetValue()->getType()->isPointerType()) {
+      // Lowered C rewrites a VLA into cplus_alloc_array, so the backend's
+      // -Wreturn-stack-address no longer sees `return &buf[0]`. Detect a
+      // local array ADDRESS in the AST so check and build agree. Returning
+      // an element value (`return row[0]`) stays legal.
+      // `self`/`this` is the implicit receiver of a lowered C+ method only
+      // in .cp sources. In plain C it is an ordinary pointer parameter whose
+      // pointee is owned by the caller (builder/fluent APIs), so returning
+      // it does not expose a dying stack frame.
+      const bool loweredMethodSource =
+          filename_.size() >= 3 &&
+          filename_.compare(filename_.size() - 3, 3, ".cp") == 0;
+      if (loweredMethodSource) {
+        if (const auto *ref = dyn_cast<DeclRefExpr>(
+                s->getRetValue()->IgnoreParenImpCasts()))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+            if (vd->getNameAsString() == "self" ||
+                vd->getNameAsString() == "this")
+              reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
+                          "address of local instance '" +
+                              vd->getNameAsString() +
+                              "' cannot escape the method",
+                          "return a copied value or use an explicit owner",
+                          true);
+      }
+      const VarDecl *owner = localStackOwner(s->getRetValue());
+      if (owner && owner->hasLocalStorage() &&
+          (owner->getType()->isArrayType() ||
+           ctx_.getAsVariableArrayType(owner->getType())))
+        reportNamed(s->getBeginLoc(), "CPLUS-LIFETIME",
+                    "address of stack memory associated with local variable '" +
+                        owner->getNameAsString() + "' cannot escape",
+                    "copy the data or heap-allocate it before returning", true);
+    }
     if (report_ && !heldLocks_.empty())
       for (const auto &held : heldLocks_)
         warnAt(s->getBeginLoc(), "mutex '" + held.first +
                                      "' is still held on this return path; "
                                      "unlock before returning");
-    // A return ends this path. Clear the linear-traversal lock state so code
-    // that follows in the AST (but is unreachable on this path) is not
-    // mistaken for a second unlock of the same mutex.
-    heldLocks_.clear();
+    // Do not wipe the lock set on an early return. The AST visitor keeps
+    // walking sibling paths after the return, and VisitIfStmt already
+    // restores the fall-through state; clearing here hid real leaks on later
+    // returns (e.g. a switch arm that returns while holding the mutex).
     if (report_ && s->getRetValue()) {
       const Expr *value = s->getRetValue()->IgnoreParenImpCasts();
       if (const auto *ref = dyn_cast<DeclRefExpr>(value))
@@ -5187,6 +5628,11 @@ public:
     recordHeapAllocation(vd);
     if (report_ && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenImpCasts();
+      if (vd->getType()->isPointerType())
+        if (const auto *ref = dyn_cast<DeclRefExpr>(init))
+          if (const auto *base = dyn_cast<VarDecl>(ref->getDecl()))
+            if (base->getType()->isArrayType())
+              arrayDerivedPtr_.insert(vd->getCanonicalDecl());
       // Use the shared provenance-shape predicate so integer locals seeded by
       // `(uintptr_t)p`, tagged/offset forms (`u | 2`, `u + 8`) and further
       // copies are all tracked. The old ad-hoc predicate only handled bitwise
@@ -5397,6 +5843,14 @@ public:
         }
       }
     }
+    // Track initial NUL-terminated length for fixed char arrays.
+    if (conditionalDepth_ == 0 && vd->getInit()) {
+      if (const auto *at = ctx_.getAsConstantArrayType(vd->getType()))
+        if (at->getElementType()->isCharType())
+          if (const auto *sl =
+                  dyn_cast<StringLiteral>(vd->getInit()->IgnoreParenCasts()))
+            knownStrLen_[vd] = sl->getLength();
+    }
     // `int *end = arr + 4;` yields a pointer that is one past the array's
     // last element; dereferencing it is undefined even though forming it is ok.
     if (vd->getInit() && isOnePastEndExpr(vd->getInit()))
@@ -5472,6 +5926,8 @@ public:
           if (callee == "malloc" || callee == "calloc" || isReallocName(callee) ||
               callee.rfind("cplus_new", 0) == 0)
             allocLocs_[vd->getNameAsString()] = vd->getBeginLoc();
+          if (conditionalDepth_ == 0 && callee == "calloc")
+            knownStrLen_[vd] = 0;
         }
       }
       if (isa<StringLiteral>(init->IgnoreParenCasts())) {
@@ -5502,7 +5958,9 @@ public:
     if (report_ && vd->getInit()) {
       const Expr *init = vd->getInit()->IgnoreParenCasts();
       const std::string fkey = lvalueKey(init);
-      if (!fkey.empty() && fkey.find('.') != std::string::npos &&
+      if (!fkey.empty() &&
+          (fkey.find('.') != std::string::npos ||
+           fkey.find('[') != std::string::npos) &&
           vd->getType()->isPointerType()) {
         linkAlias(vd->getNameAsString(), fkey);
         // Read side of a struct-pointer-field alias: `int *d = b.p;` makes
@@ -5694,6 +6152,50 @@ public:
 
   bool VisitBinaryOperator(BinaryOperator *op) {
     noteAssignedValueSource(op);
+    if (op->isAssignmentOp()) {
+      // `uintptr_t sp; sp = (uintptr_t)p; ... (T *)sp` derives provenance by
+      // assignment, not by initializer. VisitVarDecl cannot see this shape.
+      if (isIntegerProvenanceExpr(op->getRHS()))
+        if (const auto *lref = dyn_cast<DeclRefExpr>(
+                op->getLHS()->IgnoreParenImpCasts()))
+          if (const auto *lvd = dyn_cast<VarDecl>(lref->getDecl())) {
+            provenanceInts_.insert(lvd->getNameAsString());
+            std::string src = pointerSourceOf(op->getRHS());
+            if (!src.empty())
+              provenanceSource_[lvd->getNameAsString()] = src;
+          }
+    }
+    if (op->isAssignmentOp()) {
+      const Expr *re = stripStmtExpr(op->getRHS());
+      while (const auto *ec = dyn_cast<ExplicitCastExpr>(re))
+        re = stripStmtExpr(ec->getSubExpr());
+      if (const auto *rc = dyn_cast<CallExpr>(re)) {
+        bool isRealloc = false;
+        for (const auto &cn : calleeNames(rc, rc->getDirectCallee()))
+          if (isReallocName(cn)) {
+            isRealloc = true;
+            break;
+          }
+        if (isRealloc)
+          if (const auto *lref = dyn_cast<DeclRefExpr>(
+                  op->getLHS()->IgnoreParenImpCasts()))
+            if (const auto *lvd = dyn_cast<VarDecl>(lref->getDecl()))
+              reallocAssignCalls_[lvd->getCanonicalDecl()] = rc;
+      }
+    }
+    // `r.ptr = &local; return r;` stores a frame address in a struct field.
+    // The aggregate-initializer check in VisitVarDecl cannot see this form,
+    // so record the same obligation when the store is an assignment.
+    if (op->isAssignmentOp()) {
+      const Expr *lhs = op->getLHS()->IgnoreParenImpCasts();
+      if (const auto *me = dyn_cast<MemberExpr>(lhs)) {
+        if (const auto *ref = dyn_cast<DeclRefExpr>(
+                me->getBase()->IgnoreParenImpCasts()))
+          if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+            if (exprContainsLocalAddress(op->getRHS()))
+              structLocalAddrVars_.insert(vd->getNameAsString());
+      }
+    }
     if (report_ && op->isAssignmentOp()) {
       // Issue #37: `s.p = &x;` and `T *p = &s;` (assignment form) record the
       // same field/alias facts as their initializer forms above.
@@ -5809,6 +6311,30 @@ public:
           }
         }
       }
+    }
+    if (report_ && op->isAssignmentOp()) {
+      // `p = array + runtime_offset` has no static proof and no dynamic
+      // instrumentation. Remember it so a later `*p` fails closed in STRICT.
+      const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
+      if (const auto *bo = dyn_cast<BinaryOperator>(rhs))
+        if (bo->getOpcode() == BO_Add || bo->getOpcode() == BO_Sub) {
+          const Expr *base = bo->getLHS()->IgnoreParenImpCasts();
+          const Expr *off = bo->getRHS()->IgnoreParenImpCasts();
+          Expr::EvalResult r;
+          bool isConst = off->EvaluateAsInt(r, ctx_) && r.Val.isInt();
+          if (!isConst) {
+            const auto *ref = dyn_cast<DeclRefExpr>(base);
+            const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
+            bool fromArray = vd && vd->getType()->isArrayType();
+            if (vd && arrayDerivedPtr_.count(vd->getCanonicalDecl()))
+              fromArray = true;
+            if (fromArray)
+              if (const auto *lref = dyn_cast<DeclRefExpr>(
+                      op->getLHS()->IgnoreParenImpCasts()))
+                if (const auto *lvd = dyn_cast<VarDecl>(lref->getDecl()))
+                  unprovenPtrOffset_.insert(lvd->getCanonicalDecl());
+          }
+        }
     }
     if (report_ && op->isAssignmentOp()) {
       // Kill guard-derived non-zero / lower-bound facts on a definite
@@ -6190,6 +6716,12 @@ public:
             if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
               if (heapStateOf(ref))
                 heapWritten_.insert(vd);
+              llvm::APSInt iv;
+              if (conditionalDepth_ == 0 && op->getOpcode() == BO_Assign &&
+                  knownConst(op->getRHS(), iv) && iv == 0)
+                knownStrLen_[vd] = 0;
+              else
+                knownStrLen_.erase(vd);
             }
           }
         }
@@ -6199,6 +6731,13 @@ public:
           if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl())) {
             if (heapStateOf(ref))
               heapWritten_.insert(vd);
+            llvm::APSInt idxV, rhsV;
+            if (conditionalDepth_ == 0 && op->getOpcode() == BO_Assign &&
+                knownConst(ase->getIdx(), idxV) && idxV == 0 &&
+                knownConst(op->getRHS(), rhsV) && rhsV == 0)
+              knownStrLen_[vd] = 0;
+            else
+              knownStrLen_.erase(vd);
           }
         }
       }
@@ -6240,6 +6779,7 @@ public:
             heapAllocs_.erase(hit);
             identityAllocs_.erase(identityKeyForDecl(vd));
           }
+          knownStrLen_.erase(vd);
           if (isOnePastEndExpr(op->getRHS()))
             onePastEnd_.insert(vd);
           else
@@ -6273,6 +6813,26 @@ public:
               report(op->getBeginLoc(), "pointer arithmetic outside array '" +
                                             arrayVar->getNameAsString() + "'");
           }
+        }
+      }
+      // Integer-laundered pointer arithmetic, e.g. the LAUNDER macro's
+      // `(int *)(uintptr_t)a + 9`: the integer round-trip hides the source
+      // extent from the ordinary pointer-arithmetic rule above. Recover the
+      // source through pointerSourceOf() and fail closed when the offset
+      // leaves that object; the back-cast cannot be proven safe.
+      if (op->getOpcode() == BO_Add && isCastLaunderedPointer(lhs)) {
+        long long off = 0;
+        if (evalIndexValue(rhs, off) && off >= 0) {
+          const auto *pt = lhs->getType()->getAs<PointerType>();
+          unsigned es =
+              pt && !pt->getPointeeType()->isVoidType()
+                  ? (unsigned)(ctx_.getTypeSize(pt->getPointeeType()) / 8u)
+                  : 0;
+          long long bytes = provenanceByteExtent(pointerSourceOf(lhs));
+          if (es && bytes > 0 && off >= bytes / (long long)es)
+            warnAt(op->getBeginLoc(),
+                   "pointer created from integer value has unverifiable "
+                   "provenance");
         }
       }
     }
@@ -6350,6 +6910,15 @@ public:
   }
 
   bool VisitUnaryOperator(UnaryOperator *op) {
+    if (report_ && op->getOpcode() == UO_Deref) {
+      if (const auto *ref = dyn_cast<DeclRefExpr>(
+              op->getSubExpr()->IgnoreParenImpCasts()))
+        if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+          if (unprovenPtrOffset_.count(vd->getCanonicalDecl()))
+            report(op->getBeginLoc(),
+                   "dereference of pointer formed with an unproven runtime "
+                   "offset; STRICT cannot prove it is in bounds");
+    }
     // A local whose address is taken can be written by an output parameter
     // (scanf, read, memcpy, ...), so it must never be folded as a constant.
     if (op->getOpcode() == UO_AddrOf) {
@@ -6503,6 +7072,11 @@ public:
   }
 
   void warnAt(SourceLocation loc, const std::string &message) {
+    // Diagnostics about the C library's own integer-to-pointer tricks (e.g.
+    // macOS OSByteOrder.h) are not actionable in C+ source and must not make
+    // an otherwise valid program fail under -Werror.
+    if (loc.isValid() && ctx_.getSourceManager().isInSystemHeader(loc))
+      return;
     PresumedLoc ploc = ctx_.getSourceManager().getPresumedLoc(loc);
     Diag d;
     // DEFAULT mode warns about unverified operations; STRICT mode fails
@@ -6587,6 +7161,103 @@ public:
     return ref && ref->getDecl() == vd;
   }
 
+  struct StringDestination {
+    const VarDecl *var = nullptr;
+    long long offset = 0;
+    unsigned long long capacity = 0;
+    bool capacityKnown = false;
+  };
+
+  StringDestination stringDestination(const Expr *e) const {
+    StringDestination dst;
+    const Expr *x = e->IgnoreParenImpCasts();
+    while (const auto *bo = dyn_cast<BinaryOperator>(x)) {
+      if (bo->getOpcode() != BO_Add && bo->getOpcode() != BO_Sub)
+        break;
+      llvm::APSInt amount;
+      if (!knownConst(bo->getRHS(), amount) || !fits64(amount))
+        return StringDestination{};
+      long long delta = amount.getSExtValue();
+      if (bo->getOpcode() == BO_Sub)
+        delta = -delta;
+      long long elemSize = 1;
+      if (const auto *ptr = bo->getLHS()->getType()->getAs<PointerType>())
+        if (!ptr->getPointeeType()->isVoidType() &&
+            !ptr->getPointeeType()->isIncompleteType())
+          elemSize = ctx_.getTypeSize(ptr->getPointeeType()) / 8;
+      if (elemSize <= 0 || !addScaledOffset(dst.offset, delta, elemSize))
+        return StringDestination{};
+      x = bo->getLHS()->IgnoreParenImpCasts();
+    }
+    if (const auto *uo = dyn_cast<UnaryOperator>(x)) {
+      if (uo->getOpcode() != UO_AddrOf)
+        return dst;
+      const auto *ase = dyn_cast<ArraySubscriptExpr>(
+          uo->getSubExpr()->IgnoreParenImpCasts());
+      if (!ase)
+        return dst;
+      llvm::APSInt index;
+      if (!knownConst(ase->getIdx(), index) || !fits64(index) ||
+          index.isNegative())
+        return dst;
+      const Expr *base = ase->getBase()->IgnoreParenImpCasts();
+      long long elemSize = 0;
+      if (const auto *at = ctx_.getAsConstantArrayType(base->getType())) {
+        elemSize = ctx_.getTypeSize(at->getElementType()) / 8;
+      } else if (const auto *pt = base->getType()->getAs<PointerType>()) {
+        // `&heap_buf[k]`: the base is a heap allocation, not a fixed array.
+        // Resolve its pointee size here; the VarDecl/capacity resolution
+        // below uses heapStateOf() and subtracts the resulting byte offset.
+        QualType elem = pt->getPointeeType();
+        if (!elem->isVoidType() && !elem->isIncompleteType() &&
+            !elem->isDependentType())
+          elemSize = ctx_.getTypeSize(elem) / 8;
+      }
+      if (elemSize <= 0 ||
+          !addScaledOffset(dst.offset, index.getSExtValue(), elemSize))
+        return StringDestination{};
+      x = base;
+    }
+    const auto *ref = dyn_cast<DeclRefExpr>(x);
+    if (!ref)
+      return dst;
+    dst.var = dyn_cast<VarDecl>(ref->getDecl());
+    if (!dst.var || dst.offset < 0)
+      return StringDestination{};
+    if (const auto *at = ctx_.getAsConstantArrayType(dst.var->getType())) {
+      if (!at->getElementType()->isCharType())
+        return StringDestination{};
+      dst.capacity = at->getSize().getZExtValue();
+      dst.capacityKnown = true;
+    } else if (const HeapAllocState *hs = heapStateOf(ref)) {
+      dst.capacity = hs->bytes;
+      dst.capacityKnown = true;
+    }
+    if (dst.offset > 0 && dst.capacityKnown) {
+      if (static_cast<unsigned long long>(dst.offset) >= dst.capacity)
+        dst.capacity = 0;
+      else
+        dst.capacity -= dst.offset;
+    }
+    return dst;
+  }
+
+  const StringLiteral *stringLiteralOf(const Expr *e) const {
+    const Expr *x = e->IgnoreParenCasts();
+    if (const auto *str = dyn_cast<StringLiteral>(x))
+      return str;
+    if (const auto *ref = dyn_cast<DeclRefExpr>(x))
+      if (const auto *vd = dyn_cast<VarDecl>(ref->getDecl()))
+        if (vd->getInit())
+          return dyn_cast<StringLiteral>(vd->getInit()->IgnoreParenCasts());
+    return nullptr;
+  }
+
+  void invalidateStringLength(const StringDestination &dst) {
+    if (dst.var)
+      knownStrLen_.erase(dst.var);
+  }
+
   /// For memcpy/memmove with a direct array destination, reject a constant
   /// byte count that exceeds the destination extent.  Unknown extents are not
   /// guessed.
@@ -6601,35 +7272,26 @@ public:
     // (`static size_t sz(void){return 40;}`), which knownConst misses.
     if (!evalByteCount(n, bytes) || bytes <= 0)
       return;
-    const auto *ref = dyn_cast<DeclRefExpr>(dst);
-    if (!ref)
-      return;
-    const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
-    if (!vd)
-      return;
-    // Heap allocation with a known byte extent.
-    if (const HeapAllocState *hs = heapStateOf(dst)) {
-      if ((unsigned long long)bytes > (unsigned long long)hs->bytes)
-        report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
-                                        " bytes exceeds " +
-                                        extentLabel(hs->origin) + " '" +
-                                        vd->getNameAsString() + "' of " +
-                                        std::to_string(hs->bytes) + " bytes");
-      return;
+    const StringDestination destination = stringDestination(dst);
+    if (op == "copy" && call->getNumArgs() > 1) {
+      if (const StringLiteral *str = stringLiteralOf(call->getArg(1))) {
+        if (destination.var && destination.offset == 0 &&
+            static_cast<unsigned long long>(bytes) == str->getLength() + 1)
+          knownStrLen_[destination.var] = str->getLength();
+        else
+          invalidateStringLength(destination);
+      } else {
+        invalidateStringLength(destination);
+      }
+    } else if (op == "string copy") {
+      invalidateStringLength(destination);
     }
-    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
-    if (!at)
+    if (!destination.var || !destination.capacityKnown)
       return;
-    QualType elem = at->getElementType();
-    if (!elem->isIntegerType() && !elem->isCharType())
-      return;
-    unsigned long long elemSize = ctx_.getTypeSize(elem) / 8u;
-    unsigned long long capacity =
-        at->getSize().getZExtValue() * elemSize;
-    if ((unsigned long long)bytes > capacity)
+    if (static_cast<unsigned long long>(bytes) > destination.capacity)
       report(call->getBeginLoc(), op + " of " + std::to_string(bytes) +
                                       " bytes exceeds destination '" +
-                                      vd->getNameAsString() + "'");
+                                      destination.var->getNameAsString() + "'");
   }
 
   void checkBoundedCopy(const CallExpr *call,
@@ -6637,33 +7299,38 @@ public:
     checkBoundedWrite(call, 0, 2, op);
   }
 
-  /// strcat(dst, src): reject when the concatenation provably overflows a
-  /// fixed-size destination with a constant string initializer.
+  /// strcat(dst, src): current content + src + NUL must fit the destination.
   void checkStringConcat(const CallExpr *call) {
     if (call->getNumArgs() < 2)
       return;
-    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
-    const auto *ref = dyn_cast<DeclRefExpr>(dst);
-    const auto *vd = ref ? dyn_cast<VarDecl>(ref->getDecl()) : nullptr;
-    if (!vd || !vd->getInit())
+    const StringDestination dst =
+        stringDestination(call->getArg(0)->IgnoreParenImpCasts());
+    if (!dst.var)
       return;
-    const auto *at = ctx_.getAsConstantArrayType(vd->getType());
-    if (!at || !at->getElementType()->isCharType())
+    const StringLiteral *src =
+        stringLiteralOf(call->getArg(1)->IgnoreParenCasts());
+    if (!src) {
+      invalidateStringLength(dst);
       return;
-    const auto *initStr = dyn_cast<StringLiteral>(
-        vd->getInit()->IgnoreParenCasts());
-    const auto *srcStr = dyn_cast<StringLiteral>(
-        call->getArg(1)->IgnoreParenCasts());
-    if (!initStr || !srcStr)
+    }
+    auto used = knownStrLen_.find(dst.var);
+    if (used == knownStrLen_.end() || dst.offset != 0) {
+      unsigned long long need = src->getLength() + 1;
+      if (dst.capacityKnown && need > dst.capacity)
+        report(call->getBeginLoc(),
+               "string concatenation needs " + std::to_string(need) +
+                   " bytes but destination '" + dst.var->getNameAsString() +
+                   "' has capacity " + std::to_string(dst.capacity));
       return;
-    unsigned long long capacity = at->getSize().getZExtValue();
-    unsigned long long needed =
-        initStr->getLength() + srcStr->getLength() + 1;
-    if (needed > capacity)
+    }
+    unsigned long long need = used->second + src->getLength() + 1;
+    if (need > dst.capacity)
       report(call->getBeginLoc(),
-             "string concatenation needs " + std::to_string(needed) +
-                 " bytes but destination '" + vd->getNameAsString() +
-                 "' has capacity " + std::to_string(capacity));
+             "string concatenation needs " + std::to_string(need) +
+                 " bytes but destination '" + dst.var->getNameAsString() +
+                 "' has capacity " + std::to_string(dst.capacity));
+    else
+      used->second += src->getLength();
   }
 
   /// Null pointers passed to libc read/write APIs are contract violations.
@@ -6679,59 +7346,27 @@ public:
                                       api);
   }
 
-  /// Detect strcpy from a short string literal into a smaller array.  Source
-  /// lengths that are not compile-time constants are unknown.
+  /// Detect strcpy from a constant string into a smaller array or allocation.
   void checkStringCopy(const CallExpr *call) {
-    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
-    const Expr *src = call->getArg(1)->IgnoreParenImpCasts();
-    const auto *dstRef = dyn_cast<DeclRefExpr>(dst);
-    if (!dstRef)
+    const StringDestination dst =
+        stringDestination(call->getArg(0)->IgnoreParenImpCasts());
+    if (!dst.var)
       return;
-    const auto *str = dyn_cast<StringLiteral>(src);
+    const StringLiteral *str =
+        stringLiteralOf(call->getArg(1)->IgnoreParenCasts());
     if (!str) {
-      // `const char *s = "literal"; strcpy(d, s);`
-      if (const auto *sref = dyn_cast<DeclRefExpr>(src))
-        if (const auto *svd = dyn_cast<VarDecl>(sref->getDecl()))
-          if (svd->getInit())
-            str = dyn_cast<StringLiteral>(svd->getInit()->IgnoreParenCasts());
+      invalidateStringLength(dst);
+      return;
     }
-    if (!str)
-      return;
-    const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
-    if (!vd)
-      return;
-    unsigned long long cap = 0;
-    if (const auto *at = ctx_.getAsConstantArrayType(vd->getType()))
-      cap = at->getSize().getZExtValue();
-    else if (const HeapAllocState *hs = heapStateOf(dst))
-      cap = static_cast<unsigned long long>(hs->bytes);
-    if (!cap)
-      return;
     unsigned long long need = str->getLength() + 1;
-    if (need > cap)
+    if (dst.capacityKnown && need > dst.capacity)
       report(call->getBeginLoc(), "string copy of " + std::to_string(need - 1) +
                                       " chars plus NUL exceeds destination '" +
-                                      vd->getNameAsString() + "'");
-  }
-
-  /// strcat into a heap buffer: current content + src + NUL must fit.
-  void checkStringConcatHeap(const CallExpr *call) {
-    const Expr *dst = call->getArg(0)->IgnoreParenImpCasts();
-    const auto *dstRef = dyn_cast<DeclRefExpr>(dst);
-    const auto *str = dyn_cast<StringLiteral>(call->getArg(1)->IgnoreParenCasts());
-    const HeapAllocState *hs = heapStateOf(dst);
-    if (!dstRef || !str || !hs)
-      return;
-    const auto *vd = dyn_cast<VarDecl>(dstRef->getDecl());
-    if (!vd)
-      return;
-    unsigned long long used = 1; // d[0]=0 idiom reserves one byte
-    unsigned long long need = used + str->getLength();
-    if (need > static_cast<unsigned long long>(hs->bytes))
-      report(call->getBeginLoc(),
-             "string concatenation needs " + std::to_string(need) +
-                 " bytes but destination '" + vd->getNameAsString() +
-                 "' has capacity " + std::to_string(hs->bytes));
+                                      dst.var->getNameAsString() + "'");
+    if (dst.offset == 0)
+      knownStrLen_[dst.var] = str->getLength();
+    else
+      invalidateStringLength(dst);
   }
 
   /// memcpy/memmove source must have at least the requested bytes.
@@ -6939,6 +7574,27 @@ public:
       int slot = paramIndexOf(call->getArg(0));
       if (slot >= 0)
         userFrees_[currentFunction_].insert(slot);
+      // `free(*pp)` / `free(pp[0])` releases the object the pointer
+      // parameter POINTS TO, not the parameter itself. Record that shape
+      // separately so a caller passing `&p` can be tainted at the call site.
+      const Expr *ae = call->getArg(0)->IgnoreParenImpCasts();
+      const Expr *inner = nullptr;
+      if (const auto *uo = dyn_cast<UnaryOperator>(ae))
+        if (uo->getOpcode() == UO_Deref)
+          inner = uo->getSubExpr()->IgnoreParenImpCasts();
+      if (!inner)
+        if (const auto *ase = dyn_cast<ArraySubscriptExpr>(ae)) {
+          Expr::EvalResult r;
+          if (ase->getIdx()->EvaluateAsInt(r, ctx_) && r.Val.isInt() &&
+              r.Val.getInt().isZero())
+            inner = ase->getBase()->IgnoreParenImpCasts();
+        }
+      if (const auto *ref = inner ? dyn_cast<DeclRefExpr>(inner) : nullptr)
+        if (const auto *pv = dyn_cast<ParmVarDecl>(ref->getDecl()))
+          if (pv->getDeclContext() ==
+              static_cast<const DeclContext *>(currentFnDecl_))
+            userFreesPointee_[currentFunction_].insert(
+                (int)pv->getFunctionScopeIndex());
     }
     if (!report_ && isReleaseName(name) && call->getNumArgs() >= 1) {
       const std::string g = varNameOf(call->getArg(0));
@@ -7714,8 +8370,15 @@ public:
           }
       bool reallocFromNull = isReallocName(baseName) && call->getNumArgs() >= 1 &&
                              isNullConstant(call->getArg(0)->IgnoreParenCasts());
+      std::string reallocResult;
+      for (const auto &kv : reallocAssignCalls_)
+        if (kv.second == call) {
+          reallocResult = kv.first->getNameAsString();
+          break;
+        }
       if (isReallocName(baseName) && !reallocFromNull &&
-          handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0) {
+          handledReallocs_.count(call->getBeginLoc().getRawEncoding()) == 0 &&
+          !handledReallocVars_.count(reallocResult)) {
         // Do NOT mark the old pointer released: on failure realloc returns
         // NULL and the original block remains owned by the caller.  Alias
         // invalidation is only valid on the success branch, which the current
@@ -8079,7 +8742,6 @@ public:
       }
       if (baseName == "strcat" && call->getNumArgs() >= 2) {
         checkStringConcat(call);
-        checkStringConcatHeap(call);
         checkLibcNullSource(call, baseName);
       }
       if ((baseName == "snprintf" || baseName == "vsnprintf") &&
@@ -8166,6 +8828,38 @@ public:
                                             "' which frees its argument");
           else if (conditionalDepth_ == 0)
             markReleased(an);
+        }
+      }
+      // Pointer-to-pointer release (`sneak_free(&p)` where the callee does
+      // `free(*pp)`): the caller's pointee, not the address expression,
+      // becomes dangling. Keep the same double-free policy as direct relays.
+      for (const auto &target : calleeNames(call, callee)) {
+        auto pit = userFreesPointee_.find(target);
+        if (pit == userFreesPointee_.end() || pit->second.empty())
+          continue;
+        for (int idx : pit->second) {
+          if (idx < 0 || (unsigned)idx >= call->getNumArgs())
+            continue;
+          const Expr *arg = call->getArg((unsigned)idx)->IgnoreParenImpCasts();
+          const auto *addr = dyn_cast<UnaryOperator>(arg);
+          if (!addr || addr->getOpcode() != UO_AddrOf)
+            continue;
+          const auto *ref = dyn_cast<DeclRefExpr>(
+              addr->getSubExpr()->IgnoreParenImpCasts());
+          if (!ref)
+            continue;
+          const auto *vd = dyn_cast<VarDecl>(ref->getDecl());
+          if (!vd)
+            continue;
+          const std::string pn = vd->getNameAsString();
+          if (pn.empty())
+            continue;
+          if (releasedVars_.count(pn) || isReleased(addr->getSubExpr()))
+            report(call->getBeginLoc(),
+                   "double free after call to '" + target +
+                       "' which frees the pointee of its argument");
+          else if (conditionalDepth_ == 0)
+            markReleased(pn);
         }
       }
       // Out-parameter summaries: `make(&q)` where make does `*out = malloc(N)`
@@ -8292,6 +8986,10 @@ public:
             return true;
           }
     }
+    // A conditional index is safe only when every possibly-selected constant
+    // arm is in bounds; STRICT fails closed on a runtime condition with an
+    // out-of-bounds constant arm (including nested conditionals).
+    checkConditionalIndexArms(subscript);
     // A subscript through a pointer parameter with no proven extent is not
     // safe by default. STRICT rejects it; DEFAULT warns. One-past pointer
     // formation remains legal because this only checks actual subscripts.
@@ -8407,6 +9105,33 @@ public:
         }
       }
     }
+    // Struct downcast: a pointer to a smaller allocation is cast to a larger
+    // struct and a non-FAM field is indexed. FAMs are handled above.
+    if (const auto *me = dyn_cast<MemberExpr>(
+            subscript->getBase()->IgnoreParenImpCasts())) {
+      const auto *fd = dyn_cast<FieldDecl>(me->getMemberDecl());
+      if (fd && !ctx_.getAsIncompleteArrayType(fd->getType())) {
+        const auto *ref = dyn_cast<DeclRefExpr>(
+            me->getBase()->IgnoreParenImpCasts());
+        const HeapAllocState *hs = ref ? heapStateOf(ref) : nullptr;
+        long long idx = 0;
+        if (hs && hs->bytes > 0 && evalIndexValue(subscript->getIdx(), idx) &&
+            idx >= 0) {
+          QualType ft = fd->getType();
+          const auto *cat = ctx_.getAsConstantArrayType(ft);
+          QualType elem = cat ? cat->getElementType() : ft;
+          unsigned long long es = ctx_.getTypeSize(elem) / 8u;
+          unsigned long long field =
+              (unsigned long long)(ctx_.getFieldOffset(fd) / 8u);
+          if (es && field + (unsigned long long)idx * es >=
+                        (unsigned long long)hs->bytes)
+            report(subscript->getBeginLoc(),
+                   "field index " + std::to_string(idx) + " exceeds heap "
+                   "allocation '" + varNameOf(ref) + "' of " +
+                   std::to_string(hs->bytes) + " bytes");
+        }
+      }
+    }
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
     unsigned long long compExtent = 0;
     if (const auto *cle = dyn_cast<CompoundLiteralExpr>(base))
@@ -8445,6 +9170,16 @@ public:
       std::string name = varNameOf(subscript->getBase());
       if (name.empty())
         name = lvalueKey(subscript->getBase());
+      // A loop induction value is worst-case, not a source-level constant.
+      // Name it as an out-of-bounds access rather than a literal index so the
+      // diagnostic stays accurate for `a[i++]` inside a counted while loop.
+      if (indexMentionsLoopOverride(subscript->getIdx())) {
+        report(subscript->getBeginLoc(),
+               "out-of-bounds access: index " + std::to_string(value) +
+                   " reaches past array '" + name + "' of length " +
+                   std::to_string(extent));
+        return true;
+      }
       Diag d;
       d.level = DiagLevel::Error;
       d.message = "[CPLUS-SAFE-BOUNDS] constant array index " +
@@ -8662,7 +9397,11 @@ private:
   std::set<const VarDecl *> heapWritten_;
   std::set<const VarDecl *> heapInterior_;
   std::set<const VarDecl *> onePastEnd_;
+  // Pointers formed from a fixed array with a runtime (unproven) offset.
+  std::set<const VarDecl *> unprovenPtrOffset_;
+  std::set<const VarDecl *> arrayDerivedPtr_;
   std::map<const VarDecl *, std::string> strlenSized_;
+  std::map<const VarDecl *, unsigned long long> knownStrLen_;
   std::map<const VarDecl *, long long> loopIndexOverride_;
   std::map<std::string, llvm::APSInt> constLocals_;
   // Local floating constants with a provable initializer, used for strict
@@ -8759,6 +9498,13 @@ public:
   std::map<std::string, std::set<std::string>> aliasGroups_;
   int conditionalDepth_ = 0;
   std::map<std::string, std::set<int>> userFrees_;
+  // Realloc results assigned to an already-declared variable (`q = realloc(...)`).
+  std::map<const VarDecl *, const CallExpr *> reallocAssignCalls_;
+  std::set<std::string> handledReallocVars_;
+  // Callees that release the POINTEE of a pointer parameter (`free(*pp)`).
+  // The caller passes `&p`, so ownership of p must be transferred at the
+  // call site even though the callee never names p.
+  std::map<std::string, std::set<int>> userFreesPointee_;
   // Function -> function names it returns as a function pointer
   // (`void (*get(void))(void *) { return free; }`).
   std::map<std::string, std::set<std::string>> returnedFnPtr_;
@@ -8798,6 +9544,679 @@ public:
   std::map<std::string, std::set<std::string>> writeBorrows_;
   std::set<std::string> movedVars_;
   std::set<std::string> destructors_;
+};
+
+// ---------------------------------------------------------------------------
+// Issue #179: Cake-style flow-sensitive _Opt / _Owner / _View checking.
+//
+// This is a separate, additive pass. The existing SafetyVisitor keeps all of
+// its historical diagnostics unchanged; this visitor only fires on variables
+// the rewriter explicitly tagged with a Cake qualifier. That keeps the new
+// rejections deterministic and free of false positives for untagged C code.
+//
+// State is flow-sensitive in the same sense as Cake: branch refinement is
+// scoped to the arm that proves the pointer non-null, and a guard whose other
+// arm exits the function refines the state after the statement. Ownership
+// reuse (moved/released/consumed) is keyed by declaration name and fed by the
+// shared effect summaries, so cplus_move and ownership-transferring calls
+// behave consistently with the rest of the checker.
+//
+// Moved state is NOT a translation-unit-wide fact. The rewriter records each
+// cplus_move site as an ORIGINAL source line; those lines are mapped to byte
+// offsets in the lowered C buffer parsed by Clang. Moved state is seeded only
+// when the walk reaches the site's offset, cleared by an assignment to the
+// same name, intersected at if/else joins, and re-applied on the second pass
+// over a loop body (Cake visits loops twice). This keeps mutually exclusive
+// arms, move/reassign/move sequences and loop-carried moves precise.
+// ---------------------------------------------------------------------------
+namespace {
+
+/// Byte offset in `code` where ORIGINAL source line `line` starts. Clang's
+/// `#line` markers are not source lines and are skipped, so line N of the
+/// lowered buffer maps to line N of the annotated file.
+size_t cakeLineOffset(const std::string &code, unsigned line) {
+  size_t pos = 0;
+  unsigned current = 1;
+  while (pos <= code.size() && current < line) {
+    size_t nl = code.find('\n', pos);
+    if (nl == std::string::npos)
+      return code.size();
+    size_t first = pos;
+    while (first < nl && (code[first] == ' ' || code[first] == '\t'))
+      ++first;
+    if (code.compare(first, 6, "#line ") != 0)
+      ++current;
+    pos = nl + 1;
+  }
+  return pos;
+}
+
+/// Byte offset of the `nth` `cplus_move(name)` token inside [begin, end).
+size_t cakeMoveOffset(const std::string &code, size_t begin, size_t end,
+                      const std::string &name, unsigned nth) {
+  const std::string token = "cplus_move";
+  size_t pos = begin;
+  unsigned seen = 0;
+  auto skipSpace = [&](size_t &q) {
+    while (q < end && (code[q] == ' ' || code[q] == '\t'))
+      ++q;
+  };
+  while (pos < end) {
+    size_t p = code.find(token, pos);
+    if (p == std::string::npos || p >= end)
+      break;
+    size_t q = p + token.size();
+    skipSpace(q);
+    if (q < end && code[q] == '(') {
+      ++q;
+      skipSpace(q);
+      if (code.compare(q, name.size(), name) == 0) {
+        q += name.size();
+        skipSpace(q);
+        if (q < end && code[q] == ')' && seen++ == nth)
+          return p;
+      }
+    }
+    pos = p + token.size();
+  }
+  return std::string::npos;
+}
+
+} // namespace
+
+class CakeFlowVisitor : public RecursiveASTVisitor<CakeFlowVisitor> {
+public:
+  CakeFlowVisitor(ASTContext &ctx, DiagnosticEngine &diags, std::string file,
+                  const std::string &code, bool strict)
+      : ctx_(ctx), diags_(diags), file_(std::move(file)), code_(code),
+        strict_(strict) {}
+
+  int qualifierFor(const VarDecl *vd) const { return qualifierOf(vd); }
+  void noteOwnerName(const std::string &n) { currentOwners_.insert(n); }
+  void noteViewName(const std::string &n) { localViews_.insert(n); }
+
+  bool TraverseFunctionDecl(FunctionDecl *fd) {
+    if (!fd || !fd->doesThisDeclarationHaveABody())
+      return true;
+    std::set<std::string> savedOwners = std::move(currentOwners_);
+    std::set<std::string> savedViews = std::move(localViews_);
+    std::set<std::string> savedMoved = std::move(moved_);
+    std::set<std::string> savedReleased = std::move(released_);
+    std::set<std::string> savedNonNull = std::move(nonNull_);
+    std::set<std::string> savedTransferred = std::move(transferred_);
+    auto savedOffsets = std::move(moveOffsets_);
+    auto savedApplied = std::move(appliedSites_);
+    currentOwners_.clear();
+    localViews_.clear();
+    moved_.clear();
+    released_.clear();
+    nonNull_.clear();
+    transferred_.clear();
+    moveOffsets_.clear();
+    appliedSites_.clear();
+    collectTransfers(fd->getBody());
+    // cplus_move is a macro, so it has no CallExpr in the safety AST. The
+    // rewriter records each move site by original source line. Discover the
+    // qualified names first, then map their sites to byte offsets in the
+    // lowered C buffer so the walk can seed moved state at the site itself.
+    struct CakeDeclCollector : RecursiveASTVisitor<CakeDeclCollector> {
+      CakeFlowVisitor &self;
+      CakeDeclCollector(CakeFlowVisitor &s) : self(s) {}
+      bool VisitVarDecl(VarDecl *vd) {
+        const int q = self.qualifierFor(vd);
+        if (q == 2)
+          self.noteOwnerName(vd->getNameAsString());
+        else if (q == 3)
+          self.noteViewName(vd->getNameAsString());
+        return true;
+      }
+    } collector(*this);
+    collector.TraverseStmt(fd->getBody());
+    seedMoveSites();
+    bool r = RecursiveASTVisitor::TraverseFunctionDecl(fd);
+    for (const std::string &n : currentOwners_)
+      if (!moved_.count(n) && !released_.count(n) && !transferred_.count(n))
+        reportAt(fd->getLocation(), "CPLUS-OWN",
+                 "_Owner '" + n +
+                     "' is leaked: it is neither released nor moved on every "
+                     "path",
+                 "release it exactly once or transfer it with cplus_move()");
+    currentOwners_ = std::move(savedOwners);
+    localViews_ = std::move(savedViews);
+    moved_ = std::move(savedMoved);
+    released_ = std::move(savedReleased);
+    nonNull_ = std::move(savedNonNull);
+    transferred_ = std::move(savedTransferred);
+    moveOffsets_ = std::move(savedOffsets);
+    appliedSites_ = std::move(savedApplied);
+    return r;
+  }
+
+  /// Apply the recorded move sites whose byte offsets fall inside the source
+  /// range of the statement just walked. Deferring to AFTER the statement
+  /// means a use within the move expression itself is not mistaken for a
+  /// use-after-move, while the next statement sees the seeded state.
+  bool TraverseStmt(Stmt *s) {
+    bool r = RecursiveASTVisitor::TraverseStmt(s);
+    unsigned begin = 0, end = 0;
+    if (stmtOffsetRange(s, begin, end))
+      applyMovesInRange(begin, end, s->getBeginLoc());
+    return r;
+  }
+
+  bool TraverseIfStmt(IfStmt *s) {
+    if (!s)
+      return true;
+    std::string name;
+    bool thenNonNull = false, elseNonNull = false;
+    refineFromCond(s->getCond(), name, thenNonNull, elseNonNull);
+    const bool tracked = !name.empty() && isQualified(name);
+    const std::set<std::string> savedNonNull = nonNull_;
+    bool r = TraverseStmt(s->getCond());
+
+    // Fork the ownership state for each arm. appliedSites_ is intentionally
+    // shared: a move site belongs to exactly one arm, so the other arm must
+    // not re-apply it when its state is restored.
+    const std::set<std::string> entryMoved = moved_;
+    const std::set<std::string> entryReleased = released_;
+    const std::set<std::string> entryTransferred = transferred_;
+
+    moved_ = entryMoved;
+    released_ = entryReleased;
+    transferred_ = entryTransferred;
+    if (tracked && thenNonNull)
+      nonNull_.insert(name);
+    else
+      nonNull_.erase(name);
+    r &= TraverseStmt(s->getThen());
+    const std::set<std::string> thenMoved = moved_;
+    const std::set<std::string> thenReleased = released_;
+    const std::set<std::string> thenTransferred = transferred_;
+
+    moved_ = entryMoved;
+    released_ = entryReleased;
+    transferred_ = entryTransferred;
+    nonNull_ = savedNonNull;
+    if (Stmt *other = s->getElse()) {
+      if (tracked && elseNonNull)
+        nonNull_.insert(name);
+      else
+        nonNull_.erase(name);
+      r &= TraverseStmt(other);
+    }
+    const std::set<std::string> elseMoved = moved_;
+    const std::set<std::string> elseReleased = released_;
+    const std::set<std::string> elseTransferred = transferred_;
+
+    // Join: a moved/released fact survives only when BOTH arms agree, so a
+    // single move in one arm is never treated as an unconditional transfer.
+    moved_ = intersect(thenMoved, elseMoved);
+    released_ = intersect(thenReleased, elseReleased);
+    transferred_ = intersect(thenTransferred, elseTransferred);
+    nonNull_ = savedNonNull;
+    // A guard whose OTHER arm definitely exits proves non-null after the if.
+    if (tracked) {
+      if (thenNonNull && s->getElse() && containsReturn(s->getElse()))
+        nonNull_.insert(name);
+      if (elseNonNull && containsReturn(s->getThen()))
+        nonNull_.insert(name);
+    }
+    return r;
+  }
+
+  bool TraverseWhileStmt(WhileStmt *s) {
+    return traverseLoop(nullptr, s->getCond(), s->getBody(), nullptr);
+  }
+  bool TraverseForStmt(ForStmt *s) {
+    return traverseLoop(s->getInit(), s->getCond(), s->getBody(), s->getInc());
+  }
+  bool TraverseDoStmt(DoStmt *s) {
+    return traverseLoop(nullptr, s->getCond(), s->getBody(), nullptr);
+  }
+
+  /// Cake visits a loop body twice: once to reach the iteration state and a
+  /// second time with warnings enabled. Rewinding the move sites inside the
+  /// body makes a move without an intervening reassignment a double move on
+  /// the back edge; a reassignment in the body clears the state before the
+  /// move is seen again.
+  bool traverseLoop(Stmt *init, Stmt *cond, Stmt *body, Stmt *inc) {
+    if (!body)
+      return true;
+    const std::set<std::string> entryMoved = moved_;
+    const std::set<std::string> entryReleased = released_;
+    const std::set<std::string> entryTransferred = transferred_;
+    const auto entryApplied = appliedSites_;
+
+    suppress_ = true;
+    TraverseStmt(init);
+    TraverseStmt(cond);
+    TraverseStmt(body);
+    TraverseStmt(inc);
+    suppress_ = false;
+    const std::set<std::string> iterationMoved = moved_;
+    const std::set<std::string> iterationReleased = released_;
+    const std::set<std::string> iterationTransferred = transferred_;
+
+    unsigned bodyBegin = 0, bodyEnd = 0;
+    const bool haveBody = stmtOffsetRange(body, bodyBegin, bodyEnd);
+    for (auto it = appliedSites_.begin(); it != appliedSites_.end();) {
+      if (!entryApplied.count(*it) && haveBody && it->second >= bodyBegin &&
+          it->second <= bodyEnd)
+        it = appliedSites_.erase(it);
+      else
+        ++it;
+    }
+
+    moved_ = iterationMoved;
+    released_ = iterationReleased;
+    transferred_ = iterationTransferred;
+    TraverseStmt(init);
+    TraverseStmt(cond);
+    TraverseStmt(body);
+    TraverseStmt(inc);
+
+    // Zero iterations are possible: only definite state survives the exit,
+    // while a transfer anywhere in the loop still clears the leak obligation.
+    moved_ = intersect(moved_, entryMoved);
+    released_ = setUnion(released_, entryReleased);
+    transferred_ = setUnion(transferred_, entryTransferred);
+    return true;
+  }
+
+  bool TraverseBinaryOperator(BinaryOperator *op) {
+    if (!op || (op->getOpcode() != BO_LAnd && op->getOpcode() != BO_LOr))
+      return RecursiveASTVisitor::TraverseBinaryOperator(op);
+    // `p && *p` and `!p || *p` refine p only in the right operand.
+    std::string name;
+    bool refines = false;
+    const Expr *lhs = op->getLHS()->IgnoreParenCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(lhs)) {
+      if (uo->getOpcode() == UO_LNot) {
+        name = nameOf(uo->getSubExpr());
+        refines = op->getOpcode() == BO_LOr;
+      }
+    }
+    if (name.empty()) {
+      name = nameOf(lhs);
+      refines = op->getOpcode() == BO_LAnd;
+    }
+    std::set<std::string> saved = nonNull_;
+    if (!name.empty() && isQualified(name)) {
+      if (refines)
+        nonNull_.insert(name);
+      else
+        nonNull_.erase(name);
+    }
+    bool r = TraverseStmt(op->getLHS());
+    r &= TraverseStmt(op->getRHS());
+    nonNull_ = saved;
+    return r;
+  }
+
+  bool VisitVarDecl(VarDecl *vd) {
+    const int q = qualifierOf(vd);
+    if (q == 0)
+      return true;
+    const std::string n = vd->getNameAsString();
+    if (q == 1)
+      optVars_.insert(n);
+    else if (q == 3)
+      viewVars_.insert(n);
+    else if (q == 2) {
+      ownerVars_.insert(n);
+      // Parameters are borrowed by the caller; the callee is not required to
+      // destroy them. Only locals create a leak obligation here.
+      if (!isa<ParmVarDecl>(vd))
+        currentOwners_.insert(n);
+    }
+    return true;
+  }
+
+  bool VisitBinaryOperator(BinaryOperator *op) {
+    if (!op || !op->isAssignmentOp())
+      return true;
+    const std::string n = nameOf(op->getLHS());
+    if (n.empty() || !isQualified(n))
+      return true;
+    // A fresh assignment revives a moved-from owner.
+    if (ownerVars_.count(n) || viewVars_.count(n)) {
+      moved_.erase(n);
+      released_.erase(n);
+      transferred_.erase(n);
+    }
+    if (isNullExpr(op->getRHS()))
+      nonNull_.erase(n);
+    else
+      nonNull_.insert(n);
+    return true;
+  }
+
+  bool VisitUnaryOperator(UnaryOperator *op) {
+    if (!op || op->getOpcode() != UO_Deref)
+      return true;
+    const std::string n = nameOf(op->getSubExpr());
+    if (n.empty())
+      return true;
+    if (optVars_.count(n) && !nonNull_.count(n))
+      reportAt(op->getBeginLoc(), "CPLUS-OPT",
+               "_Opt pointer '" + n +
+                   "' is dereferenced without an active non-null refinement",
+               "guard it with 'if (" + n + ") { ... }' or "
+               "'if (!" + n + ") return;' before dereferencing");
+    if ((ownerVars_.count(n) || viewVars_.count(n)) && moved_.count(n))
+      reportAt(op->getBeginLoc(), "CPLUS-OWN",
+               "use-after-move: dereference of moved '" + n + "'",
+               "re-assign the owner or borrow it before the move instead");
+    return true;
+  }
+
+  bool VisitMemberExpr(MemberExpr *member) {
+    if (!member || !member->isArrow())
+      return true;
+    const std::string n = nameOf(member->getBase());
+    if (n.empty())
+      return true;
+    if (optVars_.count(n) && !nonNull_.count(n))
+      reportAt(member->getBeginLoc(), "CPLUS-OPT",
+               "_Opt pointer '" + n +
+                   "' is dereferenced by '->' without an active non-null "
+                   "refinement",
+               "guard it with 'if (" + n + ") { ... }' first");
+    if ((ownerVars_.count(n) || viewVars_.count(n)) && moved_.count(n))
+      reportAt(member->getBeginLoc(), "CPLUS-OWN",
+               "use-after-move: member access through moved '" + n + "'",
+               "re-assign the owner or borrow it before the move instead");
+    return true;
+  }
+
+  bool VisitCallExpr(CallExpr *call) {
+    if (!call)
+      return true;
+    const FunctionDecl *fd = call->getDirectCallee();
+    const std::string fn = fd ? fd->getNameAsString() : std::string();
+    const bool isDrop = fn == "free" || fn == "cplus_release" ||
+                        (fn.size() > 5 &&
+                         fn.compare(fn.size() - 5, 5, "_drop") == 0);
+    if (isDrop || fn == "cplus_move") {
+      if (call->getNumArgs() >= 1) {
+        const std::string n = nameOf(call->getArg(0));
+        if (!n.empty()) {
+          if (isDrop)
+            released_.insert(n);
+          if (fn == "cplus_move") {
+            if (viewVars_.count(n))
+              reportAt(call->getBeginLoc(), "CPLUS-VIEW",
+                       "_View '" + n +
+                           "' is a borrow and must not be moved",
+                       "borrows are non-owning; drop the _View qualifier or "
+                       "move the underlying _Owner");
+            else if (ownerVars_.count(n)) {
+              if (moved_.count(n))
+                reportAt(call->getBeginLoc(), "CPLUS-OWN",
+                         "_Owner '" + n + "' is moved more than once",
+                         "a moved owner is empty; re-assign it before "
+                         "transferring it again");
+              moved_.insert(n);
+              released_.insert(n); // transferred out of this function
+            }
+          }
+        }
+      }
+    }
+    // Ownership-consuming callees reuse the existing effect summaries.
+    for (unsigned i = 0; i < call->getNumArgs(); ++i) {
+      const std::string n = nameOf(call->getArg(i));
+      if (n.empty() || !ownerVars_.count(n))
+        continue;
+      if (cplusCakeEffectConsumesArg(fn, static_cast<int>(i))) {
+        moved_.insert(n);
+        released_.insert(n);
+      }
+    }
+    return true;
+  }
+
+private:
+  static std::string nameOf(const Expr *e) {
+    if (!e)
+      return std::string();
+    e = e->IgnoreParenImpCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(e))
+      if (uo->getOpcode() == UO_AddrOf)
+        e = uo->getSubExpr()->IgnoreParenImpCasts();
+    if (const auto *dr = dyn_cast<DeclRefExpr>(e))
+      if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+        return vd->getNameAsString();
+    return std::string();
+  }
+
+  static bool isNullExpr(const Expr *e) {
+    if (!e)
+      return false;
+    e = e->IgnoreParenImpCasts();
+    if (isa<CXXNullPtrLiteralExpr>(e))
+      return true;
+    if (const auto *il = dyn_cast<IntegerLiteral>(e))
+      return il->getValue().isZero();
+    if (const auto *dr = dyn_cast<DeclRefExpr>(e))
+      return dr->getDecl() &&
+             dr->getDecl()->getNameAsString() == "NULL";
+    return false;
+  }
+
+  static bool containsReturn(const Stmt *s) {
+    if (!s)
+      return false;
+    if (isa<ReturnStmt>(s))
+      return true;
+    for (const Stmt *c : s->children())
+      if (containsReturn(c))
+        return true;
+    return false;
+  }
+
+  void collectTransfers(const Stmt *s) {
+    if (!s)
+      return;
+    if (const auto *rs = dyn_cast<ReturnStmt>(s)) {
+      const std::string n = nameOf(rs->getRetValue());
+      if (!n.empty())
+        transferred_.insert(n);
+    }
+    for (const Stmt *c : s->children())
+      collectTransfers(c);
+  }
+
+  /// Turn the rewriter's original-source line facts into byte offsets in the
+  /// lowered C buffer that Clang parsed. Sites are kept in source order, so a
+  /// repeated move on one line is matched to its nth token occurrence.
+  void seedMoveSites() {
+    std::set<std::string> names = currentOwners_;
+    names.insert(localViews_.begin(), localViews_.end());
+    for (const std::string &n : names) {
+      std::vector<unsigned> &offsets = moveOffsets_[n];
+      std::vector<unsigned> lines = cplusCakeMoveSites(n);
+      std::map<unsigned, unsigned> perLine;
+      for (unsigned line : lines) {
+        const size_t begin = cakeLineOffset(code_, line);
+        const size_t end = cakeLineOffset(code_, line + 1);
+        const unsigned nth = perLine[line]++;
+        const size_t off = cakeMoveOffset(code_, begin, end, n, nth);
+        if (off != std::string::npos)
+          offsets.push_back(static_cast<unsigned>(off));
+      }
+      std::sort(offsets.begin(), offsets.end());
+    }
+  }
+
+  /// Source-file byte range of a statement, if both endpoints come from the
+  /// main file (macro expansions report their expansion location here).
+  bool stmtOffsetRange(const Stmt *s, unsigned &begin, unsigned &end) const {
+    if (!s)
+      return false;
+    const SourceManager &sm = ctx_.getSourceManager();
+    SourceLocation b = sm.getExpansionLoc(s->getBeginLoc());
+    SourceLocation e = sm.getExpansionLoc(s->getEndLoc());
+    if (!b.isValid() || !e.isValid() ||
+        sm.getFileID(b) != sm.getMainFileID() ||
+        sm.getFileID(e) != sm.getMainFileID())
+      return false;
+    begin = sm.getFileOffset(b);
+    end = sm.getFileOffset(e);
+    return true;
+  }
+
+  void applyMovesInRange(unsigned begin, unsigned end, SourceLocation loc) {
+    for (const auto &entry : moveOffsets_) {
+      const std::string &n = entry.first;
+      for (unsigned off : entry.second) {
+        if (off < begin || off > end)
+          continue;
+        const auto site = std::make_pair(n, off);
+        if (!appliedSites_.insert(site).second)
+          continue;
+        applyMove(n, loc);
+      }
+    }
+  }
+
+  void applyMove(const std::string &n, SourceLocation loc) {
+    if (viewVars_.count(n)) {
+      reportAt(loc, "CPLUS-VIEW",
+               "_View '" + n + "' is a borrow and must not be moved",
+               "borrows are non-owning; move the underlying _Owner instead");
+      moved_.insert(n);
+      return;
+    }
+    if (!ownerVars_.count(n)) {
+      moved_.insert(n);
+      return;
+    }
+    if (moved_.count(n))
+      reportAt(loc, "CPLUS-OWN", "_Owner '" + n + "' is moved more than once",
+               "a moved owner is empty; re-assign it before transferring it "
+               "again");
+    moved_.insert(n);
+    released_.insert(n); // transferred out; not a leak at scope exit
+  }
+
+  static std::set<std::string> intersect(const std::set<std::string> &a,
+                                         const std::set<std::string> &b) {
+    std::set<std::string> out;
+    std::set_intersection(a.begin(), a.end(), b.begin(), b.end(),
+                          std::inserter(out, out.begin()));
+    return out;
+  }
+
+  static std::set<std::string> setUnion(const std::set<std::string> &a,
+                                        const std::set<std::string> &b) {
+    std::set<std::string> out = a;
+    out.insert(b.begin(), b.end());
+    return out;
+  }
+
+  int qualifierOf(const VarDecl *vd) const {
+    if (!vd)
+      return 0;
+    const std::string n = vd->getNameAsString();
+    PresumedLoc pl = ctx_.getSourceManager().getPresumedLoc(vd->getLocation());
+    if (pl.isValid()) {
+      int q = cplusCakeQualifierOf(n, pl.getLine());
+      if (q)
+        return q;
+    }
+    const VarDecl *canonical = vd->getCanonicalDecl();
+    if (canonical && canonical != vd) {
+      PresumedLoc cp =
+          ctx_.getSourceManager().getPresumedLoc(canonical->getLocation());
+      if (cp.isValid())
+        return cplusCakeQualifierOf(n, cp.getLine());
+    }
+    return 0;
+  }
+
+  bool isQualified(const std::string &n) const {
+    return optVars_.count(n) || ownerVars_.count(n) || viewVars_.count(n);
+  }
+
+  void refineFromCond(const Expr *cond, std::string &name, bool &thenNonNull,
+                      bool &elseNonNull) const {
+    name.clear();
+    thenNonNull = elseNonNull = false;
+    if (!cond)
+      return;
+    const Expr *c = cond->IgnoreParenCasts();
+    if (const auto *uo = dyn_cast<UnaryOperator>(c)) {
+      if (uo->getOpcode() == UO_LNot) {
+        name = nameOf(uo->getSubExpr());
+        thenNonNull = false;
+        elseNonNull = !name.empty();
+      }
+      return;
+    }
+    if (const auto *bo = dyn_cast<BinaryOperator>(c)) {
+      if (!bo->isEqualityOp())
+        return;
+      name = nameOf(bo->getLHS());
+      if (name.empty())
+        name = nameOf(bo->getRHS());
+      const bool nullComparison =
+          isNullExpr(bo->getLHS()) || isNullExpr(bo->getRHS());
+      if (!name.empty() && nullComparison) {
+        thenNonNull = bo->getOpcode() == BO_NE;
+        elseNonNull = bo->getOpcode() == BO_EQ;
+      } else {
+        name.clear();
+      }
+      return;
+    }
+    name = nameOf(c);
+    thenNonNull = !name.empty();
+  }
+
+  void reportAt(SourceLocation loc, const char *category,
+                const std::string &message, const std::string &help) {
+    if (suppress_)
+      return;
+    std::string key = message + "@" + std::to_string(loc.getRawEncoding());
+    if (!reported_.insert(key).second)
+      return;
+    PresumedLoc pl = ctx_.getSourceManager().getPresumedLoc(loc);
+    Diag d;
+    d.level = strict_ ? DiagLevel::Error : DiagLevel::Warning;
+    d.message = "[" + std::string(category) + "] " + message;
+    d.help = help;
+    d.file = file_;
+    if (pl.isValid()) {
+      d.line = pl.getLine();
+      d.column = pl.getColumn();
+      std::string sourceFile = pl.getFilename();
+      if (sourceFile == file_ + ".c")
+        sourceFile = file_;
+      if (!sourceFile.empty() && sourceFile != file_)
+        d.file = sourceFile;
+    }
+    diags_.report(std::move(d));
+  }
+
+  ASTContext &ctx_;
+  DiagnosticEngine &diags_;
+  std::string file_;
+  std::string code_;
+  bool strict_ = false;
+  bool suppress_ = false;
+  std::set<std::string> optVars_;
+  std::set<std::string> ownerVars_;
+  std::set<std::string> viewVars_;
+  std::set<std::string> currentOwners_;
+  std::set<std::string> localViews_;
+  std::set<std::string> moved_;
+  std::set<std::string> released_;
+  std::set<std::string> nonNull_;
+  std::set<std::string> transferred_;
+  std::map<std::string, std::vector<unsigned>> moveOffsets_;
+  std::set<std::pair<std::string, unsigned>> appliedSites_;
+  std::set<std::string> reported_;
 };
 
 } // namespace
@@ -9080,6 +10499,8 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   check.setConstReturnValues(collect.constReturnValues());
   check.setFormatFnAliases(collect.formatFnAliases());
   check.setHandledReallocs(collect.handledReallocs());
+  check.setHandledReallocVars(collect.handledReallocVars());
+  check.setReallocAssignCalls(collect.reallocAssignCalls());
   check.setConstLocals(collect.constLocals());
   check.setConstFloatLocals(collect.constFloatLocals());
   check.setAssignedVars(collect.assignedVars());
@@ -9091,6 +10512,7 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
       collect.hasLockCalls());
   check.setParamWriteSlots(collect.paramWriteSlots());
   check.userFrees_ = collect.userFrees_;
+  check.userFreesPointee_ = collect.userFreesPointee_;
   check.setGlobalPointsTo(collect.globalPointsTo());
   check.setUnionVars(collect.unionVars());
   check.setFnPtrVarTargets(collect.fnPtrVarTargets());
@@ -9126,6 +10548,11 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
     setCheckedPointerSites(check.takePointerSites());
   setCheckedAllocSites(check.takeAllocSites());
   setCheckedFreeSites(check.takeFreeSites());
+
+  // Issue #179: Cake qualifiers are checked only when the source actually
+  // declared them, so plain C and every existing diagnostic are untouched.
+  CakeFlowVisitor cake(ast->getASTContext(), diags, filename, loweredC, strict);
+  cake.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
   // Thread-race heuristic: the same entry function passed to more than one
   // pthread_create that writes a global has unsynchronised shared mutable
@@ -9224,6 +10651,347 @@ void checkAstSafety(const std::string &loweredC, const std::string &filename,
   };
   FunctionRunner runner(ast->getASTContext(), filename, diags);
   runner.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
+}
+
+// ---------------------------------------------------------------------------
+// Issue #181: opt-in `-fcplus-disjoint-bounds` instrumentation.
+//
+// This is deliberately additive and off by default.  It runs AFTER all static
+// safety analysis and rewrites ONLY the lowered C text: every pointer object
+// gets (base, bound, key, lock) metadata in the runtime's pointer-slot side
+// table, pointer assignments/arithmetic propagate that tuple, and every
+// dereference/subscript gets an O(1) cplus_shadow_slot_check() call.  A stack
+// frame key is registered on entry and invalidated by a cleanup attribute on
+// every exit path.  Untagged/uninstrumented pointers keep plain-C behaviour.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct ShadowEdit {
+  SourceLocation loc;
+  std::string text;
+  bool afterToken;
+};
+
+static std::vector<std::string>
+shadowParseArgs(const std::vector<std::string> &backendArgs) {
+  std::vector<std::string> args;
+  for (size_t i = 0; i < backendArgs.size(); ++i) {
+    const std::string &arg = backendArgs[i];
+    if (arg == "-isysroot") {
+      ++i; // skip the SDK path
+      continue;
+    }
+    if (arg.rfind("-isysroot=", 0) == 0)
+      continue;
+    if (arg.rfind("-I", 0) == 0 || arg.rfind("-D", 0) == 0 ||
+        arg.rfind("-std=", 0) == 0)
+      args.push_back(arg);
+  }
+#ifdef CPLUS_CLANG_RESOURCE_DIR
+  args.push_back(std::string("-resource-dir=") + CPLUS_CLANG_RESOURCE_DIR);
+#endif
+  args.push_back("-fsyntax-only");
+  return args;
+}
+
+static bool shadowInMainFile(const SourceManager &sm, SourceLocation loc) {
+  return loc.isValid() && !loc.isMacroID() &&
+         sm.isWrittenInMainFile(sm.getExpansionLoc(loc));
+}
+
+static bool shadowDirectCompoundStmtChild(ASTContext &ctx, const Stmt *s) {
+  for (const auto &p : ctx.getParents(*s))
+    if (p.get<CompoundStmt>())
+      return true;
+  return false;
+}
+
+/// Statement to instrument before: the nearest ancestor that is a direct
+/// child of a CompoundStmt (so the inserted check is a valid statement).
+static const Stmt *shadowAnchorStmt(ASTContext &ctx, const Stmt *s) {
+  DynTypedNode cur = DynTypedNode::create(*s);
+  for (unsigned depth = 0; depth < 64; ++depth) {
+    DynTypedNodeList parents = ctx.getParents(cur);
+    if (parents.empty())
+      return NULL;
+    const DynTypedNode &parent = *parents.begin();
+    if (parent.get<CompoundStmt>())
+      return cur.get<Stmt>();
+    if (const Stmt *next = parent.get<Stmt>()) {
+      cur = DynTypedNode::create(*next);
+      continue;
+    }
+    // A dereference inside a variable initializer reaches a VarDecl before
+    // its DeclStmt.  Climb the Decl chain to that statement.
+    if (const Decl *d = parent.get<Decl>()) {
+      DynTypedNode dn = DynTypedNode::create(*d);
+      for (unsigned j = 0; j < 16; ++j) {
+        DynTypedNodeList ps = ctx.getParents(dn);
+        if (ps.empty())
+          break;
+        if (const DeclStmt *ds = ps.begin()->get<DeclStmt>())
+          return ds;
+        if (const Decl *nd = ps.begin()->get<Decl>()) {
+          dn = DynTypedNode::create(*nd);
+          continue;
+        }
+        break;
+      }
+    }
+    return NULL;
+  }
+  return NULL;
+}
+
+static SourceLocation shadowAfterSemicolon(ASTContext &ctx, const Stmt *s) {
+  return Lexer::findLocationAfterToken(s->getEndLoc(), tok::semi,
+                                       ctx.getSourceManager(),
+                                       ctx.getLangOpts(), false);
+}
+
+static std::string shadowSourceText(const Expr *e, const ASTContext &ctx) {
+  return Lexer::getSourceText(CharSourceRange::getTokenRange(e->getSourceRange()),
+                              ctx.getSourceManager(), ctx.getLangOpts())
+      .str();
+}
+
+/// Only side-effect-free index expressions are duplicated into the check.
+static bool shadowSimpleIndex(const Expr *e) {
+  if (!e || !e->getType()->isIntegerType())
+    return false;
+  const Expr *x = e->IgnoreParenImpCasts();
+  if (isa<IntegerLiteral>(x) || isa<DeclRefExpr>(x))
+    return true;
+  if (const auto *uo = dyn_cast<UnaryOperator>(x))
+    return uo->getOpcode() == UO_Plus || uo->getOpcode() == UO_Minus
+               ? shadowSimpleIndex(uo->getSubExpr())
+               : false;
+  if (const auto *bo = dyn_cast<BinaryOperator>(x))
+    return !bo->isAssignmentOp() && !bo->isCompoundAssignmentOp() &&
+           shadowSimpleIndex(bo->getLHS()) &&
+           shadowSimpleIndex(bo->getRHS());
+  if (const auto *cast = dyn_cast<ExplicitCastExpr>(x))
+    return shadowSimpleIndex(cast->getSubExpr());
+  return false;
+}
+
+class ShadowInstrumentVisitor
+    : public RecursiveASTVisitor<ShadowInstrumentVisitor> {
+public:
+  ShadowInstrumentVisitor(ASTContext &ctx, std::vector<ShadowEdit> &edits)
+      : ctx_(ctx), sm_(ctx.getSourceManager()), edits_(edits) {}
+
+  bool VisitFunctionDecl(FunctionDecl *fd) {
+    Stmt *body = fd->doesThisDeclarationHaveABody() ? fd->getBody() : nullptr;
+    if (!body || !shadowInMainFile(sm_, body->getBeginLoc()))
+      return true;
+    std::string text =
+        "\n  uint64_t __cplus_shadow_frame "
+        "__attribute__((cleanup(cplus_shadow_frame_leave))) = "
+        "cplus_shadow_frame_enter();";
+    for (const ParmVarDecl *p : fd->parameters())
+      if (p->getType()->isPointerType())
+        text += "\n  cplus_shadow_slot_seed(&" + p->getNameAsString() +
+                ", (const void *)(" + p->getNameAsString() + "));";
+    edits_.push_back({body->getBeginLoc(), text, true});
+    return true;
+  }
+
+  bool VisitVarDecl(VarDecl *vd) {
+    if (!vd->isLocalVarDecl() || !shadowInMainFile(sm_, vd->getLocation()))
+      return true;
+    const std::string name = vd->getNameAsString();
+    if (name.empty())
+      return true;
+    if (vd->getType()->isArrayType()) {
+      const DeclStmt *ds = enclosingDeclStmt(vd);
+      if (!ds || !shadowDirectCompoundStmtChild(ctx_, ds))
+        return true;
+      SourceLocation after = shadowAfterSemicolon(ctx_, ds);
+      if (after.isInvalid() || !shadowInMainFile(sm_, after))
+        return true;
+      edits_.push_back({after, "\n  cplus_shadow_frame_register(&" + name +
+                                   ", &__cplus_shadow_frame, (const void *)(" +
+                                   name + "), sizeof(" + name + "));",
+                        false});
+      return true;
+    }
+    if (!vd->getType()->isPointerType() || !vd->hasInit())
+      return true;
+    const DeclStmt *ds = enclosingDeclStmt(vd);
+    if (!ds || !shadowDirectCompoundStmtChild(ctx_, ds))
+      return true;
+    SourceLocation after = shadowAfterSemicolon(ctx_, ds);
+    if (after.isInvalid() || !shadowInMainFile(sm_, after))
+      return true;
+    edits_.push_back({after, "\n  " + seedText(name, vd->getInit()), false});
+    return true;
+  }
+
+  bool VisitBinaryOperator(BinaryOperator *op) {
+    if (op->getOpcode() != BO_Assign ||
+        !shadowInMainFile(sm_, op->getBeginLoc()) ||
+        !shadowDirectCompoundStmtChild(ctx_, op))
+      return true;
+    // Compound pointer assignment (p += n) keeps the same base/bound/key, so
+    // no re-seed is needed; only plain assignment carries new provenance.
+    const auto *lhs =
+        dyn_cast<DeclRefExpr>(op->getLHS()->IgnoreParenImpCasts());
+    if (!lhs)
+      return true;
+    const auto *lv = dyn_cast<VarDecl>(lhs->getDecl());
+    if (!lv || !lv->isLocalVarDecl() || !lv->getType()->isPointerType())
+      return true;
+    SourceLocation after = shadowAfterSemicolon(ctx_, op);
+    if (after.isInvalid() || !shadowInMainFile(sm_, after))
+      return true;
+    const std::string name = lv->getNameAsString();
+    const Expr *rhs = op->getRHS()->IgnoreParenImpCasts();
+    std::string text;
+    if (const auto *src = dyn_cast<DeclRefExpr>(rhs))
+      text = "cplus_shadow_slot_copy(&" + name + ", &" +
+             shadowSourceText(src, ctx_) + ");";
+    else if (const auto *arith = dyn_cast<BinaryOperator>(rhs)) {
+      const Expr *ptrSide = arith->getLHS()->IgnoreParenImpCasts();
+      if (!ptrSide->getType()->isPointerType())
+        ptrSide = arith->getRHS()->IgnoreParenImpCasts();
+      const auto *src = dyn_cast<DeclRefExpr>(ptrSide);
+      if (src && (arith->getOpcode() == BO_Add ||
+                  arith->getOpcode() == BO_Sub))
+        text = "cplus_shadow_slot_copy(&" + name + ", &" +
+               shadowSourceText(src, ctx_) + ");";
+    }
+    if (text.empty())
+      text = "cplus_shadow_slot_seed(&" + name + ", (const void *)(" + name +
+             "));";
+    edits_.push_back({after, "\n  " + text, false});
+    return true;
+  }
+
+  bool VisitUnaryOperator(UnaryOperator *uo) {
+    if (uo->getOpcode() != UO_Deref)
+      return true;
+    const auto *base =
+        dyn_cast<DeclRefExpr>(uo->getSubExpr()->IgnoreParenImpCasts());
+    if (!base || !shadowPointerish(base))
+      return true;
+    const std::string b = shadowSourceText(base, ctx_);
+    addCheck(uo, shadowSourceText(base, ctx_), "(const void *)(" + b + ")",
+             "sizeof(*(" + b + "))");
+    return true;
+  }
+
+  bool VisitArraySubscriptExpr(ArraySubscriptExpr *sub) {
+    const auto *base =
+        dyn_cast<DeclRefExpr>(sub->getBase()->IgnoreParenImpCasts());
+    if (!base || !shadowPointerish(base) ||
+        !shadowSimpleIndex(sub->getIdx()))
+      return true;
+    const std::string b = shadowSourceText(base, ctx_);
+    const std::string idx = shadowSourceText(sub->getIdx(), ctx_);
+    addCheck(sub, shadowSourceText(base, ctx_),
+             "(const void *)((const char *)(" + b +
+                 ") + (unsigned long long)(" + idx +
+                 ") * (unsigned long long)sizeof((" + b + ")[0]))",
+             "sizeof((" + b + ")[0])");
+    return true;
+  }
+
+private:
+  static bool shadowPointerish(const DeclRefExpr *e) {
+    return e->getType()->isPointerType() || e->getType()->isArrayType();
+  }
+
+  const DeclStmt *enclosingDeclStmt(const Decl *d) const {
+    DynTypedNode cur = DynTypedNode::create(*d);
+    for (unsigned depth = 0; depth < 16; ++depth) {
+      DynTypedNodeList parents = ctx_.getParents(cur);
+      if (parents.empty())
+        return NULL;
+      if (const DeclStmt *ds = parents.begin()->get<DeclStmt>())
+        return ds;
+      if (const Decl *next = parents.begin()->get<Decl>()) {
+        cur = DynTypedNode::create(*next);
+        continue;
+      }
+      return NULL;
+    }
+    return NULL;
+  }
+
+  std::string seedText(const std::string &name, const Expr *init) const {
+    if (const auto *addr = dyn_cast<UnaryOperator>(init->IgnoreParenImpCasts())) {
+      if (addr->getOpcode() == UO_AddrOf) {
+        const auto *obj = dyn_cast<DeclRefExpr>(
+            addr->getSubExpr()->IgnoreParenImpCasts());
+        if (obj && shadowInMainFile(sm_, obj->getLocation())) {
+          const std::string o = shadowSourceText(obj, ctx_);
+          return "cplus_shadow_frame_register(&" + name +
+                 ", &__cplus_shadow_frame, (const void *)(" + o +
+                 "), sizeof(" + o + "));";
+        }
+      }
+    }
+    return "cplus_shadow_slot_seed(&" + name + ", (const void *)(" + name +
+           "));";
+  }
+
+  void addCheck(const Stmt *s, const std::string &slot,
+                const std::string &ptrExpr, const std::string &sizeExpr) {
+    if (!shadowInMainFile(sm_, s->getBeginLoc()))
+      return;
+    const Stmt *anchor = shadowAnchorStmt(ctx_, s);
+    if (!anchor || !shadowInMainFile(sm_, anchor->getBeginLoc()))
+      return;
+    edits_.push_back({anchor->getBeginLoc(),
+                      "\n  cplus_shadow_slot_check(&" + slot + ", " + ptrExpr +
+                          ", " + sizeExpr + ", __FILE__, __LINE__);\n  ",
+                      false});
+  }
+
+  ASTContext &ctx_;
+  SourceManager &sm_;
+  std::vector<ShadowEdit> &edits_;
+};
+
+} // namespace
+
+bool instrumentDisjointBounds(const std::string &loweredC,
+                              const std::vector<std::string> &backendArgs,
+                              std::string &out, std::string &error) {
+  std::vector<std::string> args = shadowParseArgs(backendArgs);
+  clang::IgnoringDiagConsumer ignored;
+  std::unique_ptr<ASTUnit> ast = tooling::buildASTFromCodeWithArgs(
+      loweredC, args, "cplus-disjoint-bounds.c", "cplus-shadow-instrument",
+      std::make_shared<PCHContainerOperations>(),
+      tooling::getClangStripDependencyFileAdjuster(), {}, &ignored);
+  if (!ast || ast->getDiagnostics().hasErrorOccurred()) {
+    error = "cannot build the AST for disjoint-bounds instrumentation";
+    return false;
+  }
+  ASTContext &ctx = ast->getASTContext();
+  SourceManager &sm = ctx.getSourceManager();
+  std::vector<ShadowEdit> edits;
+  ShadowInstrumentVisitor visitor(ctx, edits);
+  visitor.TraverseDecl(ctx.getTranslationUnitDecl());
+  if (edits.empty()) {
+    out = loweredC;
+    return true;
+  }
+  Rewriter rewriter;
+  rewriter.setSourceMgr(sm, ctx.getLangOpts());
+  for (const ShadowEdit &edit : edits) {
+    if (!shadowInMainFile(sm, edit.loc))
+      continue;
+    if (edit.afterToken)
+      rewriter.InsertTextAfterToken(edit.loc, edit.text);
+    else
+      rewriter.InsertText(edit.loc, edit.text);
+  }
+  llvm::raw_string_ostream os(out);
+  rewriter.getEditBuffer(sm.getMainFileID()).write(os);
+  os.flush();
+  return true;
 }
 
 } // namespace cplus

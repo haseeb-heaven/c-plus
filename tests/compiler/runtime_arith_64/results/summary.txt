@@ -1,0 +1,10 @@
+64-bit runtime arithmetic
+macOS-27.2.1-arm64-arm-64bit
+/usr/bin/clang
+
+cmd: /usr/bin/clang -std=c11 /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_arith_64/rt64.c /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/libcplus_runtime.a -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_arith_64/results/rt64.bin
+rc=0 out='' err=''
+cmd: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/runtime_arith_64/results/rt64.bin
+rc=0 out='div=9223372036854775807 rem=1 shr=9223372036854775807 shl=4 narrow=-1\n' err=''
+
+PASS

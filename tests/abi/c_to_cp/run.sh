@@ -24,6 +24,10 @@ mkdir -p "$OUT"
 
 LOG=$OUT/results.log
 : > "$LOG"
+# Never let a stale artifact turn a failed build into a passing run.
+rm -f "$OUT/c_to_cp_lib.o" "$OUT/libc_to_cp.a" \
+      "$OUT/caller_direct" "$OUT/c_to_cp_caller" \
+      "$OUT/caller.stdout" "$OUT/caller.stderr"
 PASS=0
 FAIL=0
 LAST_RC=0
@@ -123,19 +127,24 @@ done
 check_absent no_cxx_mangling "$OUT/nm_libc_to_cp.txt" ' T __Z'
 
 # ---------------------------------------------------------------------------
-# 3. Direct-link probe (no suppression flag): prove the driver links the .a
-#    directly.  A benign compile-step "linker input unused" warning is expected
-#    and preserved verbatim in results.log; the link step consumes the archive.
+# 3. Direct-link probe: prove the STRICT C+ driver consumes the precompiled C
+#    archive.  `-- <bare .a path>` is rejected by the STRICT pass-through
+#    allow-list (bare inputs are an unbounded injection surface), so the archive
+#    is passed through the allow-listed `-L <dir> -l <name>` spelling.  No
+#    warning-suppression flag is used: -Wno-* is deliberately rejected in
+#    STRICT, and the expected compile-step "linker input unused" diagnostic is
+#    a backend warning, not a C+ safety diagnostic.
 # ---------------------------------------------------------------------------
 step Cplus_probe_link - - 180 "$ROOT/build/c+" build --strict --sanitize=none \
-    "$LAB/c_to_cp_caller.cp" -o "$OUT/caller_direct" -- "$OUT/libc_to_cp.a"
+    "$LAB/c_to_cp_caller.cp" -o "$OUT/caller_direct" -- \
+    -L"$OUT" -lc_to_cp
 
 # ---------------------------------------------------------------------------
-# 4. Production C+ build (suppress the compile-step-only warning) and run.
+# 4. Production C+ build (second STRICT configuration: -O2) and run.
 # ---------------------------------------------------------------------------
-step Cplus_build - - 180 "$ROOT/build/c+" build --strict --sanitize=none \
-    "$LAB/c_to_cp_caller.cp" -o "$OUT/c_to_cp_caller" -- "$OUT/libc_to_cp.a" \
-    -Wno-unused-command-line-argument
+step Cplus_build - - 180 "$ROOT/build/c+" build --strict --sanitize=none -O2 \
+    "$LAB/c_to_cp_caller.cp" -o "$OUT/c_to_cp_caller" -- \
+    -L"$OUT" -lc_to_cp
 step Cplus_run "$OUT/caller.stdout" "$OUT/caller.stderr" 60 "$OUT/c_to_cp_caller"
 check_line final_summary "$OUT/caller.stdout" "calls match"
 

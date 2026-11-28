@@ -1,0 +1,22 @@
+case scope_inner_shadow_safe [scopes] expectation=run
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c
+rc=0 note=
+stdout:
+check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c ok
+
+stderr:
+
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_inner_shadow_safe
+rc=0 note=
+stdout:
+
+stderr:
+
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_inner_shadow_safe
+rc=0 note=
+stdout:
+7
+1
+
+stderr:
+

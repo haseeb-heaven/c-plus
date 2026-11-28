@@ -24,6 +24,16 @@ Status: **verified checked slice**. Not a full ISO C replacement and not a host 
 
 Opt-in Annex K name aliases: define `CPLUS_SAFE_USE_ANNEX_K_NAMES` before including SafeCRT headers where compatible.
 
+**Which `_s` calls preserve C ABI?** Use the dedicated guides
+[SAFE_S_ABI_PRESERVING.md](SAFE_S_ABI_PRESERVING.md) (drop-ins),
+[SAFE_S_NON_ABI_PRESERVING.md](SAFE_S_NON_ABI_PRESERVING.md) (signature changes)
+and [SAFE_S_COMPATIBILITY_MATRIX.md](SAFE_S_COMPATIBILITY_MATRIX.md) (one-page
+decision table). The machine-readable catalog is `safeSAbiCatalog` in
+`compiler/Analysis/libc_contracts.json`; `check_safe_s_catalog.py` keeps the
+three docs and the catalog in sync, and every `-Wcplus-suggest-safe-s`
+diagnostic must print the catalog's `ABI_PRESERVING_DROP_IN` /
+`ABI_CHANGING_ANNEX_K` tag.
+
 ## ABI-preserving ordinary-C checked layer (macro-mapped `_s`)
 
 `stdlib/safe/safe_c.h` is an **optional, compile-time** layer over the APIs
@@ -47,9 +57,11 @@ non-claims are in [`docs/ABI_SAFE_LAYER.md`](ABI_SAFE_LAYER.md).
   keeps its original calls. The `c_to_cp` lab records `c_to_cp: 24 passed,
   0 failed` and `30/30 calls match` for a C+ caller linking a precompiled C
   archive (`tests/abi/c_to_cp/README.md`,
-  `tests/abi/c_to_cp/artifacts/results.log`); the separate
-  `tests/abi/precompiled/` suite was PENDING at the ABI snapshot, so no result
-  is claimed from it.
+  `tests/abi/c_to_cp/artifacts/results.log`). The separate
+  `tests/abi/precompiled/` lab is no longer pending: both labs are mandatory
+  suites in `sh tests/compiler/abi_gate/run.sh`
+  ([docs/abi/ABI_GATE.md](abi/ABI_GATE.md)), which fails closed on any
+  divergence. This documents enforcement, not a live-game result.
 - **Valid input behaves identically at the data level** (`test_safe_c_api.c`
   asserts an in-bounds `memset` fills the same bytes); differences are added
   checks/diagnostics and defined failure behaviour, not a different data

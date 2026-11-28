@@ -287,522 +287,592 @@
   "apis_with_zero_scenarios": [],
   "coverage": {
     "tool": "/usr/bin/gcov -fprofile-arcs -ftest-coverage",
-    "executed_lines": 814,
-    "total_executable_lines": 917,
-    "line_coverage_percent": 88.77,
+    "executed_lines": 836,
+    "total_executable_lines": 953,
+    "line_coverage_percent": 87.72,
     "uncovered_lines": [
       {
-        "line": 552,
+        "line": 66,
+        "source": "return fa <= sp; /* owning scope is not an ancestor => frame is dead */",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 73,
+        "source": "cplus_exception_epoch = 0u; /* generation zero is reserved for \"retired\" */",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 101,
+        "source": "cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, \"stale C+ exception frame\", file,",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 102,
+        "source": "line, \"exception frame generation is no longer live\");",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 104,
+        "source": "cplus_print_fatal(CPLUS_EXIT_UNSUPPORTED, \"stale C+ exception frame\", file,",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 105,
+        "source": "line, \"exception frame's scope has exited\");",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 195,
+        "source": "void cplus_set_auto_runtime(int enabled) {",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 196,
+        "source": "cplus_auto_runtime_enabled = enabled ? 1 : 0;",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 197,
+        "source": "}",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 224,
+        "source": "cplus_exception_current->generation != 0u &&",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 225,
+        "source": "cplus_exception_current->generation == cplus_exception_live &&",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 226,
+        "source": "!cplus_exception_frame_dead(cplus_exception_current)) {",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 227,
+        "source": "cplus_exception_raise((int)code, kind, file, line);",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 229,
+        "source": "}",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 634,
         "source": "cplus_quarantine[k] = NULL;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 553,
+        "line": 635,
         "source": "if (cplus_quarantine_count > 0u)",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 554,
+        "line": 636,
         "source": "--cplus_quarantine_count;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 555,
+        "line": 637,
         "source": "return;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 563,
+        "line": 645,
         "source": "return 1;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 580,
+        "line": 662,
         "source": "return 1;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 605,
+        "line": 687,
         "source": "static void cplus_atfork_child(void) {",
         "reason": "pthread_atfork child hook: executes only in forked children"
       },
       {
-        "line": 606,
+        "line": 688,
         "source": "pthread_mutex_init(&cplus_alloc_mutex, NULL);",
         "reason": "pthread_atfork child hook: executes only in forked children"
       },
       {
-        "line": 607,
+        "line": 689,
         "source": "}",
         "reason": "pthread_atfork child hook: executes only in forked children"
       },
       {
-        "line": 633,
+        "line": 715,
         "source": "cplus_generation = 1u; /* wrap only after 2^64 registrations */",
         "reason": "uint64 generation wrap after 2^64 registrations"
       },
       {
-        "line": 650,
+        "line": 732,
         "source": "return NULL;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 686,
-        "source": "return NULL;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 704,
-        "source": "cap = CPLUS_RETIRED_MAX * 2u;",
-        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
-      },
-      {
-        "line": 708,
-        "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"out of memory\", NULL, 0,",
-        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
-      },
-      {
-        "line": 710,
-        "source": "}",
-        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
-      },
-      {
-        "line": 737,
-        "source": "if (!cplus_retired_wrapped) {",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 738,
-        "source": "cplus_retired_wrapped = 1;",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 739,
-        "source": "fprintf(stderr,",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 743,
-        "source": "fflush(stderr);",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 744,
-        "source": "}",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 753,
-        "source": "if (cplus_retired_deleted > cplus_retired_cap / 4u)",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 754,
-        "source": "cplus_retired_grow();",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 755,
-        "source": "size_t mask = cplus_retired_cap - 1u;",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 756,
-        "source": "size_t victim = cplus_retired_evict_cursor++ & mask;",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 757,
-        "source": "for (size_t probe = 0; probe <= mask; ++probe) {",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 758,
-        "source": "void *q = cplus_retired[victim].ptr;",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 759,
-        "source": "if (q != NULL && q != CPLUS_TOMBSTONE && q != p)",
-        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
-      },
-      {
-        "line": 760,
-        "source": "break;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 761,
-        "source": "victim = (victim + 1) & mask;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 762,
-        "source": "}",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 763,
-        "source": "void *vq = cplus_retired[victim].ptr;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 764,
-        "source": "if (vq != NULL && vq != CPLUS_TOMBSTONE) {",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 765,
-        "source": "cplus_retired[victim].ptr = CPLUS_TOMBSTONE;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 766,
-        "source": "--cplus_retired_count;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 767,
-        "source": "++cplus_retired_deleted;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
         "line": 768,
+        "source": "return NULL;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 786,
+        "source": "cap = CPLUS_RETIRED_MAX * 2u;",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 790,
+        "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"out of memory\", NULL, 0,",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 792,
+        "source": "}",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 819,
+        "source": "if (!cplus_retired_wrapped) {",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 820,
+        "source": "cplus_retired_wrapped = 1;",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 821,
+        "source": "fprintf(stderr,",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 825,
+        "source": "fflush(stderr);",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 826,
+        "source": "}",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 835,
+        "source": "if (cplus_retired_deleted > cplus_retired_cap / 4u)",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 836,
+        "source": "cplus_retired_grow();",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 837,
+        "source": "size_t mask = cplus_retired_cap - 1u;",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 838,
+        "source": "size_t victim = cplus_retired_evict_cursor++ & mask;",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 839,
+        "source": "for (size_t probe = 0; probe <= mask; ++probe) {",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 840,
+        "source": "void *q = cplus_retired[victim].ptr;",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 841,
+        "source": "if (q != NULL && q != CPLUS_TOMBSTONE && q != p)",
+        "reason": "retired-ledger saturation path (1,048,576 retirements required)"
+      },
+      {
+        "line": 842,
+        "source": "break;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 843,
+        "source": "victim = (victim + 1) & mask;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 844,
         "source": "}",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 769,
+        "line": 845,
+        "source": "void *vq = cplus_retired[victim].ptr;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 846,
+        "source": "if (vq != NULL && vq != CPLUS_TOMBSTONE) {",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 847,
+        "source": "cplus_retired[victim].ptr = CPLUS_TOMBSTONE;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 848,
+        "source": "--cplus_retired_count;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 849,
+        "source": "++cplus_retired_deleted;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 850,
+        "source": "}",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 851,
         "source": "size_t i = cplus_retired_index(p);",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 770,
+        "line": 852,
         "source": "while (cplus_retired[i].ptr != NULL &&",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 771,
+        "line": 853,
         "source": "cplus_retired[i].ptr != CPLUS_TOMBSTONE)",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 772,
+        "line": 854,
         "source": "i = (i + 1) & mask;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 773,
+        "line": 855,
         "source": "if (cplus_retired[i].ptr == CPLUS_TOMBSTONE)",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 774,
+        "line": 856,
         "source": "--cplus_retired_deleted;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 775,
+        "line": 857,
         "source": "cplus_retired[i].ptr = (void *)p;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 776,
+        "line": 858,
         "source": "cplus_retired[i].generation = generation;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 777,
+        "line": 859,
         "source": "++cplus_retired_count;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 778,
+        "line": 860,
         "source": "return;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 790,
+        "line": 872,
         "source": "--cplus_retired_deleted;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 801,
+        "line": 883,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"out of memory\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 803,
+        "line": 885,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 835,
+        "line": 917,
         "source": "cplus_alloc_unlock();",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 836,
+        "line": 918,
         "source": "cplus_print_fatal(CPLUS_EXIT_TYPE_CONFUSION, \"invalid free\", file, line,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 838,
+        "line": 920,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 890,
+        "line": 972,
         "source": "cplus_live_grow();",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 907,
+        "line": 989,
         "source": "cplus_recent_slot *recent = &cplus_recent[cplus_recent_index(p)];",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 908,
+        "line": 990,
         "source": "int recently_freed = recent->ptr == p;",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 909,
+        "line": 991,
         "source": "cplus_alloc_unlock();",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 910,
+        "line": 992,
         "source": "if (retired_generation != 0u || recently_freed) {",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 942,
+        "line": 1024,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"out of memory\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 944,
+        "line": 1026,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 993,
+        "line": 1075,
         "source": "n = usable;",
         "reason": "requires a registry extent larger than the malloc usable size"
       },
       {
-        "line": 1034,
+        "line": 1116,
         "source": "void *oldest = cplus_quarantine[cplus_quarantine_next];",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1035,
+        "line": 1117,
         "source": "cplus_quarantine[cplus_quarantine_next] = ptr;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1036,
+        "line": 1118,
         "source": "cplus_quarantine_next = (cplus_quarantine_next + 1) %",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1038,
+        "line": 1120,
         "source": "if (cplus_quarantine_count < CPLUS_QUARANTINE_SLOTS)",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1039,
+        "line": 1121,
         "source": "++cplus_quarantine_count;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1040,
+        "line": 1122,
         "source": "if (oldest)",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1041,
+        "line": 1123,
         "source": "free(oldest); /* bounded: at most CPLUS_QUARANTINE_SLOTS delayed frees */",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1042,
+        "line": 1124,
         "source": "cplus_alloc_unlock();",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1043,
+        "line": 1125,
         "source": "return;",
         "reason": "opt-in CPLUS_QUARANTINE path (disabled by default)"
       },
       {
-        "line": 1151,
+        "line": 1233,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"out of memory\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1153,
+        "line": 1235,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1174,
+        "line": 1256,
         "source": "cplus_release(c->ptr);",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 1199,
+        "line": 1281,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"out of memory\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1201,
+        "line": 1283,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1203,
+        "line": 1285,
         "source": "free(m);",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1204,
+        "line": 1286,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"mutex failure\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1206,
+        "line": 1288,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1215,
+        "line": 1297,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"mutex failure\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1217,
+        "line": 1299,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1225,
+        "line": 1307,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"mutex failure\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1227,
+        "line": 1309,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1241,
+        "line": 1323,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"out of memory\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1243,
+        "line": 1325,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1245,
+        "line": 1327,
         "source": "free(s);",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1246,
+        "line": 1328,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"TLS failure\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1248,
+        "line": 1330,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1264,
+        "line": 1346,
         "source": "cplus_print_fatal(CPLUS_EXIT_RESOURCE, \"TLS failure\", NULL, 0,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1266,
+        "line": 1348,
         "source": "}",
-        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
-      },
-      {
-        "line": 1369,
-        "source": "return is_unsigned ? \"unsigned long long\" : \"long long\";",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 1400,
-        "source": "minv = SCHAR_MIN;",
-        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
-      },
-      {
-        "line": 1401,
-        "source": "maxv = SCHAR_MAX;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 1432,
-        "source": "*(long long *)dest = v;",
-        "reason": "branch not reached by the generated scenarios"
-      },
-      {
-        "line": 1448,
-        "source": "snprintf(detail, sizeof(detail),",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
         "line": 1451,
-        "source": "cplus_print_fatal(CPLUS_EXIT_IO, \"input error\", file, line, detail);",
-        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
-      },
-      {
-        "line": 1452,
-        "source": "}",
-        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+        "source": "return is_unsigned ? \"unsigned long long\" : \"long long\";",
+        "reason": "branch not reached by the generated scenarios"
       },
       {
         "line": 1482,
+        "source": "minv = SCHAR_MIN;",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 1483,
+        "source": "maxv = SCHAR_MAX;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 1514,
+        "source": "*(long long *)dest = v;",
+        "reason": "branch not reached by the generated scenarios"
+      },
+      {
+        "line": 1530,
         "source": "snprintf(detail, sizeof(detail),",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1485,
+        "line": 1533,
+        "source": "cplus_print_fatal(CPLUS_EXIT_IO, \"input error\", file, line, detail);",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 1534,
+        "source": "}",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 1564,
+        "source": "snprintf(detail, sizeof(detail),",
+        "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
+      },
+      {
+        "line": 1567,
         "source": "cplus_print_fatal(CPLUS_EXIT_CONVERSION, \"input overflow\", file, line,",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1486,
+        "line": 1568,
         "source": "detail);",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1487,
+        "line": 1569,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1497,
+        "line": 1579,
         "source": "*(unsigned long long *)dest = v;",
         "reason": "branch not reached by the generated scenarios"
       },
       {
-        "line": 1552,
+        "line": 1634,
         "source": "snprintf(detail, sizeof(detail),",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1554,
+        "line": 1636,
         "source": "cplus_print_fatal(CPLUS_EXIT_IO, \"input error\", file, line, detail);",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       },
       {
-        "line": 1555,
+        "line": 1637,
         "source": "}",
         "reason": "fatal / OOM / input-error diagnostic line; its trap scenario runs in a forked child, whose counters are not merged into the parent .gcda"
       }

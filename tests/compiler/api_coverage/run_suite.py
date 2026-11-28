@@ -150,8 +150,14 @@ def hook_block(api, slug, block, code, kind, substr):
 
 
 def stdout_case(api, slug, call, expected):
+    # The `print(...)` macro opens its own print frame; direct helper calls do
+    # not, so give each of those its own begin/end pair.
+    body = call
+    if "cplus_print_value" in call or "cplus_print_arg" in call:
+        body = re.sub(r"(cplus_print_(?:value|arg)\()",
+                      r"cplus_print_begin(); \1", call)
     add(api, slug, f"""h_capture_begin();
-{call}
+{body}
 const char *out = h_capture_end();
 return h_eq_str(out, "{expected}", "captured stdout");""")
 
@@ -366,6 +372,15 @@ for api, cfun, rem, word in [
                          f"{word} overflows the source type")
                 else:
                     want = (a - c_div(a, b) * b) if rem else c_div(a, b)
+                    if not signed:
+                        # The runtime performs unsigned div/rem on the
+                        # unsigned bit pattern and returns the int64_t view.
+                        # The helper takes int64_t operands and always uses
+                        # the full 64-bit bit pattern, independent of `bits`.
+                        ua, ub = a & MASK64, b & MASK64
+                        want = (ua % ub) if rem else (ua // ub)
+                        if want >= (1 << 63):
+                            want -= 1 << 64
                     val_i64(api, "ok_" + tag, expr, want)
 
 SHIFT_A = [0, 1, 7, 255, -1, I32_MAX, I64_MAX]
@@ -388,6 +403,8 @@ for api, cfun, left in [
                         k = b & 63
                         if left:
                             want = i64(((a & MASK64) << k) & MASK64)
+                        elif not signed:
+                            want = i64((a & MASK64) >> k)
                         else:
                             want = i64(a >> k)
                         val_i64(api, "wrap_" + tag, expr, want)
@@ -398,15 +415,27 @@ for api, cfun, left in [
                              "left shift of a negative signed value")
                     elif left and signed:
                         limit = MASK64 >> (64 - bits)
-                        if (((a & MASK64) << b) & MASK64) & ~limit:
+                        shifted = ((a & MASK64) << b) & MASK64
+                        if (shifted & ~limit) or (shifted & (1 << (bits - 1))):
                             trap(api, "bits_" + tag, expr, 110,
                                  "left shift loses bits above")
                         else:
                             val_i64(api, "ok_" + tag, expr,
                                     i64(((a & MASK64) << b) & MASK64))
                     elif left:
+                        value_bits = MASK64 if bits == 64 else ((1 << bits) - 1)
+                        shifted = ((a & MASK64) << b) & MASK64
+                        if shifted & ~value_bits:
+                            trap(api, "bits_" + tag, expr, 110,
+                                 "left shift loses bits above")
+                        else:
+                            val_i64(api, "ok_" + tag, expr, i64(shifted))
+                    elif not signed:
                         val_i64(api, "ok_" + tag, expr,
-                                i64(((a & MASK64) << b) & MASK64))
+                                i64((a & MASK64) >> b))
+                    elif not signed:
+                        val_i64(api, "ok_" + tag, expr,
+                                i64((a & MASK64) >> b))
                     else:
                         val_i64(api, "ok_" + tag, expr, i64(a >> b))
 
@@ -425,13 +454,17 @@ NARROW_CASES = [
 for value, sb, ss, db, ds in NARROW_CASES:
     v = value & MASK64
     src = v
-    if ss and 0 < sb < 64 and ((v >> (sb - 1)) & 1):
+    if ss and sb == 64:
+        src = i64(v)
+    elif ss and 0 < sb < 64 and ((v >> (sb - 1)) & 1):
         ext = (((~0) & MASK64) << sb) & MASK64
         src = i64(v | ext)
     mask = MASK64 if db >= 64 else ((1 << db) - 1)
     trunc = v & mask
     dst = trunc
-    if ds and 0 < db < 64 and ((trunc >> (db - 1)) & 1):
+    if ds and db == 64:
+        dst = i64(trunc)
+    elif ds and 0 < db < 64 and ((trunc >> (db - 1)) & 1):
         ext = (((~0) & MASK64) << db) & MASK64
         dst = i64(trunc | ext)
     tag = f"v{value}_sb{sb}_ss{ss}_db{db}_ds{ds}"
@@ -1284,6 +1317,7 @@ cplus_tls_free(a);
 cplus_tls_free(b);
 return 1;""")
 add("cplus_print_end", "three_blank_lines", """h_capture_begin();
+cplus_print_begin();
 cplus_print_end();
 cplus_print_end();
 cplus_print_end();

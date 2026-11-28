@@ -37,12 +37,15 @@
  * a label of 64 bytes is refused. */
 #define STDLIB_WIDGET_LABEL_MAX 64u
 
-/* Widget kind tags.  Values are data, not a closed enum: callers may define
- * additional kinds; serialization prints the integer verbatim. */
+/* Widget kind tags.  Valid kinds are the closed range below: add() refuses
+ * anything else so downstream layout/render/serialization never sees a stray
+ * tag.  Serialization still prints the integer verbatim. */
 #define STDLIB_WIDGET_BUTTON 1
 #define STDLIB_WIDGET_LABEL  2
 #define STDLIB_WIDGET_INPUT  3
 #define STDLIB_WIDGET_PANEL  4
+#define STDLIB_WIDGET_KIND_MIN STDLIB_WIDGET_BUTTON
+#define STDLIB_WIDGET_KIND_MAX STDLIB_WIDGET_PANEL
 
 /* Flags.  New widgets start with both bits set. */
 #define STDLIB_WIDGET_ENABLED 0x1u
@@ -229,7 +232,8 @@ static inline int stdlib_widgets_index(const stdlib_window *win, size_t index,
     return STDLIB_OK;
 }
 
-/* Append a widget.  Returns the new index (>= 0) or STDLIB_FAIL. */
+/* Append a widget.  Returns the new index (>= 0) or STDLIB_FAIL.  `kind`
+ * must be one of the STDLIB_WIDGET_* tags. */
 static inline int stdlib_widget_add(stdlib_window *win, int id, int kind,
                                     const char *label, int x, int y, int w,
                                     int h, error *err) {
@@ -238,6 +242,11 @@ static inline int stdlib_widget_add(stdlib_window *win, int id, int kind,
     stdlib_widget *item;
     if (stdlib_widgets_usable(win, err) != STDLIB_OK)
         return STDLIB_FAIL;
+    if (kind < STDLIB_WIDGET_KIND_MIN || kind > STDLIB_WIDGET_KIND_MAX)
+        return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
+                              CPLUS_EXIT_UNSUPPORTED,
+                              "widgets: invalid widget kind"),
+               STDLIB_FAIL;
     if (!stdlib_widgets_rect_valid(x, y, w, h))
         return error_fail_cat(err, STDLIB_CATEGORY_INVALID,
                               CPLUS_EXIT_UNSUPPORTED,
@@ -325,26 +334,43 @@ static inline int stdlib_widget_visible(stdlib_window *win, size_t index,
     return STDLIB_OK;
 }
 
-/* Index of the widget with `id`, or -1 when absent (not an error). */
+/* Look up `id` with an explicit outcome.  Returns STDLIB_OK for a completed
+ * lookup (found flag tells whether the ID was present) and STDLIB_FAIL only
+ * for an invalid window, with `err` populated.  Outputs are initialized on
+ * every successful call, so callers can no longer confuse a missing ID with a
+ * corrupt window. */
 static inline int stdlib_widget_index_by_id(const stdlib_window *win, int id,
+                                            size_t *out_index, int *out_found,
                                             error *err) {
     size_t i;
     if (stdlib_widgets_usable(win, err) != STDLIB_OK)
         return STDLIB_FAIL;
+    if (out_index != (size_t *)0)
+        *out_index = 0u;
+    if (out_found != (int *)0)
+        *out_found = 0;
     for (i = 0u; i < win->count; i++) {
-        if (win->items[i].id == id)
-            return (int)i;
+        if (win->items[i].id == id) {
+            if (out_index != (size_t *)0)
+                *out_index = i;
+            if (out_found != (int *)0)
+                *out_found = 1;
+            return STDLIB_OK;
+        }
     }
-    return -1;
+    return STDLIB_OK; /* absent is a completed lookup, not an error */
 }
 
-/* Borrowed pointer to the widget with `id`, or NULL when absent. */
+/* Borrowed pointer to the widget with `id`, or NULL when absent.  `err` is
+ * populated only when the window itself is invalid. */
 static inline stdlib_widget *stdlib_widget_find_by_id(stdlib_window *win,
                                                       int id, error *err) {
-    int index = stdlib_widget_index_by_id(win, id, err);
-    if (index < 0)
+    size_t index = 0u;
+    int found = 0;
+    if (stdlib_widget_index_by_id(win, id, &index, &found, err) != STDLIB_OK ||
+        !found)
         return (stdlib_widget *)0;
-    return &win->items[(size_t)index];
+    return &win->items[index];
 }
 
 /* -------------------------------------------------------------------------

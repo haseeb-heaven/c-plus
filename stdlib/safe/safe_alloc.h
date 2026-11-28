@@ -99,6 +99,7 @@ int    cplus_safe_alloc_get_meta(const void *ptr, cplus_safe_alloc_meta *out);
 int    cplus_safe_ptr_is_live(const void *ptr);
 int    cplus_safe_ptr_was_freed(const void *ptr);
 size_t cplus_safe_ptr_size(const void *ptr);       /* 0 when not a live block */
+size_t cplus_safe_ptr_remaining(const void *ptr);  /* bytes from an interior pointer to the block end */
 /* Remaining writable bytes from `ptr` to the end of its containing live
  * block. Works for INTERIOR pointers (base + offset), which is what ordinary
  * `memset(buffer + offset, ...)` / `memcpy` calls actually pass. Returns 0

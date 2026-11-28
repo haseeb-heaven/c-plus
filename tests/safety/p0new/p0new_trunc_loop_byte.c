@@ -1,6 +1,6 @@
 // scenario: p0new_trunc_loop_byte
 // EXPECT: reject
-// DIAG: constant array index
+// DIAG: out-of-bounds access: index
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

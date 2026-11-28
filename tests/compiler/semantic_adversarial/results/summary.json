@@ -1,0 +1,1435 @@
+{
+  "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "counts": {
+    "fail": 0,
+    "pass": 58,
+    "reject_expectations": 38,
+    "reject_failures": 0,
+    "run_expectations": 20,
+    "run_failures": 0,
+    "total": 58
+  },
+  "failures": [],
+  "flags": {
+    "build": [
+      "--strict",
+      "--sanitize=none"
+    ],
+    "check": [
+      "--strict",
+      "--sanitize=none"
+    ]
+  },
+  "generated": "2026-11-25T19:09:02.966380+00:00",
+  "results": [
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(int)(long)9]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_index_long",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_index_long"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_long.c",
+      "group": "casts",
+      "id": "cast_index_long",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_index_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_index_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_index_safe.c",
+      "group": "casts",
+      "id": "cast_index_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_size_t_negative.c:3:73: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] negative array index on 'a'\n  int main(void){ int a[4]={1,2,3,4}; size_t i=(size_t)-1; printf(\"%d\\n\", a[i]); return 0; }\n                                                                          ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_size_t_negative.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_size_t_negative",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_size_t_negative.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_size_t_negative"
+      },
+      "expectation": "reject",
+      "expected": "negative array index",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_size_t_negative.c",
+      "group": "casts",
+      "id": "cast_size_t_negative",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:69: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c:2:68: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=(int*)a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                     ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_alias_ptr",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_alias_ptr"
+      },
+      "expectation": "reject",
+      "expected": "via pointer 'p'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_ptr.c",
+      "group": "casts",
+      "id": "cast_alias_ptr",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_alias_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cast_alias_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cast_alias_safe.c",
+      "group": "casts",
+      "id": "cast_alias_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:56: error: [CPLUS-BOUNDS] out-of-bounds access: index 36 reaches past array 'a' via pointer 'b'\n  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf(\"%d\\n\", a[0]); return 0; }\n                                                         ^\nhelp: array contains 16 elements; valid indices are 0..15\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c:2:55: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 36 exceeds stack array 'b' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; char *b=(char*)a; b[36]=7; printf(\"%d\\n\", a[0]); return 0; }\n                                                        ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/byte_cast_oob",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/byte_cast_oob"
+      },
+      "expectation": "reject",
+      "expected": "index 36 reaches past array 'a'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_oob.c",
+      "group": "casts",
+      "id": "byte_cast_oob",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/byte_cast_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/byte_cast_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "2\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/byte_cast_safe.c",
+      "group": "casts",
+      "id": "byte_cast_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "2\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/void_cast_launder.c:2:69: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; void *v=a; int *p=(int*)v + 9; *p=7; printf(\"%d\\n\", *p); return 0; }\n                                                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/void_cast_launder.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/void_cast_launder",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/void_cast_launder.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/void_cast_launder"
+      },
+      "expectation": "reject",
+      "expected": "via pointer 'p'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/void_cast_launder.c",
+      "group": "casts",
+      "id": "void_cast_launder",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c:3:61: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; IP p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                              ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c:3:60: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; IP p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                             ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/typedef_alias",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/typedef_alias"
+      },
+      "expectation": "reject",
+      "expected": "via pointer 'p'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias.c",
+      "group": "casts",
+      "id": "typedef_alias",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/typedef_alias_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/typedef_alias_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/typedef_alias_safe.c",
+      "group": "casts",
+      "id": "typedef_alias_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[NINE]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_literal_index",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_literal_index"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index.c",
+      "group": "macros",
+      "id": "macro_literal_index",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_literal_index_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_literal_index_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_literal_index_safe.c",
+      "group": "macros",
+      "id": "macro_literal_index_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", AT(a,9)); return 0; }\n                                                     ^~\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_subscript_body",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_subscript_body"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_subscript_body.c",
+      "group": "macros",
+      "id": "macro_subscript_body",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c:3:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[N]={1,2,3,4}; printf(\"%d\\n\", a[9]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_extent",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_extent"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_extent.c",
+      "group": "macros",
+      "id": "macro_extent",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c:4:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", A); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_double_expand",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_double_expand"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_double_expand.c",
+      "group": "macros",
+      "id": "macro_double_expand",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_ptr_offset.c:3:44: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] pointer arithmetic outside array 'a'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a+OFF; printf(\"%d\\n\", p[0]); return 0; }\n                                             ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_ptr_offset.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_ptr_offset",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_ptr_offset.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_ptr_offset"
+      },
+      "expectation": "reject",
+      "expected": "pointer arithmetic outside array",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_ptr_offset.c",
+      "group": "macros",
+      "id": "macro_ptr_offset",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_cast_launder.c:4:44: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance\n  int main(void){ int a[4]={1,2,3,4}; int *p=LAUNDER(a); printf(\"%d\\n\", p[0]); return 0; }\n                                             ^~~~~~~\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_cast_launder.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_cast_launder",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_cast_launder.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_cast_launder"
+      },
+      "expectation": "reject",
+      "expected": "unverifiable provenance",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_cast_launder.c",
+      "group": "macros",
+      "id": "macro_cast_launder",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_multi_statement.c:3:26: error: [CPLUS-FFI] arithmetic in a macro expansion cannot be instrumented; STRICT cannot prove it safe\n  int main(void){ int n=1; TWICE(n++); printf(\"%d\\n\", n); return 0; }\n                           ^~~~~\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_multi_statement.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_multi_statement",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_multi_statement.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/macro_multi_statement"
+      },
+      "expectation": "reject",
+      "expected": "arithmetic in a macro expansion cannot be instrumented",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/macro_multi_statement.c",
+      "group": "macros",
+      "id": "macro_multi_statement",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c:2:63: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c:2:62: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; printf(\"%d\\n\", p[9]); return 0; }\n                                                               ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_direct",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_direct"
+      },
+      "expectation": "reject",
+      "expected": "via pointer 'p'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_direct.c",
+      "group": "aliases",
+      "id": "alias_direct",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_one_past_deref.c:2:64: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] dereference one past the end of array via pointer arithmetic\n  int main(void){ int a[4]={1,2,3,4}; int *p=a+4; printf(\"%d\\n\", *p); return 0; }\n                                                                 ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_one_past_deref.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_one_past_deref",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_one_past_deref.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_one_past_deref"
+      },
+      "expectation": "reject",
+      "expected": "one past the end",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_one_past_deref.c",
+      "group": "aliases",
+      "id": "alias_one_past_deref",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:73: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'q'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf(\"%d\\n\", q[9]); return 0; }\n                                                                          ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c:2:72: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'q' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int *q=p; printf(\"%d\\n\", q[9]); return 0; }\n                                                                         ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_chain",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_chain"
+      },
+      "expectation": "reject",
+      "expected": "via pointer 'q'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_chain.c",
+      "group": "aliases",
+      "id": "alias_chain",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_reassigned_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_reassigned_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_reassigned_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_reassigned_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_reassigned_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "7\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_reassigned_safe.c",
+      "group": "aliases",
+      "id": "alias_reassigned_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "7\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field.c:3:74: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] out-of-bounds access: index 9 reaches past array 's.p' of length 4\n  int main(void){ int a[4]={1,2,3,4}; struct S s; s.p=a; printf(\"%d\\n\", s.p[9]); return 0; }\n                                                                           ^\nhelp: use C+ managed allocations and cplus_* helpers\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_struct_field",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_struct_field"
+      },
+      "expectation": "reject",
+      "expected": "out-of-bounds access",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field.c",
+      "group": "aliases",
+      "id": "alias_struct_field",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_struct_field_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_struct_field_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_struct_field_safe.c",
+      "group": "aliases",
+      "id": "alias_struct_field_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c:2:83: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'r'\n  int main(void){ int a[2][4]={{1,2,3,4},{5,6,7,8}}; int (*r)[4]=a; printf(\"%d\\n\", r[9][0]); return 0; }\n                                                                                    ^\nhelp: array contains 2 elements; valid indices are 0..1\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_row_pointer",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_row_pointer"
+      },
+      "expectation": "reject",
+      "expected": "via pointer 'r'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer.c",
+      "group": "aliases",
+      "id": "alias_row_pointer",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_row_pointer_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_row_pointer_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "7\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_row_pointer_safe.c",
+      "group": "aliases",
+      "id": "alias_row_pointer_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "7\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_pointer_to_pointer.c:2:80: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'pp'\n  int main(void){ int a[4]={1,2,3,4}; int *p=a; int **pp=&p; printf(\"%d\\n\", (*pp)[9]); return 0; }\n                                                                                 ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_pointer_to_pointer.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_pointer_to_pointer",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_pointer_to_pointer.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_pointer_to_pointer"
+      },
+      "expectation": "reject",
+      "expected": "via pointer 'pp'",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_pointer_to_pointer.c",
+      "group": "aliases",
+      "id": "alias_pointer_to_pointer",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c:2:64: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds stack array 'p' of 16 bytes\n  int main(void){ int a[4]={1,2,3,4}; int *p=(a); printf(\"%d\\n\", (p)[9]); return 0; }\n                                                                 ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_paren_pointer",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/alias_paren_pointer"
+      },
+      "expectation": "reject",
+      "expected": "array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/alias_paren_pointer.c",
+      "group": "aliases",
+      "id": "alias_paren_pointer",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_inner_shadow_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_inner_shadow_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "7\n1\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_inner_shadow_safe.c",
+      "group": "scopes",
+      "id": "scope_inner_shadow_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "7\n1\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:80: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf(\"%d\\n\", a[9]); return 0; }\n                                                                                 ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c:2:79: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { int a[64]={0}; a[9]=7; } printf(\"%d\\n\", a[9]); return 0; }\n                                                                                ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_outer_after_inner",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_outer_after_inner"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_outer_after_inner.c",
+      "group": "scopes",
+      "id": "scope_outer_after_inner",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_shadows_global.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_shadows_global.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_shadows_global",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_shadows_global.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_shadows_global"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "0\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_shadows_global.c",
+      "group": "scopes",
+      "id": "scope_param_shadows_global",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "0\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_bigger_array.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_bigger_array.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_bigger_array",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_bigger_array.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_bigger_array"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "42\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_bigger_array.c",
+      "group": "scopes",
+      "id": "scope_param_bigger_array",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "42\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_name_like_global",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_param_name_like_global"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "42\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_param_name_like_global.c",
+      "group": "scopes",
+      "id": "scope_param_name_like_global",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "42\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_local_shadows_global_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_local_shadows_global_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_local_shadows_global_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_local_shadows_global_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_local_shadows_global_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "42\n1\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_local_shadows_global_safe.c",
+      "group": "scopes",
+      "id": "scope_local_shadows_global_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "42\n1\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c:2:57: error: [CPLUS-BOUNDS] constant array index 12 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { { printf(\"%d\\n\", a[12]); } } return 0; }\n                                                          ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c:2:56: error: [CPLUS-SAFE-BOUNDS] constant array index 12 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; { { printf(\"%d\\n\", a[12]); } } return 0; }\n                                                         ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_nested_oob",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_nested_oob"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 12",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_nested_oob.c",
+      "group": "scopes",
+      "id": "scope_nested_oob",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_scalar_shadow_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_scalar_shadow_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_scalar_shadow_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_scalar_shadow_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/scope_scalar_shadow_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "4\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/scope_scalar_shadow_safe.c",
+      "group": "scopes",
+      "id": "scope_scalar_shadow_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "4\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c:2:64: error: [CPLUS-BOUNDS] constant array index -1 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; int f=0; printf(\"%d\\n\", a[f?-1:0]); return 0; }\n                                                                 ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c:2:61: error: [CPLUS-FFI] out-of-bounds access: index -1 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int f=0; printf(\"%d\\n\", a[f?-1:0]); return 0; }\n                                                              ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_negative_branch",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_negative_branch"
+      },
+      "expectation": "reject",
+      "expected": "constant array index -1",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_negative_branch.c",
+      "group": "conditionals",
+      "id": "cond_negative_branch",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c:2:76: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index -1 chosen by conditional expression is out of bounds of 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int f=1; int i=f?-1:2; printf(\"%d\\n\", a[i]); return 0; }\n                                                                             ^\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c:2:76: error: [CPLUS-BOUNDS] negative array index -1 on 'a'\n  int main(void){ int a[4]={1,2,3,4}; int f=1; int i=f?-1:2; printf(\"%d\\n\", a[i]); return 0; }\n                                                                             ^\nhelp: use C+ managed allocations and cplus_* helpers\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_phi_variable",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_phi_variable"
+      },
+      "expectation": "reject",
+      "expected": "chosen by conditional expression",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_phi_variable.c",
+      "group": "conditionals",
+      "id": "cond_phi_variable",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_parenthesized_oob.c:2:61: error: [CPLUS-FFI] out-of-bounds access: index 20 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int f=0; printf(\"%d\\n\", a[(f?3:20)]); return 0; }\n                                                              ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_parenthesized_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_parenthesized_oob",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_parenthesized_oob.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_parenthesized_oob"
+      },
+      "expectation": "reject",
+      "expected": "out-of-bounds",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_parenthesized_oob.c",
+      "group": "conditionals",
+      "id": "cond_parenthesized_oob",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_nested_oob.c:2:65: error: [CPLUS-FFI] out-of-bounds access: index 99 reaches past array 'a' of length 4\n  int main(void){ int a[4]={1,2,3,4}; int f=0,g=0; printf(\"%d\\n\", a[f?0:(g?1:99)]); return 0; }\n                                                                  ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_nested_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_nested_oob",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_nested_oob.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_nested_oob"
+      },
+      "expectation": "reject",
+      "expected": "out-of-bounds",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_nested_oob.c",
+      "group": "conditionals",
+      "id": "cond_nested_oob",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_constant_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_constant_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_constant_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_constant_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_constant_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "2\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_constant_safe.c",
+      "group": "conditionals",
+      "id": "cond_constant_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "2\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_both_branches_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_both_branches_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_both_branches_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_both_branches_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/cond_both_branches_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_both_branches_safe.c",
+      "group": "conditionals",
+      "id": "cond_both_branches_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[((9))]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_paren_literal",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_paren_literal"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_literal.c",
+      "group": "expressions",
+      "id": "expr_paren_literal",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:53: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[1+8]); return 0; }\n                                                      ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[1+8]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_arith_literal",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_arith_literal"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_arith_literal.c",
+      "group": "expressions",
+      "id": "expr_arith_literal",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_comma_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_comma_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "2\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_safe.c",
+      "group": "expressions",
+      "id": "expr_comma_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "2\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c:2:52: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", a[(1,9)]); return 0; }\n                                                     ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_comma_oob",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_comma_oob"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_oob.c",
+      "group": "expressions",
+      "id": "expr_comma_oob",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:60: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", f(a[1],a[9])); return 0; }\n                                                             ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:59: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={1,2,3,4}; printf(\"%d\\n\", f(a[1],a[9])); return 0; }\n                                                            ^\nhelp: array contains 4 elements; valid indices are 0..3\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_comma_call_args",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_comma_call_args"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c",
+      "group": "expressions",
+      "id": "expr_comma_call_args",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_paren_lvalue_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/expr_paren_lvalue_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "2\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_paren_lvalue_safe.c",
+      "group": "expressions",
+      "id": "expr_paren_lvalue_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "2\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_uintptr_add.c:3:62: error: [CPLUS-BOUNDS] pointer arithmetic more than one past the end of 'a'\n  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a + 9*sizeof(int); int *p=(int*)u; *p=7; printf(\"%d\\n\", *p); return 0; }\n                                                               ^\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_uintptr_add.c:3:86: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance\n  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a + 9*sizeof(int); int *p=(int*)u; *p=7; printf(\"%d\\n\", *p); return 0; }\n                                                                                       ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_uintptr_add.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_uintptr_add",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_uintptr_add.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_uintptr_add"
+      },
+      "expectation": "reject",
+      "expected": "pointer arithmetic more than one past",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_uintptr_add.c",
+      "group": "laundering",
+      "id": "launder_uintptr_add",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_tag_or.c:3:74: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance\n  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=((uintptr_t)a)|1; int *p=(int*)(u & ~(uintptr_t)1); p[9]=7; printf(\"%d\\n\", p[9]); return 0; }\n                                                                           ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_tag_or.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_tag_or",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_tag_or.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_tag_or"
+      },
+      "expectation": "reject",
+      "expected": "unverifiable provenance",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_tag_or.c",
+      "group": "laundering",
+      "id": "launder_tag_or",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_add_variable.c:3:110: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance\n  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a; int k=9; u += (uintptr_t)k*sizeof(int); int *p=(int*)u; p[0]=7; printf(\"%d\\n\", p[0]); return 0; }\n                                                                                                               ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_add_variable.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_add_variable",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_add_variable.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_add_variable"
+      },
+      "expectation": "reject",
+      "expected": "unverifiable provenance",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_add_variable.c",
+      "group": "laundering",
+      "id": "launder_add_variable",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c:3:92: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a ^ 8; u ^= 8; int *p=(int*)u; p[9]=7; printf(\"%d\\n\", p[9]); return 0; }\n                                                                                             ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c:3:115: error: [CPLUS-BOUNDS] out-of-bounds access: index 9 reaches past array 'a' via pointer 'p'\n  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a ^ 8; u ^= 8; int *p=(int*)u; p[9]=7; printf(\"%d\\n\", p[9]); return 0; }\n                                                                                                                    ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c:3:82: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance\n  int main(void){ int a[4]={1,2,3,4}; uintptr_t u=(uintptr_t)a ^ 8; u ^= 8; int *p=(int*)u; p[9]=7; printf(\"%d\\n\", p[9]); return 0; }\n                                                                                   ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_xor",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_xor"
+      },
+      "expectation": "reject",
+      "expected": "out-of-bounds access",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_xor.c",
+      "group": "laundering",
+      "id": "launder_xor",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c:4:65: error: [CPLUS-BOUNDS] pointer arithmetic more than one past the end of 'a'\n  int main(void){ int a[4]={1,2,3,4}; union U x; x.u=(uintptr_t)a + 9*sizeof(int); printf(\"%d\\n\", x.p[0]); return 0; }\n                                                                  ^\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c:4:97: error: [CPLUS-FFI] pointer provenance lost before this subscript; the addressable extent cannot be proven\n  int main(void){ int a[4]={1,2,3,4}; union U x; x.u=(uintptr_t)a + 9*sizeof(int); printf(\"%d\\n\", x.p[0]); return 0; }\n                                                                                                  ^~~\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_union",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_union"
+      },
+      "expectation": "reject",
+      "expected": "pointer arithmetic more than one past",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_union.c",
+      "group": "laundering",
+      "id": "launder_union",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_long_cast.c:2:67: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance\n  int main(void){ int a[4]={1,2,3,4}; long u=(long)(void*)a; int *p=(int*)(u + 9L*4L); p[0]=7; printf(\"%d\\n\", p[0]); return 0; }\n                                                                    ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_long_cast.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_long_cast",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_long_cast.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/launder_long_cast"
+      },
+      "expectation": "reject",
+      "expected": "unverifiable provenance",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_long_cast.c",
+      "group": "laundering",
+      "id": "launder_long_cast",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c:2:54: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'\n  int main(void){ int a[4]={0}; for(int i=0;i<10;i++) a[i]=1; printf(\"%d\\n\", a[0]); return 0; }\n                                                       ^\nhelp: array contains 4 elements; valid indices are 0..3\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c:2:53: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={0}; for(int i=0;i<10;i++) a[i]=1; printf(\"%d\\n\", a[0]); return 0; }\n                                                      ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_for_loop_oob",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_for_loop_oob"
+      },
+      "expectation": "reject",
+      "expected": "constant array index 9",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_for_loop_oob.c",
+      "group": "dataflow",
+      "id": "flow_for_loop_oob",
+      "status": "PASS"
+    },
+    {
+      "check": {
+        "note": "",
+        "rc": 1,
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_while_loop_oob.c:2:52: error: [CPLUS-FFI] out-of-bounds access: index 9 reaches past array 'a' of length 4\n  int main(void){ int a[4]={0}; int i=0; while(i<10) a[i++]=1; printf(\"%d\\n\", a[0]); return 0; }\n                                                     ^\n",
+        "stdout": ""
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_while_loop_oob.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_while_loop_oob",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_while_loop_oob.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_while_loop_oob"
+      },
+      "expectation": "reject",
+      "expected": "out-of-bounds",
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_while_loop_oob.c",
+      "group": "dataflow",
+      "id": "flow_while_loop_oob",
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_volatile_index_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_volatile_index_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_volatile_index_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_volatile_index_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_volatile_index_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_volatile_index_safe.c",
+      "group": "dataflow",
+      "id": "flow_volatile_index_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    },
+    {
+      "build": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "check": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_helper_index_safe.c ok\n"
+      },
+      "commands": {
+        "build": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_helper_index_safe.c -o /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_helper_index_safe",
+        "check": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_helper_index_safe.c",
+        "run": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/results/bin/flow_helper_index_safe"
+      },
+      "expectation": "run",
+      "expected": {
+        "exit": 0,
+        "stdout": "3\n"
+      },
+      "fixture": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/flow_helper_index_safe.c",
+      "group": "dataflow",
+      "id": "flow_helper_index_safe",
+      "run": {
+        "note": "",
+        "rc": 0,
+        "stderr": "",
+        "stdout": "3\n"
+      },
+      "status": "PASS"
+    }
+  ],
+  "root": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core",
+  "timeouts_seconds": {
+    "build": 90,
+    "check": 30,
+    "run": 15
+  },
+  "version": 1
+}

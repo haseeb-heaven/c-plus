@@ -1,0 +1,32 @@
+adversarial addition to strict-safe subset conformance (spec 0.1)
+exact command: CPLUS_BIN=/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ python3 tests/compiler/strict_rules/run_adversarial.py
+compiler: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+mode: STRICT (--strict --sanitize=none) ; hard timeout: 45s
+
+rules covered: 5 (ARITH-OVERFLOW, BOUNDS-FIXED, LIFETIME-DOUBLE-FREE, LIFETIME-UAF, THREAD-RACE)
+cases: 10 total, 10 PASS, 0 FAIL, 0 timeouts
+mutations (must reject): 5 ; near-misses (must accept): 5
+false positives: 0 ; false negatives: 0
+
+ARITH-OVERFLOW         mutation  PASS     rc=1     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_arith_overflow_cast.c
+ARITH-OVERFLOW         near_miss PASS     rc=0     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_arith_overflow_boundary.c
+BOUNDS-FIXED           mutation  PASS     rc=1     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_bounds_fixed_alias.c
+BOUNDS-FIXED           near_miss PASS     rc=0     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_bounds_fixed_sizeof.c
+LIFETIME-UAF           mutation  PASS     rc=1     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_lifetime_uaf_alias.c
+LIFETIME-UAF           near_miss PASS     rc=0     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_lifetime_uaf_fresh.c
+LIFETIME-DOUBLE-FREE   mutation  PASS     rc=1     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_owner_double_free_alias.c
+LIFETIME-DOUBLE-FREE   near_miss PASS     rc=0     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_owner_double_free_branch.c
+THREAD-RACE            mutation  PASS     rc=1     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/mut_thread_race_helper.c
+THREAD-RACE            near_miss PASS     rc=0     
+    command: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/near_thread_race_mutex.c
+
+base suite is unchanged; its evidence is in results/summary.txt / summary.json

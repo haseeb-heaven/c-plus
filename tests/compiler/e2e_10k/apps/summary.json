@@ -1,0 +1,33 @@
+{
+  "compiler_reference": "/usr/bin/clang -std=c11 -O2",
+  "compiler_under_test": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ build --legacy-c --sanitize=none",
+  "secondary_modes": [
+    "--default on app_board.c"
+  ],
+  "strict_mode_note": "c+ --strict cannot build a safety AST for the forked fork/capture runner (CPLUS-ANALYSIS); strict is not applicable to this harness, verified by build attempt.",
+  "stdlib_root": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/../c-plus-stdlib",
+  "scenarios_generated": 6828,
+  "scenarios_executed": 6828,
+  "scenarios_passed": 6828,
+  "scenarios_failed": 0,
+  "apis_discovered": 209,
+  "apis_exercised": 209,
+  "apis_not_exercised": [],
+  "categories": [
+    "2048",
+    "api",
+    "calculator",
+    "file",
+    "hash",
+    "json",
+    "line-editor",
+    "snake",
+    "thread",
+    "tic-tac-toe"
+  ],
+  "differential_mismatch_count": 0,
+  "failure_paths": [],
+  "failure_count": 0,
+  "code_coverage_measured": false,
+  "code_coverage_note": "API/scenario coverage measured; line coverage not instrumented."
+}

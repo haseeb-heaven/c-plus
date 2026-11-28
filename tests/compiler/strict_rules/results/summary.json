@@ -1,0 +1,1205 @@
+{
+  "generated_utc": "2026-11-25T19:05:03.314829+00:00",
+  "spec_version": "0.1",
+  "compiler_binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "mode": "STRICT (--strict --sanitize=none)",
+  "hard_timeout_s": 45,
+  "totals": {
+    "rules_total": 20,
+    "rules_verified": 20,
+    "rules_unverified": 0,
+    "fixtures_total": 40,
+    "fixtures_passed": 40,
+    "fixtures_failed": 0,
+    "timeouts": 0,
+    "false_positives": 0,
+    "false_negatives": 0
+  },
+  "unverified_rules": [],
+  "false_positives": [],
+  "false_negatives": [],
+  "records": [
+    {
+      "rule_id": "ARITH-OVERFLOW",
+      "category": "arithmetic",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_arith_overflow.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_arith_overflow.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_arith_overflow.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.513
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_arith_overflow.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "ARITH-OVERFLOW",
+      "category": "arithmetic",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_arith_overflow.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_arith_overflow.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_arith_overflow.c:2:46: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void) { int x = 2147483647; int y = x + 1; return y == 0; }\n                                               ^\n",
+        "timed_out": false,
+        "duration_s": 0.54
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_arith_overflow.c:2:46: error: [CPLUS-ARITH] signed integer overflow in addition\n  int main(void) { int x = 2147483647; int y = x + 1; return y == 0; }\n                                               ^\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "ARITH-DIVZERO",
+      "category": "arithmetic",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_arith_divzero.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_arith_divzero.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_arith_divzero.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.607
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_arith_divzero.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "ARITH-DIVZERO",
+      "category": "arithmetic",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_arith_divzero.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_arith_divzero.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_arith_divzero.c:2:37: error: [CPLUS-ARITH] division by zero\n  int main(void) { int z = 0; int x = 10 / z; return x; }\n                                      ^~\n",
+        "timed_out": false,
+        "duration_s": 0.44
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_arith_divzero.c:2:37: error: [CPLUS-ARITH] division by zero\n  int main(void) { int z = 0; int x = 10 / z; return x; }\n                                      ^~\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-FIXED",
+      "category": "fixed bounds",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_fixed.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_fixed.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_fixed.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.513
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_fixed.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-FIXED",
+      "category": "fixed bounds",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:41: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                          ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:58: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                                           ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:40: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                         ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:57: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                                          ^\nhelp: array contains 3 elements; valid indices are 0..2\n",
+        "timed_out": false,
+        "duration_s": 0.351
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:41: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                          ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:58: error: [CPLUS-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                                           ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:40: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                         ^\nhelp: array contains 3 elements; valid indices are 0..2\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_fixed.c:2:57: error: [CPLUS-SAFE-BOUNDS] constant array index 5 is outside the bounds of 'a'\n  int main(void) { int a[3] = {1, 2, 3}; a[5] = 9; return a[5]; }\n                                                          ^\nhelp: array contains 3 elements; valid indices are 0..2\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-HEAP",
+      "category": "heap bounds",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_heap.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_heap.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_heap.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.709
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_heap.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-HEAP",
+      "category": "heap bounds",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_heap.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_heap.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_heap.c:3:35: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p) { return p[4]; }\n                                    ^\n",
+        "timed_out": false,
+        "duration_s": 0.631
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_heap.c:3:35: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 4 exceeds heap allocation 'p' of 16 bytes\n  static int first(int *p) { return p[4]; }\n                                    ^\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-VLA",
+      "category": "VLA bounds",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_vla.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_vla.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_vla.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.462
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_vla.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-VLA",
+      "category": "VLA bounds",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_vla.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_vla.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_vla.c:3:40: error: [CPLUS-BOUNDS] sizeof on a VLA evaluates the expression at run time\n  int main(void) { int n = 4; size_t s = sizeof(int[n++]); printf(\"%zu %d\\n\", s, n); return 0; }\n                                         ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n",
+        "timed_out": false,
+        "duration_s": 0.593
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_vla.c:3:40: error: [CPLUS-BOUNDS] sizeof on a VLA evaluates the expression at run time\n  int main(void) { int n = 4; size_t s = sizeof(int[n++]); printf(\"%zu %d\\n\", s, n); return 0; }\n                                         ^~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-DYNAMIC-RUNTIME",
+      "category": "heap bounds",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_bounds_dynamic.c",
+      "mode": "build_run",
+      "expect": "accept",
+      "build": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_bounds_dynamic.c",
+          "-o",
+          "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_strict_rules_zs6cxd59/pos_bounds_dynamic.bin"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.699
+      },
+      "run": {
+        "command": [
+          "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_strict_rules_zs6cxd59/pos_bounds_dynamic.bin"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.32
+      },
+      "combined_output": "",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "BOUNDS-DYNAMIC-RUNTIME",
+      "category": "heap bounds",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_bounds_dynamic.c",
+      "mode": "build_run",
+      "expect": "reject",
+      "build": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "build",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_bounds_dynamic.c",
+          "-o",
+          "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_strict_rules_zs6cxd59/neg_bounds_dynamic.bin"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.64
+      },
+      "run": {
+        "command": [
+          "/var/folders/q0/rj0k1xgn28x14thfz4gnbm5c0000gn/T/cplus_strict_rules_zs6cxd59/neg_bounds_dynamic.bin"
+        ],
+        "exit_code": -6,
+        "stdout": "",
+        "stderr": "C+ error: index 101 is outside the bounds of 'p' (length 4)\n",
+        "timed_out": false,
+        "duration_s": 0.357
+      },
+      "combined_output": "C+ error: index 101 is outside the bounds of 'p' (length 4)\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "NULL-DEREF",
+      "category": "null/uninit",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_null_deref.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_null_deref.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_null_deref.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.436
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_null_deref.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "NULL-DEREF",
+      "category": "null/uninit",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_null_deref.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_null_deref.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_null_deref.c:3:46: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n  int main(void) { struct Point *p = 0; return p->x; }\n                                               ^\n",
+        "timed_out": false,
+        "duration_s": 0.381
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_null_deref.c:3:46: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer dereference\n  int main(void) { struct Point *p = 0; return p->x; }\n                                               ^\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "UNINIT-JOIN",
+      "category": "null/uninit",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_uninit_join.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_uninit_join.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_uninit_join.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.339
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_uninit_join.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "UNINIT-JOIN",
+      "category": "null/uninit",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_uninit_join.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_uninit_join.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_uninit_join.c:3:33: error: variable 'count' is uninitialized when used here [-Werror,-Wuninitialized]\n    3 | int main(void) { int count; if (count > 0) printf(\"positive\\n\"); return 0; }\n      |                                 ^~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_uninit_join.c:3:27: note: initialize the variable 'count' to silence this warning\n    3 | int main(void) { int count; if (count > 0) printf(\"positive\\n\"); return 0; }\n      |                           ^\n      |                            = 0\n1 error generated.\n",
+        "timed_out": false,
+        "duration_s": 0.854
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_uninit_join.c:3:33: error: variable 'count' is uninitialized when used here [-Werror,-Wuninitialized]\n    3 | int main(void) { int count; if (count > 0) printf(\"positive\\n\"); return 0; }\n      |                                 ^~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_uninit_join.c:3:27: note: initialize the variable 'count' to silence this warning\n    3 | int main(void) { int count; if (count > 0) printf(\"positive\\n\"); return 0; }\n      |                           ^\n      |                            = 0\n1 error generated.\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "ALIAS-TYPEPUN",
+      "category": "alias/provenance",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_alias_typepun.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_alias_typepun.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_alias_typepun.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.551
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_alias_typepun.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "ALIAS-TYPEPUN",
+      "category": "alias/provenance",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_alias_typepun.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_alias_typepun.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_alias_typepun.c:3:51: error: [CPLUS-FFI] type-punned dereference violates strict aliasing; use memcpy\n  int main(void) { float f = 3.14f; uint32_t bits = *(uint32_t *)&f; return bits != 0 ? 0 : 1; }\n                                                    ^\nhelp: use C+ managed allocations and cplus_* helpers\n",
+        "timed_out": false,
+        "duration_s": 0.451
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_alias_typepun.c:3:51: error: [CPLUS-FFI] type-punned dereference violates strict aliasing; use memcpy\n  int main(void) { float f = 3.14f; uint32_t bits = *(uint32_t *)&f; return bits != 0 ? 0 : 1; }\n                                                    ^\nhelp: use C+ managed allocations and cplus_* helpers\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "PROVENANCE-ESCAPE",
+      "category": "alias/provenance",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_provenance_escape.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_provenance_escape.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_provenance_escape.c ok\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_provenance_escape.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 0.894
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_provenance_escape.c ok\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_provenance_escape.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "PROVENANCE-ESCAPE",
+      "category": "alias/provenance",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_provenance_escape.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_provenance_escape.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_provenance_escape.c:5:88: error: managed pointer 'b' cannot escape its owning scope\n  int main(void) { return make() != 0 ? 0 : 1; }\nhelp: managed memory is released at scope exit; copy the data or use an explicit resource\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_provenance_escape.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 1.006
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_provenance_escape.c:5:88: error: managed pointer 'b' cannot escape its owning scope\n  int main(void) { return make() != 0 ? 0 : 1; }\nhelp: managed memory is released at scope exit; copy the data or use an explicit resource\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_provenance_escape.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_release', 'cplus_zalloc' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "LIFETIME-UAF",
+      "category": "lifetime/free",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_lifetime_uaf.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_uaf.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_uaf.c ok\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_uaf.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 0.925
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_uaf.c ok\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_uaf.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "LIFETIME-UAF",
+      "category": "lifetime/free",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_lifetime_uaf.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_uaf.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_uaf.c:3:98: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'p'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; *p = 42; cplus_release(p); cplus_check_live(p); return 0; }\n                                                                                                   ^~~~~~~~~~~~~~~~\nhelp: suggested correction: do not dereference after release; copy the data or transfer ownership with cplus_move()\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_uaf.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_check_live', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 0.633
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_uaf.c:3:98: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: liveness check on released pointer 'p'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; *p = 42; cplus_release(p); cplus_check_live(p); return 0; }\n                                                                                                   ^~~~~~~~~~~~~~~~\nhelp: suggested correction: do not dereference after release; copy the data or transfer ownership with cplus_move()\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_uaf.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_check_live', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "LIFETIME-DOUBLE-FREE",
+      "category": "lifetime/free",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_lifetime_double_free.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_double_free.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_double_free.c ok\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_double_free.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 1.063
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_double_free.c ok\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_double_free.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "LIFETIME-DOUBLE-FREE",
+      "category": "lifetime/free",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_lifetime_double_free.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_double_free.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_double_free.c:3:89: error: [CPLUS-OWNER] double free of 'p'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; cplus_release(p); cplus_release(p); return 0; }\n                                                                                          ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_double_free.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 1.036
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_double_free.c:3:89: error: [CPLUS-OWNER] double free of 'p'\n  int main(void) { int *p = cplus_alloc(sizeof(int)); if (!p) return 1; cplus_release(p); cplus_release(p); return 0; }\n                                                                                          ^~~~~~~~~~~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_double_free.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "LIFETIME-REALLOC",
+      "category": "lifetime/realloc",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_lifetime_realloc.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_realloc.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_realloc.c ok\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_realloc.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 1.087
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_realloc.c ok\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_lifetime_realloc.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "LIFETIME-REALLOC",
+      "category": "lifetime/realloc",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_lifetime_realloc.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_realloc.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_realloc.c:3:61: error: [CPLUS-REALLOC] raw realloc can lose the original block on failure; use cplus_realloc\n  int main(void) { int *a = malloc(40); if (!a) return 1; a = realloc(a, 1000); free(a); return 0; }\n                                                              ^~~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_realloc.c:3:61: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n  int main(void) { int *a = malloc(40); if (!a) return 1; a = realloc(a, 1000); free(a); return 0; }\n                                                              ^~~~~~~\n",
+        "timed_out": false,
+        "duration_s": 0.911
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_realloc.c:3:61: error: [CPLUS-REALLOC] raw realloc can lose the original block on failure; use cplus_realloc\n  int main(void) { int *a = malloc(40); if (!a) return 1; a = realloc(a, 1000); free(a); return 0; }\n                                                              ^~~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_lifetime_realloc.c:3:61: error: [CPLUS-ALIAS] realloc result and original pointer require explicit success/failure handling; alias state is unknown\n  int main(void) { int *a = malloc(40); if (!a) return 1; a = realloc(a, 1000); free(a); return 0; }\n                                                              ^~~~~~~\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "FFI-FORMAT",
+      "category": "strings/FFI",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_ffi_format.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_ffi_format.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_ffi_format.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.52
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_ffi_format.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "FFI-FORMAT",
+      "category": "strings/FFI",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_ffi_format.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_ffi_format.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_ffi_format.c:3:51: error: [CPLUS-FFI] format string is not a string literal (potentially insecure)\n  int main(void) { char user[] = \"%x %x %s\"; printf(user); return 0; }\n                                                    ^~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_ffi_format.c:3:44: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n  int main(void) { char user[] = \"%x %x %s\"; printf(user); return 0; }\n                                             ^~~~~~\n",
+        "timed_out": false,
+        "duration_s": 0.416
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_ffi_format.c:3:51: error: [CPLUS-FFI] format string is not a string literal (potentially insecure)\n  int main(void) { char user[] = \"%x %x %s\"; printf(user); return 0; }\n                                                    ^~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_ffi_format.c:3:44: error: [CPLUS-FFI] format string in printf is not a string literal (CWE-134; attacker-controlled format)\n  int main(void) { char user[] = \"%x %x %s\"; printf(user); return 0; }\n                                             ^~~~~~\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "RAII-SIGNAL-CALLBACK",
+      "category": "RAII/callbacks",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_raii_signal_callback.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_signal_callback.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_signal_callback.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.587
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_signal_callback.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "RAII-SIGNAL-CALLBACK",
+      "category": "RAII/callbacks",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_raii_signal_callback.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_signal_callback.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_signal_callback.c:4:39: error: [CPLUS-FFI] 'printf' is not async-signal-safe\n  static void handler(int s) { (void)s; printf(\"caught\\n\"); }\n                                        ^~~~~~\n",
+        "timed_out": false,
+        "duration_s": 0.613
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_signal_callback.c:4:39: error: [CPLUS-FFI] 'printf' is not async-signal-safe\n  static void handler(int s) { (void)s; printf(\"caught\\n\"); }\n                                        ^~~~~~\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "RAII-DEFER-JUMP",
+      "category": "RAII/callbacks",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_raii_defer_jump.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_defer_jump.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_defer_jump.c ok\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_defer_jump.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+        "timed_out": false,
+        "duration_s": 1.06
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_defer_jump.c ok\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_raii_defer_jump.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "RAII-DEFER-JUMP",
+      "category": "RAII/callbacks",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_raii_defer_jump.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_defer_jump.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_defer_jump.c:3:26: error: 'return' cannot jump out of a defer cleanup\n  int main(void) { return test(); }\n                           ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_defer_jump.c: error: [CPLUS-ANALYSIS] cannot build the C+ safety AST for this translation unit; STRICT would silently skip all safety analysis\n",
+        "timed_out": false,
+        "duration_s": 0.475
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_defer_jump.c:3:26: error: 'return' cannot jump out of a defer cleanup\n  int main(void) { return test(); }\n                           ^~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_raii_defer_jump.c: error: [CPLUS-ANALYSIS] cannot build the C+ safety AST for this translation unit; STRICT would silently skip all safety analysis\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "JOIN-PHI-BOUNDS",
+      "category": "control-flow joins",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_join_phi_bounds.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_join_phi_bounds.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_join_phi_bounds.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.749
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_join_phi_bounds.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "JOIN-PHI-BOUNDS",
+      "category": "control-flow joins",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_join_phi_bounds.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_join_phi_bounds.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_join_phi_bounds.c:2:53: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 chosen by conditional expression is out of bounds of 'p' of length 4\n  static void wr(int *p, int c) { int i = c ? 1 : 6; p[i] = 1; }\n                                                      ^\nhelp: use C+ managed allocations and cplus_* helpers\n",
+        "timed_out": false,
+        "duration_s": 0.328
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_join_phi_bounds.c:2:53: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 6 chosen by conditional expression is out of bounds of 'p' of length 4\n  static void wr(int *p, int c) { int i = c ? 1 : 6; p[i] = 1; }\n                                                      ^\nhelp: use C+ managed allocations and cplus_* helpers\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "THREAD-RACE",
+      "category": "threads",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_thread_race.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_thread_race.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_thread_race.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.537
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_thread_race.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "THREAD-RACE",
+      "category": "threads",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_thread_race.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_thread_race.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_thread_race.c:4:76: error: [CPLUS-FFI] unsynchronized write to shared global 'shared_counter' in thread function 'worker'\n  static void *worker(void *arg) { (void)arg; for (int i = 0; i < 1000; i++) shared_counter++; return 0; }\n                                                                             ^~~~~~~~~~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_thread_race.c:5:68: error: [CPLUS-FFI] multiple threads mutate shared global 'shared_counter' without synchronization\n  int main(void) { pthread_t a, b; pthread_create(&a, 0, worker, 0); pthread_create(&b, 0, worker, 0); pthread_join(a, 0); pthread_join(b, 0); return 0; }\n                                                                     ^~~~~~~~~~~~~~\n",
+        "timed_out": false,
+        "duration_s": 0.622
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_thread_race.c:4:76: error: [CPLUS-FFI] unsynchronized write to shared global 'shared_counter' in thread function 'worker'\n  static void *worker(void *arg) { (void)arg; for (int i = 0; i < 1000; i++) shared_counter++; return 0; }\n                                                                             ^~~~~~~~~~~~~~\nhelp: use C+ managed allocations and cplus_* helpers\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_thread_race.c:5:68: error: [CPLUS-FFI] multiple threads mutate shared global 'shared_counter' without synchronization\n  int main(void) { pthread_t a, b; pthread_create(&a, 0, worker, 0); pthread_create(&b, 0, worker, 0); pthread_join(a, 0); pthread_join(b, 0); return 0; }\n                                                                     ^~~~~~~~~~~~~~\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "FUNC-BOUNDARY-NULL",
+      "category": "function boundaries",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_func_boundary_null.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_func_boundary_null.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_func_boundary_null.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.555
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_func_boundary_null.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "FUNC-BOUNDARY-NULL",
+      "category": "function boundaries",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_func_boundary_null.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_func_boundary_null.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_func_boundary_null.c:4:18: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void) { deref(NULL); return 0; }\n                   ^~~~~\n",
+        "timed_out": false,
+        "duration_s": 0.663
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_func_boundary_null.c:4:18: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to 'deref'\n  int main(void) { deref(NULL); return 0; }\n                   ^~~~~\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "FIELD-RESOURCE-COPY",
+      "category": "fields/containers",
+      "role": "positive",
+      "fixture": "tests/compiler/strict_rules/fixtures/pos_field_resource_copy.c",
+      "mode": "check",
+      "expect": "accept",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_field_resource_copy.c"
+        ],
+        "exit_code": 0,
+        "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_field_resource_copy.c ok\n",
+        "stderr": "",
+        "timed_out": false,
+        "duration_s": 0.713
+      },
+      "combined_output": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/pos_field_resource_copy.c ok\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    },
+    {
+      "rule_id": "FIELD-RESOURCE-COPY",
+      "category": "fields/containers",
+      "role": "negative",
+      "fixture": "tests/compiler/strict_rules/fixtures/neg_field_resource_copy.c",
+      "mode": "check",
+      "expect": "reject",
+      "build": null,
+      "run": {
+        "command": [
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+          "check",
+          "--strict",
+          "--sanitize=none",
+          "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_field_resource_copy.c"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_field_resource_copy.c:10:45: error: resource 'b' cannot be copied from 'a'\nhelp: transfer ownership with cplus_move(a)\n",
+        "timed_out": false,
+        "duration_s": 0.783
+      },
+      "combined_output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/strict_rules/fixtures/neg_field_resource_copy.c:10:45: error: resource 'b' cannot be copied from 'a'\nhelp: transfer ownership with cplus_move(a)\n",
+      "missing_substrings": [],
+      "forbidden_substrings": [],
+      "timed_out": false,
+      "status": "PASS",
+      "fail_reason": ""
+    }
+  ]
+}

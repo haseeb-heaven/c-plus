@@ -1,11 +1,8 @@
-extern void cplus_check_nonnull(const void *, const char *, int, const char *);
-#if defined(__GNUC__) || defined(__clang__)
-#define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
-  cplus_check_nonnull((const void *)__cplus_nn_p, __FILE__, __LINE__, #P); \
-  __cplus_nn_p; })
-#else
-#define CPLUS_NONNULL(P) \
-  (cplus_check_nonnull((const void *)(P), __FILE__, __LINE__, #P), (P))
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
 #endif
 #include <stdint.h>
 #if defined(__GNUC__) || defined(__clang__)
@@ -157,9 +154,9 @@ int main(void) {
     int *q = cplus_realloc(p, sizeof(int) * (size_t)(i + 2));
     if (!q) return 1;
     p = q;
-    CPLUS_NONNULL(p)[i + 1] = i;
+    p[i + 1] = i;
   }
-  int ok = CPLUS_NONNULL(p)[16] == 15;
+  int ok = p[16] == 15;
   cplus_release(p);
   return ok ? 0 : 1;
 }

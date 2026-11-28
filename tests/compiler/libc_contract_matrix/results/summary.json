@@ -1,0 +1,617 @@
+{
+  "generated": "2026-11-25T22:32:41.322451+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "contracts_total": 29,
+  "results": [
+    {
+      "contract": "calloc",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/calloc.neg.c:3:37: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 4 bytes\n  int main(void){ int *p=calloc(1,4); p[9]=1; free(p); return 0; }\n                                      ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "fclose",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "double close",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fclose.neg.c:3:88: error: double close of FILE* 'f'\nhelp: release the stream exactly once\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "fopen",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "use of closed FILE",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fopen.neg.c:3:88: error: use of closed FILE* 'f'\nhelp: the stream was already closed\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "fread",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "fread reads",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fread.neg.c:2:98: error: [CPLUS-FFI] fread reads 9 bytes into destination 'b' of 4 bytes\n  int main(void){ char b[4]; FILE *f=fopen(\"/tmp/cplus_matrix.txt\",\"rb\"); if(!f)return 1; size_t n=fread(b,1,9,f); fclose(f); return n==4?0:1; }\n                                                                                                   ^~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "free",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "interior",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/free.neg.c:3:52: error: [CPLUS-OWNER] invalid free of interior pointer 'p' via free\n  int main(void){ int *p=malloc(16); if(!p)return 1; free(p+1); return 0; }\n                                                     ^~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "fwrite",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "null pointer argument",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/fwrite.neg.c:2:52: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 3 passed to fwrite\n  int main(void){ char b[4]={0}; FILE *f=0; size_t n=fwrite(b,1,4,f); return n==4?0:1; }\n                                                     ^~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "malloc",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/malloc.neg.c:3:35: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'p' of 4 bytes\n  int main(void){ int *p=malloc(4); p[9]=1; free(p); return 0; }\n                                    ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "memcpy",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "overflow",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.neg.c:3:33: warning: [CPLUS-FFI] 'memcpy' will always overflow; destination buffer has size 4, but size argument is 9\n  int main(void){ char a[4],b[8]; memcpy(a,b,9); return a[0]; }\n                                  ^~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.neg.c:3:33: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] copy of 9 bytes exceeds destination 'a'\n  int main(void){ char a[4],b[8]; memcpy(a,b,9); return a[0]; }\n                                  ^~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memcpy.neg.c:3:33: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] copy of 9 bytes exceeds source of length 8\n  int main(void){ char a[4],b[8]; memcpy(a,b,9); return a[0]; }\n                                  ^~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "memmove",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "overflow",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.neg.c:3:33: warning: [CPLUS-FFI] 'memmove' will always overflow; destination buffer has size 4, but size argument is 9\n  int main(void){ char a[4],b[8]; memmove(a,b,9); return a[0]; }\n                                  ^~~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.neg.c:3:33: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] copy of 9 bytes exceeds destination 'a'\n  int main(void){ char a[4],b[8]; memmove(a,b,9); return a[0]; }\n                                  ^~~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memmove.neg.c:3:33: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] copy of 9 bytes exceeds source of length 8\n  int main(void){ char a[4],b[8]; memmove(a,b,9); return a[0]; }\n                                  ^~~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "memset",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "overflow",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.neg.c:3:28: warning: [CPLUS-FFI] 'memset' will always overflow; destination buffer has size 4, but size argument is 9\n  int main(void){ char a[4]; memset(a,0,9); return a[0]; }\n                             ^~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/memset.neg.c:3:28: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] fill of 9 bytes exceeds destination 'a'\n  int main(void){ char a[4]; memset(a,0,9); return a[0]; }\n                             ^~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "realloc",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "exceeds heap allocation",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/realloc.neg.c:3:88: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] array index 9 exceeds heap allocation 'q' of 4 bytes\n  int main(void){ int *p=malloc(4); if(!p)return 1; int *q=realloc(p,4); if(!q)return 1; q[9]=1; free(q); return 0; }\n                                                                                         ^\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "strcat",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "overflow",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.neg.c:3:32: warning: [CPLUS-FFI] 'strcat' will always overflow; destination buffer has size 2, but the source string has length 9 (including NUL byte)\n  int main(void){ char a[2]=\"x\"; strcat(a,\"overflow\"); return a[0]; }\n                                 ^~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcat.neg.c:3:32: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] string concatenation needs 10 bytes but destination 'a' has capacity 2\n  int main(void){ char a[2]=\"x\"; strcat(a,\"overflow\"); return a[0]; }\n                                 ^~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "strcpy",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "overflow",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.neg.c:3:28: warning: [CPLUS-FFI] 'strcpy' will always overflow; destination buffer has size 2, but the source string has length 9 (including NUL byte)\n  int main(void){ char a[2]; strcpy(a,\"overflow\"); return a[0]; }\n                             ^~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strcpy.neg.c:3:28: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] string copy of 8 chars plus NUL exceeds destination 'a'\n  int main(void){ char a[2]; strcpy(a,\"overflow\"); return a[0]; }\n                             ^~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "strlen",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "null pointer",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strlen.neg.c:3:35: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] null pointer argument 0 passed to strlen\n  int main(void){ char *p=0; return strlen(p); }\n                                    ^~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "strncpy",
+      "status": "PASS",
+      "kind": "assert",
+      "expected": "overflow",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.pos.c"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.pos.c ok\n",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--default",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.neg.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.neg.c:3:28: warning: [CPLUS-FFI] 'strncpy' will always overflow; destination buffer has size 2, but size argument is 9\n  int main(void){ char a[2]; strncpy(a,\"overflow\",9); return a[0]; }\n                             ^~~~~~~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/libc_contract_matrix/cases/strncpy.neg.c:3:28: error: [CPLUS-BOUNDS] [CPLUS-SAFE-BOUNDS] string copy of 9 bytes exceeds destination 'a'\n  int main(void){ char a[2]; strncpy(a,\"overflow\",9); return a[0]; }\n                             ^~~~~~~\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "contract": "strcpy_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "strncpy_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "strcat_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "memcpy_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "memmove_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "memset_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "strnlen_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "sprintf_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "snprintf_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "fopen_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "malloc_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "calloc_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "realloc_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    },
+    {
+      "contract": "free_s",
+      "status": "PASS",
+      "kind": "partial",
+      "expected": "JSON metadata present",
+      "steps": []
+    }
+  ],
+  "failures": []
+}

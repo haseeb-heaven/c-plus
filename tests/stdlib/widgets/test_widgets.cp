@@ -131,6 +131,16 @@ int main(void) {
                                     STDLIB_WIDGET_VISIBLE), "flags_default");
         ck(strcmp(g.win.items[1].label, "Cancel") == 0, "label_copied");
 
+        /* Invalid kinds never enter the vector (issue #178). */
+        ck(stdlib_widget_add(&g.win, 60, -999, "bad", 0, 0, 1, 1, &e) ==
+               STDLIB_FAIL, "add_negative_kind_refused");
+        ck(e.category() == STDLIB_CATEGORY_INVALID, "add_bad_kind_category");
+        ck(stdlib_widget_add(&g.win, 60, 0, "bad", 0, 0, 1, 1, &e) ==
+               STDLIB_FAIL, "add_zero_kind_refused");
+        ck(stdlib_widget_add(&g.win, 60, 99999, "bad", 0, 0, 1, 1, &e) ==
+               STDLIB_FAIL, "add_large_kind_refused");
+        ck(stdlib_window_count(&g.win, &e) == 2u, "add_bad_kind_no_change");
+
         /* Duplicate id. */
         ck(stdlib_widget_add(&g.win, 10, 1, "dup", 0, 0, 1, 1, &e) ==
                STDLIB_FAIL, "add_duplicate_refused");
@@ -203,10 +213,21 @@ int main(void) {
         ck(stdlib_widget_visible(&g.win, 999u, 0, &e) == STDLIB_FAIL,
            "visible_index_oor");
 
-        /* Lookup. */
-        ck(stdlib_widget_index_by_id(&g.win, 20, &e) == 1, "index_by_id_found");
-        ck(stdlib_widget_index_by_id(&g.win, 999, &e) == -1,
-           "index_by_id_missing");
+        /* Lookup: an invalid window fails, a missing ID is a clean miss. */
+        {
+            size_t found_index = 99u;
+            int found = -1;
+            ck(stdlib_widget_index_by_id(&g.win, 20, &found_index, &found,
+                                         &e) == STDLIB_OK &&
+                   found == 1 && found_index == 1u,
+               "index_by_id_found");
+            found_index = 99u;
+            found = -1;
+            ck(stdlib_widget_index_by_id(&g.win, 999, &found_index, &found,
+                                         &e) == STDLIB_OK &&
+                   found == 0 && found_index == 0u && e.ok(),
+               "index_by_id_missing");
+        }
         ck(stdlib_widget_find_by_id(&g.win, 10, &e) == &g.win.items[0],
            "find_by_id_pointer");
         ck(stdlib_widget_find_by_id(&g.win, 999, &e) == (stdlib_widget *)0,
@@ -225,6 +246,14 @@ int main(void) {
            "visible_null_window");
         ck(stdlib_widget_find_by_id((stdlib_window *)0, 1, &e) ==
                (stdlib_widget *)0, "find_null_window");
+        {
+            size_t found_index = 99u;
+            int found = -1;
+            ck(stdlib_widget_index_by_id((stdlib_window *)0, 1, &found_index,
+                                         &found, &e) == STDLIB_FAIL &&
+                   found == -1 && found_index == 99u,
+               "index_by_id_null_window");
+        }
         ck(e.code() == CPLUS_EXIT_NULL_POINTER, "null_window_code");
         ck(stdlib_window_count((stdlib_window *)0, &e) == 0u,
            "count_null_window");
@@ -255,7 +284,7 @@ int main(void) {
                               10, 20, 100, 50, 2, &e) == STDLIB_OK,
            "grid_init");
         for (i = 0; i < 5; i++) {
-            idx = stdlib_widget_add(&w, 100 + i, 1 + i, names[i],
+            idx = stdlib_widget_add(&w, 100 + i, 1 + (i % 4), names[i],
                                     1, 1, 2, 2, &e);
             ck(idx == i, "grid_add");
         }
@@ -265,7 +294,7 @@ int main(void) {
             "W 101 2 61 21 48 14 3 w1\n"
             "W 102 3 11 37 48 14 3 w2\n"
             "W 103 4 61 37 48 14 3 w3\n"
-            "W 104 5 11 53 48 14 3 w4\n";
+            "W 104 1 11 53 48 14 3 w4\n";
 
         memset(serial, 0x5A, sizeof(serial));
         ck(stdlib_window_serialize(&w, serial, sizeof(serial), &e) ==
@@ -346,7 +375,7 @@ int main(void) {
                   "W 101 2 61 21 48 14 1 w1\n"
                   "W 102 3 11 37 48 14 3 w2\n"
                   "W 103 4 61 37 48 14 3 w3\n"
-                  "W 104 5 11 21 8 8 3 w4\n") == 0,
+                  "W 104 1 11 21 8 8 3 w4\n") == 0,
            "flags_serialization_exact");
 
         stdlib_window_drop(&w, &e);

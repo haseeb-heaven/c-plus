@@ -1,3 +1,9 @@
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
+#endif
 #include <stddef.h>
 extern size_t __cplus_bounds_check(size_t, size_t, const char *);
 #include <stdint.h>
@@ -147,9 +153,9 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 static int g[4][4];
 int main(void) {
     for (int i = 0; i < 16; CPLUS_INC(add, i, int, 32, 1, 1, 1))
-        g[__cplus_bounds_check((size_t)(i/4), 4, "g")][i%4] = i;
+        g[__cplus_bounds_check((size_t)(i/4), 4, "g")][__cplus_bounds_check((size_t)(i%4), (size_t)(4), "g[]")] = i;
     int r[4];                 /* declaration inside loop must not be checked */
     for (int i = 0; i < 4; CPLUS_INC(add, i, int, 32, 1, 1, 1))
-        r[__cplus_bounds_check((size_t)(i), 4, "r")] = g[0][i];
+        r[__cplus_bounds_check((size_t)(i), 4, "r")] = g[0][__cplus_bounds_check((size_t)(i), (size_t)(4), "g[]")];
     return r[0];
 }

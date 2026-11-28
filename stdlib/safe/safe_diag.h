@@ -72,8 +72,9 @@ typedef struct cplus_diag_record {
 } cplus_diag_record;
 
 /* ------------------------------------------------------------------ config */
-/* Read CPLUS_DIAG, CPLUS_COLOR and NO_COLOR once. Safe to call repeatedly;
- * the last call wins. Called lazily by the emitters on first use. */
+/* Read CPLUS_DIAG, CPLUS_COLOR and NO_COLOR once. Safe to call repeatedly and
+ * concurrently; the last call wins. The lazy first-load is serialized, and
+ * mode/color accessors are race-free across threads. */
 void cplus_diag_init_from_env(void);
 
 void cplus_diag_set_mode(cplus_diag_mode mode);

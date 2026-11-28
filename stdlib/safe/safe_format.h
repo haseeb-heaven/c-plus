@@ -19,11 +19,13 @@ extern "C" {
  *     returning -1 / EINVAL when trap is disabled). Full static taint/literal
  *     enforcement is performed by the C+ compiler pass.
  *   - Forbidden specifiers (C11 Annex K K.3.5.3.1): `%n` (including length-
- *     modified forms such as `%hhn`, `%lln`, `%zn`) is refused in all format
- *     and scan functions.
+ *     modified forms such as `%hhn`, `%lln`, `%zn`, glibc `%In` and C23
+ *     `%w32n` / `%wf64n`) and positional `$` conversions are refused in all
+ *     format and scan functions.
  *   - Scanf width enforcement (CWE-120): `scanf_s`, `fscanf_s`, `sscanf_s`
- *     refuse unbounded `%s` and `%[...]` conversions unless an explicit field
- *     width (e.g. `%63s`) or assignment suppression (`%*s`) is present.
+ *     refuse unbounded `%s`, `%ls`, `%S` and `%[...]` conversions unless an
+ *     explicit field width (e.g. `%63s`) or assignment suppression (`%*s`) is
+ *     present.  The allocating `%m` modifier is refused as well.
  *   - Destination capacity & UAF: `snprintf_s` / `sprintf_s` check `dest`
  *     against tracked `malloc_s` bounds and `__builtin_object_size(dest, 1)`
  *     (nearest enclosing object, so struct members use their own extent) to

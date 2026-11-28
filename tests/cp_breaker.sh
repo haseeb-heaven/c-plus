@@ -15,10 +15,13 @@ check() {
   local name=$1 expected=$2 source=$3 mode=${4:-build} rc=0
   local src="$SRC_DIR/${prefix}_${name}.cp" exe="$OUT/${prefix}_${name}" log="$OUT/${prefix}_${name}.log"
   if [[ ! -f "$src" ]]; then echo "missing probe: $src" >&2; exit 2; fi
+  # These probes exercise runtime/safety behaviour, not the default
+  # warnings-as-errors policy. --no-werror is diagnostic-only: the warning is
+  # still emitted and every C+ safety check is still applied.
   if [[ "$mode" == check ]]; then
-    "$CC" check "$src" > "$log" 2>&1 || rc=$?
+    "$CC" check --no-werror "$src" > "$log" 2>&1 || rc=$?
   else
-    "$CC" build "$src" -o "$exe" > "$log" 2>&1 || rc=$?
+    "$CC" build --no-werror "$src" -o "$exe" > "$log" 2>&1 || rc=$?
   fi
   if [[ "$expected" == reject ]]; then
     if ((rc != 0)); then

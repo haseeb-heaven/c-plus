@@ -1,6 +1,6 @@
 {
   "suite": "abi_safety",
-  "generated_at": "2026-11-23T14:06:46",
+  "generated_at": "2026-11-25T23:05:19",
   "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "binary_version": [
     "C+ 0.1.0"
@@ -365,7 +365,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "clang: warning: -labi_lib_helper_legacy_c: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -457,7 +457,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "clang: warning: -labi_lib_helper_default: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -549,7 +549,7 @@
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "clang: warning: -labi_lib_helper_strict: 'linker' input unused [-Wunused-command-line-argument]\nclang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases' [-Wunused-command-line-argument]\n",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_archive.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'abi_lib_mul', 'abi_lib_pair', 'abi_lib_scale' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -637,7 +637,7 @@
       "status": "pass",
       "note": "call into the compiler's precompiled libcplus_runtime.a",
       "expected_stdout": "rlib=3\n",
-      "source": "#include <stdio.h>\n#include <stddef.h>\n\nvoid cplus_check_bounds(const void *base, size_t count, size_t index,\n                        const char *file, int line, const char *expr);\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\n/* The reserved runtime ABI is declared by the shipped public header only.\n * STRICT deliberately rejects a user declaration of a reserved helper, so the\n * fixture includes the header instead of restating the prototype. */\n#include <cplus/cplus.h>\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
       "build": {
         "rc": 0,
         "stdout": "",
@@ -674,7 +674,7 @@
       "status": "pass",
       "note": "call into the compiler's precompiled libcplus_runtime.a",
       "expected_stdout": "rlib=3\n",
-      "source": "#include <stdio.h>\n#include <stddef.h>\n\nvoid cplus_check_bounds(const void *base, size_t count, size_t index,\n                        const char *file, int line, const char *expr);\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\n/* The reserved runtime ABI is declared by the shipped public header only.\n * STRICT deliberately rejects a user declaration of a reserved helper, so the\n * fixture includes the header instead of restating the prototype. */\n#include <cplus/cplus.h>\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
       "build": {
         "rc": 0,
         "stdout": "",
@@ -711,11 +711,11 @@
       "status": "pass",
       "note": "call into the compiler's precompiled libcplus_runtime.a",
       "expected_stdout": "rlib=3\n",
-      "source": "#include <stdio.h>\n#include <stddef.h>\n\nvoid cplus_check_bounds(const void *base, size_t count, size_t index,\n                        const char *file, int line, const char *expr);\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
+      "source": "#include <stdio.h>\n#include <stddef.h>\n\n/* The reserved runtime ABI is declared by the shipped public header only.\n * STRICT deliberately rejects a user declaration of a reserved helper, so the\n * fixture includes the header instead of restating the prototype. */\n#include <cplus/cplus.h>\nint main(void){\n  int a[4]; a[0]=1;a[1]=2;a[2]=3;a[3]=4;\n  cplus_check_bounds(a,4,2,\"abi_probe.c\",__LINE__,\"a[i]\");\n  printf(\"rlib=%d\\n\", a[2]);\n  return 0;\n}\n",
       "build": {
         "rc": 0,
         "stdout": "",
-        "stderr": "",
+        "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_safety/cases/lib_interop_shipped_runtime.strict.c: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_check_bounds', 'cplus_fatal' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
         "timed_out": false,
         "command": [
           "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
@@ -1603,7 +1603,7 @@
         "binary": {
           "result": {
             "rc": 0,
-            "stdout": "00000001000040a4 T ___cplus_bounds_check\n0000000100004630 T ___cplus_checked_add_i64\n0000000100004a4c T ___cplus_checked_div_i64\n00000001000049e8 T ___cplus_checked_mul_i64\n0000000100004f38 T ___cplus_checked_narrow_i64\n0000000100004c18 T ___cplus_checked_rem_i64\n0000000100004c58 T ___cplus_checked_shl_i64\n0000000100004ef8 T ___cplus_checked_shr_i64\n0000000100004988 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100003d84 T _abi_add_exported\n000000010000c000 D _abi_glob_counter\n0000000100005b0c T _cplus_alloc\n0000000100005c60 T _cplus_alloc_array\n000000010000632c T _cplus_alloc_bytes\n0000000100006438 T _cplus_alloc_count\n0000000100004324 T _cplus_check_bounds\n00000001000064d8 T _cplus_check_index\n0000000100006244 T _cplus_check_live\n0000000100004538 T _cplus_check_nonnull\n0000000100004448 T _cplus_check_ptr_formation\n000000010000415c T _cplus_fatal\n000000010000c050 S _cplus_fatal_hook\n00000001000059c8 T _cplus_free_registered\n0000000100006a18 T _cplus_mutex_free\n0000000100006928 T _cplus_mutex_lock\n0000000100006880 T _cplus_mutex_new\n00000001000069a0 T _cplus_mutex_unlock\n0000000100006fd8 T _cplus_print_end\n0000000100006c40 T _cplus_print_value\n0000000100005e20 T _cplus_realloc\n0000000100005860 T _cplus_realloc_registered\n0000000100005320 T _cplus_register_allocation\n0000000100005f6c T _cplus_release\n0000000100005228 T _cplus_resource_check_borrow\n000000010000c008 D _cplus_runtime_log_level\n0000000100006ffc T _cplus_scan_value\n000000010000675c T _cplus_scope_cleanup\n000000010000664c T _cplus_scope_push\n0000000100006bec T _cplus_tls_free\n0000000100006b10 T _cplus_tls_get\n0000000100006a68 T _cplus_tls_new\n0000000100006b68 T _cplus_tls_set\n0000000100005bec T _cplus_zalloc\n0000000100006180 T _cplus_zero\n0000000100003ed0 T _main\n",
+            "stdout": "0000000100001cdc T ___cplus_bounds_check\n0000000100002118 T ___cplus_checked_add_i64\n0000000100002534 T ___cplus_checked_div_i64\n0000000100002d10 T ___cplus_checked_f2i_i64\n00000001000024d0 T ___cplus_checked_mul_i64\n0000000100002a20 T ___cplus_checked_narrow_i64\n0000000100002700 T ___cplus_checked_rem_i64\n0000000100002740 T ___cplus_checked_shl_i64\n00000001000029e0 T ___cplus_checked_shr_i64\n0000000100003098 T ___cplus_checked_size_mul\n0000000100002470 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n00000001000013b4 T _abi_add_exported\n000000010000c000 D _abi_glob_counter\n0000000100004f00 T _cplus_address_retired\n000000010000440c T _cplus_alloc\n000000010000456c T _cplus_alloc_array\n0000000100004d30 T _cplus_alloc_bytes\n0000000100004f98 T _cplus_alloc_count\n0000000100004e3c T _cplus_allocation_generation\n0000000100001e0c T _cplus_check_bounds\n0000000100005038 T _cplus_check_index\n0000000100004c48 T _cplus_check_live\n0000000100002020 T _cplus_check_nonnull\n0000000100001f30 T _cplus_check_ptr_formation\n0000000100004ed0 T _cplus_epoch\n00000001000016d4 T _cplus_exception_enter\n00000001000017a4 T _cplus_exception_pop\n0000000100001860 T _cplus_exception_raise\n0000000100001dc8 T _cplus_fatal\n000000010000c0c0 S _cplus_fatal_hook\n0000000100004218 T _cplus_free_registered\n0000000100005578 T _cplus_mutex_free\n0000000100005488 T _cplus_mutex_lock\n00000001000053e0 T _cplus_mutex_new\n0000000100005500 T _cplus_mutex_unlock\n0000000100005b38 T _cplus_print_end\n00000001000057a0 T _cplus_print_value\n000000010000472c T _cplus_realloc\n0000000100003ad4 T _cplus_realloc_registered\n00000001000032f8 T _cplus_register_allocation\n00000001000048b4 T _cplus_release\n000000010000318c T _cplus_resource_check_borrow\n0000000100004f68 T _cplus_retired_ledger_full\n000000010000c008 D _cplus_runtime_log_level\n0000000100006830 T _cplus_scan_value\n0000000100005b5c T _cplus_scan_value_at\n00000001000052bc T _cplus_scope_cleanup\n00000001000051ac T _cplus_scope_push\n0000000100001d94 T _cplus_set_auto_runtime\n000000010000574c T _cplus_tls_free\n0000000100005670 T _cplus_tls_get\n00000001000055c8 T _cplus_tls_new\n00000001000056c8 T _cplus_tls_set\n00000001000044f8 T _cplus_zalloc\n0000000100004b84 T _cplus_zero\n0000000100001500 T _main\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -1625,7 +1625,7 @@
         "undefined": {
           "result": {
             "rc": 0,
-            "stdout": "__Exit\n___chkstk_darwin\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_malloc\n_printf\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_vfprintf\n",
+            "stdout": "__Exit\n___chkstk_darwin\n___error\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n__tlv_bootstrap\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_longjmp\n_malloc\n_malloc_size\n_printf\n_pthread_atfork\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_strtoll\n_strtoull\n_vfprintf\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -1637,6 +1637,7 @@
           "raw": [
             "__Exit",
             "___chkstk_darwin",
+            "___error",
             "___memcpy_chk",
             "___memset_chk",
             "___snprintf_chk",
@@ -1644,6 +1645,7 @@
             "___stack_chk_guard",
             "___stderrp",
             "___stdoutp",
+            "__tlv_bootstrap",
             "_abort",
             "_calloc",
             "_fflush",
@@ -1652,8 +1654,11 @@
             "_fputs",
             "_free",
             "_getenv",
+            "_longjmp",
             "_malloc",
+            "_malloc_size",
             "_printf",
+            "_pthread_atfork",
             "_pthread_getspecific",
             "_pthread_key_create",
             "_pthread_key_delete",
@@ -1665,6 +1670,8 @@
             "_putchar",
             "_scanf",
             "_strlen",
+            "_strtoll",
+            "_strtoull",
             "_vfprintf"
           ]
         }
@@ -1751,7 +1758,7 @@
         "binary": {
           "result": {
             "rc": 0,
-            "stdout": "00000001000040a4 T ___cplus_bounds_check\n0000000100004630 T ___cplus_checked_add_i64\n0000000100004a4c T ___cplus_checked_div_i64\n00000001000049e8 T ___cplus_checked_mul_i64\n0000000100004f38 T ___cplus_checked_narrow_i64\n0000000100004c18 T ___cplus_checked_rem_i64\n0000000100004c58 T ___cplus_checked_shl_i64\n0000000100004ef8 T ___cplus_checked_shr_i64\n0000000100004988 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n0000000100003d84 T _abi_add_exported\n000000010000c000 D _abi_glob_counter\n0000000100005b0c T _cplus_alloc\n0000000100005c60 T _cplus_alloc_array\n000000010000632c T _cplus_alloc_bytes\n0000000100006438 T _cplus_alloc_count\n0000000100004324 T _cplus_check_bounds\n00000001000064d8 T _cplus_check_index\n0000000100006244 T _cplus_check_live\n0000000100004538 T _cplus_check_nonnull\n0000000100004448 T _cplus_check_ptr_formation\n000000010000415c T _cplus_fatal\n000000010000c050 S _cplus_fatal_hook\n00000001000059c8 T _cplus_free_registered\n0000000100006a18 T _cplus_mutex_free\n0000000100006928 T _cplus_mutex_lock\n0000000100006880 T _cplus_mutex_new\n00000001000069a0 T _cplus_mutex_unlock\n0000000100006fd8 T _cplus_print_end\n0000000100006c40 T _cplus_print_value\n0000000100005e20 T _cplus_realloc\n0000000100005860 T _cplus_realloc_registered\n0000000100005320 T _cplus_register_allocation\n0000000100005f6c T _cplus_release\n0000000100005228 T _cplus_resource_check_borrow\n000000010000c008 D _cplus_runtime_log_level\n0000000100006ffc T _cplus_scan_value\n000000010000675c T _cplus_scope_cleanup\n000000010000664c T _cplus_scope_push\n0000000100006bec T _cplus_tls_free\n0000000100006b10 T _cplus_tls_get\n0000000100006a68 T _cplus_tls_new\n0000000100006b68 T _cplus_tls_set\n0000000100005bec T _cplus_zalloc\n0000000100006180 T _cplus_zero\n0000000100003ed0 T _main\n",
+            "stdout": "0000000100001cdc T ___cplus_bounds_check\n0000000100002118 T ___cplus_checked_add_i64\n0000000100002534 T ___cplus_checked_div_i64\n0000000100002d10 T ___cplus_checked_f2i_i64\n00000001000024d0 T ___cplus_checked_mul_i64\n0000000100002a20 T ___cplus_checked_narrow_i64\n0000000100002700 T ___cplus_checked_rem_i64\n0000000100002740 T ___cplus_checked_shl_i64\n00000001000029e0 T ___cplus_checked_shr_i64\n0000000100003098 T ___cplus_checked_size_mul\n0000000100002470 T ___cplus_checked_sub_i64\n0000000100000000 T __mh_execute_header\n00000001000013b4 T _abi_add_exported\n000000010000c000 D _abi_glob_counter\n0000000100004f00 T _cplus_address_retired\n000000010000440c T _cplus_alloc\n000000010000456c T _cplus_alloc_array\n0000000100004d30 T _cplus_alloc_bytes\n0000000100004f98 T _cplus_alloc_count\n0000000100004e3c T _cplus_allocation_generation\n0000000100001e0c T _cplus_check_bounds\n0000000100005038 T _cplus_check_index\n0000000100004c48 T _cplus_check_live\n0000000100002020 T _cplus_check_nonnull\n0000000100001f30 T _cplus_check_ptr_formation\n0000000100004ed0 T _cplus_epoch\n00000001000016d4 T _cplus_exception_enter\n00000001000017a4 T _cplus_exception_pop\n0000000100001860 T _cplus_exception_raise\n0000000100001dc8 T _cplus_fatal\n000000010000c0c0 S _cplus_fatal_hook\n0000000100004218 T _cplus_free_registered\n0000000100005578 T _cplus_mutex_free\n0000000100005488 T _cplus_mutex_lock\n00000001000053e0 T _cplus_mutex_new\n0000000100005500 T _cplus_mutex_unlock\n0000000100005b38 T _cplus_print_end\n00000001000057a0 T _cplus_print_value\n000000010000472c T _cplus_realloc\n0000000100003ad4 T _cplus_realloc_registered\n00000001000032f8 T _cplus_register_allocation\n00000001000048b4 T _cplus_release\n000000010000318c T _cplus_resource_check_borrow\n0000000100004f68 T _cplus_retired_ledger_full\n000000010000c008 D _cplus_runtime_log_level\n0000000100006830 T _cplus_scan_value\n0000000100005b5c T _cplus_scan_value_at\n00000001000052bc T _cplus_scope_cleanup\n00000001000051ac T _cplus_scope_push\n0000000100001d94 T _cplus_set_auto_runtime\n000000010000574c T _cplus_tls_free\n0000000100005670 T _cplus_tls_get\n00000001000055c8 T _cplus_tls_new\n00000001000056c8 T _cplus_tls_set\n00000001000044f8 T _cplus_zalloc\n0000000100004b84 T _cplus_zero\n0000000100001500 T _main\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -1773,7 +1780,7 @@
         "undefined": {
           "result": {
             "rc": 0,
-            "stdout": "__Exit\n___chkstk_darwin\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_malloc\n_printf\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_vfprintf\n",
+            "stdout": "__Exit\n___chkstk_darwin\n___error\n___memcpy_chk\n___memset_chk\n___snprintf_chk\n___stack_chk_fail\n___stack_chk_guard\n___stderrp\n___stdoutp\n__tlv_bootstrap\n_abort\n_calloc\n_fflush\n_fprintf\n_fputc\n_fputs\n_free\n_getenv\n_longjmp\n_malloc\n_malloc_size\n_printf\n_pthread_atfork\n_pthread_getspecific\n_pthread_key_create\n_pthread_key_delete\n_pthread_mutex_destroy\n_pthread_mutex_init\n_pthread_mutex_lock\n_pthread_mutex_unlock\n_pthread_setspecific\n_putchar\n_scanf\n_strlen\n_strtoll\n_strtoull\n_vfprintf\n",
             "stderr": "",
             "timed_out": false,
             "command": [
@@ -1785,6 +1792,7 @@
           "raw": [
             "__Exit",
             "___chkstk_darwin",
+            "___error",
             "___memcpy_chk",
             "___memset_chk",
             "___snprintf_chk",
@@ -1792,6 +1800,7 @@
             "___stack_chk_guard",
             "___stderrp",
             "___stdoutp",
+            "__tlv_bootstrap",
             "_abort",
             "_calloc",
             "_fflush",
@@ -1800,8 +1809,11 @@
             "_fputs",
             "_free",
             "_getenv",
+            "_longjmp",
             "_malloc",
+            "_malloc_size",
             "_printf",
+            "_pthread_atfork",
             "_pthread_getspecific",
             "_pthread_key_create",
             "_pthread_key_delete",
@@ -1813,6 +1825,8 @@
             "_putchar",
             "_scanf",
             "_strlen",
+            "_strtoll",
+            "_strtoull",
             "_vfprintf"
           ]
         }

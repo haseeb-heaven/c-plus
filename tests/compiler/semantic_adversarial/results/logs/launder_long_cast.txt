@@ -1,0 +1,10 @@
+case launder_long_cast [laundering] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_long_cast.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/launder_long_cast.c:2:67: error: [CPLUS-FFI] pointer created from integer value has unverifiable provenance
+  int main(void){ int a[4]={1,2,3,4}; long u=(long)(void*)a; int *p=(int*)(u + 9L*4L); p[0]=7; printf("%d\n", p[0]); return 0; }
+                                                                    ^
+

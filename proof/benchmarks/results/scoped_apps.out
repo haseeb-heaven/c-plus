@@ -1,0 +1,6 @@
+SCOPED_APPS ops 20000
+SCOPED_APPS bump_ns_per_op 23
+SCOPED_APPS heap_ns_per_op 906
+SCOPED_APPS modern_ns_per_op 158
+SCOPED_APPS ratio_ge_2 yes
+SCOPED_APPS_OK

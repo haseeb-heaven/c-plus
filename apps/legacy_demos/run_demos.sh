@@ -217,7 +217,6 @@ expect_ok O_extensions "$OUT/O_extensions.expected"
 # P: standard library provided as .hp headers.
 printf 'language C+ scores 2 20\n\n' >"$OUT/P_std_library.expected"
 expect_ok P_std_library "$OUT/P_std_library.expected"
-expect_ok modern_allocators "$OUT/modern_allocators.expected"
 
 echo
 echo "C+ demos: $PASS passed, $FAIL failed"

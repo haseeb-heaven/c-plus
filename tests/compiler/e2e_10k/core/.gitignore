@@ -1,0 +1,5 @@
+# Generated sources, per-scenario metadata, and all build/run scratch output.
+generated/
+scratch/
+__pycache__/
+*.pyc

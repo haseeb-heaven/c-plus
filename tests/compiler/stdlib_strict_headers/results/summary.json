@@ -1,0 +1,141 @@
+{
+  "generated": "2026-11-26T04:22:32.042268+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "header": "error",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_error.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_error.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_error.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "header": "vector",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_vector.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_vector.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_vector.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "header": "thread",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_thread.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_thread.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_thread.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_mutex_free', 'cplus_mutex_lock', 'cplus_mutex_new', 'cplus_mutex_unlock', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "header": "collections",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_collections.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_collections.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_collections.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "header": "mempool",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_mempool.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_mempool.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_mempool.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_check_live', 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "header": "arena",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_arena.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_arena.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_arena.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "header": "scoped_mem",
+      "status": "PASS",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_scoped_mem.cp"
+          ],
+          "rc": 0,
+          "stdout": "check: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_scoped_mem.cp ok\n",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/stdlib_strict_headers/include_scoped_mem.cp: note: [CPLUS-MULTITU] STRICT analysis is per-translation-unit: functions 'cplus_alloc', 'cplus_check_live', 'cplus_fatal', 'cplus_realloc', 'cplus_release' have no definition in this TU; cross-TU control/data flow is not safety-checked here\n",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}

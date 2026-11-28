@@ -121,11 +121,17 @@ def toolchain_sig(combined: str) -> str | None:
     return None
 
 
-def run_cmd(argv, env=None, timeout=TIMEOUT, stdin_null=True, cwd=None):
-    """Run one command with a hard timeout; never raise on process failure."""
+def run_cmd(argv, env=None, timeout=TIMEOUT, stdin_null=True, cwd=None,
+            record_env=None):
+    """Run one command with a hard timeout; never raise on process failure.
+
+    `record_env` is the sanitized subset written to the evidence summary. The
+    full child environment must never be serialized: it contains API keys and
+    other machine secrets.
+    """
     rec = {
         "argv": argv,
-        "env_overrides": env or {},
+        "env_overrides": record_env if record_env is not None else {},
         "timeout_sec": timeout,
         "rc": None,
         "timed_out": False,
@@ -388,7 +394,7 @@ def execute_fixture(fx, expect):
             env["CPLUS_CLANG"] = CLANG
             sbuild = run_cmd(build_argv(src, s_exe, strict=True,
                                         sanitizer=san, extra_sources=extra),
-                             env=env)
+                             env=env, record_env={"CPLUS_CLANG": CLANG})
             commands["build_" + tag] = sbuild
             if s_exe.exists():
                 commands["runtime_" + tag] = run_cmd([str(s_exe)], stdin_null=True)

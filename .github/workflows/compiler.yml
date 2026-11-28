@@ -22,6 +22,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: brew install llvm cmake ninja rust
+      - name: Expose Homebrew LLVM tools on PATH
+        # `brew install llvm` is keg-only: llvm-config/clang from that prefix
+        # must be on PATH for exact version reporting and the SDK configure.
+        run: echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+      - name: Toolchain versions and feature probes
+        # Prints uname + exact clang/llvm/cmake/ninja/python versions, then
+        # probes baseline C, sanitizers (skip=record when unsupported) and
+        # static/shared library linking. Hard failures exit non-zero.
+        env:
+          CC: clang
+        run: sh tools/verify_toolchain.sh
       - name: Configure
         run: |
           PREFIX="$(brew --prefix llvm)"
@@ -35,6 +46,114 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Core safety suite
         run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh
+      - name: C-ABI non-regression gate (issues #186/#187/#190)
+        # One fail-closed command: layout/header purity, symbols, calling
+        # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
+        # tests/abi/precompiled, plus the safe-s catalog/doc sync.
+        # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
+        run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+      - name: SafeCRT/libc hard gates (issue #81)
+        # The CRT unit runner compiles and executes the fclose_s collision
+        # sub-case on glibc (there is no Linux early-return skip here), and
+        # both runners fail on any non-zero build/run. The guards forbid
+        # reintroducing the silent --legacy-c demo fallback or a crashed VLA
+        # runtime check being recorded as a pass (issue #81).
+        run: |
+          set -eu
+          ! grep -q 'defined(__linux__)' tests/crt/unit/test_fclose_s.c
+          ! grep -q -- '--legacy-c --no-werror' apps/legacy_demos/run_demos.sh
+          ! grep -q 'VLA runtime NOT_TESTED' tests/run_tests.sh
+          sh tests/crt/unit/run_unit_tests.sh
+          sh tests/libc/run_libc_tests.sh
+      - name: "Clean SDK prefix: configure, build, install, C and C+ smoke"
+        env:
+          CC: clang
+        run: |
+          set -eu
+          SDK_BUILD="$PWD/build-sdk"
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          rm -rf "$SDK_BUILD" "$SDK_PREFIX"
+          mkdir -p "$SDK_PREFIX"
+          PREFIX="$(brew --prefix llvm)"
+          cmake -S . -B "$SDK_BUILD" -G Ninja \
+            -DLLVM_DIR="$PREFIX/lib/cmake/llvm" \
+            -DClang_DIR="$PREFIX/lib/cmake/clang" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build "$SDK_BUILD" --target c+ cplus_runtime --parallel
+          cmake --install "$SDK_BUILD" --prefix "$SDK_PREFIX"
+          test -x "$SDK_PREFIX/bin/c+"
+          test -f "$SDK_PREFIX/include/cplus/cplus.h"
+          test -f "$SDK_PREFIX/share/cplus/libc_contracts.json"
+          test -f "$SDK_PREFIX/lib/libcplus_runtime.a"
+          cat > "$SDK_PREFIX/smoke_plain.c" <<'EOF'
+          #include <stdio.h>
+          int main(void) { printf("plain-ok\n"); return 0; }
+          EOF
+          "$SDK_PREFIX/bin/c+" build --legacy-c "$SDK_PREFIX/smoke_plain.c" -o "$SDK_PREFIX/smoke_plain"
+          test "$("$SDK_PREFIX/smoke_plain")" = "plain-ok"
+          clang -std=gnu89 "$SDK_PREFIX/smoke_plain.c" -o "$SDK_PREFIX/smoke_plain_clang"
+          test "$("$SDK_PREFIX/smoke_plain_clang")" = "plain-ok"
+          echo "SDK unchanged-C smoke: ok"
+          cat > "$SDK_PREFIX/smoke_cplus.cp" <<'EOF'
+          #include <stdio.h>
+          #include "cplus/cplus.h"
+          int main(void) {
+            int a[4] = {0};
+            int *p = cplus_new_array(int, 5);
+            if (a.len != 4 || p.len != 5) return 1;
+            printf("cplus-ok\n");
+            return 0;
+          }
+          EOF
+          "$SDK_PREFIX/bin/c+" build "$SDK_PREFIX/smoke_cplus.cp" -I"$SDK_PREFIX/include" -o "$SDK_PREFIX/smoke_cplus"
+          test "$("$SDK_PREFIX/smoke_cplus")" = "cplus-ok"
+          echo "SDK C+ smoke: ok"
+      - name: Static library link smoke test
+        # Link through the installed SDK compiler; a failure is a hard failure.
+        run: |
+          set -eu
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          WORK="$RUNNER_TEMP/cplus-link-static"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cat > "$WORK/add.c" <<'EOF'
+          int cplus_probe_add(int a, int b) { return a + b; }
+          EOF
+          cat > "$WORK/main.c" <<'EOF'
+          #include <stdio.h>
+          int cplus_probe_add(int, int);
+          int main(void) { printf("link=%d\n", cplus_probe_add(2, 3)); return 0; }
+          EOF
+          clang -std=gnu89 -c "$WORK/add.c" -o "$WORK/add.o"
+          ar rcs "$WORK/libadd.a" "$WORK/add.o"
+          "$SDK_PREFIX/bin/c+" build "$WORK/main.c" -L"$WORK" -ladd -o "$WORK/static_main"
+          test "$("$WORK/static_main")" = "link=5"
+          echo "static library link smoke: ok"
+      - name: Shared library link smoke test
+        run: |
+          set -eu
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          WORK="$RUNNER_TEMP/cplus-link-shared"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cat > "$WORK/add.c" <<'EOF'
+          int cplus_probe_add(int a, int b) { return a + b; }
+          EOF
+          cat > "$WORK/main.c" <<'EOF'
+          #include <stdio.h>
+          int cplus_probe_add(int, int);
+          int main(void) { printf("link=%d\n", cplus_probe_add(2, 3)); return 0; }
+          EOF
+          case "$(uname -s)" in
+            Darwin) SHARED_FLAG=-dynamiclib; SHARED_EXT=dylib; LOADER_VAR=DYLD_LIBRARY_PATH ;;
+            *) SHARED_FLAG=-shared; SHARED_EXT=so; LOADER_VAR=LD_LIBRARY_PATH ;;
+          esac
+          clang -std=gnu89 -fPIC "$SHARED_FLAG" "$WORK/add.c" -o "$WORK/libadd.$SHARED_EXT"
+          "$SDK_PREFIX/bin/c+" build "$WORK/main.c" -L"$WORK" -ladd -o "$WORK/shared_main"
+          if [ "$LOADER_VAR" = "DYLD_LIBRARY_PATH" ]; then
+            test "$(DYLD_LIBRARY_PATH="$WORK" "$WORK/shared_main")" = "link=5"
+          else
+            test "$(LD_LIBRARY_PATH="$WORK" "$WORK/shared_main")" = "link=5"
+          fi
+          echo "shared library link smoke: ok"
 
   linux-x86-64-cplus:
     runs-on: ubuntu-24.04
@@ -47,6 +166,13 @@ jobs:
                                   ninja-build python3 rustc \
                                   libprotobuf-dev protobuf-compiler-grpc \
                                   libgrpc++-dev libabsl-dev libzstd-dev
+      - name: Toolchain versions and feature probes
+        # Prints uname + exact clang/llvm/cmake/ninja/python versions, then
+        # probes baseline C, sanitizers (skip=record when unsupported) and
+        # static/shared library linking. Hard failures exit non-zero.
+        env:
+          CC: clang
+        run: sh tools/verify_toolchain.sh
       - name: Configure
         run: |
           LLVM_VER="$(llvm-config --version | cut -d. -f1)"
@@ -60,3 +186,252 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Core safety suite
         run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh
+      - name: C-ABI non-regression gate (issues #186/#187/#190)
+        # One fail-closed command: layout/header purity, symbols, calling
+        # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
+        # tests/abi/precompiled, plus the safe-s catalog/doc sync.
+        # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
+        run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+      - name: SafeCRT/libc hard gates (issue #81)
+        # The CRT unit runner compiles and executes the fclose_s collision
+        # sub-case on glibc (there is no Linux early-return skip here), and
+        # both runners fail on any non-zero build/run. The guards forbid
+        # reintroducing the silent --legacy-c demo fallback or a crashed VLA
+        # runtime check being recorded as a pass (issue #81).
+        run: |
+          set -eu
+          ! grep -q 'defined(__linux__)' tests/crt/unit/test_fclose_s.c
+          ! grep -q -- '--legacy-c --no-werror' apps/legacy_demos/run_demos.sh
+          ! grep -q 'VLA runtime NOT_TESTED' tests/run_tests.sh
+          sh tests/crt/unit/run_unit_tests.sh
+          sh tests/libc/run_libc_tests.sh
+      - name: "Clean SDK prefix: configure, build, install, C and C+ smoke"
+        env:
+          CC: clang
+        run: |
+          set -eu
+          SDK_BUILD="$PWD/build-sdk"
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          rm -rf "$SDK_BUILD" "$SDK_PREFIX"
+          mkdir -p "$SDK_PREFIX"
+          LLVM_VER="$(llvm-config --version | cut -d. -f1)"
+          cmake -S . -B "$SDK_BUILD" -G Ninja \
+            -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+            -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build "$SDK_BUILD" --target c+ cplus_runtime --parallel
+          cmake --install "$SDK_BUILD" --prefix "$SDK_PREFIX"
+          test -x "$SDK_PREFIX/bin/c+"
+          test -f "$SDK_PREFIX/include/cplus/cplus.h"
+          test -f "$SDK_PREFIX/share/cplus/libc_contracts.json"
+          test -f "$SDK_PREFIX/lib/libcplus_runtime.a"
+          cat > "$SDK_PREFIX/smoke_plain.c" <<'EOF'
+          #include <stdio.h>
+          int main(void) { printf("plain-ok\n"); return 0; }
+          EOF
+          "$SDK_PREFIX/bin/c+" build --legacy-c "$SDK_PREFIX/smoke_plain.c" -o "$SDK_PREFIX/smoke_plain"
+          test "$("$SDK_PREFIX/smoke_plain")" = "plain-ok"
+          clang -std=gnu89 "$SDK_PREFIX/smoke_plain.c" -o "$SDK_PREFIX/smoke_plain_clang"
+          test "$("$SDK_PREFIX/smoke_plain_clang")" = "plain-ok"
+          echo "SDK unchanged-C smoke: ok"
+          cat > "$SDK_PREFIX/smoke_cplus.cp" <<'EOF'
+          #include <stdio.h>
+          #include "cplus/cplus.h"
+          int main(void) {
+            int a[4] = {0};
+            int *p = cplus_new_array(int, 5);
+            if (a.len != 4 || p.len != 5) return 1;
+            printf("cplus-ok\n");
+            return 0;
+          }
+          EOF
+          "$SDK_PREFIX/bin/c+" build "$SDK_PREFIX/smoke_cplus.cp" -I"$SDK_PREFIX/include" -o "$SDK_PREFIX/smoke_cplus"
+          test "$("$SDK_PREFIX/smoke_cplus")" = "cplus-ok"
+          echo "SDK C+ smoke: ok"
+      - name: Static library link smoke test
+        run: |
+          set -eu
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          WORK="$RUNNER_TEMP/cplus-link-static"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cat > "$WORK/add.c" <<'EOF'
+          int cplus_probe_add(int a, int b) { return a + b; }
+          EOF
+          cat > "$WORK/main.c" <<'EOF'
+          #include <stdio.h>
+          int cplus_probe_add(int, int);
+          int main(void) { printf("link=%d\n", cplus_probe_add(2, 3)); return 0; }
+          EOF
+          clang -std=gnu89 -c "$WORK/add.c" -o "$WORK/add.o"
+          ar rcs "$WORK/libadd.a" "$WORK/add.o"
+          "$SDK_PREFIX/bin/c+" build "$WORK/main.c" -L"$WORK" -ladd -o "$WORK/static_main"
+          test "$("$WORK/static_main")" = "link=5"
+          echo "static library link smoke: ok"
+      - name: Shared library link smoke test
+        run: |
+          set -eu
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          WORK="$RUNNER_TEMP/cplus-link-shared"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cat > "$WORK/add.c" <<'EOF'
+          int cplus_probe_add(int a, int b) { return a + b; }
+          EOF
+          cat > "$WORK/main.c" <<'EOF'
+          #include <stdio.h>
+          int cplus_probe_add(int, int);
+          int main(void) { printf("link=%d\n", cplus_probe_add(2, 3)); return 0; }
+          EOF
+          case "$(uname -s)" in
+            Darwin) SHARED_FLAG=-dynamiclib; SHARED_EXT=dylib; LOADER_VAR=DYLD_LIBRARY_PATH ;;
+            *) SHARED_FLAG=-shared; SHARED_EXT=so; LOADER_VAR=LD_LIBRARY_PATH ;;
+          esac
+          clang -std=gnu89 -fPIC "$SHARED_FLAG" "$WORK/add.c" -o "$WORK/libadd.$SHARED_EXT"
+          "$SDK_PREFIX/bin/c+" build "$WORK/main.c" -L"$WORK" -ladd -o "$WORK/shared_main"
+          if [ "$LOADER_VAR" = "DYLD_LIBRARY_PATH" ]; then
+            test "$(DYLD_LIBRARY_PATH="$WORK" "$WORK/shared_main")" = "link=5"
+          else
+            test "$(LD_LIBRARY_PATH="$WORK" "$WORK/shared_main")" = "link=5"
+          fi
+          echo "shared library link smoke: ok"
+
+  linux-arm64-cplus:
+    # ubuntu-24.04-arm is a valid public GitHub-hosted runner label (GitHub
+    # changelog 2025-08-07; also available in private repos since 2026-01-29).
+    # No platform is inferred as supported from another OS's success.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm-dev libclang-dev cmake \
+                                  ninja-build python3 rustc \
+                                  libprotobuf-dev protobuf-compiler-grpc \
+                                  libgrpc++-dev libabsl-dev libzstd-dev
+      - name: Toolchain versions and feature probes
+        # Prints uname + exact clang/llvm/cmake/ninja/python versions, then
+        # probes baseline C, sanitizers (skip=record when unsupported) and
+        # static/shared library linking. Hard failures exit non-zero.
+        env:
+          CC: clang
+        run: sh tools/verify_toolchain.sh
+      - name: Configure
+        run: |
+          LLVM_VER="$(llvm-config --version | cut -d. -f1)"
+          cmake -S . -B build -G Ninja \
+            -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+            -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Build
+        run: cmake --build build --target c+ --parallel
+      - name: CTest (repo tests + demos)
+        run: ctest --test-dir build --output-on-failure
+      - name: Core safety suite
+        run: CPLUS_BIN="$PWD/build/c+" sh tests/core/run.sh
+      - name: C-ABI non-regression gate (issues #186/#187/#190)
+        # One fail-closed command: layout/header purity, symbols, calling
+        # conventions, every stdlib/*.hp boundary, tests/abi/c_to_cp and
+        # tests/abi/precompiled, plus the safe-s catalog/doc sync.
+        # Contract: docs/abi/ABI_GATE.md and docs/abi/STRICT_C_ABI_BOUNDARY.md.
+        run: CPLUS_BIN="$PWD/build/c+" sh tests/compiler/abi_gate/run.sh
+      - name: SafeCRT/libc hard gates (issue #81)
+        # The CRT unit runner compiles and executes the fclose_s collision
+        # sub-case on glibc (there is no Linux early-return skip here), and
+        # both runners fail on any non-zero build/run. The guards forbid
+        # reintroducing the silent --legacy-c demo fallback or a crashed VLA
+        # runtime check being recorded as a pass (issue #81).
+        run: |
+          set -eu
+          ! grep -q 'defined(__linux__)' tests/crt/unit/test_fclose_s.c
+          ! grep -q -- '--legacy-c --no-werror' apps/legacy_demos/run_demos.sh
+          ! grep -q 'VLA runtime NOT_TESTED' tests/run_tests.sh
+          sh tests/crt/unit/run_unit_tests.sh
+          sh tests/libc/run_libc_tests.sh
+      - name: "Clean SDK prefix: configure, build, install, C and C+ smoke"
+        env:
+          CC: clang
+        run: |
+          set -eu
+          SDK_BUILD="$PWD/build-sdk"
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          rm -rf "$SDK_BUILD" "$SDK_PREFIX"
+          mkdir -p "$SDK_PREFIX"
+          LLVM_VER="$(llvm-config --version | cut -d. -f1)"
+          cmake -S . -B "$SDK_BUILD" -G Ninja \
+            -DLLVM_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/llvm" \
+            -DClang_DIR="/usr/lib/llvm-${LLVM_VER}/lib/cmake/clang" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build "$SDK_BUILD" --target c+ cplus_runtime --parallel
+          cmake --install "$SDK_BUILD" --prefix "$SDK_PREFIX"
+          test -x "$SDK_PREFIX/bin/c+"
+          test -f "$SDK_PREFIX/include/cplus/cplus.h"
+          test -f "$SDK_PREFIX/share/cplus/libc_contracts.json"
+          test -f "$SDK_PREFIX/lib/libcplus_runtime.a"
+          cat > "$SDK_PREFIX/smoke_plain.c" <<'EOF'
+          #include <stdio.h>
+          int main(void) { printf("plain-ok\n"); return 0; }
+          EOF
+          "$SDK_PREFIX/bin/c+" build --legacy-c "$SDK_PREFIX/smoke_plain.c" -o "$SDK_PREFIX/smoke_plain"
+          test "$("$SDK_PREFIX/smoke_plain")" = "plain-ok"
+          clang -std=gnu89 "$SDK_PREFIX/smoke_plain.c" -o "$SDK_PREFIX/smoke_plain_clang"
+          test "$("$SDK_PREFIX/smoke_plain_clang")" = "plain-ok"
+          echo "SDK unchanged-C smoke: ok"
+          cat > "$SDK_PREFIX/smoke_cplus.cp" <<'EOF'
+          #include <stdio.h>
+          #include "cplus/cplus.h"
+          int main(void) {
+            int a[4] = {0};
+            int *p = cplus_new_array(int, 5);
+            if (a.len != 4 || p.len != 5) return 1;
+            printf("cplus-ok\n");
+            return 0;
+          }
+          EOF
+          "$SDK_PREFIX/bin/c+" build "$SDK_PREFIX/smoke_cplus.cp" -I"$SDK_PREFIX/include" -o "$SDK_PREFIX/smoke_cplus"
+          test "$("$SDK_PREFIX/smoke_cplus")" = "cplus-ok"
+          echo "SDK C+ smoke: ok"
+      - name: Static library link smoke test
+        run: |
+          set -eu
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          WORK="$RUNNER_TEMP/cplus-link-static"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cat > "$WORK/add.c" <<'EOF'
+          int cplus_probe_add(int a, int b) { return a + b; }
+          EOF
+          cat > "$WORK/main.c" <<'EOF'
+          #include <stdio.h>
+          int cplus_probe_add(int, int);
+          int main(void) { printf("link=%d\n", cplus_probe_add(2, 3)); return 0; }
+          EOF
+          clang -std=gnu89 -c "$WORK/add.c" -o "$WORK/add.o"
+          ar rcs "$WORK/libadd.a" "$WORK/add.o"
+          "$SDK_PREFIX/bin/c+" build "$WORK/main.c" -L"$WORK" -ladd -o "$WORK/static_main"
+          test "$("$WORK/static_main")" = "link=5"
+          echo "static library link smoke: ok"
+      - name: Shared library link smoke test
+        run: |
+          set -eu
+          SDK_PREFIX="$RUNNER_TEMP/cplus-sdk"
+          WORK="$RUNNER_TEMP/cplus-link-shared"
+          rm -rf "$WORK"; mkdir -p "$WORK"
+          cat > "$WORK/add.c" <<'EOF'
+          int cplus_probe_add(int a, int b) { return a + b; }
+          EOF
+          cat > "$WORK/main.c" <<'EOF'
+          #include <stdio.h>
+          int cplus_probe_add(int, int);
+          int main(void) { printf("link=%d\n", cplus_probe_add(2, 3)); return 0; }
+          EOF
+          case "$(uname -s)" in
+            Darwin) SHARED_FLAG=-dynamiclib; SHARED_EXT=dylib; LOADER_VAR=DYLD_LIBRARY_PATH ;;
+            *) SHARED_FLAG=-shared; SHARED_EXT=so; LOADER_VAR=LD_LIBRARY_PATH ;;
+          esac
+          clang -std=gnu89 -fPIC "$SHARED_FLAG" "$WORK/add.c" -o "$WORK/libadd.$SHARED_EXT"
+          "$SDK_PREFIX/bin/c+" build "$WORK/main.c" -L"$WORK" -ladd -o "$WORK/shared_main"
+          if [ "$LOADER_VAR" = "DYLD_LIBRARY_PATH" ]; then
+            test "$(DYLD_LIBRARY_PATH="$WORK" "$WORK/shared_main")" = "link=5"
+          else
+            test "$(LD_LIBRARY_PATH="$WORK" "$WORK/shared_main")" = "link=5"
+          fi
+          echo "shared library link smoke: ok"

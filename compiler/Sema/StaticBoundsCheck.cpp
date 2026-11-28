@@ -33,6 +33,10 @@ struct ArrayShape {
   // A fact from an inner block must not be used after that block closes.
   // kNPos means file scope or a shape inherited from the rewriter.
   size_t scopeEnd = kNPos;
+  // Byte width of one element, read from the declaration's type word.  Needed
+  // for byte-cast aliases (char*/void*), where a subscript counts bytes while
+  // dims count elements.  0 means unknown: byte-unit checks then stay silent.
+  size_t elemBytes = 0;
 };
 
 /// A pointer whose value is a provable constant offset (in elements) from a
@@ -54,6 +58,16 @@ class Checker {
   struct FuncSig {
     std::vector<std::string> params;
     std::vector<bool> outParam; // `T **out`: an allocation written via *out
+    // Indices of the parameters declared `restrict` / `__restrict` /
+    // `__restrict__`.  Only these parameters may alias with each other.
+    std::vector<bool> restrictParam;
+    // Token position of each parameter's name.  A parameter shadows an outer
+    // name-keyed extent for the whole body; a declaration at/after this token
+    // (e.g. `void f(int a[8])`) still describes the parameter itself.
+    std::map<std::string, size_t> paramDeclPos;
+    // Parameters declared `char` / `signed char`.  `unsigned char` is the
+    // only safe input to <ctype.h>, so it is deliberately excluded.
+    std::set<std::string> charParams;
     size_t bodyOpen = 0;
     size_t bodyClose = 0;
   };
@@ -191,6 +205,9 @@ public:
           checkRawRealloc(i);
       }
     }
+    // SafeCC-style branch-sensitive dataflow.  Runs last so that all fact
+    // collectors (functions, globals, allocations) are already populated.
+    checkCfgDataflow();
   }
 
 private:
@@ -212,6 +229,10 @@ private:
   }
 
   bool isIdent(size_t i, const char *s) const {
+    return i < toks_.size() && toks_[i].kind == TokKind::Identifier &&
+           toks_[i].text == s;
+  }
+  bool isIdent(size_t i, const std::string &s) const {
     return i < toks_.size() && toks_[i].kind == TokKind::Identifier &&
            toks_[i].text == s;
   }
@@ -478,9 +499,26 @@ private:
           break;
         cursor = nextSig(close);
       }
+      // A comma means a second declarator (`int a[4], b[8]`); walk back to
+      // the shared type word so both shapes get the same element width.
+      size_t typeTok = prev;
+      if (isPunct(prev, ",")) {
+        for (size_t k = prev; k > 0; --k) {
+          size_t j = k - 1;
+          if (isPunct(j, ";") || isPunct(j, "{") || isPunct(j, "}"))
+            break;
+          if (toks_[j].kind != TokKind::Identifier)
+            continue;
+          bool isType = false;
+          for (const char *t : kTypes)
+            if (toks_[j].text == t) { isType = true; break; }
+          if (isType) { typeTok = j; break; }
+        }
+      }
       if (!dims.empty())
-        localArrays_.push_back(
-            {i, toks_[i].text, dims, enclosingScopeEnd(i)});
+        localArrays_.push_back({i, toks_[i].text, dims,
+                                enclosingScopeEnd(i),
+                                typeSize(toks_[typeTok].text)});
     }
   }
 
@@ -505,12 +543,30 @@ private:
 
   bool findShape(const std::string &name, size_t pos,
                  const std::vector<size_t> **shape) const {
+    // Name-keyed extent facts are collected over the whole token stream, but
+    // a function parameter with the same name shadows an outer/file-scope
+    // object for the entire function body.  Otherwise
+    // `static int a[4]; void f(int *a){ a[9]; }` is checked against the
+    // global array.  Only shapes declared at or after the parameter token
+    // can describe the parameter itself (`void f(int a[8])`).
+    size_t shadowDecl = kNPos;
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (pos < sig.bodyOpen || pos > sig.bodyClose)
+        continue;
+      auto pit = sig.paramDeclPos.find(name);
+      if (pit != sig.paramDeclPos.end() && pit->second <= pos &&
+          (shadowDecl == kNPos || pit->second > shadowDecl))
+        shadowDecl = pit->second;
+    }
     for (size_t k = localArrays_.size(); k > 0; --k) {
       const ArrayShape &e = localArrays_[k - 1];
       // A declaration from a block that has already closed is dead: do not
       // let its smaller extent reject an access to the outer object.
       if (e.scopeEnd != kNPos && pos > e.scopeEnd)
         continue;
+      if (shadowDecl != kNPos && e.pos < shadowDecl)
+        continue; // shadowed by a parameter of the same name
       if (e.name == name && e.pos <= pos) {
         // A realloc with an unprovable new size replaces this extent; a
         // stale extent must never drive an OOB diagnostic.
@@ -533,6 +589,21 @@ private:
 
     *extent = dims->front();
     return true;
+  }
+
+  /// Byte width of one element of the array behind a byte-cast alias.  The
+  /// width comes from the declaration's type word; 0 means unknown, in which
+  /// case a byte-unit check must stay silent instead of guessing a bound.
+  size_t arrayElemBytes(const std::string &name, size_t pos) const {
+    for (size_t k = localArrays_.size(); k > 0; --k) {
+      const ArrayShape &e = localArrays_[k - 1];
+      if (e.name != name || e.pos > pos || e.elemBytes == 0)
+        continue;
+      if (e.scopeEnd != kNPos && pos > e.scopeEnd)
+        continue;
+      return e.elemBytes;
+    }
+    return 0;
   }
 
   struct Interval {
@@ -712,6 +783,24 @@ private:
     trim(&from, &to);
     if (from >= to)
       return false;
+    // The comma operator's value is its last operand.  Only top-level commas
+    // are operators here: commas inside `(...)` separate call arguments and
+    // are consumed by splitArgs before this helper sees them.  This folds
+    // `(0, 9, 1)` to 1 instead of guessing from an earlier operand.
+    {
+      size_t lastComma = kNPos;
+      int paren = 0, bracket = 0;
+      for (size_t k = from; k < to; ++k) {
+        if (isPunct(k, "(")) ++paren;
+        else if (isPunct(k, ")")) --paren;
+        else if (isPunct(k, "[")) ++bracket;
+        else if (isPunct(k, "]")) --bracket;
+        else if (isPunct(k, ",") && paren == 0 && bracket == 0)
+          lastComma = k;
+      }
+      if (lastComma != kNPos)
+        return indexExprValue(lastComma + 1, to, out);
+    }
     // Wave 2: fold a top-level `a + b` / `a - b` before the unary case.  This
     // is what makes chained pointer formation (`q = a + 3 + 4`) and derived
     // recursive indices (`p[i + 9]`) provable.  Doing it first keeps
@@ -1089,6 +1178,24 @@ private:
     const std::vector<size_t> *dims = nullptr;
     if (!findShape(toks_[i].text, i, &dims) || dims->empty()) return;
     long extent = (long)dims->front();
+    // A compile-time constant condition selects exactly one arm; the other
+    // arm is never evaluated and must not reject valid C such as
+    // `a[0 ? 9 : 1]`.  indexExprValue already folds the selected arm.  Only
+    // literal conditions qualify: a folded local is not a constant expression
+    // and the both-arm rule below must still catch e.g. `f ? -1 : 0`.
+    long cond = 0;
+    bool literalCond = indexExprValue(from, q, &cond);
+    for (size_t k = from; literalCond && k < q; ++k)
+      if (toks_[k].kind == TokKind::Identifier)
+        literalCond = false;
+    if (literalCond) {
+      long value = 0;
+      if (indexExprValue(from, to, &value) &&
+          (value < 0 || value >= extent))
+        reportConstantIndex(toks_[q], value, toks_[i].text,
+                            static_cast<size_t>(extent));
+      return;
+    }
     std::vector<std::pair<size_t, size_t>> branches = {
         {q + 1, colon}, {colon + 1, to}};
     for (const auto &br : branches) {
@@ -1181,6 +1288,8 @@ private:
       while (last > r + 1 && trivia(last - 1)) --last;
       bool typed = false, valid = true;
       for (size_t k = r + 1; k < last; ++k) {
+        if (trivia(k))
+          continue;
         if (toks_[k].kind == TokKind::Identifier) {
           if (isTypeWord(toks_[k].text) || toks_[k].text == "void")
             typed = true;
@@ -2277,52 +2386,189 @@ private:
            name == "calloc";
   }
 
-  void checkForkThreads() {
-    bool hasThreads = false, hasFork = false;
-    size_t forkAt = kNPos;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (isIdent(i, "pthread_create")) hasThreads = true;
-      if (isIdent(i, "fork")) { hasFork = true; if (forkAt == kNPos) forkAt = i; }
-    }
-    if (hasThreads && hasFork && forkAt != kNPos)
-      errorAt(toks_[forkAt], "fork() in a multi-threaded process can deadlock; "
-                             "use posix_spawn or fork before creating threads");
+  bool isForkCall(size_t i, size_t *lp) const {
+    if (!isIdent(i, "fork") || inDirectiveLine(i))
+      return false;
+    size_t open = nextSig(i);
+    if (!isPunct(open, "("))
+      return false;
+    size_t rp = match(open, "(", ")");
+    if (rp == kNPos || isPunct(nextSig(rp), "{"))
+      return false;
+    *lp = open;
+    return true;
   }
 
-  void checkRestrictAliasing() {
-    std::set<std::string> restrictFuncs;
-    for (const auto &entry : funcs_) {
-      const FuncSig &sig = entry.second;
-      // funcs_ stores parameter names only; rescan the header for 'restrict'.
-      bool found = false;
-      for (size_t i = 0; i < toks_.size(); ++i) {
-        if (!isIdent(i, "restrict")) continue;
-        // Attribute the restrict keyword to the nearest preceding function
-        // definition header containing this function's name.
-        for (size_t k = i; k > 0; --k) {
-          if (isPunct(k, ")") && isPunct(nextSig(k), "{")) {
+  /// Does `name` start a thread directly, or through a helper it calls?
+  /// Used only to decide whether a `fork()` site can already be concurrent
+  /// with a thread created earlier in the same call chain.
+  bool functionSpawnsThread(const std::string &name,
+                            std::set<std::string> *seen = nullptr) const {
+    auto it = funcs_.find(name);
+    if (it == funcs_.end())
+      return false;
+    std::set<std::string> local;
+    if (!seen)
+      seen = &local;
+    if (!seen->insert(name).second)
+      return false;
+    const FuncSig &sig = it->second;
+    for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+      size_t lp = kNPos;
+      if (threadSpawnCall(k, &lp))
+        return true;
+      if (toks_[k].kind != TokKind::Identifier || !funcs_.count(toks_[k].text) ||
+          !isPunct(nextSig(k), "("))
+        continue;
+      if (functionSpawnsThread(toks_[k].text, seen))
+        return true;
+    }
+    return false;
+  }
+
+  /// `main(void)` has no parameters and is therefore not in funcs_.  Locate
+  /// its body directly so fork/spawn order inside it can still be checked.
+  bool inMainBody(size_t pos) const {
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (!isIdent(i, "main"))
+        continue;
+      size_t lp = nextSig(i);
+      if (!isPunct(lp, "("))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || !isPunct(nextSig(rp), "{"))
+        continue;
+      size_t open = nextSig(rp);
+      size_t close = match(open, "{", "}");
+      if (close != kNPos && pos >= open && pos <= close)
+        return true;
+    }
+    return false;
+  }
+
+  /// A fork is only dangerous when a thread has *already* been started on the
+  /// path that reaches it.  A whole-file token presence scan also rejects the
+  /// safe `fork(); pthread_create();` order, which contradicts the diagnostic
+  /// itself.
+  void checkForkThreads() {
+    std::vector<SpawnSite> spawns = collectThreadSpawns();
+    if (spawns.empty())
+      return;
+    std::set<std::string> workers;
+    for (const auto &site : spawns)
+      if (!site.entry.empty())
+        workers.insert(site.entry);
+
+    const char *msg = "fork() in a multi-threaded process can deadlock; "
+                      "use posix_spawn or fork before creating threads";
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      size_t lp = kNPos;
+      if (!isForkCall(i, &lp))
+        continue;
+      const std::string *host = enclosingFunction(i);
+      // A worker/post-thread helper runs concurrently with its creator by
+      // construction, regardless of the textual order of the two definitions.
+      if (host && workers.count(*host)) {
+        errorAt(toks_[i], msg);
+        continue;
+      }
+      bool started = false;
+      // Spawns earlier in main(), which collectFunctions() does not record
+      // when its parameter list is empty.
+      if (!host && inMainBody(i)) {
+        for (const auto &site : spawns) {
+          if (site.pos < i && inMainBody(site.pos)) {
+            started = true;
             break;
           }
         }
-        found = true;
       }
-      if (found) restrictFuncs.insert(entry.first);
+      // Spawns earlier in the same function (directly or through a helper).
+      if (host) {
+        auto it = funcs_.find(*host);
+        if (it != funcs_.end()) {
+          const FuncSig &sig = it->second;
+          for (size_t k = sig.bodyOpen; k < i; ++k) {
+            size_t call = kNPos;
+            if (threadSpawnCall(k, &call)) {
+              started = true;
+              break;
+            }
+            if (toks_[k].kind == TokKind::Identifier &&
+                toks_[k].text != *host && funcs_.count(toks_[k].text) &&
+                isPunct(nextSig(k), "(") &&
+                functionSpawnsThread(toks_[k].text)) {
+              started = true;
+              break;
+            }
+          }
+        }
+      }
+      // A caller that started a thread and then calls a fork helper.
+      if (!started && host) {
+        for (const auto &entry : funcs_) {
+          const FuncSig &caller = entry.second;
+          for (size_t k = caller.bodyOpen; k <= caller.bodyClose && !started; ++k) {
+            if (!isIdent(k, host->c_str()) || !isPunct(nextSig(k), "("))
+              continue;
+            for (size_t before = caller.bodyOpen; before < k; ++before) {
+              size_t call = kNPos;
+              if (threadSpawnCall(before, &call)) {
+                started = true;
+                break;
+              }
+            }
+          }
+          if (started)
+            break;
+        }
+      }
+      if (started)
+        errorAt(toks_[i], msg);
     }
-    if (restrictFuncs.empty()) return;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (toks_[i].kind != TokKind::Identifier ||
-          !restrictFuncs.count(toks_[i].text))
+  }
+
+  /// Two `restrict`-qualified parameters of the same call must not refer to
+  /// overlapping objects.  Only the parameters the function itself declares
+  /// as `restrict` matter: an unrelated function elsewhere in the translation
+  /// unit must not turn every call into an error.
+  void checkRestrictAliasing() {
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      bool anyRestrict = false;
+      for (bool restricted : sig.restrictParam)
+        if (restricted)
+          anyRestrict = true;
+      if (!anyRestrict)
         continue;
-      size_t lp = nextSig(i);
-      if (!isPunct(lp, "(")) continue;
-      size_t rp = match(lp, "(", ")");
-      if (rp == kNPos || isPunct(nextSig(rp), "{")) continue;
-      auto args = splitArgs(lp + 1, rp);
-      if (args.size() < 2) continue;
-      std::string a = baseName(args[0].first, args[0].second);
-      std::string b = baseName(args[1].first, args[1].second);
-      if (!a.empty() && a == b)
-        errorAt(toks_[i], "call passes overlapping pointers to restrict parameters");
+      for (size_t i = 0; i < toks_.size(); ++i) {
+        if (toks_[i].kind != TokKind::Identifier ||
+            toks_[i].text != entry.first)
+          continue;
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "("))
+          continue;
+        size_t rp = match(lp, "(", ")");
+        if (rp == kNPos || isPunct(nextSig(rp), "{"))
+          continue; // the definition itself, not a call
+        auto args = splitArgs(lp + 1, rp);
+        size_t count = args.size() < sig.restrictParam.size()
+                           ? args.size()
+                           : sig.restrictParam.size();
+        for (size_t a = 0; a < count; ++a) {
+          for (size_t b = a + 1; b < count; ++b) {
+            // At least one of the two must be restrict-qualified; a pair of
+            // unrestricted parameters may legitimately alias.
+            if (!sig.restrictParam[a] && !sig.restrictParam[b])
+              continue;
+            std::string lhs = baseName(args[a].first, args[a].second);
+            std::string rhs = baseName(args[b].first, args[b].second);
+            if (!lhs.empty() && lhs == rhs)
+              errorAt(toks_[i], "call passes overlapping pointers to restrict "
+                                "parameters");
+          }
+        }
+      }
     }
   }
 
@@ -2363,7 +2609,8 @@ private:
     auto args = splitArgs(lp + 1, rp);
     if (args.empty())
       return;
-    std::string target = baseName(args[0].first, args[0].second);
+    std::string argText = exprText(args[0].first, args[0].second);
+    std::string argBase = baseName(args[0].first, args[0].second);
     size_t eq = kNPos;
     for (size_t k = i; k > 0; --k) {
       if (isPunct(k, "=")) { eq = k; break; }
@@ -2371,13 +2618,18 @@ private:
         break;
     }
     if (eq != kNPos) {
-      size_t lhs = eq == 0 ? kNPos : eq - 1;
-      while (lhs != kNPos && trivia(lhs)) {
-        if (lhs == 0) { lhs = kNPos; break; }
-        --lhs;
-      }
-      if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier &&
-          toks_[lhs].text == target) {
+      // The assigned lvalue is the whole expression before `=`, so that
+      // `s->buf = realloc(s->buf, n)` and `arr[i] = realloc(arr[i], n)` are
+      // compared as whole lvalues instead of a single trailing identifier.
+      size_t lhs = lvalueStart(eq);
+      std::string lhsText = exprText(lhs, eq);
+      std::string lhsBase = baseName(lhs, eq);
+      bool same = lhsText == argText;
+      // `p = realloc(p + 1, n)` overwrites the only pointer to the original
+      // block too: the plain variable is the base of the reallocated object.
+      if (!same && !lhsText.empty() && lhsText == lhsBase && lhsBase == argBase)
+        same = true;
+      if (same) {
         errorAt(toks_[i], "raw realloc can lose the original block on failure; "
                           "use cplus_realloc");
         return;
@@ -2413,16 +2665,45 @@ private:
     if (!isIdent(i, "sizeof"))
       return;
     size_t lp = nextSig(i);
-    if (!isPunct(lp, "("))
+    size_t rp = kNPos;
+    if (isPunct(lp, "(")) {
+      rp = match(lp, "(", ")");
+      if (rp == kNPos)
+        return;
+      bool bracket = false;
+      for (size_t k = lp + 1; k < rp; ++k) {
+        if (isPunct(k, "[")) bracket = true;
+        if (bracket && (isPunct(k, "++") || isPunct(k, "--")))
+          errorAt(toks_[i], "sizeof on a VLA evaluates the expression at run time");
+      }
+    } else if (toks_[lp].kind != TokKind::Identifier) {
+      return; // `sizeof(type)` without parentheses is not a VLA name here
+    }
+    // `int a[n++]; size_t s = sizeof a;` has the same run-time side effect,
+    // but the increment lives in the declaration, not inside sizeof. Handle
+    // both `sizeof a` and `sizeof(a)`.
+    size_t id = isPunct(lp, "(") ? nextSig(lp) : lp;
+    if (isPunct(lp, "(") && (id >= rp || toks_[id].kind != TokKind::Identifier ||
+                             nextSig(id) != rp))
       return;
-    size_t rp = match(lp, "(", ")");
-    if (rp == kNPos)
-      return;
-    bool bracket = false;
-    for (size_t k = lp + 1; k < rp; ++k) {
-      if (isPunct(k, "[")) bracket = true;
-      if (bracket && (isPunct(k, "++") || isPunct(k, "--")))
-        errorAt(toks_[i], "sizeof on a VLA evaluates the expression at run time");
+    const std::string &name = toks_[id].text;
+    for (size_t k = id; k > 0; --k) {
+      size_t decl = k - 1;
+      if (toks_[decl].kind != TokKind::Identifier || toks_[decl].text != name)
+        continue;
+      size_t ob = nextSig(decl);
+      if (!isPunct(ob, "["))
+        continue;
+      size_t cb = match(ob, "[", "]");
+      if (cb == kNPos)
+        continue;
+      for (size_t j = ob + 1; j < cb; ++j)
+        if (isPunct(j, "++") || isPunct(j, "--")) {
+          errorAt(toks_[i],
+                  "sizeof on a VLA evaluates the expression at run time");
+          return;
+        }
+      break;
     }
   }
 
@@ -2461,71 +2742,194 @@ private:
   /// Casting away const and then writing through the result is undefined for
   /// an originally const object.  A plain cast (Lua-style ABI casts) is fine.
   void checkConstCastMutation() {
-    std::set<std::string> constNames;
+    std::set<std::string> globalConstObjects;
+    int depth = 0;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isPunct(i, "{")) { ++depth; continue; }
+      if (isPunct(i, "}")) { --depth; continue; }
+      if (depth != 0 || !isIdent(i, "const"))
+        continue;
+      size_t end = i;
+      while (end < toks_.size() && !isPunct(end, ";") &&
+             !isPunct(end, "{") && !isPunct(end, ","))
+        ++end;
+      for (size_t k = i + 1; k < end; ++k)
+        if (isPunct(k, "=")) { end = k; break; }
+      bool pointer = false;
+      std::string name;
+      for (size_t k = i + 1; k < end; ++k) {
+        if (isPunct(k, "*"))
+          pointer = true;
+        if (toks_[k].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[k].text) && toks_[k].text != "const" &&
+            toks_[k].text != "volatile")
+          name = toks_[k].text;
+      }
+      if (!pointer && !name.empty())
+        globalConstObjects.insert(name);
+    }
+
+    std::set<std::string> constObjects;
+    std::set<std::string> constPointers;
     std::set<std::string> castPtrs;
+    auto declarationEnd = [&](size_t from) {
+      size_t end = from;
+      int parens = 0, brackets = 0;
+      while (end < toks_.size()) {
+        if (isPunct(end, "(")) ++parens;
+        else if (isPunct(end, ")")) {
+          if (parens == 0) return end;
+          --parens;
+        } else if (isPunct(end, "[")) ++brackets;
+        else if (isPunct(end, "]")) --brackets;
+        else if (parens == 0 && brackets == 0 &&
+                 (isPunct(end, ";") || isPunct(end, ",") ||
+                  isPunct(end, "{")))
+          return end;
+        ++end;
+      }
+      return end;
+    };
+
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (functionOpens_.count(i)) {
-        constNames.clear();
+        constObjects.clear();
+        constPointers.clear();
         castPtrs.clear();
-      }
-      if (isIdent(i, "const")) {
-        size_t n = nextSig(i);
-        while (n < toks_.size() && toks_[n].kind == TokKind::Identifier) {
-          size_t after = nextSig(n);
-          if (isPunct(after, "=") || isPunct(after, ";") ||
-              isPunct(after, "[")) {
-            constNames.insert(toks_[n].text);
-            break;
+        for (const auto &entry : funcs_) {
+          if (entry.second.bodyOpen != i)
+            continue;
+          for (const auto &param : entry.second.paramDeclPos) {
+            size_t begin = param.second;
+            while (begin > 0) {
+              --begin;
+              if (isPunct(begin, "(") || isPunct(begin, ","))
+                break;
+            }
+            bool isConst = false, pointer = false;
+            for (size_t k = begin + 1; k < param.second; ++k) {
+              if (isIdent(k, "const")) isConst = true;
+              if (isPunct(k, "*")) pointer = true;
+            }
+            if (isConst)
+              (pointer ? constPointers : constObjects).insert(param.first);
           }
-          n = after;
         }
+      }
+      if (!isIdent(i, "const"))
+        continue;
+      size_t end = declarationEnd(i);
+      for (size_t k = i + 1; k < end; ++k)
+        if (isPunct(k, "=")) { end = k; break; }
+      bool pointer = false;
+      std::string name;
+      for (size_t k = i + 1; k < end; ++k) {
+        if (isPunct(k, "*"))
+          pointer = true;
+        if (toks_[k].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[k].text) && toks_[k].text != "const" &&
+            toks_[k].text != "volatile")
+          name = toks_[k].text;
+      }
+      if (!name.empty())
+        (pointer ? constPointers : constObjects).insert(name);
+      i = end == 0 ? i : end - 1;
+    }
+
+    auto isConstOperand = [&](size_t from, size_t to) {
+      to = stmtEnd(from);
+      from = stripCast(from, to);
+      trim(&from, &to);
+      if (isPunct(from, "&")) {
+        size_t id = nextSig(from);
+        if (id < to && toks_[id].kind == TokKind::Identifier &&
+            (globalConstObjects.count(toks_[id].text) ||
+             constObjects.count(toks_[id].text)))
+          return true;
+      }
+      if (from < to && toks_[from].kind == TokKind::Identifier &&
+          constPointers.count(toks_[from].text))
+        return true;
+      return false;
+    };
+
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i)) {
+        castPtrs.clear();
         continue;
       }
-      if (isPunct(i, "(")) {
-        size_t close = match(i, "(", ")");
-        if (close != kNPos) {
-          bool hasStar = false;
-          for (size_t k = i + 1; k < close; ++k)
-            if (isPunct(k, "*")) hasStar = true;
-          size_t after = nextSig(close);
-          if (hasStar && isPunct(after, "&")) {
-            size_t owner = nextSig(after);
-            if (owner < toks_.size() && constNames.count(toks_[owner].text)) {
-              for (size_t k = i; k > 0; --k) {
-                if (isPunct(k, "=")) {
-                  size_t lhs = k == 0 ? kNPos : k - 1;
-                  while (lhs != kNPos && trivia(lhs)) {
-                    if (lhs == 0) { lhs = kNPos; break; }
-                    --lhs;
-                  }
-                  if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier)
-                    castPtrs.insert(toks_[lhs].text);
-                  break;
-                }
-                if (isPunct(k, ";") || isPunct(k, "{")) break;
-              }
-            }
+      if (!isPunct(i, "("))
+        continue;
+      size_t close = kNPos;
+      if (!castClose(i, toks_.size(), &close))
+        continue;
+      size_t operand = nextSig(close);
+      if (operand >= toks_.size() || !isConstOperand(operand, stmtEnd(operand)))
+        continue;
+      size_t after = stmtEnd(operand);
+      while (after > operand && trivia(after - 1))
+        --after;
+      if (isPunct(prevSig(i), "*") && after < toks_.size() &&
+          (isPunct(after, "=") || isPunct(after, "+=") ||
+           isPunct(after, "-=") || isPunct(after, "++") ||
+           isPunct(after, "--")))
+        errorAt(toks_[i], "casting away const and writing to the original "
+                          "object is undefined");
+    }
+
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i)) {
+        castPtrs.clear();
+        continue;
+      }
+      if (isPunct(i, "=")) {
+        size_t lhs = prevSig(i);
+        size_t rhs = nextSig(i);
+        if (lhs == kNPos || rhs >= toks_.size() ||
+            toks_[lhs].kind != TokKind::Identifier)
+          continue;
+        bool derivesFromConst = false;
+        if (toks_[rhs].kind == TokKind::Identifier && castPtrs.count(toks_[rhs].text))
+          derivesFromConst = true;
+        if (isPunct(rhs, "(")) {
+          size_t close = kNPos;
+          if (castClose(rhs, toks_.size(), &close)) {
+            bool pointer = false;
+            for (size_t k = rhs + 1; k < close; ++k)
+              if (isPunct(k, "*")) pointer = true;
+            size_t operand = nextSig(close);
+            derivesFromConst = pointer && operand < toks_.size() &&
+                isConstOperand(operand, stmtEnd(operand));
           }
         }
+        if (derivesFromConst)
+          castPtrs.insert(toks_[lhs].text);
+        else
+          castPtrs.erase(toks_[lhs].text);
+        continue;
       }
-      if (toks_[i].kind == TokKind::Identifier && castPtrs.count(toks_[i].text)) {
-        size_t prev = i == 0 ? kNPos : i - 1;
-        while (prev != kNPos && trivia(prev)) {
-          if (prev == 0) { prev = kNPos; break; }
-          --prev;
+      if (toks_[i].kind != TokKind::Identifier ||
+          !castPtrs.count(toks_[i].text))
+        continue;
+      size_t prev = prevSig(i);
+      size_t next = nextSig(i);
+      bool derefWrite = isPunct(prev, "*") &&
+          (isPunct(next, "=") || isPunct(next, "+=") ||
+           isPunct(next, "-=") || isPunct(next, "++") ||
+           isPunct(next, "--"));
+      bool indexWrite = false;
+      if (isPunct(next, "[")) {
+        size_t rb = match(next, "[", "]");
+        if (rb != kNPos) {
+          size_t after = nextSig(rb);
+          indexWrite = isPunct(after, "=") || isPunct(after, "+=") ||
+                       isPunct(after, "-=") || isPunct(after, "++") ||
+                       isPunct(after, "--");
         }
-        size_t next = nextSig(i);
-        bool derefWrite = isPunct(prev, "*") && isPunct(next, "=");
-        bool indexWrite = false;
-        if (isPunct(next, "[")) {
-          size_t rb = match(next, "[", "]");
-          if (rb != kNPos && isPunct(nextSig(rb), "="))
-            indexWrite = true;
-        }
-        if (derefWrite || indexWrite)
-          errorAt(toks_[i], "casting away const and writing to the original "
-                            "object is undefined");
       }
+      if (derefWrite || indexWrite)
+        errorAt(toks_[i], "casting away const and writing to the original "
+                          "object is undefined");
     }
   }
 
@@ -3419,6 +3823,26 @@ private:
     if (tp.dims.empty())
       return;
 
+    // A byte-granular alias (char*/void* cast or declaration) counts BYTES,
+    // while the tracked dims count elements of the underlying array.  Reuse
+    // the same byteCastAliases_ fact as checkParamIndexSubscript and
+    // checkPointerToPointerSubscript and convert the extent once, so
+    // `int a[4]; char *b=(char*)a; b[4]` stays in bounds while `b[36]` is
+    // still rejected.  An unknown element width suppresses the diagnostic
+    // rather than guessing; the AST byte-accurate check still covers those
+    // sites.  Row pointers keep their row-count unit.
+    long long total = 1;
+    for (size_t dim : tp.dims)
+      total *= static_cast<long long>(dim);
+    bool byteUnit = false;
+    if (!tp.rowPointer && byteCastAliases_.count(toks_[i].text)) {
+      size_t elemBytes = arrayElemBytes(tp.array, i);
+      if (elemBytes == 0)
+        return; // no provable byte bound
+      byteUnit = true;
+      total *= static_cast<long long>(elemBytes);
+    }
+
     size_t lb = nextSig(i);
     // `(*pp)[k]`: the tracked pointer is the dereferenced operand, so the
     // subscript follows the closing parenthesis rather than the identifier.
@@ -3448,7 +3872,7 @@ private:
         }
       } else {
         // Element pointer: its absolute index is offset + subscript, checked
-        // against the total number of elements in the flattened array.
+        // against the total number of elements (or bytes for a byte alias).
         size_t rb = match(lb, "[", "]");
         if (rb == kNPos)
           return;
@@ -3459,9 +3883,6 @@ private:
         if (isPunct(prevSig(i), "&"))
           return;
         long absolute = tp.offset + idx;
-        long long total = 1;
-        for (size_t dim : tp.dims)
-          total *= static_cast<long long>(dim);
         if (absolute < 0)
           reportNegativeAliasIndex(toks_[lb], absolute, tp.array,
                                    toks_[i].text);
@@ -3486,12 +3907,12 @@ private:
          isPunct(before, ",") || isPunct(before, "*")))
       return;
     long absolute = tp.rowPointer ? 0 : tp.offset;
-    size_t extent = tp.dims[0];
+    long long extent = byteUnit ? total : static_cast<long long>(tp.dims[0]);
     if (absolute < 0)
       reportNegativeAliasIndex(toks_[i], absolute, tp.array, toks_[i].text);
-    else if (static_cast<size_t>(absolute) >= extent)
-      reportAliasOutOfBounds(toks_[i], absolute, tp.array, extent,
-                             toks_[i].text);
+    else if (static_cast<long long>(absolute) >= extent)
+      reportAliasOutOfBounds(toks_[i], absolute, tp.array,
+                             static_cast<size_t>(extent), toks_[i].text);
   }
 
   /// One-past rule for the direct spelling `*(array + N)`: forming `array + N`
@@ -3643,21 +4064,33 @@ private:
   void checkCtypeChar() {
     static const char *const kCtype[] = {
         "isalpha", "isdigit", "isalnum", "isspace", "islower", "isupper",
-        "tolower", "toupper", "ispunct", "isxdigit"};
+        "tolower", "toupper", "ispunct", "isxdigit", "iscntrl", "isgraph",
+        "isprint", "isblank"};
+    // Locals are cleared at each function body, but parameters are recorded
+    // in FuncSig and survive the opening `{` of their own function.
     std::set<std::string> plainChars;
     for (size_t i = 0; i < toks_.size(); ++i) {
       if (functionOpens_.count(i))
         plainChars.clear();
       if (isIdent(i, "char")) {
-        size_t prev = i == 0 ? kNPos : i - 1;
-        while (prev != kNPos && trivia(prev)) {
-          if (prev == 0) { prev = kNPos; break; }
-          --prev;
+        // Only `unsigned char` is safe here.  `signed char` and plain `char`
+        // (on signed-char targets) are undefined for negative values.
+        bool unsignedChar = false;
+        for (size_t back = i; back > 0;) {
+          --back;
+          if (isPunct(back, ";") || isPunct(back, "{") ||
+              isPunct(back, "}") || isPunct(back, ","))
+            break;
+          if (isIdent(back, "unsigned"))
+            unsignedChar = true;
         }
-        if (prev != kNPos &&
-            (isIdent(prev, "unsigned") || isIdent(prev, "signed")))
+        if (unsignedChar)
           continue;
         size_t name = nextSig(i);
+        while (isPunct(name, "*") ||
+               isIdent(name, "restrict") || isIdent(name, "__restrict") ||
+               isIdent(name, "__restrict__"))
+          name = nextSig(name);
         if (name < toks_.size() && toks_[name].kind == TokKind::Identifier)
           plainChars.insert(toks_[name].text);
         continue;
@@ -3670,47 +4103,137 @@ private:
           ctype = true;
           break;
         }
-      if (!ctype)
+      if (!ctype || !isPunct(nextSig(i), "("))
         continue;
-      size_t arg = nextSig(nextSig(i));
-      if (arg < toks_.size() && plainChars.count(toks_[arg].text))
-        errorAt(toks_[arg], "cast a plain char to unsigned char before <ctype.h>");
+      size_t lp = nextSig(i);
+      size_t rp = match(lp, "(", ")");
+      if (rp == kNPos || isPunct(nextSig(rp), "{"))
+        continue; // a declaration/definition, not a call
+      auto args = splitArgs(lp + 1, rp);
+      if (args.empty())
+        continue;
+      size_t from = args.front().first, to = args.front().second;
+      size_t id = kNPos, plainTokens = 0;
+      bool beforeStar = false, afterIndex = false;
+      for (size_t k = from; k < to; ++k) {
+        if (trivia(k))
+          continue;
+        ++plainTokens;
+        if (isPunct(k, "*") && (id == kNPos))
+          beforeStar = true;
+        if (isPunct(k, "[") && id != kNPos)
+          afterIndex = true;
+        if (toks_[k].kind == TokKind::Identifier && id == kNPos)
+          id = k;
+      }
+      if (id == kNPos || !(plainTokens == 1 || beforeStar || afterIndex))
+        continue;
+      const std::string &name = toks_[id].text;
+      bool bad = plainChars.count(name) != 0;
+      if (!bad) {
+        const std::string *host = enclosingFunction(i);
+        if (host) {
+          auto it = funcs_.find(*host);
+          if (it != funcs_.end() && it->second.charParams.count(name))
+            bad = true;
+        }
+      }
+      if (bad)
+        errorAt(toks_[id],
+                "cast a plain char to unsigned char before <ctype.h>");
     }
   }
 
-  // getenv() returns a pointer into the environ table; any later setenv()
-  // may reallocate it, leaving earlier results dangling.
+  // getenv() returns a pointer into the environ table; any later mutation of
+  // the environment (setenv/putenv/unsetenv and their cplus_* wrappers) may
+  // reallocate that table, leaving earlier results dangling.
+  static bool isEnvMutator(const std::string &name) {
+    static const char *const kNames[] = {
+        "setenv", "putenv", "unsetenv", "cplus_setenv", "cplus_putenv",
+        "cplus_unsetenv"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
   void checkGetenvInvalidation() {
     for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (sig.bodyClose == kNPos || sig.bodyClose >= toks_.size())
+        continue;
       std::map<std::string, size_t> saved;
-      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
-        if (!isIdent(k, "getenv"))
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (!isIdent(k, "getenv") || !isPunct(nextSig(k), "("))
           continue;
         size_t eq = k;
-        while (eq > entry.second.bodyOpen && trivia(eq - 1)) --eq;
-        if (eq > entry.second.bodyOpen && isPunct(eq - 1, "=")) {
-          size_t lhs = eq - 1;
-          while (lhs > entry.second.bodyOpen && trivia(lhs - 1)) --lhs;
-          if (lhs > entry.second.bodyOpen)
-            saved[toks_[lhs - 1].text] = k;
+        while (eq > sig.bodyOpen && trivia(eq - 1)) --eq;
+        if (eq <= sig.bodyOpen || !isPunct(eq - 1, "="))
+          continue;
+        // The saved name is the identifier immediately before `=`.  Do not
+        // walk backwards past it: that would skip over `*p = getenv(...)`
+        // and pick an unrelated token from the declaration/statement.
+        size_t name = k;
+        while (name > sig.bodyOpen) {
+          --name;
+          if (trivia(name) || isPunct(name, "="))
+            continue;
+          break;
         }
+        if (name < sig.bodyOpen || toks_[name].kind != TokKind::Identifier)
+          continue;
+        static const char *const kTypes[] = {
+            "char", "int", "const", "unsigned", "signed", "static", "void",
+            "long", "short", "struct", "size_t", "return"};
+        bool typeWord = false;
+        for (const char *t : kTypes)
+          if (toks_[name].text == t) {
+            typeWord = true;
+            break;
+          }
+        if (!typeWord && !saved.count(toks_[name].text))
+          saved[toks_[name].text] = k;
       }
       if (saved.empty())
         continue;
-      for (size_t k = entry.second.bodyOpen; k <= entry.second.bodyClose; ++k) {
-        if (!isIdent(k, "setenv"))
+
+      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+        if (toks_[k].kind != TokKind::Identifier || inDirectiveLine(k))
           continue;
-        for (size_t u = k + 1; u <= entry.second.bodyClose; ++u) {
+        const std::string &word = toks_[k].text;
+        // A later getenv() call is an invalidation point too: the environ
+        // table is shared state and a second lookup can reuse/reallocate it.
+        if (!isEnvMutator(word) && word != "getenv")
+          continue;
+        size_t lp = nextSig(k);
+        if (!isPunct(lp, "("))
+          continue;
+        size_t rp = match(lp, "(", ")");
+        if (rp == kNPos)
+          continue;
+        bool used = false;
+        for (size_t u = rp + 1; u <= sig.bodyClose; ++u) {
           if (toks_[u].kind != TokKind::Identifier)
             continue;
           auto it = saved.find(toks_[u].text);
           if (it != saved.end() && it->second < k) {
-            errorAt(toks_[it->second],
-                    "getenv result '" + it->first +
-                        "' may dangle after setenv reallocates environ");
+            used = true;
             break;
           }
         }
+        if (!used)
+          continue;
+        bool reported = false;
+        for (const auto &item : saved) {
+          if (item.second >= k)
+            continue;
+          errorAt(toks_[item.second],
+                  "getenv result '" + item.first + "' may dangle after " +
+                      word + " reallocates environ");
+          reported = true;
+        }
+        if (reported)
+          break; // one diagnostic per invalidation site
       }
     }
   }
@@ -3746,10 +4269,279 @@ private:
     return std::string();
   }
 
+  /// Spelling of a token range with whitespace and comments removed, so that
+  /// `s -> buf` and `arr [ i ]` normalise to `s->buf` and `arr[i]`.
+  std::string exprText(size_t from, size_t to) const {
+    std::string out;
+    for (size_t k = from; k < to && k < toks_.size(); ++k) {
+      if (trivia(k))
+        continue;
+      out += toks_[k].text;
+    }
+    return out;
+  }
+
+  /// Start token of the lvalue expression that ends just before `end`.
+  /// Walks back over identifiers, `->`, `.`, `*` and bracketed subscripts.
+  size_t lvalueStart(size_t end) const {
+    int depth = 0;
+    size_t start = end;
+    while (start > 0) {
+      size_t k = start - 1;
+      if (trivia(k)) { --start; continue; }
+      if (toks_[k].kind == TokKind::Identifier) {
+        // A statement keyword ends the expression: `return p = realloc(..)`
+        // assigns to `p`, not to `return p`.
+        if (isControlKeyword(toks_[k].text))
+          break;
+        --start;
+        continue;
+      }
+      if (toks_[k].kind == TokKind::Number) { --start; continue; }
+      if (isPunct(k, "]")) { ++depth; --start; continue; }
+      if (isPunct(k, "[")) {
+        if (depth == 0)
+          break;
+        --depth;
+        --start;
+        continue;
+      }
+      if (depth == 0 &&
+          (isPunct(k, "->") || isPunct(k, ".") || isPunct(k, "*"))) {
+        --start;
+        continue;
+      }
+      break;
+    }
+    return start;
+  }
+
+  /// Keywords that never form part of an lvalue expression.
+  static bool isControlKeyword(const std::string &text) {
+    static const char *const kWords[] = {
+        "return", "if",    "else",  "while",  "for",    "do",     "switch",
+        "case",   "default", "break", "continue", "goto", "sizeof"};
+    for (const char *word : kWords)
+      if (text == word)
+        return true;
+    return false;
+  }
+
   /// memcpy with overlapping source/destination is undefined; memmove is the
   /// correct API.
   void checkMemcpyOverlap() {
+    struct Pointer {
+      std::string base;
+      long long offset = 0; // bytes from the base, not pointer elements
+      size_t elemBytes = 0;
+    };
+    std::map<std::string, Pointer> aliases;
+
+    // Pointer arithmetic is scaled by the operand's pointee type.  Unknown
+    // types stay silent rather than guessing a byte width.
+    auto pointerTypeBytes = [&](size_t from, size_t to) {
+      std::string type;
+      size_t stars = 0;
+      for (size_t k = from; k < to; ++k) {
+        if (trivia(k))
+          continue;
+        if (isPunct(k, "*")) {
+          ++stars;
+        } else if (toks_[k].kind == TokKind::Identifier &&
+                   isTypeWord(toks_[k].text)) {
+          if (!type.empty())
+            type += " ";
+          type += toks_[k].text;
+        } else {
+          return size_t{0};
+        }
+      }
+      return stars == 1 ? typeSize(type) : size_t{0};
+    };
+
+    auto declaredPointerBytes = [&](size_t lhs) {
+      size_t begin = lhs;
+      while (begin > 0) {
+        --begin;
+        if (trivia(begin))
+          continue;
+        if (isPunct(begin, ";") || isPunct(begin, "{") ||
+            isPunct(begin, "}") || isPunct(begin, "(") ||
+            isPunct(begin, ","))
+          break;
+      }
+      return pointerTypeBytes(begin + 1, lhs);
+    };
+
+    auto addOffset = [](long long *offset, long amount, size_t width,
+                        bool add) {
+      if (width == 0)
+        return false;
+      const __int128 delta = static_cast<__int128>(amount) * width;
+      const __int128 value = static_cast<__int128>(*offset) +
+                             (add ? delta : -delta);
+      if (value < LLONG_MIN || value > LLONG_MAX)
+        return false;
+      *offset = static_cast<long long>(value);
+      return true;
+    };
+
+    // `char s[] = "text";` carries no explicit extent, so findShape() cannot
+    // see it, but the literal still fixes the element width.  Resolving the
+    // array here lets pointer arithmetic on it keep a known byte scale.
+    auto stringArrayElemBytes = [&](const std::string &name, size_t pos,
+                                     size_t *elemBytes) -> bool {
+      for (size_t i = 0; i < toks_.size(); ++i) {
+        if (toks_[i].kind != TokKind::Identifier || toks_[i].text != name)
+          continue;
+        if (i > pos)
+          continue;
+        size_t scopeEnd = enclosingScopeEnd(i);
+        if (scopeEnd != kNPos && pos > scopeEnd)
+          continue;
+        size_t lb = nextSig(i);
+        if (lb >= toks_.size() || !isPunct(lb, "["))
+          continue;
+        size_t rb = matchIn(lb, toks_.size(), "[", "]");
+        if (rb == kNPos)
+          continue;
+        size_t inner = nextSig(lb);
+        if (inner > rb)
+          continue;
+        if (inner != rb)
+          continue; // an explicit extent is handled by findShape()
+        size_t eq = nextSig(rb);
+        if (!isPunct(eq, "="))
+          continue;
+        size_t lit = nextSig(eq);
+        if (lit >= toks_.size() || toks_[lit].kind != TokKind::StringLit)
+          continue;
+        size_t typeTok = prevSig(i);
+        if (typeTok == kNPos || toks_[typeTok].kind != TokKind::Identifier)
+          continue;
+        size_t width = typeSize(toks_[typeTok].text);
+        if (width != 1)
+          continue; // only a byte-wide element type holds a string literal
+        *elemBytes = width;
+        return true;
+      }
+      return false;
+    };
+
+    // Resolve only expressions whose base and constant byte offset are known:
+    // an array, &array[k], a prior local alias, or one of those +/- a constant.
+    auto parsePointer = [&](size_t from, size_t to, const auto &self,
+                           Pointer *out) -> bool {
+      trim(&from, &to);
+      if (from >= to)
+        return false;
+      size_t castBytes = 0;
+      if (isPunct(from, "(")) {
+        size_t close = kNPos;
+        if (castClose(from, to, &close))
+          castBytes = pointerTypeBytes(from + 1, close);
+      }
+      from = stripCast(from, to);
+      if (from >= to)
+        return false;
+
+      if (isPunct(from, "&")) {
+        size_t id = nextSig(from);
+        size_t lb = nextSig(id);
+        if (id >= to || lb >= to || !isPunct(lb, "["))
+          return false;
+        size_t rb = matchIn(lb, to, "[", "]");
+        long index = 0;
+        if (rb == kNPos || nextSig(rb) < to ||
+            !constantIndexAt(lb + 1, rb, &index))
+          return false;
+        const std::vector<size_t> *dims = nullptr;
+        if (findShape(toks_[id].text, id, &dims) && !dims->empty()) {
+          out->base = toks_[id].text;
+          out->elemBytes = arrayElemBytes(out->base, from);
+        } else {
+          size_t width = 0;
+          if (!stringArrayElemBytes(toks_[id].text, id, &width))
+            return false;
+          out->base = toks_[id].text;
+          out->elemBytes = width;
+        }
+        return addOffset(&out->offset, index, out->elemBytes, true);
+      }
+
+      if (toks_[from].kind != TokKind::Identifier)
+        return false;
+      const std::string &name = toks_[from].text;
+      size_t after = nextSig(from);
+      Pointer base;
+      const std::vector<size_t> *dims = nullptr;
+      if (findShape(name, from, &dims) && !dims->empty()) {
+        base.base = name;
+        base.elemBytes = arrayElemBytes(name, from);
+      } else {
+        size_t width = 0;
+        if (stringArrayElemBytes(name, from, &width)) {
+          base.base = name;
+          base.elemBytes = width;
+        } else {
+          auto alias = aliases.find(name);
+          if (alias == aliases.end())
+            return false;
+          base = alias->second;
+        }
+      }
+      if (base.elemBytes == 0)
+        return false;
+
+      *out = base;
+      if (after >= to)
+        return true;
+      if (!isPunct(after, "+") && !isPunct(after, "-"))
+        return false;
+      long amount = 0;
+      size_t amountEnd = to;
+      for (size_t k = after + 1; k < to; ++k)
+        if (isPunct(k, ")") || isPunct(k, ";") || isPunct(k, ",")) {
+          amountEnd = k;
+          break;
+        }
+      if (!constantIndexAt(after + 1, amountEnd, &amount))
+        return false;
+      const size_t width = castBytes ? castBytes : base.elemBytes;
+      if (!addOffset(&out->offset, amount, width, isPunct(after, "+")))
+        return false;
+      out->elemBytes = width;
+      return true;
+    };
+
     for (size_t i = 0; i < toks_.size(); ++i) {
+      if (isPunct(i, "=")) {
+        size_t lhs = prevSig(i);
+        if (lhs == kNPos || toks_[lhs].kind != TokKind::Identifier ||
+            isWriteThroughObject(lhs))
+          continue;
+        const std::string &name = toks_[lhs].text;
+        Pointer value;
+        size_t rhs = nextSig(i);
+        if (parsePointer(rhs, stmtEnd(rhs), parsePointer, &value)) {
+          const size_t declared = declaredPointerBytes(lhs);
+          if (declared != 0)
+            value.elemBytes = declared;
+          else {
+            auto prior = aliases.find(name);
+            if (prior == aliases.end() || prior->second.elemBytes == 0) {
+              aliases.erase(name);
+              continue;
+            }
+            value.elemBytes = prior->second.elemBytes;
+          }
+          aliases[name] = std::move(value);
+        } else {
+          aliases.erase(name);
+        }
+        continue;
+      }
+
       if (!isIdent(i, "memcpy"))
         continue;
       size_t lp = nextSig(i);
@@ -3759,24 +4551,35 @@ private:
       if (rp == kNPos)
         continue;
       auto args = splitArgs(lp + 1, rp);
-      if (args.size() < 2)
+      if (args.size() < 3)
         continue;
-      std::string dst = join(args[0].first, args[0].second);
-      std::string src = join(args[1].first, args[1].second);
-      bool overlap = !dst.empty() && dst == src;
-      if (!overlap) {
-        const std::string &shorter = dst.size() < src.size() ? dst : src;
-        const std::string &longer = dst.size() < src.size() ? src : dst;
-        if (longer.compare(0, shorter.size(), shorter) == 0) {
-          size_t pos = shorter.size();
-          while (pos < longer.size() &&
-                 (longer[pos] == ' ' || longer[pos] == '\t'))
-            ++pos;
-          if (pos < longer.size() &&
-              (longer[pos] == '+' || longer[pos] == '-'))
-            overlap = true;
-        }
+      long bytes = 0;
+      const bool sizeKnown =
+          indexExprValue(args[2].first, args[2].second, &bytes);
+      // `sizeof` of a complete type is never zero, so a copy sized by sizeof
+      // always moves at least one byte even when the exact count is unknown.
+      size_t sizeFrom = args[2].first, sizeTo = args[2].second;
+      trim(&sizeFrom, &sizeTo);
+      const bool sizePositive =
+          (sizeKnown && bytes > 0) || isIdent(sizeFrom, "sizeof");
+      if (!sizePositive)
+        continue; // an unknown or empty copy cannot overlap
+
+      Pointer dst, src;
+      bool overlap = false;
+      if (sizeKnown && bytes > 0 &&
+          parsePointer(args[0].first, args[0].second, parsePointer, &dst) &&
+          parsePointer(args[1].first, args[1].second, parsePointer, &src) &&
+          dst.base == src.base) {
+        const __int128 dstEnd = static_cast<__int128>(dst.offset) + bytes;
+        const __int128 srcEnd = static_cast<__int128>(src.offset) + bytes;
+        overlap = dst.offset < srcEnd && src.offset < dstEnd;
       }
+      // Identical expressions still overlap even when their base is unknown.
+      if (!overlap && !join(args[0].first, args[0].second).empty() &&
+          join(args[0].first, args[0].second) ==
+              join(args[1].first, args[1].second))
+        overlap = true;
       if (overlap)
         errorAt(toks_[i], "memcpy source and destination overlap; use memmove");
     }
@@ -3829,63 +4632,248 @@ private:
         }
         if (isVolatile)
           volatileGlobals_.insert(toks_[i].text);
+        bool isAtomic = false;
+        size_t ascan = i;
+        while (ascan > 0) {
+          --ascan;
+          if (isPunct(ascan, ";") || isPunct(ascan, "}"))
+            break;
+          if (isIdent(ascan, "_Atomic") || isIdent(ascan, "atomic_int") ||
+              isIdent(ascan, "atomic_long") || isIdent(ascan, "atomic_flag"))
+            isAtomic = true;
+        }
+        if (isAtomic)
+          atomicGlobals_.insert(toks_[i].text);
     }
+  }
+
+  /// The C and C+ thread creation APIs.  All of them start a thread that runs
+  /// concurrently with the creating thread.
+  static bool isThreadSpawnName(const std::string &name) {
+    static const char *const kNames[] = {
+        "pthread_create", "cplus_pthread_create", "thrd_create",
+        "cplus_thrd_create", "thread_start"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  /// True when the token at `i` sits on a preprocessor directive line.  A
+  /// `#define pthread_create my_create` must not look like a thread spawn.
+  bool inDirectiveLine(size_t i) const {
+    for (size_t k = i; k > 0 && toks_[k].line == toks_[i].line; --k)
+      if (isPunct(k - 1, "#"))
+        return true;
+    return false;
+  }
+
+  /// A call site of one of the thread creation APIs.
+  struct SpawnSite {
+    size_t pos = 0;            // token index of the call
+    std::string entry;         // entry function, when identifiable
+    std::string host;          // function whose body contains the call
+  };
+
+  /// True when `i` is a real call of one of the thread creation APIs (not a
+  /// declaration, a macro definition or a mention in a comment).  `lp` is
+  /// the token index of the call's opening parenthesis.
+  bool threadSpawnCall(size_t i, size_t *lp) const {
+    if (i >= toks_.size() || toks_[i].kind != TokKind::Identifier ||
+        inDirectiveLine(i))
+      return false;
+    size_t open = kNPos;
+    if (isThreadSpawnName(toks_[i].text)) {
+      open = nextSig(i);
+    } else if (isIdent(i, "thread") && isPunct(nextSig(i), "::") &&
+               isIdent(nextSig(nextSig(i)), "start")) {
+      open = nextSig(nextSig(nextSig(i)));
+    } else {
+      return false;
+    }
+    if (!isPunct(open, "("))
+      return false;
+    size_t rp = match(open, "(", ")");
+    if (rp == kNPos || isPunct(nextSig(rp), "{"))
+      return false;
+    *lp = open;
+    return true;
+  }
+
+  /// Every thread creation call in the translation unit.  The entry function
+  /// is the first argument that names a function defined in this unit, which
+  /// covers the differing argument positions of pthread_create, thrd_create
+  /// and the C+ wrappers.
+  std::vector<SpawnSite> collectThreadSpawns() const {
+    std::vector<SpawnSite> sites;
+    for (size_t i = 0; i < toks_.size(); ++i) {
+      size_t lp = kNPos;
+      if (!threadSpawnCall(i, &lp))
+        continue;
+      size_t rp = match(lp, "(", ")");
+      SpawnSite site;
+      site.pos = i;
+      const std::string *host = enclosingFunction(i);
+      if (host)
+        site.host = *host;
+      for (const auto &arg : splitArgs(lp + 1, rp)) {
+        // `&thread_id` is an out-parameter, not a worker entrypoint.
+        if (isPunct(nextSig(arg.first), "&"))
+          continue;
+        std::string name = baseName(arg.first, arg.second);
+        if (!name.empty() && funcs_.count(name)) {
+          site.entry = name;
+          break;
+        }
+      }
+      sites.push_back(site);
+    }
+    return sites;
+  }
+
+  /// Synchronisation primitives.  Only these exact names count: a substring
+  /// match on "lock" would let `clock()`, `block` or `block_size` silently
+  /// disable every race diagnostic.
+  static bool isLockAcquireName(const std::string &name) {
+    static const char *const kNames[] = {
+        "pthread_mutex_lock",   "pthread_mutex_trylock",
+        "pthread_rwlock_rdlock", "pthread_rwlock_wrlock",
+        "pthread_spin_lock",    "pthread_spin_trylock",
+        "cplus_mutex_lock",     "cplus_mutex_trylock",
+        "mutex_lock",           "mutex_trylock",
+        "mtx_lock",             "mtx_trylock",
+        "cplus_sema_lock",      "sem_wait"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  static bool isLockReleaseName(const std::string &name) {
+    static const char *const kNames[] = {
+        "pthread_mutex_unlock", "pthread_rwlock_unlock",
+        "pthread_spin_unlock",  "cplus_mutex_unlock",
+        "mutex_unlock",         "mtx_unlock",
+        "cplus_sema_unlock",    "sem_post"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  /// RAII guard types.  They hold the lock for the whole enclosing scope.
+  static bool isScopeGuardName(const std::string &name) {
+    static const char *const kNames[] = {
+        "lock_guard", "unique_lock", "scoped_lock", "mutex_guard",
+        "Guard", "guard", "Lock", "MutexGuard"};
+    for (const char *n : kNames)
+      if (name == n)
+        return true;
+    return false;
+  }
+
+  /// True when the identifier at `i` introduces a declared object, which is
+  /// how a guard type is used: `Guard g(m);`.  `int guard = 0;` is a plain
+  /// variable and must not count as synchronisation.
+  bool declaresObject(size_t i) const {
+    size_t next = nextSig(i);
+    if (next >= toks_.size())
+      return false;
+    if (toks_[next].kind == TokKind::Identifier)
+      return true;
+    return isPunct(next, "<");
+  }
+
+  /// Shared globals that a function body writes without holding a lock.  The
+  /// map holds the token index of the first such write per global.
+  std::map<std::string, size_t> unsynchronizedGlobalWrites(
+      const FuncSig &sig) const {
+    std::map<std::string, size_t> writes;
+    if (sig.bodyClose == kNPos)
+      return writes;
+    int held = 0;
+    for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
+      if (toks_[k].kind != TokKind::Identifier)
+        continue;
+      const std::string &word = toks_[k].text;
+      if (isScopeGuardName(word) && declaresObject(k)) {
+        held = 1; // the guard is released when the scope ends
+        continue;
+      }
+      if (isLockAcquireName(word) || (isScopeGuardName(word) &&
+                                      isPunct(nextSig(k), "("))) {
+        ++held;
+        continue;
+      }
+      if (isLockReleaseName(word)) {
+        if (held > 0)
+          --held;
+        continue;
+      }
+      if (!globals_.count(word) || volatileGlobals_.count(word) ||
+          atomicGlobals_.count(word))
+        continue;
+      size_t next = nextSig(k);
+      bool write = isPunct(next, "=") || isPunct(next, "++") ||
+                   isPunct(next, "--") || isPunct(next, "+=") ||
+                   isPunct(next, "-=") || isPunct(next, "*=") ||
+                   isPunct(next, "/=") || isPunct(next, "%=") ||
+                   isPunct(next, "|=") || isPunct(next, "&=") ||
+                   isPunct(next, "^=");
+      if (write && held == 0 && !writes.count(word))
+        writes[word] = k;
+    }
+    return writes;
   }
 
   /// A conservative check: a thread entry function that writes a global
   /// without taking any C+ lock is a data race.
   void checkDataRaces() {
     collectGlobals();
+    std::vector<SpawnSite> spawns = collectThreadSpawns();
+    if (spawns.empty())
+      return;
     std::map<std::string, int> workerCounts;
-    for (size_t i = 0; i < toks_.size(); ++i) {
-      if (!isIdent(i, "pthread_create"))
+    std::map<std::string, std::vector<std::string>> spawnHosts;
+    for (const auto &site : spawns) {
+      if (site.entry.empty())
         continue;
-      size_t lp = nextSig(i);
-      if (!isPunct(lp, "("))
-        continue;
-      size_t rp = match(lp, "(", ")");
-      if (rp == kNPos)
-        continue;
-      auto args = splitArgs(lp + 1, rp);
-      if (args.size() < 3)
-        continue;
-      std::string name = baseName(args[2].first, args[2].second);
-      if (!name.empty())
-        ++workerCounts[name];
+      ++workerCounts[site.entry];
+      spawnHosts[site.entry].push_back(site.host);
     }
     for (const auto &entry : funcs_) {
-      // A single thread does not create a race; require the same entry to be
-      // passed to at least two pthread_create calls.
-      if (workerCounts[entry.first] < 2)
+      const std::string &worker = entry.first;
+      auto countIt = workerCounts.find(worker);
+      if (countIt == workerCounts.end())
         continue;
       const FuncSig &sig = entry.second;
-      bool locked = false;
-      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
-        if (toks_[k].kind != TokKind::Identifier)
-          continue;
-        const std::string &word = toks_[k].text;
-        // Direct runtime calls or a lock-taking helper (Lock_acquire,
-        // Guard_lock, ...) count as synchronisation for this conservative
-        // check.
-        if (word.find("lock") != std::string::npos ||
-            word.find("Lock") != std::string::npos ||
-            word.find("guard") != std::string::npos ||
-            word.find("Guard") != std::string::npos)
-          locked = true;
-      }
-      if (locked)
+      std::map<std::string, size_t> writes = unsynchronizedGlobalWrites(sig);
+      if (writes.empty())
         continue;
-      for (size_t k = sig.bodyOpen; k <= sig.bodyClose; ++k) {
-        if (toks_[k].kind != TokKind::Identifier ||
-            !globals_.count(toks_[k].text))
-          continue;
-        size_t next = nextSig(k);
-        bool write = isPunct(next, "=") || isPunct(next, "++") ||
-                     isPunct(next, "--") || isPunct(next, "+=");
-        if (write && !volatileGlobals_.count(toks_[k].text))
-          errorAt(toks_[k], "unsynchronized write to shared global '" +
-                                toks_[k].text + "' in thread function '" +
-                                entry.first + "'");
+      for (const auto &write : writes) {
+        const std::string &global = write.first;
+        // Two workers on the same entry always race.  A single worker still
+        // races with the thread that started it when both touch the global.
+        bool concurrent = countIt->second >= 2;
+        if (!concurrent) {
+          for (const auto &host : spawnHosts[worker]) {
+            auto hostIt = funcs_.find(host);
+            if (hostIt == funcs_.end())
+              continue;
+            if (unsynchronizedGlobalWrites(hostIt->second).count(global))
+              concurrent = true;
+          }
+          if (!concurrent) {
+            auto mainIt = funcs_.find("main");
+            if (mainIt != funcs_.end() &&
+                unsynchronizedGlobalWrites(mainIt->second).count(global))
+              concurrent = true;
+          }
+        }
+        if (concurrent)
+          errorAt(toks_[write.second],
+                  "unsynchronized write to shared global '" + global +
+                      "' in thread function '" + worker + "'");
       }
     }
   }
@@ -4009,26 +4997,46 @@ private:
       if (rp == kNPos || !isPunct(nextSig(rp), "{"))
         continue;
       auto parts = splitArgs(lp + 1, rp);
-      if (parts.size() == 1 &&
-          join(parts[0].first, parts[0].second).empty())
-        continue;
+      // A `(void)` parameter list yields no named parameters, but the
+      // function still has a body that later fact collectors must inspect.
       std::vector<std::string> params;
       std::vector<bool> outFlags;
+      std::vector<bool> restrictFlags;
+      std::map<std::string, size_t> declPos;
+      std::set<std::string> pendingCharParams;
       for (const auto &part : parts) {
         size_t last = kNPos;
         int stars = 0;
+        bool restricted = false;
+        bool plainChar = false, unsignedChar = false;
         for (size_t k = part.first; k < part.second; ++k) {
-          if (toks_[k].kind == TokKind::Identifier)
+          if (toks_[k].kind == TokKind::Identifier) {
             last = k;
-          else if (isPunct(k, "*"))
+            if (toks_[k].text == "restrict" || toks_[k].text == "__restrict" ||
+                toks_[k].text == "__restrict__")
+              restricted = true;
+            if (toks_[k].text == "char")
+              plainChar = true;
+            if (toks_[k].text == "unsigned")
+              unsignedChar = true;
+          } else if (isPunct(k, "*"))
             ++stars;
         }
         params.push_back(last == kNPos ? std::string() : toks_[last].text);
         outFlags.push_back(stars >= 2);
+        restrictFlags.push_back(restricted);
+        if (last != kNPos) {
+          declPos[toks_[last].text] = last;
+          if (plainChar && !unsignedChar)
+            pendingCharParams.insert(toks_[last].text);
+        }
       }
       FuncSig sig;
+      sig.charParams = pendingCharParams;
       sig.params = params;
       sig.outParam = outFlags;
+      sig.restrictParam = restrictFlags;
+      sig.paramDeclPos = declPos;
       sig.bodyOpen = nextSig(rp);
       sig.bodyClose = match(sig.bodyOpen, "{", "}");
       funcs_[toks_[i].text] = sig;
@@ -5192,33 +6200,190 @@ private:
   }
 
   static size_t typeAlignment(const std::string &type) {
-    if (type.find("char") != std::string::npos)
+    if (type == "char" || type == "signed char" || type == "unsigned char" ||
+        type == "bool" || type == "_Bool" || type == "int8_t" ||
+        type == "uint8_t")
       return 1;
-    if (type.find("short") != std::string::npos)
+    if (type == "short" || type == "unsigned short" || type == "int16_t" ||
+        type == "uint16_t")
       return 2;
-    if (type.find("long long") != std::string::npos ||
-        type.find("double") != std::string::npos ||
-        type.find("size_t") != std::string::npos ||
-        type.find("uint64") != std::string::npos ||
-        type.find("int64") != std::string::npos ||
-        type.find("long") != std::string::npos)
-      return 8;
-    if (type.find("int") != std::string::npos ||
-        type.find("float") != std::string::npos ||
-        type.find("uint32") != std::string::npos ||
-        type.find("unsigned") != std::string::npos)
+    if (type == "int" || type == "unsigned" || type == "unsigned int" ||
+        type == "float" || type == "int32_t" || type == "uint32_t" ||
+        type == "wchar_t")
       return 4;
+    if (type == "long long" || type == "unsigned long long" ||
+        type == "double" || type == "int64_t" || type == "uint64_t" ||
+        type == "size_t" || type == "ssize_t" || type == "intptr_t" ||
+        type == "uintptr_t")
+      return 8;
+    if (type == "long" || type == "unsigned long")
+      return 8;
+    if (type == "long double")
+      return 16;
     return 0;
   }
 
-  /// Bug 46: casting a known allocation base plus a non-multiple byte offset
-  /// to a type with stricter alignment produces an unaligned pointer.
+  /// Casting a pointer with a known byte offset to a stricter-aligned type is
+  /// undefined when that offset is not a multiple of the target alignment.
   void checkUnalignedCasts() {
+    struct PointerBytes {
+      long long offset = 0;
+      size_t elemBytes = 0;
+    };
+    std::map<std::string, PointerBytes> pointers;
+
+    auto expressionEnd = [&](size_t from) {
+      int parens = 0, brackets = 0;
+      for (size_t k = from; k < toks_.size(); ++k) {
+        if (isPunct(k, "(")) ++parens;
+        else if (isPunct(k, ")")) {
+          if (parens == 0) return k;
+          --parens;
+        } else if (isPunct(k, "[")) ++brackets;
+        else if (isPunct(k, "]")) {
+          if (brackets == 0) return k;
+          --brackets;
+        } else if (parens == 0 && brackets == 0 &&
+                   (isPunct(k, ";") || isPunct(k, ",") ||
+                    isPunct(k, "=") || isPunct(k, "{")))
+          return k;
+      }
+      return toks_.size();
+    };
+
+    auto declaredBytePointer = [&](size_t lhs) {
+      size_t begin = lhs;
+      while (begin > 0) {
+        --begin;
+        if (trivia(begin))
+          continue;
+        if (isPunct(begin, ";") || isPunct(begin, "{") ||
+            isPunct(begin, "}") || isPunct(begin, "(") ||
+            isPunct(begin, ","))
+          break;
+      }
+      size_t stars = 0;
+      std::string type;
+      for (size_t k = begin + 1; k < lhs; ++k) {
+        if (trivia(k))
+          continue;
+        if (isPunct(k, "*")) {
+          ++stars;
+        } else if (toks_[k].kind == TokKind::Identifier &&
+                   isTypeWord(toks_[k].text)) {
+          if (!type.empty()) type += " ";
+          type += toks_[k].text;
+        }
+      }
+      return stars == 1 && (type == "char" || type == "void" ||
+                            type == "signed char" ||
+                            type == "unsigned char");
+    };
+
+    auto resolvePointer = [&](size_t from, size_t to, const auto &self,
+                             PointerBytes *out) -> bool {
+      trim(&from, &to);
+      if (from >= to)
+        return false;
+      from = stripCast(from, to);
+      trim(&from, &to);
+      while (to > from && isPunct(to - 1, ")")) --to;
+      trim(&from, &to);
+      if (from >= to)
+        return false;
+      if (isPunct(from, "(")) {
+        // A grouped operand such as `((char *)buf + 1)`: peel the group and
+        // resolve the expression inside it.
+        size_t close = matchIn(from, to, "(", ")");
+        if (close == kNPos || close <= from + 1)
+          return false;
+        return self(from + 1, close, self, out);
+      }
+
+      if (isPunct(from, "&")) {
+        size_t id = nextSig(from);
+        size_t lb = nextSig(id);
+        if (id >= to || lb >= to || !isPunct(lb, "["))
+          return false;
+        size_t rb = matchIn(lb, to, "[", "]");
+        long index = 0;
+        const std::vector<size_t> *dims = nullptr;
+        if (rb == kNPos || !constantIndexAt(lb + 1, rb, &index) ||
+            !findShape(toks_[id].text, id, &dims) || dims->empty())
+          return false;
+        size_t width = arrayElemBytes(toks_[id].text, id);
+        if (!width)
+          return false;
+        out->offset = static_cast<long long>(index) * width;
+        out->elemBytes = width;
+        return true;
+      }
+
+      if (toks_[from].kind != TokKind::Identifier)
+        return false;
+      const std::string &name = toks_[from].text;
+      size_t after = nextSig(from);
+      const std::vector<size_t> *dims = nullptr;
+      if (findShape(name, from, &dims) && !dims->empty()) {
+        out->offset = 0;
+        out->elemBytes = arrayElemBytes(name, from);
+      } else {
+        auto prior = pointers.find(name);
+        if (prior == pointers.end()) {
+          return false;
+        }
+        *out = prior->second;
+      }
+      if (!out->elemBytes) {
+        return false;
+      }
+      if (after >= to)
+        return true;
+      if (!isPunct(after, "+") && !isPunct(after, "-"))
+        return false;
+      long amount = 0;
+      size_t amountEnd = to;
+      for (size_t k = after + 1; k < to; ++k)
+        if (isPunct(k, ")") || isPunct(k, ";") || isPunct(k, ",")) {
+          amountEnd = k;
+          break;
+        }
+      if (!constantIndexAt(after + 1, amountEnd, &amount))
+        return false;
+      const __int128 offset = static_cast<__int128>(out->offset) +
+          static_cast<__int128>(amount) * out->elemBytes *
+              (isPunct(after, "+") ? 1 : -1);
+      if (offset < LLONG_MIN || offset > LLONG_MAX)
+        return false;
+      out->offset = static_cast<long long>(offset);
+      return true;
+    };
+
     for (size_t i = 0; i < toks_.size(); ++i) {
+      if (functionOpens_.count(i))
+        pointers.clear();
+      if (isPunct(i, "=")) {
+        size_t lhs = prevSig(i);
+        if (lhs != kNPos && toks_[lhs].kind == TokKind::Identifier &&
+            !isWriteThroughObject(lhs)) {
+          size_t rhs = nextSig(i);
+          const std::string &name = toks_[lhs].text;
+          PointerBytes value;
+          if (isAllocator(allocatorName(rhs)) && declaredBytePointer(lhs)) {
+            pointers[name] = PointerBytes{};
+            pointers[name].elemBytes = 1;
+          } else if (resolvePointer(rhs, expressionEnd(rhs), resolvePointer, &value)) {
+            pointers[name] = value;
+          } else {
+            pointers.erase(name);
+          }
+        }
+        continue;
+      }
       if (!isPunct(i, "("))
         continue;
-      size_t close = match(i, "(", ")");
-      if (close == kNPos)
+      size_t close = kNPos;
+      if (!castClose(i, toks_.size(), &close))
         continue;
       bool hasStar = false;
       std::string type;
@@ -5226,43 +6391,821 @@ private:
         if (isPunct(k, "*"))
           hasStar = true;
         if (toks_[k].kind == TokKind::Identifier) {
-          if (!type.empty())
-            type += " ";
+          if (!type.empty()) type += " ";
           type += toks_[k].text;
         }
       }
-      if (!hasStar || type.empty())
+      if (!hasStar)
         continue;
       size_t align = typeAlignment(type);
       if (align <= 1)
         continue;
-      size_t open2 = nextSig(close);
-      if (!isPunct(open2, "("))
+      size_t from = nextSig(close);
+      PointerBytes value;
+      if (!resolvePointer(from, expressionEnd(from), resolvePointer, &value))
         continue;
-      size_t close2 = match(open2, "(", ")");
-      if (close2 == kNPos)
-        continue;
-      size_t base = nextSig(open2);
-      if (base >= close2 || toks_[base].kind != TokKind::Identifier)
-        continue;
-      const std::string &baseName = toks_[base].text;
-      // Only byte-granular allocation bases make `base + N` a byte offset;
-      // for typed arrays/pointers N counts elements, not bytes.
-      if (!byteAllocPtrs_.count(baseName))
-        continue;
-      size_t op = nextSig(base);
-      if (!(isPunct(op, "+") || isPunct(op, "-")))
-        continue;
-      size_t numTok = nextSig(op);
-      if (numTok >= close2)
-        continue;
-      long offset = 0;
-      if (!number(toks_[numTok], &offset) || offset == 0)
-        continue;
-      if (offset % static_cast<long>(align) != 0)
-        errorAt(toks_[i], "unaligned pointer: '" + baseName + "' offset " +
-                              std::to_string(offset) + " is not a multiple of " +
+      if (value.offset % static_cast<long long>(align) != 0)
+        errorAt(toks_[i], "unaligned pointer: byte offset " +
+                              std::to_string(value.offset) +
+                              " is not a multiple of " +
                               std::to_string(align) + " for '" + type + "'");
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
+  // SafeCC-style CFG dataflow verification.
+  //
+  // A small, purely compile-time abstract interpretation over the C+ token
+  // stream.  The structured walker below is the CFG: compound statements are
+  // blocks, `if`/`else` are explicit forks with a join at the merge point, and
+  // `while`/`for` close a back-edge that is iterated to a fixed point.  Facts
+  // are must-facts, so a fact survives a join only when it holds on *every*
+  // incoming path.  That is what makes the two diagnostics below provable:
+  // a dereference is rejected only when the pointer is NULL on every path to
+  // it, and an allocation is a leak only when it is still live on every exit
+  // path.  Unknown shapes are always killed rather than guessed, so valid C
+  // (including `goto cleanup` and conditional cleanup) is never rejected.
+  //===--------------------------------------------------------------------===//
+
+  enum class FlowNull : uint8_t { Unknown, Null, NonNull };
+  enum class FlowOwn : uint8_t { None, Live, Freed, Conflict };
+
+  struct FlowFact {
+    FlowNull null = FlowNull::Unknown;
+    FlowOwn own = FlowOwn::None;
+    size_t allocPos = kNPos;
+  };
+  using FlowState = std::map<std::string, FlowFact>;
+
+  struct FlowBlockResult {
+    FlowState out;
+    bool fallsThrough = true;
+  };
+
+  std::set<std::pair<size_t, int>> flowReported_;
+
+  static FlowFact flowOf(const FlowState &s, const std::string &n) {
+    auto it = s.find(n);
+    return it == s.end() ? FlowFact{} : it->second;
+  }
+
+  static void flowKill(FlowFact &f) {
+    f.null = FlowNull::Unknown;
+    f.own = FlowOwn::None;
+    f.allocPos = kNPos;
+  }
+
+  static FlowFact flowJoinFact(const FlowFact &a, const FlowFact &b) {
+    FlowFact r;
+    r.null = (a.null == b.null) ? a.null : FlowNull::Unknown;
+    r.own = (a.own == b.own) ? a.own : FlowOwn::Conflict;
+    r.allocPos = (a.allocPos == b.allocPos) ? a.allocPos : kNPos;
+    return r;
+  }
+
+  static FlowState flowJoin(const FlowState &a, const FlowState &b) {
+    FlowState out = a;
+    for (const auto &kv : b) {
+      auto it = out.find(kv.first);
+      if (it == out.end())
+        out[kv.first] = kv.second;
+      else
+        it->second = flowJoinFact(it->second, kv.second);
+    }
+    return out;
+  }
+
+  static bool flowSame(const FlowState &a, const FlowState &b) {
+    if (a.size() != b.size())
+      return false;
+    for (const auto &kv : a) {
+      auto it = b.find(kv.first);
+      if (it == b.end())
+        return false;
+      if (it->second.null != kv.second.null ||
+          it->second.own != kv.second.own ||
+          it->second.allocPos != kv.second.allocPos)
+        return false;
+    }
+    return true;
+  }
+
+  bool flowTypeContext(size_t i) const {
+    if (i == kNPos || i >= toks_.size())
+      return false;
+    if (toks_[i].kind == TokKind::Identifier &&
+        (isTypeWord(toks_[i].text) || toks_[i].text == "static" ||
+         toks_[i].text == "restrict" || toks_[i].text == "__restrict" ||
+         toks_[i].text == "__restrict__" || toks_[i].text == "register" ||
+         toks_[i].text == "auto"))
+      return true;
+    // A tag name is not a type word, but `struct S *p`, `union U *p` and
+    // `enum E *p` still declare p.  Without this, flowDeclStar() mistakes the
+    // declarator star for a dereference, skips flowAssign() for
+    // `struct S *p = NULL`, and never records the must-NULL fact -- so a
+    // definite `p->field` defect escaped [CPLUS-SAFECC].
+    if (toks_[i].kind == TokKind::Identifier) {
+      size_t kw = prevSig(i);
+      if (kw != kNPos && kw < toks_.size() &&
+          (isIdent(kw, "struct") || isIdent(kw, "union") ||
+           isIdent(kw, "enum")))
+        return true;
+    }
+    return isPunct(i, "*");
+  }
+
+  /// A `*` to the left of an identifier is a declarator star (not a deref)
+  /// when a type word sits immediately to its left, including `T **p`.
+  bool flowDeclStar(size_t star) const {
+    size_t before = prevSig(star);
+    if (before == kNPos || before >= toks_.size())
+      return false;
+    if (flowTypeContext(before) && !isPunct(before, "*"))
+      return true;
+    if (isPunct(before, "*")) {
+      size_t before2 = prevSig(before);
+      return before2 != kNPos && before2 < toks_.size() &&
+             flowTypeContext(before2) && !isPunct(before2, "*");
+    }
+    return false;
+  }
+
+  size_t flowMatchBack(size_t close, const char *l, const char *r) const {
+    int depth = 0;
+    size_t i = close;
+    while (true) {
+      if (isPunct(i, r))
+        ++depth;
+      else if (isPunct(i, l) && --depth == 0)
+        return i;
+      if (i == 0)
+        break;
+      --i;
+    }
+    return kNPos;
+  }
+
+  /// `sizeof` does not evaluate its operand: `*p` inside it is not a deref.
+  bool flowInsideSizeof(size_t pos) const {
+    size_t i = pos;
+    while (i > 0) {
+      --i;
+      if (isPunct(i, ")")) {
+        size_t open = flowMatchBack(i, "(", ")");
+        if (open == kNPos)
+          return false;
+        size_t before = prevSig(open);
+        if (before != kNPos && before < toks_.size() &&
+            isIdent(before, "sizeof"))
+          return true;
+        i = open;
+      } else if (isIdent(i, "sizeof")) {
+        // Unparenthesized operand (`sizeof *p`, `sizeof p[0]`). sizeof does
+        // not evaluate it, so no null/leak diagnostic may be raised.
+        return true;
+      } else if (isPunct(i, "{") || isPunct(i, ";")) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /// A dereference inside the true or false arm of `p ? ... : ...` is guarded
+  /// by `p` (or `!p`), so the raw must-NULL fact must not be used there.
+  bool flowInsideTernary(size_t pos, const std::string &name) const {
+    size_t i = pos;
+    int depth = 0;
+    while (i > 0) {
+      --i;
+      if (isPunct(i, ")")) ++depth;
+      else if (isPunct(i, "(")) --depth;
+      else if (depth == 0 && isPunct(i, "?")) {
+        size_t c = prevSig(i);
+        if (c != kNPos && isIdent(c, name))
+          return true;
+        if (c != kNPos && isPunct(c, "!")) {
+          size_t d = prevSig(c);
+          if (d != kNPos && isIdent(d, name))
+            return true;
+        }
+        return false;
+      } else if (depth == 0 &&
+                 (isPunct(i, ";") || isPunct(i, "{") || isPunct(i, "}"))) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  size_t flowStatementEnd(size_t from, size_t end) const {
+    int paren = 0, bracket = 0, brace = 0;
+    for (size_t k = from; k < end; ++k) {
+      if (isPunct(k, "(")) ++paren;
+      else if (isPunct(k, ")")) --paren;
+      else if (isPunct(k, "[")) ++bracket;
+      else if (isPunct(k, "]")) --bracket;
+      else if (isPunct(k, "{")) ++brace;
+      else if (isPunct(k, "}")) --brace;
+      else if (isPunct(k, ";") && paren == 0 && bracket == 0 && brace == 0)
+        return k;
+    }
+    return end;
+  }
+
+  /// Interpret the null fact of a condition under `truth`.  Only shapes that
+  /// are unambiguous in the token stream are handled; everything else is
+  /// returned untouched so no path fact is ever guessed.
+  FlowState flowRefine(const FlowState &state, size_t from, size_t to,
+                       bool truth) const {
+    FlowState out = state;
+    std::vector<size_t> s;
+    for (size_t k = from; k < to; ++k)
+      if (!trivia(k))
+        s.push_back(k);
+    while (s.size() >= 3 && isPunct(s.front(), "(") &&
+           isPunct(s.back(), ")")) {
+      size_t close = kNPos;
+      for (size_t n = 0; n < s.size(); ++n) {
+        if (isPunct(s[n], "(")) {
+          size_t d = 0;
+          for (size_t m = n; m < s.size(); ++m) {
+            if (isPunct(s[m], "(")) ++d;
+            else if (isPunct(s[m], ")") && --d == 0) { close = m; break; }
+          }
+          break;
+        }
+      }
+      if (close != s.size() - 1)
+        break;
+      s.erase(s.begin());
+      s.pop_back();
+    }
+    // `a && b` gives facts about both operands only when it is true;
+    // `a || b` gives facts about both only when it is false.  Splitting here
+    // keeps guards such as `if (p && p->field)` from being false positives.
+    {
+      int depth = 0;
+      for (size_t n = 0; n < s.size(); ++n) {
+        if (isPunct(s[n], "(")) ++depth;
+        else if (isPunct(s[n], ")")) --depth;
+        else if (depth == 0 && (isPunct(s[n], "&&") || isPunct(s[n], "||")) &&
+                 n > 0 && n + 1 < s.size()) {
+          bool isAnd = isPunct(s[n], "&&");
+          if ((isAnd && truth) || (!isAnd && !truth)) {
+            out = flowRefine(out, s.front(), s[n], truth);
+            out = flowRefine(out, s[n] + 1, s.back() + 1, truth);
+          }
+          return out;
+        }
+      }
+    }
+    auto setNull = [&](const std::string &n, FlowNull f) {
+      auto it = out.find(n);
+      if (it == out.end())
+        return;
+      it->second.null = f;
+      // malloc may return NULL: on a path where the allocation is null there
+      // is no live block to leak, so drop the ownership fact on that path.
+      if (f == FlowNull::Null && it->second.own == FlowOwn::Live) {
+        it->second.own = FlowOwn::None;
+        it->second.allocPos = kNPos;
+      }
+    };
+    if (s.size() == 2 && isPunct(s[0], "!") &&
+        toks_[s[1]].kind == TokKind::Identifier) {
+      setNull(toks_[s[1]].text, truth ? FlowNull::Null : FlowNull::NonNull);
+      return out;
+    }
+    if (s.size() == 1 && toks_[s[0]].kind == TokKind::Identifier) {
+      setNull(toks_[s[0]].text, truth ? FlowNull::NonNull : FlowNull::Null);
+      return out;
+    }
+    size_t op = kNPos;
+    bool equal = false;
+    for (size_t n = 1; n + 1 < s.size(); ++n) {
+      if (isPunct(s[n], "==") || isPunct(s[n], "!=")) {
+        op = n;
+        equal = isPunct(s[n], "==");
+        break;
+      }
+    }
+    if (op == kNPos)
+      return out;
+    auto nullConst = [&](size_t a, size_t b) {
+      if (a >= b)
+        return false;
+      if (b - a != 1)
+        return false;
+      size_t t = s[a];
+      return isIdent(t, "NULL") ||
+             (toks_[t].kind == TokKind::Number && toks_[t].text == "0");
+    };
+    auto varName = [&](size_t a, size_t b, std::string *n) {
+      if (a >= b || b - a != 1)
+        return false;
+      if (toks_[s[a]].kind != TokKind::Identifier)
+        return false;
+      *n = toks_[s[a]].text;
+      return out.count(*n) != 0;
+    };
+    std::string name;
+    bool leftVar = varName(0, op, &name) && nullConst(op + 1, s.size());
+    if (!leftVar) {
+      name.clear();
+      leftVar = varName(op + 1, s.size(), &name) && nullConst(0, op);
+    }
+    if (!leftVar)
+      return out;
+    FlowNull whenTrue = equal ? FlowNull::Null : FlowNull::NonNull;
+    FlowNull whenFalse = equal ? FlowNull::NonNull : FlowNull::Null;
+    setNull(name, truth ? whenTrue : whenFalse);
+    return out;
+  }
+
+  /// Apply an assignment to the tracked fact for `name`.
+  void flowAssign(FlowState &state, const std::string &name, size_t eq) {
+    std::vector<size_t> r;
+    for (size_t k = nextSig(eq); k < toks_.size() && !isPunct(k, ";") &&
+                              !isPunct(k, ","); ++k)
+      if (!trivia(k))
+        r.push_back(k);
+    if (r.empty()) {
+      auto it = state.find(name);
+      if (it != state.end())
+        flowKill(it->second);
+      return;
+    }
+    const std::string alloc = allocatorName(r[0]);
+    if (alloc == "malloc" || alloc == "calloc" || alloc == "cplus_alloc" ||
+        alloc == "cplus_zalloc" || alloc == "cplus_new" ||
+        alloc == "cplus_new_array") {
+      FlowFact f;
+      f.null = FlowNull::Unknown; // allocation may fail; never assume non-null
+      f.own = FlowOwn::Live;
+      f.allocPos = r[0];
+      state[name] = f;
+      return;
+    }
+    bool nullConst = isIdent(r.back(), "NULL") ||
+                     (toks_[r.back()].kind == TokKind::Number &&
+                      toks_[r.back()].text == "0");
+    bool casted = isPunct(r[0], "(") && r.size() >= 3 &&
+                  isPunct(r[r.size() - 2], ")");
+    if (nullConst && (r.size() == 1 || casted)) {
+      FlowFact f;
+      f.null = FlowNull::Null; // reassigning drops any prior ownership
+      state[name] = f;
+      return;
+    }
+    if (r.size() == 1 && toks_[r[0]].kind == TokKind::Identifier) {
+      const std::string &src = toks_[r[0]].text;
+      auto it = state.find(src);
+      FlowFact f;
+      if (it != state.end()) {
+        f = it->second;
+        if (f.own == FlowOwn::Live) { // ownership moves to the destination
+          it->second.own = FlowOwn::None;
+          it->second.allocPos = kNPos;
+        }
+      }
+      state[name] = f;
+      return;
+    }
+    state[name] = FlowFact{}; // unknown shape: no fact survives
+  }
+
+  void reportFlowNull(size_t pos, const std::string &name) {
+    if (!flowReported_.insert({pos, 0}).second)
+      return;
+    errorAt(toks_[pos], "[CPLUS-SAFECC] definite null dereference of '" + name +
+                            "': null pointer dereference on every path to "
+                            "this access");
+  }
+
+  void reportFlowLeak(size_t pos, const std::string &name) {
+    if (!flowReported_.insert({pos, 1}).second)
+      return;
+    errorAt(toks_[pos], "[CPLUS-SAFECC] definite memory leak: allocation held "
+                            "by '" +
+                            name +
+                            "' reaches every function exit without being "
+                            "released");
+  }
+
+  /// Structured CFG walk of the token range [begin, end) (end is a `}` or a
+  /// statement terminator).  `exits` accumulates the state at every return
+  /// and at the end of the function body so the caller can prove leaks.
+  FlowBlockResult analyzeFlowRange(size_t begin, size_t end, FlowState state,
+                                   std::vector<FlowState> *exits) {
+    size_t i = begin;
+    bool returned = false;
+    while (i < end) {
+      if (trivia(i)) {
+        ++i;
+        continue;
+      }
+      if (isPunct(i, ";")) {
+        if (returned)
+          return {state, false};
+        ++i;
+        continue;
+      }
+
+      // Nested compound statement: a new basic-block region.
+      if (isPunct(i, "{")) {
+        size_t close = matchIn(i, end, "{", "}");
+        if (close == kNPos || close > end)
+          break;
+        FlowBlockResult r = analyzeFlowRange(i + 1, close, state, exits);
+        if (!r.fallsThrough)
+          return {state, false};
+        state = r.out;
+        i = close + 1;
+        continue;
+      }
+
+      // if / else: fork, walk both arms, join at the merge point.
+      if (isIdent(i, "if")) {
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "(")) { ++i; continue; }
+        size_t rp = matchIn(lp, end, "(", ")");
+        if (rp == kNPos || rp >= end) { ++i; continue; }
+        size_t thenPos = nextSig(rp);
+        if (thenPos >= end) { ++i; continue; }
+        FlowState thenIn = flowRefine(state, lp + 1, rp, true);
+        FlowState elseIn = flowRefine(state, lp + 1, rp, false);
+        size_t afterThen;
+        FlowBlockResult thenR;
+        if (isPunct(thenPos, "{")) {
+          size_t close = matchIn(thenPos, end, "{", "}");
+          if (close == kNPos || close > end) { ++i; continue; }
+          thenR = analyzeFlowRange(thenPos + 1, close, thenIn, exits);
+          afterThen = close + 1;
+        } else {
+          size_t stop = flowStatementEnd(thenPos, end);
+          thenR = analyzeFlowRange(thenPos, stop, thenIn, exits);
+          afterThen = stop < end ? nextSig(stop) : end;
+        }
+        bool fall = false;
+        FlowState merged;
+        size_t after = afterThen;
+        size_t es = afterThen < end ? nextSig(afterThen) : kNPos;
+        if (es != kNPos && es < end && isIdent(es, "else")) {
+          size_t elsePos = nextSig(es);
+          FlowBlockResult elseR;
+          if (elsePos < end && isPunct(elsePos, "{")) {
+            size_t close = matchIn(elsePos, end, "{", "}");
+            if (close == kNPos || close > end) { ++i; continue; }
+            elseR = analyzeFlowRange(elsePos + 1, close, elseIn, exits);
+            after = close + 1;
+          } else {
+            size_t stop = flowStatementEnd(elsePos, end);
+            elseR = analyzeFlowRange(elsePos, stop, elseIn, exits);
+            after = stop < end ? nextSig(stop) : end;
+          }
+          if (thenR.fallsThrough && elseR.fallsThrough) {
+            merged = flowJoin(thenR.out, elseR.out);
+            fall = true;
+          } else if (thenR.fallsThrough) {
+            merged = thenR.out;
+            fall = true;
+          } else if (elseR.fallsThrough) {
+            merged = elseR.out;
+            fall = true;
+          }
+        } else if (thenR.fallsThrough) {
+          merged = flowJoin(thenR.out, elseIn);
+          fall = true;
+        } else {
+          merged = elseIn; // the fall-through arm is the negated condition
+          fall = true;
+        }
+        if (!fall)
+          return {state, false};
+        state = merged;
+        i = after;
+        continue;
+      }
+
+      // while / for: close the back-edge and iterate to a fixed point.
+      if (isIdent(i, "while") || isIdent(i, "for")) {
+        bool isFor = isIdent(i, "for");
+        size_t lp = nextSig(i);
+        if (!isPunct(lp, "(")) { ++i; continue; }
+        size_t rp = matchIn(lp, end, "(", ")");
+        if (rp == kNPos || rp >= end) { ++i; continue; }
+        size_t bodyPos = nextSig(rp);
+        if (bodyPos >= end) { ++i; continue; }
+        size_t bodyOpen = kNPos, bodyClose = kNPos;
+        if (isPunct(bodyPos, "{")) {
+          bodyOpen = bodyPos;
+          bodyClose = matchIn(bodyOpen, end, "{", "}");
+        } else {
+          bodyClose = flowStatementEnd(bodyPos, end);
+        }
+        if (bodyClose == kNPos || bodyClose > end) { ++i; continue; }
+
+        size_t condFrom = lp + 1, condTo = rp;
+        if (isFor) {
+          size_t s1 = kNPos, s2 = kNPos;
+          int paren = 0;
+          for (size_t k = lp + 1; k < rp; ++k) {
+            if (isPunct(k, "(")) ++paren;
+            else if (isPunct(k, ")")) --paren;
+            else if (isPunct(k, ";") && paren == 0) {
+              if (s1 == kNPos) s1 = k;
+              else { s2 = k; break; }
+            }
+          }
+          if (s1 != kNPos && s2 != kNPos) {
+            FlowBlockResult init = analyzeFlowRange(lp + 1, s1, state, exits);
+            if (!init.fallsThrough)
+              return {state, false};
+            state = init.out;
+            condFrom = s1 + 1;
+            condTo = s2;
+          } else {
+            // Unparseable header: drop every fact rather than guess.
+            for (auto &kv : state)
+              flowKill(kv.second);
+            i = bodyClose + 1;
+            continue;
+          }
+        }
+
+        FlowState head = state;
+        for (int iter = 0; iter < 4; ++iter) {
+          FlowState in = flowRefine(head, condFrom, condTo, true);
+          FlowBlockResult body =
+              bodyOpen != kNPos
+                  ? analyzeFlowRange(bodyOpen + 1, bodyClose, in, exits)
+                  : analyzeFlowRange(bodyPos, bodyClose, in, exits);
+          FlowState candidate = body.fallsThrough ? body.out : FlowState{};
+          if (isFor) {
+            size_t s2 = kNPos;
+            int paren = 0;
+            for (size_t k = lp + 1; k < rp; ++k) {
+              if (isPunct(k, "(")) ++paren;
+              else if (isPunct(k, ")")) --paren;
+              else if (isPunct(k, ";") && paren == 0) {
+                if (s2 == kNPos) s2 = k;
+                else { s2 = k; break; }
+              }
+            }
+            if (s2 != kNPos && s2 + 1 < rp)
+              candidate = analyzeFlowRange(s2 + 1, rp, candidate, exits).out;
+          }
+          FlowState nextHead = flowJoin(head, candidate);
+          if (flowSame(nextHead, head)) {
+            head = nextHead;
+            break;
+          }
+          head = nextHead;
+        }
+        state = flowRefine(head, condFrom, condTo, false);
+        i = bodyClose + 1;
+        continue;
+      }
+
+      // `do { } while ();` runs its body once before the test.
+      if (isIdent(i, "do")) {
+        size_t body = nextSig(i);
+        size_t open = kNPos, close = kNPos;
+        if (body < end && isPunct(body, "{")) {
+          open = body;
+          close = matchIn(open, end, "{", "}");
+        }
+        if (close != kNPos && close <= end) {
+          FlowBlockResult first =
+              analyzeFlowRange(open + 1, close, state, exits);
+          if (!first.fallsThrough)
+            return {state, false};
+          state = flowJoin(state, first.out);
+          size_t w = nextSig(close);
+          size_t after = end;
+          if (w < end && isIdent(w, "while")) {
+            size_t lp = nextSig(w);
+            size_t rp = lp != kNPos && lp < end ? matchIn(lp, end, "(", ")")
+                                                : kNPos;
+            if (rp != kNPos && rp < end) {
+              state = flowRefine(state, lp + 1, rp, false);
+              after = nextSig(rp);
+              if (after < end && isPunct(after, ";"))
+                after = nextSig(after);
+            }
+          }
+          i = after;
+          continue;
+        }
+        ++i;
+        continue;
+      }
+
+      // switch / goto / break / continue: too many edges for a token-level
+      // proof.  Kill the path facts instead of risking a false positive.
+      if (isIdent(i, "switch") || isIdent(i, "goto") || isIdent(i, "break") ||
+          isIdent(i, "continue") || isIdent(i, "case") ||
+          isIdent(i, "default")) {
+        if (isIdent(i, "switch")) {
+          size_t lp = nextSig(i);
+          size_t rp = lp != kNPos && lp < end ? matchIn(lp, end, "(", ")")
+                                              : kNPos;
+          size_t body = rp != kNPos ? nextSig(rp) : kNPos;
+          if (body != kNPos && body < end && isPunct(body, "{")) {
+            size_t close = matchIn(body, end, "{", "}");
+            if (close != kNPos && close <= end) {
+              for (auto &kv : state)
+                flowKill(kv.second);
+              i = close + 1;
+              continue;
+            }
+          }
+        }
+        for (auto &kv : state)
+          flowKill(kv.second);
+        ++i;
+        continue;
+      }
+
+      if (isIdent(i, "return")) {
+        FlowState out = state;
+        size_t value = nextSig(i);
+        size_t stop = flowStatementEnd(i, end);
+        if (value < stop && toks_[value].kind == TokKind::Identifier) {
+          auto it = out.find(toks_[value].text);
+          if (it != out.end())
+            it->second.own = FlowOwn::None; // ownership transferred to caller
+        }
+        exits->push_back(std::move(out));
+        // Keep walking the expression so its dereferences are still checked;
+        // the terminating `;` ends this path below.
+        returned = true;
+      }
+
+      // free(p): an OwnedLive pointer becomes Freed.  No double-free report
+      // is emitted here (many valid programs free twice on disjoint paths).
+      if (isIdent(i, "free")) {
+        size_t lp = nextSig(i);
+        if (isPunct(lp, "(")) {
+          size_t rp = matchIn(lp, end, "(", ")");
+          if (rp != kNPos && rp < end) {
+            size_t arg = kNPos;
+            for (size_t k = lp + 1; k < rp; ++k) {
+              if (trivia(k)) continue;
+              if (arg != kNPos) { arg = kNPos; break; }
+              arg = k;
+            }
+            if (arg != kNPos && toks_[arg].kind == TokKind::Identifier) {
+              auto it = state.find(toks_[arg].text);
+              if (it != state.end() && it->second.own == FlowOwn::Live)
+                it->second.own = FlowOwn::Freed;
+            }
+          }
+        }
+      }
+
+      // Calls and realloc consume/kill facts for the names they mention.
+      // Control keywords and the ownership primitives themselves are exempt.
+      if (isPunct(i, "(") && i > 0) {
+        size_t callee = prevSig(i);
+        if (callee != kNPos && toks_[callee].kind == TokKind::Identifier &&
+            !isTypeWord(toks_[callee].text) &&
+            toks_[callee].text != "sizeof" && toks_[callee].text != "free" &&
+            toks_[callee].text != "malloc" && toks_[callee].text != "calloc" &&
+            toks_[callee].text != "if" && toks_[callee].text != "while" &&
+            toks_[callee].text != "for" && toks_[callee].text != "switch" &&
+            toks_[callee].text != "return") {
+          size_t rp = matchIn(i, end, "(", ")");
+          if (rp != kNPos && rp < end) {
+            for (auto &kv : state) {
+              for (size_t k = i + 1; k < rp; ++k) {
+                if (!isIdent(k, kv.first))
+                  continue;
+                // A callee may release (or take) the block, so ownership is
+                // never assumed to survive a call.  The null fact, however,
+                // cannot change through a plain by-value argument; a real
+                // out-param write requires `&p` and is killed below.
+                kv.second.own = FlowOwn::None;
+                kv.second.allocPos = kNPos;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // `&p` lets the pointer be written from outside this path.
+      if (toks_[i].kind == TokKind::Identifier && isPunct(prevSig(i), "&")) {
+        auto it = state.find(toks_[i].text);
+        if (it != state.end())
+          flowKill(it->second);
+      }
+
+      // Plain assignment to a scalar local (never a field, array element or
+      // a write through another pointer).
+      if (isPunct(i, "=") && i > 0) {
+        size_t lhs = prevSig(i);
+        if (lhs != kNPos && lhs < toks_.size() &&
+            toks_[lhs].kind == TokKind::Identifier) {
+          size_t before = prevSig(lhs);
+          size_t after = nextSig(lhs);
+          bool field = before != kNPos && before < toks_.size() &&
+                       (isPunct(before, ".") || isPunct(before, "->"));
+          bool throughPtr = before != kNPos && before < toks_.size() &&
+                            isPunct(before, "*") && !flowDeclStar(before);
+          bool element = after < toks_.size() && isPunct(after, "[");
+          if (!field && !throughPtr && !element &&
+              !globals_.count(toks_[lhs].text))
+            flowAssign(state, toks_[lhs].text, i);
+        }
+      }
+
+      // A dereference of a must-NULL pointer is a provable defect.
+      if (toks_[i].kind == TokKind::Identifier && !flowInsideSizeof(i)) {
+        auto it = state.find(toks_[i].text);
+        if (it != state.end() && it->second.null == FlowNull::Null &&
+            !flowInsideTernary(i, toks_[i].text)) {
+          size_t prev = prevSig(i);
+          size_t next = nextSig(i);
+          bool starDeref = prev != kNPos && prev < toks_.size() &&
+                           isPunct(prev, "*") && !flowDeclStar(prev) &&
+                           prev > 0 &&
+                           (isPunct(prevSig(prev), ";") ||
+                            isPunct(prevSig(prev), "{") ||
+                            isPunct(prevSig(prev), "}") ||
+                            isPunct(prevSig(prev), "(") ||
+                            isPunct(prevSig(prev), "=") ||
+                            isPunct(prevSig(prev), ",") ||
+                            isPunct(prevSig(prev), "!") ||
+                            isPunct(prevSig(prev), "?") ||
+                            isPunct(prevSig(prev), ":") ||
+                            isIdent(prevSig(prev), "return"));
+          bool arrow = next < toks_.size() && isPunct(next, "->");
+          bool subscript = next < toks_.size() && isPunct(next, "[");
+          if (starDeref || arrow || subscript)
+            reportFlowNull(i, toks_[i].text);
+        }
+      }
+
+      ++i;
+    }
+    // A single-statement branch ends *at* its `;`, which the loop above does
+    // not visit, so honour a pending return here as well.
+    if (returned)
+      return {state, false};
+    return {state, true};
+  }
+
+  void checkCfgDataflow() {
+    flowReported_.clear();
+    for (const auto &entry : funcs_) {
+      const FuncSig &sig = entry.second;
+      if (sig.bodyClose == kNPos || sig.bodyClose >= toks_.size() ||
+          sig.bodyOpen >= sig.bodyClose)
+        continue;
+      std::vector<FlowState> exits;
+      FlowBlockResult body =
+          analyzeFlowRange(sig.bodyOpen + 1, sig.bodyClose, FlowState{},
+                           &exits);
+      if (body.fallsThrough)
+        exits.push_back(std::move(body.out));
+      if (exits.empty())
+        continue;
+      // Candidate names are the union across all exits: an allocation made
+      // after an early return has no entry in exits.front(), so iterating
+      // only that state silently missed real leaks.
+      std::set<std::string> candidates;
+      for (const auto &s : exits)
+        for (const auto &kv : s)
+          candidates.insert(kv.first);
+      for (const std::string &name : candidates) {
+        bool allocatedSomewhere = false;
+        bool liveOnEveryExit = true;
+        size_t allocPos = kNPos;
+        for (const auto &s : exits) {
+          FlowFact f = flowOf(s, name);
+          if (f.allocPos != kNPos)
+            allocatedSomewhere = true;
+          if (f.own == FlowOwn::Live && f.allocPos != kNPos)
+            allocPos = f.allocPos;
+          else
+            liveOnEveryExit = false;
+        }
+        if (!allocatedSomewhere || !liveOnEveryExit)
+          continue;
+        // A loop-scoped managed allocation is lowered with RAII cleanup; the
+        // token-level flow pass does not model that, so do not report it as a
+        // definite leak (avoids false positives on valid managed code).
+        bool inLoop = false;
+        for (size_t k = sig.bodyOpen; k < allocPos && k < toks_.size(); ++k)
+          if (isIdent(k, "for") || isIdent(k, "while") || isIdent(k, "do"))
+            inLoop = true;
+        if (inLoop)
+          continue;
+        if (allocPos == kNPos || allocPos >= toks_.size())
+          allocPos = sig.bodyClose;
+        reportFlowLeak(allocPos, name);
+      }
     }
   }
 
@@ -5287,6 +7230,7 @@ private:
   std::map<std::string, size_t> returnExtents_;
   std::set<std::string> globals_;
   std::set<std::string> volatileGlobals_;
+  std::set<std::string> atomicGlobals_;
   std::set<size_t> functionOpens_;
   std::set<std::string> pointerNames_;   // bug 35
   std::set<std::string> byteAllocPtrs_;  // bug 46

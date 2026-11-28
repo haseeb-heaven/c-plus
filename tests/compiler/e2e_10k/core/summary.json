@@ -1,0 +1,416 @@
+{
+  "categories": {
+    "allocation_lifetime": {
+      "executed": 820,
+      "failed": 0,
+      "generated": 820,
+      "passed": 820
+    },
+    "arithmetic": {
+      "executed": 960,
+      "failed": 0,
+      "generated": 960,
+      "passed": 960
+    },
+    "bounds": {
+      "executed": 1020,
+      "failed": 0,
+      "generated": 1020,
+      "passed": 1020
+    },
+    "compile_time_violation": {
+      "executed": 40,
+      "failed": 0,
+      "generated": 40,
+      "passed": 40
+    },
+    "exceptions": {
+      "executed": 260,
+      "failed": 0,
+      "generated": 260,
+      "passed": 260
+    },
+    "format_strings": {
+      "executed": 250,
+      "failed": 0,
+      "generated": 250,
+      "passed": 250
+    },
+    "function_pointers": {
+      "executed": 260,
+      "failed": 0,
+      "generated": 260,
+      "passed": 260
+    },
+    "initialization": {
+      "executed": 250,
+      "failed": 0,
+      "generated": 250,
+      "passed": 250
+    },
+    "nullability": {
+      "executed": 260,
+      "failed": 0,
+      "generated": 260,
+      "passed": 260
+    },
+    "raii": {
+      "executed": 250,
+      "failed": 0,
+      "generated": 250,
+      "passed": 250
+    },
+    "recursion": {
+      "executed": 260,
+      "failed": 0,
+      "generated": 260,
+      "passed": 260
+    },
+    "runtime_guards": {
+      "executed": 260,
+      "failed": 0,
+      "generated": 260,
+      "passed": 260
+    },
+    "structs_unions": {
+      "executed": 250,
+      "failed": 0,
+      "generated": 250,
+      "passed": 250
+    }
+  },
+  "clang_bin": "/usr/bin/clang",
+  "clang_crosscheck": {
+    "compile_failed": 0,
+    "compiled": 9,
+    "executed": 4230,
+    "failed": 0,
+    "passed": 4230
+  },
+  "cplus_bin": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "failed": 0,
+  "failure_paths": [],
+  "passed": 5140,
+  "scenarios_executed": 5140,
+  "scenarios_generated": 5140,
+  "seed": 20261124,
+  "timings": [
+    {
+      "seconds": 1.718,
+      "tag": "build_shard_00"
+    },
+    {
+      "seconds": 2.029,
+      "tag": "shard_00_safe"
+    },
+    {
+      "seconds": 0.004,
+      "tag": "shard_00_trap"
+    },
+    {
+      "seconds": 0.444,
+      "tag": "shard_00_clang_plain"
+    },
+    {
+      "seconds": 1.276,
+      "tag": "build_shard_01"
+    },
+    {
+      "seconds": 0.686,
+      "tag": "shard_01_safe"
+    },
+    {
+      "seconds": 2.113,
+      "tag": "shard_01_trap"
+    },
+    {
+      "seconds": 0.494,
+      "tag": "shard_01_clang_plain"
+    },
+    {
+      "seconds": 1.616,
+      "tag": "build_shard_02"
+    },
+    {
+      "seconds": 0.844,
+      "tag": "shard_02_safe"
+    },
+    {
+      "seconds": 4.557,
+      "tag": "shard_02_trap"
+    },
+    {
+      "seconds": 0.414,
+      "tag": "shard_02_clang_plain"
+    },
+    {
+      "seconds": 2.824,
+      "tag": "build_shard_03"
+    },
+    {
+      "seconds": 0.887,
+      "tag": "shard_03_safe"
+    },
+    {
+      "seconds": 1.406,
+      "tag": "shard_03_trap"
+    },
+    {
+      "seconds": 0.964,
+      "tag": "shard_03_clang_plain"
+    },
+    {
+      "seconds": 3.16,
+      "tag": "build_shard_04"
+    },
+    {
+      "seconds": 0.85,
+      "tag": "shard_04_safe"
+    },
+    {
+      "seconds": 0.004,
+      "tag": "shard_04_trap"
+    },
+    {
+      "seconds": 0.83,
+      "tag": "shard_04_clang_plain"
+    },
+    {
+      "seconds": 1.285,
+      "tag": "build_shard_05"
+    },
+    {
+      "seconds": 0.767,
+      "tag": "shard_05_safe"
+    },
+    {
+      "seconds": 0.046,
+      "tag": "shard_05_trap"
+    },
+    {
+      "seconds": 0.927,
+      "tag": "shard_05_clang_plain"
+    },
+    {
+      "seconds": 3.264,
+      "tag": "build_shard_06"
+    },
+    {
+      "seconds": 0.979,
+      "tag": "shard_06_safe"
+    },
+    {
+      "seconds": 0.004,
+      "tag": "shard_06_trap"
+    },
+    {
+      "seconds": 2.05,
+      "tag": "build_shard_07"
+    },
+    {
+      "seconds": 1.774,
+      "tag": "shard_07_safe"
+    },
+    {
+      "seconds": 0.004,
+      "tag": "shard_07_trap"
+    },
+    {
+      "seconds": 1.606,
+      "tag": "shard_07_clang_plain"
+    },
+    {
+      "seconds": 1.519,
+      "tag": "build_shard_08"
+    },
+    {
+      "seconds": 1.342,
+      "tag": "shard_08_safe"
+    },
+    {
+      "seconds": 0.006,
+      "tag": "shard_08_trap"
+    },
+    {
+      "seconds": 0.492,
+      "tag": "shard_08_clang_plain"
+    },
+    {
+      "seconds": 1.212,
+      "tag": "build_shard_09"
+    },
+    {
+      "seconds": 0.652,
+      "tag": "shard_09_safe"
+    },
+    {
+      "seconds": 1.978,
+      "tag": "shard_09_trap"
+    },
+    {
+      "seconds": 0.774,
+      "tag": "shard_09_clang_plain"
+    },
+    {
+      "seconds": 0.061,
+      "tag": "reject_reject_double_free_00"
+    },
+    {
+      "seconds": 0.051,
+      "tag": "reject_reject_double_free_01"
+    },
+    {
+      "seconds": 0.053,
+      "tag": "reject_reject_double_free_02"
+    },
+    {
+      "seconds": 0.053,
+      "tag": "reject_reject_double_free_03"
+    },
+    {
+      "seconds": 0.055,
+      "tag": "reject_reject_double_free_04"
+    },
+    {
+      "seconds": 0.055,
+      "tag": "reject_reject_uaf_deref_00"
+    },
+    {
+      "seconds": 0.062,
+      "tag": "reject_reject_uaf_deref_01"
+    },
+    {
+      "seconds": 0.067,
+      "tag": "reject_reject_uaf_deref_02"
+    },
+    {
+      "seconds": 0.051,
+      "tag": "reject_reject_uaf_deref_03"
+    },
+    {
+      "seconds": 0.055,
+      "tag": "reject_reject_uaf_deref_04"
+    },
+    {
+      "seconds": 0.038,
+      "tag": "reject_reject_null_read_00"
+    },
+    {
+      "seconds": 0.036,
+      "tag": "reject_reject_null_read_01"
+    },
+    {
+      "seconds": 0.037,
+      "tag": "reject_reject_null_read_02"
+    },
+    {
+      "seconds": 0.037,
+      "tag": "reject_reject_null_read_03"
+    },
+    {
+      "seconds": 0.046,
+      "tag": "reject_reject_null_read_04"
+    },
+    {
+      "seconds": 0.036,
+      "tag": "reject_reject_null_write_00"
+    },
+    {
+      "seconds": 0.037,
+      "tag": "reject_reject_null_write_01"
+    },
+    {
+      "seconds": 0.049,
+      "tag": "reject_reject_null_write_02"
+    },
+    {
+      "seconds": 0.036,
+      "tag": "reject_reject_null_write_03"
+    },
+    {
+      "seconds": 0.038,
+      "tag": "reject_reject_null_write_04"
+    },
+    {
+      "seconds": 0.04,
+      "tag": "reject_reject_const_oob_00"
+    },
+    {
+      "seconds": 0.038,
+      "tag": "reject_reject_const_oob_01"
+    },
+    {
+      "seconds": 0.038,
+      "tag": "reject_reject_const_oob_02"
+    },
+    {
+      "seconds": 0.037,
+      "tag": "reject_reject_const_oob_03"
+    },
+    {
+      "seconds": 0.043,
+      "tag": "reject_reject_const_oob_04"
+    },
+    {
+      "seconds": 0.036,
+      "tag": "reject_reject_negative_index_00"
+    },
+    {
+      "seconds": 0.043,
+      "tag": "reject_reject_negative_index_01"
+    },
+    {
+      "seconds": 0.038,
+      "tag": "reject_reject_negative_index_02"
+    },
+    {
+      "seconds": 0.036,
+      "tag": "reject_reject_negative_index_03"
+    },
+    {
+      "seconds": 0.036,
+      "tag": "reject_reject_negative_index_04"
+    },
+    {
+      "seconds": 0.068,
+      "tag": "reject_reject_uninit_read_00"
+    },
+    {
+      "seconds": 0.075,
+      "tag": "reject_reject_uninit_read_01"
+    },
+    {
+      "seconds": 0.06,
+      "tag": "reject_reject_uninit_read_02"
+    },
+    {
+      "seconds": 0.064,
+      "tag": "reject_reject_uninit_read_03"
+    },
+    {
+      "seconds": 0.06,
+      "tag": "reject_reject_uninit_read_04"
+    },
+    {
+      "seconds": 0.05,
+      "tag": "reject_reject_invalid_free_00"
+    },
+    {
+      "seconds": 0.053,
+      "tag": "reject_reject_invalid_free_01"
+    },
+    {
+      "seconds": 0.052,
+      "tag": "reject_reject_invalid_free_02"
+    },
+    {
+      "seconds": 0.052,
+      "tag": "reject_reject_invalid_free_03"
+    },
+    {
+      "seconds": 0.063,
+      "tag": "reject_reject_invalid_free_04"
+    }
+  ],
+  "total_seconds": 49.736
+}

@@ -1,11 +1,11 @@
 Same-program cross-compiler safety + benchmark comparison
-2026-11-23T23:10:21.390351+00:00
+2026-11-25T18:43:48.861966+00:00
 
 toolchain_availability fil-c          TOOLCHAIN_UNAVAILABLE compile=- run=-
 toolchain_availability trapc          TOOLCHAIN_UNAVAILABLE compile=- run=-
 const_oob    cplus_strict   compile_reject   compile=1 run=-
 const_oob    cplus_default  compile_reject   compile=1 run=-
-const_oob    clang          clean_run        compile=0 run=1
+const_oob    clang          runtime_trap     compile=0 run=1
 const_oob    gcc            clean_run        compile=0 run=0
 const_oob    rustc_debug    compile_reject   compile=1 run=-
 const_oob    rustc_release  compile_reject   compile=1 run=-
@@ -16,7 +16,7 @@ overflow     gcc            clean_run        compile=0 run=0
 overflow     rustc_debug    runtime_trap     compile=0 run=101
 overflow     rustc_release  clean_run        compile=0 run=0
 null_deref   cplus_strict   compile_reject   compile=1 run=-
-null_deref   cplus_default  runtime_trap     compile=0 run=102
+null_deref   cplus_default  compile_reject   compile=1 run=-
 null_deref   clang          runtime_trap     compile=0 run=-5
 null_deref   gcc            runtime_trap     compile=0 run=-11
 null_deref   rustc_debug    runtime_trap     compile=0 run=-6
@@ -29,9 +29,9 @@ clean        rustc_debug    clean_run        compile=0 run=0
 clean        rustc_release  clean_run        compile=0 run=0
 
 BENCHMARKS
-compute    cplus_strict   OK         median=1.34 rss=1671168
-compute    cplus_default  OK         median=1.23 rss=1671168
-compute    clang          OK         median=0.08 rss=1654784
-compute    gcc            OK         median=0.07 rss=1507328
-compute    rustc_debug    OK         median=1.34 rss=1802240
-compute    rustc_release  OK         median=0.08 rss=1802240
+compute    cplus_strict   OK         median=14.35 rss=1687552
+compute    cplus_default  OK         median=12.7 rss=1687552
+compute    clang          OK         median=0.43 rss=1654784
+compute    gcc            OK         median=0.91 rss=1507328
+compute    rustc_debug    OK         median=16.67 rss=1720320
+compute    rustc_release  OK         median=0.58 rss=1802240

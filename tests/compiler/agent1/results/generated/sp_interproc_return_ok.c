@@ -1,3 +1,9 @@
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
+#endif
 #include <stddef.h>
 extern void *cplus_register_allocation(void *, size_t, const char *, int);
 extern void cplus_free_registered(void *, const char *, int);

@@ -47,6 +47,14 @@ owned one.
   pointer out of another marks the pointer's provenance as lost. STRICT
   rejects a later subscript/dereference; the value is never treated as an
   opaque ABI pointer just because its extent is unavailable.
+- Pointee release through indirection: a helper that performs
+  `free(*pp)` / `free(pp[0])` has a pointee-release effect on its parameter
+  slot. A caller passing `&p` inherits that release, so a later use of `p` is
+  rejected as use-after-free. This reuses the existing `userFrees_`
+  interprocedural summary; benign reads/writes through `**pp` remain allowed.
+  Evidence: `tests/compiler/proof1_uaf/` (4 cases). System-header
+  definite-init findings are suppressed in `OwnershipAnalysis.cpp` so valid
+  unchanged C (for example Apple `math.h` unions) is not rejected.
 
 ## Unknown-provenance policy
 

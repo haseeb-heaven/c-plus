@@ -5,6 +5,4 @@ timed_out: False
 --- stdout ---
 
 --- stderr ---
-clang: warning: -lstatic_library_interop_default: 'linker' input unused [-Wunused-command-line-argument]
-clang: warning: argument unused during compilation: '-L/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/abi_real_world/cases' [-Wunused-command-line-argument]
 

@@ -1,7 +1,7 @@
 {
   "spec_version": "0.1",
   "generated_by": "tests/compiler/strict_rules/run_strict_rules.py",
-  "generated_utc": "2026-11-24T09:38:27.559590+00:00",
+  "generated_utc": "2026-11-25T19:05:03.314829+00:00",
   "compiler_binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "mode": "STRICT (--strict --sanitize=none)",
   "status_definition": "VERIFIED only when both fixtures were actually executed within the hard timeout and their asserted exit status and diagnostic substrings held; otherwise UNVERIFIED.",

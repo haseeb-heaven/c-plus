@@ -31,6 +31,29 @@ build_expect_stderr() {
   ok "$name"
 }
 
+# Issue #25 criterion 1: the NULL allocation-failure return must NOT be
+# diagnosed as a leak. Build under the DEFAULT warnings-as-errors policy (no
+# --no-werror) so a leak warning fails the build, then assert the exact leak
+# diagnostic is absent and the program runs cleanly. Deliberately scoped to
+# this one fixture: other positives keep --no-werror and safety fixtures keep
+# their existing reject/warn assertions unchanged.
+build_run_no_leak() {
+  name=$1; src=$2
+  if ! "$CPLUS" build "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
+    bad "$name" "default-policy build failed (unexpected warning, e.g. NULL-path leak)"
+    return
+  fi
+  if grep -q 'leaks on this return path' "$OUT/$name.log"; then
+    bad "$name" "NULL allocation-failure path diagnosed as a leak"
+    return
+  fi
+  if ! "$OUT/$name" >"$OUT/$name.stdout" 2>>"$OUT/$name.log"; then
+    bad "$name" "runtime failed"
+    return
+  fi
+  ok "$name"
+}
+
 expect_reject() {
   name=$1; src=$2
   if "$CPLUS" check "$src" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"; then
@@ -54,7 +77,11 @@ expect_trap() {
   if ! "$CPLUS" build --no-werror "$src" -o "$OUT/$name" >"$OUT/$name.log" 2>&1; then
     bad "$name" "build failed"; return
   fi
-  "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
+  # Some sanitizer runtimes print a fatal diagnostic and then hang on this
+  # host. Bound each trap probe so a hang is a recorded failure, never an
+  # infinite gate. A timed-out probe with a real diagnostic still counts as a
+  # trap because the safety error was emitted before the runtime stalled.
+  timeout 20 "$OUT/$name" >"$OUT/$name.stdout" 2>"$OUT/$name.stderr"
   rc=$?
   # Platform sanitizer abort codes differ (SIGABRT 134 on macOS, exit 1 on
   # some Linux toolchains). Accept a different non-zero code only when the
@@ -63,7 +90,8 @@ expect_trap() {
     ok "$name"
   elif [ "$rc" -ne 0 ] && \
        cat "$OUT/$name.stdout" "$OUT/$name.stderr" 2>/dev/null | \
-         grep -qE 'runtime error:|AddressSanitizer|C\+ error:'; then
+         grep -qE 'runtime error:|AddressSanitizer|UndefinedBehaviorSanitizer|C\+ error:'; then
+    # A real sanitizer diagnostic was emitted; the runtime may stall after it.
     ok "$name"
   else
     bad "$name" "exit $rc != $code"
@@ -82,7 +110,7 @@ build_run goto_no_resources "$ROOT/tests/core/positive/goto_no_resources.c"
 build_run format_string_literal "$ROOT/tests/core/positive/format_string_literal.c"
 build_run null_assignment_guard "$ROOT/tests/core/positive/null_assignment_guard.cp"
 build_run alloc_failure_guard "$ROOT/tests/core/positive/alloc_failure_guard.c"
-build_run libccontract_null_path "$ROOT/tests/core/positive/libccontract_null_path.c"
+build_run_no_leak libccontract_null_path "$ROOT/tests/core/positive/libccontract_null_path.c"
 build_run uninit_scanf_output "$ROOT/tests/core/positive/uninit_scanf_output.c"
 build_run libc_interop "$ROOT/tests/core/positive/libc_interop.c"
 build_run free_zero_offset "$ROOT/tests/core/positive/free_zero_offset.c"

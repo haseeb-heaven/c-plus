@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-24T02:28:48.041664+00:00",
+  "generated": "2026-11-25T19:05:28.291645+00:00",
   "binary": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
   "results": [
     {
@@ -39,7 +39,7 @@
       "mode": "--default",
       "rc": 1,
       "expected_tag": "[CPLUS-FFI]",
-      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_confusion.cp:12:23: error: [CPLUS-FFI] forged pointer from union type punning has unverifiable provenance\n      volatile int x = *u.ptr;\n                        ^~~~~\nhelp: suggested correction: store a real pointer into the union's pointer member instead of fabricating one from an integer constant\n",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_confusion.cp:12:23: error: [CPLUS-FFI] forged pointer from union type punning has unverifiable provenance\n      volatile int x = *u.ptr;\n                        ^~~~~\nhelp: suggested correction: store a real pointer into the union's pointer member instead of fabricating one from an integer constant\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_",
       "status": "PASS"
     },
     {
@@ -47,7 +47,7 @@
       "mode": "--strict",
       "rc": 1,
       "expected_tag": "[CPLUS-FFI]",
-      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_confusion.cp:12:23: error: [CPLUS-FFI] forged pointer from union type punning has unverifiable provenance\n      volatile int x = *u.ptr;\n                        ^~~~~\nhelp: suggested correction: store a real pointer into the union's pointer member instead of fabricating one from an integer constant\n",
+      "output": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_confusion.cp:12:23: error: [CPLUS-FFI] forged pointer from union type punning has unverifiable provenance\n      volatile int x = *u.ptr;\n                        ^~~~~\nhelp: suggested correction: store a real pointer into the union's pointer member instead of fabricating one from an integer constant\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/safety_breakers/cases/03_union_type_",
       "status": "PASS"
     },
     {

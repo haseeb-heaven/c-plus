@@ -1,3 +1,11 @@
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
+#endif
+#include <stddef.h>
+extern size_t __cplus_bounds_check(size_t, size_t, const char *);
 #include <stddef.h>
 extern void *cplus_register_allocation(void *, size_t, const char *, int);
 extern void cplus_free_registered(void *, const char *, int);
@@ -158,7 +166,7 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 int main(void) {
   int *p = cplus_register_allocation((malloc(__cplus_inline_size_mul((size_t)(sizeof(int) ), (size_t)( 4)))), 16, __FILE__, __LINE__);
   if (!p) return 1;
-  for (int i = 0; i < 4; CPLUS_INC(add, i, int, 32, 1, 1, 1)) p[i] = i;
+  for (int i = 0; i < 4; CPLUS_INC(add, i, int, 32, 1, 1, 1)) p[__cplus_bounds_check((size_t)(i), (size_t)(sizeof(int) * 4), "p")] = i;
   int *q = cplus_realloc_registered((p), (realloc(p, sizeof(int) * 8)), 32, __FILE__, __LINE__);
   if (!q) { cplus_free_registered(p, __FILE__, __LINE__); return 2; }  // preserve original on realloc failure
   cplus_free_registered(q, __FILE__, __LINE__);

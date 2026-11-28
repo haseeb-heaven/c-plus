@@ -1,0 +1,50 @@
+strict-safe subset conformance (spec 0.1)
+compiler: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+
+mode: STRICT (--strict --sanitize=none) ; hard timeout: 45s
+
+rules: 20 total, 20 VERIFIED, 0 UNVERIFIED
+fixtures: 40 total, 40 PASS, 0 FAIL, 0 timeouts
+false positives: 0 ; false negatives: 0
+
+ARITH-OVERFLOW           positive PASS     rc=0       
+ARITH-OVERFLOW           negative PASS     rc=1       
+ARITH-DIVZERO            positive PASS     rc=0       
+ARITH-DIVZERO            negative PASS     rc=1       
+BOUNDS-FIXED             positive PASS     rc=0       
+BOUNDS-FIXED             negative PASS     rc=1       
+BOUNDS-HEAP              positive PASS     rc=0       
+BOUNDS-HEAP              negative PASS     rc=1       
+BOUNDS-VLA               positive PASS     rc=0       
+BOUNDS-VLA               negative PASS     rc=1       
+BOUNDS-DYNAMIC-RUNTIME   positive PASS     rc=0       
+BOUNDS-DYNAMIC-RUNTIME   negative PASS     rc=-6      
+NULL-DEREF               positive PASS     rc=0       
+NULL-DEREF               negative PASS     rc=1       
+UNINIT-JOIN              positive PASS     rc=0       
+UNINIT-JOIN              negative PASS     rc=1       
+ALIAS-TYPEPUN            positive PASS     rc=0       
+ALIAS-TYPEPUN            negative PASS     rc=1       
+PROVENANCE-ESCAPE        positive PASS     rc=0       
+PROVENANCE-ESCAPE        negative PASS     rc=1       
+LIFETIME-UAF             positive PASS     rc=0       
+LIFETIME-UAF             negative PASS     rc=1       
+LIFETIME-DOUBLE-FREE     positive PASS     rc=0       
+LIFETIME-DOUBLE-FREE     negative PASS     rc=1       
+LIFETIME-REALLOC         positive PASS     rc=0       
+LIFETIME-REALLOC         negative PASS     rc=1       
+FFI-FORMAT               positive PASS     rc=0       
+FFI-FORMAT               negative PASS     rc=1       
+RAII-SIGNAL-CALLBACK     positive PASS     rc=0       
+RAII-SIGNAL-CALLBACK     negative PASS     rc=1       
+RAII-DEFER-JUMP          positive PASS     rc=0       
+RAII-DEFER-JUMP          negative PASS     rc=1       
+JOIN-PHI-BOUNDS          positive PASS     rc=0       
+JOIN-PHI-BOUNDS          negative PASS     rc=1       
+THREAD-RACE              positive PASS     rc=0       
+THREAD-RACE              negative PASS     rc=1       
+FUNC-BOUNDARY-NULL       positive PASS     rc=0       
+FUNC-BOUNDARY-NULL       negative PASS     rc=1       
+FIELD-RESOURCE-COPY      positive PASS     rc=0       
+FIELD-RESOURCE-COPY      negative PASS     rc=1       
+
+unverified rules: none

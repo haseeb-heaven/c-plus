@@ -1,0 +1,15 @@
+case expr_comma_call_args [expressions] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:60: error: [CPLUS-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; printf("%d\n", f(a[1],a[9])); return 0; }
+                                                             ^
+help: array contains 4 elements; valid indices are 0..3
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/expr_comma_call_args.c:3:59: error: [CPLUS-SAFE-BOUNDS] constant array index 9 is outside the bounds of 'a'
+  int main(void){ int a[4]={1,2,3,4}; printf("%d\n", f(a[1],a[9])); return 0; }
+                                                            ^
+help: array contains 4 elements; valid indices are 0..3
+

@@ -1,0 +1,10 @@
+case cond_nested_oob [conditionals] expectation=reject
+$ /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+ check --strict --sanitize=none /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_nested_oob.c
+rc=1 note=
+stdout:
+
+stderr:
+/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/semantic_adversarial/cases/cond_nested_oob.c:2:65: error: [CPLUS-FFI] out-of-bounds access: index 99 reaches past array 'a' of length 4
+  int main(void){ int a[4]={1,2,3,4}; int f=0,g=0; printf("%d\n", a[f?0:(g?1:99)]); return 0; }
+                                                                  ^
+

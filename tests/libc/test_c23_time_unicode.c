@@ -132,7 +132,7 @@ static void test_mbrtoc8_2byte(void) {
     CHECK(c8 == (char8_t)0xC3u);
 
     c8 = 0;
-    CHECK(cplus_mbrtoc8(&c8, NULL, 0, &st) == (size_t)-3);
+    CHECK(cplus_mbrtoc8(&c8, "", 1, &st) == (size_t)-3);
     CHECK(c8 == (char8_t)0xA9u);
 
     /* Buffered output drained: normal input is consumed again. */
@@ -151,9 +151,9 @@ static void test_mbrtoc8_3byte(void) {
     c8 = 0;
     CHECK(cplus_mbrtoc8(&c8, s, 3, &st) == 3u);
     CHECK(c8 == (char8_t)0xE2u);
-    CHECK(cplus_mbrtoc8(&c8, NULL, 0, &st) == (size_t)-3);
+    CHECK(cplus_mbrtoc8(&c8, "", 1, &st) == (size_t)-3);
     CHECK(c8 == (char8_t)0x82u);
-    CHECK(cplus_mbrtoc8(&c8, NULL, 0, &st) == (size_t)-3);
+    CHECK(cplus_mbrtoc8(&c8, "", 1, &st) == (size_t)-3);
     CHECK(c8 == (char8_t)0xACu);
     CHECK(cplus_mbrtoc8(&c8, "A", 1, &st) == 1u);
     CHECK(c8 == (char8_t)'A');
@@ -172,11 +172,11 @@ static void test_mbrtoc8_4byte(void) {
     }
     CHECK(cplus_mbrtoc8(&c8, s + 3, 1, &st) == 1u);
     CHECK(c8 == (char8_t)0xF0u);
-    CHECK(cplus_mbrtoc8(&c8, NULL, 0, &st) == (size_t)-3);
+    CHECK(cplus_mbrtoc8(&c8, "", 1, &st) == (size_t)-3);
     CHECK(c8 == (char8_t)0x9Fu);
-    CHECK(cplus_mbrtoc8(&c8, NULL, 0, &st) == (size_t)-3);
+    CHECK(cplus_mbrtoc8(&c8, "", 1, &st) == (size_t)-3);
     CHECK(c8 == (char8_t)0x98u);
-    CHECK(cplus_mbrtoc8(&c8, NULL, 0, &st) == (size_t)-3);
+    CHECK(cplus_mbrtoc8(&c8, "", 1, &st) == (size_t)-3);
     CHECK(c8 == (char8_t)0x80u);
 }
 
@@ -214,6 +214,8 @@ static void test_c8rtomb_invalid(void) {
     CHECK(errno == EILSEQ);
 }
 
+/* ISO C23 7.30.1.2: c8rtomb stores 0 bytes and returns 0 while a UTF-8
+ * sequence is incomplete; it never returns (size_t)-2 (issue #175). */
 static void test_c8rtomb_multibyte(void) {
     mbstate_t st;
     char out[8];
@@ -221,7 +223,7 @@ static void test_c8rtomb_multibyte(void) {
     /* 2-byte U+00E9. */
     memset(&st, 0, sizeof st);
     memset(out, 0, sizeof out);
-    CHECK(cplus_c8rtomb(out, (char8_t)0xC3u, &st) == (size_t)-2);
+    CHECK(cplus_c8rtomb(out, (char8_t)0xC3u, &st) == 0u);
     CHECK(cplus_c8rtomb(out, (char8_t)0xA9u, &st) == 2u);
     CHECK((unsigned char)out[0] == 0xC3u);
     CHECK((unsigned char)out[1] == 0xA9u);
@@ -229,8 +231,8 @@ static void test_c8rtomb_multibyte(void) {
     /* 3-byte U+20AC. */
     memset(&st, 0, sizeof st);
     memset(out, 0, sizeof out);
-    CHECK(cplus_c8rtomb(out, (char8_t)0xE2u, &st) == (size_t)-2);
-    CHECK(cplus_c8rtomb(out, (char8_t)0x82u, &st) == (size_t)-2);
+    CHECK(cplus_c8rtomb(out, (char8_t)0xE2u, &st) == 0u);
+    CHECK(cplus_c8rtomb(out, (char8_t)0x82u, &st) == 0u);
     CHECK(cplus_c8rtomb(out, (char8_t)0xACu, &st) == 3u);
     CHECK((unsigned char)out[0] == 0xE2u);
     CHECK((unsigned char)out[1] == 0x82u);
@@ -239,9 +241,9 @@ static void test_c8rtomb_multibyte(void) {
     /* 4-byte U+1F600. */
     memset(&st, 0, sizeof st);
     memset(out, 0, sizeof out);
-    CHECK(cplus_c8rtomb(out, (char8_t)0xF0u, &st) == (size_t)-2);
-    CHECK(cplus_c8rtomb(out, (char8_t)0x9Fu, &st) == (size_t)-2);
-    CHECK(cplus_c8rtomb(out, (char8_t)0x98u, &st) == (size_t)-2);
+    CHECK(cplus_c8rtomb(out, (char8_t)0xF0u, &st) == 0u);
+    CHECK(cplus_c8rtomb(out, (char8_t)0x9Fu, &st) == 0u);
+    CHECK(cplus_c8rtomb(out, (char8_t)0x98u, &st) == 0u);
     CHECK(cplus_c8rtomb(out, (char8_t)0x80u, &st) == 4u);
     CHECK((unsigned char)out[0] == 0xF0u);
     CHECK((unsigned char)out[1] == 0x9Fu);

@@ -1,3 +1,11 @@
+#if defined(CPLUS_AUTO_RUNTIME)
+extern void cplus_set_auto_runtime(int);
+static void __attribute__((constructor)) __cplus_auto_runtime_init(void) {
+  cplus_set_auto_runtime(1);
+}
+#endif
+#include <stddef.h>
+extern size_t __cplus_bounds_check(size_t, size_t, const char *);
 extern void cplus_check_nonnull(const void *, const char *, int, const char *);
 #if defined(__GNUC__) || defined(__clang__)
 #define CPLUS_NONNULL(P) ({ __typeof__(P) __cplus_nn_p = (P); \
@@ -163,4 +171,4 @@ CPLUS_ARITH_INLINE int64_t __cplus_inline_narrow_i64(
 #line 1 "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/core/positive/len_malloc_constant.c"
 #include <stdio.h>
 #include <stdlib.h>
-int main(void){int*arr=(int*)cplus_register_allocation((malloc(__cplus_inline_size_mul((size_t)(5), (size_t)(sizeof(int))))), 20, __FILE__, __LINE__);for(int i=0;i<((5 * sizeof ( int )) / sizeof(*arr));CPLUS_INC(add, i, int, 32, 1, 1, 1))CPLUS_NONNULL(arr)[i]=i;int s=0;for(int i=0;i<((5 * sizeof ( int )) / sizeof(*arr));CPLUS_INC(add, i, int, 32, 1, 1, 1))CPLUS_CMPD_BIN(add, s, int, CPLUS_NONNULL(arr)[i], 32, 1);cplus_free_registered(arr, __FILE__, __LINE__);return s==10?0:1;}
+int main(void){int*arr=(int*)cplus_register_allocation((malloc(__cplus_inline_size_mul((size_t)(5), (size_t)(sizeof(int))))), 20, __FILE__, __LINE__);for(int i=0;i<((5 * sizeof ( int )) / sizeof(*arr));CPLUS_INC(add, i, int, 32, 1, 1, 1))CPLUS_NONNULL(arr)[__cplus_bounds_check((size_t)(i), (size_t)(5), "arr")]=i;int s=0;for(int i=0;i<((5 * sizeof ( int )) / sizeof(*arr));CPLUS_INC(add, i, int, 32, 1, 1, 1))CPLUS_CMPD_BIN(add, s, int, CPLUS_NONNULL(arr)[__cplus_bounds_check((size_t)(i), (size_t)(5), "arr")], 32, 1);cplus_free_registered(arr, __FILE__, __LINE__);return s==10?0:1;}

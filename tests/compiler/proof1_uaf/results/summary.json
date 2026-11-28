@@ -1,0 +1,140 @@
+{
+  "generated": "2026-11-25T21:37:57.551481+00:00",
+  "host": "macOS-27.2.1-arm64-arm-64bit",
+  "compiler": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+  "results": [
+    {
+      "case": "neg_double_ptr_free",
+      "status": "PASS",
+      "expected": "use-after-free",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4:92: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){ int *p=(int*)malloc(sizeof(int)); if(!p) return 1; *p=100; sneak_free(&p); *p=999; printf(\"[PROOF 1] %d\\n\",*p); return 0; }\n                                                                                             ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4:124: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){ int *p=(int*)malloc(sizeof(int)); if(!p) return 1; *p=100; sneak_free(&p); *p=999; printf(\"[PROOF 1] %d\\n\",*p); return 0; }\n                                                                                                                             ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/results/neg_double_ptr_free.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4:92: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){ int *p=(int*)malloc(sizeof(int)); if(!p) return 1; *p=100; sneak_free(&p); *p=999; printf(\"[PROOF 1] %d\\n\",*p); return 0; }\n                                                                                             ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4:124: error: [CPLUS-LIFETIME] [CPLUS-SAFE-LIFETIME] use-after-free: dereference of released pointer 'p'\n  int main(void){ int *p=(int*)malloc(sizeof(int)); if(!p) return 1; *p=100; sneak_free(&p); *p=999; printf(\"[PROOF 1] %d\\n\",*p); return 0; }\n                                                                                                                             ^\nhelp: suggested correction: do not use after release; copy the data or transfer ownership with cplus_move()\nnote: allocation: /Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_free.c:4\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "neg_double_ptr_index_free",
+      "status": "PASS",
+      "expected": "double free",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "check",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_index_free.c"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_index_free.c:3:40: error: [CPLUS-FFI] pointer parameter 'pp' has unverifiable extent; subscript cannot be proven safe\n  static void sneak_free(int **pp){ free(pp[0]); }\n                                         ^~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_index_free.c:4:84: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p=(int*)malloc(sizeof(int)); if(!p) return 1; sneak_free(&p); free(p); return 0; }\n                                                                                     ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_index_free.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/results/neg_double_ptr_index_free.bin"
+          ],
+          "rc": 1,
+          "stdout": "",
+          "stderr": "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_index_free.c:3:40: error: [CPLUS-FFI] pointer parameter 'pp' has unverifiable extent; subscript cannot be proven safe\n  static void sneak_free(int **pp){ free(pp[0]); }\n                                         ^~\n/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/neg_double_ptr_index_free.c:4:84: error: [CPLUS-OWNER] double free of 'p'\n  int main(void){ int *p=(int*)malloc(sizeof(int)); if(!p) return 1; sneak_free(&p); free(p); return 0; }\n                                                                                     ^~~~\nhelp: suggested correction: release each owner exactly once; use cplus_move() to transfer ownership\n",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_read_through_indirection",
+      "status": "PASS",
+      "expected": "42\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/pos_read_through_indirection.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/results/pos_read_through_indirection.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/results/pos_read_through_indirection.bin"
+          ],
+          "rc": 0,
+          "stdout": "42\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    },
+    {
+      "case": "pos_write_through_indirection",
+      "status": "PASS",
+      "expected": "42\n",
+      "steps": [
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/build/c+",
+            "build",
+            "--strict",
+            "--sanitize=none",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/cases/pos_write_through_indirection.c",
+            "-o",
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/results/pos_write_through_indirection.bin"
+          ],
+          "rc": 0,
+          "stdout": "",
+          "stderr": "",
+          "timed_out": false
+        },
+        {
+          "command": [
+            "/Users/haseeb-mir/Documents/Code/Cpp/c-plus-core/tests/compiler/proof1_uaf/results/pos_write_through_indirection.bin"
+          ],
+          "rc": 0,
+          "stdout": "42\n",
+          "stderr": "",
+          "timed_out": false
+        }
+      ]
+    }
+  ],
+  "failures": []
+}
