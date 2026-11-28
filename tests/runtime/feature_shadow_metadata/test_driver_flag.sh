@@ -41,8 +41,10 @@ set +e
 "$OUT/disjoint_oob" >/dev/null 2>&1
 run_rc=$?
 set -e
-[ "$run_rc" -eq 101 ] || {
-  echo "FAIL: expected disjoint-bounds trap exit 101, got $run_rc"
+# A C+ deterministic trap may surface as exit 101 (_Exit) or SIGABRT 134
+# depending on the host runtime; both are fail-closed outcomes.
+[ "$run_rc" -eq 101 ] || [ "$run_rc" -eq 134 ] || {
+  echo "FAIL: expected disjoint-bounds trap exit 101 or 134, got $run_rc"
   exit 1
 }
 
