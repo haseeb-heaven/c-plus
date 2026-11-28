@@ -7202,6 +7202,21 @@ private:
             inLoop = true;
         if (inLoop)
           continue;
+        /* A `managed T *p = ...` declaration is lowered with RAII cleanup by
+         * RaiiLowering; the token-level flow pass does not model that cleanup,
+         * so it must not report a definite leak for it. */
+        size_t stmtStart = allocPos;
+        while (stmtStart > sig.bodyOpen && toks_[stmtStart - 1].text != "managed") {
+          if (isPunct(stmtStart - 1, ";") || isPunct(stmtStart - 1, "{"))
+            break;
+          --stmtStart;
+        }
+        bool isManaged = false;
+        for (size_t k = stmtStart > 0 ? stmtStart - 1 : 0; k <= allocPos && k < toks_.size(); ++k)
+          if (toks_[k].text == "managed")
+            isManaged = true;
+        if (isManaged)
+          continue;
         if (allocPos == kNPos || allocPos >= toks_.size())
           allocPos = sig.bodyClose;
         reportFlowLeak(allocPos, name);
