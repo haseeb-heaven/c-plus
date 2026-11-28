@@ -4423,6 +4423,7 @@ public:
     currentFunction_ = fd->getNameAsString();
     currentFnDecl_ = fd;
     stringPtrs_.clear(); // names are function-scoped, not TU-scoped
+    stringPtrLens_.clear();
     localParamAliases_.clear(); // per-function alias -> parameter slot map
     forgedUnionVars_.clear();    // compile-time union-punning provenance
     forgedPointerVars_.clear();  // locals copied from a forged union pointer
@@ -5474,8 +5475,9 @@ public:
             allocLocs_[vd->getNameAsString()] = vd->getBeginLoc();
         }
       }
-      if (isa<StringLiteral>(init->IgnoreParenCasts())) {
+      if (const auto *sl = dyn_cast<StringLiteral>(init->IgnoreParenCasts())) {
         stringPtrs_.insert(vd);
+        stringPtrLens_[vd] = sl->getLength() + 1u; /* including NUL */
       }
       if (const auto *uo = dyn_cast<UnaryOperator>(init->IgnoreParenCasts()))
         if (uo->getOpcode() == UO_AddrOf)
@@ -8408,6 +8410,25 @@ public:
       }
     }
     Expr *base = subscript->getBase()->IgnoreParenImpCasts();
+    /* A pointer initialised from a string literal has a statically known
+     * extent (literal length + NUL). A constant subscript beyond it is an
+     * out-of-bounds read even though the variable is typed as a pointer. */
+    if (const auto *sref = dyn_cast<DeclRefExpr>(base)) {
+      if (const auto *svd = dyn_cast<VarDecl>(sref->getDecl())) {
+        auto lit = stringPtrLens_.find(svd);
+        if (lit != stringPtrLens_.end()) {
+          long long si = 0;
+          if (evalIndexValue(subscript->getIdx(), si) &&
+              (si < 0 || (unsigned long long)si >= lit->second))
+            report(subscript->getBeginLoc(),
+                   "array index " +
+                       std::to_string(si) +
+                       " is outside the bounds of string literal '" +
+                       svd->getNameAsString() + "' (extent " +
+                       std::to_string(lit->second) + ")");
+        }
+      }
+    }
     unsigned long long compExtent = 0;
     if (const auto *cle = dyn_cast<CompoundLiteralExpr>(base))
       if (const auto *cat = ctx_.getAsConstantArrayType(cle->getType()))
@@ -8615,6 +8636,7 @@ private:
   std::map<std::string, SourceLocation> aliasLocs_;
   std::map<std::string, SourceLocation> releaseLocs_;
   std::set<const VarDecl *> stringPtrs_;
+  std::map<const VarDecl *, unsigned long long> stringPtrLens_;
   std::map<const VarDecl *, unsigned long long> compoundLiteralVars_;
   std::set<const VarDecl *> nonZeroVars_;
   // Variables whose guard-derived non-zero / lower-bound proof was invalidated
