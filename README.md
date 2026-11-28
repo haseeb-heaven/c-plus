@@ -204,7 +204,7 @@ Passing tests do not prove general memory safety. Review the [status](docs/STATU
 
 ## 🤖 AI-assisted development
 
-Codex and Gemini assisted with implementation. Heaven created the language design and vision, directed technical decisions, and manually tested the project. AI-assisted code remains subject to review and verification.
+AI assistants were used in the implementation of this project. Heaven created the language design and vision, directed all technical decisions, and personally reviewed and tested the work. AI-assisted code remains subject to the same review, regression tests, and verification gates as hand-written code; no claim of autonomous correctness is made.
 
 ## 🤝 Contributing
 
