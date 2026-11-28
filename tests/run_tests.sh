@@ -205,6 +205,19 @@ if [ -f "$ROOT/tests/legacy/plain.c" ] && matches "legacy"; then
   fi
 fi
 
+# --- instrumented-runtime compile-only regression -------------------------
+
+if matches "instrumented_runtime_linker_flags"; then
+  if /bin/sh "$ROOT/tests/compiler/run_instrumented_runtime_regression.sh" \
+      >"$OUT/instrumented_runtime_linker_flags.suite.log" 2>&1; then
+    pass "instrumented_runtime_linker_flags"
+  else
+    cat "$OUT/instrumented_runtime_linker_flags.suite.log" >&2
+    fail "instrumented_runtime_linker_flags" \
+      "see tests/out/instrumented_runtime_linker_flags.suite.log"
+  fi
+fi
+
 echo
 gap_word=gaps
 [ "$GAP" -eq 1 ] && gap_word=gap

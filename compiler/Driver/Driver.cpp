@@ -1374,8 +1374,13 @@ withoutLinkerFlags(const std::vector<std::string> &args) {
         ++i;
       continue;
     }
+    // -fuse-ld=* and -static-lib* are equally link-only: Clang rejects them
+    // with -Wunused-command-line-argument on a -c invocation. -pthread and
+    // -static are deliberately kept: the former defines _REENTRANT while
+    // parsing, and the latter is silently accepted by -c.
     if (a.starts_with("-L") || a.starts_with("-l") ||
-        a.starts_with("-Wl,") || a == "-shared")
+        a.starts_with("-Wl,") || a == "-shared" ||
+        a.starts_with("-fuse-ld") || a.starts_with("-static-lib"))
       continue;
     out.push_back(args[i]);
   }
@@ -1654,7 +1659,13 @@ int runDriver(const DriverOptions &opts, llvm::raw_ostream &os,
       rtArgs.push_back("-o");
       rtArgs.push_back(std::string(objPath.str()));
       rtArgs.push_back(runtimeSrc);
-      for (const auto &a : opts.extraArgs)
+      // This is a compile-only (-c) invocation of the runtime, so app build
+      // flags such as -lminiaudio/-luv must not be forwarded: under the
+      // default warnings-as-errors policy Clang turns their "linker input
+      // unused" warning into a hard error. The shared filter keeps the
+      // compilation-affecting flags (-D/-I/-fsanitize=*) intact, and the
+      // final link step still receives every original extraArgs verbatim.
+      for (const auto &a : withoutLinkerFlags(opts.extraArgs))
         rtArgs.push_back(a);
       appendSafetyTail(rtArgs);
       if (runProgram(clang, rtArgs) != 0) {
