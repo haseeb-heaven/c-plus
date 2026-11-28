@@ -62,7 +62,7 @@ The scoped-memory architecture (`stdlib/datastack.hp`, `stdlib/arena.hp`,
 `stdlib/scoped_mem.hp`) is inspired by `aardappel/scoped` (Apache-2.0),
 read directly: arena-first allocation, one-store scope release and a
 stable-handle model. See `docs/CORE_PHILOSOPHY.md` and
-`docs/stdlib/SCOPED_MEMORY_INSPIRATION.md`. No upstream source was copied.
+`docs/stdlib/SCOPED_MEMORY_PROVENANCE.md`. No upstream source was copied.
 
 ## Third-party libraries actually vendored
 
